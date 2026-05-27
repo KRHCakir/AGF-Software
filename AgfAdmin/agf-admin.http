@@ -1,0 +1,6 @@
+@agf_admin_HostAddress = http://localhost:5197
+
+GET {{agf_admin_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

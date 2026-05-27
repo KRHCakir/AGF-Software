@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --classic-bg: #c0c0c0; /* Windows 95/98 Gray */
+  --classic-dark: #808080;
+  --classic-light: #ffffff;
+  --classic-text: #000000;
+  --classic-blue: #000080; /* Title bar blue */
+  --classic-yellow: #ffffe0; /* Input field yellow */
+  --classic-hilight: #e0e0e0;
+}
+
+body {
+  background-color: var(--classic-bg);
+  color: var(--classic-text);
+  font-family: 'Tahoma', 'Segoe UI', sans-serif; /* System fonts */
+  font-size: 13px; /* Smaller, denser font */
+}
+
+@layer utilities {
+  .classic-border {
+    border-top: 2px solid white;
+    border-left: 2px solid white;
+    border-right: 2px solid #808080;
+    border-bottom: 2px solid #808080;
+    background-color: #c0c0c0;
+  }
+  
+  .classic-inset {
+    border-top: 2px solid #808080;
+    border-left: 2px solid #808080;
+    border-right: 2px solid white;
+    border-bottom: 2px solid white;
+    background-color: white;
+  }
+
+  .classic-btn {
+    @apply classic-border px-4 py-1 active:border-t-gray-500 active:border-l-gray-500 active:border-r-white active:border-b-white active:bg-gray-300;
+  }
+
+  .classic-input {
+    @apply classic-inset px-1 py-0.5 w-full focus:bg-[var(--classic-yellow)] focus:outline-none;
+  }
+}
