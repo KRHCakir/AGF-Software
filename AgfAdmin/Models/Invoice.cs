@@ -19,6 +19,13 @@ namespace AgfAdmin.Models
         public string PaymentStatus { get; set; } = "Pending"; // Financial status (Pending, Paid, Overdue)
         public DateTime? DueDate { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // --- Nieuwe AGF Specifieke Velden ---
+        public DateTime? DeliveryDate { get; set; }
+        public string? BatchNumber { get; set; } // Partij / Lotnummer
+        public string? DeliveryAddress { get; set; }
+        public string? ShippingMethod { get; set; }
+        public string? ReferenceNumber { get; set; } // Uw bestelnummer / PO
         
         // Navigation property for lines
         public ICollection<InvoiceLine> InvoiceLines { get; set; }

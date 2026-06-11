@@ -1,37 +1,54 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using AgfAdmin.Data;
+using AgfAdmin.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Cors;
 
 namespace AgfAdmin.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableCors("AllowFrontend")]
     public class CustomersController : ControllerBase
     {
         private readonly AppDbContext _context;
+        public CustomersController(AppDbContext context) { _context = context; }
 
-        public CustomersController(AppDbContext context)
+        [HttpGet]
+        public async Task<IActionResult> GetCustomers()
         {
-            _context = context;
+            var customers = await _context.Customers.OrderBy(c => c.Name).ToListAsync();
+            return Ok(customers);
         }
 
-        [HttpGet("{id}/standing")]
-        public async Task<IActionResult> GetCustomerStanding(int id)
+        [HttpPost]
+        public async Task<IActionResult> CreateCustomer([FromBody] Customer customer)
         {
-            var overdueCount = await _context.Invoices
-                .Where(i => i.CustomerId == id && i.PaymentStatus == "Overdue")
-                .CountAsync();
-                
-            var pendingCount = await _context.Invoices
-                .Where(i => i.CustomerId == id && i.PaymentStatus == "Pending")
-                .CountAsync();
+            customer.CreatedAt = DateTime.UtcNow;
+            
+            // Als er geen betaaltermijn is ingevuld, maken we er standaard 14 van
+            if (customer.PaymentTermsDays <= 0) customer.PaymentTermsDays = 14;
 
-            return Ok(new {
-                CustomerId = id,
-                OverdueInvoicesCount = overdueCount,
-                PendingInvoicesCount = pendingCount,
-                IsHighRisk = overdueCount >= 3
-            });
+            _context.Customers.Add(customer);
+            await _context.SaveChangesAsync();
+            return Ok(customer);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateCustomer(int id, [FromBody] Customer updatedCustomer)
+        {
+            var customer = await _context.Customers.FindAsync(id);
+            if (customer == null) return NotFound();
+
+            customer.Name = updatedCustomer.Name;
+            customer.BillingAddress = updatedCustomer.BillingAddress;
+            customer.VATNumber = updatedCustomer.VATNumber;
+            customer.PaymentTermsDays = updatedCustomer.PaymentTermsDays;
+            customer.Email = updatedCustomer.Email;
+            customer.Phone = updatedCustomer.Phone;
+
+            await _context.SaveChangesAsync();
+            return Ok(customer);
         }
     }
 }

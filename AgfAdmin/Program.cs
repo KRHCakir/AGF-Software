@@ -38,7 +38,7 @@ var app = builder.Build();
 QuestPDF.Settings.License = LicenseType.Community;
 
 app.UseCors("AllowFrontend");
-
+app.UseStaticFiles();
 // 2. Middleware pipeline
 if (app.Environment.IsDevelopment())
 {
@@ -54,10 +54,8 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // Use EnsureCreated because dotnet ef tool is having issues on this machine
-    // FORCE RESET for Schema Change
     db.Database.EnsureDeleted();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 
     if (!db.Products.Any())
     {
