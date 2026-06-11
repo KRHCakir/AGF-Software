@@ -1,12 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using AgfAdmin.Data;
 using AgfAdmin.Models;
-using AgfAdmin.DTOs;
-using System.Threading.Tasks;
-using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Cors;
 using QuestPDF.Fluent;
+using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
 namespace AgfAdmin.Controllers
@@ -17,217 +15,149 @@ namespace AgfAdmin.Controllers
     public class InvoiceController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public InvoiceController(AppDbContext context)
-        {
-            _context = context;
-        }
+        public InvoiceController(AppDbContext context) { _context = context; }
 
-        // KEEPING OLD ENDPOINT FOR NOW TO AVOID BREAKING EXISTING CODE
-        // Ideally should be deprecated or updated to use nullable OrderId
-        [HttpPost]
-        public async Task<IActionResult> CreateInvoice(CreateInvoiceDto dto)
-        {
-            var order = await _context.Orders.Include(o => o.Customer).FirstOrDefaultAsync(o => o.Id == dto.OrderId);
-            if (order == null)
-                return BadRequest("Order not found");
-
-            var invoice = new Invoice
-            {
-                OrderId = dto.OrderId,
-                CustomerId = order.CustomerId, // Backfill CustomerId
-                InvoiceNumber = dto.InvoiceNumber,
-                InvoiceDate = dto.InvoiceDate,
-                TotalAmount = dto.TotalAmount,
-                DueDate = dto.DueDate,
-                Status = "Draft"
-            };
-
-            _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync();
-
-            return Ok(invoice);
-        }
-
-        [HttpPost("manual")]
-        public async Task<ActionResult<Invoice>> CreateManualInvoice([FromBody] CreateManualInvoiceDto dto)
-        {
-            var customer = await _context.Customers.FindAsync(dto.CustomerId);
-            if (customer == null) return BadRequest("Customer not found");
-
-            var invoice = new Invoice
-            {
-                CustomerId = dto.CustomerId,
-                InvoiceNumber = $"INV-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(100, 999)}", // Simple Auto-gen
-                InvoiceDate = dto.InvoiceDate,
-                DueDate = dto.DueDate ?? dto.InvoiceDate.AddDays(customer.PaymentTermsDays),
-                Status = "Sent",
-                CreatedAt = DateTime.UtcNow
-            };
-
-            decimal totalAmount = 0;
-            decimal totalVat = 0;
-
-            invoice.InvoiceLines = new List<InvoiceLine>();
-
-            foreach (var lineDto in dto.Lines)
-            {
-                var line = new InvoiceLine
-                {
-                    ProductVariantId = lineDto.ProductVariantId,
-                    Description = lineDto.Description,
-                    Quantity = lineDto.Quantity,
-                    UnitPrice = lineDto.UnitPrice,
-                    VATPercentage = lineDto.VATPercentage
-                    // LineTotal and Total are calculated properties
-                };
-
-                // Create "Shadow" Order for tracking history?
-                // For now, let's JUST handle Inventory deduction
-                if (lineDto.ProductVariantId.HasValue)
-                {
-                    var inventory = await _context.Inventory
-                        .FirstOrDefaultAsync(i => i.ProductVariantId == lineDto.ProductVariantId.Value); // FIFO logic omitted for brevity
-
-                    if (inventory != null)
-                    {
-                        inventory.Quantity -= lineDto.Quantity;
-                        _context.Inventory.Update(inventory);
-                        
-                        // Check if stock goes negative for warning?
-                    }
-                     // Else: create negative inventory record?
-                }
-                
-                // Calculate Totals manually for Invoice Header since EF mostly handles saving
-                decimal lineTotal = line.Quantity * line.UnitPrice;
-                decimal vatAmount = lineTotal * (line.VATPercentage / 100);
-                
-                totalAmount += lineTotal + vatAmount;
-                totalVat += vatAmount;
-
-                invoice.InvoiceLines.Add(line);
-            }
-
-            invoice.SubTotal = totalAmount - totalVat; // Back calculation or store explicitly
-            invoice.VATAmount = totalVat;
-            invoice.TotalAmount = totalAmount;
-
-            _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetInvoices", new { id = invoice.Id }, invoice);
-        }
-
+        // 1. De lijst ophalen voor de React pagina
         [HttpGet]
         public async Task<IActionResult> GetInvoices()
         {
             var invoices = await _context.Invoices
-                .Include(i => i.Customer) // Load Customer directly
-                .Include(i => i.Order)    // Optional: Load Linked Order if exists
+                .Include(i => i.Order)
                 .OrderByDescending(i => i.InvoiceDate)
+                .Select(i => new {
+                    i.Id,
+                    i.InvoiceNumber,
+                    i.OrderId,
+                    CustomerName = i.CustomCustomerName ?? (i.Order != null && i.Order.Customer != null ? i.Order.Customer.Name : "Unknown"),
+                    i.TotalAmount,
+                    i.Status,
+                    i.InvoiceDate,
+                    i.DueDate,
+                    i.CreatedAt
+                })
                 .ToListAsync();
-            
-            // Map to DTO or return directly (serializing cycles handled in Program.cs)
+
             return Ok(invoices);
         }
 
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateInvoice(int id, [FromBody] UpdateInvoiceDto dto)
-        {
-            var invoice = await _context.Invoices.FindAsync(id);
-            if (invoice == null) return NotFound();
-
-            invoice.TotalAmount = dto.TotalAmount;
-            invoice.Status = dto.Status;
-            invoice.DueDate = dto.DueDate;
-
-            await _context.SaveChangesAsync();
-            return Ok(invoice);
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteInvoice(int id)
-        {
-            var invoice = await _context.Invoices.FindAsync(id);
-            if (invoice == null)
-                return NotFound();
-
-            _context.Invoices.Remove(invoice);
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
+        // 2. Het PDF Endpoint (Aangeroepen door de Download knop!)
         [HttpGet("{id}/pdf")]
-        public async Task<IActionResult> GetInvoicePdf(int id)
+        public async Task<IActionResult> GenerateInvoicePdf(int id)
         {
+            // Haal de factuur op inclusief de regels en de klant
             var invoice = await _context.Invoices
-                .Include(i => i.Customer)
                 .Include(i => i.InvoiceLines)
-                .ThenInclude(l => l.ProductVariant)
-                .ThenInclude(pv => pv.Product)
+                .Include(i => i.Customer)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
-            if (invoice == null)
-                return NotFound();
+            if (invoice == null) return NotFound("Invoice not found");
 
-            var bytes = Document.Create(container =>
+            // Definieer de bedrijfsnaam van wie het systeem is (later uit database)
+            string companyName = "AGF ERP B.V.";
+            string companyAddress = "Handelsweg 1, 1234 AB, Rotterdam";
+            string companyEmail = "info@agf-erp.nl";
+
+            // Bouw het document op
+            var document = Document.Create(container =>
             {
                 container.Page(page =>
                 {
-                    page.Margin(40);
-                    page.Header()
-                        .Text($"Invoice {invoice.InvoiceNumber ?? invoice.Id.ToString()}")
-                        .FontSize(20)
-                        .SemiBold();
+                    page.Size(PageSizes.A4);
+                    page.Margin(2, Unit.Centimetre);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Arial));
 
-                    page.Content().Column(col =>
+                    // HEADER: Logo en Factuurinfo
+                    page.Header().Row(row =>
                     {
-                        col.Spacing(6);
-                        col.Item().Text($"Customer: {invoice.Customer.Name}");
-                        col.Item().Text($"Date: {invoice.InvoiceDate:yyyy-MM-dd}");
-                        
-                        // Line Items Table
-                        col.Item().Table(table =>
+                        row.RelativeItem().Column(column =>
+                        {
+                            column.Item().Text("INVOICE").FontSize(28).SemiBold().FontColor(Colors.Blue.Darken2);
+                            column.Item().Text($"#{invoice.InvoiceNumber}").FontSize(14).FontColor(Colors.Grey.Medium);
+                        });
+
+                        row.ConstantItem(175).AlignRight().Column(column =>
+                        {
+                            column.Item().Text(companyName).Bold().FontSize(12);
+                            column.Item().Text(companyAddress);
+                            column.Item().Text(companyEmail);
+                        });
+                    });
+
+                    // CONTENT: Klant, Tabel en Totalen
+                    page.Content().PaddingVertical(1, Unit.Centimetre).Column(column =>
+                    {
+                        column.Spacing(20);
+
+                        // Klant Details & Datums
+                        column.Item().Row(row =>
+                        {
+                            row.RelativeItem().Column(col =>
+                            {
+                                col.Item().Text("Factuur voor:").SemiBold().FontColor(Colors.Grey.Darken2);
+                                col.Item().Text(invoice.CustomCustomerName ?? invoice.Customer?.Name ?? "Onbekende Klant").Bold().FontSize(12);
+                            });
+                            
+                            row.ConstantItem(175).AlignRight().Column(col =>
+                            {
+                                col.Item().Text($"Factuurdatum: {invoice.InvoiceDate:dd-MM-yyyy}");
+                                col.Item().Text($"Vervaldatum: {invoice.DueDate:dd-MM-yyyy}");
+                            });
+                        });
+
+                        // Tabel
+                        column.Item().Table(table =>
                         {
                             table.ColumnsDefinition(columns =>
                             {
-                                columns.RelativeColumn(3); // Description
-                                columns.RelativeColumn(1); // Qty
-                                columns.RelativeColumn(1); // Price
-                                columns.RelativeColumn(1); // Total
+                                columns.RelativeColumn(3); // Product Omschrijving
+                                columns.RelativeColumn();  // Aantal
+                                columns.RelativeColumn();  // Prijs
+                                columns.RelativeColumn();  // Totaal
                             });
 
+                            // Tabel Header
                             table.Header(header =>
                             {
-                                header.Cell().Text("Description").SemiBold();
-                                header.Cell().Text("Qty").SemiBold();
-                                header.Cell().Text("Price").SemiBold();
-                                header.Cell().Text("Total").SemiBold();
+                                header.Cell().BorderBottom(1).BorderColor(Colors.Black).PaddingVertical(5).Text("Omschrijving").SemiBold();
+                                header.Cell().BorderBottom(1).BorderColor(Colors.Black).PaddingVertical(5).AlignRight().Text("Aantal").SemiBold();
+                                header.Cell().BorderBottom(1).BorderColor(Colors.Black).PaddingVertical(5).AlignRight().Text("Prijs").SemiBold();
+                                header.Cell().BorderBottom(1).BorderColor(Colors.Black).PaddingVertical(5).AlignRight().Text("Totaal").SemiBold();
                             });
 
+                            // Tabel Regels (De verkochte producten)
                             foreach (var line in invoice.InvoiceLines)
                             {
-                                string desc = line.Description;
-                                if (line.ProductVariant != null)
-                                    desc = $"{line.ProductVariant.Product.Name} - {line.ProductVariant.Name}";
-
-                                table.Cell().Text(desc);
-                                table.Cell().Text(line.Quantity.ToString());
-                                table.Cell().Text($"€ {line.UnitPrice:0.00}");
-                                table.Cell().Text($"€ {(line.Quantity * line.UnitPrice):0.00}");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingVertical(5).Text(line.Description);
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingVertical(5).AlignRight().Text($"{line.Quantity}");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingVertical(5).AlignRight().Text($"€ {line.UnitPrice:0.00}");
+                                table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingVertical(5).AlignRight().Text($"€ {(line.Quantity * line.UnitPrice):0.00}");
                             }
                         });
 
-
-                        col.Item().Text($"Total Amount: € {invoice.TotalAmount:0.00}").FontSize(14).SemiBold().AlignRight();
+                        // Totaalblok rechtsonder
+                        column.Item().AlignRight().Column(col => 
+                        {
+                            col.Item().Text($"Subtotaal: € {invoice.SubTotal:0.00}");
+                            col.Item().Text($"BTW (9%): € {invoice.VATAmount:0.00}");
+                            col.Item().PaddingTop(5).Text($"Totaal: € {invoice.TotalAmount:0.00}").Bold().FontSize(14).FontColor(Colors.Blue.Darken2);
+                        });
                     });
 
-                    page.Footer().AlignCenter().Text($"Generated {System.DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
+                    // FOOTER: Pagina nummers
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Pagina ");
+                        x.CurrentPageNumber();
+                        x.Span(" van ");
+                        x.TotalPages();
+                    });
                 });
-            }).GeneratePdf();
+            });
 
-            var fileName = $"Invoice-{(invoice.InvoiceNumber ?? invoice.Id.ToString())}.pdf";
-            return File(bytes, "application/pdf", fileName);
+            // Genereer de PDF en stuur hem naar de browser
+            var pdfBytes = document.GeneratePdf();
+            return File(pdfBytes, "application/pdf", $"{invoice.InvoiceNumber}.pdf");
         }
     }
 }

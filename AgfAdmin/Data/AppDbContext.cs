@@ -23,5 +23,7 @@ namespace AgfAdmin.Data
         public DbSet<OrderLine> OrderLines { get; set; }
         public DbSet<OrderLineAllocation> OrderLineAllocations { get; set; }
         public DbSet<WasteLog> WasteLogs { get; set; }
+        // Voeg deze regel toe aan je bestaande AppDbContext
+        public DbSet<CompanySettings> CompanySettings { get; set; }
     }
 }
