@@ -1,20 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ReportsService } from '../../../services/reportsService';
-import { ProductService, Product, ProductVariant } from '../../../services/productService';
+import { ReportsService, ShipmentTrace, InvoiceTrace } from '../../../services/reportsService';
+import { ProductService } from '../../../services/productService';
 
 export default function ReportsPage() {
     const [shipmentIdInput, setShipmentIdInput] = useState('');
     const [invoiceIdInput, setInvoiceIdInput] = useState('');
 
-    const [traceResult, setTraceResult] = useState<any>(null);
+    const [traceResult, setTraceResult] = useState<ShipmentTrace | InvoiceTrace | null>(null);
     const [traceType, setTraceType] = useState<'forward' | 'backward' | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Shortcut Manager State
-    const [allVariants, setAllVariants] = useState<any[]>([]);
+    const [allVariants, setAllVariants] = useState<{ id: number; name: string; shortcutCode?: string }[]>([]);
     const [selectedShortcutVariantId, setSelectedShortcutVariantId] = useState<string>('');
     const [shortcutCodeInput, setShortcutCodeInput] = useState<string>('');
 
@@ -43,8 +43,8 @@ export default function ReportsPage() {
             setAllVariants(variants);
             setShortcutCodeInput('');
             setSelectedShortcutVariantId('');
-        } catch (e: any) {
-            alert("Error: " + e.message);
+        } catch (e: unknown) {
+            alert("Error: " + (e instanceof Error ? e.message : undefined));
         }
     };
 
@@ -56,8 +56,8 @@ export default function ReportsPage() {
             const data = await ReportsService.traceShipment(parseInt(shipmentIdInput));
             setTraceResult(data);
             setTraceType('forward');
-        } catch (e: any) {
-            setError(e.message || "Failed to trace shipment. Ensure the Batch ID exists.");
+        } catch (e: unknown) {
+            setError((e instanceof Error && e.message) || "Failed to trace shipment. Ensure the Batch ID exists.");
         } finally {
             setLoading(false);
         }
@@ -71,12 +71,15 @@ export default function ReportsPage() {
             const data = await ReportsService.traceInvoice(parseInt(invoiceIdInput));
             setTraceResult(data);
             setTraceType('backward');
-        } catch (e: any) {
-            setError(e.message || "Failed to trace invoice. Ensure the Invoice ID exists.");
+        } catch (e: unknown) {
+            setError((e instanceof Error && e.message) || "Failed to trace invoice. Ensure the Invoice ID exists.");
         } finally {
             setLoading(false);
         }
     };
+
+    const shipmentTrace = traceType === 'forward' ? (traceResult as ShipmentTrace | null) : null;
+    const invoiceTrace = traceType === 'backward' ? (traceResult as InvoiceTrace | null) : null;
 
     return (
         <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -179,21 +182,21 @@ export default function ReportsPage() {
             )}
 
             {/* RESULTS PORTAL */}
-            {traceResult && traceType === 'forward' && (
+            {shipmentTrace && (
                 <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden mt-8 animate-fade-in">
                     <div className="bg-blue-900 text-white p-6">
-                        <h2 className="text-2xl font-black">Shipment Recall Report: #{traceResult.shipmentId}</h2>
+                        <h2 className="text-2xl font-black">Shipment Recall Report: #{shipmentTrace.shipmentId}</h2>
                         <div className="mt-4 grid grid-cols-3 gap-4 text-sm font-medium">
-                            <div className="bg-blue-800 p-3 rounded">Associated Batches: {traceResult.totalBatches}</div>
-                            <div className="bg-blue-800 p-3 rounded text-red-200">Total Wasted Units: {traceResult.totalWastedUnits}</div>
+                            <div className="bg-blue-800 p-3 rounded">Associated Batches: {shipmentTrace.totalBatches}</div>
+                            <div className="bg-blue-800 p-3 rounded text-red-200">Total Wasted Units: {shipmentTrace.totalWastedUnits}</div>
                         </div>
                     </div>
 
                     <div className="p-6 border-b border-gray-100 bg-gray-50">
                         <h3 className="font-bold text-gray-700 mb-2">Waste Breakdown</h3>
-                        {traceResult.wastedReasons.length > 0 ? (
+                        {shipmentTrace.wastedReasons.length > 0 ? (
                             <div className="flex space-x-4">
-                                {traceResult.wastedReasons.map((w: any, idx: number) => (
+                                {shipmentTrace.wastedReasons.map((w, idx) => (
                                     <span key={idx} className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-bold border border-red-200">
                                         {w.reason}: {w.count} units
                                     </span>
@@ -215,7 +218,7 @@ export default function ReportsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {traceResult.customers.length > 0 ? traceResult.customers.map((c: any, i: number) => (
+                                {shipmentTrace.customers.length > 0 ? shipmentTrace.customers.map((c, i) => (
                                     <tr key={i} className="hover:bg-blue-50 transition-colors">
                                         <td className="p-4 font-bold text-gray-900">{c.customerName}</td>
                                         <td className="p-4 text-blue-600 font-mono">{c.invoiceNumber}</td>
@@ -231,10 +234,10 @@ export default function ReportsPage() {
                 </div>
             )}
 
-            {traceResult && traceType === 'backward' && (
+            {invoiceTrace && (
                 <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden mt-8 animate-fade-in">
                     <div className="bg-emerald-900 text-white p-6">
-                        <h2 className="text-2xl font-black">Quality Complaint Trace: Invoice {traceResult.invoiceNumber}</h2>
+                        <h2 className="text-2xl font-black">Quality Complaint Trace: Invoice {invoiceTrace.invoiceNumber}</h2>
                         <p className="text-emerald-200 mt-2 text-sm">Definitively mappings of physical batch origins dispatched to this client.</p>
                     </div>
 
@@ -250,7 +253,7 @@ export default function ReportsPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {traceResult.sources.length > 0 ? traceResult.sources.map((s: any, i: number) => (
+                                {invoiceTrace.sources.length > 0 ? invoiceTrace.sources.map((s, i) => (
                                     <tr key={i} className="hover:bg-emerald-50 transition-colors">
                                         <td className="p-4 font-bold text-gray-700">{s.productName}</td>
                                         <td className="p-4 font-bold text-emerald-600">{s.batchQuantity}x</td>

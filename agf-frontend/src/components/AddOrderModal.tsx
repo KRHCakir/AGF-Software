@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ProductService, Product, ProductVariant } from '../services/productService';
+import { ProductService, Product } from '../services/productService';
 import { InvoiceService } from '../services/invoiceService';
 import { OrderService, CreateOrderDto } from '../services/orderService';
 import { useTranslation } from '../i18n/LanguageContext';

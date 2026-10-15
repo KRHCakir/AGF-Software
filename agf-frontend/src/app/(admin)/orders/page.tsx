@@ -35,7 +35,7 @@ export default function OrdersPage() {
       await OrderService.generateInvoice(id);
       alert(t('invoice_generated_success'));
       loadOrders();
-    } catch (error) {
+    } catch {
       alert(t('failed_generate_invoice'));
     }
   };
@@ -46,7 +46,7 @@ export default function OrdersPage() {
       await OrderService.deleteOrder(id);
       alert(t('order_cancelled_success'));
       loadOrders();
-    } catch (error) {
+    } catch {
       alert(t('failed_delete_order'));
     }
   };
@@ -54,12 +54,12 @@ export default function OrdersPage() {
   // Vervang de oude sortedOrders door deze gefilterde versie:
   const sortedOrders = useMemo(() => {
     // Filter: laat alleen orders zien die NIET 'Invoiced' of 'Cancelled' zijn
-    let activeOrders = orders.filter(o => o.status === 'Pending');
+    const activeOrders = orders.filter(o => o.status === 'Pending');
 
-    let sortableItems = [...activeOrders];
+    const sortableItems = [...activeOrders];
     sortableItems.sort((a, b) => {
-      let aValue: any = a[sortConfig.key as keyof OrderDto];
-      let bValue: any = b[sortConfig.key as keyof OrderDto];
+      let aValue = a[sortConfig.key as keyof OrderDto] as string | number;
+      let bValue = b[sortConfig.key as keyof OrderDto] as string | number;
 
       if (sortConfig.key === 'products') {
         aValue = a.lines[0]?.productName || '';

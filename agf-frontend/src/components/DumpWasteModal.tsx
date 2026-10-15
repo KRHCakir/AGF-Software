@@ -32,9 +32,9 @@ export default function DumpWasteModal({ isOpen, inventoryId, currentQuantity, o
             }
             await InventoryService.registerWaste(inventoryId, qty, wgt, reason);
             onSuccess();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
-            alert(`Failed to log waste: ${error.message}`);
+            alert(`Failed to log waste: ${error instanceof Error ? error.message : undefined}`);
         } finally {
             setLoading(false);
         }

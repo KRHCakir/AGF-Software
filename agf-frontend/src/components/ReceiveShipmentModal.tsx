@@ -46,9 +46,9 @@ export default function ReceiveShipmentModal({ isOpen, onClose, onSuccess }: Pro
             
             await InventoryService.receiveShipment(shipId, varId, qty, wt);
             onSuccess();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
-            alert(`Failed: ${error.message}`);
+            alert(`Failed: ${error instanceof Error ? error.message : undefined}`);
         } finally {
             setLoading(false);
         }
@@ -82,7 +82,7 @@ export default function ReceiveShipmentModal({ isOpen, onClose, onSuccess }: Pro
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Quantity Physically Received (Units/Boxes)</label>
                         <input type="number" required min="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500" />
-                        <p className="text-xs text-gray-400 mt-1">If "Backorder Ghosts" exist for this variant, the system will dynamically absorb the debt from this quantity before adding the remainder to live stock.</p>
+                        <p className="text-xs text-gray-400 mt-1">If &quot;Backorder Ghosts&quot; exist for this variant, the system will dynamically absorb the debt from this quantity before adding the remainder to live stock.</p>
                     </div>
 
                     <div>

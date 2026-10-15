@@ -31,7 +31,7 @@ export default function ShortcutManager({ onSuccess }: ShortcutManagerProps) {
             // Geen succesmelding meer, gewoon direct velden leegmaken en lijst verversen
             setProduct(''); setVariant(''); setOrigin(''); setSize(''); setShortcut('');
             onSuccess();
-        } catch (error) {
+        } catch {
             // Alleen meldingen als er iets fout gaat
             alert('Error saving shortcut. Please try again.');
         } finally {

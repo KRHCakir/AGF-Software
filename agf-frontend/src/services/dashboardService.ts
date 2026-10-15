@@ -1,3 +1,14 @@
+import { Shipment } from './inventoryService';
+
+export interface DashboardRecentOrder {
+    id: number;
+    orderNumber: string;
+    customerName: string;
+    productName: string;
+    amount: number;
+    status: string;
+}
+
 export interface DashboardData {
     kpis: {
         totalSalesToday: number;
@@ -5,8 +16,8 @@ export interface DashboardData {
         shipmentsArriving: number;
         margin: string;
     };
-    recentOrders: any[];
-    shipments: any[];
+    recentOrders: DashboardRecentOrder[];
+    shipments: Shipment[];
 }
 
 const API_BASE_URL = 'http://localhost:5197/api';

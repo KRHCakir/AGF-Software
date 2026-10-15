@@ -1,3 +1,5 @@
+import { ApiMessage } from './apiTypes';
+
 const API_BASE_URL = 'http://localhost:5197/api';
 
 export interface InventoryItem {
@@ -8,7 +10,7 @@ export interface InventoryItem {
     stored: string;
     isFrozen?: boolean;
     shipmentId?: number;
-    shipment?: any;
+    shipment?: Shipment | null;
     productVariantName?: string; // Optional derived field for UI
 }
 
@@ -35,7 +37,7 @@ export const InventoryService = {
     },
 
     // Ghost sweep trigger
-    async receiveShipment(id: number, productVariantId: number, quantityReceived: number, weightKg?: number): Promise<any> {
+    async receiveShipment(id: number, productVariantId: number, quantityReceived: number, weightKg?: number): Promise<ApiMessage> {
         const res = await fetch(`${API_BASE_URL}/shipments/${id}/receive`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -48,7 +50,7 @@ export const InventoryService = {
         return res.json();
     },
 
-    async registerWaste(id: number, quantityDumped: number, weightDumpedKg?: number, reason: string = "Spoilage"): Promise<any> {
+    async registerWaste(id: number, quantityDumped: number, weightDumpedKg?: number, reason: string = "Spoilage"): Promise<ApiMessage> {
         const res = await fetch(`${API_BASE_URL}/inventory/${id}/waste`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -61,13 +63,13 @@ export const InventoryService = {
         return res.json();
     },
 
-    async freezeBatch(id: number): Promise<any> {
+    async freezeBatch(id: number): Promise<ApiMessage> {
         const res = await fetch(`${API_BASE_URL}/inventory/${id}/freeze`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         return res.json();
     },
 
-    async unfreezeBatch(id: number): Promise<any> {
+    async unfreezeBatch(id: number): Promise<ApiMessage> {
         const res = await fetch(`${API_BASE_URL}/inventory/${id}/unfreeze`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         return res.json();
