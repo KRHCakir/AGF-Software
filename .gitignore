@@ -571,3 +571,6 @@ FodyWeavers.xsd
 *.msm
 *.msp
 .DS_Store
+
+# Lokale ontwikkelconfiguratie met credentials (zie docs/development-setup.md)
+AgfAdmin/appsettings.Development.json
