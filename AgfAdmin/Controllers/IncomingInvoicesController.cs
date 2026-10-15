@@ -156,26 +156,24 @@ namespace AgfAdmin.Controllers
                 return BadRequest();
             }
 
-            _context.Entry(invoice).State = EntityState.Modified;
+            var existing = await _context.IncomingInvoices.FindAsync(id);
+            if (existing == null) return NotFound();
 
-            // Also update lines if sent? Complex, generally handle lines separately or use specific DTOs.
-            // For prototype, basic update.
+            if (!IsEditable(existing.Status))
+            {
+                return Conflict(new { message = $"Invoice with status '{existing.Status}' can no longer be edited." });
+            }
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!IncomingInvoiceExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            // Alleen bewerkbare velden overnemen; Status, Id, CreatedAt en geneste objecten uit de body worden genegeerd.
+            existing.VendorId = invoice.VendorId;
+            existing.InvoiceNumber = invoice.InvoiceNumber;
+            existing.InvoiceDate = invoice.InvoiceDate;
+            existing.DueDate = invoice.DueDate;
+            existing.TotalAmount = invoice.TotalAmount;
+            existing.VATAmount = invoice.VATAmount;
+            existing.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
 
             return NoContent();
         }
@@ -187,7 +185,13 @@ namespace AgfAdmin.Controllers
             var invoice = await _context.IncomingInvoices.FindAsync(id);
             if (invoice == null) return NotFound();
 
+            if (!IsReviewable(invoice.Status))
+            {
+                return Conflict(new { message = $"Invoice with status '{invoice.Status}' cannot be approved." });
+            }
+
             invoice.Status = "Approved";
+            invoice.UpdatedAt = DateTime.UtcNow;
             // Trigger payment workflow or creating internal record
             await _context.SaveChangesAsync();
             return Ok(new { status = "Approved" });
@@ -200,14 +204,22 @@ namespace AgfAdmin.Controllers
             var invoice = await _context.IncomingInvoices.FindAsync(id);
             if (invoice == null) return NotFound();
 
+            if (!IsReviewable(invoice.Status))
+            {
+                return Conflict(new { message = $"Invoice with status '{invoice.Status}' cannot be rejected." });
+            }
+
             invoice.Status = "Rejected";
+            invoice.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
             return Ok(new { status = "Rejected" });
         }
 
-        private bool IncomingInvoiceExists(int id)
-        {
-            return _context.IncomingInvoices.Any(e => e.Id == id);
-        }
+        // Alleen deze statussen mogen nog worden beoordeeld; Approved, Rejected en Error zijn (voorlopig) terminal.
+        private static readonly string[] ReviewableStatuses = { "Draft", "Processing", "NeedsReview" };
+
+        private static bool IsReviewable(string status) => ReviewableStatuses.Contains(status);
+
+        private static bool IsEditable(string status) => status != "Approved" && status != "Rejected";
     }
 }
