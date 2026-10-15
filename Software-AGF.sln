@@ -4,6 +4,8 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgfAdmin", "AgfAdmin\AgfAdmin.csproj", "{BAB77BC6-6124-A493-4C7D-1FBA56149D27}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgfAdmin.Tests", "AgfAdmin.Tests\AgfAdmin.Tests.csproj", "{D6ABABD5-613B-4117-A97D-0F59A5968001}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,6 +16,10 @@ Global
 		{BAB77BC6-6124-A493-4C7D-1FBA56149D27}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BAB77BC6-6124-A493-4C7D-1FBA56149D27}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BAB77BC6-6124-A493-4C7D-1FBA56149D27}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6ABABD5-613B-4117-A97D-0F59A5968001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6ABABD5-613B-4117-A97D-0F59A5968001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6ABABD5-613B-4117-A97D-0F59A5968001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6ABABD5-613B-4117-A97D-0F59A5968001}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
