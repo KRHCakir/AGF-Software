@@ -1,3 +1,4 @@
+using AgfAdmin.Configuration;
 using AgfAdmin.Data;
 using AgfAdmin.Models;
 using AgfAdmin.Services;
@@ -20,8 +21,9 @@ builder.Services.AddScoped<IAIExtractorService, MockAIExtractorService>();
 builder.Services.AddScoped<ISalesParserService, SimpleSalesParserService>();
 
 // Database configuratie
+var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder.Configuration);
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 // CORS configuratie
 builder.Services.AddCors(options =>
