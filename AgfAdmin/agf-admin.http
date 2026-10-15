@@ -1,6 +1,10 @@
 @agf_admin_HostAddress = http://localhost:5197
 
-GET {{agf_admin_HostAddress}}/weatherforecast/
+### Handmatige smoke-test (alleen-lezen): productlijst ophalen
+# Vereist een draaiende lokale API en database, zie docs/development-setup.md.
+# Verwacht: HTTP 200 met een JSON-array (leeg zonder demo-data).
+# Endpoint: ProductsController, GET api/products.
+GET {{agf_admin_HostAddress}}/api/products
 Accept: application/json
 
 ###
