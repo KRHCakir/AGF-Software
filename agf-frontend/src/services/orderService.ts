@@ -1,3 +1,5 @@
+import { ApiMessage } from './apiTypes';
+
 export interface OrderLineDto {
     id: number;
     productVariantId: number;
@@ -58,7 +60,7 @@ export const OrderService = {
         return res.json();
     },
 
-    async generateInvoice(id: number): Promise<any> {
+    async generateInvoice(id: number): Promise<{ invoiceNumber: string }> {
         const res = await fetch(`${API_BASE_URL}/order/${id}/generate-invoice`, {
             method: 'POST',
         });
@@ -69,7 +71,7 @@ export const OrderService = {
         return res.json();
     },
 
-    async deleteOrder(id: number): Promise<any> {
+    async deleteOrder(id: number): Promise<ApiMessage> {
         const res = await fetch(`${API_BASE_URL}/order/${id}`, {
             method: 'DELETE',
         });

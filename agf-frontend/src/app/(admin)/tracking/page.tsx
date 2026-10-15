@@ -1,3 +1,5 @@
+'use client';
+
 import { useTranslation } from '../../../i18n/LanguageContext';
 
 export default function TrackingPage() {

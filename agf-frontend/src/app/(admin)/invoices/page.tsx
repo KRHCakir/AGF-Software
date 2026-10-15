@@ -1,13 +1,26 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "../../../i18n/LanguageContext";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5197";
 
+// Vorm van GET /api/Invoice (InvoiceController.GetInvoices).
+interface InvoiceListItem {
+  id: number;
+  invoiceNumber: string;
+  orderId: number | null;
+  customerName: string;
+  totalAmount: number;
+  status: string;
+  invoiceDate: string;
+  dueDate: string | null;
+  createdAt: string;
+}
+
 export default function InvoicesPage() {
   const { t } = useTranslation();
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadInvoices = () => {
@@ -55,8 +68,8 @@ export default function InvoicesPage() {
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">{new Date(i.invoiceDate).toLocaleDateString()}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">
-                  <span className={new Date(i.dueDate) < new Date() ? "text-red-500 font-bold" : ""}>
-                    {new Date(i.dueDate).toLocaleDateString()}
+                  <span className={new Date(i.dueDate ?? 0) < new Date() ? "text-red-500 font-bold" : ""}>
+                    {new Date(i.dueDate ?? 0).toLocaleDateString()}
                   </span>
                 </td>
                 <td className="px-6 py-4">

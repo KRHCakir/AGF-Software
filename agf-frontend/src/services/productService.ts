@@ -1,3 +1,5 @@
+import { ApiMessage } from './apiTypes';
+
 const API_BASE_URL = 'http://localhost:5197/api';
 
 export const ProductService = {
@@ -7,7 +9,7 @@ export const ProductService = {
         return res.json();
     },
 
-    async updateShortcut(variantId: number, shortcutCode: string | null): Promise<any> {
+    async updateShortcut(variantId: number, shortcutCode: string | null): Promise<ApiMessage> {
         const res = await fetch(`${API_BASE_URL}/products/variants/${variantId}/shortcut`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -27,7 +29,7 @@ export const ProductService = {
         notes?: string; // <-- Toevoegen
         sizeCategory?: string;
         shortcutCode: string;
-    }): Promise<any> {
+    }): Promise<ApiMessage & { variantId: number }> {
         const res = await fetch(`${API_BASE_URL}/products/quick-shortcut`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

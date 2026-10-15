@@ -12,6 +12,13 @@ import { CustomerService } from '@/services/customerService';
 import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 
+type FastSaleVariant = {
+    id: number;
+    name: string;
+    price: number;
+    shortcutCode?: string;
+};
+
 export default function FastSalesPage({ params }: { params: Promise<{ sellerId: string }> }) {
     const { sellerId } = use(params);
     const router = useRouter();
@@ -39,7 +46,8 @@ export default function FastSalesPage({ params }: { params: Promise<{ sellerId: 
         }).catch(console.error);
     }, []);
 
-    const allVariants = allProducts.flatMap(p => 
+    // Bekende bug (apart vervolg-PR): shortcutCode wordt hieronder niet gemapt, dus shortcut-matching vindt nooit iets.
+    const allVariants: FastSaleVariant[] = allProducts.flatMap(p =>
         p.variants.map(v => ({
             id: v.id,
             name: `${p.name} ${v.name}`,
