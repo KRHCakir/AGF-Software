@@ -126,7 +126,8 @@ public class IncomingInvoicesControllerTests
     [Theory]
     [InlineData("Approved")]
     [InlineData("Rejected")]
-    public async Task Update_When_Approved_Or_Rejected_Returns_Conflict_And_Leaves_Fields_Unchanged(string initialStatus)
+    [InlineData("Error")]
+    public async Task Update_When_Approved_Rejected_Or_Error_Returns_Conflict_And_Leaves_Fields_Unchanged(string initialStatus)
     {
         var (databaseName, id) = await SeedInvoiceAsync(initialStatus);
 

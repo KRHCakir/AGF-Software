@@ -215,11 +215,11 @@ namespace AgfAdmin.Controllers
             return Ok(new { status = "Rejected" });
         }
 
-        // Alleen deze statussen mogen nog worden beoordeeld; Approved, Rejected en Error zijn (voorlopig) terminal.
+        // Alleen deze statussen mogen nog worden bewerkt en beoordeeld; Approved, Rejected en Error zijn (voorlopig) terminal.
         private static readonly string[] ReviewableStatuses = { "Draft", "Processing", "NeedsReview" };
 
         private static bool IsReviewable(string status) => ReviewableStatuses.Contains(status);
 
-        private static bool IsEditable(string status) => status != "Approved" && status != "Rejected";
+        private static bool IsEditable(string status) => IsReviewable(status);
     }
 }
