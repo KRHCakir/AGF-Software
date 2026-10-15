@@ -52,4 +52,28 @@ public class DatabaseConfigurationTests
 
         Assert.Equal(connectionString, result);
     }
+
+    [Fact]
+    public void DefaultConnection_From_EnvironmentVariable_Is_Accepted()
+    {
+        const string connectionString = "Host=env-host;Database=env-db";
+        var prefix = $"AGFTEST_{Guid.NewGuid():N}_";
+        var variableName = prefix + "ConnectionStrings__DefaultConnection";
+
+        Environment.SetEnvironmentVariable(variableName, connectionString);
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddEnvironmentVariables(prefix)
+                .Build();
+
+            var result = DatabaseConfiguration.GetRequiredConnectionString(configuration);
+
+            Assert.Equal(connectionString, result);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variableName, null);
+        }
+    }
 }
