@@ -571,7 +571,11 @@ public class PalletServiceTests : IDisposable
         var palletId = await CreatedPalletIdAsync(PalletRequest());
         await using (var db = _factory.CreateContext())
         {
-            (await db.Pallets.SingleAsync()).LogisticsStatus = terminalStatus;
+            // Een eindstatus is nooit Warehouse (database-check); de pallet staat dan bij de klant.
+            var pallet = await db.Pallets.SingleAsync();
+            pallet.LogisticsStatus = terminalStatus;
+            pallet.LocationContext = "Customer";
+            pallet.WarehouseLocation = null;
             await db.SaveChangesAsync();
         }
 

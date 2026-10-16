@@ -516,6 +516,10 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.Property<string>("WarehouseLocation")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -532,6 +536,14 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("Pallets", t =>
                         {
+                            t.HasCheckConstraint("CK_Pallets_Delivered_Location", "\"LogisticsStatus\" <> 'Delivered' OR \"LocationContext\" IN ('Customer', 'External')");
+
+                            t.HasCheckConstraint("CK_Pallets_LocationContext_Allowed", "\"LocationContext\" IN ('Supplier', 'Warehouse', 'Crossdock', 'InTransit', 'Customer', 'External')");
+
+                            t.HasCheckConstraint("CK_Pallets_Location_Status", "(\"LocationContext\" <> 'Warehouse' OR \"LogisticsStatus\" = 'Received') AND (\"WarehouseLocation\" IS NULL OR (\"LocationContext\" = 'Warehouse' AND \"LogisticsStatus\" = 'Received' AND length(trim(\"WarehouseLocation\")) > 0))");
+
+                            t.HasCheckConstraint("CK_Pallets_LogisticsStatus_Allowed", "\"LogisticsStatus\" IN ('Expected', 'InTransit', 'Received', 'Dispatched', 'Delivered', 'Cancelled')");
+
                             t.HasCheckConstraint("CK_Pallets_Reference_NotBlank", "length(trim(\"Reference\")) > 0");
 
                             t.HasCheckConstraint("CK_Pallets_Sscc_NullOrNotBlank", "\"Sscc\" IS NULL OR length(trim(\"Sscc\")) > 0");
@@ -576,11 +588,17 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PalletContentLineId");
 
                     b.HasIndex("PalletId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
 
                     b.ToTable("PalletAuditEvents", t =>
                         {
@@ -635,6 +653,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("PalletId");
@@ -649,6 +671,8 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
 
                             t.HasCheckConstraint("CK_PalletContentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed", "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
 
                             t.HasCheckConstraint("CK_PalletContentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 

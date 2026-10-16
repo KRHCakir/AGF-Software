@@ -342,4 +342,260 @@ public class TraceabilityGuardTests : IDisposable
         await using var verify = _factory.CreateContext();
         Assert.Equal(2, await verify.Customers.CountAsync());
     }
+
+    // ---- Versies: start op 0, centrale verhoging bij elke succesvolle wijziging, concurrency-token ----
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task New_Pallet_And_ContentLine_Start_At_Version_Zero(bool async)
+    {
+        var graph = await SeedAsync();
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, (await verify.Pallets.SingleAsync(p => p.Id == graph.PalletId)).Version);
+        Assert.Equal(0, (await verify.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA)).Version);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var pallet = new Pallet { Reference = "PAL-002", LogisticsStatus = "Expected", LocationContext = "Supplier", Version = 0 };
+            db.Pallets.Add(pallet);
+            await SaveAsync(db, async);
+            Assert.Equal(0, pallet.Version);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Version_Increments_Centrally_On_Every_Successful_Modification(bool async)
+    {
+        var graph = await SeedAsync();
+
+        for (var expected = 1; expected <= 3; expected++)
+        {
+            await using var db = _factory.CreateContext();
+            var pallet = await db.Pallets.SingleAsync(p => p.Id == graph.PalletId);
+            var content = await db.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA);
+            pallet.PalletType = $"EUR-{expected}";
+            content.QualityReason = $"Check {expected}";
+            await SaveAsync(db, async);
+            Assert.Equal(expected, pallet.Version);
+            Assert.Equal(expected, content.Version);
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(3, (await verify.Pallets.SingleAsync(p => p.Id == graph.PalletId)).Version);
+        Assert.Equal(3, (await verify.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA)).Version);
+    }
+
+    [Fact]
+    public async Task Version_Does_Not_Change_Without_Modification()
+    {
+        var graph = await SeedAsync();
+
+        await using (var db = _factory.CreateContext())
+        {
+            await db.Pallets.SingleAsync(p => p.Id == graph.PalletId);
+            db.Customers.Add(new Customer { Name = "Customer T" });
+            await db.SaveChangesAsync();
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, (await verify.Pallets.SingleAsync(p => p.Id == graph.PalletId)).Version);
+    }
+
+    [Theory]
+    [InlineData("pallet", false)]
+    [InlineData("pallet", true)]
+    [InlineData("content", false)]
+    [InlineData("content", true)]
+    public async Task Stale_Version_Is_Rejected_As_Concurrency_Conflict(string entity, bool async)
+    {
+        var graph = await SeedAsync();
+
+        await using var first = _factory.CreateContext();
+        await using var second = _factory.CreateContext();
+        var firstPallet = await first.Pallets.SingleAsync(p => p.Id == graph.PalletId);
+        var secondPallet = await second.Pallets.SingleAsync(p => p.Id == graph.PalletId);
+        var firstContent = await first.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA);
+        var secondContent = await second.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA);
+
+        if (entity == "pallet")
+        {
+            firstPallet.PalletType = "EUR";
+            secondPallet.PalletType = "BLOK";
+        }
+        else
+        {
+            firstContent.QualityReason = "first";
+            secondContent.QualityReason = "second";
+        }
+
+        await SaveAsync(first, async);
+        var exception = await Record.ExceptionAsync(() => SaveAsync(second, async));
+        Assert.IsType<DbUpdateConcurrencyException>(exception);
+
+        await using var verify = _factory.CreateContext();
+        if (entity == "pallet")
+        {
+            var pallet = await verify.Pallets.SingleAsync(p => p.Id == graph.PalletId);
+            Assert.Equal("EUR", pallet.PalletType);
+            Assert.Equal(1, pallet.Version);
+        }
+        else
+        {
+            var content = await verify.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA);
+            Assert.Equal("first", content.QualityReason);
+            Assert.Equal(1, content.Version);
+        }
+    }
+
+    // ---- Regel 4: DirectTrade-inhoud komt nooit op een Warehouse-pallet ----
+
+    private async Task<int> AddDirectTradeSourceLineAsync()
+    {
+        await using var db = _factory.CreateContext();
+        var variant = await db.ProductVariants.FirstAsync();
+        var commitment = new SupplyCommitment
+        {
+            RequestId = Guid.NewGuid(),
+            VendorId = (await db.Vendors.FirstAsync()).Id,
+            Customer = new Customer { Name = "Customer T" },
+            Route = "DirectTrade",
+            Status = "Expected",
+            Origin = "Kenya",
+            Destination = "Turkey"
+        };
+        var line = new SupplyCommitmentLine { SupplyCommitment = commitment, ProductVariantId = variant.Id, ExpectedQuantity = 5m, ExpectedUnit = "box" };
+        db.AddRange(commitment, line);
+        await db.SaveChangesAsync();
+        return line.Id;
+    }
+
+    private async Task<int> AddCrossdockPalletAsync(int? directTradeSourceLineId)
+    {
+        await using var db = _factory.CreateContext();
+        var pallet = new Pallet { Reference = $"PAL-X-{Guid.NewGuid():N}"[..20], LogisticsStatus = "Received", LocationContext = "Crossdock" };
+        db.Pallets.Add(pallet);
+        if (directTradeSourceLineId != null)
+        {
+            var source = await db.SupplyCommitmentLines.SingleAsync(l => l.Id == directTradeSourceLineId);
+            db.PalletContentLines.Add(NewContentLine(pallet, source));
+        }
+        await db.SaveChangesAsync();
+        return pallet.Id;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DirectTrade_ContentLine_On_Existing_Warehouse_Pallet_Is_Rejected(bool async)
+    {
+        await SeedAsync();
+        var directLineId = await AddDirectTradeSourceLineAsync();
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.PalletContentLines.Add(new PalletContentLine
+            {
+                RequestId = Guid.NewGuid(),
+                PalletId = (await db.Pallets.SingleAsync()).Id,
+                SupplyCommitmentLineId = directLineId,
+                LotNumber = "LOT-D",
+                Quantity = 1m,
+                Unit = "box",
+                NetWeightKg = 4m,
+                QualityStatus = "Quarantine"
+            });
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(1, await verify.PalletContentLines.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task New_Warehouse_Pallet_With_New_DirectTrade_Content_In_Same_Save_Is_Rejected(bool async)
+    {
+        await SeedAsync();
+        var directLineId = await AddDirectTradeSourceLineAsync();
+
+        await using (var db = _factory.CreateContext())
+        {
+            var pallet = new Pallet { Reference = "PAL-NEW", LogisticsStatus = "Received", LocationContext = "Warehouse" };
+            var source = await db.SupplyCommitmentLines.SingleAsync(l => l.Id == directLineId);
+            db.Pallets.Add(pallet);
+            db.PalletContentLines.Add(NewContentLine(pallet, source));
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.False(await verify.Pallets.AnyAsync(p => p.Reference == "PAL-NEW"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Moving_A_Pallet_With_DirectTrade_Content_To_Warehouse_Is_Rejected(bool async)
+    {
+        await SeedAsync();
+        var directLineId = await AddDirectTradeSourceLineAsync();
+        var palletId = await AddCrossdockPalletAsync(directLineId);
+
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.Pallets.SingleAsync(p => p.Id == palletId)).LocationContext = "Warehouse";
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal("Crossdock", (await verify.Pallets.SingleAsync(p => p.Id == palletId)).LocationContext);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DirectTrade_Content_Outside_Warehouse_And_Warehouse_Moves_Without_DirectTrade_Are_Allowed(bool async)
+    {
+        await SeedAsync();
+        var directLineId = await AddDirectTradeSourceLineAsync();
+        var directPalletId = await AddCrossdockPalletAsync(directLineId);
+        var emptyPalletId = await AddCrossdockPalletAsync(null);
+
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.Pallets.SingleAsync(p => p.Id == emptyPalletId)).LocationContext = "Warehouse";
+            (await db.Pallets.SingleAsync(p => p.Id == directPalletId)).LocationContext = "Customer";
+            await SaveAsync(db, async);
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal("Warehouse", (await verify.Pallets.SingleAsync(p => p.Id == emptyPalletId)).LocationContext);
+        Assert.Equal("Customer", (await verify.Pallets.SingleAsync(p => p.Id == directPalletId)).LocationContext);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Audit_Event_With_RequestId_Is_Also_Append_Only(bool async)
+    {
+        var graph = await SeedAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            db.PalletAuditEvents.Add(new PalletAuditEvent { PalletId = graph.PalletId, EventType = "LogisticsStatusChanged", RequestId = Guid.NewGuid(), ActorReference = "office-1", OccurredAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.PalletAuditEvents.SingleAsync()).NewValue = "{\"logisticsStatus\":\"Delivered\"}";
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Null((await verify.PalletAuditEvents.SingleAsync()).NewValue);
+    }
 }
