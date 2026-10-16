@@ -894,6 +894,9 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Destination")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -905,6 +908,9 @@ namespace AgfAdmin.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Route")
                         .IsRequired()
@@ -924,9 +930,17 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
                     b.HasIndex("VendorId");
 
-                    b.ToTable("SupplyCommitments");
+                    b.ToTable("SupplyCommitments", t =>
+                        {
+                            t.HasCheckConstraint("CK_SupplyCommitments_Route_CustomerLink", "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentLine", b =>
@@ -1302,11 +1316,18 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.Vendor", "Vendor")
                         .WithMany()
                         .HasForeignKey("VendorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Customer");
 
                     b.Navigation("Vendor");
                 });

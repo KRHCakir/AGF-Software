@@ -20,6 +20,9 @@ builder.Services.AddScoped<IAIExtractorService, MockAIExtractorService>();
 builder.Services.AddScoped<ISalesParserService, SimpleSalesParserService>();
 builder.Services.AddScoped<IDevelopmentDataSeeder, DevelopmentDataSeeder>();
 
+// Beschikbaarheidsdomein
+builder.Services.AddScoped<ISupplyCommitmentService, SupplyCommitmentService>();
+
 // Database configuratie
 var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder.Configuration);
 builder.Services.AddDbContext<AppDbContext>(options =>

@@ -21,7 +21,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         var vendor = new Vendor { Name = "Supplier B" };
         var order = new Order { CustomCustomerName = "Customer C" };
         var orderLine = new OrderLine { Order = order, ProductVariant = variant, Quantity = 1, UnitPrice = 12.50m };
-        var commitment = new SupplyCommitment { Vendor = vendor, Route = "Warehouse", Status = "Expected", Origin = "Peru" };
+        var commitment = new SupplyCommitment { RequestId = Guid.NewGuid(), Vendor = vendor, Route = "Warehouse", Status = "Expected", Origin = "Peru" };
         var commitmentLine = new SupplyCommitmentLine { SupplyCommitment = commitment, ProductVariant = variant, ExpectedQuantity = 3m };
 
         db.AddRange(product, variant, vendor, order, orderLine, commitment, commitmentLine);
@@ -89,6 +89,7 @@ public class InventoryAvailabilityModelTests : IDisposable
 
         await AssertSaveIsRejectedAsync(db => db.SupplyCommitments.Add(new SupplyCommitment
         {
+            RequestId = Guid.NewGuid(),
             VendorId = graph.VendorId + 1000,
             Route = "Warehouse",
             Status = "Expected",
@@ -408,6 +409,114 @@ public class InventoryAvailabilityModelTests : IDisposable
 
         Assert.Equal(32, property.GetMaxLength());
         Assert.True(property.IsNullable);
+    }
+
+    // ---- Klantkoppeling en idempotentie van supply-commitments ----
+
+    private async Task<int> AddCustomerAsync(string name = "Customer T")
+    {
+        await using var db = _factory.CreateContext();
+        var customer = new Customer { Name = name };
+        db.Customers.Add(customer);
+        await db.SaveChangesAsync();
+        return customer.Id;
+    }
+
+    private static SupplyCommitment NewCommitment(int vendorId, string route, int? customerId, Guid? requestId = null) => new()
+    {
+        RequestId = requestId ?? Guid.NewGuid(),
+        VendorId = vendorId,
+        CustomerId = customerId,
+        Route = route,
+        Status = "Expected",
+        Origin = "Kenya",
+        Destination = "Turkey"
+    };
+
+    [Theory]
+    [InlineData("Warehouse", false, true)]
+    [InlineData("Warehouse", true, false)]
+    [InlineData("DirectTrade", true, true)]
+    [InlineData("DirectTrade", false, false)]
+    public async Task SupplyCommitment_Customer_Link_Must_Match_Route(string route, bool withCustomer, bool accepted)
+    {
+        var graph = await SeedGraphAsync();
+        var customerId = await AddCustomerAsync();
+
+        await using var db = _factory.CreateContext();
+        db.SupplyCommitments.Add(NewCommitment(graph.VendorId, route, withCustomer ? customerId : null));
+
+        if (accepted)
+        {
+            await db.SaveChangesAsync();
+            await using var verify = _factory.CreateContext();
+            Assert.Equal(2, await verify.SupplyCommitments.CountAsync());
+        }
+        else
+        {
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
+    public async Task SupplyCommitment_Requires_Existing_Customer()
+    {
+        var graph = await SeedGraphAsync();
+
+        await AssertSaveIsRejectedAsync(db =>
+            db.SupplyCommitments.Add(NewCommitment(graph.VendorId, "DirectTrade", customerId: 999_999)));
+    }
+
+    [Fact]
+    public async Task Deleting_Customer_With_SupplyCommitment_Is_Restricted()
+    {
+        var graph = await SeedGraphAsync();
+        var customerId = await AddCustomerAsync();
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.SupplyCommitments.Add(NewCommitment(graph.VendorId, "DirectTrade", customerId));
+            await db.SaveChangesAsync();
+        }
+
+        await AssertSaveIsRejectedAsync(db => db.Customers.Remove(new Customer { Id = customerId }));
+
+        await using var verify = _factory.CreateContext();
+        Assert.True(await verify.Customers.AnyAsync(c => c.Id == customerId));
+    }
+
+    [Fact]
+    public async Task SupplyCommitment_Duplicate_RequestId_Is_Rejected()
+    {
+        var graph = await SeedGraphAsync();
+        var requestId = Guid.NewGuid();
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.SupplyCommitments.Add(NewCommitment(graph.VendorId, "Warehouse", null, requestId));
+            await db.SaveChangesAsync();
+        }
+
+        await AssertSaveIsRejectedAsync(db =>
+            db.SupplyCommitments.Add(NewCommitment(graph.VendorId, "Warehouse", null, requestId)));
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(1, await verify.SupplyCommitments.CountAsync(c => c.RequestId == requestId));
+    }
+
+    [Fact]
+    public void SupplyCommitment_Customer_And_RequestId_Metadata()
+    {
+        using var db = _factory.CreateContext();
+        var entity = db.Model.FindEntityType(typeof(SupplyCommitment))!;
+
+        var requestIdIndex = Assert.Single(entity.GetIndexes(), i => i.Properties.Single().Name == nameof(SupplyCommitment.RequestId));
+        Assert.True(requestIdIndex.IsUnique);
+        Assert.Contains(entity.GetIndexes(), i => i.Properties.Single().Name == nameof(SupplyCommitment.CustomerId));
+
+        var customerFk = Assert.Single(entity.GetForeignKeys(), fk => fk.PrincipalEntityType.ClrType == typeof(Customer));
+        Assert.Equal(DeleteBehavior.Restrict, customerFk.DeleteBehavior);
+        Assert.True(entity.FindProperty(nameof(SupplyCommitment.CustomerId))!.IsNullable);
     }
 
     // ---- Pallet- en inhoudsregel-traceability ----

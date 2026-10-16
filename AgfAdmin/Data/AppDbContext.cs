@@ -63,6 +63,20 @@ namespace AgfAdmin.Data
                     .WithMany()
                     .HasForeignKey(c => c.VendorId)
                     .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasIndex(c => c.RequestId).IsUnique();
+
+                b.HasOne(c => c.Customer)
+                    .WithMany()
+                    .HasForeignKey(c => c.CustomerId)
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(c => c.CustomerId);
+
+                // DirectTrade is altijd klantgebonden; Warehouse-aanbod is nooit aan een klant gebonden.
+                b.ToTable(t => t.HasCheckConstraint(
+                    "CK_SupplyCommitments_Route_CustomerLink",
+                    "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)"));
             });
 
             modelBuilder.Entity<SupplyCommitmentLine>(b =>
