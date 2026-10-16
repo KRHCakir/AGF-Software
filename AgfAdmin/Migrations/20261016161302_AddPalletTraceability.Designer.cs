@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace AgfAdmin.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261016160006_AddPalletTraceability")]
+    [Migration("20261016161302_AddPalletTraceability")]
     partial class AddPalletTraceability
     {
         /// <inheritdoc />
@@ -533,7 +533,12 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("StockReceiptId");
 
-                    b.ToTable("Pallets");
+                    b.ToTable("Pallets", t =>
+                        {
+                            t.HasCheckConstraint("CK_Pallets_Reference_NotBlank", "length(trim(\"Reference\")) > 0");
+
+                            t.HasCheckConstraint("CK_Pallets_Sscc_NullOrNotBlank", "\"Sscc\" IS NULL OR length(trim(\"Sscc\")) > 0");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.PalletAuditEvent", b =>

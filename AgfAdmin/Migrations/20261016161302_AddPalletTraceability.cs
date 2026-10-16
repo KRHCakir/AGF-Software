@@ -45,6 +45,8 @@ namespace AgfAdmin.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Pallets", x => x.Id);
+                    table.CheckConstraint("CK_Pallets_Reference_NotBlank", "length(trim(\"Reference\")) > 0");
+                    table.CheckConstraint("CK_Pallets_Sscc_NullOrNotBlank", "\"Sscc\" IS NULL OR length(trim(\"Sscc\")) > 0");
                     table.ForeignKey(
                         name: "FK_Pallets_StockReceipts_StockReceiptId",
                         column: x => x.StockReceiptId,

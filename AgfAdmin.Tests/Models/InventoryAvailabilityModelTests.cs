@@ -482,6 +482,43 @@ public class InventoryAvailabilityModelTests : IDisposable
     }
 
     [Theory]
+    [InlineData("nullReference")]
+    [InlineData("emptyReference")]
+    [InlineData("whitespaceReference")]
+    [InlineData("emptySscc")]
+    [InlineData("whitespaceSscc")]
+    public async Task Pallet_Rejects_Blank_Reference_Or_Blank_Sscc(string invalidCase)
+    {
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            var pallet = NewPallet("PAL-001", sscc: "000000000000000001");
+            switch (invalidCase)
+            {
+                case "nullReference": pallet.Reference = null; break;
+                case "emptyReference": pallet.Reference = ""; break;
+                case "whitespaceReference": pallet.Reference = "   "; break;
+                case "emptySscc": pallet.Sscc = ""; break;
+                case "whitespaceSscc": pallet.Sscc = "   "; break;
+            }
+            db.Pallets.Add(pallet);
+        });
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.Pallets.CountAsync());
+    }
+
+    [Fact]
+    public async Task Pallet_Accepts_Null_Sscc()
+    {
+        var palletId = await AddPalletAsync("PAL-001", sscc: null);
+
+        await using var verify = _factory.CreateContext();
+        var saved = await verify.Pallets.SingleAsync(p => p.Id == palletId);
+        Assert.Null(saved.Sscc);
+        Assert.Equal("PAL-001", saved.Reference);
+    }
+
+    [Theory]
     [InlineData("missingPallet")]
     [InlineData("missingSourceLine")]
     [InlineData("nullLot")]

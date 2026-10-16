@@ -159,6 +159,13 @@ namespace AgfAdmin.Data
                 b.Property(p => p.LocationContext).IsRequired().HasMaxLength(32);
                 b.Property(p => p.WarehouseLocation).HasMaxLength(64);
 
+                // Referentie nooit leeg; SSCC is NULL of een niet-lege waarde, zodat "" niet als unieke "echte" SSCC telt.
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_Pallets_Reference_NotBlank", "length(trim(\"Reference\")) > 0");
+                    t.HasCheckConstraint("CK_Pallets_Sscc_NullOrNotBlank", "\"Sscc\" IS NULL OR length(trim(\"Sscc\")) > 0");
+                });
+
                 b.HasIndex(p => p.Reference).IsUnique();
                 // NULL telt in een unieke index als verschillend (PostgreSQL en SQLite): meerdere pallets zonder SSCC mogen.
                 b.HasIndex(p => p.Sscc).IsUnique();
