@@ -12,6 +12,10 @@ namespace AgfAdmin.Models
         public int SupplyCommitmentLineId { get; set; }
         public SupplyCommitmentLine SupplyCommitmentLine { get; set; }
 
+        // Optioneel: de fysieke inhoudsregel (partij op een pallet), zodra die bestaat.
+        public int? PalletContentLineId { get; set; }
+        public PalletContentLine PalletContentLine { get; set; }
+
         public decimal Quantity { get; set; }
         public string Unit { get; set; }            // expliciete eenheid; optioneel tijdens de overgang
         public decimal? NetWeightKg { get; set; }   // werkelijk netto kg; nooit afgeleid

@@ -381,6 +381,11 @@ public class InventoryAvailabilityModelTests : IDisposable
     [InlineData(typeof(StockMovement), nameof(StockMovement.NetWeightKg))]
     [InlineData(typeof(StockReservation), nameof(StockReservation.Quantity))]
     [InlineData(typeof(StockReservation), nameof(StockReservation.NetWeightKg))]
+    [InlineData(typeof(Pallet), nameof(Pallet.TareKg))]
+    [InlineData(typeof(Pallet), nameof(Pallet.GrossKg))]
+    [InlineData(typeof(Pallet), nameof(Pallet.DeclaredNetKg))]
+    [InlineData(typeof(PalletContentLine), nameof(PalletContentLine.Quantity))]
+    [InlineData(typeof(PalletContentLine), nameof(PalletContentLine.NetWeightKg))]
     public void Availability_Decimal_Properties_Are_Configured_As_Decimal_18_3(Type entityType, string propertyName)
     {
         // SQLite dwingt decimal-precisie niet af; deze modeltest bewaakt de afspraak voor Postgres.
@@ -403,5 +408,411 @@ public class InventoryAvailabilityModelTests : IDisposable
 
         Assert.Equal(32, property.GetMaxLength());
         Assert.True(property.IsNullable);
+    }
+
+    // ---- Pallet- en inhoudsregel-traceability ----
+
+    private async Task<int> AddCommitmentLineAsync(SeededGraph graph, string lotNumber)
+    {
+        await using var db = _factory.CreateContext();
+        var line = new SupplyCommitmentLine
+        {
+            SupplyCommitmentId = graph.CommitmentId,
+            ProductVariantId = graph.ProductVariantId,
+            ExpectedQuantity = 10m,
+            ExpectedUnit = "box",
+            LotNumber = lotNumber
+        };
+        db.SupplyCommitmentLines.Add(line);
+        await db.SaveChangesAsync();
+        return line.Id;
+    }
+
+    private async Task<int> AddPalletAsync(string reference, string sscc = null)
+    {
+        await using var db = _factory.CreateContext();
+        var pallet = NewPallet(reference, sscc);
+        db.Pallets.Add(pallet);
+        await db.SaveChangesAsync();
+        return pallet.Id;
+    }
+
+    private static Pallet NewPallet(string reference, string sscc = null) => new()
+    {
+        Reference = reference,
+        Sscc = sscc,
+        LogisticsStatus = "Received",
+        LocationContext = "Warehouse"
+    };
+
+    private static PalletContentLine NewContentLine(int palletId, int sourceLineId, string lotNumber = "LOT-1") => new()
+    {
+        PalletId = palletId,
+        SupplyCommitmentLineId = sourceLineId,
+        LotNumber = lotNumber,
+        Quantity = 40m,
+        Unit = "box",
+        NetWeightKg = 160.000m,
+        QualityStatus = "Quarantine"
+    };
+
+    private async Task<int> AddContentLineAsync(int palletId, int sourceLineId, string lotNumber = "LOT-1")
+    {
+        await using var db = _factory.CreateContext();
+        var contentLine = NewContentLine(palletId, sourceLineId, lotNumber);
+        db.PalletContentLines.Add(contentLine);
+        await db.SaveChangesAsync();
+        return contentLine.Id;
+    }
+
+    [Fact]
+    public async Task Pallet_Rejects_Duplicate_Reference_And_Duplicate_Sscc()
+    {
+        await AddPalletAsync("PAL-001", sscc: "000000000000000001");
+
+        // Meerdere pallets zonder SSCC zijn toegestaan.
+        await AddPalletAsync("PAL-002");
+        await AddPalletAsync("PAL-003");
+
+        await AssertSaveIsRejectedAsync(db => db.Pallets.Add(NewPallet("PAL-001")));
+        await AssertSaveIsRejectedAsync(db => db.Pallets.Add(NewPallet("PAL-004", sscc: "000000000000000001")));
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(3, await verify.Pallets.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("nullReference")]
+    [InlineData("emptyReference")]
+    [InlineData("whitespaceReference")]
+    [InlineData("emptySscc")]
+    [InlineData("whitespaceSscc")]
+    public async Task Pallet_Rejects_Blank_Reference_Or_Blank_Sscc(string invalidCase)
+    {
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            var pallet = NewPallet("PAL-001", sscc: "000000000000000001");
+            switch (invalidCase)
+            {
+                case "nullReference": pallet.Reference = null; break;
+                case "emptyReference": pallet.Reference = ""; break;
+                case "whitespaceReference": pallet.Reference = "   "; break;
+                case "emptySscc": pallet.Sscc = ""; break;
+                case "whitespaceSscc": pallet.Sscc = "   "; break;
+            }
+            db.Pallets.Add(pallet);
+        });
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.Pallets.CountAsync());
+    }
+
+    [Fact]
+    public async Task Pallet_Accepts_Null_Sscc()
+    {
+        var palletId = await AddPalletAsync("PAL-001", sscc: null);
+
+        await using var verify = _factory.CreateContext();
+        var saved = await verify.Pallets.SingleAsync(p => p.Id == palletId);
+        Assert.Null(saved.Sscc);
+        Assert.Equal("PAL-001", saved.Reference);
+    }
+
+    [Theory]
+    [InlineData("missingPallet")]
+    [InlineData("missingSourceLine")]
+    [InlineData("nullLot")]
+    [InlineData("emptyLot")]
+    [InlineData("whitespaceLot")]
+    [InlineData("nullUnit")]
+    [InlineData("emptyUnit")]
+    [InlineData("whitespaceUnit")]
+    public async Task PalletContentLine_Requires_Pallet_SourceLine_Lot_Unit_And_Positive_Quantities(string invalidCase)
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            var contentLine = NewContentLine(palletId, graph.CommitmentLineId);
+            switch (invalidCase)
+            {
+                case "missingPallet": contentLine.PalletId = palletId + 1000; break;
+                case "missingSourceLine": contentLine.SupplyCommitmentLineId = graph.CommitmentLineId + 1000; break;
+                case "nullLot": contentLine.LotNumber = null; break;
+                case "emptyLot": contentLine.LotNumber = ""; break;
+                case "whitespaceLot": contentLine.LotNumber = "   "; break;
+                case "nullUnit": contentLine.Unit = null; break;
+                case "emptyUnit": contentLine.Unit = ""; break;
+                case "whitespaceUnit": contentLine.Unit = "   "; break;
+            }
+            db.PalletContentLines.Add(contentLine);
+        });
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.PalletContentLines.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(0, 160)]
+    [InlineData(-1, 160)]
+    [InlineData(40, 0)]
+    [InlineData(40, -1)]
+    public async Task PalletContentLine_Rejects_Zero_Quantity_Or_NetWeight(int quantity, int netWeightKg)
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            var contentLine = NewContentLine(palletId, graph.CommitmentLineId);
+            contentLine.Quantity = quantity;
+            contentLine.NetWeightKg = netWeightKg;
+            db.PalletContentLines.Add(contentLine);
+        });
+    }
+
+    [Fact]
+    public async Task PalletContentLine_Accepts_Smallest_Positive_Quantity_And_NetWeight()
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+
+        await using (var db = _factory.CreateContext())
+        {
+            var contentLine = NewContentLine(palletId, graph.CommitmentLineId);
+            contentLine.Quantity = 0.001m;
+            contentLine.NetWeightKg = 0.001m;
+            db.PalletContentLines.Add(contentLine);
+            await db.SaveChangesAsync();
+        }
+
+        await using var verify = _factory.CreateContext();
+        var saved = await verify.PalletContentLines.SingleAsync();
+        Assert.Equal(0.001m, saved.Quantity);
+        Assert.Equal(0.001m, saved.NetWeightKg);
+    }
+
+    [Fact]
+    public async Task Pallet_Can_Carry_Multiple_Lots_Of_Same_Variant_As_Separate_ContentLines()
+    {
+        var graph = await SeedGraphAsync();
+        var sourceLineA = await AddCommitmentLineAsync(graph, "LOT-A");
+        var sourceLineB = await AddCommitmentLineAsync(graph, "LOT-B");
+        var palletId = await AddPalletAsync("PAL-MIXED");
+
+        await AddContentLineAsync(palletId, sourceLineA, "LOT-A");
+        await AddContentLineAsync(palletId, sourceLineB, "LOT-B");
+
+        await using var verify = _factory.CreateContext();
+        var lines = await verify.PalletContentLines
+            .Include(c => c.SupplyCommitmentLine)
+            .Where(c => c.PalletId == palletId)
+            .OrderBy(c => c.LotNumber)
+            .ToListAsync();
+
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(new[] { "LOT-A", "LOT-B" }, lines.Select(c => c.LotNumber));
+        Assert.Equal(new[] { sourceLineA, sourceLineB }, lines.Select(c => c.SupplyCommitmentLineId));
+        Assert.All(lines, c => Assert.Equal(graph.ProductVariantId, c.SupplyCommitmentLine.ProductVariantId));
+        Assert.All(lines, c => Assert.NotEqual(default, c.CreatedAt));
+        Assert.NotEqual(default, (await verify.Pallets.SingleAsync(p => p.Id == palletId)).CreatedAt);
+    }
+
+    [Fact]
+    public async Task SourceLine_Can_Be_Split_Across_Multiple_Pallets_With_Distinct_ContentLines()
+    {
+        var graph = await SeedGraphAsync();
+        var palletA = await AddPalletAsync("PAL-A");
+        var palletB = await AddPalletAsync("PAL-B");
+
+        var contentA = await AddContentLineAsync(palletA, graph.CommitmentLineId);
+        var contentB = await AddContentLineAsync(palletB, graph.CommitmentLineId);
+
+        await using var verify = _factory.CreateContext();
+        var lines = await verify.PalletContentLines
+            .Where(c => c.SupplyCommitmentLineId == graph.CommitmentLineId)
+            .ToListAsync();
+
+        Assert.Equal(2, lines.Count);
+        Assert.NotEqual(contentA, contentB);
+        Assert.Equal(new[] { palletA, palletB }.OrderBy(id => id), lines.Select(c => c.PalletId).OrderBy(id => id));
+    }
+
+    [Fact]
+    public async Task PalletAuditEvent_Requires_A_Pallet_Or_ContentLine_Target()
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+        var contentLineId = await AddContentLineAsync(palletId, graph.CommitmentLineId);
+
+        await AssertSaveIsRejectedAsync(db => db.PalletAuditEvents.Add(new PalletAuditEvent
+        {
+            EventType = "QualityStatusChanged",
+            OccurredAt = DateTime.UtcNow
+        }));
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.PalletAuditEvents.AddRange(
+                new PalletAuditEvent { PalletId = palletId, EventType = "LocationChanged", OccurredAt = DateTime.UtcNow },
+                new PalletAuditEvent { PalletContentLineId = contentLineId, EventType = "QualityStatusChanged", OldValue = "Quarantine", NewValue = "Approved", ActorReference = "office-1", OccurredAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(2, await verify.PalletAuditEvents.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("existing")]
+    [InlineData("missing")]
+    public async Task StockMovement_And_Reservation_May_Link_Optional_Existing_ContentLine(string link)
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+        var contentLineId = await AddContentLineAsync(palletId, graph.CommitmentLineId);
+        int? target = link switch
+        {
+            "none" => null,
+            "existing" => contentLineId,
+            _ => contentLineId + 1000
+        };
+
+        void Arrange(AgfAdmin.Data.AppDbContext db)
+        {
+            db.StockMovements.Add(new StockMovement { Type = "Receipt", Quantity = 1m, SupplyCommitmentLineId = graph.CommitmentLineId, PalletContentLineId = target });
+            db.StockReservations.Add(new StockReservation
+            {
+                OrderLineId = graph.OrderLineId,
+                SupplyCommitmentLineId = graph.CommitmentLineId,
+                PalletContentLineId = target,
+                Quantity = 1m,
+                Source = "Physical",
+                Status = "Active"
+            });
+        }
+
+        if (link == "missing")
+        {
+            await AssertSaveIsRejectedAsync(Arrange);
+            return;
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            Arrange(db);
+            await db.SaveChangesAsync();
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(target, (await verify.StockMovements.SingleAsync()).PalletContentLineId);
+        Assert.Equal(target, (await verify.StockReservations.SingleAsync()).PalletContentLineId);
+    }
+
+    [Theory]
+    [InlineData("palletWithContentLine")]
+    [InlineData("palletWithAuditEvent")]
+    [InlineData("receiptWithPallet")]
+    [InlineData("sourceLineWithContentLine")]
+    [InlineData("contentLineWithMovement")]
+    [InlineData("contentLineWithReservation")]
+    [InlineData("contentLineWithAuditEvent")]
+    public async Task Deleting_Pallet_Or_ContentLine_With_Traceability_Dependents_Is_Restricted(string scenario)
+    {
+        var graph = await SeedGraphAsync();
+        int receiptId;
+        await using (var db = _factory.CreateContext())
+        {
+            var receipt = new StockReceipt { RequestId = Guid.NewGuid(), SupplyCommitmentId = graph.CommitmentId };
+            db.StockReceipts.Add(receipt);
+            await db.SaveChangesAsync();
+            receiptId = receipt.Id;
+        }
+
+        int palletId;
+        await using (var db = _factory.CreateContext())
+        {
+            var pallet = NewPallet("PAL-001");
+            pallet.StockReceiptId = scenario == "receiptWithPallet" ? receiptId : null;
+            db.Pallets.Add(pallet);
+            await db.SaveChangesAsync();
+            palletId = pallet.Id;
+        }
+
+        var contentLineId = scenario is "palletWithAuditEvent" or "receiptWithPallet"
+            ? (int?)null
+            : await AddContentLineAsync(palletId, graph.CommitmentLineId);
+
+        await using (var db = _factory.CreateContext())
+        {
+            switch (scenario)
+            {
+                case "palletWithAuditEvent":
+                    db.PalletAuditEvents.Add(new PalletAuditEvent { PalletId = palletId, EventType = "LocationChanged", OccurredAt = DateTime.UtcNow });
+                    break;
+                case "contentLineWithMovement":
+                    db.StockMovements.Add(new StockMovement { Type = "Receipt", Quantity = 1m, SupplyCommitmentLineId = graph.CommitmentLineId, PalletContentLineId = contentLineId });
+                    break;
+                case "contentLineWithReservation":
+                    db.StockReservations.Add(new StockReservation
+                    {
+                        OrderLineId = graph.OrderLineId,
+                        SupplyCommitmentLineId = graph.CommitmentLineId,
+                        PalletContentLineId = contentLineId,
+                        Quantity = 1m,
+                        Source = "Physical",
+                        Status = "Active"
+                    });
+                    break;
+                case "contentLineWithAuditEvent":
+                    db.PalletAuditEvents.Add(new PalletAuditEvent { PalletContentLineId = contentLineId, EventType = "QualityStatusChanged", OccurredAt = DateTime.UtcNow });
+                    break;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            switch (scenario)
+            {
+                case "palletWithContentLine":
+                case "palletWithAuditEvent":
+                    db.Pallets.Remove(new Pallet { Id = palletId });
+                    break;
+                case "receiptWithPallet":
+                    db.StockReceipts.Remove(new StockReceipt { Id = receiptId });
+                    break;
+                case "sourceLineWithContentLine":
+                    db.SupplyCommitmentLines.Remove(new SupplyCommitmentLine { Id = graph.CommitmentLineId });
+                    break;
+                default:
+                    db.PalletContentLines.Remove(new PalletContentLine { Id = contentLineId.Value });
+                    break;
+            }
+        });
+
+        await using var verify = _factory.CreateContext();
+        Assert.True(await verify.Pallets.AnyAsync(p => p.Id == palletId));
+        Assert.True(await verify.StockReceipts.AnyAsync(r => r.Id == receiptId));
+        Assert.True(await verify.SupplyCommitmentLines.AnyAsync(l => l.Id == graph.CommitmentLineId));
+        if (contentLineId.HasValue)
+        {
+            Assert.True(await verify.PalletContentLines.AnyAsync(c => c.Id == contentLineId.Value));
+        }
+        switch (scenario)
+        {
+            case "palletWithAuditEvent":
+            case "contentLineWithAuditEvent":
+                Assert.Equal(1, await verify.PalletAuditEvents.CountAsync());
+                break;
+            case "contentLineWithMovement":
+                Assert.Equal(1, await verify.StockMovements.CountAsync());
+                break;
+            case "contentLineWithReservation":
+                Assert.Equal(1, await verify.StockReservations.CountAsync());
+                break;
+        }
     }
 }
