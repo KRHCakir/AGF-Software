@@ -83,6 +83,34 @@ public class InventoryAvailabilityModelTests : IDisposable
     }
 
     [Fact]
+    public async Task SupplyCommitment_Requires_Existing_Vendor()
+    {
+        var graph = await SeedGraphAsync();
+
+        await AssertSaveIsRejectedAsync(db => db.SupplyCommitments.Add(new SupplyCommitment
+        {
+            VendorId = graph.VendorId + 1000,
+            Route = "Warehouse",
+            Status = "Expected",
+            Origin = "Peru"
+        }));
+    }
+
+    [Fact]
+    public async Task StockMovement_Requires_Existing_SupplyCommitmentLine()
+    {
+        await SeedGraphAsync();
+
+        await AssertSaveIsRejectedAsync(db => db.StockMovements.Add(new StockMovement
+        {
+            Type = "Correction",
+            Quantity = 1,
+            SupplyCommitmentLineId = 999_999,
+            Reason = "Test"
+        }));
+    }
+
+    [Fact]
     public async Task StockReservation_Requires_Existing_OrderLine()
     {
         var graph = await SeedGraphAsync();
