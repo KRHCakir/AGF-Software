@@ -556,6 +556,197 @@ namespace AgfAdmin.Migrations
                     b.ToTable("Shipments");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.StockMovement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("StockReceiptId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StockReservationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StockReceiptId");
+
+                    b.HasIndex("StockReservationId");
+
+                    b.HasIndex("SupplyCommitmentLineId");
+
+                    b.ToTable("StockMovements");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.StockReceipt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SupplyCommitmentId");
+
+                    b.ToTable("StockReceipts");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.StockReservation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("OrderLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderLineId");
+
+                    b.HasIndex("SupplyCommitmentLineId");
+
+                    b.ToTable("StockReservations");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ExpectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Route")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("VendorId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VendorId");
+
+                    b.ToTable("SupplyCommitments");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExpectedQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LotNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("SupplyCommitmentId");
+
+                    b.ToTable("SupplyCommitmentLines");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>
                 {
                     b.Property<int>("Id")
@@ -770,6 +961,91 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.StockMovement", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.StockReceipt", "StockReceipt")
+                        .WithMany()
+                        .HasForeignKey("StockReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.StockReservation", "StockReservation")
+                        .WithMany()
+                        .HasForeignKey("StockReservationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("StockReceipt");
+
+                    b.Navigation("StockReservation");
+
+                    b.Navigation("SupplyCommitmentLine");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.StockReceipt", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SupplyCommitment");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.StockReservation", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.OrderLine", "OrderLine")
+                        .WithMany()
+                        .HasForeignKey("OrderLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OrderLine");
+
+                    b.Navigation("SupplyCommitmentLine");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Vendor", "Vendor")
+                        .WithMany()
+                        .HasForeignKey("VendorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Vendor");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany("Lines")
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProductVariant");
+
+                    b.Navigation("SupplyCommitment");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.WasteLog", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Inventory", "Inventory")
@@ -826,6 +1102,11 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Inventories");
 
                     b.Navigation("OrderLines");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>
