@@ -43,13 +43,30 @@ namespace AgfAdmin.Data
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             TraceabilityGuard.Validate(this);
+            IncrementVersions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
         }
 
         public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
+            IncrementVersions();
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        // Elke gewijzigde pallet of inhoudsregel krijgt versie +1. De oorspronkelijke versie blijft het
+        // concurrency-token in de WHERE-clausule, zodat een verouderde schrijver een DbUpdateConcurrencyException krijgt.
+        private void IncrementVersions()
+        {
+            foreach (var entry in ChangeTracker.Entries<Pallet>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(p => p.Version).CurrentValue = entry.Property(p => p.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(c => c.Version).CurrentValue = entry.Property(c => c.Version).OriginalValue + 1;
+            }
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -187,11 +204,24 @@ namespace AgfAdmin.Data
                 b.Property(p => p.LocationContext).IsRequired().HasMaxLength(32);
                 b.Property(p => p.WarehouseLocation).HasMaxLength(64);
 
+                b.Property(p => p.Version).IsConcurrencyToken();
+
                 // Referentie nooit leeg; SSCC is NULL of een niet-lege waarde, zodat "" niet als unieke "echte" SSCC telt.
+                // Toestandsregels binnen één rij: Warehouse alleen met Received, een bin alleen in het magazijn,
+                // Delivered alleen bij de klant of extern, en alleen bekende status-/locatiewaarden.
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_Pallets_Reference_NotBlank", "length(trim(\"Reference\")) > 0");
                     t.HasCheckConstraint("CK_Pallets_Sscc_NullOrNotBlank", "\"Sscc\" IS NULL OR length(trim(\"Sscc\")) > 0");
+                    t.HasCheckConstraint("CK_Pallets_Location_Status",
+                        "(\"LocationContext\" <> 'Warehouse' OR \"LogisticsStatus\" = 'Received') " +
+                        "AND (\"WarehouseLocation\" IS NULL OR (\"LocationContext\" = 'Warehouse' AND \"LogisticsStatus\" = 'Received' AND length(trim(\"WarehouseLocation\")) > 0))");
+                    t.HasCheckConstraint("CK_Pallets_Delivered_Location",
+                        "\"LogisticsStatus\" <> 'Delivered' OR \"LocationContext\" IN ('Customer', 'External')");
+                    t.HasCheckConstraint("CK_Pallets_LogisticsStatus_Allowed",
+                        "\"LogisticsStatus\" IN ('Expected', 'InTransit', 'Received', 'Dispatched', 'Delivered', 'Cancelled')");
+                    t.HasCheckConstraint("CK_Pallets_LocationContext_Allowed",
+                        "\"LocationContext\" IN ('Supplier', 'Warehouse', 'Crossdock', 'InTransit', 'Customer', 'External')");
                 });
 
                 b.HasIndex(p => p.Reference).IsUnique();
@@ -221,7 +251,11 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
+                    t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
+                        "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
                 });
+
+                b.Property(c => c.Version).IsConcurrencyToken();
 
                 b.HasIndex(c => c.RequestId).IsUnique();
 
@@ -247,6 +281,9 @@ namespace AgfAdmin.Data
                 b.ToTable(t => t.HasCheckConstraint(
                     "CK_PalletAuditEvents_HasTarget",
                     "\"PalletId\" IS NOT NULL OR \"PalletContentLineId\" IS NOT NULL"));
+
+                // NULL telt als verschillend: creatie-events zonder RequestId blijven toegestaan.
+                b.HasIndex(e => e.RequestId).IsUnique();
 
                 b.HasOne(e => e.Pallet)
                     .WithMany()

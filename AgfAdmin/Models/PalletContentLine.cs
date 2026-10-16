@@ -24,5 +24,8 @@ namespace AgfAdmin.Models
         public string QualityReason { get; set; }  // optioneel
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Optimistisch concurrency-token: start op 0 en wordt centraal in AppDbContext verhoogd bij elke wijziging.
+        public int Version { get; set; }
     }
 }

@@ -961,4 +961,149 @@ public class InventoryAvailabilityModelTests : IDisposable
                 break;
         }
     }
+
+    // ---- Toestandsregels van pallets en kwaliteit (database-checks), audit-RequestId en versies ----
+
+    [Theory]
+    [InlineData("Received", "Warehouse", null, true)]
+    [InlineData("Received", "Warehouse", "COLD-01", true)]
+    [InlineData("Expected", "Warehouse", null, false)]
+    [InlineData("InTransit", "Warehouse", null, false)]
+    [InlineData("Dispatched", "Warehouse", null, false)]
+    [InlineData("Delivered", "Warehouse", null, false)]
+    [InlineData("Cancelled", "Warehouse", null, false)]
+    [InlineData("Received", "Supplier", "COLD-01", false)]
+    [InlineData("Dispatched", "InTransit", "COLD-01", false)]
+    [InlineData("Received", "Warehouse", "   ", false)]
+    [InlineData("Received", "Warehouse", "", false)]
+    [InlineData("Expected", "Supplier", null, true)]
+    [InlineData("Received", "Crossdock", null, true)]
+    [InlineData("Dispatched", "InTransit", null, true)]
+    [InlineData("Delivered", "Customer", null, true)]
+    [InlineData("Delivered", "External", null, true)]
+    [InlineData("Delivered", "Crossdock", null, false)]
+    [InlineData("Delivered", "InTransit", null, false)]
+    [InlineData("Delivered", "Supplier", null, false)]
+    [InlineData("Cancelled", "Supplier", null, true)]
+    public async Task Pallet_Status_Location_And_Bin_Combination_Is_Enforced_By_Database(string status, string location, string bin, bool accepted)
+    {
+        await using var db = _factory.CreateContext();
+        var pallet = NewPallet("PAL-001");
+        pallet.LogisticsStatus = status;
+        pallet.LocationContext = location;
+        pallet.WarehouseLocation = bin;
+        db.Pallets.Add(pallet);
+
+        if (accepted)
+        {
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Changing_A_Warehouse_Pallet_To_An_Invalid_Combination_Is_Rejected_By_Database()
+    {
+        var palletId = await AddPalletAsync("PAL-001");
+
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.Pallets.SingleAsync()).LogisticsStatus = "Dispatched";
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal("Received", (await verify.Pallets.SingleAsync(p => p.Id == palletId)).LogisticsStatus);
+    }
+
+    [Theory]
+    [InlineData("status", "Shipped")]
+    [InlineData("status", "received")]
+    [InlineData("location", "Truck")]
+    [InlineData("location", "warehouse")]
+    public async Task Pallet_Rejects_Unknown_Status_Or_Location_Values(string field, string value)
+    {
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            var pallet = NewPallet("PAL-001");
+            if (field == "status")
+            {
+                pallet.LogisticsStatus = value;
+                pallet.LocationContext = "Supplier";
+            }
+            else
+            {
+                pallet.LocationContext = value;
+            }
+            db.Pallets.Add(pallet);
+        });
+    }
+
+    [Theory]
+    [InlineData("Quarantine", true)]
+    [InlineData("Approved", true)]
+    [InlineData("Blocked", true)]
+    [InlineData("Rejected", true)]
+    [InlineData("PartiallyApproved", false)]
+    [InlineData("approved", false)]
+    public async Task PalletContentLine_QualityStatus_Must_Be_An_Allowed_Value(string qualityStatus, bool accepted)
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+
+        await using var db = _factory.CreateContext();
+        var contentLine = NewContentLine(palletId, graph.CommitmentLineId);
+        contentLine.QualityStatus = qualityStatus;
+        db.PalletContentLines.Add(contentLine);
+
+        if (accepted)
+        {
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
+    public async Task PalletAuditEvent_RequestId_Is_Unique_But_Optional()
+    {
+        var palletId = await AddPalletAsync("PAL-001");
+        var requestId = Guid.NewGuid();
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.PalletAuditEvents.AddRange(
+                new PalletAuditEvent { PalletId = palletId, EventType = "PalletCreated", OccurredAt = DateTime.UtcNow },
+                new PalletAuditEvent { PalletId = palletId, EventType = "PalletCreated", OccurredAt = DateTime.UtcNow },
+                new PalletAuditEvent { PalletId = palletId, EventType = "LocationChanged", RequestId = requestId, OccurredAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        await AssertSaveIsRejectedAsync(db => db.PalletAuditEvents.Add(
+            new PalletAuditEvent { PalletId = palletId, EventType = "LocationChanged", RequestId = requestId, OccurredAt = DateTime.UtcNow }));
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(3, await verify.PalletAuditEvents.CountAsync());
+    }
+
+    [Fact]
+    public void Pallet_State_Metadata_Has_Version_Tokens_And_Audit_RequestId_Index()
+    {
+        using var db = _factory.CreateContext();
+
+        var pallet = db.Model.FindEntityType(typeof(Pallet))!;
+        Assert.True(pallet.FindProperty(nameof(Pallet.Version))!.IsConcurrencyToken);
+        var contentLine = db.Model.FindEntityType(typeof(PalletContentLine))!;
+        Assert.True(contentLine.FindProperty(nameof(PalletContentLine.Version))!.IsConcurrencyToken);
+
+        var auditEvent = db.Model.FindEntityType(typeof(PalletAuditEvent))!;
+        Assert.True(auditEvent.FindProperty(nameof(PalletAuditEvent.RequestId))!.IsNullable);
+        var index = Assert.Single(auditEvent.GetIndexes(), i => i.Properties.Single().Name == nameof(PalletAuditEvent.RequestId));
+        Assert.True(index.IsUnique);
+    }
 }

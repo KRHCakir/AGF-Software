@@ -1,4 +1,5 @@
 using AgfAdmin.Models;
+using AgfAdmin.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Data
@@ -11,117 +12,95 @@ namespace AgfAdmin.Data
     // Draait vóór elke SaveChanges/SaveChangesAsync, zodat geen enkele writer de regels kan vergeten:
     // 1. een StockMovement/StockReservation met PalletContentLineId heeft dezelfde SupplyCommitmentLineId als die regel;
     // 2. de bronregel van een bestaande PalletContentLine ligt vast;
-    // 3. PalletAuditEvents zijn append-only.
+    // 3. PalletAuditEvents zijn append-only;
+    // 4. inhoud met een DirectTrade-bron staat nooit op een pallet met LocationContext Warehouse.
     // Er wordt nooit automatisch omgekoppeld. Een niet-bestaande inhoudsregel laten we over aan de FK in de database.
     // Let op: ExecuteUpdate/ExecuteDelete en ruwe SQL gaan buiten de change tracker om en dus ook buiten deze guard.
     internal static class TraceabilityGuard
     {
-        public static void Validate(AppDbContext db)
-        {
-            var plan = Collect(db);
-            if (plan.StoredIdsToLoad.Count == 0)
-            {
-                Check(plan, new Dictionary<int, int>());
-                return;
-            }
+        public static void Validate(AppDbContext db) =>
+            // Met async = false voert de kern alleen synchrone EF-aanroepen uit en is de taak al voltooid.
+            ValidateCoreAsync(db, async: false, CancellationToken.None).GetAwaiter().GetResult();
 
-            var stored = db.PalletContentLines
-                .AsNoTracking()
-                .Where(c => plan.StoredIdsToLoad.Contains(c.Id))
-                .Select(c => new { c.Id, c.SupplyCommitmentLineId })
-                .ToDictionary(c => c.Id, c => c.SupplyCommitmentLineId);
-            Check(plan, stored);
-        }
-
-        public static async Task ValidateAsync(AppDbContext db, CancellationToken cancellationToken)
-        {
-            var plan = Collect(db);
-            if (plan.StoredIdsToLoad.Count == 0)
-            {
-                Check(plan, new Dictionary<int, int>());
-                return;
-            }
-
-            var stored = await db.PalletContentLines
-                .AsNoTracking()
-                .Where(c => plan.StoredIdsToLoad.Contains(c.Id))
-                .Select(c => new { c.Id, c.SupplyCommitmentLineId })
-                .ToDictionaryAsync(c => c.Id, c => c.SupplyCommitmentLineId, cancellationToken);
-            Check(plan, stored);
-        }
+        public static Task ValidateAsync(AppDbContext db, CancellationToken cancellationToken) =>
+            ValidateCoreAsync(db, async: true, cancellationToken);
 
         private sealed record SourceLink(string Entity, int ContentLineId, int SupplyCommitmentLineId);
 
-        private sealed class Plan
-        {
-            public List<SourceLink> Links { get; } = new();
-            public Dictionary<int, int> TrackedContentSources { get; } = new();
-            public Dictionary<int, int> ModifiedContentSources { get; } = new();
-            public List<int> StoredIdsToLoad { get; } = new();
-        }
-
-        private static Plan Collect(AppDbContext db)
+        private static async Task ValidateCoreAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             if (db.ChangeTracker.AutoDetectChangesEnabled)
             {
                 db.ChangeTracker.DetectChanges();
             }
 
-            // Append-only: een auditrecord mag nooit worden gewijzigd of verwijderd.
+            // Regel 3: een auditrecord mag nooit worden gewijzigd of verwijderd.
             if (db.ChangeTracker.Entries<PalletAuditEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             {
                 throw new TraceabilityViolationException("Pallet audit events are append-only and cannot be modified or deleted.");
             }
 
-            var plan = new Plan();
+            await CheckSourceLinksAsync(db, async, cancellationToken);
+            await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
+        }
+
+        // ---- Regels 1 en 2 ----
+
+        private static async Task CheckSourceLinksAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var trackedContentSources = new Dictionary<int, int>();
+            var modifiedContentSources = new Dictionary<int, int>();
 
             // Waarden via de entry, zodat ook tijdelijke sleutels van nieuwe entiteiten in dezelfde save meetellen.
             foreach (var entry in db.ChangeTracker.Entries<PalletContentLine>())
             {
-                if (entry.State == EntityState.Deleted || entry.State == EntityState.Detached)
+                if (entry.State is EntityState.Deleted or EntityState.Detached)
                 {
                     continue;
                 }
 
                 var id = entry.Property(c => c.Id).CurrentValue;
                 var sourceLineId = entry.Property(c => c.SupplyCommitmentLineId).CurrentValue;
-                plan.TrackedContentSources[id] = sourceLineId;
+                trackedContentSources[id] = sourceLineId;
 
                 if (entry.State == EntityState.Modified && entry.Property(c => c.SupplyCommitmentLineId).IsModified)
                 {
-                    plan.ModifiedContentSources[id] = sourceLineId;
+                    modifiedContentSources[id] = sourceLineId;
                 }
             }
 
+            var links = new List<SourceLink>();
             foreach (var entry in db.ChangeTracker.Entries<StockMovement>().Where(e => e.State is EntityState.Added or EntityState.Modified))
             {
                 var contentLineId = entry.Property(m => m.PalletContentLineId).CurrentValue;
                 if (contentLineId != null)
                 {
-                    plan.Links.Add(new SourceLink(nameof(StockMovement), contentLineId.Value, entry.Property(m => m.SupplyCommitmentLineId).CurrentValue));
+                    links.Add(new SourceLink(nameof(StockMovement), contentLineId.Value, entry.Property(m => m.SupplyCommitmentLineId).CurrentValue));
                 }
             }
-
             foreach (var entry in db.ChangeTracker.Entries<StockReservation>().Where(e => e.State is EntityState.Added or EntityState.Modified))
             {
                 var contentLineId = entry.Property(r => r.PalletContentLineId).CurrentValue;
                 if (contentLineId != null)
                 {
-                    plan.Links.Add(new SourceLink(nameof(StockReservation), contentLineId.Value, entry.Property(r => r.SupplyCommitmentLineId).CurrentValue));
+                    links.Add(new SourceLink(nameof(StockReservation), contentLineId.Value, entry.Property(r => r.SupplyCommitmentLineId).CurrentValue));
                 }
             }
 
-            plan.StoredIdsToLoad.AddRange(plan.ModifiedContentSources.Keys);
-            plan.StoredIdsToLoad.AddRange(plan.Links
-                .Select(l => l.ContentLineId)
-                .Where(id => !plan.TrackedContentSources.ContainsKey(id)));
+            var idsToLoad = modifiedContentSources.Keys
+                .Concat(links.Select(l => l.ContentLineId).Where(id => !trackedContentSources.ContainsKey(id)))
+                .Distinct()
+                .ToList();
+            var stored = idsToLoad.Count == 0
+                ? new Dictionary<int, int>()
+                : (await ToListAsync(
+                        db.PalletContentLines.AsNoTracking()
+                            .Where(c => idsToLoad.Contains(c.Id))
+                            .Select(c => new { c.Id, c.SupplyCommitmentLineId }),
+                        async, cancellationToken))
+                    .ToDictionary(c => c.Id, c => c.SupplyCommitmentLineId);
 
-            return plan;
-        }
-
-        private static void Check(Plan plan, IReadOnlyDictionary<int, int> stored)
-        {
-            foreach (var (contentLineId, newSourceLineId) in plan.ModifiedContentSources)
+            foreach (var (contentLineId, newSourceLineId) in modifiedContentSources)
             {
                 if (stored.TryGetValue(contentLineId, out var storedSourceLineId) && storedSourceLineId != newSourceLineId)
                 {
@@ -130,9 +109,9 @@ namespace AgfAdmin.Data
                 }
             }
 
-            foreach (var link in plan.Links)
+            foreach (var link in links)
             {
-                var known = plan.TrackedContentSources.TryGetValue(link.ContentLineId, out var contentSourceLineId)
+                var known = trackedContentSources.TryGetValue(link.ContentLineId, out var contentSourceLineId)
                     || stored.TryGetValue(link.ContentLineId, out contentSourceLineId);
                 if (!known)
                 {
@@ -147,5 +126,121 @@ namespace AgfAdmin.Data
                 }
             }
         }
+
+        // ---- Regel 4 ----
+
+        private static async Task CheckNoDirectTradeInWarehouseAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var trackedPalletLocations = db.ChangeTracker.Entries<Pallet>()
+                .Where(e => e.State is not (EntityState.Deleted or EntityState.Detached))
+                .ToDictionary(e => e.Property(p => p.Id).CurrentValue, e => e.Property(p => p.LocationContext).CurrentValue);
+
+            var warehousePalletIds = db.ChangeTracker.Entries<Pallet>()
+                .Where(e => e.State is EntityState.Added or EntityState.Modified
+                    && e.Property(p => p.LocationContext).CurrentValue == PalletRules.LocationWarehouse)
+                .Select(e => e.Property(p => p.Id).CurrentValue)
+                .ToHashSet();
+
+            // Te controleren paren (pallet, bronregel): nieuwe inhoud op elke pallet, en gevolgde inhoud op een pallet die
+            // (opnieuw) in het magazijn staat.
+            var pairs = db.ChangeTracker.Entries<PalletContentLine>()
+                .Where(e => e.State is not (EntityState.Deleted or EntityState.Detached))
+                .Select(e => (
+                    State: e.State,
+                    PalletId: e.Property(c => c.PalletId).CurrentValue,
+                    SourceLineId: e.Property(c => c.SupplyCommitmentLineId).CurrentValue))
+                .Where(c => c.State == EntityState.Added || warehousePalletIds.Contains(c.PalletId))
+                .Select(c => (c.PalletId, c.SourceLineId))
+                .ToList();
+
+            if (warehousePalletIds.Count == 0 && pairs.Count == 0)
+            {
+                return;
+            }
+
+            // Opgeslagen inhoud van pallets die naar het magazijn gaan.
+            if (warehousePalletIds.Count > 0)
+            {
+                var ids = warehousePalletIds.ToList();
+                var storedDirectTrade = await ToListAsync(
+                    db.PalletContentLines.AsNoTracking()
+                        .Where(c => ids.Contains(c.PalletId) && c.SupplyCommitmentLine.SupplyCommitment.Route == SupplyRules.RouteDirectTrade)
+                        .Select(c => c.PalletId),
+                    async, cancellationToken);
+                if (storedDirectTrade.Count > 0)
+                {
+                    throw DirectTradeInWarehouse(storedDirectTrade[0]);
+                }
+            }
+
+            if (pairs.Count == 0)
+            {
+                return;
+            }
+
+            var missingPalletIds = pairs.Select(p => p.PalletId).Where(id => !trackedPalletLocations.ContainsKey(id)).Distinct().ToList();
+            var palletLocations = new Dictionary<int, string>(trackedPalletLocations);
+            if (missingPalletIds.Count > 0)
+            {
+                foreach (var pallet in await ToListAsync(
+                    db.Pallets.AsNoTracking().Where(p => missingPalletIds.Contains(p.Id)).Select(p => new { p.Id, p.LocationContext }),
+                    async, cancellationToken))
+                {
+                    palletLocations[pallet.Id] = pallet.LocationContext;
+                }
+            }
+
+            var warehousePairs = pairs.Where(p => palletLocations.TryGetValue(p.PalletId, out var location) && location == PalletRules.LocationWarehouse).ToList();
+            if (warehousePairs.Count == 0)
+            {
+                return;
+            }
+
+            var routes = TrackedSourceRoutes(db);
+            var missingSourceIds = warehousePairs.Select(p => p.SourceLineId).Where(id => !routes.ContainsKey(id)).Distinct().ToList();
+            if (missingSourceIds.Count > 0)
+            {
+                foreach (var source in await ToListAsync(
+                    db.SupplyCommitmentLines.AsNoTracking()
+                        .Where(l => missingSourceIds.Contains(l.Id))
+                        .Select(l => new { l.Id, l.SupplyCommitment.Route }),
+                    async, cancellationToken))
+                {
+                    routes[source.Id] = source.Route;
+                }
+            }
+
+            foreach (var (palletId, sourceLineId) in warehousePairs)
+            {
+                if (routes.TryGetValue(sourceLineId, out var route) && route == SupplyRules.RouteDirectTrade)
+                {
+                    throw DirectTradeInWarehouse(palletId);
+                }
+            }
+        }
+
+        // Route per gevolgde bronregel, via de gevolgde toezegging (ook met tijdelijke sleutels in dezelfde save).
+        private static Dictionary<int, string> TrackedSourceRoutes(AppDbContext db)
+        {
+            var commitmentRoutes = db.ChangeTracker.Entries<SupplyCommitment>()
+                .Where(e => e.State is not (EntityState.Deleted or EntityState.Detached))
+                .ToDictionary(e => e.Property(c => c.Id).CurrentValue, e => e.Property(c => c.Route).CurrentValue);
+
+            var routes = new Dictionary<int, string>();
+            foreach (var entry in db.ChangeTracker.Entries<SupplyCommitmentLine>().Where(e => e.State is not (EntityState.Deleted or EntityState.Detached)))
+            {
+                if (commitmentRoutes.TryGetValue(entry.Property(l => l.SupplyCommitmentId).CurrentValue, out var route))
+                {
+                    routes[entry.Property(l => l.Id).CurrentValue] = route;
+                }
+            }
+            return routes;
+        }
+
+        private static TraceabilityViolationException DirectTradeInWarehouse(int palletId) =>
+            new($"Pallet {palletId} cannot hold DirectTrade content while its location context is {PalletRules.LocationWarehouse}.");
+
+        private static async Task<List<T>> ToListAsync<T>(IQueryable<T> query, bool async, CancellationToken cancellationToken) =>
+            async ? await query.ToListAsync(cancellationToken) : query.ToList();
     }
 }
