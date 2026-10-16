@@ -14,6 +14,10 @@ namespace AgfAdmin.Models
         public int SupplyCommitmentLineId { get; set; }
         public SupplyCommitmentLine SupplyCommitmentLine { get; set; }
 
+        // Optioneel: de fysieke inhoudsregel (partij op een pallet), zodra die bestaat.
+        public int? PalletContentLineId { get; set; }
+        public PalletContentLine PalletContentLine { get; set; }
+
         // Gezet bij Receipt.
         public int? StockReceiptId { get; set; }
         public StockReceipt StockReceipt { get; set; }

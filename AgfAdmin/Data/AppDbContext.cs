@@ -33,6 +33,11 @@ namespace AgfAdmin.Data
         public DbSet<StockMovement> StockMovements { get; set; }
         public DbSet<StockReservation> StockReservations { get; set; }
 
+        // Pallet-traceability: logistieke drager, atomaire inhoudsregels en append-only auditrecords.
+        public DbSet<Pallet> Pallets { get; set; }
+        public DbSet<PalletContentLine> PalletContentLines { get; set; }
+        public DbSet<PalletAuditEvent> PalletAuditEvents { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -110,6 +115,11 @@ namespace AgfAdmin.Data
                     .WithMany()
                     .HasForeignKey(m => m.StockReservationId)
                     .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(m => m.PalletContentLine)
+                    .WithMany()
+                    .HasForeignKey(m => m.PalletContentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<StockReservation>(b =>
@@ -128,6 +138,87 @@ namespace AgfAdmin.Data
                 b.HasOne(r => r.SupplyCommitmentLine)
                     .WithMany()
                     .HasForeignKey(r => r.SupplyCommitmentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(r => r.PalletContentLine)
+                    .WithMany()
+                    .HasForeignKey(r => r.PalletContentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Check-constraints gebruiken SQL met dubbele quotes; geldig in zowel PostgreSQL als SQLite (tests).
+            modelBuilder.Entity<Pallet>(b =>
+            {
+                b.Property(p => p.Reference).IsRequired().HasMaxLength(64);
+                b.Property(p => p.Sscc).HasMaxLength(18);
+                b.Property(p => p.PalletType).HasMaxLength(32);
+                b.Property(p => p.TareKg).HasPrecision(18, 3);
+                b.Property(p => p.GrossKg).HasPrecision(18, 3);
+                b.Property(p => p.DeclaredNetKg).HasPrecision(18, 3);
+                b.Property(p => p.LogisticsStatus).IsRequired().HasMaxLength(32);
+                b.Property(p => p.LocationContext).IsRequired().HasMaxLength(32);
+                b.Property(p => p.WarehouseLocation).HasMaxLength(64);
+
+                b.HasIndex(p => p.Reference).IsUnique();
+                // NULL telt in een unieke index als verschillend (PostgreSQL en SQLite): meerdere pallets zonder SSCC mogen.
+                b.HasIndex(p => p.Sscc).IsUnique();
+
+                b.HasOne(p => p.StockReceipt)
+                    .WithMany()
+                    .HasForeignKey(p => p.StockReceiptId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PalletContentLine>(b =>
+            {
+                b.Property(c => c.LotNumber).IsRequired().HasMaxLength(100);
+                b.Property(c => c.Quantity).HasPrecision(18, 3);
+                b.Property(c => c.Unit).IsRequired().HasMaxLength(32);
+                b.Property(c => c.NetWeightKg).HasPrecision(18, 3);
+                b.Property(c => c.QualityStatus).IsRequired().HasMaxLength(32);
+                b.Property(c => c.QualityReason).HasMaxLength(500);
+
+                // CAST AS NUMERIC: exact in PostgreSQL (numeric -> numeric) en dwingt in SQLite, waar EF decimals
+                // als TEXT opslaat, een numerieke in plaats van een tekstuele vergelijking af.
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_PalletContentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_PalletContentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
+                    t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
+                });
+
+                b.HasOne(c => c.Pallet)
+                    .WithMany(p => p.ContentLines)
+                    .HasForeignKey(c => c.PalletId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(c => c.SupplyCommitmentLine)
+                    .WithMany()
+                    .HasForeignKey(c => c.SupplyCommitmentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PalletAuditEvent>(b =>
+            {
+                b.Property(e => e.EventType).IsRequired().HasMaxLength(64);
+                b.Property(e => e.OldValue).HasMaxLength(2000);
+                b.Property(e => e.NewValue).HasMaxLength(2000);
+                b.Property(e => e.Reason).HasMaxLength(500);
+                b.Property(e => e.ActorReference).HasMaxLength(100);
+
+                b.ToTable(t => t.HasCheckConstraint(
+                    "CK_PalletAuditEvents_HasTarget",
+                    "\"PalletId\" IS NOT NULL OR \"PalletContentLineId\" IS NOT NULL"));
+
+                b.HasOne(e => e.Pallet)
+                    .WithMany()
+                    .HasForeignKey(e => e.PalletId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(e => e.PalletContentLine)
+                    .WithMany()
+                    .HasForeignKey(e => e.PalletContentLineId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
         }

@@ -467,6 +467,184 @@ namespace AgfAdmin.Migrations
                     b.ToTable("OrderLineAllocations");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Pallet", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DeclaredNetKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal?>("GrossKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("LocationContext")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("LogisticsStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("PalletType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Sscc")
+                        .HasMaxLength(18)
+                        .HasColumnType("character varying(18)");
+
+                    b.Property<int?>("StockReceiptId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TareKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("WarehouseLocation")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("Sscc")
+                        .IsUnique();
+
+                    b.HasIndex("StockReceiptId");
+
+                    b.ToTable("Pallets");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PalletAuditEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("PalletContentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PalletId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PalletContentLineId");
+
+                    b.HasIndex("PalletId");
+
+                    b.ToTable("PalletAuditEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_PalletAuditEvents_HasTarget", "\"PalletId\" IS NOT NULL OR \"PalletContentLineId\" IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PalletContentLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LotNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("PalletId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QualityReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("QualityStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PalletId");
+
+                    b.HasIndex("SupplyCommitmentLineId");
+
+                    b.ToTable("PalletContentLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -575,6 +753,9 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<int?>("PalletContentLineId")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -602,6 +783,8 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(32)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PalletContentLineId");
 
                     b.HasIndex("StockReceiptId");
 
@@ -657,6 +840,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("OrderLineId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PalletContentLineId")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -684,6 +870,8 @@ namespace AgfAdmin.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderLineId");
+
+                    b.HasIndex("PalletContentLineId");
 
                     b.HasIndex("SupplyCommitmentLineId");
 
@@ -981,6 +1169,52 @@ namespace AgfAdmin.Migrations
                     b.Navigation("OrderLine");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Pallet", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.StockReceipt", "StockReceipt")
+                        .WithMany()
+                        .HasForeignKey("StockReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("StockReceipt");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PalletAuditEvent", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.Pallet", "Pallet")
+                        .WithMany()
+                        .HasForeignKey("PalletId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Pallet");
+
+                    b.Navigation("PalletContentLine");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PalletContentLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Pallet", "Pallet")
+                        .WithMany("ContentLines")
+                        .HasForeignKey("PalletId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Pallet");
+
+                    b.Navigation("SupplyCommitmentLine");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.ProductVariant", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Product", "Product")
@@ -994,6 +1228,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.StockMovement", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.StockReceipt", "StockReceipt")
                         .WithMany()
                         .HasForeignKey("StockReceiptId")
@@ -1009,6 +1248,8 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("SupplyCommitmentLineId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("PalletContentLine");
 
                     b.Navigation("StockReceipt");
 
@@ -1036,6 +1277,11 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
                         .WithMany()
                         .HasForeignKey("SupplyCommitmentLineId")
@@ -1043,6 +1289,8 @@ namespace AgfAdmin.Migrations
                         .IsRequired();
 
                     b.Navigation("OrderLine");
+
+                    b.Navigation("PalletContentLine");
 
                     b.Navigation("SupplyCommitmentLine");
                 });
@@ -1121,6 +1369,11 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.OrderLine", b =>
                 {
                     b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.Pallet", b =>
+                {
+                    b.Navigation("ContentLines");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Product", b =>
