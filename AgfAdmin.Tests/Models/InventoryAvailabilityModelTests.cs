@@ -22,7 +22,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         var order = new Order { CustomCustomerName = "Customer C" };
         var orderLine = new OrderLine { Order = order, ProductVariant = variant, Quantity = 1, UnitPrice = 12.50m };
         var commitment = new SupplyCommitment { Vendor = vendor, Route = "Warehouse", Status = "Expected", Origin = "Peru" };
-        var commitmentLine = new SupplyCommitmentLine { SupplyCommitment = commitment, ProductVariant = variant, ExpectedQuantity = 3 };
+        var commitmentLine = new SupplyCommitmentLine { SupplyCommitment = commitment, ProductVariant = variant, ExpectedQuantity = 3m };
 
         db.AddRange(product, variant, vendor, order, orderLine, commitment, commitmentLine);
         await db.SaveChangesAsync();
@@ -65,7 +65,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         {
             SupplyCommitmentId = graph.CommitmentId + 1000,
             ProductVariantId = graph.ProductVariantId,
-            ExpectedQuantity = 1
+            ExpectedQuantity = 1m
         }));
     }
 
@@ -78,7 +78,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         {
             SupplyCommitmentId = graph.CommitmentId,
             ProductVariantId = graph.ProductVariantId + 1000,
-            ExpectedQuantity = 1
+            ExpectedQuantity = 1m
         }));
     }
 
@@ -104,7 +104,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         await AssertSaveIsRejectedAsync(db => db.StockMovements.Add(new StockMovement
         {
             Type = "Correction",
-            Quantity = 1,
+            Quantity = 1m,
             SupplyCommitmentLineId = 999_999,
             Reason = "Test"
         }));
@@ -119,7 +119,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         {
             OrderLineId = graph.OrderLineId + 1000,
             SupplyCommitmentLineId = graph.CommitmentLineId,
-            Quantity = 1,
+            Quantity = 1m,
             Source = "Expected",
             Status = "Active"
         }));
@@ -134,7 +134,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         {
             OrderLineId = graph.OrderLineId,
             SupplyCommitmentLineId = graph.CommitmentLineId + 1000,
-            Quantity = 1,
+            Quantity = 1m,
             Source = "Expected",
             Status = "Active"
         }));
@@ -152,7 +152,7 @@ public class InventoryAvailabilityModelTests : IDisposable
             {
                 OrderLineId = graph.OrderLineId,
                 SupplyCommitmentLineId = graph.CommitmentLineId,
-                Quantity = 1,
+                Quantity = 1m,
                 Source = "Expected",
                 Status = "Active"
             };
@@ -165,7 +165,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         var saved = await verify.StockReservations.SingleAsync(r => r.Id == reservationId);
         Assert.Equal(graph.OrderLineId, saved.OrderLineId);
         Assert.Equal(graph.CommitmentLineId, saved.SupplyCommitmentLineId);
-        Assert.Equal(1, saved.Quantity);
+        Assert.Equal(1m, saved.Quantity);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         {
             if (dependent == "movement")
             {
-                db.StockMovements.Add(new StockMovement { Type = "Correction", Quantity = 1, SupplyCommitmentLineId = graph.CommitmentLineId, Reason = "Test" });
+                db.StockMovements.Add(new StockMovement { Type = "Correction", Quantity = 1m, SupplyCommitmentLineId = graph.CommitmentLineId, Reason = "Test" });
             }
             else
             {
@@ -199,7 +199,7 @@ public class InventoryAvailabilityModelTests : IDisposable
                 {
                     OrderLineId = graph.OrderLineId,
                     SupplyCommitmentLineId = graph.CommitmentLineId,
-                    Quantity = 1,
+                    Quantity = 1m,
                     Source = "Expected",
                     Status = "Active"
                 });
@@ -232,7 +232,7 @@ public class InventoryAvailabilityModelTests : IDisposable
         {
             var receipt = new StockReceipt { RequestId = Guid.NewGuid(), SupplyCommitmentId = graph.CommitmentId };
             db.StockReceipts.Add(receipt);
-            db.StockMovements.Add(new StockMovement { Type = "Receipt", Quantity = 3, SupplyCommitmentLineId = graph.CommitmentLineId, StockReceipt = receipt });
+            db.StockMovements.Add(new StockMovement { Type = "Receipt", Quantity = 3m, SupplyCommitmentLineId = graph.CommitmentLineId, StockReceipt = receipt });
             await db.SaveChangesAsync();
             receiptId = receipt.Id;
         }
@@ -258,7 +258,7 @@ public class InventoryAvailabilityModelTests : IDisposable
             {
                 OrderLineId = graph.OrderLineId,
                 SupplyCommitmentLineId = graph.CommitmentLineId,
-                Quantity = 1,
+                Quantity = 1m,
                 Source = "Expected",
                 Status = "Active"
             });
@@ -280,5 +280,128 @@ public class InventoryAvailabilityModelTests : IDisposable
         await using var verify = _factory.CreateContext();
         Assert.Equal(1, await verify.StockReservations.CountAsync());
         Assert.True(await verify.SupplyCommitmentLines.AnyAsync(l => l.Id == graph.CommitmentLineId));
+    }
+
+    [Fact]
+    public async Task Availability_Quantity_And_NetWeight_RoundTrip_With_Three_Decimals()
+    {
+        var graph = await SeedGraphAsync();
+        int lineId, movementId, reservationId;
+
+        await using (var db = _factory.CreateContext())
+        {
+            var line = new SupplyCommitmentLine
+            {
+                SupplyCommitmentId = graph.CommitmentId,
+                ProductVariantId = graph.ProductVariantId,
+                ExpectedQuantity = 12.345m,
+                ExpectedUnit = "box",
+                ExpectedNetWeightKg = 67.890m
+            };
+            db.SupplyCommitmentLines.Add(line);
+            await db.SaveChangesAsync();
+
+            var movement = new StockMovement { Type = "Receipt", Quantity = 12.345m, Unit = "box", NetWeightKg = 67.890m, SupplyCommitmentLineId = line.Id };
+            var reservation = new StockReservation
+            {
+                OrderLineId = graph.OrderLineId,
+                SupplyCommitmentLineId = line.Id,
+                Quantity = 12.345m,
+                Unit = "box",
+                NetWeightKg = 67.890m,
+                Source = "Expected",
+                Status = "Active"
+            };
+            db.AddRange(movement, reservation);
+            await db.SaveChangesAsync();
+
+            (lineId, movementId, reservationId) = (line.Id, movement.Id, reservation.Id);
+        }
+
+        await using var verify = _factory.CreateContext();
+        var savedLine = await verify.SupplyCommitmentLines.SingleAsync(l => l.Id == lineId);
+        Assert.Equal(12.345m, savedLine.ExpectedQuantity);
+        Assert.Equal("box", savedLine.ExpectedUnit);
+        Assert.Equal(67.890m, savedLine.ExpectedNetWeightKg);
+
+        var savedMovement = await verify.StockMovements.SingleAsync(m => m.Id == movementId);
+        Assert.Equal(12.345m, savedMovement.Quantity);
+        Assert.Equal("box", savedMovement.Unit);
+        Assert.Equal(67.890m, savedMovement.NetWeightKg);
+
+        var savedReservation = await verify.StockReservations.SingleAsync(r => r.Id == reservationId);
+        Assert.Equal(12.345m, savedReservation.Quantity);
+        Assert.Equal("box", savedReservation.Unit);
+        Assert.Equal(67.890m, savedReservation.NetWeightKg);
+    }
+
+    [Fact]
+    public async Task Legacy_Availability_Metadata_Can_Remain_Unknown_Until_A_New_Write()
+    {
+        var graph = await SeedGraphAsync();
+        int movementId, reservationId;
+
+        await using (var db = _factory.CreateContext())
+        {
+            var movement = new StockMovement { Type = "Correction", Quantity = 1m, SupplyCommitmentLineId = graph.CommitmentLineId, Reason = "Test" };
+            var reservation = new StockReservation
+            {
+                OrderLineId = graph.OrderLineId,
+                SupplyCommitmentLineId = graph.CommitmentLineId,
+                Quantity = 1m,
+                Source = "Expected",
+                Status = "Active"
+            };
+            db.AddRange(movement, reservation);
+            await db.SaveChangesAsync();
+            (movementId, reservationId) = (movement.Id, reservation.Id);
+        }
+
+        await using var verify = _factory.CreateContext();
+        var variant = await verify.ProductVariants.SingleAsync(v => v.Id == graph.ProductVariantId);
+        Assert.Null(variant.AvailabilityUnit);
+
+        var line = await verify.SupplyCommitmentLines.SingleAsync(l => l.Id == graph.CommitmentLineId);
+        Assert.Null(line.ExpectedUnit);
+        Assert.Null(line.ExpectedNetWeightKg);
+
+        var movementRow = await verify.StockMovements.SingleAsync(m => m.Id == movementId);
+        Assert.Null(movementRow.Unit);
+        Assert.Null(movementRow.NetWeightKg);
+
+        var reservationRow = await verify.StockReservations.SingleAsync(r => r.Id == reservationId);
+        Assert.Null(reservationRow.Unit);
+        Assert.Null(reservationRow.NetWeightKg);
+    }
+
+    [Theory]
+    [InlineData(typeof(SupplyCommitmentLine), nameof(SupplyCommitmentLine.ExpectedQuantity))]
+    [InlineData(typeof(SupplyCommitmentLine), nameof(SupplyCommitmentLine.ExpectedNetWeightKg))]
+    [InlineData(typeof(StockMovement), nameof(StockMovement.Quantity))]
+    [InlineData(typeof(StockMovement), nameof(StockMovement.NetWeightKg))]
+    [InlineData(typeof(StockReservation), nameof(StockReservation.Quantity))]
+    [InlineData(typeof(StockReservation), nameof(StockReservation.NetWeightKg))]
+    public void Availability_Decimal_Properties_Are_Configured_As_Decimal_18_3(Type entityType, string propertyName)
+    {
+        // SQLite dwingt decimal-precisie niet af; deze modeltest bewaakt de afspraak voor Postgres.
+        using var db = _factory.CreateContext();
+        var property = db.Model.FindEntityType(entityType)!.FindProperty(propertyName)!;
+
+        Assert.Equal(18, property.GetPrecision());
+        Assert.Equal(3, property.GetScale());
+    }
+
+    [Theory]
+    [InlineData(typeof(ProductVariant), nameof(ProductVariant.AvailabilityUnit))]
+    [InlineData(typeof(SupplyCommitmentLine), nameof(SupplyCommitmentLine.ExpectedUnit))]
+    [InlineData(typeof(StockMovement), nameof(StockMovement.Unit))]
+    [InlineData(typeof(StockReservation), nameof(StockReservation.Unit))]
+    public void Availability_Unit_Properties_Are_Optional_With_Max_Length_32(Type entityType, string propertyName)
+    {
+        using var db = _factory.CreateContext();
+        var property = db.Model.FindEntityType(entityType)!.FindProperty(propertyName)!;
+
+        Assert.Equal(32, property.GetMaxLength());
+        Assert.True(property.IsNullable);
     }
 }
