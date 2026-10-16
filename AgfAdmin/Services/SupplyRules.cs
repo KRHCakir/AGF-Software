@@ -8,12 +8,13 @@ namespace AgfAdmin.Services
         public const string RouteDirectTrade = "DirectTrade";
 
         public const string StatusExpected = "Expected";
+        public const string StatusCancelled = "Cancelled";
 
         public static readonly IReadOnlyList<string> Routes = new[] { RouteWarehouse, RouteDirectTrade };
 
         public static readonly IReadOnlyList<string> CommitmentStatuses = new[]
         {
-            StatusExpected, "PartiallyReceived", "Received", "Cancelled", "Delivered"
+            StatusExpected, "PartiallyReceived", "Received", StatusCancelled, "Delivered"
         };
 
         public static readonly IReadOnlyList<string> PackageUnits = new[] { "box", "colli", "tray", "piece", "dozen" };

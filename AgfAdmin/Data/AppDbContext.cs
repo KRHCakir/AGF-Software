@@ -38,6 +38,20 @@ namespace AgfAdmin.Data
         public DbSet<PalletContentLine> PalletContentLines { get; set; }
         public DbSet<PalletAuditEvent> PalletAuditEvents { get; set; }
 
+        // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
+        // van SaveChanges/SaveChangesAsync lopen via deze overloads.
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            TraceabilityGuard.Validate(this);
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            await TraceabilityGuard.ValidateAsync(this, cancellationToken);
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -208,6 +222,8 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
                 });
+
+                b.HasIndex(c => c.RequestId).IsUnique();
 
                 b.HasOne(c => c.Pallet)
                     .WithMany(p => p.ContentLines)

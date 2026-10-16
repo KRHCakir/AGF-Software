@@ -624,6 +624,9 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("SupplyCommitmentLineId")
                         .HasColumnType("integer");
 
@@ -635,6 +638,9 @@ namespace AgfAdmin.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PalletId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
 
                     b.HasIndex("SupplyCommitmentLineId");
 
