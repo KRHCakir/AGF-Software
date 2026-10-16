@@ -6,6 +6,9 @@ namespace AgfAdmin.Models
     {
         public int Id { get; set; }
 
+        // Door de client meegegeven idempotentiesleutel: een retry maakt nooit een tweede fysieke regel.
+        public Guid RequestId { get; set; }
+
         public int PalletId { get; set; }
         public Pallet Pallet { get; set; }
 

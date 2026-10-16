@@ -556,6 +556,7 @@ public class InventoryAvailabilityModelTests : IDisposable
 
     private static PalletContentLine NewContentLine(int palletId, int sourceLineId, string lotNumber = "LOT-1") => new()
     {
+        RequestId = Guid.NewGuid(),
         PalletId = palletId,
         SupplyCommitmentLineId = sourceLineId,
         LotNumber = lotNumber,
@@ -700,6 +701,42 @@ public class InventoryAvailabilityModelTests : IDisposable
         var saved = await verify.PalletContentLines.SingleAsync();
         Assert.Equal(0.001m, saved.Quantity);
         Assert.Equal(0.001m, saved.NetWeightKg);
+    }
+
+    [Fact]
+    public async Task PalletContentLine_Duplicate_RequestId_Is_Rejected()
+    {
+        var graph = await SeedGraphAsync();
+        var palletId = await AddPalletAsync("PAL-001");
+        var requestId = Guid.NewGuid();
+
+        await using (var db = _factory.CreateContext())
+        {
+            var contentLine = NewContentLine(palletId, graph.CommitmentLineId);
+            contentLine.RequestId = requestId;
+            db.PalletContentLines.Add(contentLine);
+            await db.SaveChangesAsync();
+        }
+
+        await AssertSaveIsRejectedAsync(db =>
+        {
+            var duplicate = NewContentLine(palletId, graph.CommitmentLineId, "LOT-2");
+            duplicate.RequestId = requestId;
+            db.PalletContentLines.Add(duplicate);
+        });
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(1, await verify.PalletContentLines.CountAsync());
+    }
+
+    [Fact]
+    public void PalletContentLine_RequestId_Has_Unique_Index()
+    {
+        using var db = _factory.CreateContext();
+        var entity = db.Model.FindEntityType(typeof(PalletContentLine))!;
+
+        var index = Assert.Single(entity.GetIndexes(), i => i.Properties.Single().Name == nameof(PalletContentLine.RequestId));
+        Assert.True(index.IsUnique);
     }
 
     [Fact]
