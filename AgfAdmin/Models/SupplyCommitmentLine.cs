@@ -12,7 +12,9 @@ namespace AgfAdmin.Models
         public int ProductVariantId { get; set; }
         public ProductVariant ProductVariant { get; set; }
 
-        public int ExpectedQuantity { get; set; }
+        public decimal ExpectedQuantity { get; set; }
+        public string ExpectedUnit { get; set; }            // box, colli, tray, piece of dozen; optioneel tijdens de overgang
+        public decimal? ExpectedNetWeightKg { get; set; }   // werkelijk opgegeven netto kg; nooit afgeleid
         public string LotNumber { get; set; } // optioneel
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

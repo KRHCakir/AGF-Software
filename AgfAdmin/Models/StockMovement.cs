@@ -6,7 +6,9 @@ namespace AgfAdmin.Models
     {
         public int Id { get; set; }
         public string Type { get; set; }
-        public int Quantity { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }            // expliciete eenheid; optioneel tijdens de overgang
+        public decimal? NetWeightKg { get; set; }   // werkelijk netto kg; nooit afgeleid
 
         // Bron/partij van de beweging; altijd verplicht.
         public int SupplyCommitmentLineId { get; set; }

@@ -12,7 +12,9 @@ namespace AgfAdmin.Models
         public int SupplyCommitmentLineId { get; set; }
         public SupplyCommitmentLine SupplyCommitmentLine { get; set; }
 
-        public int Quantity { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }            // expliciete eenheid; optioneel tijdens de overgang
+        public decimal? NetWeightKg { get; set; }   // werkelijk netto kg; nooit afgeleid
         public string Source { get; set; } // "Physical", "Expected" of "DirectTrade"
         public string Status { get; set; } // bijv. "Active", "Released", "Dispatched"
 

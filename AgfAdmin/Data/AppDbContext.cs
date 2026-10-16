@@ -40,6 +40,13 @@ namespace AgfAdmin.Data
             // Alleen de nieuwe entiteiten worden hier geconfigureerd. Alle relaties zijn Restrict:
             // verwijderen van een ouder mag nooit stil audit-/historierecords meenemen.
             // Geen inverse navigaties op legacy-entiteiten, zodat bestaande API-responses gelijk blijven.
+            // Hoeveelheden en gewichten: decimal(18,3). Eenheden: max 32 tekens. Alle metadata blijft optioneel
+            // tijdens de overgang; er worden geen defaults, conversies of afgeleide gewichten vastgelegd.
+            modelBuilder.Entity<ProductVariant>(b =>
+            {
+                b.Property(v => v.AvailabilityUnit).HasMaxLength(32);
+            });
+
             modelBuilder.Entity<SupplyCommitment>(b =>
             {
                 b.Property(c => c.Route).IsRequired().HasMaxLength(32);
@@ -56,6 +63,9 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<SupplyCommitmentLine>(b =>
             {
                 b.Property(l => l.LotNumber).HasMaxLength(100);
+                b.Property(l => l.ExpectedQuantity).HasPrecision(18, 3);
+                b.Property(l => l.ExpectedUnit).HasMaxLength(32);
+                b.Property(l => l.ExpectedNetWeightKg).HasPrecision(18, 3);
 
                 b.HasOne(l => l.SupplyCommitment)
                     .WithMany(c => c.Lines)
@@ -82,6 +92,9 @@ namespace AgfAdmin.Data
             {
                 b.Property(m => m.Type).IsRequired().HasMaxLength(32);
                 b.Property(m => m.Reason).HasMaxLength(500);
+                b.Property(m => m.Quantity).HasPrecision(18, 3);
+                b.Property(m => m.Unit).HasMaxLength(32);
+                b.Property(m => m.NetWeightKg).HasPrecision(18, 3);
 
                 b.HasOne(m => m.SupplyCommitmentLine)
                     .WithMany()
@@ -103,6 +116,9 @@ namespace AgfAdmin.Data
             {
                 b.Property(r => r.Source).IsRequired().HasMaxLength(32);
                 b.Property(r => r.Status).IsRequired().HasMaxLength(32);
+                b.Property(r => r.Quantity).HasPrecision(18, 3);
+                b.Property(r => r.Unit).HasMaxLength(32);
+                b.Property(r => r.NetWeightKg).HasPrecision(18, 3);
 
                 b.HasOne(r => r.OrderLine)
                     .WithMany()

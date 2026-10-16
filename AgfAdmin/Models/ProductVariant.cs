@@ -23,6 +23,10 @@ namespace AgfAdmin.Models
 
         public string? ShortcutCode { get; set; }
 
+        // Beschikbaarheidseenheid voor nieuwe voorraadflows: "Kilogram" of "Package".
+        // Optioneel tijdens de overgang; nooit afgeleid uit maat of verpakking.
+        public string AvailabilityUnit { get; set; }
+
         // Relationships
         [JsonIgnore]
         public ICollection<OrderLine> OrderLines { get; set; }
