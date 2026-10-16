@@ -1,5 +1,6 @@
 using AgfAdmin.Controllers;
 using AgfAdmin.Data;
+using AgfAdmin.DTOs;
 using AgfAdmin.Models;
 using AgfAdmin.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -208,6 +209,89 @@ public class IncomingInvoicesControllerTests
         await using var verify = CreateContext(databaseName);
         var stock = Assert.Single(await verify.Inventory.ToListAsync());
         Assert.Equal(inventoryId, stock.Id);
+        Assert.Equal(10, stock.Quantity);
+    }
+
+    [Fact]
+    public async Task CreateManualInvoice_Creates_Draft_Without_Changing_Inventory()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var inventoryId = await SeedInventoryAsync(databaseName, productVariantId: 1, quantity: 10);
+
+        int invoiceId;
+        await using (var db = CreateContext(databaseName))
+        {
+            var result = await CreateController(db).CreateManualInvoice(CreateManualInvoiceRequest());
+
+            var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+            Assert.Equal("GetIncomingInvoice", created.ActionName);
+            invoiceId = Assert.IsType<IncomingInvoice>(created.Value).Id;
+        }
+
+        var invoice = await LoadInvoiceAsync(databaseName, invoiceId);
+        Assert.Equal("Draft", invoice.Status);
+        Assert.Equal(1, invoice.VendorId);
+        // Regel 1: 5 x 2,00 = 10,00 + 9% btw 0,90; regel 2: 3 x 1,00 = 3,00 + 21% btw 0,63.
+        Assert.Equal(14.53m, invoice.TotalAmount);
+        Assert.Equal(1.53m, invoice.VATAmount);
+
+        await AssertInventoryUnchangedAsync(databaseName, inventoryId);
+    }
+
+    [Fact]
+    public async Task Approve_ManualInvoice_Does_Not_Change_Inventory()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var inventoryId = await SeedInventoryAsync(databaseName, productVariantId: 1, quantity: 10);
+
+        int invoiceId;
+        await using (var db = CreateContext(databaseName))
+        {
+            var result = await CreateController(db).CreateManualInvoice(CreateManualInvoiceRequest());
+            invoiceId = Assert.IsType<IncomingInvoice>(Assert.IsType<CreatedAtActionResult>(result.Result).Value).Id;
+        }
+
+        await using (var db = CreateContext(databaseName))
+        {
+            var result = await CreateController(db).ApproveInvoice(invoiceId);
+            Assert.IsType<OkObjectResult>(result);
+        }
+
+        var invoice = await LoadInvoiceAsync(databaseName, invoiceId);
+        Assert.Equal("Approved", invoice.Status);
+
+        await AssertInventoryUnchangedAsync(databaseName, inventoryId);
+    }
+
+    private static CreateIncomingInvoiceDto CreateManualInvoiceRequest() => new()
+    {
+        VendorId = 1,
+        InvoiceNumber = "SUP-MANUAL-001",
+        InvoiceDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+        Lines = new List<CreateIncomingInvoiceLineDto>
+        {
+            // Bestaande voorraadrij voor variant 1.
+            new() { Description = "Avocado Hass", Quantity = 5, UnitPrice = 2.00m, VATPercentage = 9m, ProductVariantId = 1 },
+            // Variant zonder voorraadrij: mag er geen aanmaken.
+            new() { Description = "Mango Kent", Quantity = 3, UnitPrice = 1.00m, VATPercentage = 21m, ProductVariantId = 2 }
+        }
+    };
+
+    private static async Task<int> SeedInventoryAsync(string databaseName, int productVariantId, int quantity)
+    {
+        await using var db = CreateContext(databaseName);
+        var inventory = new Inventory { Location = "Warehouse A", Quantity = quantity, ProductVariantId = productVariantId };
+        db.Inventory.Add(inventory);
+        await db.SaveChangesAsync();
+        return inventory.Id;
+    }
+
+    private static async Task AssertInventoryUnchangedAsync(string databaseName, int inventoryId)
+    {
+        await using var verify = CreateContext(databaseName);
+        var stock = Assert.Single(await verify.Inventory.ToListAsync());
+        Assert.Equal(inventoryId, stock.Id);
+        Assert.Equal(1, stock.ProductVariantId);
         Assert.Equal(10, stock.Quantity);
     }
 

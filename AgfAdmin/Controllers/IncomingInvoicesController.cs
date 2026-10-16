@@ -84,7 +84,7 @@ namespace AgfAdmin.Controllers
                 InvoiceNumber = dto.InvoiceNumber,
                 InvoiceDate = dto.InvoiceDate,
                 DueDate = dto.DueDate ?? dto.InvoiceDate.AddDays(30),
-                Status = "Approved", // Manual entry usually implies it's verified
+                Status = "Draft", // Handmatige invoer wordt eerst beoordeeld en daarna goedgekeurd
                 ReviewConfidence = 1.0,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -114,28 +114,7 @@ namespace AgfAdmin.Controllers
 
                 invoice.InvoiceLines.Add(line);
 
-                // 3. Update Inventory if ProductVariantId is present (Optional: Incoming = Stock Increase)
-                if (lineDto.ProductVariantId.HasValue)
-                {
-                    var inventory = await _context.Inventory
-                        .FirstOrDefaultAsync(i => i.ProductVariantId == lineDto.ProductVariantId.Value);
-
-                    if (inventory != null)
-                    {
-                        inventory.Quantity += lineDto.Quantity;
-                        _context.Inventory.Update(inventory);
-                    }
-                    else
-                    {
-                         _context.Inventory.Add(new Inventory
-                        {
-                            ProductVariantId = lineDto.ProductVariantId.Value,
-                            Location = "Warehouse A",
-                            Quantity = lineDto.Quantity,
-                            Stored = DateTime.UtcNow
-                        });
-                    }
-                }
+                // Een inkoopfactuur is administratief: zij wijzigt nooit voorraad. Voorraad komt alleen via ontvangst binnen.
             }
 
             invoice.TotalAmount = totalAmount;
