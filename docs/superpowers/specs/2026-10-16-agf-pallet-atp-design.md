@@ -21,7 +21,7 @@ Each inbound or direct-trade source line records the actual facts entered by the
 - product variant;
 - explicit package quantity and explicit package unit;
 - actual total net weight in kg;
-- mandatory lot/party;
+- known or provisional lot/party reference; a final lot is mandatory when physical content is recorded;
 - supplier/source and route;
 - optional pallet quantity.
 
@@ -119,8 +119,8 @@ Quarantine, blocked and rejected quantities cannot be selected for a sale or res
 
 ### Own warehouse
 
-1. Create expected supply with source-line quantities, package units, net kg and lots.
-2. On arrival, create/scan a pallet and atomic content lines linked to those source lines.
+1. Create expected supply with source-line quantities, package units and net kg; record a lot when known.
+2. On arrival, create/scan a pallet and atomic content lines with a mandatory final lot, linked to those source lines.
 3. Record inspection and quality outcome on each content line.
 4. Only approved content at a saleable own location becomes physical available stock.
 5. Dispatch consumes an explicit reservation; corrections add compensating events rather than rewrite history.
