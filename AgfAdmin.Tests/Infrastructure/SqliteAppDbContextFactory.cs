@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace AgfAdmin.Tests.Infrastructure;
 
@@ -26,6 +27,13 @@ public sealed class SqliteAppDbContextFactory : IDisposable
     }
 
     public AppDbContext CreateContext() => new(_options);
+
+    // Voor deterministische concurrency-tests: een interceptor kan midden in SaveChanges een gelijktijdige wijziging doen.
+    public AppDbContext CreateContext(params IInterceptor[] interceptors) => new(
+        new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_connection)
+            .AddInterceptors(interceptors)
+            .Options);
 
     public void Dispose() => _connection.Dispose();
 }

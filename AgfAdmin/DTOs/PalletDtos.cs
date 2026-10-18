@@ -43,6 +43,7 @@ namespace AgfAdmin.DTOs
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
         public DateTime CreatedAt { get; set; }
+        public int Version { get; set; }
         public List<PalletContentLineDto> ContentLines { get; set; } = new();
     }
 
@@ -63,6 +64,56 @@ namespace AgfAdmin.DTOs
         public string Unit { get; set; }
         public decimal NetWeightKg { get; set; }
         public string QualityStatus { get; set; }
+        public string QualityReason { get; set; }
         public DateTime CreatedAt { get; set; }
+        public int Version { get; set; }
+        // Huidige versie van de pallet: elke wijziging van een regel raakt ook de pallet.
+        public int PalletVersion { get; set; }
+    }
+
+    // Expliciete commando's: elk met een idempotentiesleutel, de verwachte versie en een actor.
+    public sealed class ChangeLogisticsStatusDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedPalletVersion { get; set; }
+        public string ToStatus { get; set; }
+        // Optioneel: een nieuwe locatie die tegelijk met de status ingaat (bijvoorbeeld bij dispatch uit het magazijn).
+        public string LocationContext { get; set; }
+        public string WarehouseLocation { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+    }
+
+    public sealed class ChangePalletLocationDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedPalletVersion { get; set; }
+        public string LocationContext { get; set; }
+        public string WarehouseLocation { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+    }
+
+    public sealed class ChangeQualityStatusDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedContentLineVersion { get; set; }
+        public string ToStatus { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+    }
+
+    public sealed class PalletAuditEventDto
+    {
+        public int Id { get; set; }
+        public int? PalletId { get; set; }
+        public int? PalletContentLineId { get; set; }
+        public string EventType { get; set; }
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+        public string Reason { get; set; }
+        public string ActorReference { get; set; }
+        public DateTime OccurredAt { get; set; }
+        public Guid? RequestId { get; set; }
     }
 }

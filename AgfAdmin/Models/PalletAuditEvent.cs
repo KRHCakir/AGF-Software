@@ -19,5 +19,8 @@ namespace AgfAdmin.Models
         public string ActorReference { get; set; } // expliciete actor tot authenticatie beschikbaar is
 
         public DateTime OccurredAt { get; set; }
+
+        // Idempotentiesleutel van het commando dat dit event veroorzaakte; uniek, leeg bij oudere/creatie-events.
+        public Guid? RequestId { get; set; }
     }
 }

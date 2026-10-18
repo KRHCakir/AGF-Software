@@ -124,4 +124,105 @@ public class PalletsControllerTests : IDisposable
         Assert.Equal(pallet.Id, Assert.IsType<PalletDto>(ok.Value).Id);
         Assert.IsType<NotFoundObjectResult>(await Run(c => c.GetById(999_999)));
     }
+
+    // ---- Commando's voor status, locatie en kwaliteit ----
+
+    private async Task<(PalletDto Pallet, PalletContentLineDto Line)> PalletWithLineAsync()
+    {
+        var sourceLineId = await SeedSourceLineAsync();
+        var pallet = await CreatePalletAsync();
+        var created = Assert.IsType<CreatedAtActionResult>(await Run(c => c.AddContentLine(pallet.Id, ContentRequest(sourceLineId, Guid.NewGuid()))));
+        var line = Assert.IsType<PalletContentLineDto>(created.Value);
+        var current = Assert.IsType<PalletDto>(Assert.IsType<OkObjectResult>(await Run(c => c.GetById(pallet.Id))).Value);
+        return (current, line);
+    }
+
+    private static ChangeLogisticsStatusDto DispatchCommand(int version) => new()
+    {
+        RequestId = Guid.NewGuid(),
+        ExpectedPalletVersion = version,
+        ToStatus = "Dispatched",
+        LocationContext = "InTransit",
+        ActorReference = "warehouse-1"
+    };
+
+    [Fact]
+    public async Task ChangeLogisticsStatus_Returns_200_400_404_And_409()
+    {
+        var (pallet, line) = await PalletWithLineAsync();
+
+        // Inhoud nog in Quarantine: dispatch is een conflict met de huidige toestand.
+        Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(pallet.Version))));
+
+        var approve = new ChangeQualityStatusDto { RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Approved", ActorReference = "qc-1" };
+        var approved = Assert.IsType<PalletContentLineDto>(Assert.IsType<OkObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, approve))).Value);
+        // De kwaliteitswijziging verhoogt ook de palletversie; een client gebruikt de teruggegeven palletVersion.
+        Assert.Equal(pallet.Version + 1, approved.PalletVersion);
+        Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(pallet.Version))));
+
+        var invalid = DispatchCommand(pallet.Version);
+        invalid.ToStatus = "Shipped";
+        var badRequest = Assert.IsType<BadRequestObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, invalid)));
+        Assert.Contains("toStatus", Assert.IsType<ValidationProblemDetails>(badRequest.Value).Errors.Keys);
+
+        Assert.IsType<NotFoundObjectResult>(await Run(c => c.ChangeLogisticsStatus(999_999, DispatchCommand(0))));
+
+        var ok = Assert.IsType<OkObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(approved.PalletVersion))));
+        Assert.Equal("Dispatched", Assert.IsType<PalletDto>(ok.Value).LogisticsStatus);
+    }
+
+    [Fact]
+    public async Task ChangeLocation_Returns_200_400_404_And_409()
+    {
+        var (pallet, _) = await PalletWithLineAsync();
+        ChangePalletLocationDto Command(string location, string bin, int version) => new()
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedPalletVersion = version,
+            LocationContext = location,
+            WarehouseLocation = bin,
+            ActorReference = "warehouse-1"
+        };
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(await Run(c => c.ChangeLocation(pallet.Id, Command("Supplier", "COLD-01", pallet.Version))));
+        Assert.Contains("warehouseLocation", Assert.IsType<ValidationProblemDetails>(badRequest.Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Run(c => c.ChangeLocation(999_999, Command("Warehouse", null, 0))));
+        Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeLocation(pallet.Id, Command("Warehouse", "COLD-01", pallet.Version + 1))));
+
+        var ok = Assert.IsType<OkObjectResult>(await Run(c => c.ChangeLocation(pallet.Id, Command("Warehouse", "COLD-01", pallet.Version))));
+        Assert.Equal("COLD-01", Assert.IsType<PalletDto>(ok.Value).WarehouseLocation);
+    }
+
+    [Fact]
+    public async Task ChangeQualityStatus_Returns_200_400_404_And_409()
+    {
+        var (pallet, line) = await PalletWithLineAsync();
+        ChangeQualityStatusDto Command(string to, string reason, int version) => new()
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedContentLineVersion = version,
+            ToStatus = to,
+            ActorReference = "qc-1",
+            Reason = reason
+        };
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, Command("Blocked", null, line.Version))));
+        Assert.Contains("reason", Assert.IsType<ValidationProblemDetails>(badRequest.Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, 999_999, Command("Approved", null, 0))));
+        Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, Command("Quarantine", "Again", line.Version))));
+
+        var ok = Assert.IsType<OkObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, Command("Rejected", "Mould", line.Version))));
+        Assert.Equal("Rejected", Assert.IsType<PalletContentLineDto>(ok.Value).QualityStatus);
+    }
+
+    [Fact]
+    public async Task GetAuditEvents_Returns_200_Or_404()
+    {
+        var (pallet, _) = await PalletWithLineAsync();
+
+        var ok = Assert.IsType<OkObjectResult>(await Run(c => c.GetAuditEvents(pallet.Id)));
+        var events = Assert.IsAssignableFrom<IReadOnlyList<PalletAuditEventDto>>(ok.Value);
+        Assert.Equal(new[] { "PalletCreated", "ContentLineAdded" }, events.Select(e => e.EventType));
+        Assert.IsType<NotFoundObjectResult>(await Run(c => c.GetAuditEvents(999_999)));
+    }
 }

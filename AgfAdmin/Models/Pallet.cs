@@ -23,6 +23,9 @@ namespace AgfAdmin.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        // Optimistisch concurrency-token: start op 0 en wordt centraal in AppDbContext verhoogd bij elke wijziging.
+        public int Version { get; set; }
+
         public ICollection<PalletContentLine> ContentLines { get; set; } = new List<PalletContentLine>();
     }
 }

@@ -13,6 +13,9 @@ namespace AgfAdmin.Services
     {
         public const string PalletCreatedEvent = "PalletCreated";
         public const string ContentLineAddedEvent = "ContentLineAdded";
+        public const string LogisticsStatusChangedEvent = "LogisticsStatusChanged";
+        public const string LocationChangedEvent = "LocationChanged";
+        public const string QualityStatusChangedEvent = "QualityStatusChanged";
 
         private const int MaxReferenceLength = 64;
         private const int MaxPalletTypeLength = 32;
@@ -215,12 +218,9 @@ namespace AgfAdmin.Services
                 return ResultForContentLineRetry(existing, candidate);
             }
 
-            var pallet = await _db.Pallets
-                .AsNoTracking()
-                .Include(p => p.ContentLines)
-                    .ThenInclude(c => c.SupplyCommitmentLine)
-                        .ThenInclude(l => l.SupplyCommitment)
-                .SingleOrDefaultAsync(p => p.Id == palletId, cancellationToken);
+            // Gevolgd geladen: de pallet wordt hieronder "aangeraakt" (versie +1), zodat twee gelijktijdige
+            // toevoegingen niet samen de gewichts- of mengregels kunnen omzeilen.
+            var pallet = await TrackedPalletWithContentAsync(palletId, cancellationToken);
             if (pallet == null)
             {
                 return ServiceResult<PalletContentLineDto>.NotFound($"Pallet {palletId} does not exist.");
@@ -242,6 +242,7 @@ namespace AgfAdmin.Services
             }
 
             _db.PalletContentLines.Add(candidate);
+            _db.Entry(pallet).Property(p => p.Version).IsModified = true;
             _db.PalletAuditEvents.Add(new PalletAuditEvent
             {
                 PalletId = palletId,
@@ -265,16 +266,20 @@ namespace AgfAdmin.Services
             {
                 await _db.SaveChangesAsync(cancellationToken);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException exception)
             {
-                // Gelijktijdige retry: de unieke index op RequestId heeft het tweede verzoek geweigerd.
+                // Gelijktijdige retry (unieke RequestId) of gelijktijdige wijziging van de pallet (versie).
                 _db.ChangeTracker.Clear();
                 var concurrent = await ContentLineQuery().SingleOrDefaultAsync(c => c.RequestId == candidate.RequestId, cancellationToken);
-                if (concurrent == null)
+                if (concurrent != null)
                 {
-                    throw;
+                    return ResultForContentLineRetry(concurrent, candidate);
                 }
-                return ResultForContentLineRetry(concurrent, candidate);
+                if (exception is DbUpdateConcurrencyException)
+                {
+                    return ServiceResult<PalletContentLineDto>.Conflict(ConcurrentChangeMessage($"Pallet {palletId}"));
+                }
+                throw;
             }
 
             var created = await ContentLineQuery().SingleAsync(c => c.Id == candidate.Id, cancellationToken);
@@ -359,23 +364,15 @@ namespace AgfAdmin.Services
                 return $"Unit {candidate.Unit} does not match the source line unit {source.ExpectedUnit}; units are never converted.";
             }
 
-            // Directe levering wordt nooit Nederlandse magazijnvoorraad.
-            if (commitment.Route == SupplyRules.RouteDirectTrade && pallet.LocationContext == PalletRules.LocationWarehouse)
+            // Directe levering wordt nooit magazijnvoorraad en routes/klanten worden niet gemengd (centrale controle).
+            var sources = pallet.ContentLines
+                .Select(c => new PalletInvariants.ContentSource(c.SupplyCommitmentLine.SupplyCommitment.Route, c.SupplyCommitmentLine.SupplyCommitment.CustomerId))
+                .Append(new PalletInvariants.ContentSource(commitment.Route, commitment.CustomerId))
+                .ToList();
+            var contentConflict = PalletInvariants.CheckContent(pallet.LocationContext, sources);
+            if (contentConflict != null)
             {
-                return "DirectTrade supply cannot be placed on a warehouse pallet.";
-            }
-
-            foreach (var line in pallet.ContentLines)
-            {
-                var other = line.SupplyCommitmentLine.SupplyCommitment;
-                if (!string.Equals(other.Route, commitment.Route, StringComparison.Ordinal))
-                {
-                    return $"Pallet {pallet.Reference} already holds {other.Route} content; routes cannot be mixed on one pallet.";
-                }
-                if (commitment.Route == SupplyRules.RouteDirectTrade && other.CustomerId != commitment.CustomerId)
-                {
-                    return $"Pallet {pallet.Reference} already holds DirectTrade content for another customer.";
-                }
+                return contentConflict;
             }
 
             // Alleen gemeten waarden: is bruto bekend, dan past tara (indien gemeten) plus alle ingevoerde netto-kg daarbinnen.
@@ -405,6 +402,481 @@ namespace AgfAdmin.Services
                 : ServiceResult<PalletContentLineDto>.Conflict($"RequestId {candidate.RequestId} was already used for a different pallet content line.");
         }
 
+        // ---- Logistieke status, locatie en kwaliteit (commando's) ----
+        //
+        // Elk commando: verplichte requestId, verwachte versie en actor; één append-only auditrecord in dezelfde save.
+        // Volgorde: invoer (400) -> idempotente replay -> bestaan (404) -> versie (409) -> regels (409) -> opslaan.
+        // Idempotentie vergelijkt het volledige genormaliseerde commando: doel, eventtype, actor, reden, de gevraagde
+        // nieuwe waarden (NewValue) en de verwachte versie (vastgelegd als "version" in OldValue).
+
+        private sealed record StateCommand(
+            Guid RequestId,
+            string EventType,
+            int PalletId,
+            int? ContentLineId,
+            string Actor,
+            string Reason,
+            string NewValue,
+            int ExpectedVersion);
+
+        public async Task<ServiceResult<PalletDto>> ChangeLogisticsStatusAsync(int palletId, ChangeLogisticsStatusDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            if (request == null)
+            {
+                AddError(errors, "request", "A request body is required.");
+                return Validation<PalletDto>(errors);
+            }
+
+            ValidateRequestId(request.RequestId, errors);
+            if (request.ExpectedPalletVersion == null)
+            {
+                AddError(errors, "expectedPalletVersion", "The pallet version the change is based on is required.");
+            }
+            if (!PalletRules.IsLogisticsStatus(request.ToStatus))
+            {
+                AddError(errors, "toStatus", $"Status must be one of: {string.Join(", ", PalletRules.LogisticsStatuses)}.");
+            }
+
+            var locationRequested = request.LocationContext != null;
+            if (locationRequested && !PalletRules.IsLocationContext(request.LocationContext))
+            {
+                AddError(errors, "locationContext", $"Location context must be one of: {string.Join(", ", PalletRules.LocationContexts)}.");
+            }
+            var bin = NormalizeCommandBin(request.WarehouseLocation, request.LocationContext, errors);
+            var actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            var reason = OptionalReason(request.Reason, errors);
+            if (reason == null && !errors.ContainsKey("reason") && PalletRules.LogisticsTransitionRequiresReason(null, request.ToStatus))
+            {
+                AddError(errors, "reason", $"A reason is required to change a pallet to {request.ToStatus}.");
+            }
+            if (errors.Count > 0)
+            {
+                return Validation<PalletDto>(errors);
+            }
+
+            var command = new StateCommand(
+                request.RequestId!.Value,
+                LogisticsStatusChangedEvent,
+                palletId,
+                null,
+                actor,
+                reason,
+                locationRequested
+                    ? Snapshot(new { logisticsStatus = request.ToStatus, locationContext = request.LocationContext, warehouseLocation = bin })
+                    : Snapshot(new { logisticsStatus = request.ToStatus }),
+                request.ExpectedPalletVersion!.Value);
+
+            var replay = await ReplayAsync(command, () => GetAsync(palletId, cancellationToken), cancellationToken);
+            if (replay != null)
+            {
+                return replay;
+            }
+
+            var pallet = await TrackedPalletWithContentAsync(palletId, cancellationToken);
+            if (pallet == null)
+            {
+                return ServiceResult<PalletDto>.NotFound($"Pallet {palletId} does not exist.");
+            }
+            if (pallet.Version != command.ExpectedVersion)
+            {
+                return ServiceResult<PalletDto>.Conflict(StaleVersionMessage($"Pallet {palletId}", pallet.Version, command.ExpectedVersion));
+            }
+
+            var from = pallet.LogisticsStatus;
+            var to = request.ToStatus;
+            var newLocation = locationRequested ? request.LocationContext : pallet.LocationContext;
+            var newBin = locationRequested ? bin : pallet.WarehouseLocation;
+            var conflict = FindLogisticsConflict(pallet, from, to, newLocation, newBin, locationRequested);
+            if (conflict != null)
+            {
+                return ServiceResult<PalletDto>.Conflict(conflict);
+            }
+
+            var oldValue = Snapshot(new
+            {
+                logisticsStatus = from,
+                locationContext = pallet.LocationContext,
+                warehouseLocation = pallet.WarehouseLocation,
+                version = pallet.Version
+            });
+            pallet.LogisticsStatus = to;
+            pallet.LocationContext = newLocation;
+            pallet.WarehouseLocation = newBin;
+            AddCommandEvent(command, oldValue);
+
+            return await SaveCommandAsync(command, () => GetAsync(palletId, cancellationToken), $"Pallet {palletId}", cancellationToken);
+        }
+
+        private static string FindLogisticsConflict(Pallet pallet, string from, string to, string newLocation, string newBin, bool locationRequested)
+        {
+            if (from == to)
+            {
+                return $"Pallet {pallet.Reference} is already {to}.";
+            }
+            if (!PalletRules.IsAllowedLogisticsTransition(from, to))
+            {
+                return $"A pallet cannot go from {from} to {to}.";
+            }
+
+            if (to == PalletRules.StatusDispatched || to == PalletRules.StatusDelivered)
+            {
+                if (pallet.ContentLines.Count == 0)
+                {
+                    return $"An empty pallet cannot become {to}.";
+                }
+                if (pallet.ContentLines.Any(c => !PalletRules.IsSellableQuality(c.QualityStatus)))
+                {
+                    return $"Every content line must be {PalletRules.QualityApproved} before the pallet can become {to}.";
+                }
+            }
+
+            if (from == PalletRules.StatusInTransit && to == PalletRules.StatusDelivered
+                && pallet.ContentLines.Any(c => c.SupplyCommitmentLine.SupplyCommitment.Route != SupplyRules.RouteDirectTrade))
+            {
+                return "Only a pallet with DirectTrade content can be delivered directly from transit.";
+            }
+
+            var stateConflict = PalletInvariants.CheckStateCombination(to, newLocation, newBin);
+            if (stateConflict != null)
+            {
+                return locationRequested ? stateConflict : $"{stateConflict} Provide a new location together with this status change.";
+            }
+
+            return PalletInvariants.CheckContent(newLocation, ContentSources(pallet));
+        }
+
+        public async Task<ServiceResult<PalletDto>> ChangeLocationAsync(int palletId, ChangePalletLocationDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            if (request == null)
+            {
+                AddError(errors, "request", "A request body is required.");
+                return Validation<PalletDto>(errors);
+            }
+
+            ValidateRequestId(request.RequestId, errors);
+            if (request.ExpectedPalletVersion == null)
+            {
+                AddError(errors, "expectedPalletVersion", "The pallet version the change is based on is required.");
+            }
+            if (!PalletRules.IsLocationContext(request.LocationContext))
+            {
+                AddError(errors, "locationContext", $"Location context must be one of: {string.Join(", ", PalletRules.LocationContexts)}.");
+            }
+            var bin = NormalizeCommandBin(request.WarehouseLocation, request.LocationContext, errors);
+            var actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            var reason = OptionalReason(request.Reason, errors);
+            if (errors.Count > 0)
+            {
+                return Validation<PalletDto>(errors);
+            }
+
+            var command = new StateCommand(
+                request.RequestId!.Value,
+                LocationChangedEvent,
+                palletId,
+                null,
+                actor,
+                reason,
+                Snapshot(new { locationContext = request.LocationContext, warehouseLocation = bin }),
+                request.ExpectedPalletVersion!.Value);
+
+            var replay = await ReplayAsync(command, () => GetAsync(palletId, cancellationToken), cancellationToken);
+            if (replay != null)
+            {
+                return replay;
+            }
+
+            var pallet = await TrackedPalletWithContentAsync(palletId, cancellationToken);
+            if (pallet == null)
+            {
+                return ServiceResult<PalletDto>.NotFound($"Pallet {palletId} does not exist.");
+            }
+            if (pallet.Version != command.ExpectedVersion)
+            {
+                return ServiceResult<PalletDto>.Conflict(StaleVersionMessage($"Pallet {palletId}", pallet.Version, command.ExpectedVersion));
+            }
+
+            var conflict = FindLocationConflict(pallet, request.LocationContext, bin);
+            if (conflict != null)
+            {
+                return ServiceResult<PalletDto>.Conflict(conflict);
+            }
+
+            var oldValue = Snapshot(new
+            {
+                locationContext = pallet.LocationContext,
+                warehouseLocation = pallet.WarehouseLocation,
+                version = pallet.Version
+            });
+            pallet.LocationContext = request.LocationContext;
+            pallet.WarehouseLocation = bin;
+            AddCommandEvent(command, oldValue);
+
+            return await SaveCommandAsync(command, () => GetAsync(palletId, cancellationToken), $"Pallet {palletId}", cancellationToken);
+        }
+
+        private static string FindLocationConflict(Pallet pallet, string newLocation, string newBin)
+        {
+            if (PalletRules.LocationLockedLogisticsStatuses.Contains(pallet.LogisticsStatus, StringComparer.Ordinal))
+            {
+                return $"The location of a {pallet.LogisticsStatus} pallet can no longer change.";
+            }
+            if (pallet.LocationContext == newLocation && pallet.WarehouseLocation == newBin)
+            {
+                return $"Pallet {pallet.Reference} is already at this location.";
+            }
+
+            return PalletInvariants.CheckStateCombination(pallet.LogisticsStatus, newLocation, newBin)
+                ?? PalletInvariants.CheckContent(newLocation, ContentSources(pallet));
+        }
+
+        public async Task<ServiceResult<PalletContentLineDto>> ChangeQualityStatusAsync(int palletId, int contentLineId, ChangeQualityStatusDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            if (request == null)
+            {
+                AddError(errors, "request", "A request body is required.");
+                return Validation<PalletContentLineDto>(errors);
+            }
+
+            ValidateRequestId(request.RequestId, errors);
+            if (request.ExpectedContentLineVersion == null)
+            {
+                AddError(errors, "expectedContentLineVersion", "The content line version the change is based on is required.");
+            }
+            if (!PalletRules.IsQualityStatus(request.ToStatus))
+            {
+                AddError(errors, "toStatus", $"Quality status must be one of: {string.Join(", ", PalletRules.QualityStatuses)}.");
+            }
+            var actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            var reason = OptionalReason(request.Reason, errors);
+            if (errors.Count > 0)
+            {
+                return Validation<PalletContentLineDto>(errors);
+            }
+
+            var command = new StateCommand(
+                request.RequestId!.Value,
+                QualityStatusChangedEvent,
+                palletId,
+                contentLineId,
+                actor,
+                reason,
+                Snapshot(new { qualityStatus = request.ToStatus, qualityReason = reason }),
+                request.ExpectedContentLineVersion!.Value);
+
+            var replay = await ReplayAsync(command, () => GetContentLineAsync(contentLineId, cancellationToken), cancellationToken);
+            if (replay != null)
+            {
+                return replay;
+            }
+
+            var line = await _db.PalletContentLines
+                .Include(c => c.Pallet)
+                .SingleOrDefaultAsync(c => c.Id == contentLineId, cancellationToken);
+            if (line == null || line.PalletId != palletId)
+            {
+                return ServiceResult<PalletContentLineDto>.NotFound($"Content line {contentLineId} does not exist on pallet {palletId}.");
+            }
+            if (line.Version != command.ExpectedVersion)
+            {
+                return ServiceResult<PalletContentLineDto>.Conflict(StaleVersionMessage($"Content line {contentLineId}", line.Version, command.ExpectedVersion));
+            }
+
+            var from = line.QualityStatus;
+            var to = request.ToStatus;
+            if (PalletRules.QualityLockedLogisticsStatuses.Contains(line.Pallet.LogisticsStatus, StringComparer.Ordinal))
+            {
+                return ServiceResult<PalletContentLineDto>.Conflict($"Quality cannot change on a {line.Pallet.LogisticsStatus} pallet.");
+            }
+            if (from == to)
+            {
+                return ServiceResult<PalletContentLineDto>.Conflict($"Content line {contentLineId} is already {to}.");
+            }
+            if (!PalletRules.IsAllowedQualityTransition(from, to))
+            {
+                return ServiceResult<PalletContentLineDto>.Conflict($"Quality cannot go from {from} to {to}.");
+            }
+            if (reason == null && PalletRules.QualityTransitionRequiresReason(from, to))
+            {
+                AddError(errors, "reason", $"A reason is required to change quality from {from} to {to}.");
+                return Validation<PalletContentLineDto>(errors);
+            }
+
+            var oldValue = Snapshot(new { qualityStatus = from, qualityReason = line.QualityReason, version = line.Version });
+            line.QualityStatus = to;
+            line.QualityReason = reason;
+            // Ook de pallet "aanraken" (versie +1 via IncrementVersions): een gelijktijdige dispatch beslist op de
+            // kwaliteit van alle regels en beschermt alleen de palletversie. Zo wint precies één van beide, in één transactie
+            // met de kwaliteitswijziging, het auditrecord en beide versieverhogingen.
+            _db.Entry(line.Pallet).Property(p => p.Version).IsModified = true;
+            AddCommandEvent(command, oldValue);
+
+            return await SaveCommandAsync(command, () => GetContentLineAsync(contentLineId, cancellationToken), $"Content line {contentLineId}", cancellationToken);
+        }
+
+        public async Task<ServiceResult<IReadOnlyList<PalletAuditEventDto>>> GetAuditEventsAsync(int palletId, CancellationToken cancellationToken = default)
+        {
+            if (!await _db.Pallets.AnyAsync(p => p.Id == palletId, cancellationToken))
+            {
+                return ServiceResult<IReadOnlyList<PalletAuditEventDto>>.NotFound($"Pallet {palletId} does not exist.");
+            }
+
+            var events = await _db.PalletAuditEvents
+                .AsNoTracking()
+                .Where(e => e.PalletId == palletId || (e.PalletContentLine != null && e.PalletContentLine.PalletId == palletId))
+                .OrderBy(e => e.OccurredAt)
+                .ThenBy(e => e.Id)
+                .ToListAsync(cancellationToken);
+
+            return ServiceResult<IReadOnlyList<PalletAuditEventDto>>.Ok(events.Select(e => new PalletAuditEventDto
+            {
+                Id = e.Id,
+                PalletId = e.PalletId,
+                PalletContentLineId = e.PalletContentLineId,
+                EventType = e.EventType,
+                OldValue = e.OldValue,
+                NewValue = e.NewValue,
+                Reason = e.Reason,
+                ActorReference = e.ActorReference,
+                OccurredAt = DateTime.SpecifyKind(e.OccurredAt, DateTimeKind.Utc),
+                RequestId = e.RequestId
+            }).ToList());
+        }
+
+        // ---- Gedeelde stappen van de commando's ----
+
+        private async Task<ServiceResult<T>> ReplayAsync<T>(StateCommand command, Func<Task<ServiceResult<T>>> currentState, CancellationToken cancellationToken)
+        {
+            var existing = await _db.PalletAuditEvents.AsNoTracking().SingleOrDefaultAsync(e => e.RequestId == command.RequestId, cancellationToken);
+            if (existing == null)
+            {
+                return null;
+            }
+
+            return IsSameCommand(existing, command)
+                ? await currentState()
+                : ServiceResult<T>.Conflict($"RequestId {command.RequestId} was already used for a different command.");
+        }
+
+        private static bool IsSameCommand(PalletAuditEvent existing, StateCommand command) =>
+            string.Equals(existing.EventType, command.EventType, StringComparison.Ordinal)
+            && existing.PalletId == command.PalletId
+            && existing.PalletContentLineId == command.ContentLineId
+            && string.Equals(existing.ActorReference, command.Actor, StringComparison.Ordinal)
+            && string.Equals(existing.Reason, command.Reason, StringComparison.Ordinal)
+            && string.Equals(existing.NewValue, command.NewValue, StringComparison.Ordinal)
+            && RecordedVersion(existing.OldValue) == command.ExpectedVersion;
+
+        private static int? RecordedVersion(string oldValue)
+        {
+            if (oldValue == null)
+            {
+                return null;
+            }
+            try
+            {
+                using var document = JsonDocument.Parse(oldValue);
+                return document.RootElement.TryGetProperty("version", out var version) && version.TryGetInt32(out var value) ? value : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        private void AddCommandEvent(StateCommand command, string oldValue) =>
+            _db.PalletAuditEvents.Add(new PalletAuditEvent
+            {
+                PalletId = command.PalletId,
+                PalletContentLineId = command.ContentLineId,
+                EventType = command.EventType,
+                OldValue = oldValue,
+                NewValue = command.NewValue,
+                Reason = command.Reason,
+                ActorReference = command.Actor,
+                OccurredAt = DateTime.UtcNow,
+                RequestId = command.RequestId
+            });
+
+        private async Task<ServiceResult<T>> SaveCommandAsync<T>(StateCommand command, Func<Task<ServiceResult<T>>> currentState, string target, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception)
+            {
+                // Een gelijktijdige retry (unieke RequestId) wordt alsnog als replay beoordeeld; een gelijktijdige
+                // andere wijziging (versie) wordt 409. In beide gevallen is niets van dit verzoek opgeslagen.
+                _db.ChangeTracker.Clear();
+                var replay = await ReplayAsync(command, currentState, cancellationToken);
+                if (replay != null)
+                {
+                    return replay;
+                }
+                if (exception is DbUpdateConcurrencyException)
+                {
+                    return ServiceResult<T>.Conflict(ConcurrentChangeMessage(target));
+                }
+                throw;
+            }
+
+            return await currentState();
+        }
+
+        private async Task<ServiceResult<PalletContentLineDto>> GetContentLineAsync(int contentLineId, CancellationToken cancellationToken)
+        {
+            var line = await ContentLineQuery().SingleOrDefaultAsync(c => c.Id == contentLineId, cancellationToken);
+            return line == null
+                ? ServiceResult<PalletContentLineDto>.NotFound($"Content line {contentLineId} does not exist.")
+                : ServiceResult<PalletContentLineDto>.Ok(ToDto(line));
+        }
+
+        private Task<Pallet> TrackedPalletWithContentAsync(int palletId, CancellationToken cancellationToken) =>
+            _db.Pallets
+                .Include(p => p.ContentLines)
+                    .ThenInclude(c => c.SupplyCommitmentLine)
+                        .ThenInclude(l => l.SupplyCommitment)
+                .SingleOrDefaultAsync(p => p.Id == palletId, cancellationToken);
+
+        private static List<PalletInvariants.ContentSource> ContentSources(Pallet pallet) =>
+            pallet.ContentLines
+                .Select(c => new PalletInvariants.ContentSource(c.SupplyCommitmentLine.SupplyCommitment.Route, c.SupplyCommitmentLine.SupplyCommitment.CustomerId))
+                .ToList();
+
+        private static void ValidateRequestId(Guid? requestId, Dictionary<string, List<string>> errors)
+        {
+            if (requestId == null || requestId == Guid.Empty)
+            {
+                AddError(errors, "requestId", "A client-generated, non-empty requestId is required.");
+            }
+        }
+
+        // Leeg of alleen spaties telt als geen bin; een bin hoort alleen bij LocationContext Warehouse.
+        private static string NormalizeCommandBin(string value, string locationContext, Dictionary<string, List<string>> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+            if (locationContext != PalletRules.LocationWarehouse)
+            {
+                AddError(errors, "warehouseLocation", "A warehouse location can only be given together with location context Warehouse.");
+                return null;
+            }
+
+            return WithinLength(value.Trim(), MaxWarehouseLocationLength, "warehouseLocation", errors);
+        }
+
+        private static string StaleVersionMessage(string target, int actual, int expected) =>
+            $"{target} is at version {actual}, not {expected}; reload it and decide again.";
+
+        private static string ConcurrentChangeMessage(string target) =>
+            $"{target} was changed concurrently; reload it and retry with a new requestId.";
+
         // ---- Lezen ----
 
         public async Task<ServiceResult<PalletDto>> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -429,6 +901,7 @@ namespace AgfAdmin.Services
         private IQueryable<PalletContentLine> ContentLineQuery() =>
             _db.PalletContentLines
                 .AsNoTracking()
+                .Include(c => c.Pallet)
                 .Include(c => c.SupplyCommitmentLine)
                     .ThenInclude(l => l.SupplyCommitment)
                 .Include(c => c.SupplyCommitmentLine)
@@ -449,10 +922,13 @@ namespace AgfAdmin.Services
             LocationContext = pallet.LocationContext,
             WarehouseLocation = pallet.WarehouseLocation,
             CreatedAt = DateTime.SpecifyKind(pallet.CreatedAt, DateTimeKind.Utc),
-            ContentLines = pallet.ContentLines.OrderBy(c => c.Id).Select(ToDto).ToList()
+            Version = pallet.Version,
+            ContentLines = pallet.ContentLines.OrderBy(c => c.Id).Select(c => ToDto(c, pallet.Version)).ToList()
         };
 
-        private static PalletContentLineDto ToDto(PalletContentLine line) => new()
+        private static PalletContentLineDto ToDto(PalletContentLine line) => ToDto(line, line.Pallet.Version);
+
+        private static PalletContentLineDto ToDto(PalletContentLine line, int palletVersion) => new()
         {
             Id = line.Id,
             RequestId = line.RequestId,
@@ -469,7 +945,10 @@ namespace AgfAdmin.Services
             Unit = line.Unit,
             NetWeightKg = line.NetWeightKg,
             QualityStatus = line.QualityStatus,
-            CreatedAt = DateTime.SpecifyKind(line.CreatedAt, DateTimeKind.Utc)
+            QualityReason = line.QualityReason,
+            CreatedAt = DateTime.SpecifyKind(line.CreatedAt, DateTimeKind.Utc),
+            Version = line.Version,
+            PalletVersion = palletVersion
         };
 
         // ---- Hulpfuncties ----
