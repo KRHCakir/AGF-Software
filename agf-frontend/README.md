@@ -2,6 +2,8 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+Configure the API address first: copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` (including `/api`). The Availability page (`/availability`) shows a configuration error when it is missing or invalid; it never falls back to a hardcoded address.
+
 First, run the development server:
 
 ```bash
