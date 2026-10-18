@@ -3,9 +3,9 @@ import { AvailabilityOverviewQuery } from '../services/availabilityService';
 
 // Contextgerichte links naar /availability. De filters zijn echte API-filters; `focus` markeert alleen een kolom.
 
-export type AvailabilityFocus = 'expected' | 'quarantine' | 'inTransit';
+export type AvailabilityFocus = 'expected' | 'quarantine' | 'inTransit' | 'available';
 
-const FOCUS_VALUES: readonly AvailabilityFocus[] = ['expected', 'quarantine', 'inTransit'];
+const FOCUS_VALUES: readonly AvailabilityFocus[] = ['expected', 'quarantine', 'inTransit', 'available'];
 
 export interface AvailabilityLink {
     route: SupplyRoute;

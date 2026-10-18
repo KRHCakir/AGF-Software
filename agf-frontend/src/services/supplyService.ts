@@ -21,6 +21,14 @@ export async function createSupplyCommitment(request: CreateSupplyCommitmentRequ
     return { value: json, replayed: status === 200 };
 }
 
+export async function getSupplyCommitment(id: number, signal?: AbortSignal): Promise<SupplyCommitment> {
+    const json = await getJson(`/supply-commitments/${id}`, signal);
+    if (!isSupplyCommitment(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de aanvoer.');
+    }
+    return json;
+}
+
 // Bronnen voor ontvangst: alleen open Warehouse-aanvoer. DirectTrade komt hier nooit in.
 export async function listOpenWarehouseCommitments(signal?: AbortSignal): Promise<SupplyCommitment[]> {
     const json = await getJson('/supply-commitments?route=Warehouse&status=Expected', signal);
