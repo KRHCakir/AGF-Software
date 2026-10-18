@@ -34,6 +34,7 @@ function AdminLayoutContent({
                     <NavLink href="/tracking" label={t('tracking')} />
                     <NavLink href="/inventory" label={t('inventory')} />
                     <NavLink href="/supply" label={t('supply')} />
+                    <NavLink href="/inspection" label={t('inspection')} />
                     <NavLink href="/availability" label={t('availability')} />
                     <NavLink href="/reports" label={t('reports')} />
                     <NavLink href="/help" label={t('help')} />

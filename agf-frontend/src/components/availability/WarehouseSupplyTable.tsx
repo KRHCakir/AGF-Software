@@ -25,9 +25,10 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null }: { r
                     <tr>
                         <th scope="col" rowSpan={2} className={th}>{t('availability_col_product')}</th>
                         <th scope="col" rowSpan={2} className={th}>{t('availability_col_unit')}</th>
-                        <th scope="col" rowSpan={2} className={`${th} bg-green-50 text-green-900`}>
+                        <th scope="col" rowSpan={2} className={`${th} bg-green-50 text-green-900 ${marked('available')}`}>
                             {t('availability_now_available')}
                             <span className="block font-normal normal-case text-green-800">{t('availability_before_reservations')}</span>
+                            {markLabel('available')}
                         </th>
                         <th scope="colgroup" colSpan={4} className={`${th} border-l border-gray-200 text-center`}>{t('availability_group_in_warehouse')}</th>
                         <th scope="col" rowSpan={2} className={`${th} border-l border-gray-200`}>{t('availability_col_outside_warehouse')}</th>
@@ -56,7 +57,7 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null }: { r
                                 </button>
                             </th>
                             <td className={td}><UnitBadge unit={row.supply.unit} /></td>
-                            <td className={`${td} bg-green-50/60`}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>
+                            <td className={`${td} bg-green-50/60 ${marked('available')}`}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>
                             <td className={`${td} border-l border-gray-100`}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
                             <td className={`${td} ${marked('quarantine')}`}><QuantityCell value={row.supply.warehouse.quarantine} /></td>
                             <td className={td}><QuantityCell value={row.supply.warehouse.blocked} /></td>

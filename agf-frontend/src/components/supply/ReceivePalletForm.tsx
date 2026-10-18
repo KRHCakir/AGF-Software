@@ -392,6 +392,9 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 actions={(
                     <>
                         <Link href={href} className={primaryButtonClass}>{t('supply_view_availability')}</Link>
+                        {frozen.pallet.result && (
+                            <Link href={`/inspection?palletId=${frozen.pallet.result.id}`} className={secondaryButtonClass}>{t('supply_to_inspection')}</Link>
+                        )}
                         <button type="button" className={secondaryButtonClass} onClick={() => reset(null)}>{t('supply_another_pallet')}</button>
                     </>
                 )}
