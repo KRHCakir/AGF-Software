@@ -23,6 +23,7 @@ builder.Services.AddScoped<IDevelopmentDataSeeder, DevelopmentDataSeeder>();
 // Beschikbaarheidsdomein
 builder.Services.AddScoped<ISupplyCommitmentService, SupplyCommitmentService>();
 builder.Services.AddScoped<IPalletService, PalletService>();
+builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 
 // Database configuratie
 var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder.Configuration);
