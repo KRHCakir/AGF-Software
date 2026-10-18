@@ -33,6 +33,7 @@ function AdminLayoutContent({
                     <NavLink href="/incoming-invoices" label={t('invoices')} />
                     <NavLink href="/tracking" label={t('tracking')} />
                     <NavLink href="/inventory" label={t('inventory')} />
+                    <NavLink href="/supply" label={t('supply')} />
                     <NavLink href="/availability" label={t('availability')} />
                     <NavLink href="/reports" label={t('reports')} />
                     <NavLink href="/help" label={t('help')} />

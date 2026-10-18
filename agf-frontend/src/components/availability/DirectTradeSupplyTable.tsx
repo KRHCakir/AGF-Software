@@ -2,15 +2,20 @@
 
 import { useTranslation } from '../../i18n/LanguageContext';
 import { DirectTradeRow, breakdownTotal } from '../../lib/availability';
+import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
 import WarningBadges from './WarningBadges';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-violet-900';
 const td = 'px-3 py-2 align-top';
+// Alleen visuele markering vanuit een contextlink; filtert niets weg.
+const focusClass = 'bg-amber-50 ring-2 ring-inset ring-amber-400';
 
 // Klantgebonden aanvoer. Bewust geen kolom "beschikbaar": dit is nooit algemeen magazijnaanbod.
-export default function DirectTradeSupplyTable({ rows, onOpen }: { rows: DirectTradeRow[]; onOpen: (row: DirectTradeRow) => void }) {
+export default function DirectTradeSupplyTable({ rows, onOpen, focus = null }: { rows: DirectTradeRow[]; onOpen: (row: DirectTradeRow) => void; focus?: AvailabilityFocus | null }) {
     const { t } = useTranslation();
+    const marked = (column: AvailabilityFocus) => (focus === column ? focusClass : '');
+    const markLabel = (column: AvailabilityFocus) => focus === column && <span className="block font-normal normal-case text-amber-900">{t('availability_focus_marked')}</span>;
     return (
         <div className="overflow-x-auto rounded-md border-2 border-violet-300 bg-white">
             <table className="min-w-full divide-y divide-violet-100 text-sm">
@@ -22,8 +27,8 @@ export default function DirectTradeSupplyTable({ rows, onOpen }: { rows: DirectT
                         <th scope="col" className={th}>{t('availability_col_unit')}</th>
                         <th scope="col" className={th}>{t('availability_col_outside_warehouse')}</th>
                         <th scope="col" className={th}>{t('availability_col_expected_on_pallets')}</th>
-                        <th scope="col" className={th}>{t('availability_col_in_transit')}</th>
-                        <th scope="col" className={th}>{t('availability_col_expected_unregistered')}</th>
+                        <th scope="col" className={`${th} ${marked('inTransit')}`}>{t('availability_col_in_transit')}{markLabel('inTransit')}</th>
+                        <th scope="col" className={`${th} ${marked('expected')}`}>{t('availability_col_expected_unregistered')}{markLabel('expected')}</th>
                         <th scope="col" className={th}>{t('availability_col_signals')}</th>
                     </tr>
                 </thead>
@@ -48,8 +53,8 @@ export default function DirectTradeSupplyTable({ rows, onOpen }: { rows: DirectT
                             <td className={td}><UnitBadge unit={row.supply.unit} /></td>
                             <td className={td}><QuantityCell value={breakdownTotal(row.supply.receivedOutsideWarehouse)} /></td>
                             <td className={td}><QuantityCell value={breakdownTotal(row.supply.expectedOnPallets)} /></td>
-                            <td className={td}><QuantityCell value={breakdownTotal(row.supply.inTransit)} /></td>
-                            <td className={td}><ExpectedCell value={row.supply.expectedUnregistered} /></td>
+                            <td className={`${td} ${marked('inTransit')}`}><QuantityCell value={breakdownTotal(row.supply.inTransit)} /></td>
+                            <td className={`${td} ${marked('expected')}`}><ExpectedCell value={row.supply.expectedUnregistered} /></td>
                             <td className={td}><WarningBadges warnings={row.supply.warnings} /></td>
                         </tr>
                     ))}
