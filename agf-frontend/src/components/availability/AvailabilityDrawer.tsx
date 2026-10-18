@@ -90,7 +90,18 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
             <td className={`${td} text-right`}>{formatQuantity(line.quantity, locale)}</td>
             <td className={td}><UnitBadge unit={line.unit} /></td>
             <td className={`${td} text-right`}>{formatKg(line.netWeightKg, locale)}</td>
-            <td className={td}>{line.sellableNow ? t('availability_yes') : t('availability_no')}</td>
+            <td className={`${td} text-right`}>
+                {formatQuantity(line.reservedQuantity, locale)}
+                {line.onHold && (
+                    <span className="ml-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 text-xs font-medium text-amber-900">
+                        {t('availability_on_hold_badge')}
+                    </span>
+                )}
+            </td>
+            <td className={`${td} text-right`}>
+                {formatQuantity(line.availableQuantity, locale)}
+                <span className="block text-xs text-gray-500">{formatKg(line.availableNetWeightKg, locale)}</span>
+            </td>
         </tr>
     ));
 
@@ -106,10 +117,8 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
                 <th scope="col" className={`${th} text-right`}>{t('availability_col_quantity')}</th>
                 <th scope="col" className={th}>{t('availability_col_unit')}</th>
                 <th scope="col" className={`${th} text-right`}>{t('availability_col_actual_kg')}</th>
-                <th scope="col" className={th}>
-                    {t('availability_col_counts_in_now')}
-                    <span className="block font-normal normal-case">{t('availability_before_reservations')}</span>
-                </th>
+                <th scope="col" className={`${th} text-right`}>{t('availability_col_reserved')}</th>
+                <th scope="col" className={`${th} text-right`}>{t('availability_col_available_after')}</th>
             </tr>
         </thead>
     );

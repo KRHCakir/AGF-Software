@@ -7,9 +7,7 @@ import { AvailabilityBasis } from '../../types/availability';
 export default function DataBasisNote({ basis }: { basis: AvailabilityBasis }) {
     const { t } = useTranslation();
     const notes: string[] = [];
-    if (!basis.reservationsApplied) {
-        notes.push(t('availability_basis_no_reservations'));
-    }
+    notes.push(basis.reservationsApplied ? t('availability_basis_reservations_applied') : t('availability_basis_no_reservations'));
     if (!basis.legacyInventoryIncluded) {
         notes.push(t('availability_basis_no_legacy'));
     }

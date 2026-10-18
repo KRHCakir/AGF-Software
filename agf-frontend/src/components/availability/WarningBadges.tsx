@@ -6,6 +6,9 @@ import { AvailabilityWarning } from '../../types/availability';
 
 const WARNING_KEYS: Record<string, string> = {
     OVER_REGISTERED: 'availability_warning_over_registered',
+    RESERVATION_ON_NON_APPROVED_CONTENT: 'availability_warning_reservation_on_hold',
+    RESERVATION_EXCEEDS_CONTENT: 'availability_warning_reservation_exceeds',
+    RESERVATION_OUTSIDE_WAREHOUSE: 'availability_warning_reservation_outside',
     SOURCE_UNIT_UNKNOWN: 'availability_warning_source_unit_unknown',
     DIRECT_TRADE_IN_WAREHOUSE: 'availability_warning_direct_trade_in_warehouse',
 };

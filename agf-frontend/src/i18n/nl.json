@@ -395,5 +395,13 @@
   "inspection_notice_counts": "Telt nu mee in “Nu beschikbaar (vóór reserveringen)”.",
   "inspection_notice_not_counts": "Telt niet mee in “Nu beschikbaar (vóór reserveringen)”.",
   "inspection_notice_current": "Actueel Nu beschikbaar (vóór reserveringen) voor deze variant in {unit}: {quantity} · {kg}.",
-  "inspection_notice_no_supply": "Er is nu geen magazijnaanbod voor deze variant in {unit}."
+  "inspection_notice_no_supply": "Er is nu geen magazijnaanbod voor deze variant in {unit}.",
+  "availability_basis_reservations_applied": "Actieve verkoopreserveringen zijn afgetrokken in “Beschikbaar na reserveringen”; “Nu beschikbaar” blijft vóór reserveringen.",
+  "availability_col_reserved": "Gereserveerd",
+  "availability_col_available_after": "Beschikbaar na reserveringen",
+  "availability_col_reserved_on_hold": "Gereserveerd (on hold)",
+  "availability_on_hold_badge": "on hold",
+  "availability_warning_reservation_on_hold": "Reservering op inhoud die niet meer goedgekeurd is (+{quantity}); telt niet als beschikbaar",
+  "availability_warning_reservation_exceeds": "Reserveringen hoger dan de inhoud; controleren",
+  "availability_warning_reservation_outside": "Reservering op inhoud buiten het magazijn; controleren"
 }

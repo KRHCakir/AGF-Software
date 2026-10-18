@@ -411,5 +411,13 @@
   "inspection_notice_counts": "Now counts in “Available now (before reservations)”.",
   "inspection_notice_not_counts": "Does not count in “Available now (before reservations)”.",
   "inspection_notice_current": "Current Available now (before reservations) for this variant in {unit}: {quantity} · {kg}.",
-  "inspection_notice_no_supply": "There is currently no warehouse supply for this variant in {unit}."
+  "inspection_notice_no_supply": "There is currently no warehouse supply for this variant in {unit}.",
+  "availability_basis_reservations_applied": "Active sales reservations are subtracted in “Available after reservations”; “Available now” stays before reservations.",
+  "availability_col_reserved": "Reserved",
+  "availability_col_available_after": "Available after reservations",
+  "availability_col_reserved_on_hold": "Reserved (on hold)",
+  "availability_on_hold_badge": "on hold",
+  "availability_warning_reservation_on_hold": "Reservation on content that is no longer approved (+{quantity}); not counted as available",
+  "availability_warning_reservation_exceeds": "Reservations exceed the content; please check",
+  "availability_warning_reservation_outside": "Reservation on content outside the warehouse; please check"
 }

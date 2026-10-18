@@ -37,7 +37,10 @@ namespace AgfAdmin.Services
         string Unit,
         decimal Quantity,
         decimal NetWeightKg,
-        string QualityStatus);
+        string QualityStatus,
+        // Som van Active Physical verkoopreserveringen (SalesOrderLineId) op deze inhoudsregel.
+        decimal ReservedQuantity = 0m,
+        decimal ReservedNetWeightKg = 0m);
 
     // Pure berekening in het geheugen (decimal, dus exact; geen decimal-SUM in SQL vanwege SQLite).
     // - Nooit eenheden omrekenen: groeperen per variant + route (+ klant bij DirectTrade) + eenheid.
@@ -59,6 +62,10 @@ namespace AgfAdmin.Services
             public QualityBreakdownDto InTransit { get; } = new();
             public QualityBreakdownDto ExpectedOnPallets { get; } = new();
             public decimal Unregistered { get; set; }
+            public decimal ReservedQuantity { get; set; }
+            public decimal ReservedNetWeightKg { get; set; }
+            public decimal OnHoldQuantity { get; set; }
+            public decimal OnHoldNetWeightKg { get; set; }
             public List<AvailabilityWarningDto> Warnings { get; } = new();
 
             public QualityBreakdownDto For(string category) => category switch
@@ -114,6 +121,7 @@ namespace AgfAdmin.Services
                 }
 
                 Add(group.For(category), content.QualityStatus, content.Quantity, content.NetWeightKg);
+                AddReservations(group, content, category);
             }
 
             foreach (var source in sources.Where(s => AvailabilityRules.IsOpenCommitmentStatus(s.CommitmentStatus)))
@@ -218,7 +226,15 @@ namespace AgfAdmin.Services
                     Quantity = c.Fact.Quantity,
                     NetWeightKg = c.Fact.NetWeightKg,
                     QualityStatus = c.Fact.QualityStatus,
-                    SellableNow = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route),
+                    ReservedQuantity = c.Fact.ReservedQuantity,
+                    ReservedNetWeightKg = c.Fact.ReservedNetWeightKg,
+                    OnHold = c.Fact.ReservedQuantity > 0m && c.Fact.QualityStatus != PalletRules.QualityApproved,
+                    AvailableQuantity = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route)
+                        ? Math.Max(0m, c.Fact.Quantity - c.Fact.ReservedQuantity) : 0m,
+                    AvailableNetWeightKg = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route)
+                        ? Math.Max(0m, c.Fact.NetWeightKg - c.Fact.ReservedNetWeightKg) : 0m,
+                    SellableNow = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route)
+                        && c.Fact.Quantity - c.Fact.ReservedQuantity > 0m,
                     Closed = c.Category == AvailabilityRules.CategoryClosed
                 })
                 .ToList();
@@ -299,14 +315,67 @@ namespace AgfAdmin.Services
                 .ThenBy(g => g.Key.Unit == null)
                 .ThenBy(g => g.Key.Unit, StringComparer.Ordinal);
 
-        private static WarehouseSupplyDto ToWarehouseSupply(Group group) => new()
+        // reserved:       Active Physical verkoopreserveringen op inhoud die nu Approved is en Received + Warehouse.
+        // reservedOnHold: idem op inhoud die niet meer Approved is; telt al niet mee in "before" en wordt dus nooit afgetrokken.
+        private static void AddReservations(Group group, ContentLineFact content, string category)
         {
-            Unit = group.Key.Unit,
-            AvailableBeforeReservations = new AvailabilityQuantityDto
+            if (content.ReservedQuantity <= 0m && content.ReservedNetWeightKg <= 0m)
+            {
+                return;
+            }
+            if (content.QualityStatus != PalletRules.QualityApproved)
+            {
+                group.OnHoldQuantity += content.ReservedQuantity;
+                group.OnHoldNetWeightKg += content.ReservedNetWeightKg;
+                group.Warnings.Add(Warning(AvailabilityRules.WarningReservationOnNonApprovedContent, content, content.ReservedQuantity));
+                return;
+            }
+            if (!AvailabilityRules.IsAvailableNow(category, content.QualityStatus, content.Route))
+            {
+                // Kan via de API niet ontstaan (B6); zichtbaar maken in plaats van stil meetellen.
+                group.Warnings.Add(Warning(AvailabilityRules.WarningReservationOutsideWarehouse, content, content.ReservedQuantity));
+                return;
+            }
+            group.ReservedQuantity += content.ReservedQuantity;
+            group.ReservedNetWeightKg += content.ReservedNetWeightKg;
+            if (content.ReservedQuantity > content.Quantity || content.ReservedNetWeightKg > content.NetWeightKg)
+            {
+                group.Warnings.Add(Warning(AvailabilityRules.WarningReservationExceedsContent, content, content.ReservedQuantity));
+            }
+        }
+
+        private static AvailabilityWarningDto Warning(string code, ContentLineFact content, decimal quantity) => new()
+        {
+            Code = code,
+            SupplyCommitmentLineId = content.SupplyCommitmentLineId,
+            PalletContentLineId = content.PalletContentLineId,
+            Quantity = quantity
+        };
+
+        private static WarehouseSupplyDto ToWarehouseSupply(Group group)
+        {
+            var before = new AvailabilityQuantityDto
             {
                 Quantity = group.Warehouse.Approved.Quantity,
                 NetWeightKg = group.Warehouse.Approved.NetWeightKg
-            },
+            };
+            var afterQuantity = before.Quantity - group.ReservedQuantity;
+            var afterKg = before.NetWeightKg - group.ReservedNetWeightKg;
+            // Door service en guard kan dit niet negatief worden; corrupte data wordt gemeld en nooit negatief getoond.
+            if ((afterQuantity < 0m || afterKg < 0m) && !group.Warnings.Any(w => w.Code == AvailabilityRules.WarningReservationExceedsContent))
+            {
+                group.Warnings.Add(new AvailabilityWarningDto { Code = AvailabilityRules.WarningReservationExceedsContent, Quantity = group.ReservedQuantity });
+            }
+            return ToWarehouseSupply(group, before, new AvailabilityQuantityDto { Quantity = Math.Max(0m, afterQuantity), NetWeightKg = Math.Max(0m, afterKg) });
+        }
+
+        private static WarehouseSupplyDto ToWarehouseSupply(Group group, AvailabilityQuantityDto before, AvailabilityQuantityDto after) => new()
+        {
+            Unit = group.Key.Unit,
+            AvailableBeforeReservations = before,
+            Reserved = new ReservedDto { Quantity = group.ReservedQuantity, NetWeightKg = group.ReservedNetWeightKg },
+            ReservedOnHold = new AvailabilityQuantityDto { Quantity = group.OnHoldQuantity, NetWeightKg = group.OnHoldNetWeightKg },
+            AvailableAfterReservations = after,
             Warehouse = group.Warehouse,
             ReceivedOutsideWarehouse = group.ReceivedOutsideWarehouse,
             InTransit = group.InTransit,

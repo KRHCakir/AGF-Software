@@ -14,6 +14,9 @@ namespace AgfAdmin.Services
         public const string WarningOverRegistered = "OVER_REGISTERED";
         public const string WarningSourceUnitUnknown = "SOURCE_UNIT_UNKNOWN";
         public const string WarningDirectTradeInWarehouse = "DIRECT_TRADE_IN_WAREHOUSE";
+        public const string WarningReservationOnNonApprovedContent = "RESERVATION_ON_NON_APPROVED_CONTENT";
+        public const string WarningReservationExceedsContent = "RESERVATION_EXCEEDS_CONTENT";
+        public const string WarningReservationOutsideWarehouse = "RESERVATION_OUTSIDE_WAREHOUSE";
 
         public static readonly IReadOnlyList<string> ActiveCategories = new[]
         {
