@@ -708,6 +708,10 @@ namespace AgfAdmin.Services
             var oldValue = Snapshot(new { qualityStatus = from, qualityReason = line.QualityReason, version = line.Version });
             line.QualityStatus = to;
             line.QualityReason = reason;
+            // Ook de pallet "aanraken" (versie +1 via IncrementVersions): een gelijktijdige dispatch beslist op de
+            // kwaliteit van alle regels en beschermt alleen de palletversie. Zo wint precies één van beide, in één transactie
+            // met de kwaliteitswijziging, het auditrecord en beide versieverhogingen.
+            _db.Entry(line.Pallet).Property(p => p.Version).IsModified = true;
             AddCommandEvent(command, oldValue);
 
             return await SaveCommandAsync(command, () => GetContentLineAsync(contentLineId, cancellationToken), $"Content line {contentLineId}", cancellationToken);
@@ -897,6 +901,7 @@ namespace AgfAdmin.Services
         private IQueryable<PalletContentLine> ContentLineQuery() =>
             _db.PalletContentLines
                 .AsNoTracking()
+                .Include(c => c.Pallet)
                 .Include(c => c.SupplyCommitmentLine)
                     .ThenInclude(l => l.SupplyCommitment)
                 .Include(c => c.SupplyCommitmentLine)
@@ -918,10 +923,12 @@ namespace AgfAdmin.Services
             WarehouseLocation = pallet.WarehouseLocation,
             CreatedAt = DateTime.SpecifyKind(pallet.CreatedAt, DateTimeKind.Utc),
             Version = pallet.Version,
-            ContentLines = pallet.ContentLines.OrderBy(c => c.Id).Select(ToDto).ToList()
+            ContentLines = pallet.ContentLines.OrderBy(c => c.Id).Select(c => ToDto(c, pallet.Version)).ToList()
         };
 
-        private static PalletContentLineDto ToDto(PalletContentLine line) => new()
+        private static PalletContentLineDto ToDto(PalletContentLine line) => ToDto(line, line.Pallet.Version);
+
+        private static PalletContentLineDto ToDto(PalletContentLine line, int palletVersion) => new()
         {
             Id = line.Id,
             RequestId = line.RequestId,
@@ -940,7 +947,8 @@ namespace AgfAdmin.Services
             QualityStatus = line.QualityStatus,
             QualityReason = line.QualityReason,
             CreatedAt = DateTime.SpecifyKind(line.CreatedAt, DateTimeKind.Utc),
-            Version = line.Version
+            Version = line.Version,
+            PalletVersion = palletVersion
         };
 
         // ---- Hulpfuncties ----

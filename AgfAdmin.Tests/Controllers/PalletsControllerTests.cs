@@ -155,7 +155,10 @@ public class PalletsControllerTests : IDisposable
         Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(pallet.Version))));
 
         var approve = new ChangeQualityStatusDto { RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Approved", ActorReference = "qc-1" };
-        Assert.IsType<OkObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, approve)));
+        var approved = Assert.IsType<PalletContentLineDto>(Assert.IsType<OkObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, approve))).Value);
+        // De kwaliteitswijziging verhoogt ook de palletversie; een client gebruikt de teruggegeven palletVersion.
+        Assert.Equal(pallet.Version + 1, approved.PalletVersion);
+        Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(pallet.Version))));
 
         var invalid = DispatchCommand(pallet.Version);
         invalid.ToStatus = "Shipped";
@@ -164,7 +167,7 @@ public class PalletsControllerTests : IDisposable
 
         Assert.IsType<NotFoundObjectResult>(await Run(c => c.ChangeLogisticsStatus(999_999, DispatchCommand(0))));
 
-        var ok = Assert.IsType<OkObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(pallet.Version))));
+        var ok = Assert.IsType<OkObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(approved.PalletVersion))));
         Assert.Equal("Dispatched", Assert.IsType<PalletDto>(ok.Value).LogisticsStatus);
     }
 

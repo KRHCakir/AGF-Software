@@ -737,7 +737,9 @@ public class PalletStateChangeServiceTests : IDisposable
         Assert.Equal(to, line.QualityStatus);
         Assert.Equal(reason, line.QualityReason);
         Assert.Equal(lineBefore.Version + 1, line.Version);
-        Assert.Equal(palletVersionBefore, await PalletVersionAsync(palletId));
+        // Een kwaliteitswijziging raakt ook de pallet, zodat een gelijktijdige dispatch niet op verouderde kwaliteit beslist.
+        Assert.Equal(palletVersionBefore + 1, await PalletVersionAsync(palletId));
+        Assert.Equal(palletVersionBefore + 1, result.Value.PalletVersion);
         Assert.Equal("Quarantine", (await LoadLineAsync(otherLineId)).QualityStatus);
 
         var events = await EventsAsync();
@@ -1142,12 +1144,124 @@ public class PalletStateChangeServiceTests : IDisposable
 
         await SetQualityAsync(palletId, lineId, "Approved");
         Assert.Equal(1, await LineVersionAsync(lineId));
-        Assert.Equal(3, await PalletVersionAsync(palletId));
+        Assert.Equal(4, await PalletVersionAsync(palletId)); // kwaliteit wijzigen raakt de pallet
 
         await using var db = _factory.CreateContext();
         var dto = (await new PalletService(db).GetAsync(palletId)).Value;
-        Assert.Equal(3, dto.Version);
+        Assert.Equal(4, dto.Version);
         Assert.Equal(1, dto.ContentLines.Single().Version);
+        Assert.Equal(4, dto.ContentLines.Single().PalletVersion);
+    }
+
+    [Fact]
+    public async Task Successful_Quality_Change_Increments_Line_And_Pallet_Version_And_Returns_Both()
+    {
+        var (palletId, lineId) = await PalletInStateAsync("Received", quality: "Approved");
+        var palletVersionBefore = await PalletVersionAsync(palletId);
+        var lineVersionBefore = await LineVersionAsync(lineId);
+
+        var result = await ChangeQualityAsync(palletId, lineId, await QualityCommandAsync(lineId, "Blocked", "Customer claim"));
+
+        Assert.Equal(ServiceResultStatus.Ok, result.Status);
+        Assert.Equal(lineVersionBefore + 1, await LineVersionAsync(lineId));
+        Assert.Equal(palletVersionBefore + 1, await PalletVersionAsync(palletId));
+        Assert.Equal(lineVersionBefore + 1, result.Value.Version);
+        Assert.Equal(palletVersionBefore + 1, result.Value.PalletVersion);
+
+        // Met de teruggegeven palletversie kan de client direct verder, zonder eerst te herladen.
+        var block = await ChangeStatusAsync(palletId, new ChangeLogisticsStatusDto
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedPalletVersion = result.Value.PalletVersion,
+            ToStatus = "Dispatched",
+            LocationContext = "InTransit",
+            ActorReference = Actor
+        });
+        Assert.Equal(ServiceResultStatus.Conflict, block.Status); // regel is Blocked: geen dispatch
+        Assert.DoesNotContain("version", block.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Pallet Received in het magazijn met één Approved regel, beide nog op versie 0 (rechtstreeks opgeslagen).
+    private async Task<(int PalletId, int LineId)> ReceivedPalletWithApprovedLineAtVersionZeroAsync()
+    {
+        await SeedAsync();
+        await using var db = _factory.CreateContext();
+        var pallet = new Pallet { Reference = "PAL-RACE", LogisticsStatus = "Received", LocationContext = "Warehouse", WarehouseLocation = "COLD-01" };
+        var line = new PalletContentLine
+        {
+            RequestId = Guid.NewGuid(),
+            Pallet = pallet,
+            SupplyCommitmentLineId = _seed.WarehouseLine,
+            LotNumber = "LOT-RACE",
+            Quantity = 4m,
+            Unit = "box",
+            NetWeightKg = 16m,
+            QualityStatus = "Approved"
+        };
+        db.AddRange(pallet, line);
+        await db.SaveChangesAsync();
+        Assert.Equal(0, pallet.Version);
+        Assert.Equal(0, line.Version);
+        return (pallet.Id, line.Id);
+    }
+
+    // Deterministische race: het eerste commando heeft alles gevalideerd en staat op het punt op te slaan; precies
+    // dan voert een tweede context het andere commando volledig uit. Beide zijn gebaseerd op dezelfde versies (0).
+    [Theory]
+    [InlineData("dispatch-saves-last")]
+    [InlineData("quality-saves-last")]
+    public async Task Concurrent_Dispatch_And_Block_Never_End_As_Dispatched_With_Blocked_Content(string order)
+    {
+        var (palletId, lineId) = await ReceivedPalletWithApprovedLineAtVersionZeroAsync();
+        var dispatch = new ChangeLogisticsStatusDto
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedPalletVersion = 0,
+            ToStatus = "Dispatched",
+            LocationContext = "InTransit",
+            ActorReference = "warehouse-1"
+        };
+        var block = new ChangeQualityStatusDto
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedContentLineVersion = 0,
+            ToStatus = "Blocked",
+            ActorReference = "qc-1",
+            Reason = "Recall"
+        };
+
+        ServiceResultStatus dispatchStatus = default, blockStatus = default;
+        if (order == "dispatch-saves-last")
+        {
+            var concurrentBlock = new ConcurrentChangeInterceptor(async () =>
+                blockStatus = (await ChangeQualityAsync(palletId, lineId, block)).Status);
+            dispatchStatus = (await ChangeStatusAsync(palletId, dispatch, concurrentBlock)).Status;
+        }
+        else
+        {
+            var concurrentDispatch = new ConcurrentChangeInterceptor(async () =>
+                dispatchStatus = (await ChangeStatusAsync(palletId, dispatch)).Status);
+            blockStatus = (await ChangeQualityAsync(palletId, lineId, block, concurrentDispatch)).Status;
+        }
+
+        // Precies één wint; de verliezer krijgt 409.
+        var statuses = new[] { dispatchStatus, blockStatus };
+        Assert.Equal(1, statuses.Count(s => s == ServiceResultStatus.Ok));
+        Assert.Equal(1, statuses.Count(s => s == ServiceResultStatus.Conflict));
+        Assert.Equal(order == "dispatch-saves-last" ? ServiceResultStatus.Conflict : ServiceResultStatus.Ok, dispatchStatus);
+
+        // Nooit Dispatched met Blocked inhoud.
+        var pallet = await LoadPalletAsync(palletId);
+        var line = await LoadLineAsync(lineId);
+        Assert.False(pallet.LogisticsStatus == "Dispatched" && line.QualityStatus == "Blocked");
+        Assert.Equal(order == "dispatch-saves-last" ? ("Received", "Blocked") : ("Dispatched", "Approved"), (pallet.LogisticsStatus, line.QualityStatus));
+
+        // Alleen de winnaar heeft een auditrecord; de verliezer schreef niets.
+        var events = await EventsAsync();
+        var winner = Assert.Single(events);
+        Assert.Equal(order == "dispatch-saves-last" ? "QualityStatusChanged" : "LogisticsStatusChanged", winner.EventType);
+        Assert.Equal(order == "dispatch-saves-last" ? block.RequestId : dispatch.RequestId, winner.RequestId);
+        Assert.Equal(1, pallet.Version);
     }
 
     private sealed class ConcurrentChangeInterceptor : SaveChangesInterceptor

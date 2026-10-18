@@ -67,6 +67,8 @@ namespace AgfAdmin.DTOs
         public string QualityReason { get; set; }
         public DateTime CreatedAt { get; set; }
         public int Version { get; set; }
+        // Huidige versie van de pallet: elke wijziging van een regel raakt ook de pallet.
+        public int PalletVersion { get; set; }
     }
 
     // Expliciete commando's: elk met een idempotentiesleutel, de verwachte versie en een actor.
