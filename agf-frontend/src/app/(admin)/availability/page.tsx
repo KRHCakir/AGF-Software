@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import AvailabilityDrawer, { DrillDownSelection } from '../../../components/availability/AvailabilityDrawer';
 import DataBasisNote from '../../../components/availability/DataBasisNote';
 import DirectTradeSupplyTable from '../../../components/availability/DirectTradeSupplyTable';
@@ -8,12 +10,29 @@ import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../compone
 import WarehouseSupplyTable from '../../../components/availability/WarehouseSupplyTable';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { DirectTradeRow, UnitFilter, WarehouseRow, directTradeRows, formatTime, warehouseRows } from '../../../lib/availability';
+import { parseAvailabilityParams } from '../../../lib/availabilityLinks';
 import { getAvailabilityOverview, toAvailabilityError } from '../../../services/availabilityService';
 import { AvailabilityOverview, PACKAGE_UNITS } from '../../../types/availability';
 
 // Alleen-lezen overzicht van de beschikbaarheid uit de echte Availability API. Geen schrijfacties.
+// useSearchParams vraagt in Next.js 15 een Suspense-grens; zo blijft de pagina statisch te genereren.
 export default function AvailabilityPage() {
+    const { t } = useTranslation();
+    return (
+        <Suspense fallback={<LoadingRows label={t('availability_loading')} />}>
+            <AvailabilityWorkspace />
+        </Suspense>
+    );
+}
+
+function AvailabilityWorkspace() {
     const { t, locale } = useTranslation();
+    // URL-filters uit contextlinks (bijvoorbeeld vanuit Aanvoer): echte API-filters; focus markeert alleen een kolom.
+    const searchParams = useSearchParams();
+    const linkFilters = useMemo(() => parseAvailabilityParams(searchParams), [searchParams]);
+    const { productVariantId, route, customerId, unit } = linkFilters.query;
+    const focus = linkFilters.focus;
+    const hasLinkFilters = route !== undefined || productVariantId !== undefined || customerId !== undefined || unit !== undefined || focus !== null;
     const [state, setState] = useState<LoadState<AvailabilityOverview>>({ status: 'loading' });
     const [reloadToken, setReloadToken] = useState(0);
     const [search, setSearch] = useState('');
@@ -25,7 +44,7 @@ export default function AvailabilityPage() {
     useEffect(() => {
         const controller = new AbortController();
         setState({ status: 'loading' });
-        getAvailabilityOverview(controller.signal)
+        getAvailabilityOverview({ productVariantId, route, customerId, unit }, controller.signal)
             .then((data) => setState({ status: 'ready', data }))
             .catch((error: unknown) => {
                 const apiError = toAvailabilityError(error);
@@ -34,7 +53,7 @@ export default function AvailabilityPage() {
                 }
             });
         return () => controller.abort();
-    }, [reloadToken]);
+    }, [reloadToken, productVariantId, route, customerId, unit]);
 
     const reload = useCallback(() => setReloadToken((n) => n + 1), []);
     const closeDrawer = useCallback(() => setSelection(null), []);
@@ -89,6 +108,39 @@ export default function AvailabilityPage() {
 
             {state.status === 'ready' && <DataBasisNote basis={state.data.basis} />}
 
+            {(hasLinkFilters || linkFilters.invalid.length > 0) && (
+                <div role="status" className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    {hasLinkFilters && <span className="font-medium">{t('availability_link_filtered')}</span>}
+                    {route !== undefined && (
+                        <span className="rounded border border-amber-300 bg-white px-2 py-0.5">
+                            {route === 'DirectTrade' ? t('availability_direct_title') : t('availability_warehouse_title')}
+                        </span>
+                    )}
+                    {productVariantId !== undefined && (
+                        <span className="rounded border border-amber-300 bg-white px-2 py-0.5">
+                            {(() => {
+                                const variant = state.status === 'ready' ? state.data.variants.find((v) => v.productVariantId === productVariantId) : undefined;
+                                return variant ? `${variant.productName} · ${variant.variantName}` : t('availability_link_variant', { id: String(productVariantId) });
+                            })()}
+                        </span>
+                    )}
+                    {customerId !== undefined && (
+                        <span className="rounded border border-violet-300 bg-white px-2 py-0.5 text-violet-900">
+                            🔒 {(() => {
+                                const name = state.status === 'ready'
+                                    ? state.data.variants.flatMap((v) => v.directTradeSupply).find((d) => d.customerId === customerId)?.customerName
+                                    : undefined;
+                                return name ?? t('availability_link_customer', { id: String(customerId) });
+                            })()}
+                        </span>
+                    )}
+                    {unit !== undefined && <span className="rounded border border-amber-300 bg-white px-2 py-0.5 font-mono">{unit}</span>}
+                    {focus !== null && <span className="rounded border border-amber-400 bg-white px-2 py-0.5">{t('availability_link_focus', { column: t(`availability_focus_${focus}`) })}</span>}
+                    {linkFilters.invalid.length > 0 && <span>{t('availability_link_invalid', { fields: linkFilters.invalid.join(', ') })}</span>}
+                    <Link href="/availability" className="ml-auto font-medium text-blue-800 underline underline-offset-2">{t('availability_link_show_all')}</Link>
+                </div>
+            )}
+
             <div className="flex flex-wrap items-end gap-4 rounded-md border border-gray-200 bg-white px-3 py-2">
                 <label className="flex flex-col text-xs font-medium text-gray-700">
                     {t('availability_search_label')}
@@ -127,7 +179,7 @@ export default function AvailabilityPage() {
 
             {state.status === 'ready' && state.data.variants.length > 0 && (
                 <>
-                    {showWarehouse && (
+                    {showWarehouse && route !== 'DirectTrade' && (
                         <section aria-labelledby="availability-warehouse" className="space-y-2">
                             <div>
                                 <h2 id="availability-warehouse" className="text-lg font-semibold text-gray-900">{t('availability_warehouse_title')}</h2>
@@ -136,11 +188,11 @@ export default function AvailabilityPage() {
                             {warehouse.length === 0
                                 ? <EmptyState title={filtersActive ? t('availability_no_results', { search: search.trim() }) : t('availability_warehouse_empty')}
                                     action={filtersActive ? clearFilters : undefined} />
-                                : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} />}
+                                : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} />}
                         </section>
                     )}
 
-                    {showDirectTrade && (
+                    {showDirectTrade && route !== 'Warehouse' && (
                         <section aria-labelledby="availability-direct" className="space-y-2">
                             <div>
                                 <h2 id="availability-direct" className="flex items-center gap-2 text-lg font-semibold text-violet-900">
@@ -151,7 +203,7 @@ export default function AvailabilityPage() {
                             {directTrade.length === 0
                                 ? <EmptyState title={filtersActive ? t('availability_no_results', { search: search.trim() }) : t('availability_direct_empty')}
                                     action={filtersActive ? clearFilters : undefined} />
-                                : <DirectTradeSupplyTable rows={directTrade} onOpen={openDirectTrade} />}
+                                : <DirectTradeSupplyTable rows={directTrade} onOpen={openDirectTrade} focus={focus} />}
                         </section>
                     )}
                 </>

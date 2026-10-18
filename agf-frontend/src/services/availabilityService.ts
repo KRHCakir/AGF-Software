@@ -1,4 +1,4 @@
-import { ApiConfigError, getApiBaseUrl } from './apiConfig';
+import { ApiError, getJson } from './apiClient';
 import {
     AvailabilityDrillDown,
     AvailabilityOverview,
@@ -9,89 +9,37 @@ import {
 } from '../types/availability';
 
 // Alleen-lezen client voor de Availability API. Geen schrijfacties.
+// De fouttypen komen uit de gedeelde apiClient; de oude namen blijven beschikbaar voor bestaande componenten.
+export { ApiError as AvailabilityApiError, toApiError as toAvailabilityError } from './apiClient';
+export type { ApiErrorKind as AvailabilityErrorKind } from './apiClient';
 
-export type AvailabilityErrorKind = 'config' | 'network' | 'http' | 'shape' | 'aborted';
-
-export class AvailabilityApiError extends Error {
-    readonly kind: AvailabilityErrorKind;
-    readonly status: number | null;
-    readonly fieldErrors: Record<string, string[]>;
-
-    constructor(kind: AvailabilityErrorKind, message: string, status: number | null = null, fieldErrors: Record<string, string[]> = {}) {
-        super(message);
-        this.name = 'AvailabilityApiError';
-        this.kind = kind;
-        this.status = status;
-        this.fieldErrors = fieldErrors;
-    }
+// Echte API-filters van GET /api/availability (gebruikt door URL-filters op de pagina).
+export interface AvailabilityOverviewQuery {
+    productVariantId?: number;
+    route?: SupplyRoute;
+    customerId?: number;
+    unit?: PackageUnit;
 }
 
-export function toAvailabilityError(error: unknown): AvailabilityApiError {
-    if (error instanceof AvailabilityApiError) {
-        return error;
+export async function getAvailabilityOverview(query: AvailabilityOverviewQuery = {}, signal?: AbortSignal): Promise<AvailabilityOverview> {
+    const params = new URLSearchParams();
+    if (query.productVariantId !== undefined) {
+        params.set('productVariantId', String(query.productVariantId));
     }
-    return new AvailabilityApiError('network', error instanceof Error ? error.message : 'Onbekende fout');
-}
+    if (query.route !== undefined) {
+        params.set('route', query.route);
+    }
+    if (query.customerId !== undefined) {
+        params.set('customerId', String(query.customerId));
+    }
+    if (query.unit !== undefined) {
+        params.set('unit', query.unit);
+    }
+    const suffix = params.toString() === '' ? '' : `?${params.toString()}`;
 
-// Uit ValidationProblemDetails ({ errors: { veld: [meldingen] } }) of { message } van de backend.
-function readErrorBody(body: unknown): { message: string | null; fieldErrors: Record<string, string[]> } {
-    if (typeof body !== 'object' || body === null) {
-        return { message: null, fieldErrors: {} };
-    }
-    const record = body as Record<string, unknown>;
-    const fieldErrors: Record<string, string[]> = {};
-    if (typeof record.errors === 'object' && record.errors !== null) {
-        for (const [field, messages] of Object.entries(record.errors as Record<string, unknown>)) {
-            if (Array.isArray(messages)) {
-                fieldErrors[field] = messages.filter((m): m is string => typeof m === 'string');
-            }
-        }
-    }
-    const message = typeof record.message === 'string' ? record.message : typeof record.title === 'string' ? record.title : null;
-    return { message, fieldErrors };
-}
-
-async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
-    let baseUrl: string;
-    try {
-        baseUrl = getApiBaseUrl();
-    } catch (error) {
-        throw new AvailabilityApiError('config', error instanceof ApiConfigError ? error.message : 'API-adres niet ingesteld.');
-    }
-
-    let response: Response;
-    try {
-        response = await fetch(`${baseUrl}${path}`, { signal, cache: 'no-store', headers: { Accept: 'application/json' } });
-    } catch (error) {
-        if (signal?.aborted) {
-            throw new AvailabilityApiError('aborted', 'Verzoek afgebroken.');
-        }
-        throw new AvailabilityApiError('network', error instanceof Error ? error.message : 'Netwerkfout');
-    }
-
-    if (!response.ok) {
-        let body: unknown = null;
-        try {
-            body = await response.json();
-        } catch {
-            body = null;
-        }
-        const { message, fieldErrors } = readErrorBody(body);
-        throw new AvailabilityApiError('http', message ?? `HTTP ${response.status}`, response.status, fieldErrors);
-    }
-
-    try {
-        const json: unknown = await response.json();
-        return json;
-    } catch {
-        throw new AvailabilityApiError('shape', 'Antwoord is geen geldige JSON.');
-    }
-}
-
-export async function getAvailabilityOverview(signal?: AbortSignal): Promise<AvailabilityOverview> {
-    const json = await getJson('/availability', signal);
+    const json = await getJson(`/availability${suffix}`, signal);
     if (!isAvailabilityOverview(json)) {
-        throw new AvailabilityApiError('shape', 'Onverwacht antwoord van de server.');
+        throw new ApiError('shape', 'Onverwacht antwoord van de server.');
     }
     return json;
 }
@@ -123,7 +71,7 @@ export async function getAvailabilityVariant(
 
     const json = await getJson(`/availability/variants/${productVariantId}?${params.toString()}`, signal);
     if (!isAvailabilityDrillDown(json)) {
-        throw new AvailabilityApiError('shape', 'Onverwacht antwoord van de server.');
+        throw new ApiError('shape', 'Onverwacht antwoord van de server.');
     }
 
     if (query.unit !== null) {
