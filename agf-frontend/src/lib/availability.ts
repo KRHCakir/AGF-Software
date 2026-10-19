@@ -110,13 +110,6 @@ export function formatDateTime(value: string, locale: string): string {
         : new Intl.DateTimeFormat(numberLocale(locale), { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-export function formatDate(value: string, locale: string): string {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime())
-        ? value
-        : new Intl.DateTimeFormat(numberLocale(locale), { dateStyle: 'medium' }).format(date);
-}
-
 export function formatTime(value: string, locale: string): string {
     const date = new Date(value);
     return Number.isNaN(date.getTime())

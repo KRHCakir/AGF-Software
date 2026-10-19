@@ -1,11 +1,12 @@
 import type { PackageUnit } from '../types/availability';
 import type { CreateSalesOrderRequest } from '../types/salesOrder';
+import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 
 // Pure regels van de verkoopwerkplek, los van React en i18n, zodat ze met node:test te toetsen zijn.
 // Ze spiegelen de backendregels (SalesOrderService, StockReservationService); de server blijft altijd leidend.
 // Er wordt nooit een eenheid omgerekend en nooit kg afgeleid uit hoeveelheid, dozen of maat.
-// Let op: imports met .ts-extensie zijn nodig voor node:test; dit bestand importeert daarom alleen ./decimal.ts.
+// Let op: imports met .ts-extensie zijn nodig voor node:test; dit bestand importeert alleen pure modules zonder verdere imports.
 
 export const MAX_ORDER_LINES = 200;
 export const MAX_CUSTOMER_REFERENCE_LENGTH = 100;
@@ -46,15 +47,7 @@ export type OrderPayload = Omit<CreateSalesOrderRequest, 'requestId'>;
 
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; errors: RuleError[] };
 
-// Een kalenderdatum (yyyy-mm-dd) wordt als lokale middernacht verstuurd; de server normaliseert naar UTC.
-export function toLocalMidnightIso(dateText: string): string | null {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText);
-    if (match === null) return null;
-    const [, year, month, day] = match.map(Number);
-    const local = new Date(year, month - 1, day);
-    if (local.getFullYear() !== year || local.getMonth() !== month - 1 || local.getDate() !== day) return null;
-    return local.toISOString();
-}
+export { toLocalMidnightIso };
 
 export function normalizeActor(actor: string): BuildResult<string> {
     const value = actor.trim();
@@ -175,8 +168,11 @@ export interface LineProgress {
     reserved: number;
     total: number;
     open: number;
+    // Volledig gereserveerd volgens de servertotalen (open = 0), ongeacht de kwaliteit van de inhoud.
     complete: boolean;
     onHold: boolean;
+    // Groen betekent: volledig gereserveerd én geen enkele reservering on hold.
+    ready: boolean;
 }
 
 // Structurele types: de helpers lezen alleen de servertotalen en de serverflag onHold; er wordt niets afgeleid.
@@ -188,12 +184,15 @@ export interface LineTotals {
 }
 
 export function lineProgress(line: LineTotals): LineProgress {
+    const complete = line.openQuantity === 0;
+    const onHold = line.reservations.some((reservation) => reservation.onHold);
     return {
         reserved: line.reservedQuantity,
         total: line.quantity,
         open: line.openQuantity,
-        complete: line.openQuantity === 0,
-        onHold: line.reservations.some((reservation) => reservation.onHold),
+        complete,
+        onHold,
+        ready: complete && !onHold,
     };
 }
 
@@ -201,14 +200,18 @@ export interface OrderProgress {
     linesComplete: number;
     linesTotal: number;
     onHoldCount: number;
+    // Alle regels volledig gereserveerd volgens de totalen.
     complete: boolean;
+    // Alle regels volledig gereserveerd en nergens een reservering on hold.
+    ready: boolean;
 }
 
 export function orderProgress(order: { lines: LineTotals[] }): OrderProgress {
     const progress = order.lines.map(lineProgress);
     const onHoldCount = order.lines.reduce((sum, line) => sum + line.reservations.filter((reservation) => reservation.onHold).length, 0);
     const linesComplete = progress.filter((line) => line.complete).length;
-    return { linesComplete, linesTotal: order.lines.length, onHoldCount, complete: order.lines.length > 0 && linesComplete === order.lines.length };
+    const complete = order.lines.length > 0 && linesComplete === order.lines.length;
+    return { linesComplete, linesTotal: order.lines.length, onHoldCount, complete, ready: complete && onHoldCount === 0 };
 }
 
 function normalizeSearch(value: string): string {

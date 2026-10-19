@@ -529,5 +529,19 @@
   "sales_notice_reserved": "Reservation saved.",
   "sales_notice_released": "Reservation released.",
   "sales_notice_availability": "Current availability in {unit}: before reservations {before}, reserved {reserved}, after reservations {after} ({afterKg}).",
-  "sales_notice_availability_failed": "The action was saved, but the current availability could not be loaded."
+  "sales_notice_availability_failed": "The action was saved, but the current availability could not be loaded.",
+  "sales_close_form": "Close",
+  "sales_line_complete_on_hold": "Fully reserved, but on hold",
+  "sales_order_complete_on_hold": "Fully reserved, but not ready: reservations are on hold.",
+  "sales_pending_title": "{count} unresolved action(s) with an unknown outcome",
+  "sales_pending_hint": "These commands may already have been processed. They are kept (also after navigating away and back) and can only be resent unchanged; a new command never takes their place. Other orders remain readable.",
+  "sales_pending_create": "New sales order for {customer}",
+  "sales_pending_reserve": "Reservation on {pallet} · {lot} ({product}) for order #{id}",
+  "sales_pending_release": "Release on {pallet} · {lot} ({product}) for order #{id}",
+  "sales_pending_attempts": "attempt {n}; last error: {error}",
+  "sales_pending_go_to": "Go there",
+  "sales_pending_kept": "This command is kept until its outcome is known; only the exact same retry is possible.",
+  "sales_pending_blocked_line": "There is an unresolved action on this order line. Resolve it first; until then no new reservation or release is possible here.",
+  "sales_pending_stock_missing": "This content line is not (or no longer) in the reservable stock; the command may already have been processed. Retry it to be sure.",
+  "sales_pending_open_create": "Open unresolved sales order"
 }

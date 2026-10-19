@@ -513,5 +513,19 @@
   "sales_notice_reserved": "Reservering vastgelegd.",
   "sales_notice_released": "Reservering vrijgegeven.",
   "sales_notice_availability": "Actuele beschikbaarheid in {unit}: vóór reserveringen {before}, gereserveerd {reserved}, na reserveringen {after} ({afterKg}).",
-  "sales_notice_availability_failed": "De actie is opgeslagen, maar de actuele beschikbaarheid kon niet worden geladen."
+  "sales_notice_availability_failed": "De actie is opgeslagen, maar de actuele beschikbaarheid kon niet worden geladen.",
+  "sales_close_form": "Sluiten",
+  "sales_line_complete_on_hold": "Volledig gereserveerd, maar on hold",
+  "sales_order_complete_on_hold": "Volledig gereserveerd, maar niet gereed: er staan reserveringen on hold.",
+  "sales_pending_title": "{count} onafgeronde actie(s) met onbekende uitkomst",
+  "sales_pending_hint": "Deze opdrachten zijn mogelijk al verwerkt. Ze blijven bewaard (ook na weg- en terugnavigeren) en kunnen alleen ongewijzigd opnieuw worden verstuurd; er komt nooit een nieuwe opdracht voor in de plaats. Andere orders blijven gewoon leesbaar.",
+  "sales_pending_create": "Nieuwe verkooporder voor {customer}",
+  "sales_pending_reserve": "Reservering op {pallet} · {lot} ({product}) voor order #{id}",
+  "sales_pending_release": "Vrijgave op {pallet} · {lot} ({product}) voor order #{id}",
+  "sales_pending_attempts": "poging {n}; laatste fout: {error}",
+  "sales_pending_go_to": "Ga ernaartoe",
+  "sales_pending_kept": "Deze opdracht blijft bewaard tot de uitkomst bekend is; alleen exact dezelfde herhaling is mogelijk.",
+  "sales_pending_blocked_line": "Er staat een onafgeronde actie op deze orderregel. Rond die eerst af; tot die tijd is hier geen nieuwe reservering of vrijgave mogelijk.",
+  "sales_pending_stock_missing": "Deze inhoudsregel staat nu niet (meer) in de reserveerbare voorraad; mogelijk is de opdracht al verwerkt. Herhaal de opdracht om dat zeker te weten.",
+  "sales_pending_open_create": "Onafgeronde verkooporder openen"
 }

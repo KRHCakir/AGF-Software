@@ -16,13 +16,15 @@ const td = 'px-2 py-1.5 align-top';
 
 // Reserveerbare voorraad voor één orderregel, rechtstreeks uit GET .../reservable-stock:
 // alleen Approved inhoud op een Received pallet in het magazijn, route Warehouse, zelfde variant en eenheid.
-export default function ReservableStockTable({ orderId, line, token, selectedId, onSelect, onLoaded }: {
+export default function ReservableStockTable({ orderId, line, token, selectedId, onSelect, onLoaded, selectable = true }: {
     orderId: number;
     line: SalesOrderLine;
     token: number;
     selectedId: number | null;
     onSelect: (stock: ReservableStockLine) => void;
     onLoaded: (rows: ReservableStockLine[]) => void;
+    // Onwaar zolang er een onafgeronde reservering op deze regel is: geen tweede keuze naast een open commando.
+    selectable?: boolean;
 }) {
     const { t, locale } = useTranslation();
     const [state, setState] = useState<LoadState<ReservableStockLine[]>>({ status: 'loading' });
@@ -86,7 +88,7 @@ export default function ReservableStockTable({ orderId, line, token, selectedId,
                                 </td>
                                 <td className={td}><QualityBadge status={stock.qualityStatus} /></td>
                                 <td className={td}>
-                                    <button type="button" className={secondaryButtonClass} onClick={() => onSelect(stock)} aria-pressed={selected}
+                                    <button type="button" className={secondaryButtonClass} onClick={() => onSelect(stock)} aria-pressed={selected} disabled={!selectable}
                                         aria-label={t('sales_select_stock', { pallet: stock.palletReference, lot: stock.lotNumber })}>
                                         {selected ? t('sales_selected') : t('supply_select')}
                                     </button>

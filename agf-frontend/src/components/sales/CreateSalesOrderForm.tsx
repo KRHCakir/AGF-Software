@@ -2,7 +2,9 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDate, formatQuantity } from '../../lib/availability';
+import { formatQuantity } from '../../lib/availability';
+import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
+import { CREATE_ORDER_KEY, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { MAX_ORDER_LINES, OrderDraft, OrderLineDraft, buildOrderPayload } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -10,39 +12,51 @@ import { createSalesOrder } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
 import { PACKAGE_UNITS } from '../../types/availability';
 import { CustomerOption, ProductOption } from '../../types/referenceData';
-import { CreateSalesOrderRequest, SalesOrder } from '../../types/salesOrder';
+import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { PendingNotice } from './PendingCommandsBanner';
+import { usePendingCommand } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '' });
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', requestedDeliveryDate: '', lines: [emptyLine()] });
 
+// Een onafgerond commando wordt als (vergrendeld) concept getoond; verstuurd wordt altijd de bevroren payload zelf.
+const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
+    customerId: String(command.payload.customerId),
+    customerReference: command.payload.customerReference ?? '',
+    requestedDeliveryDate: isoToDateInput(command.payload.requestedDeliveryDate) ?? '',
+    lines: command.payload.lines.map((line) => ({ key: newRequestId(), productVariantId: String(line.productVariantId), quantity: String(line.quantity), unit: line.unit })),
+});
+
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
-// geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren: "opnieuw proberen" stuurt exact hetzelfde.
-export default function CreateSalesOrderForm({ actor, customers, products, onCreated, onCancel }: {
+// geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren en boven dit formulier bewaard:
+// bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
+export default function CreateSalesOrderForm({ actor, customers, products, onSaved, onOpen, onCancel }: {
     actor: string;
     customers: CustomerOption[];
     products: ProductOption[];
-    onCreated: (order: SalesOrder) => void;
+    onSaved: (order: SalesOrder) => void;
+    onOpen: (orderId: number) => void;
     onCancel: () => void;
 }) {
     const { t, locale } = useTranslation();
-    const [draft, setDraft] = useState<OrderDraft>(emptyDraft);
+    const [pending, setPending, clearPending] = usePendingCommand<CreateOrderCommand>(CREATE_ORDER_KEY);
+    const [draft, setDraft] = useState<OrderDraft>(() => (pending === null ? emptyDraft() : draftFromCommand(pending)));
     const [customerFilter, setCustomerFilter] = useState('');
     const [variantFilter, setVariantFilter] = useState('');
-    const [pending, setPending] = useState<CreateSalesOrderRequest | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
     const [result, setResult] = useState<SaveResult<SalesOrder> | null>(null);
     const inFlight = useRef(false);
 
-    // Na een onbekende uitkomst of na succes is het formulier vergrendeld: nooit een gewijzigde retry.
-    const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
+    // Vergrendeld zolang er een onafgerond commando is: nooit een gewijzigde retry, nooit een tweede order ernaast.
+    const locked = submitting || result !== null || pending !== null;
 
     const filteredCustomers = useMemo(() => {
         const term = customerFilter.trim().toLowerCase();
@@ -70,8 +84,6 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
     }, [products]);
 
     const edited = () => {
-        // Gewijzigde invoer hoort bij een nieuw verzoek (nieuwe requestId bij de volgende poging).
-        setPending(null);
         setError(null);
         setErrors({});
     };
@@ -102,25 +114,45 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
 
     const submit = async () => {
         if (inFlight.current || result !== null) return;
-        let request = pending;
-        if (request === null) {
+        let command = pending;
+        if (command === null) {
             const built = buildOrderPayload(draft, actor);
             if (!built.ok) {
                 setErrors(ruleErrorsToFieldErrors(built.errors, t));
                 return;
             }
             setErrors({});
-            request = { requestId: newRequestId(), ...built.value };
-            setPending(request);
+            const requestId = newRequestId();
+            command = {
+                kind: 'create-order',
+                key: CREATE_ORDER_KEY,
+                requestId,
+                payload: { requestId, ...built.value },
+                display: { customerName: customers.find((customer) => customer.id === built.value.customerId)?.name ?? String(built.value.customerId) },
+                attempts: 0,
+                lastError: null,
+                frozenAt: new Date().toISOString(),
+            };
+            setPending(command);
         }
 
         inFlight.current = true;
         setSubmitting(true);
         setError(null);
         try {
-            setResult(await createSalesOrder(request));
+            const saved = await createSalesOrder(command.payload);
+            clearPending();
+            setResult(saved);
+            onSaved(saved.value);
         } catch (caught) {
             const apiError = toApiError(caught);
+            if (outcomeUnknown(apiError)) {
+                // Uitkomst onbekend: het commando blijft bewaard; alleen exact dezelfde herhaling is mogelijk.
+                setPending(withAttempt(command, apiError.message) as CreateOrderCommand);
+            } else {
+                // Definitief antwoord van de server (400/404/409): er is niets opgeslagen; de invoer mag weer wijzigen.
+                clearPending();
+            }
             setError(apiError);
             setErrors(apiError.fieldErrors);
         } finally {
@@ -131,7 +163,6 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
 
     const startOver = () => {
         setDraft(emptyDraft());
-        setPending(null);
         setError(null);
         setErrors({});
         setResult(null);
@@ -147,13 +178,13 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
                 note={result.replayed ? t('supply_saved_before') : undefined}
                 actions={(
                     <>
-                        <button type="button" className={primaryButtonClass} onClick={() => onCreated(order)}>{t('sales_reserve_for_this_order')}</button>
+                        <button type="button" className={primaryButtonClass} onClick={() => onOpen(order.id)}>{t('sales_reserve_for_this_order')}</button>
                         <button type="button" className={secondaryButtonClass} onClick={startOver}>{t('sales_another_order')}</button>
                     </>
                 )}
             >
                 <p>
-                    {t('sales_delivery_on', { date: formatDate(order.requestedDeliveryDate, locale) })}
+                    {t('sales_delivery_on', { date: formatCalendarDate(order.requestedDeliveryDate, locale) })}
                     {order.customerReference && <> · {t('sales_reference_short')} {order.customerReference}</>}
                 </p>
                 <ul className="mt-2 list-disc pl-5">
@@ -173,17 +204,15 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
                     <h2 className="text-lg font-semibold text-gray-900">{t('sales_new_order')}</h2>
                     <p className="text-xs text-gray-600">{t('sales_new_order_hint')}</p>
                 </div>
-                <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={submitting}>{t('inspection_cancel')}</button>
+                <button type="button" className={secondaryButtonClass} onClick={onCancel} disabled={submitting}>{t('sales_close_form')}</button>
             </div>
 
-            {error && (
-                <ErrorNotice error={error} actions={outcomeUnknown(error) ? (
-                    <>
-                        <button type="submit" className={primaryButtonClass} disabled={submitting}>{t('supply_retry_same')}</button>
-                        <button type="button" className={secondaryButtonClass} onClick={startOver}>{t('supply_discard_and_restart')}</button>
-                    </>
-                ) : undefined} />
+            {pending !== null && (
+                <PendingNotice command={pending} submitting={submitting}>
+                    <button type="submit" className={primaryButtonClass}>{t('supply_retry_same')}</button>
+                </PendingNotice>
             )}
+            {error && pending === null && <ErrorNotice error={error} />}
             <FieldError id="actorReference" messages={e('actorReference')} />
 
             <div className="grid grid-cols-4 gap-3">
@@ -222,7 +251,7 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
                 <div className="flex items-end gap-3">
                     <label className="text-xs font-medium text-gray-700">
                         {t('supply_variant_filter')}
-                        <input type="search" value={variantFilter} onChange={(event) => setVariantFilter(event.target.value)}
+                        <input type="search" value={variantFilter} onChange={(event) => setVariantFilter(event.target.value)} disabled={locked}
                             placeholder={t('supply_variant_filter_placeholder')} className={`${inputClass} w-72`} />
                     </label>
                     <FieldError id="lines" messages={e('lines')} />
@@ -296,12 +325,14 @@ export default function CreateSalesOrderForm({ actor, customers, products, onCre
                 </button>
             </fieldset>
 
-            <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={locked}>
-                    {submitting ? t('supply_saving') : t('sales_save_order')}
-                </button>
-                <span className="text-xs text-gray-600">{t('sales_save_footer')}</span>
-            </div>
+            {pending === null && (
+                <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
+                    <button type="submit" className={primaryButtonClass} disabled={locked}>
+                        {submitting ? t('supply_saving') : t('sales_save_order')}
+                    </button>
+                    <span className="text-xs text-gray-600">{t('sales_save_footer')}</span>
+                </div>
+            )}
         </form>
     );
 }

@@ -5,12 +5,15 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import CreateSalesOrderForm from '../../../components/sales/CreateSalesOrderForm';
+import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
+import { PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
 import SalesOrderDetail from '../../../components/sales/SalesOrderDetail';
 import SalesOrderList from '../../../components/sales/SalesOrderList';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useActorReference } from '../../../components/supply/useActorReference';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { CREATE_ORDER_KEY, PendingCommand } from '../../../lib/pendingCommands';
 import { matchesOrderSearch } from '../../../lib/salesOrderRules';
 import { toApiError } from '../../../services/apiClient';
 import { getCustomers, getProductsWithVariants } from '../../../services/referenceDataService';
@@ -25,7 +28,9 @@ export default function SalesOrdersPage() {
     const { t } = useTranslation();
     return (
         <Suspense fallback={<LoadingRows label={t('sales_loading')} />}>
-            <SalesWorkspace />
+            <PendingCommandsProvider>
+                <SalesWorkspace />
+            </PendingCommandsProvider>
         </Suspense>
     );
 }
@@ -45,6 +50,7 @@ function SalesWorkspace() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const selectedId = parseOrderId(searchParams.get('orderId'));
+    const { hydrated, commands } = usePendingCommands();
     const [actor, setActor] = useActorReference();
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
     const [referenceToken, setReferenceToken] = useState(0);
@@ -108,6 +114,25 @@ function SalesWorkspace() {
         select(id);
     };
 
+    // Direct na een geslaagde aanmaak (ook bij een replay) staat de nieuwe order in de lijst, nog vóór de gebruiker kiest.
+    const onOrderSaved = useCallback((order: SalesOrder) => {
+        setOrders((current) => (current.status === 'ready' && !current.data.some((existing) => existing.id === order.id)
+            ? { status: 'ready', data: [order, ...current.data] }
+            : current));
+        setOrdersToken((n) => n + 1);
+    }, []);
+
+    // Vanuit de lijst met onafgeronde commando's terug naar de plek waar de identieke opdracht wordt getoond.
+    const goToCommand = (command: PendingCommand) => {
+        if (command.kind === 'create-order') {
+            setCreating(true);
+        } else {
+            openOrder(command.orderId);
+        }
+    };
+
+    const createPending = commands[CREATE_ORDER_KEY] !== undefined;
+
     // Na een schrijfactie: de order opnieuw lezen (leidend voor reserveringen en on hold) en de lijst verversen.
     const reloadOrder = useCallback(async (): Promise<boolean> => {
         if (selectedId === null) return false;
@@ -146,6 +171,8 @@ function SalesWorkspace() {
                 </div>
             </div>
 
+            {hydrated && <PendingCommandsBanner commands={commands} onGoTo={goToCommand} />}
+
             <p className="flex flex-wrap items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-900">
                 <span aria-hidden="true">🔒</span>{t('sales_direct_trade_note')}
                 <Link href="/orders" className="ml-auto text-xs font-medium underline underline-offset-2">{t('sales_legacy_link')}</Link>
@@ -155,8 +182,9 @@ function SalesWorkspace() {
                 <aside className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                         <h2 className="text-sm font-semibold text-gray-900">{t('sales_orders_title')}</h2>
-                        <button type="button" className={creating ? secondaryButtonClass : primaryButtonClass} onClick={() => setCreating(true)} disabled={creating || reference.status !== 'ready'}>
-                            + {t('sales_new_order')}
+                        <button type="button" className={creating ? secondaryButtonClass : primaryButtonClass} onClick={() => setCreating(true)}
+                            disabled={creating || reference.status !== 'ready' || !hydrated}>
+                            {createPending ? t('sales_pending_open_create') : `+ ${t('sales_new_order')}`}
                         </button>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -186,16 +214,16 @@ function SalesWorkspace() {
                 <section aria-live="polite">
                     {creating && reference.status === 'loading' && <LoadingRows rows={4} label={t('supply_loading_reference')} />}
                     {creating && reference.status === 'error' && <ErrorState error={reference.error} onRetry={() => setReferenceToken((n) => n + 1)} />}
-                    {creating && reference.status === 'ready' && (
+                    {creating && reference.status === 'ready' && hydrated && (
                         <CreateSalesOrderForm actor={actor} customers={reference.data.customers} products={reference.data.products}
-                            onCreated={(order) => openOrder(order.id)} onCancel={() => setCreating(false)} />
+                            onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => setCreating(false)} />
                     )}
                     {!creating && selectedId === null && (
                         <EmptyState title={t('sales_select_order')} description={t('sales_select_order_hint')} />
                     )}
                     {!creating && detail?.status === 'loading' && <LoadingRows rows={4} label={t('sales_loading_order')} />}
                     {!creating && detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => void reloadOrder()} />}
-                    {!creating && detail?.status === 'ready' && (
+                    {!creating && detail?.status === 'ready' && hydrated && (
                         <SalesOrderDetail order={detail.data} actor={actor} onOrderChanged={reloadOrder} />
                     )}
                 </section>

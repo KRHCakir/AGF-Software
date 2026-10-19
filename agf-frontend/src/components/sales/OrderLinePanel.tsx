@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
+import { ReserveCommand, blockedBy, releaseKey, reserveKey } from '../../lib/pendingCommands';
 import { lineProgress } from '../../lib/salesOrderRules';
 import { toApiError } from '../../services/apiClient';
 import { AvailabilitySnapshot, getAvailabilitySnapshot } from '../../services/salesOrderService';
@@ -11,6 +12,7 @@ import { ReservableStockLine, SalesOrder, SalesOrderLine, StockReservation } fro
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { usePendingCommands } from './PendingCommandsContext';
 import ReleaseReservationForm from './ReleaseReservationForm';
 import { OnHoldBadge, ReservationStatusBadge } from './ReservationBadges';
 import ReservableStockTable from './ReservableStockTable';
@@ -27,6 +29,7 @@ interface Notice {
 
 // Eén orderregel: klantvraag, voortgang, bestaande reserveringen (met vrijgave) en het reserveren op exacte voorraad.
 // Na elke geslaagde schrijfactie worden de order, de reserveerbare voorraad en de beschikbaarheid opnieuw geladen.
+// Een onafgerond commando op deze regel wordt altijd getoond en blokkeert elk nieuw commando op dezelfde regel.
 export default function OrderLinePanel({ order, line, actor, readOnly, onOrderChanged }: {
     order: SalesOrder;
     line: SalesOrderLine;
@@ -35,17 +38,21 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
     onOrderChanged: () => Promise<boolean>;
 }) {
     const { t, locale } = useTranslation();
+    const { commands } = usePendingCommands();
     const [choosing, setChoosing] = useState(false);
     const [selected, setSelected] = useState<ReservableStockLine | null>(null);
     const [releasingId, setReleasingId] = useState<number | null>(null);
     const [stockToken, setStockToken] = useState(0);
-    // Elke herlaadactie na een conflict geeft de formulieren een nieuwe sleutel: de bevroren opdracht vervalt, de gebruiker beslist opnieuw.
+    // Elke herlaadactie na een conflict geeft de formulieren een nieuwe sleutel; een bewaard commando komt daarbij gewoon terug.
     const [decisionToken, setDecisionToken] = useState(0);
     const [notice, setNotice] = useState<Notice | null>(null);
     const [reloadFailed, setReloadFailed] = useState(false);
 
     const progress = lineProgress(line);
-    const canReserve = !readOnly && line.openQuantity > 0;
+    const lineBlock = blockedBy(commands, { kind: 'line', orderId: order.id, lineId: line.id });
+    const pendingReserve = (commands[reserveKey(order.id, line.id)] as ReserveCommand | undefined) ?? null;
+    const canStartReserve = !readOnly && line.openQuantity > 0 && lineBlock === null;
+    const showChooser = choosing || pendingReserve !== null;
 
     const reload = useCallback(async () => {
         setReloadFailed(false);
@@ -90,31 +97,44 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
         });
     }, []);
 
+    // Bij een onafgeronde reservering hoort het formulier bij die inhoudsregel, ook als die niet meer in de lijst staat.
+    const pendingStock = pendingReserve === null ? null : selected?.palletContentLineId === pendingReserve.payload.palletContentLineId ? selected : null;
+    const onStockLoadedForPending = useCallback((rows: ReservableStockLine[]) => {
+        onStockLoaded(rows);
+        if (pendingReserve !== null) {
+            setSelected(rows.find((row) => row.palletContentLineId === pendingReserve.payload.palletContentLineId) ?? null);
+        }
+    }, [onStockLoaded, pendingReserve]);
+
     const reservations = [...line.reservations].sort((a, b) => Number(b.status === 'Active') - Number(a.status === 'Active') || b.id - a.id);
+
+    const statusClass = progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-amber-900';
+    const statusText = progress.ready ? t('sales_line_complete') : progress.complete ? t('sales_line_complete_on_hold') : t('sales_line_open', { quantity: formatQuantity(line.openQuantity, locale) });
+    const barClass = progress.ready ? 'bg-green-600' : progress.complete ? 'bg-red-600' : 'bg-blue-600';
 
     return (
         <section aria-labelledby={`line-${line.id}`} className="rounded-md border border-gray-300 bg-white">
             <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm">
                 <h3 id={`line-${line.id}`} className="font-semibold text-gray-900">{line.productName} · {line.productVariantName}</h3>
                 <UnitBadge unit={line.unit} />
-                <span className="text-gray-800">
-                    {t('sales_line_demand', { quantity: formatQuantity(line.quantity, locale) })}
-                </span>
+                <span className="text-gray-800">{t('sales_line_demand', { quantity: formatQuantity(line.quantity, locale) })}</span>
                 <span className="text-gray-800">
                     {t('sales_line_reserved', { quantity: formatQuantity(line.reservedQuantity, locale), kg: formatKg(line.reservedNetWeightKg, locale) })}
                 </span>
-                <span className={`font-medium ${progress.complete ? 'text-green-800' : 'text-amber-900'}`}>
-                    {progress.complete ? t('sales_line_complete') : t('sales_line_open', { quantity: formatQuantity(line.openQuantity, locale) })}
-                </span>
+                <span className={`font-medium ${statusClass}`}>{statusText}</span>
                 {progress.onHold && <OnHoldBadge />}
                 <div className="ml-auto h-2 w-40 overflow-hidden rounded bg-gray-200" role="progressbar" aria-valuemin={0} aria-valuemax={line.quantity} aria-valuenow={line.reservedQuantity}
                     aria-label={t('sales_col_progress')}>
-                    <div className={`h-full ${progress.complete ? 'bg-green-600' : 'bg-blue-600'}`} style={{ width: `${line.quantity > 0 ? Math.min(100, (line.reservedQuantity / line.quantity) * 100) : 0}%` }} />
+                    <div className={`h-full ${barClass}`} style={{ width: `${line.quantity > 0 ? Math.min(100, (line.reservedQuantity / line.quantity) * 100) : 0}%` }} />
                 </div>
             </header>
 
             {reloadFailed && (
                 <p role="alert" className="mx-3 mt-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-900">{t('sales_reload_failed')}</p>
+            )}
+
+            {lineBlock !== null && (
+                <p role="status" className="mx-3 mt-2 rounded border border-amber-400 bg-amber-50 px-2 py-1 text-sm text-amber-950">{t('sales_pending_blocked_line')}</p>
             )}
 
             {notice && (
@@ -159,44 +179,48 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {reservations.map((reservation) => (
-                                    <tr key={reservation.id} className={reservation.onHold ? 'bg-red-50' : reservation.status !== 'Active' ? 'text-gray-600' : undefined}>
-                                        <td className={`${td} font-mono`}>{reservation.palletReference ?? t('availability_unknown')}</td>
-                                        <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
-                                        <td className={`${td} font-mono text-xs`}>{reservation.warehouseLocation ?? t('supply_no_bin')}</td>
-                                        <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
-                                        <td className={`${td} text-right`}>{formatKg(reservation.netWeightKg, locale)}</td>
-                                        <td className={td}>
-                                            <ReservationStatusBadge status={reservation.status} />
-                                            {reservation.onHold && <span className="mt-1 block"><OnHoldBadge /></span>}
-                                            {reservation.status === 'Released' && reservation.releaseReason && (
-                                                <span className="mt-1 block text-xs italic text-gray-700">“{reservation.releaseReason}”</span>
-                                            )}
-                                        </td>
-                                        <td className={td}>
-                                            {reservation.contentQualityStatus === null
-                                                ? <span className="text-xs text-amber-900">{t('sales_quality_unknown')}</span>
-                                                : <QualityBadge status={reservation.contentQualityStatus} />}
-                                            {reservation.onHold && <span className="mt-1 block text-xs text-red-900">{t('sales_on_hold_hint')}</span>}
-                                        </td>
-                                        <td className={`${td} text-xs`}>
-                                            {formatDateTime(reservation.createdAt, locale)}
-                                            {reservation.releasedAt && <span className="block">{t('sales_released_at', { date: formatDateTime(reservation.releasedAt, locale) })}</span>}
-                                        </td>
-                                        <td className={`${td} w-80`}>
-                                            {reservation.status === 'Active' && !readOnly && releasingId !== reservation.id && (
-                                                <button type="button" className={secondaryButtonClass} onClick={() => setReleasingId(reservation.id)}
-                                                    aria-label={t('sales_release_label', { pallet: reservation.palletReference ?? '', lot: reservation.lotNumber ?? '' })}>
-                                                    {t('sales_release')}
-                                                </button>
-                                            )}
-                                            {releasingId === reservation.id && (
-                                                <ReleaseReservationForm key={`${reservation.id}:${reservation.version}:${decisionToken}`} reservation={reservation} actor={actor}
-                                                    onSucceeded={onReleased} onReload={() => void reload()} onCancel={() => setReleasingId(null)} />
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {reservations.map((reservation) => {
+                                    const pendingRelease = commands[releaseKey(order.id, line.id, reservation.id)] !== undefined;
+                                    const releaseOpen = pendingRelease || releasingId === reservation.id;
+                                    return (
+                                        <tr key={reservation.id} className={reservation.onHold ? 'bg-red-50' : reservation.status !== 'Active' ? 'text-gray-600' : undefined}>
+                                            <td className={`${td} font-mono`}>{reservation.palletReference ?? t('availability_unknown')}</td>
+                                            <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
+                                            <td className={`${td} font-mono text-xs`}>{reservation.warehouseLocation ?? t('supply_no_bin')}</td>
+                                            <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
+                                            <td className={`${td} text-right`}>{formatKg(reservation.netWeightKg, locale)}</td>
+                                            <td className={td}>
+                                                <ReservationStatusBadge status={reservation.status} />
+                                                {reservation.onHold && <span className="mt-1 block"><OnHoldBadge /></span>}
+                                                {reservation.status === 'Released' && reservation.releaseReason && (
+                                                    <span className="mt-1 block text-xs italic text-gray-700">“{reservation.releaseReason}”</span>
+                                                )}
+                                            </td>
+                                            <td className={td}>
+                                                {reservation.contentQualityStatus === null
+                                                    ? <span className="text-xs text-amber-900">{t('sales_quality_unknown')}</span>
+                                                    : <QualityBadge status={reservation.contentQualityStatus} />}
+                                                {reservation.onHold && <span className="mt-1 block text-xs text-red-900">{t('sales_on_hold_hint')}</span>}
+                                            </td>
+                                            <td className={`${td} text-xs`}>
+                                                {formatDateTime(reservation.createdAt, locale)}
+                                                {reservation.releasedAt && <span className="block">{t('sales_released_at', { date: formatDateTime(reservation.releasedAt, locale) })}</span>}
+                                            </td>
+                                            <td className={`${td} w-80`}>
+                                                {reservation.status === 'Active' && !readOnly && !releaseOpen && (
+                                                    <button type="button" className={secondaryButtonClass} onClick={() => setReleasingId(reservation.id)} disabled={lineBlock !== null}
+                                                        aria-label={t('sales_release_label', { pallet: reservation.palletReference ?? '', lot: reservation.lotNumber ?? '' })}>
+                                                        {t('sales_release')}
+                                                    </button>
+                                                )}
+                                                {releaseOpen && (
+                                                    <ReleaseReservationForm key={`${reservation.id}:${reservation.version}:${decisionToken}`} orderId={order.id} line={line}
+                                                        reservation={reservation} actor={actor} onSucceeded={onReleased} onReload={() => void reload()} onCancel={() => setReleasingId(null)} />
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -204,22 +228,29 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
             </div>
 
             <div className="border-t border-gray-200 px-3 py-2">
-                {!choosing && (
-                    <button type="button" className={primaryButtonClass} disabled={!canReserve} onClick={() => { setNotice(null); setChoosing(true); }}>
+                {!showChooser && (
+                    <button type="button" className={primaryButtonClass} disabled={!canStartReserve} onClick={() => { setNotice(null); setChoosing(true); }}>
                         {t('sales_choose_stock')}
                     </button>
                 )}
-                {!canReserve && !readOnly && <span className="ml-3 text-xs text-gray-600">{t('sales_line_fully_reserved_hint')}</span>}
-                {choosing && (
+                {!showChooser && !readOnly && line.openQuantity === 0 && <span className="ml-3 text-xs text-gray-600">{t('sales_line_fully_reserved_hint')}</span>}
+                {showChooser && (
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-semibold text-gray-900">{t('sales_stock_title')}</h4>
-                            <button type="button" className={secondaryButtonClass} onClick={() => { setChoosing(false); setSelected(null); }}>{t('sales_close_stock')}</button>
+                            {pendingReserve === null && (
+                                <button type="button" className={secondaryButtonClass} onClick={() => { setChoosing(false); setSelected(null); }}>{t('sales_close_stock')}</button>
+                            )}
                         </div>
                         <p className="text-xs text-gray-600">{t('sales_stock_rules')}</p>
-                        <ReservableStockTable orderId={order.id} line={line} token={stockToken} selectedId={selected?.palletContentLineId ?? null}
-                            onSelect={setSelected} onLoaded={onStockLoaded} />
-                        {selected && (
+                        <ReservableStockTable orderId={order.id} line={line} token={stockToken} selectedId={(pendingReserve?.payload.palletContentLineId ?? selected?.palletContentLineId) ?? null}
+                            onSelect={setSelected} onLoaded={pendingReserve === null ? onStockLoaded : onStockLoadedForPending} selectable={pendingReserve === null} />
+                        {pendingReserve !== null && (
+                            <ReserveForm key={`pending:${pendingReserve.requestId}:${line.version}:${decisionToken}`}
+                                orderId={order.id} line={line} stock={pendingStock} actor={actor}
+                                onSucceeded={onReserved} onReload={() => void reload()} onCancel={() => setChoosing(false)} />
+                        )}
+                        {pendingReserve === null && selected && (
                             <ReserveForm key={`${selected.palletContentLineId}:${selected.contentLineVersion}:${line.version}:${decisionToken}`}
                                 orderId={order.id} line={line} stock={selected} actor={actor}
                                 onSucceeded={onReserved} onReload={() => void reload()} onCancel={() => setSelected(null)} />

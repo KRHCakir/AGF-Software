@@ -1,7 +1,8 @@
 'use client';
 
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDate, formatQuantity } from '../../lib/availability';
+import { formatQuantity } from '../../lib/availability';
+import { formatCalendarDate } from '../../lib/calendarDate';
 import { orderProgress } from '../../lib/salesOrderRules';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
@@ -45,10 +46,12 @@ export default function SalesOrderList({ orders, selectedId, onSelect }: {
                                     </span>
                                     {order.status !== 'Open' && <span className="mt-1 block"><OrderStatusBadge status={order.status} /></span>}
                                 </td>
-                                <td className="whitespace-nowrap px-2 py-1.5 align-top">{formatDate(order.requestedDeliveryDate, locale)}</td>
+                                <td className="whitespace-nowrap px-2 py-1.5 align-top">{formatCalendarDate(order.requestedDeliveryDate, locale)}</td>
                                 <td className="px-2 py-1.5 align-top">
-                                    <span className={`block text-xs font-medium ${progress.complete ? 'text-green-800' : 'text-gray-800'}`}>
+                                    {/* Groen alleen als alles gereserveerd is én niets on hold staat; volledig gereserveerd met on hold is een waarschuwing. */}
+                                    <span className={`block text-xs font-medium ${progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-800'}`}>
                                         {t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
+                                        {progress.complete && !progress.ready && <> · {t('sales_on_hold')}</>}
                                     </span>
                                     <ul className="mt-0.5 space-y-0.5 text-xs text-gray-700">
                                         {order.lines.map((line) => (

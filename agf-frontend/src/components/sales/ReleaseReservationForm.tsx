@@ -2,18 +2,24 @@
 
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
+import { ReleaseCommand, releaseKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { MAX_REASON_LENGTH, normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { releaseReservation } from '../../services/salesOrderService';
-import { ReleaseStockReservationRequest, StockReservation } from '../../types/salesOrder';
+import { SalesOrderLine, StockReservation } from '../../types/salesOrder';
 import FieldError, { inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { PendingNotice } from './PendingCommandsBanner';
+import { usePendingCommand } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 
 // Vrijgeven met een verplichte reden en de reserveringsversie waarop de beslissing is gebaseerd (optimistische concurrency).
-export default function ReleaseReservationForm({ reservation, actor, onSucceeded, onReload, onCancel }: {
+// De opdracht wordt bevroren en boven dit formulier bewaard tot de uitkomst bekend is.
+export default function ReleaseReservationForm({ orderId, line, reservation, actor, onSucceeded, onReload, onCancel }: {
+    orderId: number;
+    line: SalesOrderLine;
     reservation: StockReservation;
     actor: string;
     onSucceeded: (released: StockReservation) => Promise<void>;
@@ -21,30 +27,29 @@ export default function ReleaseReservationForm({ reservation, actor, onSucceeded
     onCancel: () => void;
 }) {
     const { t } = useTranslation();
-    const [reason, setReason] = useState('');
-    const [pending, setPending] = useState<ReleaseStockReservationRequest | null>(null);
+    const [pending, setPending, clearPending] = usePendingCommand<ReleaseCommand>(releaseKey(orderId, line.id, reservation.id));
+    const [reason, setReason] = useState(() => pending?.payload.reason ?? '');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
     const inFlight = useRef(false);
 
-    const unknown = error !== null && outcomeUnknown(error);
     const conflict = error !== null && error.kind === 'http' && (error.status === 409 || error.status === 404);
-    const locked = submitting || unknown || conflict;
+    const locked = submitting || pending !== null || conflict;
     const idPrefix = `release-${reservation.id}`;
+    const basedOnVersion = pending?.payload.expectedReservationVersion ?? reservation.version;
 
     const editReason = (value: string) => {
         if (locked) return;
         setReason(value);
-        setPending(null);
         setError(null);
         setFieldErrors({});
     };
 
     const submit = async () => {
         if (inFlight.current) return;
-        let request = pending;
-        if (request === null) {
+        let command = pending;
+        if (command === null) {
             const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
             if (!actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
@@ -52,23 +57,37 @@ export default function ReleaseReservationForm({ reservation, actor, onSucceeded
                 return;
             }
             setFieldErrors({});
-            request = {
-                requestId: newRequestId(),
-                expectedReservationVersion: reservation.version,
-                actorReference: actorResult.value,
-                reason: reasonResult.value,
+            const requestId = newRequestId();
+            command = {
+                kind: 'release',
+                key: releaseKey(orderId, line.id, reservation.id),
+                orderId,
+                lineId: line.id,
+                reservationId: reservation.id,
+                requestId,
+                payload: { requestId, expectedReservationVersion: reservation.version, actorReference: actorResult.value, reason: reasonResult.value },
+                display: { palletReference: reservation.palletReference ?? '', lotNumber: reservation.lotNumber ?? '', productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}` },
+                attempts: 0,
+                lastError: null,
+                frozenAt: new Date().toISOString(),
             };
-            setPending(request);
+            setPending(command);
         }
 
         inFlight.current = true;
         setSubmitting(true);
         setError(null);
         try {
-            const released = await releaseReservation(reservation.id, request);
+            const released = await releaseReservation(reservation.id, command.payload);
+            clearPending();
             await onSucceeded(released);
         } catch (caught) {
             const apiError = toApiError(caught);
+            if (outcomeUnknown(apiError)) {
+                setPending(withAttempt(command, apiError.message) as ReleaseCommand);
+            } else {
+                clearPending();
+            }
             setError(apiError);
             setFieldErrors(apiError.fieldErrors);
         } finally {
@@ -80,7 +99,12 @@ export default function ReleaseReservationForm({ reservation, actor, onSucceeded
     return (
         <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }}
             className="mt-2 space-y-2 rounded border border-gray-300 bg-gray-50 p-3">
-            <p className="text-xs text-gray-800">{t('sales_release_based_on_version', { version: String(reservation.version) })}</p>
+            {pending !== null && (
+                <PendingNotice command={pending} submitting={submitting}>
+                    <button type="submit" className={primaryButtonClass}>{t('supply_retry_same')}</button>
+                </PendingNotice>
+            )}
+            <p className="text-xs text-gray-800">{t('sales_release_based_on_version', { version: String(basedOnVersion) })}</p>
             <div>
                 <label htmlFor={`${idPrefix}-reason`} className="text-xs font-medium text-gray-700">{t('sales_release_reason')} *</label>
                 <textarea id={`${idPrefix}-reason`} value={reason} rows={2} disabled={locked} maxLength={MAX_REASON_LENGTH}
@@ -92,16 +116,15 @@ export default function ReleaseReservationForm({ reservation, actor, onSucceeded
                 <FieldError id={`${idPrefix}-version-error`} messages={fieldErrors.expectedReservationVersion} />
             </div>
 
-            {error && (
+            {error && pending === null && (
                 <div role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-900">
-                    <p className="font-medium">
-                        {conflict ? t('sales_conflict') : unknown ? t('supply_error_outcome_unknown') : t('supply_error_http_400')}
-                    </p>
+                    <p className="font-medium">{conflict ? t('sales_conflict') : t('supply_error_http_400')}</p>
                     {error.kind === 'http' && error.status !== 400 && <p className="mt-1">{error.message}</p>}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {unknown && <button type="submit" className={primaryButtonClass} disabled={submitting}>{t('supply_retry_same')}</button>}
-                        {(conflict || unknown) && <button type="button" className={secondaryButtonClass} onClick={onReload}>{t('sales_reload_and_decide')}</button>}
-                    </div>
+                    {conflict && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <button type="button" className={secondaryButtonClass} onClick={onReload}>{t('sales_reload_and_decide')}</button>
+                        </div>
+                    )}
                 </div>
             )}
 

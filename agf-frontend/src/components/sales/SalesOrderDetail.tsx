@@ -1,7 +1,8 @@
 'use client';
 
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDate, formatDateTime } from '../../lib/availability';
+import { formatDateTime } from '../../lib/availability';
+import { formatCalendarDate } from '../../lib/calendarDate';
 import { orderProgress } from '../../lib/salesOrderRules';
 import { SalesOrder } from '../../types/salesOrder';
 import OrderLinePanel from './OrderLinePanel';
@@ -28,7 +29,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                 <dl className="mt-2 grid grid-cols-4 gap-x-6 gap-y-1 text-sm">
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_delivery_date')}</dt>
-                        <dd className="font-medium text-gray-900">{formatDate(order.requestedDeliveryDate, locale)}</dd>
+                        <dd className="font-medium text-gray-900">{formatCalendarDate(order.requestedDeliveryDate, locale)}</dd>
                     </div>
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_customer_reference')}</dt>
@@ -36,8 +37,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                     </div>
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
-                        <dd className={`font-medium ${progress.complete ? 'text-green-800' : 'text-gray-900'}`}>
+                        <dd className={`font-medium ${progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-900'}`}>
                             {t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
+                            {progress.complete && !progress.ready && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
                         </dd>
                     </div>
                     <div>
