@@ -13,6 +13,33 @@ export interface CustomerOption {
     name: string;
 }
 
+// Klant aanmaken vanuit Verkoop (POST /api/customers). Lege optionele velden gaan als null mee.
+export interface CreateCustomerRequest {
+    requestId: string;
+    name: string;
+    contactPerson: string | null;
+    email: string | null;
+    phone: string | null;
+    shippingAddress: string | null;
+    acknowledgeSimilarNames: boolean;
+}
+
+export interface CreatedCustomer {
+    id: number;
+    name: string;
+    contactPerson: string | null;
+    email: string | null;
+    phone: string | null;
+    shippingAddress: string | null;
+}
+
+export interface SimilarCustomer {
+    id: number;
+    name: string;
+    contactPerson: string | null;
+    phone: string | null;
+}
+
 export interface VariantOption {
     id: number;
     name: string;
@@ -38,6 +65,18 @@ function isVariant(value: unknown): value is Named {
         && isOptionalNullableString(value.origin)
         && isOptionalNullableString(value.packaging)
         && isOptionalNullableString(value.sizeCategory);
+}
+
+export function isCreatedCustomer(value: unknown): value is CreatedCustomer {
+    return isNamed(value)
+        && isOptionalNullableString(value.contactPerson)
+        && isOptionalNullableString(value.email)
+        && isOptionalNullableString(value.phone)
+        && isOptionalNullableString(value.shippingAddress);
+}
+
+export function isSimilarCustomerList(value: unknown): value is SimilarCustomer[] {
+    return isArrayOf(value, (item): item is SimilarCustomer => isNamed(item) && isOptionalNullableString(item.contactPerson) && isOptionalNullableString(item.phone));
 }
 
 export function isNamedList(value: unknown): value is Named[] {

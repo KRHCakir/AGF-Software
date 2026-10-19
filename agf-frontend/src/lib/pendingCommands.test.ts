@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
     CREATE_ORDER_KEY,
     blockedBy,
+    CREATE_CUSTOMER_KEY,
     cancelKey,
     correctDispatchKey,
     dispatchKey,
@@ -52,6 +53,12 @@ const correct = (orderId: number, dispatchId: number, requestId = 'x-1'): Pendin
     kind: 'correct-dispatch', key: correctDispatchKey(orderId, dispatchId), orderId, dispatchId, requestId, attempts: 1, lastError: 'HTTP 504', frozenAt: '2026-10-19T13:00:00.000Z',
     payload: { requestId, expectedOrderVersion: 4, actorReference: 'office-1', reason: 'Verkeerd gescand', goodsNeverLeftWarehouse: true, lines: [{ stockReservationId: 11, expectedReservationVersion: 1 }] },
     display: { customerName: 'Local Market Stalls', lineCount: 1 },
+});
+
+const customer = (requestId = 'c-1', acknowledge = false): PendingCommand => ({
+    kind: 'create-customer', key: CREATE_CUSTOMER_KEY, requestId, attempts: 1, lastError: 'HTTP 503', frozenAt: '2026-10-19T14:00:00.000Z',
+    payload: { requestId, name: 'Groentehal Jansen', contactPerson: 'Piet', email: null, phone: '06-1', shippingAddress: null, acknowledgeSimilarNames: acknowledge },
+    display: { name: 'Groentehal Jansen' },
 });
 
 const toMap = (...commands: PendingCommand[]): PendingCommands => Object.fromEntries(commands.map((command) => [command.key, command]));
@@ -173,6 +180,34 @@ describe('unresolved commands', () => {
         }
         assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { c.dispatchId = 0; c.key = correctDispatchKey(4, 0); })), {});
         assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { c.key = correctDispatchKey(4, 8); })), {});
+    });
+
+    test('a create-customer command has one fixed key, blocks only itself and never blocks or is blocked by order commands', () => {
+        const pendingCustomer = toMap(customer());
+        assert.equal(blockedBy(pendingCustomer, { kind: 'create-customer' })?.kind, 'create-customer');
+        assert.equal(blockedBy(pendingCustomer, { kind: 'create-order' }), null);
+        assert.equal(blockedBy(pendingCustomer, { kind: 'line', orderId: 4, lineId: 7 }), null);
+        assert.equal(blockedBy(pendingCustomer, { kind: 'cancel-order', orderId: 4 }), null);
+        assert.equal(blockedBy(toMap(dispatch(4), reserve(4, 7)), { kind: 'create-customer' }), null);
+        // Een tweede klantopdracht krijgt dezelfde sleutel: de opslag kan er maar één bevatten.
+        assert.equal(customer('c-2').key, customer('c-1').key);
+    });
+
+    test('create-customer payload is validated field by field; blanks must be null and the acknowledgement a boolean', () => {
+        assert.equal(isPendingCommand(customer()), true);
+        assert.equal(isPendingCommand(customer('c-9', true)), true);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(customer()))), toMap(customer()));
+        for (const field of ['name', 'contactPerson', 'email', 'phone', 'shippingAddress', 'acknowledgeSimilarNames']) {
+            assert.deepEqual(parseStoredCommands(stored(customer(), (c) => { delete payloadOf(c)[field]; })), {}, `customer without ${field}`);
+        }
+        const bad: [string, unknown][] = [
+            ['name', ''], ['name', '   '], ['name', 'x'.repeat(201)], ['contactPerson', ''], ['contactPerson', '   '], ['email', 'x'.repeat(201)],
+            ['phone', 'x'.repeat(41)], ['shippingAddress', 'x'.repeat(301)], ['acknowledgeSimilarNames', 'true'], ['acknowledgeSimilarNames', 1],
+        ];
+        for (const [field, value] of bad) {
+            assert.deepEqual(parseStoredCommands(stored(customer(), (c) => { payloadOf(c)[field] = value; })), {}, `customer ${field}=${JSON.stringify(value)}`);
+        }
+        assert.deepEqual(parseStoredCommands(stored(customer(), (c) => { c.key = 'create-customer:2'; })), {});
     });
 
     test('attempts are counted on the same frozen requestId and payload; the command itself never changes', () => {

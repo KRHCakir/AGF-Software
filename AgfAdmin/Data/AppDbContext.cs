@@ -261,6 +261,12 @@ namespace AgfAdmin.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
+            modelBuilder.Entity<Customer>(entity =>
+            {
+                // Eén klant per client-requestId; oudere klanten zonder requestId blijven buiten de index.
+                entity.HasIndex(c => c.RequestId).IsUnique().HasFilter("\"RequestId\" IS NOT NULL");
+            });
+
             modelBuilder.Entity<SalesOrder>(b =>
             {
                 b.Property(o => o.Status).IsRequired().HasMaxLength(32);

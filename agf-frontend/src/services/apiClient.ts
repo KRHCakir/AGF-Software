@@ -9,13 +9,16 @@ export class ApiError extends Error {
     readonly kind: ApiErrorKind;
     readonly status: number | null;
     readonly fieldErrors: Record<string, string[]>;
+    // Het ruwe JSON-foutlichaam van de server (alleen bij HTTP-fouten); nooit tekstueel geïnterpreteerd, alleen op vorm.
+    readonly body: unknown;
 
-    constructor(kind: ApiErrorKind, message: string, status: number | null = null, fieldErrors: Record<string, string[]> = {}) {
+    constructor(kind: ApiErrorKind, message: string, status: number | null = null, fieldErrors: Record<string, string[]> = {}, body: unknown = null) {
         super(message);
         this.name = 'ApiError';
         this.kind = kind;
         this.status = status;
         this.fieldErrors = fieldErrors;
+        this.body = body;
     }
 
     // Definitieve afwijzing door de server (400/404/409): er is niets opgeslagen.
@@ -89,7 +92,7 @@ async function request(method: 'GET' | 'POST', path: string, body: unknown, sign
             errorBody = null;
         }
         const { message, fieldErrors } = readErrorBody(errorBody);
-        throw new ApiError('http', message ?? `HTTP ${response.status}`, response.status, fieldErrors);
+        throw new ApiError('http', message ?? `HTTP ${response.status}`, response.status, fieldErrors, errorBody);
     }
 
     try {
