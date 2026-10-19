@@ -145,7 +145,9 @@ public static class SalesTestData
     }
 
     // Zelfde volledige afboeking, maar in een meegegeven context (voor race-tests met een interceptor); slaat niet zelf op.
-    public static async Task<SalesDispatch> ConsumeInContextAsync(AppDbContext db, int reservationId, string reference = null)
+    // `into`: bestaande (nieuwe, gevolgde) verzending om de regel aan toe te voegen; `intoDispatchId`: alleen-FK-verwijzing naar een opgeslagen verzending.
+    // `fkOnly`: de verzendregel verwijst naar reservering en inhoudsregel alleen via FK (geen navigaties), zoals een externe writer dat zou doen.
+    public static async Task<SalesDispatch> ConsumeInContextAsync(AppDbContext db, int reservationId, string reference = null, SalesDispatch into = null, int? intoDispatchId = null, bool fkOnly = false)
     {
         var reservation = await db.StockReservations.Include(r => r.PalletContentLine).Include(r => r.SalesOrderLine).SingleAsync(r => r.Id == reservationId);
         var now = DateTime.UtcNow;
@@ -159,14 +161,30 @@ public static class SalesTestData
             Type = "Dispatch", Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = reservation.NetWeightKg,
             SupplyCommitmentLineId = content.SupplyCommitmentLineId, PalletContentLine = content, StockReservation = reservation, CreatedAt = now
         };
-        var dispatch = new SalesDispatch { RequestId = Guid.NewGuid(), SalesOrderId = reservation.SalesOrderLine.SalesOrderId, Reference = reference, ActorReference = "test", DispatchedAt = now };
-        dispatch.Lines.Add(new SalesDispatchLine
-        {
-            StockReservation = reservation, SalesOrderLineId = reservation.SalesOrderLineId!.Value, PalletContentLine = content,
-            Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = reservation.NetWeightKg ?? 0m, ExpectedReservationVersion = reservation.Version, StockMovement = movement
-        });
+        var line = fkOnly
+            ? new SalesDispatchLine
+            {
+                StockReservationId = reservation.Id, SalesOrderLineId = reservation.SalesOrderLineId!.Value, PalletContentLineId = content.Id,
+                Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = reservation.NetWeightKg ?? 0m, ExpectedReservationVersion = reservation.Version, StockMovement = movement
+            }
+            : new SalesDispatchLine
+            {
+                StockReservation = reservation, SalesOrderLineId = reservation.SalesOrderLineId!.Value, PalletContentLine = content,
+                Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = reservation.NetWeightKg ?? 0m, ExpectedReservationVersion = reservation.Version, StockMovement = movement
+            };
         db.StockMovements.Add(movement);
-        db.SalesDispatches.Add(dispatch);
+        if (intoDispatchId != null)
+        {
+            line.SalesDispatchId = intoDispatchId.Value;
+            db.SalesDispatchLines.Add(line);
+            return null;
+        }
+        var dispatch = into ?? new SalesDispatch { RequestId = Guid.NewGuid(), SalesOrderId = reservation.SalesOrderLine.SalesOrderId, Reference = reference, ActorReference = "test", DispatchedAt = now };
+        dispatch.Lines.Add(line);
+        if (into == null)
+        {
+            db.SalesDispatches.Add(dispatch);
+        }
         return dispatch;
     }
 }

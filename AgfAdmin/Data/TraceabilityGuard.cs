@@ -20,7 +20,9 @@ namespace AgfAdmin.Data
     // 7. een nieuwe Active verkoopreservering hoort bij een orderregel van een Open verkooporder (ook als die order in dezelfde save wordt geannuleerd);
     // 8. het afboekgrootboek is in beide richtingen consistent: een verhoging van DispatchedQuantity/-NetWeightKg op een inhoudsregel
     //    bestaat alleen samen met Dispatch-mutaties van exact hetzelfde totaal in dezelfde save, elke Dispatch-mutatie hoort bij een
-    //    reservering die in dezelfde save Consumed wordt (gelijke hoeveelheid, eenheid en kg) met een verzendregel, en afgeboekt daalt nooit.
+    //    reservering die in dezelfde save Active -> Consumed gaat (gelijke hoeveelheid, eenheid en kg) met een verzendregel, afgeboekt
+    //    daalt nooit, en elke nieuwe verzendregel is een exacte kopie van precies één zo'n reservering met precies haar nieuwe
+    //    Dispatch-mutatie, onder een verzending van dezelfde verkooporder (navigatie of alleen FK).
     // Regels 5 t/m 7 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // Append-only (regel 3): PalletAuditEvents, SalesOrderAuditEvents, SalesDispatches, SalesDispatchLines en Dispatch-mutaties
     // (andere mutatietypen blijven ongemoeid).
@@ -68,12 +70,12 @@ namespace AgfAdmin.Data
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
             await CheckSalesReservationsAsync(db, async, cancellationToken);
             await CheckReservationsOnOpenOrdersAsync(db, async, cancellationToken);
-            CheckDispatchLedger(db);
+            await CheckDispatchLedgerAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 8: afboekgrootboek in beide richtingen ----
 
-        private static void CheckDispatchLedger(AppDbContext db)
+        private static async Task CheckDispatchLedgerAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             var contentDeltas = new Dictionary<int, (decimal Quantity, decimal Kg)>();
             foreach (var entry in db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Modified))
@@ -101,12 +103,17 @@ namespace AgfAdmin.Data
                 .Where(e => e.State == EntityState.Added && e.Entity.Type == ReservationRules.MovementTypeDispatch)
                 .Select(e => e.Entity)
                 .ToList();
-            var consumed = db.ChangeTracker.Entries<StockReservation>()
+            // Alleen Active -> Consumed telt als verbruik in deze save; elke andere overgang naar Consumed is een fout.
+            var consumedEntries = db.ChangeTracker.Entries<StockReservation>()
                 .Where(e => e.State == EntityState.Modified
                     && e.Entity.Status == ReservationRules.StatusConsumed
                     && e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) != ReservationRules.StatusConsumed)
-                .Select(e => e.Entity)
                 .ToList();
+            if (consumedEntries.Any(e => e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) != ReservationRules.StatusActive))
+            {
+                throw new TraceabilityViolationException("Only an Active reservation can become Consumed.");
+            }
+            var consumed = consumedEntries.Select(e => e.Entity).ToList();
             var dispatchLines = db.ChangeTracker.Entries<SalesDispatchLine>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
             if (db.ChangeTracker.Entries<StockReservation>().Any(e => e.State == EntityState.Added && e.Entity.Status == ReservationRules.StatusConsumed))
             {
@@ -175,6 +182,106 @@ namespace AgfAdmin.Data
                 if (!contentDeltas.TryGetValue(contentId, out var delta) || delta.Quantity != total.Quantity || delta.Kg != total.Kg)
                 {
                     throw new TraceabilityViolationException($"Dispatch stock movements on pallet content line {contentId} without a matching increase of its dispatched totals.");
+                }
+            }
+
+            await CheckDispatchLinesAsync(db, dispatchLines, consumed, movements, async, cancellationToken);
+        }
+
+        // Verzendregels: elke nieuwe regel is een exacte kopie van precies één reservering die nu Active -> Consumed gaat, verwijst naar
+        // precies haar nieuwe Dispatch-mutatie en hangt onder een verzending van dezelfde verkooporder. Verwijzingen mogen via navigatie
+        // of alleen via FK lopen; een FK naar een nieuwe (nog ongesleutelde) entiteit wordt via de tijdelijke sleutel van de tracker gevonden.
+        private static async Task CheckDispatchLinesAsync(AppDbContext db, List<SalesDispatchLine> dispatchLines, List<StockReservation> consumed, List<StockMovement> movements, bool async, CancellationToken cancellationToken)
+        {
+            if (dispatchLines.Count == 0)
+            {
+                return;
+            }
+
+            StockReservation ReservationOf(SalesDispatchLine line)
+            {
+                if (line.StockReservation != null) return line.StockReservation;
+                return consumed.FirstOrDefault(r => r.Id == line.StockReservationId);
+            }
+
+            StockMovement MovementOf(SalesDispatchLine line)
+            {
+                if (line.StockMovement != null) return line.StockMovement;
+                // Een nieuwe mutatie heeft een tijdelijke sleutel; vergelijk met de huidige sleutelwaarde in de tracker.
+                return movements.FirstOrDefault(m => db.Entry(m).Property(x => x.Id).CurrentValue == line.StockMovementId);
+            }
+
+            // Verkooporder per verzendregel-reservering (via de orderregel) en per verzending (nieuw via navigatie, bestaand via de database).
+            var reservationLineIds = dispatchLines.Select(l => ReservationOf(l)?.SalesOrderLineId).Where(id => id != null).Select(id => id!.Value).Distinct().ToList();
+            var orderOfLine = (await ToListAsync(
+                    db.SalesOrderLines.AsNoTracking().Where(l => reservationLineIds.Contains(l.Id)).Select(l => new { l.Id, l.SalesOrderId }),
+                    async, cancellationToken))
+                .ToDictionary(l => l.Id, l => l.SalesOrderId);
+            foreach (var entry in db.ChangeTracker.Entries<SalesOrderLine>().Where(e => e.State is not (EntityState.Deleted or EntityState.Detached) && reservationLineIds.Contains(e.Entity.Id)))
+            {
+                orderOfLine[entry.Entity.Id] = entry.Entity.SalesOrder?.Id ?? entry.Property(l => l.SalesOrderId).CurrentValue;
+            }
+
+            var storedDispatchIds = dispatchLines
+                .Where(l => l.SalesDispatch == null && l.SalesDispatchId != 0)
+                .Select(l => l.SalesDispatchId)
+                .Distinct()
+                .ToList();
+            var orderOfDispatch = storedDispatchIds.Count == 0
+                ? new Dictionary<int, int>()
+                : (await ToListAsync(
+                        db.SalesDispatches.AsNoTracking().Where(d => storedDispatchIds.Contains(d.Id)).Select(d => new { d.Id, d.SalesOrderId }),
+                        async, cancellationToken))
+                    .ToDictionary(d => d.Id, d => d.SalesOrderId);
+            foreach (var entry in db.ChangeTracker.Entries<SalesDispatch>().Where(e => e.State is not (EntityState.Deleted or EntityState.Detached)))
+            {
+                orderOfDispatch[entry.Property(d => d.Id).CurrentValue] = entry.Entity.SalesOrder?.Id ?? entry.Property(d => d.SalesOrderId).CurrentValue;
+            }
+
+            var usedReservations = new HashSet<StockReservation>();
+            var usedMovements = new HashSet<StockMovement>();
+            foreach (var line in dispatchLines)
+            {
+                var reservation = ReservationOf(line);
+                if (reservation == null || !consumed.Contains(reservation))
+                {
+                    throw new TraceabilityViolationException("A sales dispatch line requires its reservation to go from Active to Consumed in the same save.");
+                }
+                if (!usedReservations.Add(reservation))
+                {
+                    throw new TraceabilityViolationException($"Reservation {reservation.Id} has more than one sales dispatch line.");
+                }
+                var movement = MovementOf(line);
+                if (movement == null || !movements.Contains(movement))
+                {
+                    throw new TraceabilityViolationException("A sales dispatch line requires a new dispatch stock movement in the same save.");
+                }
+                if (!usedMovements.Add(movement))
+                {
+                    throw new TraceabilityViolationException("A dispatch stock movement can belong to only one sales dispatch line.");
+                }
+                var movementReservation = movement.StockReservation ?? consumed.FirstOrDefault(r => r.Id == movement.StockReservationId);
+                if (!ReferenceEquals(movementReservation, reservation))
+                {
+                    throw new TraceabilityViolationException("A sales dispatch line must reference the dispatch stock movement of its own reservation.");
+                }
+                var lineContentId = line.PalletContentLine != null ? db.Entry(line.PalletContentLine).Property(c => c.Id).CurrentValue : line.PalletContentLineId;
+                var lineOrderLineId = line.SalesOrderLine != null ? db.Entry(line.SalesOrderLine).Property(l => l.Id).CurrentValue : line.SalesOrderLineId;
+                if (line.Quantity != reservation.Quantity
+                    || !string.Equals(line.Unit, reservation.Unit, StringComparison.Ordinal)
+                    || line.NetWeightKg != (reservation.NetWeightKg ?? 0m)
+                    || lineContentId != reservation.PalletContentLineId
+                    || lineOrderLineId != reservation.SalesOrderLineId)
+                {
+                    throw new TraceabilityViolationException($"Sales dispatch line for reservation {reservation.Id} must copy quantity, unit, net weight, content line and sales order line exactly.");
+                }
+                var dispatchId = line.SalesDispatch != null ? db.Entry(line.SalesDispatch).Property(d => d.Id).CurrentValue : line.SalesDispatchId;
+                if (!orderOfDispatch.TryGetValue(dispatchId, out var dispatchOrderId)
+                    || reservation.SalesOrderLineId == null
+                    || !orderOfLine.TryGetValue(reservation.SalesOrderLineId.Value, out var reservationOrderId)
+                    || dispatchOrderId != reservationOrderId)
+                {
+                    throw new TraceabilityViolationException($"Sales dispatch line for reservation {reservation.Id} belongs to a dispatch of another sales order.");
                 }
             }
         }
