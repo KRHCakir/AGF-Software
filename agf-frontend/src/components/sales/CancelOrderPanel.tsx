@@ -41,7 +41,10 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
     const blocker = blockedBy(commands, { kind: 'cancel-order', orderId: order.id });
     const blockedByLine = blocker !== null && blocker.kind !== 'cancel-order';
     const conflict = error !== null && error.kind === 'http' && (error.status === 409 || error.status === 404);
-    const locked = submitting || pending !== null || conflict || blockedByLine;
+    // Niet meer Open (bijvoorbeeld al geannuleerd door een eerder commando waarvan het antwoord verloren ging):
+    // dan is alleen de identieke herhaling van een onafgerond commando nog mogelijk, nooit een nieuwe annulering.
+    const replayOnly = order.status !== 'Open';
+    const locked = submitting || pending !== null || conflict || blockedByLine || replayOnly;
     const basedOnVersion = pending?.payload.expectedOrderVersion ?? order.version;
     const active = order.lines.flatMap((line) => line.reservations.filter((reservation) => reservation.status === 'Active').map((reservation) => ({ line, reservation })));
     const consumed = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
@@ -58,6 +61,7 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
         if (inFlight.current || blockedByLine) return;
         let command = pending;
         if (command === null) {
+            if (replayOnly) return;
             const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
             if (!actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
@@ -116,8 +120,10 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
             {pending !== null && (
                 <PendingNotice command={pending} submitting={submitting}>
                     <button type="submit" className={primaryButtonClass}>{t('supply_retry_same')}</button>
-                    <button type="button" className={secondaryButtonClass} onClick={onClose}>{t('sales_close_form')}</button>
                 </PendingNotice>
+            )}
+            {replayOnly && (
+                <p role="status" className="rounded border border-gray-400 bg-gray-100 px-2 py-1 text-sm text-gray-900">{t('sales_cancel_replay_only')}</p>
             )}
             {blockedByLine && (
                 <p role="status" className="rounded border border-amber-400 bg-amber-50 px-2 py-1 text-sm text-amber-950">{t('sales_cancel_blocked')}</p>
@@ -172,7 +178,7 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
                 </div>
             )}
 
-            {!locked && (
+            {!locked && !replayOnly && (
                 <div className="flex gap-2">
                     <button type="submit" className={`${primaryButtonClass} bg-red-700 hover:bg-red-800`}>{t('sales_cancel_confirm', { count: String(active.length) })}</button>
                     <button type="button" className={secondaryButtonClass} onClick={onClose}>{t('inspection_cancel')}</button>

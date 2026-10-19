@@ -563,5 +563,6 @@
   "sales_history_hide": "Hide history",
   "sales_history_loading": "Loading order history…",
   "sales_history_empty": "No events for this order.",
-  "sales_event_cancelled": "Order cancelled"
+  "sales_event_cancelled": "Order cancelled",
+  "sales_cancel_replay_only": "This order is no longer open. An unresolved cancellation can only be resent unchanged; the server then returns the current state."
 }

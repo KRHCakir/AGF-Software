@@ -26,18 +26,29 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
     const [showHistory, setShowHistory] = useState(false);
     const [historyToken, setHistoryToken] = useState(0);
     const [cancelNotice, setCancelNotice] = useState(false);
+    // Telt alleen op na een geslaagde, bewuste herlaadactie vanuit het annuleringspaneel: dan vervalt de lokale
+    // conflicttoestand en begint een nieuwe beslissing. Een onafgerond commando staat in de opslag en komt gewoon terug.
+    const [decisionToken, setDecisionToken] = useState(0);
     const progress = orderProgress(order);
     const readOnly = order.status !== 'Open';
     const cancelled = order.status === 'Cancelled';
     const pendingCancel = commands[cancelKey(order.id)] !== undefined;
     const cancelBlocker = blockedBy(commands, { kind: 'cancel-order', orderId: order.id });
-    const showCancel = !readOnly && (cancelling || pendingCancel);
+    // Een onafgeronde annulering blijft zichtbaar, ook als de order intussen Cancelled is (de server kan het commando
+    // al hebben verwerkt terwijl het antwoord verloren ging): alleen de identieke herhaling rondt haar af.
+    const showCancel = pendingCancel || (!readOnly && cancelling);
 
     const onCancelled = async () => {
         setCancelling(false);
         setCancelNotice(true);
         setHistoryToken((n) => n + 1);
         await onOrderChanged();
+    };
+
+    const reloadForNewDecision = async () => {
+        if (await onOrderChanged()) {
+            setDecisionToken((n) => n + 1);
+        }
     };
 
     return (
@@ -102,8 +113,8 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
             </header>
 
             {showCancel && (
-                <CancelOrderPanel key={`${order.id}:${order.version}`} order={order} actor={actor} onCancelled={onCancelled}
-                    onReload={() => void onOrderChanged()} onClose={() => setCancelling(false)} />
+                <CancelOrderPanel key={`${order.id}:${decisionToken}`} order={order} actor={actor} onCancelled={onCancelled}
+                    onReload={() => void reloadForNewDecision()} onClose={() => setCancelling(false)} />
             )}
 
             {order.lines.map((line) => (

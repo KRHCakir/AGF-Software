@@ -547,5 +547,6 @@
   "sales_history_hide": "Historie verbergen",
   "sales_history_loading": "Orderhistorie wordt geladen…",
   "sales_history_empty": "Geen gebeurtenissen voor deze order.",
-  "sales_event_cancelled": "Order geannuleerd"
+  "sales_event_cancelled": "Order geannuleerd",
+  "sales_cancel_replay_only": "Deze order is niet (meer) open. Een onafgeronde annulering kan alleen nog ongewijzigd worden herhaald; de server geeft dan de huidige toestand terug."
 }
