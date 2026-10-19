@@ -1,23 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import '../globals.css';
-import ManualInvoiceModal from '../../components/ManualInvoiceModal';
-import QuickSellModal from '../../components/QuickSellModal';
-import AddOrderModal from '../../components/AddOrderModal';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
+import { showLegacyDemoChrome } from '../../lib/featureFlags';
 
 function AdminLayoutContent({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
-    const [isSellModalOpen, setIsSellModalOpen] = useState(false);
-    const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-
     const { t, locale, setLocale } = useTranslation();
 
     return (
@@ -29,30 +22,30 @@ function AdminLayoutContent({
                 <nav className="flex space-x-1 h-full items-center">
                     <NavLink href="/dashboard" label={t('home')} />
                     <NavLink href="/sales-orders" label={t('sales')} />
-                    <NavLink href="/orders" label={t('orders_legacy_nav')} />
-                    <NavLink href="/products" label={t('products')} />
-                    <NavLink href="/incoming-invoices" label={t('invoices')} />
-                    <NavLink href="/tracking" label={t('tracking')} />
-                    <NavLink href="/inventory" label={t('inventory')} />
                     <NavLink href="/supply" label={t('supply')} />
                     <NavLink href="/inspection" label={t('inspection')} />
                     <NavLink href="/availability" label={t('availability')} />
+                    <NavLink href="/products" label={t('products')} />
                     <NavLink href="/reports" label={t('reports')} />
                     <NavLink href="/help" label={t('help')} />
                 </nav>
 
                 <div className="ml-auto flex items-center space-x-4 text-gray-500">
                     <div className="flex items-center space-x-1 border border-gray-200 rounded p-1">
-                        <button 
+                        <button
+                            type="button"
                             title="English"
-                            onClick={() => setLocale('en')} 
+                            aria-pressed={locale === 'en'}
+                            onClick={() => setLocale('en')}
                             className={`w-6 h-6 flex items-center justify-center rounded text-xs transition-colors ${locale === 'en' ? 'bg-blue-100' : 'hover:bg-gray-100 opacity-50 grayscale hover:grayscale-0'}`}
                         >
                             🇬🇧
                         </button>
-                        <button 
+                        <button
+                            type="button"
                             title="Nederlands"
-                            onClick={() => setLocale('nl')} 
+                            aria-pressed={locale === 'nl'}
+                            onClick={() => setLocale('nl')}
                             className={`w-6 h-6 flex items-center justify-center rounded text-xs transition-colors ${locale === 'nl' ? 'bg-blue-100' : 'hover:bg-gray-100 opacity-50 grayscale hover:grayscale-0'}`}
                         >
                             🇳🇱
@@ -63,77 +56,50 @@ function AdminLayoutContent({
             </header>
 
             <div className="flex flex-1 overflow-hidden">
-                {/* LEFT SIDEBAR */}
+                {/* LEFT SIDEBAR: snelkoppelingen naar de nieuwe werkplekken; geen oude modals meer. */}
                 <aside className="w-56 bg-gray-100 border-r border-gray-300 flex flex-col p-2 space-y-4">
-                    {/* Section 1: Quick Actions */}
                     <div>
-                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('quick_actions')}</h3>
-                        <div className="flex flex-col space-y-1">
-                            <SidebarButton label={t('new_sale_quick')} icon="⚡" onClick={() => setIsSellModalOpen(true)} />
-                            <SidebarButton label={t('new_order_std')} icon="📦" onClick={() => setIsOrderModalOpen(true)} />
-                            <SidebarButton label={t('add_invoice')} icon="📄" onClick={() => setIsInvoiceModalOpen(true)} />
-                            <SidebarButton label={t('track_container')} icon="🚢" />
-                        </div>
+                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('workspaces')}</h3>
+                        <nav className="flex flex-col space-y-1" aria-label={t('workspaces')}>
+                            <SidebarLink href="/sales-orders" label={t('sidebar_new_sales_order')} icon="🧾" />
+                            <SidebarLink href="/supply" label={t('sidebar_plan_supply')} icon="📅" />
+                            <SidebarLink href="/supply#receive" label={t('sidebar_receive_pallet')} icon="📦" />
+                            <SidebarLink href="/inspection" label={t('sidebar_inspection')} icon="🔍" />
+                            <SidebarLink href="/availability" label={t('sidebar_availability')} icon="📊" />
+                        </nav>
                     </div>
 
-                    {/* Section 2: Notifications */}
+                    {/* Oude flows: duidelijk apart gezet; niets wordt gesynchroniseerd. Tracking is een niet-actieve placeholder. */}
                     <div>
-                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('notifications')}</h3>
-                        <div className="bg-white border border-gray-300 p-2 rounded text-xs shadow-sm">
-                            <div className="font-bold text-blue-600 mb-1">{t('incoming_shipment')}</div>
-                            <p>{t('container_arriving')}</p>
-                        </div>
-                        <div className="bg-white border border-gray-300 p-2 rounded text-xs shadow-sm mt-2">
-                            <div className="font-bold text-red-600 mb-1">{t('stock_warning')}</div>
-                            <p>{t('avocados_expiring')}</p>
-                        </div>
+                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('legacy_flows')}</h3>
+                        <nav className="flex flex-col space-y-1 text-sm" aria-label={t('legacy_flows')}>
+                            <SidebarLink href="/orders" label={t('orders_legacy_nav')} icon="🗂️" />
+                            <SidebarLink href="/inventory" label={t('inventory_legacy_nav')} icon="🗂️" />
+                            <SidebarLink href="/incoming-invoices" label={t('invoices_legacy_nav')} icon="🗂️" />
+                            <SidebarLink href="/tracking" label={t('tracking_nav')} icon="⏸️" />
+                        </nav>
                     </div>
+
+                    {showLegacyDemoChrome && (
+                        <div>
+                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('notifications')}</h3>
+                            <div className="bg-white border border-gray-300 p-2 rounded text-xs shadow-sm">
+                                <div className="font-bold text-blue-600 mb-1">{t('incoming_shipment')}</div>
+                                <p>{t('container_arriving')}</p>
+                            </div>
+                            <div className="bg-white border border-gray-300 p-2 rounded text-xs shadow-sm mt-2">
+                                <div className="font-bold text-red-600 mb-1">{t('stock_warning')}</div>
+                                <p>{t('avocados_expiring')}</p>
+                            </div>
+                        </div>
+                    )}
                 </aside>
 
                 {/* MAIN CONTENT AREA */}
                 <main className="flex-1 overflow-auto bg-gray-50 p-4 relative">
                     {children}
-
-                    {/* AI BUBBLE */}
-                    <div className="absolute bottom-6 right-6 w-12 h-12 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white cursor-pointer hover:bg-blue-700 transition-transform hover:scale-105 z-50">
-                        <span className="text-xl">🤖</span>
-                    </div>
                 </main>
             </div>
-
-            {/* MODALS */}
-            {isInvoiceModalOpen && (
-                <ManualInvoiceModal
-                    isOpen={isInvoiceModalOpen}
-                    onClose={() => setIsInvoiceModalOpen(false)}
-                    onSuccess={() => {
-                        alert(t('invoice_created')); // Improve: Toast or global refresh
-                        setIsInvoiceModalOpen(false);
-                    }}
-                />
-            )}
-
-            {isSellModalOpen && (
-                <QuickSellModal
-                    isOpen={isSellModalOpen}
-                    onClose={() => setIsSellModalOpen(false)}
-                    onSuccess={() => {
-                        alert(t('sale_completed'));
-                        setIsSellModalOpen(false);
-                    }}
-                />
-            )}
-
-            {isOrderModalOpen && (
-                <AddOrderModal
-                    isOpen={isOrderModalOpen}
-                    onClose={() => setIsOrderModalOpen(false)}
-                    onSuccess={() => {
-                        alert(t('order_created_success'));
-                        setIsOrderModalOpen(false);
-                    }}
-                />
-            )}
         </div>
     );
 }
@@ -150,17 +116,17 @@ function NavLink({ href, label }: { href: string; label: string }) {
     const pathname = usePathname();
     const active = pathname === href || pathname.startsWith(href + '/');
     return (
-        <Link href={href} className={`px-4 h-8 flex items-center rounded-md text-sm font-medium transition-colors ${active ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
+        <Link href={href} aria-current={active ? 'page' : undefined} className={`px-3 h-8 flex items-center rounded-md text-sm font-medium transition-colors ${active ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
             {label}
         </Link>
     );
 }
 
-function SidebarButton({ label, icon, onClick }: { label: string, icon: string, onClick?: () => void }) {
+function SidebarLink({ href, label, icon }: { href: string; label: string; icon: string }) {
     return (
-        <button onClick={onClick} className="flex items-center w-full px-2 py-1.5 text-left text-gray-700 hover:bg-white hover:shadow-sm rounded transition-all">
-            <span className="mr-2">{icon}</span>
+        <Link href={href} className="flex items-center w-full px-2 py-1.5 text-left text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded transition-all">
+            <span className="mr-2" aria-hidden="true">{icon}</span>
             {label}
-        </button>
+        </Link>
     );
 }

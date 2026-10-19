@@ -23,21 +23,54 @@ const defaultContext: LanguageContextProps = {
 
 const LanguageContext = createContext<LanguageContextProps>(defaultContext);
 
+const STORAGE_KEY = 'agf_locale';
+
+function isLocale(value: unknown): value is Locale {
+    return value === 'en' || value === 'nl';
+}
+
+// Taalkeuze bij de eerste start: een eerder opgeslagen keuze wint altijd; anders de eerste browsertaal die Nederlands
+// of Engels is; anders Nederlands. Pure functie zodat de volgorde testbaar is.
+export function initialLocale(stored: string | null, browserLanguages: readonly string[]): Locale {
+    if (isLocale(stored)) return stored;
+    for (const language of browserLanguages) {
+        const base = language.toLowerCase().split(/[-_]/)[0];
+        if (base === 'nl') return 'nl';
+        if (base === 'en') return 'en';
+    }
+    return 'nl';
+}
+
+function browserLanguages(): readonly string[] {
+    if (typeof navigator === 'undefined') return [];
+    if (Array.isArray(navigator.languages) && navigator.languages.length > 0) return navigator.languages;
+    return navigator.language ? [navigator.language] : [];
+}
+
+function readStoredLocale(): string | null {
+    try {
+        return localStorage.getItem(STORAGE_KEY);
+    } catch {
+        return null;
+    }
+}
+
 export const LanguageProvider = ({ children }: { children: React.ReactNode }) => {
-    const [locale, setLocaleState] = useState<Locale>('en'); // Default to EN
+    const [locale, setLocaleState] = useState<Locale>('nl');
     const [isClient, setIsClient] = useState(false);
 
     useEffect(() => {
+        setLocaleState(initialLocale(readStoredLocale(), browserLanguages()));
         setIsClient(true);
-        const stored = localStorage.getItem('agf_locale') as Locale;
-        if (stored && (stored === 'en' || stored === 'nl')) {
-            setLocaleState(stored);
-        }
     }, []);
 
     const setLocale = (newLocale: Locale) => {
         setLocaleState(newLocale);
-        localStorage.setItem('agf_locale', newLocale);
+        try {
+            localStorage.setItem(STORAGE_KEY, newLocale);
+        } catch {
+            // Opslag niet beschikbaar: de keuze geldt dan alleen voor deze pagina.
+        }
     };
 
     const t = (key: string, variables?: Record<string, string>) => {

@@ -22,6 +22,13 @@ export default function SupplyPage() {
     const [actor, setActor] = useActorReference();
     const [destination, setDestination] = useState<SupplyRoute | null>(null);
     const [mode, setMode] = useState<Mode>('plan');
+    // Snelkoppeling uit de zijbalk (/supply#receive): meteen naar "Pallet ontvangen" voor het eigen magazijn.
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.location.hash === '#receive') {
+            setDestination('Warehouse');
+            setMode('receive');
+        }
+    }, []);
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
     const [referenceToken, setReferenceToken] = useState(0);
     const [preselected, setPreselected] = useState<SupplyCommitment | null>(null);

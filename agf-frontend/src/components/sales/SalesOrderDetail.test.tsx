@@ -60,6 +60,9 @@ let nextPost: () => Promise<Response>;
 let current: SalesOrder;
 let onOrderChanged: () => Promise<boolean>;
 
+// De knop Vernieuwen draagt een pictogram vóór de tekst.
+const refreshButton = (m: Mounted) => m.buttons().find((b) => (b.textContent ?? '').includes('sales_refresh')) ?? null;
+
 const element = (order: SalesOrder) => (
     <PendingCommandsProvider>
         <HydratedGate>
@@ -164,6 +167,53 @@ describe('SalesOrderDetail cancellation decisions', () => {
         await mounted.waitFor(() => mounted.button('sales_correct_dispatch') !== null, 'the uncorrected dispatch can still be corrected');
         await click(cancel);
         assert.equal(mounted.button('sales_cancel_confirm'), null, 'no cancellation panel');
+    });
+
+    test('refresh is read-only: it keeps an open form with its input, keeps the frozen command, sends no write and reports failure without replacing the order', async () => {
+        window.sessionStorage.setItem('agf_sales_pending_commands', JSON.stringify({ [frozenCancel.key]: frozenCancel }));
+        current = orderWith('Open', 2, [reservation(11, 'Active')]);
+        let refreshes = 0;
+        let refreshOk = true;
+        const onRefresh = async () => { refreshes += 1; return refreshOk; };
+        await mounted.render(
+            <PendingCommandsProvider>
+                <HydratedGate>
+                    <SalesOrderDetail order={current} actor="office-1" onOrderChanged={() => onOrderChanged()} onRefresh={onRefresh} />
+                </HydratedGate>
+            </PendingCommandsProvider>,
+        );
+        // Het bevroren annuleringscommando staat open met zijn herhaalknop.
+        const retry = await mounted.waitFor(() => mounted.button('supply_retry_same'), 'frozen cancel command');
+        const form = mounted.form()!;
+        await click(refreshButton(mounted)!);
+        await mounted.waitFor(() => refreshes === 1, 'refresh callback');
+        await mounted.waitFor(() => refreshButton(mounted)?.disabled === false, 'refresh finished');
+        assert.equal(posted.length, 0, 'refresh sends no write');
+        assert.deepEqual(storedCommands(), { [frozenCancel.key]: frozenCancel }, 'frozen command untouched');
+        assert.equal(mounted.form(), form, 'the pending panel stays mounted');
+        assert.equal(mounted.button('supply_retry_same'), retry, 'same retry button instance');
+        assert.equal(mounted.hasText('sales_refresh_failed'), false);
+        // Mislukt vernieuwen: melding, maar niets vervangen of gewist.
+        refreshOk = false;
+        await click(refreshButton(mounted)!);
+        await mounted.waitFor(() => mounted.hasText('sales_refresh_failed'), 'failure notice');
+        assert.equal(mounted.form(), form);
+        assert.deepEqual(storedCommands(), { [frozenCancel.key]: frozenCancel });
+        assert.equal(refreshes, 2);
+    });
+
+    test('refresh keeps typed input in an open cancellation form', async () => {
+        current = orderWith('Open', 2, [reservation(11, 'Active')]);
+        await mounted.render(element(current));
+        await click(await mounted.waitFor(() => mounted.button('sales_cancel_order'), 'cancel button'));
+        const form = await mounted.waitFor(() => mounted.form(), 'cancel form');
+        const reason = form.querySelector('textarea')!;
+        await act(async () => { setValue(reason, 'Klant belt nog terug'); });
+        await click(refreshButton(mounted)!);
+        await mounted.waitFor(() => refreshButton(mounted)?.disabled === false, 'refresh finished');
+        assert.equal(mounted.form(), form, 'same form instance');
+        assert.equal(form.querySelector('textarea')!.value, 'Klant belt nog terug');
+        assert.equal(posted.length, 0);
     });
 
     test('a reload that fails keeps the conflict state instead of pretending a fresh decision', async () => {

@@ -3,6 +3,7 @@
 import { useTranslation } from '../../i18n/LanguageContext';
 import { ApiError } from '../../services/apiClient';
 import { outcomeUnknown } from './messages';
+import TechnicalDetails from './TechnicalDetails';
 
 // Foutmelding bovenaan een formulier. Maakt expliciet of het verzoek mogelijk al is opgeslagen.
 export default function ErrorNotice({ error, actions }: { error: ApiError; actions?: React.ReactNode }) {
@@ -22,7 +23,7 @@ export default function ErrorNotice({ error, actions }: { error: ApiError; actio
     return (
         <div role="alert" className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
             <p className="font-medium">{title}</p>
-            {error.kind === 'http' && error.status !== 400 && error.message && <p className="mt-1">{error.message}</p>}
+            {error.status !== 400 && <TechnicalDetails error={error} />}
             {outcomeUnknown(error) && <p className="mt-1">{t('supply_error_outcome_unknown')}</p>}
             {actions && <div className="mt-3 flex flex-wrap gap-2">{actions}</div>}
         </div>

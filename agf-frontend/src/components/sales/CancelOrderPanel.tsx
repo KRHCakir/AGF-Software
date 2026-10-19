@@ -17,6 +17,7 @@ import { PendingNotice } from './PendingCommandsBanner';
 import { usePendingCommand, usePendingCommands } from './PendingCommandsContext';
 import { OnHoldBadge } from './ReservationBadges';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
+import TechnicalDetails from '../supply/TechnicalDetails';
 
 // Annuleren van een Open order met een verplichte reden en de orderversie waarop de beslissing is gebaseerd.
 // De bevestiging toont precies welke Active reserveringen (ook on hold) de server in dezelfde transactie vrijgeeft.
@@ -169,7 +170,7 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
             {error && pending === null && (
                 <div role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-900">
                     <p className="font-medium">{conflict ? t('sales_conflict') : t('supply_error_http_400')}</p>
-                    {error.kind === 'http' && error.status !== 400 && <p className="mt-1">{error.message}</p>}
+                    {error.status !== 400 && <TechnicalDetails error={error} />}
                     {conflict && (
                         <div className="mt-2 flex flex-wrap gap-2">
                             <button type="button" className={secondaryButtonClass} onClick={onReload}>{t('sales_reload_and_decide')}</button>

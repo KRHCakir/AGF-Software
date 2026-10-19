@@ -1,5 +1,7 @@
 'use client';
 
+import LegacyNotice from '../../../components/LegacyNotice';
+
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "../../../i18n/LanguageContext";
 
@@ -36,9 +38,9 @@ export default function InvoicesPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
+      <LegacyNotice noticeKey="invoices_legacy_notice" linkHref="/sales-orders" linkKey="orders_legacy_go_to_sales" />
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-black text-gray-900">{t('invoices')} (Sales)</h1>
-        <div className="text-xs text-gray-400 uppercase font-bold">Outgoing Documents</div>
+        <h1 className="text-3xl font-black text-gray-900">{t('invoices_legacy_title')}</h1>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
