@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
 {
-    // Alleen lezen. Bronnen: SupplyCommitmentLines en PalletContentLines. Bewust niet gelezen: legacy Inventory/Shipment,
-    // StockMovements/StockReceipts (geen writers) en StockReservations (levenscyclus nog niet gedefinieerd).
+    // Alleen lezen. Bronnen: SupplyCommitmentLines, PalletContentLines en Active Physical verkoopreserveringen (SalesOrderLineId).
+    // Bewust niet gelezen: legacy Inventory/Shipment, StockMovements/StockReceipts en legacy OrderLineId-reserveringen.
     // SQL laadt alleen gefilterde platte projecties; alle optellingen gebeuren exact in AvailabilityCalculator.
     public sealed class AvailabilityService : IAvailabilityService
     {
@@ -29,6 +29,7 @@ namespace AgfAdmin.Services
             return ServiceResult<AvailabilityOverviewDto>.Ok(new AvailabilityOverviewDto
             {
                 GeneratedAt = DateTime.UtcNow,
+                Basis = new AvailabilityBasisDto { ReservationsApplied = true },
                 Variants = AvailabilityCalculator.BuildOverview(sources, contents, query)
             });
         }
@@ -82,6 +83,7 @@ namespace AgfAdmin.Services
             return ServiceResult<AvailabilityDrillDownDto>.Ok(new AvailabilityDrillDownDto
             {
                 GeneratedAt = DateTime.UtcNow,
+                Basis = new AvailabilityBasisDto { ReservationsApplied = true },
                 ProductVariantId = variant.Id,
                 ProductName = variant.ProductName,
                 VariantName = variant.VariantName,
@@ -151,8 +153,24 @@ namespace AgfAdmin.Services
                     c.Unit,
                     c.Quantity,
                     c.NetWeightKg,
-                    c.QualityStatus))
+                    c.QualityStatus,
+                    0m,
+                    0m))
                 .ToListAsync(cancellationToken);
+
+            // Alleen Active Physical verkoopreserveringen (SalesOrderLineId); legacy OrderLineId-reserveringen nooit.
+            var reservations = await _db.StockReservations.AsNoTracking()
+                .Where(r => r.PalletContentLineId != null && r.SalesOrderLineId != null
+                    && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical
+                    && (productVariantId == null || r.PalletContentLine.SupplyCommitmentLine.ProductVariantId == productVariantId))
+                .Select(r => new { ContentId = r.PalletContentLineId!.Value, r.Quantity, r.NetWeightKg })
+                .ToListAsync(cancellationToken);
+            var reserved = reservations
+                .GroupBy(r => r.ContentId)
+                .ToDictionary(g => g.Key, g => (Quantity: g.Sum(r => r.Quantity), Kg: g.Sum(r => r.NetWeightKg ?? 0m)));
+            contents = contents
+                .Select(c => reserved.TryGetValue(c.PalletContentLineId, out var r) ? c with { ReservedQuantity = r.Quantity, ReservedNetWeightKg = r.Kg } : c)
+                .ToList();
 
             return (sources, contents);
         }

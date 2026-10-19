@@ -92,14 +92,14 @@ public class AvailabilityCalculatorTests
     }
 
     [Fact]
-    public void Reservations_Are_Not_Applied_And_Reserved_Quantity_Is_Unknown_Not_Zero()
+    public void Reservations_Are_Applied_And_Reserved_Is_Zero_Without_Sales_Reservations()
     {
         var source = Source(1, 100m);
 
         var entry = WarehouseEntry(Overview(new[] { source }, new[] { Content(source, 40m, 160m) }));
 
-        Assert.Null(entry.Reserved.Quantity);
-        Assert.False(entry.Reserved.Applied);
+        Assert.Equal((0m, 0m, true), (entry.Reserved.Quantity, entry.Reserved.NetWeightKg, entry.Reserved.Applied));
+        Assert.Equal((40m, 160m), (entry.AvailableAfterReservations.Quantity, entry.AvailableAfterReservations.NetWeightKg));
     }
 
     [Theory]
@@ -277,7 +277,9 @@ public class AvailabilityCalculatorTests
         var web = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
 
         var warehouseJson = System.Text.Json.JsonSerializer.Serialize(variant.WarehouseSupply.Single(), web);
-        Assert.Contains("\"reserved\":{\"quantity\":null,\"applied\":false}", warehouseJson);
+        Assert.Contains("\"reserved\":{\"quantity\":0,\"netWeightKg\":0,\"applied\":true}", warehouseJson);
+        Assert.Contains("\"reservedOnHold\":{\"quantity\":0,\"netWeightKg\":0}", warehouseJson);
+        Assert.Contains("\"availableAfterReservations\":{\"quantity\":0,\"netWeightKg\":0}", warehouseJson);
         Assert.Contains("\"availableBeforeReservations\":{\"quantity\":0,\"netWeightKg\":0}", warehouseJson);
         Assert.Contains("\"expectedUnregistered\":{\"quantity\":10,\"netWeightKg\":null}", warehouseJson);
 

@@ -61,11 +61,13 @@ namespace AgfAdmin.DTOs
         public decimal? NetWeightKg => null;
     }
 
-    // Reserveringen worden (nog) niet gelezen: de hoeveelheid is onbekend, niet 0.
+    // Active Physical verkoopreserveringen op inhoud die nu Approved is en Received + Warehouse.
+    // Legacy-reserveringen (OrderLineId) tellen nooit mee.
     public sealed class ReservedDto
     {
-        public decimal? Quantity => null;
-        public bool Applied => false;
+        public decimal Quantity { get; set; }
+        public decimal NetWeightKg { get; set; }
+        public bool Applied => true;
     }
 
     public sealed class AvailabilityWarningDto
@@ -81,7 +83,11 @@ namespace AgfAdmin.DTOs
         public string Unit { get; set; }
         // Received + Warehouse + Approved + route Warehouse; nog zonder aftrek van reserveringen.
         public AvailabilityQuantityDto AvailableBeforeReservations { get; set; } = new();
-        public ReservedDto Reserved { get; } = new();
+        public ReservedDto Reserved { get; set; } = new();
+        // Active Physical verkoopreserveringen op inhoud die niet meer Approved is (Blocked, Rejected): wordt nooit afgetrokken.
+        public AvailabilityQuantityDto ReservedOnHold { get; set; } = new();
+        // availableBeforeReservations - reserved, per eenheid; nooit negatief.
+        public AvailabilityQuantityDto AvailableAfterReservations { get; set; } = new();
         public QualityBreakdownDto Warehouse { get; set; } = new();
         public QualityBreakdownDto ReceivedOutsideWarehouse { get; set; } = new();
         public QualityBreakdownDto InTransit { get; set; } = new();
@@ -153,6 +159,13 @@ namespace AgfAdmin.DTOs
         public decimal Quantity { get; set; }
         public decimal NetWeightKg { get; set; }
         public string QualityStatus { get; set; }
+        public decimal ReservedQuantity { get; set; }
+        public decimal ReservedNetWeightKg { get; set; }
+        // Gereserveerd op inhoud die niet meer Approved is.
+        public bool OnHold { get; set; }
+        // Nog te reserveren: alleen bij Approved inhoud op Received + Warehouse; anders 0.
+        public decimal AvailableQuantity { get; set; }
+        public decimal AvailableNetWeightKg { get; set; }
         public bool SellableNow { get; set; }
         public bool Closed { get; set; }
     }

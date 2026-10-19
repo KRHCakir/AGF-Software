@@ -7,7 +7,13 @@ export type QualityStatus = 'Quarantine' | 'Approved' | 'Blocked' | 'Rejected';
 export type LogisticsStatus = 'Expected' | 'InTransit' | 'Received' | 'Dispatched' | 'Delivered' | 'Cancelled';
 export type LocationContext = 'Supplier' | 'Warehouse' | 'Crossdock' | 'InTransit' | 'Customer' | 'External';
 export type AvailabilityCategory = 'warehouse' | 'receivedOutsideWarehouse' | 'inTransit' | 'expectedOnPallets' | 'closed';
-export type AvailabilityWarningCode = 'OVER_REGISTERED' | 'SOURCE_UNIT_UNKNOWN' | 'DIRECT_TRADE_IN_WAREHOUSE';
+export type AvailabilityWarningCode =
+    | 'OVER_REGISTERED'
+    | 'SOURCE_UNIT_UNKNOWN'
+    | 'DIRECT_TRADE_IN_WAREHOUSE'
+    | 'RESERVATION_ON_NON_APPROVED_CONTENT'
+    | 'RESERVATION_EXCEEDS_CONTENT'
+    | 'RESERVATION_OUTSIDE_WAREHOUSE';
 
 export const PACKAGE_UNITS: readonly PackageUnit[] = ['box', 'colli', 'tray', 'piece', 'dozen'];
 
@@ -29,10 +35,11 @@ export interface ExpectedUnregistered {
     netWeightKg: null;
 }
 
-// Reserveringen worden nog niet gelezen: de hoeveelheid is onbekend, niet 0.
+// Active Physical verkoopreserveringen op inhoud die nu Approved is en Received + Warehouse.
 export interface Reserved {
-    quantity: null;
-    applied: false;
+    quantity: number;
+    netWeightKg: number;
+    applied: true;
 }
 
 export interface AvailabilityWarning {
@@ -53,6 +60,10 @@ export interface WarehouseSupply {
     unit: PackageUnit | null;
     availableBeforeReservations: AvailabilityQuantity;
     reserved: Reserved;
+    // Gereserveerd op inhoud die niet meer Approved is; wordt nooit nogmaals afgetrokken.
+    reservedOnHold: AvailabilityQuantity;
+    // availableBeforeReservations - reserved, per eenheid; nooit negatief.
+    availableAfterReservations: AvailabilityQuantity;
     warehouse: QualityBreakdown;
     receivedOutsideWarehouse: QualityBreakdown;
     inTransit: QualityBreakdown;
@@ -122,6 +133,11 @@ export interface ContentLineAvailability {
     quantity: number;
     netWeightKg: number;
     qualityStatus: QualityStatus;
+    reservedQuantity: number;
+    reservedNetWeightKg: number;
+    onHold: boolean;
+    availableQuantity: number;
+    availableNetWeightKg: number;
     sellableNow: boolean;
     closed: boolean;
 }
@@ -205,8 +221,11 @@ function isWarehouseSupply(value: unknown): value is WarehouseSupply {
         && isNullableUnit(value.unit)
         && isQuantity(value.availableBeforeReservations)
         && isObject(value.reserved)
-        && value.reserved.quantity === null
-        && value.reserved.applied === false
+        && isNumber(value.reserved.quantity)
+        && isNumber(value.reserved.netWeightKg)
+        && value.reserved.applied === true
+        && isQuantity(value.reservedOnHold)
+        && isQuantity(value.availableAfterReservations)
         && isBreakdown(value.warehouse)
         && isBreakdown(value.receivedOutsideWarehouse)
         && isBreakdown(value.inTransit)
@@ -281,6 +300,11 @@ function isContentLine(value: unknown): value is ContentLineAvailability {
         && isNumber(value.quantity)
         && isNumber(value.netWeightKg)
         && typeof value.qualityStatus === 'string'
+        && isNumber(value.reservedQuantity)
+        && isNumber(value.reservedNetWeightKg)
+        && typeof value.onHold === 'boolean'
+        && isNumber(value.availableQuantity)
+        && isNumber(value.availableNetWeightKg)
         && typeof value.sellableNow === 'boolean'
         && typeof value.closed === 'boolean';
 }

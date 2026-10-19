@@ -487,7 +487,8 @@ namespace AgfAdmin.Services
             var to = request.ToStatus;
             var newLocation = locationRequested ? request.LocationContext : pallet.LocationContext;
             var newBin = locationRequested ? bin : pallet.WarehouseLocation;
-            var conflict = FindLogisticsConflict(pallet, from, to, newLocation, newBin, locationRequested);
+            var conflict = FindLogisticsConflict(pallet, from, to, newLocation, newBin, locationRequested)
+                ?? await FindReservationBlockAsync(pallet, to, newLocation, cancellationToken);
             if (conflict != null)
             {
                 return ServiceResult<PalletDto>.Conflict(conflict);
@@ -506,6 +507,27 @@ namespace AgfAdmin.Services
             AddCommandEvent(command, oldValue);
 
             return await SaveCommandAsync(command, () => GetAsync(palletId, cancellationToken), $"Pallet {palletId}", cancellationToken);
+        }
+
+        // B6: zolang dispatch reserveringen nog niet afboekt (PR #26), mag een pallet met Active Physical verkoopreserveringen
+        // (SalesOrderLineId) niet verzonden/afgeleverd worden of het magazijn verlaten. Legacy OrderLineId-reserveringen tellen niet.
+        private async Task<string> FindReservationBlockAsync(Pallet pallet, string toStatus, string newLocation, CancellationToken cancellationToken)
+        {
+            var leavesWarehouse = toStatus == PalletRules.StatusDispatched
+                || toStatus == PalletRules.StatusDelivered
+                || (pallet.LocationContext == PalletRules.LocationWarehouse && newLocation != PalletRules.LocationWarehouse);
+            if (!leavesWarehouse)
+            {
+                return null;
+            }
+            var reserved = await _db.StockReservations.AsNoTracking().AnyAsync(r =>
+                r.SalesOrderLineId != null
+                && r.Status == ReservationRules.StatusActive
+                && r.Source == ReservationRules.SourcePhysical
+                && r.PalletContentLine.PalletId == pallet.Id, cancellationToken);
+            return reserved
+                ? "Release the active reservations on this pallet first; consuming them through dispatch follows later."
+                : null;
         }
 
         private static string FindLogisticsConflict(Pallet pallet, string from, string to, string newLocation, string newBin, bool locationRequested)
@@ -598,7 +620,8 @@ namespace AgfAdmin.Services
                 return ServiceResult<PalletDto>.Conflict(StaleVersionMessage($"Pallet {palletId}", pallet.Version, command.ExpectedVersion));
             }
 
-            var conflict = FindLocationConflict(pallet, request.LocationContext, bin);
+            var conflict = FindLocationConflict(pallet, request.LocationContext, bin)
+                ?? await FindReservationBlockAsync(pallet, pallet.LogisticsStatus, request.LocationContext, cancellationToken);
             if (conflict != null)
             {
                 return ServiceResult<PalletDto>.Conflict(conflict);

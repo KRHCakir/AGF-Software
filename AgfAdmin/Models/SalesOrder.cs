@@ -1,0 +1,28 @@
+namespace AgfAdmin.Models
+{
+    // Schone verkooporder voor het nieuwe beschikbaarheidsdomein. Bewust los van de legacy Order/OrderLine
+    // (int zonder eenheid, harde delete, legacy Inventory). Geen prijzen, btw of facturen in deze fase.
+    public sealed class SalesOrder
+    {
+        public int Id { get; set; }
+
+        // Door de client meegegeven idempotentiesleutel.
+        public Guid RequestId { get; set; }
+
+        public int CustomerId { get; set; }
+        public Customer Customer { get; set; }
+
+        public string Status { get; set; }               // Open, Cancelled
+        public string CustomerReference { get; set; }    // optioneel; getrimd, leeg = null
+        public DateTime RequestedDeliveryDate { get; set; } // UTC, afgekapt op microseconden
+        public string ActorReference { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // Optimistisch concurrency-token; centraal verhoogd in AppDbContext.
+        public int Version { get; set; }
+
+        public ICollection<SalesOrderLine> Lines { get; set; } = new List<SalesOrderLine>();
+    }
+}

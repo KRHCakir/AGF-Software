@@ -38,6 +38,10 @@ namespace AgfAdmin.Data
         public DbSet<PalletContentLine> PalletContentLines { get; set; }
         public DbSet<PalletAuditEvent> PalletAuditEvents { get; set; }
 
+        // Schone verkoopflow (los van legacy Order/OrderLine/OrderLineAllocation/Inventory).
+        public DbSet<SalesOrder> SalesOrders { get; set; }
+        public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
+
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
@@ -66,6 +70,21 @@ namespace AgfAdmin.Data
             foreach (var entry in ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(c => c.Version).CurrentValue = entry.Property(c => c.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<StockReservation>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(r => r.Version).CurrentValue = entry.Property(r => r.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<SalesOrder>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(o => o.Version).CurrentValue = entry.Property(o => o.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<SalesOrderLine>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
             }
         }
 
@@ -174,10 +193,37 @@ namespace AgfAdmin.Data
                 b.Property(r => r.Quantity).HasPrecision(18, 3);
                 b.Property(r => r.Unit).HasMaxLength(32);
                 b.Property(r => r.NetWeightKg).HasPrecision(18, 3);
+                b.Property(r => r.ReleaseReason).HasMaxLength(500);
+                b.Property(r => r.Version).IsConcurrencyToken();
+
+                b.HasIndex(r => r.RequestId).IsUnique();
+                b.HasIndex(r => r.ReleaseRequestId).IsUnique();
+
+                // Precies één eigenaar; de nieuwe verkoopflow is altijd volledig en fysiek; Released heeft tijd en reden.
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_StockReservations_SingleOwner",
+                        "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL)");
+                    t.HasCheckConstraint("CK_StockReservations_Status_Allowed",
+                        "\"Status\" IN ('Active', 'Released', 'Consumed')");
+                    t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_StockReservations_SalesFlowComplete",
+                        "\"SalesOrderLineId\" IS NULL OR (\"PalletContentLineId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL " +
+                        "AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"Source\" = 'Physical')");
+                    t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent",
+                        "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
+                });
 
                 b.HasOne(r => r.OrderLine)
                     .WithMany()
                     .HasForeignKey(r => r.OrderLineId)
+                    .IsRequired(false)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(r => r.SalesOrderLine)
+                    .WithMany(l => l.Reservations)
+                    .HasForeignKey(r => r.SalesOrderLineId)
+                    .IsRequired(false)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 b.HasOne(r => r.SupplyCommitmentLine)
@@ -188,6 +234,48 @@ namespace AgfAdmin.Data
                 b.HasOne(r => r.PalletContentLine)
                     .WithMany()
                     .HasForeignKey(r => r.PalletContentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<SalesOrder>(b =>
+            {
+                b.Property(o => o.Status).IsRequired().HasMaxLength(32);
+                b.Property(o => o.CustomerReference).HasMaxLength(100);
+                b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
+                b.Property(o => o.Version).IsConcurrencyToken();
+                b.HasIndex(o => o.RequestId).IsUnique();
+
+                b.ToTable(t => t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')"));
+
+                b.HasOne(o => o.Customer)
+                    .WithMany()
+                    .HasForeignKey(o => o.CustomerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<SalesOrderLine>(b =>
+            {
+                b.Property(l => l.Quantity).HasPrecision(18, 3);
+                b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
+                b.Property(l => l.Version).IsConcurrencyToken();
+
+                // Eén regel per variant + eenheid per order: anders worden reserveringen dubbelzinnig.
+                b.HasIndex(l => new { l.SalesOrderId, l.ProductVariantId, l.Unit }).IsUnique();
+
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
+                });
+
+                b.HasOne(l => l.SalesOrder)
+                    .WithMany(o => o.Lines)
+                    .HasForeignKey(l => l.SalesOrderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasOne(l => l.ProductVariant)
+                    .WithMany()
+                    .HasForeignKey(l => l.ProductVariantId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

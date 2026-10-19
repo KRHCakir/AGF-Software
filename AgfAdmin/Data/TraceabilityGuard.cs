@@ -13,7 +13,11 @@ namespace AgfAdmin.Data
     // 1. een StockMovement/StockReservation met PalletContentLineId heeft dezelfde SupplyCommitmentLineId als die regel;
     // 2. de bronregel van een bestaande PalletContentLine ligt vast;
     // 3. PalletAuditEvents zijn append-only;
-    // 4. inhoud met een DirectTrade-bron staat nooit op een pallet met LocationContext Warehouse.
+    // 4. inhoud met een DirectTrade-bron staat nooit op een pallet met LocationContext Warehouse;
+    // 5. een nieuwe Active verkoopreservering (SalesOrderLineId) staat op Approved inhoud van een Received + Warehouse-pallet,
+    //    met route Warehouse en exact dezelfde eenheid;
+    // 6. de som van Active verkoopreserveringen per inhoudsregel overschrijdt nooit de hoeveelheid of het netto-kg.
+    // Regels 5 en 6 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven of afboeken wordt nooit geblokkeerd.
     // Er wordt nooit automatisch omgekoppeld. Een niet-bestaande inhoudsregel laten we over aan de FK in de database.
     // Let op: ExecuteUpdate/ExecuteDelete en ruwe SQL gaan buiten de change tracker om en dus ook buiten deze guard.
     internal static class TraceabilityGuard
@@ -42,6 +46,112 @@ namespace AgfAdmin.Data
 
             await CheckSourceLinksAsync(db, async, cancellationToken);
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
+            await CheckSalesReservationsAsync(db, async, cancellationToken);
+        }
+
+        // ---- Regels 5 en 6 ----
+
+        private sealed record ContentState(string QualityStatus, string Unit, decimal Quantity, decimal NetWeightKg, int PalletId, string Route);
+
+        private static bool IsActiveSalesReservation(StockReservation reservation) =>
+            reservation.SalesOrderLineId != null && reservation.Status == ReservationRules.StatusActive;
+
+        private static async Task CheckSalesReservationsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var added = db.ChangeTracker.Entries<StockReservation>()
+                // Onvolledige rijen (zonder inhoudsregel of eenheid) laten we over aan de database-checks/FK's.
+                .Where(e => e.State == EntityState.Added && IsActiveSalesReservation(e.Entity) && e.Entity.PalletContentLineId != null && e.Entity.Unit != null)
+                .Select(e => e.Entity)
+                .ToList();
+            if (added.Count == 0)
+            {
+                return;
+            }
+
+            var contentIds = added.Select(r => r.PalletContentLineId!.Value).Distinct().ToList();
+            var contents = (await ToListAsync(
+                    db.PalletContentLines.AsNoTracking()
+                        .Where(c => contentIds.Contains(c.Id))
+                        .Select(c => new { c.Id, c.QualityStatus, c.Unit, c.Quantity, c.NetWeightKg, c.PalletId, c.SupplyCommitmentLine.SupplyCommitment.Route }),
+                    async, cancellationToken))
+                .ToDictionary(c => c.Id, c => new ContentState(c.QualityStatus, c.Unit, c.Quantity, c.NetWeightKg, c.PalletId, c.Route));
+
+            // Een in dezelfde save gewijzigde inhoudsregel telt met zijn actuele waarden.
+            foreach (var entry in db.ChangeTracker.Entries<PalletContentLine>().Where(e => contentIds.Contains(e.Entity.Id)))
+            {
+                if (contents.TryGetValue(entry.Entity.Id, out var state))
+                {
+                    contents[entry.Entity.Id] = state with
+                    {
+                        QualityStatus = entry.Entity.QualityStatus,
+                        Unit = entry.Entity.Unit,
+                        Quantity = entry.Entity.Quantity,
+                        NetWeightKg = entry.Entity.NetWeightKg,
+                    };
+                }
+            }
+
+            var palletIds = contents.Values.Select(c => c.PalletId).Distinct().ToList();
+            var pallets = (await ToListAsync(
+                    db.Pallets.AsNoTracking().Where(p => palletIds.Contains(p.Id)).Select(p => new { p.Id, p.LogisticsStatus, p.LocationContext }),
+                    async, cancellationToken))
+                .ToDictionary(p => p.Id, p => (p.LogisticsStatus, p.LocationContext));
+            foreach (var entry in db.ChangeTracker.Entries<Pallet>().Where(e => palletIds.Contains(e.Entity.Id)))
+            {
+                pallets[entry.Entity.Id] = (entry.Entity.LogisticsStatus, entry.Entity.LocationContext);
+            }
+
+            // Regel 5.
+            foreach (var reservation in added)
+            {
+                if (!contents.TryGetValue(reservation.PalletContentLineId!.Value, out var content))
+                {
+                    continue; // bestaat niet: de FK-constraint weigert dit bij het opslaan
+                }
+                var (status, location) = pallets.TryGetValue(content.PalletId, out var pallet) ? pallet : (null, null);
+                if (content.QualityStatus != PalletRules.QualityApproved
+                    || status != PalletRules.StatusReceived
+                    || location != PalletRules.LocationWarehouse
+                    || content.Route != SupplyRules.RouteWarehouse
+                    || !string.Equals(content.Unit, reservation.Unit, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException(
+                        $"Pallet content line {reservation.PalletContentLineId} is not reservable: it must be Approved Warehouse-route content on a Received pallet in the Warehouse, in the same unit.");
+                }
+            }
+
+            // Regel 6: opgeslagen Active verkoopreserveringen (minus de gevolgde) plus alle gevolgde Active verkoopreserveringen.
+            var tracked = db.ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State is not (EntityState.Detached) && e.Entity.PalletContentLineId != null && contentIds.Contains(e.Entity.PalletContentLineId.Value))
+                .ToList();
+            var trackedIds = tracked.Where(e => e.State != EntityState.Added).Select(e => e.Entity.Id).ToHashSet();
+            var stored = await ToListAsync(
+                db.StockReservations.AsNoTracking()
+                    .Where(r => r.PalletContentLineId != null && contentIds.Contains(r.PalletContentLineId.Value)
+                        && r.SalesOrderLineId != null && r.Status == ReservationRules.StatusActive)
+                    .Select(r => new { r.Id, ContentId = r.PalletContentLineId!.Value, r.Quantity, r.NetWeightKg }),
+                async, cancellationToken);
+
+            var totals = stored
+                .Where(r => !trackedIds.Contains(r.Id))
+                .Select(r => (r.ContentId, r.Quantity, Kg: r.NetWeightKg ?? 0m))
+                .Concat(tracked
+                    .Where(e => e.State != EntityState.Deleted && IsActiveSalesReservation(e.Entity))
+                    .Select(e => (ContentId: e.Entity.PalletContentLineId!.Value, e.Entity.Quantity, Kg: e.Entity.NetWeightKg ?? 0m)))
+                .GroupBy(r => r.ContentId);
+
+            foreach (var group in totals)
+            {
+                if (!contents.TryGetValue(group.Key, out var content))
+                {
+                    continue;
+                }
+                if (group.Sum(r => r.Quantity) > content.Quantity || group.Sum(r => r.Kg) > content.NetWeightKg)
+                {
+                    throw new TraceabilityViolationException(
+                        $"Active reservations on pallet content line {group.Key} would exceed its quantity or net weight.");
+                }
+            }
         }
 
         // ---- Regels 1 en 2 ----

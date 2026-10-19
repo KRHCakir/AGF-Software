@@ -745,6 +745,105 @@ namespace AgfAdmin.Migrations
                     b.ToTable("ProductVariants");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CustomerReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("RequestedDeliveryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.ToTable("SalesOrders", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("SalesOrderId", "ProductVariantId", "Unit")
+                        .IsUnique();
+
+                    b.ToTable("SalesOrderLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Shipment", b =>
                 {
                     b.Property<int>("Id")
@@ -872,7 +971,7 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
-                    b.Property<int>("OrderLineId")
+                    b.Property<int?>("OrderLineId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("PalletContentLineId")
@@ -881,6 +980,22 @@ namespace AgfAdmin.Migrations
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("ReleaseRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("SalesOrderLineId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -902,15 +1017,38 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OrderLineId");
 
                     b.HasIndex("PalletContentLineId");
 
+                    b.HasIndex("ReleaseRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderLineId");
+
                     b.HasIndex("SupplyCommitmentLineId");
 
-                    b.ToTable("StockReservations");
+                    b.ToTable("StockReservations", t =>
+                        {
+                            t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent", "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
+
+                            t.HasCheckConstraint("CK_StockReservations_SalesFlowComplete", "\"SalesOrderLineId\" IS NULL OR (\"PalletContentLineId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"Source\" = 'Physical')");
+
+                            t.HasCheckConstraint("CK_StockReservations_SingleOwner", "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_StockReservations_Status_Allowed", "\"Status\" IN ('Active', 'Released', 'Consumed')");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>
@@ -1275,6 +1413,36 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany("Lines")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProductVariant");
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.StockMovement", b =>
                 {
                     b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
@@ -1323,12 +1491,16 @@ namespace AgfAdmin.Migrations
                     b.HasOne("AgfAdmin.Models.OrderLine", "OrderLine")
                         .WithMany()
                         .HasForeignKey("OrderLineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
                         .WithMany()
                         .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesOrderLine", "SalesOrderLine")
+                        .WithMany("Reservations")
+                        .HasForeignKey("SalesOrderLineId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
@@ -1340,6 +1512,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("OrderLine");
 
                     b.Navigation("PalletContentLine");
+
+                    b.Navigation("SalesOrderLine");
 
                     b.Navigation("SupplyCommitmentLine");
                 });
@@ -1442,6 +1616,16 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Inventories");
 
                     b.Navigation("OrderLines");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
+                {
+                    b.Navigation("Reservations");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>

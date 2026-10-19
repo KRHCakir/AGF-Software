@@ -30,6 +30,11 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null }: { r
                             <span className="block font-normal normal-case text-green-800">{t('availability_before_reservations')}</span>
                             {markLabel('available')}
                         </th>
+                        <th scope="col" rowSpan={2} className={th}>{t('availability_col_reserved')}</th>
+                        <th scope="col" rowSpan={2} className={`${th} bg-emerald-50 text-emerald-900`}>
+                            {t('availability_col_available_after')}
+                        </th>
+                        <th scope="col" rowSpan={2} className={th}>{t('availability_col_reserved_on_hold')}</th>
                         <th scope="colgroup" colSpan={4} className={`${th} border-l border-gray-200 text-center`}>{t('availability_group_in_warehouse')}</th>
                         <th scope="col" rowSpan={2} className={`${th} border-l border-gray-200`}>{t('availability_col_outside_warehouse')}</th>
                         <th scope="colgroup" colSpan={3} className={`${th} border-l border-gray-200 text-center`}>{t('availability_group_incoming')}</th>
@@ -58,6 +63,9 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null }: { r
                             </th>
                             <td className={td}><UnitBadge unit={row.supply.unit} /></td>
                             <td className={`${td} bg-green-50/60 ${marked('available')}`}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>
+                            <td className={td}><QuantityCell value={row.supply.reserved} /></td>
+                            <td className={`${td} bg-emerald-50/60`}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
+                            <td className={td}><QuantityCell value={row.supply.reservedOnHold} /></td>
                             <td className={`${td} border-l border-gray-100`}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
                             <td className={`${td} ${marked('quarantine')}`}><QuantityCell value={row.supply.warehouse.quarantine} /></td>
                             <td className={td}><QuantityCell value={row.supply.warehouse.blocked} /></td>

@@ -134,8 +134,8 @@ public class AvailabilityServiceTests : IDisposable
         Assert.Equal(80m, box.InTransit.Quarantine.NetWeightKg);
         Assert.Equal(32m, box.ExpectedUnregistered.Quantity); // 100 - (40 + 3 + 20 + 5 verzonden)
         Assert.Null(box.ExpectedUnregistered.NetWeightKg);
-        Assert.Null(box.Reserved.Quantity);
-        Assert.False(box.Reserved.Applied);
+        Assert.Equal((0m, 0m, true), (box.Reserved.Quantity, box.Reserved.NetWeightKg, box.Reserved.Applied));
+        Assert.Equal((40m, 160.125m), (box.AvailableAfterReservations.Quantity, box.AvailableAfterReservations.NetWeightKg));
 
         var colli = Assert.Single(variant.WarehouseSupply, e => e.Unit == "colli");
         Assert.Equal(50m, colli.ExpectedUnregistered.Quantity); // geannuleerde pallet trekt niets af
@@ -151,13 +151,13 @@ public class AvailabilityServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Basis_States_That_Reservations_Legacy_Inventory_And_Ledger_Are_Not_Included()
+    public async Task Basis_States_That_Reservations_Are_Applied_But_Legacy_Inventory_And_Ledger_Are_Not()
     {
         await SeedAsync();
 
         var basis = (await OverviewAsync()).Value.Basis;
 
-        Assert.False(basis.ReservationsApplied);
+        Assert.True(basis.ReservationsApplied);
         Assert.False(basis.LegacyInventoryIncluded);
         Assert.False(basis.StockLedgerIncluded);
         Assert.Equal("SupplyCommitmentLines + PalletContentLines", basis.Source);
@@ -186,7 +186,7 @@ public class AvailabilityServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Stock_Movements_And_Reservations_Are_Not_Read()
+    public async Task Stock_Movements_And_Legacy_OrderLine_Reservations_Are_Not_Read()
     {
         var seed = await SeedAsync();
         var before = Json((await OverviewAsync()).Value.Variants);
@@ -214,7 +214,7 @@ public class AvailabilityServiceTests : IDisposable
         Assert.Equal(before, Json(after.Variants));
         var box = Assert.Single(after.Variants.Single().WarehouseSupply, e => e.Unit == "box");
         Assert.Equal(40m, box.AvailableBeforeReservations.Quantity);
-        Assert.Null(box.Reserved.Quantity);
+        Assert.Equal(0m, box.Reserved.Quantity);
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public class AvailabilityServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Ok, result.Status);
         var drillDown = result.Value;
         Assert.Equal("Hass 6", drillDown.VariantName);
-        Assert.False(drillDown.Basis.ReservationsApplied);
+        Assert.True(drillDown.Basis.ReservationsApplied);
 
         var box = Assert.Single(drillDown.SourceLines, s => s.SupplyCommitmentLineId == seed.SourceBox);
         Assert.Equal(100m, box.ExpectedQuantity);

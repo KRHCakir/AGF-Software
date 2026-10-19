@@ -6,8 +6,17 @@ namespace AgfAdmin.Models
     {
         public int Id { get; set; }
 
-        public int OrderLineId { get; set; }
+        // Legacy-eigenaar (nooit gebruikt door de nieuwe verkoopflow). Precies één eigenaar is verplicht (database-check).
+        public int? OrderLineId { get; set; }
         public OrderLine OrderLine { get; set; }
+
+        // Eigenaar in de nieuwe verkoopflow.
+        public int? SalesOrderLineId { get; set; }
+        public SalesOrderLine SalesOrderLine { get; set; }
+
+        // Idempotentiesleutels van het aanmaak- en vrijgavecommando (uniek).
+        public Guid? RequestId { get; set; }
+        public Guid? ReleaseRequestId { get; set; }
 
         public int SupplyCommitmentLineId { get; set; }
         public SupplyCommitmentLine SupplyCommitmentLine { get; set; }
@@ -20,9 +29,15 @@ namespace AgfAdmin.Models
         public string Unit { get; set; }            // expliciete eenheid; optioneel tijdens de overgang
         public decimal? NetWeightKg { get; set; }   // werkelijk netto kg; nooit afgeleid
         public string Source { get; set; } // "Physical", "Expected" of "DirectTrade"
-        public string Status { get; set; } // bijv. "Active", "Released", "Dispatched"
+        public string Status { get; set; } // "Active", "Released" of "Consumed" (database-check)
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime? ReleasedAt { get; set; }
+        public string ReleaseReason { get; set; }
+
+        // Optimistisch concurrency-token; centraal verhoogd in AppDbContext bij elke wijziging (vrijgeven, afboeken).
+        public int Version { get; set; }
     }
 }
