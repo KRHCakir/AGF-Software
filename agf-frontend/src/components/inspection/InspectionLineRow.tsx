@@ -124,9 +124,16 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
                 <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                 <span className="block text-xs text-gray-600">{t('supply_lot')} {line.lotNumber}</span>
             </td>
-            <td className="px-3 py-2 text-right">{formatQuantity(line.quantity, locale)}</td>
+            <td className="px-3 py-2 text-right">
+                {formatQuantity(line.onHandQuantity, locale)}
+                {line.dispatchedQuantity > 0 && <span className="block text-xs text-gray-500">{t('inspection_received', { quantity: formatQuantity(line.quantity, locale) })}</span>}
+                {line.depleted && <span className="mt-1 inline-flex rounded border border-gray-400 bg-gray-200 px-1.5 text-xs font-medium text-gray-800">{t('sales_depleted')}</span>}
+            </td>
             <td className="px-3 py-2"><UnitBadge unit={line.unit} /></td>
-            <td className="px-3 py-2 text-right">{formatKg(line.netWeightKg, locale)}</td>
+            <td className="px-3 py-2 text-right">
+                {formatKg(line.onHandNetWeightKg, locale)}
+                {line.dispatchedNetWeightKg > 0 && <span className="block text-xs text-gray-500">{t('inspection_received', { quantity: formatKg(line.netWeightKg, locale) })}</span>}
+            </td>
             <td className="px-3 py-2 text-sm text-gray-800">
                 {commitment?.vendorName ?? t('availability_unknown')}
                 <span className="block text-xs text-gray-600">{commitment?.origin ?? t('availability_unknown')} · #{line.supplyCommitmentId}</span>

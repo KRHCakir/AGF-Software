@@ -54,15 +54,19 @@ export default function SalesOrderList({ orders, selectedId, onSelect }: {
                                 <td className="whitespace-nowrap px-2 py-1.5 align-top">{formatCalendarDate(order.requestedDeliveryDate, locale)}</td>
                                 <td className="px-2 py-1.5 align-top">
                                     {/* Groen alleen als alles gereserveerd is én niets on hold staat; volledig gereserveerd met on hold is een waarschuwing. */}
-                                    <span className={`block text-xs font-medium ${progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-800'}`}>
-                                        {t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
-                                        {progress.complete && !progress.ready && <> · {t('sales_on_hold')}</>}
+                                    <span className={`block text-xs font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-800'}`}>
+                                        {progress.fulfilled
+                                            ? t('sales_order_fulfilled')
+                                            : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
+                                                {progress.partiallyDispatched && <> · {t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</>}
+                                                {progress.complete && !progress.ready && <> · {t('sales_on_hold')}</>}</>}
                                     </span>
                                     <ul className="mt-0.5 space-y-0.5 text-xs text-gray-700">
                                         {order.lines.map((line) => (
                                             <li key={line.id} className="flex flex-wrap items-center gap-1">
                                                 <span className="truncate">{line.productName} · {line.productVariantName}</span>
-                                                <span className="font-mono">{formatQuantity(line.reservedQuantity, locale)}/{formatQuantity(line.quantity, locale)}</span>
+                                                <span className="font-mono">{formatQuantity(line.reservedQuantity + line.dispatchedQuantity, locale)}/{formatQuantity(line.quantity, locale)}</span>
+                                                {line.dispatchedQuantity > 0 && <span className="text-emerald-900">({t('sales_list_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale) })})</span>}
                                                 <UnitBadge unit={line.unit} />
                                             </li>
                                         ))}

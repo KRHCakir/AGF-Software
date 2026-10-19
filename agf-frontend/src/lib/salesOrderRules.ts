@@ -166,20 +166,27 @@ export function remainingAfter(openQuantity: number, quantity: number): number {
 
 export interface LineProgress {
     reserved: number;
+    dispatched: number;
     total: number;
     open: number;
-    // Volledig gereserveerd volgens de servertotalen (open = 0), ongeacht de kwaliteit van de inhoud.
+    // Volledig vastgelegd volgens de servertotalen (open = 0): gereserveerd + verzonden = gevraagd.
     complete: boolean;
     onHold: boolean;
-    // Groen betekent: volledig gereserveerd én geen enkele reservering on hold.
+    // Groen zonder verzending betekent: volledig gereserveerd én geen enkele reservering on hold.
     ready: boolean;
+    // Volledig verzonden (serverflag); toont als geleverd, nooit als "volledig gereserveerd" met 0 gereserveerd.
+    fulfilled: boolean;
+    // Deels verzonden, rest nog open of gereserveerd.
+    partiallyDispatched: boolean;
 }
 
-// Structurele types: de helpers lezen alleen de servertotalen en de serverflag onHold; er wordt niets afgeleid.
+// Structurele types: de helpers lezen alleen de servertotalen en de serverflags; er wordt niets afgeleid.
 export interface LineTotals {
     quantity: number;
     reservedQuantity: number;
+    dispatchedQuantity: number;
     openQuantity: number;
+    fulfilled: boolean;
     reservations: { onHold: boolean }[];
 }
 
@@ -188,30 +195,83 @@ export function lineProgress(line: LineTotals): LineProgress {
     const onHold = line.reservations.some((reservation) => reservation.onHold);
     return {
         reserved: line.reservedQuantity,
+        dispatched: line.dispatchedQuantity,
         total: line.quantity,
         open: line.openQuantity,
         complete,
         onHold,
         ready: complete && !onHold,
+        fulfilled: line.fulfilled,
+        partiallyDispatched: line.dispatchedQuantity > 0 && !line.fulfilled,
     };
 }
 
 export interface OrderProgress {
     linesComplete: number;
+    linesFulfilled: number;
     linesTotal: number;
     onHoldCount: number;
-    // Alle regels volledig gereserveerd volgens de totalen.
+    // Alle regels volledig vastgelegd volgens de totalen.
     complete: boolean;
-    // Alle regels volledig gereserveerd en nergens een reservering on hold.
+    // Alle regels volledig vastgelegd en nergens een reservering on hold.
     ready: boolean;
+    // Alle regels volledig verzonden (serverflag).
+    fulfilled: boolean;
+    // Minstens één regel (deels) verzonden, maar niet alles.
+    partiallyDispatched: boolean;
 }
 
-export function orderProgress(order: { lines: LineTotals[] }): OrderProgress {
+export function orderProgress(order: { fulfilled: boolean; lines: LineTotals[] }): OrderProgress {
     const progress = order.lines.map(lineProgress);
     const onHoldCount = order.lines.reduce((sum, line) => sum + line.reservations.filter((reservation) => reservation.onHold).length, 0);
     const linesComplete = progress.filter((line) => line.complete).length;
+    const linesFulfilled = progress.filter((line) => line.fulfilled).length;
     const complete = order.lines.length > 0 && linesComplete === order.lines.length;
-    return { linesComplete, linesTotal: order.lines.length, onHoldCount, complete, ready: complete && onHoldCount === 0 };
+    return {
+        linesComplete,
+        linesFulfilled,
+        linesTotal: order.lines.length,
+        onHoldCount,
+        complete,
+        ready: complete && onHoldCount === 0,
+        fulfilled: order.fulfilled,
+        partiallyDispatched: !order.fulfilled && progress.some((line) => line.dispatched > 0),
+    };
+}
+
+// ---- Verzenden: keuze van hele reserveringen ----
+
+export interface DispatchCandidate {
+    id: number;
+    status: string;
+    onHold: boolean;
+    quantity: number;
+    unit: string;
+    netWeightKg: number;
+}
+
+// Alleen Active reserveringen die niet on hold zijn kunnen worden verzonden; de server controleert dit opnieuw.
+export function isDispatchable(reservation: DispatchCandidate): boolean {
+    return reservation.status === 'Active' && !reservation.onHold;
+}
+
+// Totalen van de gekozen reserveringen per eenheid; eenheden worden nooit samengevoegd of omgerekend.
+export function dispatchTotals(selected: DispatchCandidate[]): { unit: string; quantity: number; netWeightKg: number; count: number }[] {
+    const byUnit = new Map<string, { unit: string; quantity: number; netWeightKg: number; count: number }>();
+    for (const reservation of selected) {
+        const total = byUnit.get(reservation.unit) ?? { unit: reservation.unit, quantity: 0, netWeightKg: 0, count: 0 };
+        total.quantity += reservation.quantity;
+        total.netWeightKg += reservation.netWeightKg;
+        total.count += 1;
+        byUnit.set(reservation.unit, total);
+    }
+    return Array.from(byUnit.values()).sort((a, b) => a.unit.localeCompare(b.unit));
+}
+
+export function normalizeDispatchReference(text: string): BuildResult<string | null> {
+    const value = text.trim();
+    if (value.length > 100) return { ok: false, errors: [{ field: 'reference', code: 'too_long' }] };
+    return { ok: true, value: value === '' ? null : value };
 }
 
 function normalizeSearch(value: string): string {

@@ -15,6 +15,19 @@ namespace AgfAdmin.Services
         public const string ReservationCreatedEvent = "ReservationCreated";
         public const string ReservationReleasedEvent = "ReservationReleased";
         public const string OrderCancelledEvent = "SalesOrderCancelled";
+        public const string OrderDispatchedEvent = "SalesOrderDispatched";
+        public const string ReservationConsumedEvent = "ReservationConsumed";
+
+        public const string MovementTypeDispatch = "Dispatch";
+        public const int MaxDispatchReferenceLength = 100;
+        public const int MaxDispatchLines = 200;
+
+        // Voorraad = ontvangst - afgeboekt; nooit negatief.
+        public static decimal OnHandQuantity(decimal receipt, decimal dispatched) => Math.Max(0m, receipt - dispatched);
+        public static bool IsDepleted(decimal quantity, decimal netWeightKg, decimal dispatchedQuantity, decimal dispatchedNetWeightKg) =>
+            receiptMinus(quantity, dispatchedQuantity) == 0m && receiptMinus(netWeightKg, dispatchedNetWeightKg) == 0m;
+
+        private static decimal receiptMinus(decimal receipt, decimal dispatched) => Math.Max(0m, receipt - dispatched);
 
         public static readonly IReadOnlyList<string> OrderStatuses = new[] { OrderStatusOpen, OrderStatusCancelled };
 

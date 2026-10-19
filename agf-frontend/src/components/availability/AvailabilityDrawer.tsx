@@ -87,9 +87,16 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
                 {line.warehouseLocation && <span className="block font-mono text-xs text-gray-500">{line.warehouseLocation}</span>}
             </td>
             <td className={td}><QualityBadge status={line.qualityStatus} /></td>
-            <td className={`${td} text-right`}>{formatQuantity(line.quantity, locale)}</td>
+            <td className={`${td} text-right`}>
+                {formatQuantity(line.onHandQuantity, locale)}
+                {line.dispatchedQuantity > 0 && <span className="block text-xs text-gray-500">{t('availability_received_of', { quantity: formatQuantity(line.quantity, locale) })}</span>}
+                {line.depleted && <span className="mt-1 inline-flex rounded border border-gray-400 bg-gray-200 px-1.5 text-xs font-medium text-gray-800">{t('sales_depleted')}</span>}
+            </td>
             <td className={td}><UnitBadge unit={line.unit} /></td>
-            <td className={`${td} text-right`}>{formatKg(line.netWeightKg, locale)}</td>
+            <td className={`${td} text-right`}>
+                {formatKg(line.onHandNetWeightKg, locale)}
+                {line.dispatchedNetWeightKg > 0 && <span className="block text-xs text-gray-500">{t('availability_received_of', { quantity: formatKg(line.netWeightKg, locale) })}</span>}
+            </td>
             <td className={`${td} text-right`}>
                 {formatQuantity(line.reservedQuantity, locale)}
                 {line.onHold && (

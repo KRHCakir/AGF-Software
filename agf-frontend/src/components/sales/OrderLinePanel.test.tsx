@@ -16,22 +16,23 @@ const STORAGE_KEY = 'agf_sales_pending_commands';
 
 const line: SalesOrderLine = {
     id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 10, unit: 'box',
-    reservedQuantity: 0, reservedNetWeightKg: 0, openQuantity: 10, version: 0, reservations: [],
+    reservedQuantity: 0, reservedNetWeightKg: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, openQuantity: 10, fulfilled: false, version: 0, reservations: [],
 };
 const order: SalesOrder = {
     id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status: 'Open', customerReference: null,
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T10:00:00.000Z', version: 0,
-    cancelledAt: null, cancelReason: null, cancelledBy: null, lines: [line],
+    cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, lines: [line],
 };
 const stockRow = {
     palletContentLineId: 2, palletId: 2, palletReference: 'SMOKE-PAL-002', warehouseLocation: null, lotNumber: 'LOT-SALES-1', unit: 'box',
-    quantity: 40, netWeightKg: 160, reservedQuantity: 15, reservedNetWeightKg: 60, availableQuantity: 25, availableNetWeightKg: 100,
+    quantity: 40, netWeightKg: 160, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, onHandQuantity: 40, onHandNetWeightKg: 160, reservedQuantity: 15, reservedNetWeightKg: 60, availableQuantity: 25, availableNetWeightKg: 100,
     qualityStatus: 'Approved', contentLineVersion: 6,
 };
 const reservationResponse = (requestId: string) => ({
     id: 9, requestId, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'SMOKE-PAL-002',
     warehouseLocation: null, lotNumber: 'LOT-SALES-1', quantity: 5, unit: 'box', netWeightKg: 20, source: 'Physical', status: 'Active',
     createdAt: '2026-10-19T10:05:00.000Z', releasedAt: null, releaseReason: null, version: 0, contentQualityStatus: 'Approved', onHold: false,
+    consumedAt: null, dispatchId: null, dispatchReference: null,
 });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
