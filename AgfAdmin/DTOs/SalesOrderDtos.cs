@@ -74,6 +74,10 @@ namespace AgfAdmin.DTOs
         public DateTime? ReleasedAt { get; set; }
         public string ReleaseReason { get; set; }
         public int Version { get; set; }
+        // Actuele kwaliteit van de inhoudsregel (nooit afgeleid uit de reserveringsstatus).
+        public string ContentQualityStatus { get; set; }
+        // Active reservering op inhoud die niet (meer) Approved is: telt niet als beschikbaar en wacht op vrijgave of herkeuring.
+        public bool OnHold { get; set; }
     }
 
     // Inhoudsregel die voor een orderregel te reserveren is (zelfde variant + eenheid, Approved, Received + Warehouse).

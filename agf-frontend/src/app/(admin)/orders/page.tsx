@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { OrderService, OrderDto } from '../../../services/orderService';
+import Link from 'next/link';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import AddOrderModal from '../../../components/AddOrderModal';
 
@@ -88,8 +89,13 @@ export default function OrdersPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
+      {/* Legacy-flow: blijft bestaan naast de nieuwe werkplek Verkoop; niets wordt gesynchroniseerd of gemigreerd. */}
+      <p role="note" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        {t('orders_legacy_notice')}{' '}
+        <Link href="/sales-orders" className="font-medium underline underline-offset-2">{t('orders_legacy_go_to_sales')}</Link>
+      </p>
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-black text-gray-900">{t('orders')}</h1>
+        <h1 className="text-3xl font-black text-gray-900">{t('orders_legacy_title')}</h1>
         <button
           onClick={() => setIsModalOpen(true)}
           className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 shadow-lg"

@@ -83,6 +83,7 @@ public class StockReservationServiceTests : IDisposable
         Assert.Equal(("Active", "Physical", 10m, "box", 40.5m, 0), (dto.Status, dto.Source, dto.Quantity, dto.Unit, dto.NetWeightKg, dto.Version));
         Assert.Equal((_orderId, _boxLine, _seed.ApprovedBox, _seed.WarehousePalletId), (dto.SalesOrderId, dto.SalesOrderLineId, dto.PalletContentLineId, dto.PalletId));
         Assert.Equal(("P-WH", "COLD-01", "LOT-A"), (dto.PalletReference, dto.WarehouseLocation, dto.LotNumber));
+        Assert.Equal(("Approved", false), (dto.ContentQualityStatus, dto.OnHold));
 
         await using var db = _factory.CreateContext();
         var stored = await db.StockReservations.SingleAsync();
@@ -331,6 +332,7 @@ public class StockReservationServiceTests : IDisposable
 
         Assert.Equal(ServiceResultStatus.Ok, result.Status);
         Assert.Equal(("Released", 1, "Klant annuleert"), (result.Value.Status, result.Value.Version, result.Value.ReleaseReason));
+        Assert.Equal(("Approved", false), (result.Value.ContentQualityStatus, result.Value.OnHold));
         Assert.NotNull(result.Value.ReleasedAt);
         await using var db = _factory.CreateContext();
         var stored = await db.StockReservations.SingleAsync();
