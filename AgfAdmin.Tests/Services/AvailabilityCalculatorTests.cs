@@ -623,4 +623,25 @@ public class AvailabilityCalculatorTests
         Assert.Contains(entry.Warnings, w => w.Code == "RESERVATION_EXCEEDS_CONTENT");
         Assert.Equal(0m, entry.AvailableAfterReservations.Quantity);
     }
+
+    [Fact]
+    public void Correction_Content_Counts_As_Quarantine_Stock_But_Never_As_Registration_Against_The_Source()
+    {
+        var source = Source(1, 100m);
+        var original = Content(source, 40m, 160m, "Received", "Warehouse", "Approved") with { DispatchedQuantity = 15m, DispatchedNetWeightKg = 60m };
+        var restored = Content(source, 15m, 60m, "Received", "Warehouse", "Quarantine") with { PalletContentLineId = 99, FromCorrection = true };
+
+        var entry = WarehouseEntry(Overview(new[] { source }, new[] { original, restored }));
+
+        Assert.Equal((25m, 100m), (entry.Warehouse.Approved.Quantity, entry.Warehouse.Approved.NetWeightKg));
+        Assert.Equal((15m, 60m), (entry.Warehouse.Quarantine.Quantity, entry.Warehouse.Quarantine.NetWeightKg));
+        Assert.Equal(25m, entry.AvailableBeforeReservations.Quantity);
+        // Geregistreerd blijft 40 (alleen de fysieke ontvangst): 100 - 40 = 60 nog verwacht, geen OVER_REGISTERED.
+        Assert.Equal(60m, entry.ExpectedUnregistered.Quantity);
+        Assert.DoesNotContain(entry.Warnings, w => w.Code == "OVER_REGISTERED");
+        var (sourceLines, contentLines) = AvailabilityCalculator.BuildDrillDown(new[] { source }, new[] { original, restored }, new AvailabilityQuery { Route = "Warehouse" });
+        Assert.Equal(40m, Assert.Single(sourceLines).RegisteredQuantity);
+        Assert.Equal(new[] { "DispatchCorrection", "Receipt" }, contentLines.Select(c => c.Origin).OrderBy(o => o, StringComparer.Ordinal));
+        Assert.Equal("DispatchCorrection", contentLines.Single(c => c.PalletContentLineId == 99).Origin);
+    }
 }

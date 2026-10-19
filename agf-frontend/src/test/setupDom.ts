@@ -7,6 +7,8 @@ const { window } = dom;
 
 const globals = globalThis as Record<string, unknown>;
 globals.window = window;
+// next/link verwijst naar `self`; in Node bestaat dat niet.
+globals.self = window;
 globals.document = window.document;
 // Node heeft zelf een alleen-lezen navigator; die wordt hier bewust vervangen door die van jsdom.
 Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true, writable: true });

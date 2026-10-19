@@ -406,7 +406,7 @@ namespace AgfAdmin.Services
             return ToDto(reservation, reservation.SalesOrderLine?.SalesOrderId ?? 0);
         }
 
-        internal static StockReservationDto ToDto(StockReservation reservation, int salesOrderId) => new()
+        internal static StockReservationDto ToDto(StockReservation reservation, int salesOrderId, int? correctionId = null) => new()
         {
             Id = reservation.Id,
             RequestId = reservation.RequestId,
@@ -432,7 +432,9 @@ namespace AgfAdmin.Services
                 && reservation.PalletContentLine.QualityStatus != PalletRules.QualityApproved,
             ConsumedAt = reservation.ConsumedAt == null ? null : DateTime.SpecifyKind(reservation.ConsumedAt.Value, DateTimeKind.Utc),
             DispatchId = reservation.DispatchLine?.SalesDispatchId,
-            DispatchReference = reservation.DispatchLine?.SalesDispatch?.Reference
+            DispatchReference = reservation.DispatchLine?.SalesDispatch?.Reference,
+            CorrectedAt = reservation.CorrectedAt == null ? null : DateTime.SpecifyKind(reservation.CorrectedAt.Value, DateTimeKind.Utc),
+            CorrectionId = correctionId
         };
     }
 }

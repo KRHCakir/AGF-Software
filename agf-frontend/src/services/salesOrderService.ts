@@ -4,17 +4,20 @@ import { SaveResult } from './supplyService';
 import { AvailabilityQuantity, PackageUnit } from '../types/availability';
 import {
     CancelSalesOrderRequest,
+    CorrectSalesDispatchRequest,
     CreateSalesDispatchRequest,
     CreateSalesOrderRequest,
     CreateStockReservationRequest,
     ReleaseStockReservationRequest,
     ReservableStockLine,
     SalesDispatch,
+    SalesDispatchCorrection,
     SalesOrder,
     SalesOrderAuditEvent,
     StockReservation,
     isReservableStockList,
     isSalesDispatch,
+    isSalesDispatchCorrection,
     isSalesDispatchList,
     isSalesOrder,
     isSalesOrderAuditEventList,
@@ -106,6 +109,15 @@ export async function createSalesDispatch(orderId: number, request: CreateSalesD
     const { status, json } = await postJson(`/sales-orders/${orderId}/dispatches`, request, signal);
     if (!isSalesDispatch(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij het verzenden.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+// Administratieve correctie: 201 = nieuw, 200 = exact dezelfde opdracht was al verwerkt (nooit tweemaal teruggeboekt); 409 = herladen.
+export async function correctSalesDispatch(orderId: number, dispatchId: number, request: CorrectSalesDispatchRequest, signal?: AbortSignal): Promise<SaveResult<SalesDispatchCorrection>> {
+    const { status, json } = await postJson(`/sales-orders/${orderId}/dispatches/${dispatchId}/corrections`, request, signal);
+    if (!isSalesDispatchCorrection(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het corrigeren van de verzending.');
     }
     return { value: json, replayed: status === 200 };
 }

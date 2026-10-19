@@ -9,6 +9,7 @@ namespace AgfAdmin.Services
         public const string StatusActive = "Active";
         public const string StatusReleased = "Released";
         public const string StatusConsumed = "Consumed";
+        public const string StatusCorrected = "Corrected";
 
         public const string SourcePhysical = "Physical";
 
@@ -19,6 +20,9 @@ namespace AgfAdmin.Services
         public const string ReservationConsumedEvent = "ReservationConsumed";
 
         public const string MovementTypeDispatch = "Dispatch";
+        public const string MovementTypeCorrection = "Correction";
+        public const string OrderDispatchCorrectedEvent = "SalesOrderDispatchCorrected";
+        public const string ReservationCorrectedEvent = "ReservationCorrected";
         public const int MaxDispatchReferenceLength = 100;
         public const int MaxDispatchLines = 200;
 

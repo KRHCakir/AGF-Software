@@ -24,8 +24,13 @@ namespace AgfAdmin.Data
     //    daalt nooit, en elke nieuwe verzendregel is een exacte kopie van precies één zo'n reservering met precies haar nieuwe
     //    Dispatch-mutatie, onder een verzending van dezelfde verkooporder (navigatie of alleen FK).
     // Regels 5 t/m 7 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
-    // Append-only (regel 3): PalletAuditEvents, SalesOrderAuditEvents, SalesDispatches, SalesDispatchLines en Dispatch-mutaties
-    // (andere mutatietypen blijven ongemoeid).
+    // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
+    //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
+    //    bronregel en exact dezelfde hoeveelheid/kg (herkomst = die correctieregel), en één compenserende Correction-mutatie; de correctie
+    //    hoort bij dezelfde order als de verzending. Correctie-inhoud en zulke mutaties bestaan nooit buiten een correctie. De herkomst, de
+    //    bronregel en de partij van correctie-inhoud zijn onveranderlijk; Corrected is een eindtoestand.
+    // Append-only (regel 3): PalletAuditEvents, SalesOrderAuditEvents, SalesDispatches, SalesDispatchLines, SalesDispatchCorrections,
+    // SalesDispatchCorrectionLines, Dispatch-mutaties en compenserende Correction-mutaties (andere mutatietypen blijven ongemoeid).
     // Er wordt nooit automatisch omgekoppeld. Een niet-bestaande inhoudsregel laten we over aan de FK in de database.
     // Let op: ExecuteUpdate/ExecuteDelete en ruwe SQL gaan buiten de change tracker om en dus ook buiten deze guard.
     internal static class TraceabilityGuard
@@ -65,12 +70,174 @@ namespace AgfAdmin.Data
             {
                 throw new TraceabilityViolationException("Dispatch stock movements are append-only and cannot be modified or deleted.");
             }
+            if (db.ChangeTracker.Entries<SalesDispatchCorrection>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+                || db.ChangeTracker.Entries<SalesDispatchCorrectionLine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Sales dispatch corrections are append-only and cannot be modified or deleted.");
+            }
+            if (db.ChangeTracker.Entries<StockMovement>().Any(e => e.State is EntityState.Modified or EntityState.Deleted
+                    && (e.Entity.SalesDispatchCorrectionLineId != null || e.OriginalValues.GetValue<int?>(nameof(StockMovement.SalesDispatchCorrectionLineId)) != null)))
+            {
+                throw new TraceabilityViolationException("Compensating correction stock movements are append-only and cannot be modified or deleted.");
+            }
+            // Corrected is een eindtoestand: nooit meer Active, Consumed of Released.
+            if (db.ChangeTracker.Entries<StockReservation>().Any(e => e.State == EntityState.Modified
+                    && e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) == ReservationRules.StatusCorrected
+                    && e.Entity.Status != ReservationRules.StatusCorrected))
+            {
+                throw new TraceabilityViolationException("A corrected reservation is terminal and can never become Active, Consumed or Released again.");
+            }
+            // Herkomst, bronregel en partij van correctie-inhoud zijn onveranderlijk (de bronregel van elke inhoud al via regel 2).
+            foreach (var entry in db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Modified))
+            {
+                var originBefore = entry.OriginalValues.GetValue<int?>(nameof(PalletContentLine.OriginCorrectionLineId));
+                if (originBefore != entry.Property(c => c.OriginCorrectionLineId).CurrentValue)
+                {
+                    throw new TraceabilityViolationException($"The correction origin of pallet content line {entry.Entity.Id} cannot be set, removed or reassigned.");
+                }
+                if (originBefore != null && entry.OriginalValues.GetValue<string>(nameof(PalletContentLine.LotNumber)) != entry.Entity.LotNumber)
+                {
+                    throw new TraceabilityViolationException($"The lot of correction content line {entry.Entity.Id} cannot be changed.");
+                }
+            }
 
             await CheckSourceLinksAsync(db, async, cancellationToken);
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
             await CheckSalesReservationsAsync(db, async, cancellationToken);
             await CheckReservationsOnOpenOrdersAsync(db, async, cancellationToken);
             await CheckDispatchLedgerAsync(db, async, cancellationToken);
+            await CheckCorrectionLedgerAsync(db, async, cancellationToken);
+        }
+
+        // ---- Regel 9: verzendcorrecties in beide richtingen ----
+
+        private static async Task CheckCorrectionLedgerAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var correctedEntries = db.ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State == EntityState.Modified
+                    && e.Entity.Status == ReservationRules.StatusCorrected
+                    && e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) != ReservationRules.StatusCorrected)
+                .ToList();
+            if (correctedEntries.Any(e => e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) != ReservationRules.StatusConsumed))
+            {
+                throw new TraceabilityViolationException("Only a Consumed reservation can become Corrected.");
+            }
+            if (db.ChangeTracker.Entries<StockReservation>().Any(e => e.State == EntityState.Added && e.Entity.Status == ReservationRules.StatusCorrected))
+            {
+                throw new TraceabilityViolationException("A reservation can only become Corrected through a dispatch correction, never be created as Corrected.");
+            }
+            var corrected = correctedEntries.Select(e => e.Entity).ToList();
+            var correctionLines = db.ChangeTracker.Entries<SalesDispatchCorrectionLine>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            var restoredLines = db.ChangeTracker.Entries<PalletContentLine>()
+                .Where(e => e.State == EntityState.Added && (e.Entity.OriginCorrectionLine != null || e.Entity.OriginCorrectionLineId != null))
+                .Select(e => e.Entity)
+                .ToList();
+            var compensations = db.ChangeTracker.Entries<StockMovement>()
+                .Where(e => e.State == EntityState.Added && e.Entity.Type == ReservationRules.MovementTypeCorrection
+                    && (e.Entity.SalesDispatchCorrectionLine != null || e.Entity.SalesDispatchCorrectionLineId != null || e.Entity.StockReservation != null || e.Entity.StockReservationId != null))
+                .Select(e => e.Entity)
+                .ToList();
+            if (corrected.Count == 0 && correctionLines.Count == 0 && restoredLines.Count == 0 && compensations.Count == 0)
+            {
+                return;
+            }
+            if (corrected.Count != correctionLines.Count || restoredLines.Count != correctionLines.Count || compensations.Count != correctionLines.Count)
+            {
+                throw new TraceabilityViolationException("A dispatch correction needs, per reservation, exactly one corrected reservation, one correction line, one restored content line and one compensating correction movement in the same save.");
+            }
+
+            // Verzendregels en oorspronkelijke inhoud (navigatie of opgeslagen).
+            var dispatchLineIds = correctionLines.Select(l => l.SalesDispatchLine != null ? db.Entry(l.SalesDispatchLine).Property(x => x.Id).CurrentValue : l.SalesDispatchLineId).Distinct().ToList();
+            var dispatchLines = correctionLines.Where(l => l.SalesDispatchLine != null).Select(l => l.SalesDispatchLine).ToDictionary(l => l.Id);
+            var missing = dispatchLineIds.Where(id => !dispatchLines.ContainsKey(id)).ToList();
+            if (missing.Count > 0)
+            {
+                foreach (var stored in await ToListAsync(db.SalesDispatchLines.AsNoTracking().Include(l => l.SalesDispatch).Include(l => l.PalletContentLine).Where(l => missing.Contains(l.Id)), async, cancellationToken))
+                {
+                    dispatchLines[stored.Id] = stored;
+                }
+            }
+            var originalContentIds = dispatchLines.Values.Select(l => l.PalletContentLineId).Distinct().ToList();
+            var originals = (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => originalContentIds.Contains(c.Id)), async, cancellationToken)).ToDictionary(c => c.Id);
+            foreach (var entry in db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State is not (EntityState.Added or EntityState.Deleted or EntityState.Detached) && originalContentIds.Contains(e.Entity.Id)))
+            {
+                originals[entry.Entity.Id] = entry.Entity;
+            }
+            var dispatchIds = dispatchLines.Values.Select(l => l.SalesDispatch != null ? db.Entry(l.SalesDispatch).Property(d => d.Id).CurrentValue : l.SalesDispatchId).Distinct().ToList();
+            var orderOfDispatch = (await ToListAsync(db.SalesDispatches.AsNoTracking().Where(d => dispatchIds.Contains(d.Id)).Select(d => new { d.Id, d.SalesOrderId }), async, cancellationToken))
+                .ToDictionary(d => d.Id, d => d.SalesOrderId);
+            foreach (var entry in db.ChangeTracker.Entries<SalesDispatch>().Where(e => e.State is not (EntityState.Deleted or EntityState.Detached)))
+            {
+                orderOfDispatch[entry.Property(d => d.Id).CurrentValue] = entry.Entity.SalesOrder?.Id ?? entry.Property(d => d.SalesOrderId).CurrentValue;
+            }
+
+            var usedReservations = new HashSet<StockReservation>();
+            foreach (var correctionLine in correctionLines)
+            {
+                var reservation = correctionLine.StockReservation ?? corrected.FirstOrDefault(r => r.Id == correctionLine.StockReservationId);
+                if (reservation == null || !corrected.Contains(reservation) || !usedReservations.Add(reservation))
+                {
+                    throw new TraceabilityViolationException("A dispatch correction line requires exactly one reservation that goes from Consumed to Corrected in the same save.");
+                }
+                if (reservation.CorrectedAt == null)
+                {
+                    throw new TraceabilityViolationException($"Reservation {reservation.Id} becomes Corrected without a correction time.");
+                }
+                var dispatchLineId = correctionLine.SalesDispatchLine != null ? db.Entry(correctionLine.SalesDispatchLine).Property(x => x.Id).CurrentValue : correctionLine.SalesDispatchLineId;
+                if (!dispatchLines.TryGetValue(dispatchLineId, out var dispatchLine) || dispatchLine.StockReservationId != reservation.Id)
+                {
+                    throw new TraceabilityViolationException($"Correction line for reservation {reservation.Id} must reference the dispatch line that consumed that reservation.");
+                }
+                if (correctionLine.Quantity != dispatchLine.Quantity || !string.Equals(correctionLine.Unit, dispatchLine.Unit, StringComparison.Ordinal) || correctionLine.NetWeightKg != dispatchLine.NetWeightKg)
+                {
+                    throw new TraceabilityViolationException($"Correction line for reservation {reservation.Id} must copy quantity, unit and net weight of the dispatch line exactly.");
+                }
+                if (!originals.TryGetValue(dispatchLine.PalletContentLineId, out var original))
+                {
+                    throw new TraceabilityViolationException($"The original content line of dispatch line {dispatchLineId} does not exist.");
+                }
+
+                var restored = restoredLines.FirstOrDefault(c => ReferenceEquals(c.OriginCorrectionLine, correctionLine)
+                    || (c.OriginCorrectionLine == null && c.OriginCorrectionLineId == db.Entry(correctionLine).Property(x => x.Id).CurrentValue));
+                if (restored == null)
+                {
+                    throw new TraceabilityViolationException($"Correction line for reservation {reservation.Id} has no restored content line.");
+                }
+                var restoredPalletId = restored.Pallet != null ? db.Entry(restored.Pallet).Property(p => p.Id).CurrentValue : restored.PalletId;
+                if (restored.Quantity != dispatchLine.Quantity || restored.NetWeightKg != dispatchLine.NetWeightKg || !string.Equals(restored.Unit, dispatchLine.Unit, StringComparison.Ordinal)
+                    || restored.QualityStatus != PalletRules.QualityQuarantine
+                    || restored.DispatchedQuantity != 0m || restored.DispatchedNetWeightKg != 0m
+                    || restoredPalletId != original.PalletId
+                    || restored.SupplyCommitmentLineId != original.SupplyCommitmentLineId
+                    || !string.Equals(restored.LotNumber, original.LotNumber, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"Restored content for reservation {reservation.Id} must be Quarantine on the original pallet, same lot and source line, with exactly the dispatched quantity and net weight and nothing dispatched.");
+                }
+
+                var movement = compensations.FirstOrDefault(m => ReferenceEquals(m.SalesDispatchCorrectionLine, correctionLine)
+                    || (m.SalesDispatchCorrectionLine == null && m.SalesDispatchCorrectionLineId == db.Entry(correctionLine).Property(x => x.Id).CurrentValue));
+                if (movement == null)
+                {
+                    throw new TraceabilityViolationException($"Correction line for reservation {reservation.Id} has no compensating correction movement.");
+                }
+                var movementReservation = movement.StockReservation ?? corrected.FirstOrDefault(r => r.Id == movement.StockReservationId);
+                var movementContent = movement.PalletContentLine;
+                if (!ReferenceEquals(movementReservation, reservation) || !ReferenceEquals(movementContent, restored)
+                    || movement.Quantity != dispatchLine.Quantity || !string.Equals(movement.Unit, dispatchLine.Unit, StringComparison.Ordinal) || movement.NetWeightKg != dispatchLine.NetWeightKg
+                    || movement.SupplyCommitmentLineId != original.SupplyCommitmentLineId)
+                {
+                    throw new TraceabilityViolationException($"The compensating movement for reservation {reservation.Id} must reference its reservation and restored content line and copy quantity, unit, net weight and source line exactly.");
+                }
+
+                var correction = correctionLine.SalesDispatchCorrection;
+                var correctionOrderId = correction?.SalesOrder?.Id ?? correction?.SalesOrderId;
+                var correctionDispatchId = correction?.SalesDispatch != null ? db.Entry(correction.SalesDispatch).Property(d => d.Id).CurrentValue : correction?.SalesDispatchId;
+                var dispatchId = dispatchLine.SalesDispatch != null ? db.Entry(dispatchLine.SalesDispatch).Property(d => d.Id).CurrentValue : dispatchLine.SalesDispatchId;
+                if (correction == null || correctionDispatchId != dispatchId || !orderOfDispatch.TryGetValue(dispatchId, out var dispatchOrderId) || correctionOrderId != dispatchOrderId)
+                {
+                    throw new TraceabilityViolationException($"Correction line for reservation {reservation.Id} must belong to a correction of the dispatch and sales order that consumed it.");
+                }
+            }
         }
 
         // ---- Regel 8: afboekgrootboek in beide richtingen ----

@@ -4,6 +4,7 @@ import {
     CREATE_ORDER_KEY,
     blockedBy,
     cancelKey,
+    correctDispatchKey,
     dispatchKey,
     commandsForLine,
     commandsForOrder,
@@ -45,6 +46,12 @@ const dispatch = (orderId: number, requestId = 'd-1'): PendingCommand => ({
     kind: 'dispatch', key: dispatchKey(orderId), orderId, requestId, attempts: 1, lastError: 'HTTP 502', frozenAt: '2026-10-19T12:00:00.000Z',
     payload: { requestId, expectedOrderVersion: 1, actorReference: 'office-1', reference: 'VRB-1', lines: [{ stockReservationId: 11, expectedReservationVersion: 0 }, { stockReservationId: 12, expectedReservationVersion: 2 }] },
     display: { customerName: 'Local Market Stalls', lineCount: 2 },
+});
+
+const correct = (orderId: number, dispatchId: number, requestId = 'x-1'): PendingCommand => ({
+    kind: 'correct-dispatch', key: correctDispatchKey(orderId, dispatchId), orderId, dispatchId, requestId, attempts: 1, lastError: 'HTTP 504', frozenAt: '2026-10-19T13:00:00.000Z',
+    payload: { requestId, expectedOrderVersion: 4, actorReference: 'office-1', reason: 'Verkeerd gescand', goodsNeverLeftWarehouse: true, lines: [{ stockReservationId: 11, expectedReservationVersion: 1 }] },
+    display: { customerName: 'Local Market Stalls', lineCount: 1 },
 });
 
 const toMap = (...commands: PendingCommand[]): PendingCommands => Object.fromEntries(commands.map((command) => [command.key, command]));
@@ -137,6 +144,35 @@ describe('unresolved commands', () => {
         }
         assert.equal(Object.keys(parseStoredCommands(stored(dispatch(4), (c) => { payloadOf(c).reference = null; }))).length, 1);
         assert.deepEqual(parseStoredCommands(stored(dispatch(4), (c) => { c.display = { customerName: 'X', lineCount: 0 }; })), {});
+    });
+
+    test('an unresolved dispatch correction is an order-level command: it blocks lines, cancel and dispatch, and is blocked by them', () => {
+        const pendingCorrection = toMap(correct(4, 9));
+        assert.equal(blockedBy(pendingCorrection, { kind: 'line', orderId: 4, lineId: 7 })?.kind, 'correct-dispatch');
+        assert.equal(blockedBy(pendingCorrection, { kind: 'cancel-order', orderId: 4 })?.kind, 'correct-dispatch');
+        assert.equal(blockedBy(pendingCorrection, { kind: 'dispatch', orderId: 4 })?.kind, 'correct-dispatch');
+        assert.equal(blockedBy(pendingCorrection, { kind: 'correct-dispatch', orderId: 4 })?.kind, 'correct-dispatch');
+        assert.equal(blockedBy(pendingCorrection, { kind: 'correct-dispatch', orderId: 5 }), null);
+        assert.equal(blockedBy(toMap(reserve(4, 7)), { kind: 'correct-dispatch', orderId: 4 })?.kind, 'reserve');
+        assert.equal(blockedBy(toMap(dispatch(4)), { kind: 'correct-dispatch', orderId: 4 })?.kind, 'dispatch');
+    });
+
+    test('correct-dispatch payload requires the explicit confirmation, a reason, versions and well-formed lines', () => {
+        assert.equal(isPendingCommand(correct(4, 9)), true);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(correct(4, 9)))), toMap(correct(4, 9)));
+        for (const field of ['expectedOrderVersion', 'actorReference', 'reason', 'goodsNeverLeftWarehouse', 'lines']) {
+            assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { delete payloadOf(c)[field]; })), {}, `correction without ${field}`);
+        }
+        const bad: [string, unknown][] = [
+            ['goodsNeverLeftWarehouse', false], ['goodsNeverLeftWarehouse', 'true'], ['goodsNeverLeftWarehouse', 1],
+            ['reason', ''], ['reason', '  '], ['expectedOrderVersion', -1],
+            ['lines', []], ['lines', [{ stockReservationId: 0, expectedReservationVersion: 1 }]], ['lines', [{ stockReservationId: 11, expectedReservationVersion: 1 }, { stockReservationId: 11, expectedReservationVersion: 1 }]],
+        ];
+        for (const [field, value] of bad) {
+            assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { payloadOf(c)[field] = value; })), {}, `correction ${field}=${JSON.stringify(value)}`);
+        }
+        assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { c.dispatchId = 0; c.key = correctDispatchKey(4, 0); })), {});
+        assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { c.key = correctDispatchKey(4, 8); })), {});
     });
 
     test('attempts are counted on the same frozen requestId and payload; the command itself never changes', () => {

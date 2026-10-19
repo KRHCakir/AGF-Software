@@ -22,9 +22,13 @@ namespace AgfAdmin.Models
         public int? StockReceiptId { get; set; }
         public StockReceipt StockReceipt { get; set; }
 
-        // Gezet bij Reservation, ReservationRelease en Dispatch.
+        // Gezet bij Reservation, ReservationRelease, Dispatch en Correction (compensatie van een Dispatch).
         public int? StockReservationId { get; set; }
         public StockReservation StockReservation { get; set; }
+
+        // Gezet bij een compenserende Correction-mutatie van een verzendcorrectie (uniek).
+        public int? SalesDispatchCorrectionLineId { get; set; }
+        public SalesDispatchCorrectionLine SalesDispatchCorrectionLine { get; set; }
 
         public string Reason { get; set; } // optioneel; verplicht voor Waste/Correction (servicecode)
 

@@ -25,7 +25,7 @@ public class SalesOrdersControllerTests : IDisposable
     private async Task<IActionResult> Orders(Func<SalesOrdersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db)));
+        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db)));
     }
 
     private async Task<IActionResult> Reservations(Func<StockReservationsController, Task<IActionResult>> action)
@@ -213,5 +213,46 @@ public class SalesOrdersControllerTests : IDisposable
         Assert.Equal((10m, 0m, 10m, false), (line.DispatchedQuantity, line.ReservedQuantity, line.OpenQuantity, line.Fulfilled));
         Assert.Equal(("Consumed", dispatch.Id), (line.Reservations.Single().Status, line.Reservations.Single().DispatchId));
         Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = after.Version, ActorReference = "office-1", Reason = "x" })));
+    }
+
+    [Fact]
+    public async Task CorrectDispatch_Returns_201_Then_200_On_Replay_400_Without_Confirmation_404_And_409()
+    {
+        var order = await CreatedOrderAsync();
+        var reservation = Assert.IsType<StockReservationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
+        {
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+        }))).Value);
+        var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
+        var dispatch = Assert.IsType<SalesDispatchDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Dispatch(order.Id, new CreateSalesDispatchDto
+        {
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = current.Version, ActorReference = "office-1", Reference = "VRB-1",
+            Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = reservation.Version } }
+        }))).Value);
+        current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
+        CorrectSalesDispatchDto Correct(int? version, bool? confirmed = true, Guid? requestId = null, string reason = "Verkeerd gescand") => new()
+        {
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = reason, GoodsNeverLeftWarehouse = confirmed,
+            Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = 1 } }
+        };
+
+        Assert.Contains("goodsNeverLeftWarehouse", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.CorrectDispatch(order.Id, dispatch.Id, Correct(current.Version, confirmed: false)))).Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.CorrectDispatch(order.Id, 999_999, Correct(current.Version))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.CorrectDispatch(order.Id, dispatch.Id, Correct(current.Version + 1))));
+
+        var request = Correct(current.Version);
+        var created = Assert.IsType<CreatedAtActionResult>(await Orders(c => c.CorrectDispatch(order.Id, dispatch.Id, request)));
+        var correction = Assert.IsType<SalesDispatchCorrectionDto>(created.Value);
+        Assert.Equal((dispatch.Id, true, "Quarantine"), (correction.SalesDispatchId, correction.GoodsNeverLeftWarehouseConfirmed, correction.Lines.Single().RestoredQualityStatus));
+        Assert.Equal(correction.Id, Assert.IsType<SalesDispatchCorrectionDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.CorrectDispatch(order.Id, dispatch.Id, request))).Value).Id);
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.CorrectDispatch(order.Id, dispatch.Id, Correct(current.Version, requestId: request.RequestId, reason: "Anders"))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.CorrectDispatch(order.Id, dispatch.Id, Correct(current.Version + 1))));
+
+        var after = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
+        var line = after.Lines[0];
+        Assert.Equal((0m, 0m, 20m, false, "Corrected"), (line.DispatchedQuantity, line.ReservedQuantity, line.OpenQuantity, line.Fulfilled, line.Reservations.Single().Status));
+        Assert.Equal(correction.Id, line.Reservations.Single().CorrectionId);
+        var dispatches = Assert.IsAssignableFrom<IReadOnlyList<SalesDispatchDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetDispatches(order.Id))).Value);
+        Assert.Equal(correction.Id, Assert.Single(dispatches).Correction!.Id);
     }
 }

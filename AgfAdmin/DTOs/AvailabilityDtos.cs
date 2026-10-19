@@ -166,6 +166,8 @@ namespace AgfAdmin.DTOs
         public decimal OnHandNetWeightKg { get; set; }
         // Afgeleid: voorraad én kg zijn allebei 0. Zegt niets over de fysieke pallet.
         public bool Depleted { get; set; }
+        // Receipt of DispatchCorrection; correctie-inhoud telt niet als registratie tegen de bronregel.
+        public string Origin { get; set; }
         public string QualityStatus { get; set; }
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }

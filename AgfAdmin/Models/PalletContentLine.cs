@@ -25,6 +25,11 @@ namespace AgfAdmin.Models
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }
 
+        // Herkomst: null = fysieke ontvangst; anders de correctieregel waaruit deze inhoud is teruggeboekt (onveranderlijk, uniek).
+        // Zulke inhoud telt niet mee als registratie tegen de bronregel: die goederen zijn al bij de oorspronkelijke regel geteld.
+        public int? OriginCorrectionLineId { get; set; }
+        public SalesDispatchCorrectionLine OriginCorrectionLine { get; set; }
+
         public string QualityStatus { get; set; }  // Quarantine, Approved, Blocked, Rejected
         public string QualityReason { get; set; }  // optioneel
 

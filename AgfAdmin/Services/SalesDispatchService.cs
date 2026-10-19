@@ -350,9 +350,12 @@ namespace AgfAdmin.Services
                 && audit != null
                 && RecordedVersion(audit.OldValue) == command.ExpectedOrderVersion
                 && existingLines.SequenceEqual(commandLines);
-            return same
-                ? ServiceResult<SalesDispatchDto>.Ok(ToDto(existing))
-                : ServiceResult<SalesDispatchDto>.Conflict($"RequestId {command.RequestId} was already used for a different dispatch.");
+            if (!same)
+            {
+                return ServiceResult<SalesDispatchDto>.Conflict($"RequestId {command.RequestId} was already used for a different dispatch.");
+            }
+            var corrections = await CorrectionsAsync(new List<int> { existing.Id }, cancellationToken);
+            return ServiceResult<SalesDispatchDto>.Ok(ToDto(existing, corrections.GetValueOrDefault(existing.Id)));
         }
 
         private static int? RecordedVersion(string json)
@@ -376,13 +379,15 @@ namespace AgfAdmin.Services
                 return ServiceResult<IReadOnlyList<SalesDispatchDto>>.NotFound($"Sales order {salesOrderId} does not exist.");
             }
             var dispatches = await DispatchQuery().Where(d => d.SalesOrderId == salesOrderId).OrderBy(d => d.DispatchedAt).ThenBy(d => d.Id).ToListAsync(cancellationToken);
-            return ServiceResult<IReadOnlyList<SalesDispatchDto>>.Ok(dispatches.Select(ToDto).ToList());
+            var corrections = await CorrectionsAsync(dispatches.Select(d => d.Id).ToList(), cancellationToken);
+            return ServiceResult<IReadOnlyList<SalesDispatchDto>>.Ok(dispatches.Select(d => ToDto(d, corrections.GetValueOrDefault(d.Id))).ToList());
         }
 
         private async Task<SalesDispatchDto> LoadDtoAsync(int dispatchId, CancellationToken cancellationToken)
         {
             _db.ChangeTracker.Clear();
-            return ToDto(await DispatchQuery().SingleAsync(d => d.Id == dispatchId, cancellationToken));
+            var corrections = await CorrectionsAsync(new List<int> { dispatchId }, cancellationToken);
+            return ToDto(await DispatchQuery().SingleAsync(d => d.Id == dispatchId, cancellationToken), corrections.GetValueOrDefault(dispatchId));
         }
 
         private IQueryable<SalesDispatch> DispatchQuery() =>
@@ -391,7 +396,19 @@ namespace AgfAdmin.Services
                 .Include(d => d.Lines).ThenInclude(l => l.SalesOrderLine).ThenInclude(s => s.ProductVariant).ThenInclude(v => v.Product)
                 .AsSplitQuery();
 
-        internal static SalesDispatchDto ToDto(SalesDispatch dispatch) => new()
+        private async Task<Dictionary<int, SalesDispatchCorrection>> CorrectionsAsync(List<int> dispatchIds, CancellationToken cancellationToken)
+        {
+            if (dispatchIds.Count == 0) return new Dictionary<int, SalesDispatchCorrection>();
+            var corrections = await _db.SalesDispatchCorrections.AsNoTracking()
+                .Include(c => c.Lines).ThenInclude(l => l.RestoredContentLine).ThenInclude(r => r.Pallet)
+                .Include(c => c.Lines).ThenInclude(l => l.StockMovement)
+                .Where(c => dispatchIds.Contains(c.SalesDispatchId))
+                .AsSplitQuery()
+                .ToListAsync(cancellationToken);
+            return corrections.ToDictionary(c => c.SalesDispatchId);
+        }
+
+        internal static SalesDispatchDto ToDto(SalesDispatch dispatch, SalesDispatchCorrection correction = null) => new()
         {
             Id = dispatch.Id,
             RequestId = dispatch.RequestId,
@@ -399,6 +416,7 @@ namespace AgfAdmin.Services
             Reference = dispatch.Reference,
             ActorReference = dispatch.ActorReference,
             DispatchedAt = DateTime.SpecifyKind(dispatch.DispatchedAt, DateTimeKind.Utc),
+            Correction = correction == null ? null : SalesDispatchCorrectionService.ToDto(correction),
             Lines = dispatch.Lines.OrderBy(l => l.Id).Select(l => new SalesDispatchLineDto
             {
                 Id = l.Id,

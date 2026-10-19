@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { blockedBy, cancelKey, dispatchKey } from '../../lib/pendingCommands';
+import { blockedBy, cancelKey, correctDispatchKey, dispatchKey } from '../../lib/pendingCommands';
 import { orderProgress } from '../../lib/salesOrderRules';
 import { SaveResult } from '../../services/supplyService';
-import { SalesDispatch, SalesOrder } from '../../types/salesOrder';
+import { SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import CancelOrderPanel from './CancelOrderPanel';
+import CorrectDispatchPanel from './CorrectDispatchPanel';
 import DispatchList from './DispatchList';
 import DispatchPanel from './DispatchPanel';
 import OrderHistory from './OrderHistory';
@@ -50,7 +51,20 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
     const dispatchBlocker = blockedBy(commands, { kind: 'dispatch', orderId: order.id });
     const showDispatch = pendingDispatch || (!readOnly && dispatching);
     const hasDispatchable = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Active' && !reservation.onHold));
-    const hasDispatches = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
+    // Twee aparte begrippen: verzendhistorie (Consumed of Corrected) wordt getoond; alleen nog niet gecorrigeerd verbruik
+    // (Consumed) blokkeert annuleren. Een order waarvan alle verzendingen gecorrigeerd zijn, kan dus weer geannuleerd worden.
+    const hasDispatchHistory = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed' || reservation.status === 'Corrected'));
+    const hasUncorrectedConsumption = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
+    // Verzendcorrectie: paneel per verzending; een onafgerond correctiecommando opent het paneel ook na verversen.
+    const [dispatches, setDispatches] = useState<SalesDispatch[]>([]);
+    const [correctingId, setCorrectingId] = useState<number | null>(null);
+    const [correctionNotice, setCorrectionNotice] = useState<SaveResult<SalesDispatchCorrection> | null>(null);
+    const [correctionDecisionToken, setCorrectionDecisionToken] = useState(0);
+    const onDispatchesLoaded = useCallback((loaded: SalesDispatch[]) => setDispatches(loaded), []);
+    const pendingCorrectionDispatch = dispatches.find((dispatch) => commands[correctDispatchKey(order.id, dispatch.id)] !== undefined) ?? null;
+    const correctingDispatch = pendingCorrectionDispatch ?? dispatches.find((dispatch) => dispatch.id === correctingId) ?? null;
+    const correctionBlocker = blockedBy(commands, { kind: 'correct-dispatch', orderId: order.id });
+    const canStartCorrection = !readOnly && (correctionBlocker === null || correctionBlocker.kind === 'correct-dispatch');
 
     const onCancelled = async () => {
         setCancelling(false);
@@ -79,6 +93,21 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
         }
     };
 
+    const onCorrected = async (saved: SaveResult<SalesDispatchCorrection>) => {
+        setCorrectingId(null);
+        setCorrectionNotice(saved);
+        setHistoryToken((n) => n + 1);
+        setDispatchToken((n) => n + 1);
+        await onOrderChanged();
+    };
+
+    const reloadForNewCorrectionDecision = async () => {
+        if (await onOrderChanged()) {
+            setDispatchToken((n) => n + 1);
+            setCorrectionDecisionToken((n) => n + 1);
+        }
+    };
+
     return (
         <div className="space-y-3">
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
@@ -98,8 +127,8 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                         )}
                         {!readOnly && !showCancel && (
                             <button type="button" className={`${secondaryButtonClass} border-red-300 text-red-800 hover:bg-red-50`} onClick={() => { setCancelNotice(false); setCancelling(true); }}
-                                disabled={hasDispatches || (cancelBlocker !== null && cancelBlocker.kind !== 'cancel-order')}
-                                title={hasDispatches ? t('sales_cancel_after_dispatch') : undefined}>
+                                disabled={hasUncorrectedConsumption || (cancelBlocker !== null && cancelBlocker.kind !== 'cancel-order')}
+                                title={hasUncorrectedConsumption ? t('sales_cancel_after_dispatch') : undefined}>
                                 {t('sales_cancel_order')}
                             </button>
                         )}
@@ -167,10 +196,24 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                     onReload={() => void reloadForNewDecision()} onClose={() => setCancelling(false)} />
             )}
 
-            {(hasDispatches || dispatchNotice) && (
+            {correctionNotice && (
+                <div role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    <p className="font-medium"><span aria-hidden="true">↺ </span>{t('sales_notice_corrected', { id: String(correctionNotice.value.salesDispatchId), count: String(correctionNotice.value.lines.length) })}</p>
+                    {correctionNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
+                    <p className="mt-1">{t('sales_notice_corrected_next')}</p>
+                </div>
+            )}
+
+            {correctingDispatch !== null && (
+                <CorrectDispatchPanel key={`${correctingDispatch.id}:${correctionDecisionToken}`} order={order} dispatch={correctingDispatch} actor={actor}
+                    onCorrected={onCorrected} onReload={() => void reloadForNewCorrectionDecision()} onClose={() => setCorrectingId(null)} />
+            )}
+
+            {(hasDispatchHistory || dispatchNotice || correctionNotice) && (
                 <section aria-labelledby={`dispatches-${order.id}`} className="rounded-md border border-gray-300 bg-white px-4 py-3">
                     <h3 id={`dispatches-${order.id}`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">{t('sales_dispatches_title')}</h3>
-                    <DispatchList orderId={order.id} token={dispatchToken} />
+                    <DispatchList orderId={order.id} token={dispatchToken} onDispatches={onDispatchesLoaded} canCorrect={canStartCorrection}
+                        correctingId={correctingDispatch?.id ?? null} onCorrect={(dispatch) => { setCorrectionNotice(null); setCorrectingId(dispatch.id); }} />
                 </section>
             )}
 

@@ -139,6 +139,8 @@ export interface ContentLineAvailability {
     onHandNetWeightKg: number;
     // Voorraad én kg zijn 0; zegt niets over de fysieke pallet.
     depleted: boolean;
+    // Receipt (fysieke ontvangst) of DispatchCorrection (teruggeboekt; telt niet als registratie tegen de bron).
+    origin: string;
     qualityStatus: QualityStatus;
     reservedQuantity: number;
     reservedNetWeightKg: number;
@@ -311,6 +313,7 @@ function isContentLine(value: unknown): value is ContentLineAvailability {
         && isNumber(value.onHandQuantity)
         && isNumber(value.onHandNetWeightKg)
         && typeof value.depleted === 'boolean'
+        && typeof value.origin === 'string'
         && typeof value.qualityStatus === 'string'
         && isNumber(value.reservedQuantity)
         && isNumber(value.reservedNetWeightKg)

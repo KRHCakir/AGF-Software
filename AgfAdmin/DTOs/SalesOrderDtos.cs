@@ -116,6 +116,9 @@ namespace AgfAdmin.DTOs
         public DateTime? ConsumedAt { get; set; }
         public int? DispatchId { get; set; }
         public string DispatchReference { get; set; }
+        // Alleen bij Corrected: de verzendcorrectie heeft deze reservering teruggeboekt (eindtoestand).
+        public DateTime? CorrectedAt { get; set; }
+        public int? CorrectionId { get; set; }
     }
 
     // Inhoudsregel die voor een orderregel te reserveren is (zelfde variant + eenheid, Approved, Received + Warehouse).
@@ -167,7 +170,49 @@ namespace AgfAdmin.DTOs
         public string Reference { get; set; }
         public string ActorReference { get; set; }
         public DateTime DispatchedAt { get; set; }
+        // Gevuld zodra de verzending administratief is gecorrigeerd; de verzending zelf blijft ongewijzigd.
+        public SalesDispatchCorrectionDto Correction { get; set; }
         public List<SalesDispatchLineDto> Lines { get; set; } = new();
+    }
+
+    // Correctie: alleen voor goederen die het magazijn niet hebben verlaten (door de gebruiker bevestigd).
+    public sealed class CorrectSalesDispatchDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+        public bool? GoodsNeverLeftWarehouse { get; set; }
+        public List<CreateSalesDispatchLineDto> Lines { get; set; }
+    }
+
+    public sealed class SalesDispatchCorrectionDto
+    {
+        public int Id { get; set; }
+        public Guid RequestId { get; set; }
+        public int SalesDispatchId { get; set; }
+        public int SalesOrderId { get; set; }
+        public string Reason { get; set; }
+        public string ActorReference { get; set; }
+        public bool GoodsNeverLeftWarehouseConfirmed { get; set; }
+        public DateTime CorrectedAt { get; set; }
+        public List<SalesDispatchCorrectionLineDto> Lines { get; set; } = new();
+    }
+
+    public sealed class SalesDispatchCorrectionLineDto
+    {
+        public int Id { get; set; }
+        public int SalesDispatchLineId { get; set; }
+        public int StockReservationId { get; set; }
+        public int RestoredPalletContentLineId { get; set; }
+        public int PalletId { get; set; }
+        public string PalletReference { get; set; }
+        public string LotNumber { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public decimal NetWeightKg { get; set; }
+        public string RestoredQualityStatus { get; set; }
+        public int StockMovementId { get; set; }
     }
 
     public sealed class SalesDispatchLineDto

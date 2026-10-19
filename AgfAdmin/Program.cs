@@ -27,6 +27,7 @@ builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
 builder.Services.AddScoped<ISalesOrderService, SalesOrderService>();
 builder.Services.AddScoped<IStockReservationService, StockReservationService>();
 builder.Services.AddScoped<ISalesDispatchService, SalesDispatchService>();
+builder.Services.AddScoped<ISalesDispatchCorrectionService, SalesDispatchCorrectionService>();
 
 // Database configuratie
 var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder.Configuration);

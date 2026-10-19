@@ -12,11 +12,24 @@ import SalesOrderDetail from './SalesOrderDetail';
 // (server heeft het commando verwerkt, antwoord verloren), en na een geslaagde herlaadactie na 409 begint
 // een nieuwe beslissing, ook als de orderversie gelijk bleef maar de reserveringen veranderden.
 
-const reservation = (id: number, status: 'Active' | 'Released'): StockReservation => ({
+const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed' | 'Corrected'): StockReservation => ({
     id, requestId: `r-${id}`, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: `PAL-${id}`,
     warehouseLocation: null, lotNumber: `LOT-${id}`, quantity: 5, unit: 'box', netWeightKg: 20, source: 'Physical', status,
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
-    releaseReason: status === 'Released' ? 'eerder' : null, version: status === 'Released' ? 1 : 0, contentQualityStatus: 'Approved', onHold: false, consumedAt: null, dispatchId: null, dispatchReference: null,
+    releaseReason: status === 'Released' ? 'eerder' : null, version: status === 'Active' ? 0 : status === 'Corrected' ? 2 : 1, contentQualityStatus: 'Approved', onHold: false,
+    consumedAt: status === 'Consumed' || status === 'Corrected' ? '2026-10-19T13:00:00.000Z' : null,
+    dispatchId: status === 'Consumed' || status === 'Corrected' ? 9 : null, dispatchReference: status === 'Consumed' || status === 'Corrected' ? 'VRB-9' : null,
+    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null,
+});
+
+// Verzending 9 met de opgegeven reserveringen; `corrected` vult de correctie zodat de historie beide toont.
+const dispatchNine = (reservationIds: number[], corrected: boolean) => ({
+    id: 9, requestId: 'd-9', salesOrderId: 4, reference: 'VRB-9', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z',
+    correction: corrected ? {
+        id: 3, requestId: 'c-3', salesDispatchId: 9, salesOrderId: 4, reason: 'Verkeerd gescand', actorReference: 'office-1', goodsNeverLeftWarehouseConfirmed: true, correctedAt: '2026-10-19T14:00:00.000Z',
+        lines: reservationIds.map((rid, index) => ({ id: 50 + index, salesDispatchLineId: 20 + index, stockReservationId: rid, restoredPalletContentLineId: 70 + index, palletId: 2, palletReference: `PAL-${rid}`, lotNumber: `LOT-${rid}`, quantity: 5, unit: 'box', netWeightKg: 20, restoredQualityStatus: 'Quarantine', stockMovementId: 80 + index })),
+    } : null,
+    lines: reservationIds.map((rid, index) => ({ id: 20 + index, stockReservationId: rid, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: `PAL-${rid}`, lotNumber: `LOT-${rid}`, productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 30 + index })),
 });
 
 const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: StockReservation[]): SalesOrder => ({
@@ -30,8 +43,8 @@ const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: 
         id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
         reservedQuantity: reservations.filter((r) => r.status === 'Active').length * 5,
         reservedNetWeightKg: reservations.filter((r) => r.status === 'Active').length * 20,
-        dispatchedQuantity: 0, dispatchedNetWeightKg: 0,
-        openQuantity: 20 - reservations.filter((r) => r.status === 'Active').length * 5, fulfilled: false, version: 3, reservations,
+        dispatchedQuantity: reservations.filter((r) => r.status === 'Consumed').length * 5, dispatchedNetWeightKg: reservations.filter((r) => r.status === 'Consumed').length * 20,
+        openQuantity: 20 - reservations.filter((r) => r.status === 'Active' || r.status === 'Consumed').length * 5, fulfilled: false, version: 3, reservations,
     }],
 });
 
@@ -121,6 +134,36 @@ describe('SalesOrderDetail cancellation decisions', () => {
         assert.equal((fresh.textContent ?? '').includes('PAL-12'), true, 'the confirmation lists the updated active reservation');
         assert.equal((fresh.textContent ?? '').includes('PAL-11'), false, 'the released one is no longer in the release list');
         assert.equal(mounted.hasText('sales_cancel_based_on_version'), true);
+    });
+
+    test('all consumed reservations are Corrected: cancellation is available again while dispatch and correction history stay visible', async () => {
+        posted = stubFetch({ onGet: (url) => (url.includes('/dispatches') ? json(200, [dispatchNine([11, 12], true)]) : json(404, { message: `unexpected GET ${url}` })), nextPost: () => nextPost() });
+        current = orderWith('Open', 3, [reservation(11, 'Corrected'), reservation(12, 'Corrected'), reservation(13, 'Released')]);
+        await mounted.render(element(current));
+
+        const cancel = await mounted.waitFor(() => mounted.button('sales_cancel_order'), 'cancel button');
+        assert.equal(cancel.disabled, false, 'fully corrected consumption no longer blocks cancellation');
+        assert.equal(cancel.title, '', 'no "after dispatch" explanation');
+        assert.equal(mounted.hasText('sales_dispatches_title'), true, 'dispatch history section stays visible');
+        await mounted.waitFor(() => mounted.hasText('sales_dispatch_corrected'), 'corrected badge in the dispatch list');
+        assert.equal(mounted.hasText('sales_corrected_notice'), true);
+        assert.equal(mounted.button('sales_correct_dispatch'), null, 'a corrected dispatch offers no second correction');
+        await click(cancel);
+        assert.ok(await mounted.waitFor(() => mounted.button('sales_cancel_confirm'), 'cancellation panel opens'));
+    });
+
+    test('at least one reservation remains Consumed: cancellation stays disabled although history is visible', async () => {
+        posted = stubFetch({ onGet: (url) => (url.includes('/dispatches') ? json(200, [dispatchNine([11], true), { ...dispatchNine([12], false), id: 10, requestId: 'd-10', reference: 'VRB-10' }]) : json(404, { message: `unexpected GET ${url}` })), nextPost: () => nextPost() });
+        current = orderWith('Open', 3, [reservation(11, 'Corrected'), reservation(12, 'Consumed')]);
+        await mounted.render(element(current));
+
+        const cancel = await mounted.waitFor(() => mounted.button('sales_cancel_order'), 'cancel button');
+        assert.equal(cancel.disabled, true, 'uncorrected consumption blocks cancellation');
+        assert.equal(cancel.title, 'sales_cancel_after_dispatch');
+        assert.equal(mounted.hasText('sales_dispatches_title'), true);
+        await mounted.waitFor(() => mounted.button('sales_correct_dispatch') !== null, 'the uncorrected dispatch can still be corrected');
+        await click(cancel);
+        assert.equal(mounted.button('sales_cancel_confirm'), null, 'no cancellation panel');
     });
 
     test('a reload that fails keeps the conflict state instead of pretending a fresh decision', async () => {

@@ -187,4 +187,38 @@ public static class SalesTestData
         }
         return dispatch;
     }
+
+    // Volledige verzendcorrectie rechtstreeks in de database (zoals de correctieservice die schrijft): reservering Consumed -> Corrected,
+    // correctie met regel, nieuwe inhoudsregel in quarantaine met herkomst en één compenserende Correction-mutatie. Slaat niet zelf op.
+    public static async Task<(SalesDispatchCorrection Correction, PalletContentLine Restored, StockMovement Movement)> CorrectInContextAsync(AppDbContext db, int dispatchId, string reason = "test correction")
+    {
+        var dispatch = await db.SalesDispatches.Include(d => d.Lines).ThenInclude(l => l.StockReservation).Include(d => d.Lines).ThenInclude(l => l.PalletContentLine).SingleAsync(d => d.Id == dispatchId);
+        var dispatchLine = dispatch.Lines.Single();
+        var reservation = dispatchLine.StockReservation;
+        var original = dispatchLine.PalletContentLine;
+        var now = DateTime.UtcNow;
+        reservation.Status = "Corrected";
+        reservation.CorrectedAt = now;
+        var correction = new SalesDispatchCorrection { RequestId = Guid.NewGuid(), SalesDispatch = dispatch, SalesOrderId = dispatch.SalesOrderId, Reason = reason, ActorReference = "test", GoodsNeverLeftWarehouseConfirmed = true, CorrectedAt = now };
+        var correctionLine = new SalesDispatchCorrectionLine { SalesDispatchLine = dispatchLine, StockReservation = reservation, Quantity = dispatchLine.Quantity, Unit = dispatchLine.Unit, NetWeightKg = dispatchLine.NetWeightKg, ExpectedReservationVersion = reservation.Version };
+        correction.Lines.Add(correctionLine);
+        var restored = new PalletContentLine
+        {
+            RequestId = Guid.NewGuid(), PalletId = original.PalletId, SupplyCommitmentLineId = original.SupplyCommitmentLineId, LotNumber = original.LotNumber,
+            Quantity = dispatchLine.Quantity, Unit = dispatchLine.Unit, NetWeightKg = dispatchLine.NetWeightKg, QualityStatus = "Quarantine", OriginCorrectionLine = correctionLine, CreatedAt = now
+        };
+        var movement = new StockMovement { Type = "Correction", Quantity = dispatchLine.Quantity, Unit = dispatchLine.Unit, NetWeightKg = dispatchLine.NetWeightKg, SupplyCommitmentLineId = original.SupplyCommitmentLineId, PalletContentLine = restored, StockReservation = reservation, SalesDispatchCorrectionLine = correctionLine, CreatedAt = now };
+        db.SalesDispatchCorrections.Add(correction);
+        db.PalletContentLines.Add(restored);
+        db.StockMovements.Add(movement);
+        return (correction, restored, movement);
+    }
+
+    public static async Task<(int CorrectionId, int RestoredContentLineId, int CorrectionLineId)> CorrectAsync(SqliteAppDbContextFactory factory, int dispatchId)
+    {
+        await using var db = factory.CreateContext();
+        var (correction, restored, _) = await CorrectInContextAsync(db, dispatchId);
+        await db.SaveChangesAsync();
+        return (correction.Id, restored.Id, correction.Lines.Single().Id);
+    }
 }
