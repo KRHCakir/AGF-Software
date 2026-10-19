@@ -28,7 +28,8 @@ function AdminLayoutContent({
 
                 <nav className="flex space-x-1 h-full items-center">
                     <NavLink href="/dashboard" label={t('home')} />
-                    <NavLink href="/orders" label={t('orders')} />
+                    <NavLink href="/sales-orders" label={t('sales')} />
+                    <NavLink href="/orders" label={t('orders_legacy_nav')} />
                     <NavLink href="/products" label={t('products')} />
                     <NavLink href="/incoming-invoices" label={t('invoices')} />
                     <NavLink href="/tracking" label={t('tracking')} />

@@ -311,6 +311,64 @@ public class SalesOrderServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Get_Flags_Active_Reservations_On_Non_Approved_Content_As_On_Hold_From_Current_Quality()
+    {
+        await SeedAsync();
+        var order = (await CreateAsync(Request())).Value;
+        var box = order.Lines.Single(l => l.Unit == "box");
+        var onFirstPallet = await ReserveAsync(order.Id, box.Id, _seed.ApprovedBox, 10m, 40m);
+        var released = await ReserveAsync(order.Id, box.Id, _seed.ApprovedBox, 2m, 8m);
+        var onSecondPallet = await ReserveAsync(order.Id, box.Id, _seed.SecondPalletApprovedBox, 5m, 20m);
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Ok, (await new StockReservationService(db).ReleaseAsync(released.Value.Id, new ReleaseStockReservationDto
+            {
+                RequestId = Guid.NewGuid(),
+                ExpectedReservationVersion = released.Value.Version,
+                ActorReference = "office-1",
+                Reason = "Verkeerde partij"
+            })).Status);
+        }
+
+        // Vóór de blokkade: alles Approved en niets on hold.
+        await using (var before = _factory.CreateContext())
+        {
+            var line = (await new SalesOrderService(before).GetAsync(order.Id)).Value.Lines.Single(l => l.Unit == "box");
+            Assert.All(line.Reservations, r => Assert.Equal(("Approved", false), (r.ContentQualityStatus, r.OnHold)));
+        }
+
+        Assert.Equal(ServiceResultStatus.Ok, await BlockAsync(_seed.ApprovedBox));
+
+        await using var read = _factory.CreateContext();
+        var after = (await new SalesOrderService(read).GetAsync(order.Id)).Value.Lines.Single(l => l.Unit == "box");
+        var held = after.Reservations.Single(r => r.Id == onFirstPallet.Value.Id);
+        Assert.Equal(("Active", "Blocked", true), (held.Status, held.ContentQualityStatus, held.OnHold));
+        // Een vrijgegeven reservering op geblokkeerde inhoud is niet on hold: er staat niets meer vast.
+        var done = after.Reservations.Single(r => r.Id == released.Value.Id);
+        Assert.Equal(("Released", "Blocked", false), (done.Status, done.ContentQualityStatus, done.OnHold));
+        var fine = after.Reservations.Single(r => r.Id == onSecondPallet.Value.Id);
+        Assert.Equal(("Active", "Approved", false), (fine.Status, fine.ContentQualityStatus, fine.OnHold));
+        // De totalen van de orderregel tellen de reservering on hold gewoon mee: de klantvraag is nog steeds vastgelegd.
+        Assert.Equal(15m, after.ReservedQuantity);
+        Assert.Equal(15m, after.OpenQuantity);
+    }
+
+    private async Task<ServiceResultStatus> BlockAsync(int contentLineId)
+    {
+        await using var read = _factory.CreateContext();
+        var line = await read.PalletContentLines.AsNoTracking().SingleAsync(c => c.Id == contentLineId);
+        await using var service = _factory.CreateContext();
+        return (await new PalletService(service).ChangeQualityStatusAsync(line.PalletId, line.Id, new ChangeQualityStatusDto
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedContentLineVersion = line.Version,
+            ToStatus = "Blocked",
+            ActorReference = "qc-1",
+            Reason = "Claim"
+        })).Status;
+    }
+
+    [Fact]
     public async Task Get_Unknown_Order_Is_NotFound()
     {
         await using var db = _factory.CreateContext();

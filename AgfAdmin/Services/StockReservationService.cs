@@ -421,7 +421,11 @@ namespace AgfAdmin.Services
             CreatedAt = DateTime.SpecifyKind(reservation.CreatedAt, DateTimeKind.Utc),
             ReleasedAt = reservation.ReleasedAt == null ? null : DateTime.SpecifyKind(reservation.ReleasedAt.Value, DateTimeKind.Utc),
             ReleaseReason = reservation.ReleaseReason,
-            Version = reservation.Version
+            Version = reservation.Version,
+            ContentQualityStatus = reservation.PalletContentLine?.QualityStatus,
+            OnHold = reservation.Status == ReservationRules.StatusActive
+                && reservation.PalletContentLine != null
+                && reservation.PalletContentLine.QualityStatus != PalletRules.QualityApproved
         };
     }
 }
