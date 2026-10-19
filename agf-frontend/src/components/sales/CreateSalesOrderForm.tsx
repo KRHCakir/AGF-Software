@@ -4,22 +4,23 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
-import { CREATE_ORDER_KEY, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
+import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { MAX_ORDER_LINES, OrderDraft, OrderLineDraft, buildOrderPayload } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
 import { PACKAGE_UNITS } from '../../types/availability';
-import { CustomerOption, ProductOption } from '../../types/referenceData';
+import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import NewCustomerPanel from './NewCustomerPanel';
 import { PendingNotice } from './PendingCommandsBanner';
-import { usePendingCommand } from './PendingCommandsContext';
+import { usePendingCommand, usePendingCommands } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '' });
@@ -36,16 +37,30 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
 // geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren en boven dit formulier bewaard:
 // bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
-export default function CreateSalesOrderForm({ actor, customers, products, onSaved, onOpen, onCancel }: {
+export default function CreateSalesOrderForm({ actor, customers: knownCustomers, products, onSaved, onOpen, onCancel, onCustomerCreated }: {
     actor: string;
     customers: CustomerOption[];
     products: ProductOption[];
     onSaved: (order: SalesOrder) => void;
     onOpen: (orderId: number) => void;
     onCancel: () => void;
+    // Na een nieuwe klant: de pagina ververst de klantenlijst op de achtergrond zonder dit formulier te hermonteren.
+    onCustomerCreated?: (customer: CreatedCustomer) => void;
 }) {
     const { t, locale } = useTranslation();
     const [pending, setPending, clearPending] = usePendingCommand<CreateOrderCommand>(CREATE_ORDER_KEY);
+    const { commands } = usePendingCommands();
+    // Nieuwe klant: paneel naast de klantkeuze. Een onafgeronde klantopdracht opent het paneel altijd (ook na sluiten,
+    // navigeren of verversen) en kan niet door een tweede worden vervangen. Zojuist aangemaakte klanten staan direct in de keuze.
+    const pendingCustomer = (commands[CREATE_CUSTOMER_KEY] as CreateCustomerCommand | undefined) ?? null;
+    const [customerPanelOpen, setCustomerPanelOpen] = useState(false);
+    const [createdCustomers, setCreatedCustomers] = useState<CustomerOption[]>([]);
+    const [customerNotice, setCustomerNotice] = useState<string | null>(null);
+    const showCustomerPanel = customerPanelOpen || pendingCustomer !== null;
+    const customers = useMemo(() => {
+        const extra = createdCustomers.filter((created) => !knownCustomers.some((known) => known.id === created.id));
+        return extra.length === 0 ? knownCustomers : [...knownCustomers, ...extra].sort((a, b) => a.name.localeCompare(b.name));
+    }, [knownCustomers, createdCustomers]);
     const [draft, setDraft] = useState<OrderDraft>(() => (pending === null ? emptyDraft() : draftFromCommand(pending)));
     const [customerFilter, setCustomerFilter] = useState('');
     const [variantFilter, setVariantFilter] = useState('');
@@ -161,6 +176,25 @@ export default function CreateSalesOrderForm({ actor, customers, products, onSav
         }
     };
 
+    const onCustomerSaved = (customer: CreatedCustomer, replayed: boolean) => {
+        setCreatedCustomers((current) => (current.some((c) => c.id === customer.id) ? current : [...current, { id: customer.id, name: customer.name }]));
+        // Alleen de klantkeuze verandert; regels, datum en referentie van het concept blijven staan.
+        setDraft((current) => ({ ...current, customerId: String(customer.id) }));
+        setCustomerFilter('');
+        setCustomerPanelOpen(false);
+        setCustomerNotice(`${t('sales_customer_created', { name: customer.name })}${replayed ? ` ${t('supply_saved_before')}` : ''}`);
+        edited();
+        onCustomerCreated?.(customer);
+    };
+
+    const chooseExisting = (customerId: number) => {
+        setDraft((current) => ({ ...current, customerId: String(customerId) }));
+        setCustomerFilter('');
+        setCustomerPanelOpen(false);
+        setCustomerNotice(null);
+        edited();
+    };
+
     const startOver = () => {
         setDraft(emptyDraft());
         setError(null);
@@ -217,7 +251,14 @@ export default function CreateSalesOrderForm({ actor, customers, products, onSav
 
             <div className="grid grid-cols-4 gap-3">
                 <div className="col-span-2">
-                    <label htmlFor="customerId-input" className="text-xs font-medium text-gray-700">{t('sales_customer')} *</label>
+                    <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="customerId-input" className="text-xs font-medium text-gray-700">{t('sales_customer')} *</label>
+                        <button type="button" className={`${secondaryButtonClass} px-2 py-1 text-xs`} disabled={locked && pendingCustomer === null}
+                            onClick={() => { setCustomerNotice(null); setCustomerPanelOpen(true); }} aria-expanded={showCustomerPanel}
+                            title={locked && pendingCustomer === null ? t('sales_customer_blocked_by_order') : undefined}>
+                            + {t('sales_new_customer')}
+                        </button>
+                    </div>
                     <input type="search" value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)} disabled={locked}
                         placeholder={t('sales_customer_filter_placeholder')} aria-label={t('sales_customer_filter')} className={inputClass} />
                     <select {...fieldProps('customerId', e('customerId'))} value={draft.customerId} disabled={locked}
@@ -228,8 +269,13 @@ export default function CreateSalesOrderForm({ actor, customers, products, onSav
                         )}
                         {filteredCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
                     </select>
-                    <span className="block text-xs text-gray-500">{t('sales_customer_existing_only')}</span>
                     <FieldError id="customerId" messages={e('customerId')} />
+                    {customerNotice && <p role="status" className="mt-1 rounded border border-green-300 bg-green-50 px-2 py-1 text-xs text-green-900">{customerNotice}</p>}
+                    {showCustomerPanel && (
+                        <div className="mt-2">
+                            <NewCustomerPanel customers={customers} onCreated={onCustomerSaved} onChooseExisting={chooseExisting} onClose={() => setCustomerPanelOpen(false)} />
+                        </div>
+                    )}
                 </div>
                 <div>
                     <label htmlFor="requestedDeliveryDate-input" className="text-xs font-medium text-gray-700">{t('sales_delivery_date')} *</label>

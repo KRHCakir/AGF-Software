@@ -88,6 +88,9 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ShippingAddress")
                         .HasColumnType("text");
 
@@ -95,6 +98,10 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique()
+                        .HasFilter("\"RequestId\" IS NOT NULL");
 
                     b.ToTable("Customers");
                 });

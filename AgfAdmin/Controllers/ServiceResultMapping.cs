@@ -14,7 +14,7 @@ namespace AgfAdmin.Controllers
                 ServiceResultStatus.Validation => controller.BadRequest(new ValidationProblemDetails(
                     result.Errors.ToDictionary(e => e.Key, e => e.Value))),
                 ServiceResultStatus.NotFound => controller.NotFound(new { message = result.Message }),
-                ServiceResultStatus.Conflict => controller.Conflict(new { message = result.Message }),
+                ServiceResultStatus.Conflict => controller.Conflict(result.ConflictBody ?? new { message = result.Message }),
                 _ => throw new InvalidOperationException($"Unhandled service result status {result.Status}.")
             };
     }

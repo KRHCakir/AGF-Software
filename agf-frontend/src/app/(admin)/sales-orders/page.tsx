@@ -76,12 +76,14 @@ function SalesWorkspace() {
 
     useEffect(() => {
         const controller = new AbortController();
-        setReference({ status: 'loading' });
+        // Een al geladen stamgegevensset blijft staan tijdens het verversen (bijvoorbeeld na een nieuwe klant), zodat een
+        // open orderformulier niet hermonteert en zijn concept behoudt.
+        setReference((current) => (current.status === 'ready' ? current : { status: 'loading' }));
         Promise.all([getCustomers(controller.signal), getProductsWithVariants(controller.signal)])
             .then(([customers, products]) => setReference({ status: 'ready', data: { customers, products } }))
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
-                if (apiError.kind !== 'aborted') setReference({ status: 'error', error: apiError });
+                if (apiError.kind !== 'aborted') setReference((current) => (current.status === 'ready' ? current : { status: 'error', error: apiError }));
             });
         return () => controller.abort();
     }, [referenceToken]);
@@ -145,7 +147,7 @@ function SalesWorkspace() {
 
     // Vanuit de lijst met onafgeronde commando's terug naar de plek waar de identieke opdracht wordt getoond.
     const goToCommand = (command: PendingCommand) => {
-        if (command.kind === 'create-order') {
+        if (command.kind === 'create-order' || command.kind === 'create-customer') {
             setCreating(true);
         } else {
             openOrder(command.orderId);
@@ -279,7 +281,8 @@ function SalesWorkspace() {
                     {creating && reference.status === 'ready' && (
                         <HydratedGate>
                             <CreateSalesOrderForm actor={actor} customers={reference.data.customers} products={reference.data.products}
-                                onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => setCreating(false)} />
+                                onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => setCreating(false)}
+                                onCustomerCreated={() => setReferenceToken((n) => n + 1)} />
                         </HydratedGate>
                     )}
                     {!creating && selectedId === null && (

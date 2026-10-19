@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using AgfAdmin.Data;
+using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Cors;
 
@@ -12,7 +14,8 @@ namespace AgfAdmin.Controllers
     public class CustomersController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public CustomersController(AppDbContext context) { _context = context; }
+        private readonly ICustomerService _customers;
+        public CustomersController(AppDbContext context, ICustomerService customers) { _context = context; _customers = customers; }
 
         [HttpGet]
         public async Task<IActionResult> GetCustomers()
@@ -21,18 +24,11 @@ namespace AgfAdmin.Controllers
             return Ok(customers);
         }
 
+        // Klant aanmaken vanuit Verkoop: gevalideerd en idempotent (requestId). 201 nieuw, 200 identieke herhaling,
+        // 400 validatie, 409 gelijkende naam zonder bevestiging of afwijkende herhaling. GET en PUT zijn ongewijzigd.
         [HttpPost]
-        public async Task<IActionResult> CreateCustomer([FromBody] Customer customer)
-        {
-            customer.CreatedAt = DateTime.UtcNow;
-            
-            // Als er geen betaaltermijn is ingevuld, maken we er standaard 14 van
-            if (customer.PaymentTermsDays <= 0) customer.PaymentTermsDays = 14;
-
-            _context.Customers.Add(customer);
-            await _context.SaveChangesAsync();
-            return Ok(customer);
-        }
+        public async Task<IActionResult> CreateCustomer([FromBody] CreateOperationalCustomerDto request) =>
+            this.ToActionResult(await _customers.CreateAsync(request, HttpContext?.RequestAborted ?? default));
 
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCustomer(int id, [FromBody] Customer updatedCustomer)

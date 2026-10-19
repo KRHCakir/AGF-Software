@@ -1,4 +1,5 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
+import type { CreateCustomerRequest } from '../types/referenceData';
 import type { CancelSalesOrderRequest, CorrectSalesDispatchRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
@@ -64,11 +65,20 @@ export interface CorrectDispatchCommand extends CommandMeta {
     display: { customerName: string; lineCount: number };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | CorrectDispatchCommand;
+// Nieuwe klant vanuit het orderformulier. Eén vaste sleutel: een tweede klantopdracht kan een onafgeronde nooit vervangen.
+export interface CreateCustomerCommand extends CommandMeta {
+    kind: 'create-customer';
+    key: 'create-customer';
+    payload: CreateCustomerRequest;
+    display: { name: string };
+}
+
+export type PendingCommand = CreateOrderCommand | ReserveCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | CorrectDispatchCommand | CreateCustomerCommand;
 
 export type PendingCommands = Record<string, PendingCommand>;
 
 export const CREATE_ORDER_KEY = 'create-order';
+export const CREATE_CUSTOMER_KEY = 'create-customer';
 
 export function reserveKey(orderId: number, lineId: number): string {
     return `reserve:${orderId}:${lineId}`;
@@ -96,11 +106,12 @@ export function commandsForLine(commands: PendingCommands, orderId: number, line
 
 // Alle commando's op een order: regelcommando's én een annulering van de order zelf.
 export function commandsForOrder(commands: PendingCommands, orderId: number): PendingCommand[] {
-    return Object.values(commands).filter((command) => command.kind !== 'create-order' && command.orderId === orderId);
+    return Object.values(commands).filter((command) => command.kind !== 'create-order' && command.kind !== 'create-customer' && command.orderId === orderId);
 }
 
 export type CommandScope =
     | { kind: 'create-order' }
+    | { kind: 'create-customer' }
     | { kind: 'line'; orderId: number; lineId: number }
     | { kind: 'cancel-order'; orderId: number }
     | { kind: 'dispatch'; orderId: number }
@@ -112,6 +123,9 @@ export type CommandScope =
 export function blockedBy(commands: PendingCommands, scope: CommandScope): PendingCommand | null {
     if (scope.kind === 'create-order') {
         return commands[CREATE_ORDER_KEY] ?? null;
+    }
+    if (scope.kind === 'create-customer') {
+        return commands[CREATE_CUSTOMER_KEY] ?? null;
     }
     if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'correct-dispatch') {
         return commandsForOrder(commands, scope.orderId)[0] ?? null;
@@ -230,6 +244,21 @@ function isCorrectDispatchPayload(value: unknown, requestId: string): value is C
         && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
 }
 
+function isBoundedNullableText(value: unknown, max: number): value is string | null {
+    return value === null || (typeof value === 'string' && value.trim() !== '' && value.length <= max);
+}
+
+function isCreateCustomerPayload(value: unknown, requestId: string): value is CreateCustomerRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isText(value.name) && (value.name as string).length <= 200
+        && isBoundedNullableText(value.contactPerson, 100)
+        && isBoundedNullableText(value.email, 200)
+        && isBoundedNullableText(value.phone, 40)
+        && isBoundedNullableText(value.shippingAddress, 300)
+        && typeof value.acknowledgeSimilarNames === 'boolean';
+}
+
 function hasMeta(value: Record<string, unknown>): value is Record<string, unknown> & CommandMeta {
     return isText(value.requestId)
         && isNonNegativeInt(value.attempts)
@@ -268,6 +297,10 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
                 && value.key === dispatchKey(value.orderId)
                 && isDispatchPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'create-customer':
+            return value.key === CREATE_CUSTOMER_KEY
+                && isCreateCustomerPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.name === 'string';
         case 'correct-dispatch':
             return isPositiveInt(value.orderId) && isPositiveInt(value.dispatchId)
                 && value.key === correctDispatchKey(value.orderId, value.dispatchId)
