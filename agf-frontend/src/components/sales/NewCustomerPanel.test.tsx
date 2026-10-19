@@ -1,7 +1,7 @@
 import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { act } from 'react';
+import { StrictMode, act } from 'react';
 import { Mounted, click, deferred, json, setValue, stubFetch, storedCommands } from '../../test/reactHarness.ts';
 import { CREATE_CUSTOMER_KEY, PendingCommand } from '../../lib/pendingCommands';
 import { CustomerOption, ProductOption } from '../../types/referenceData';
@@ -150,6 +150,70 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         assert.deepEqual(storedCommands(), {});
         assert.equal(customerSelect().value, '7');
         assert.equal(mounted.hasText('supply_saved_before'), true);
+    });
+
+    test('under StrictMode (setup -> cleanup -> setup) a successful creation still selects the customer and closes the panel', async () => {
+        await mounted.render(<StrictMode>{element()}</StrictMode>);
+        await mounted.waitFor(() => orderForm(), 'order form');
+        await typeDraft();
+        await click(newCustomerButton());
+        await act(async () => { setValue(input('customer-name-input'), 'Groentehal Jansen'); });
+        nextPost = async () => json(201, created);
+        await savePanel();
+        await mounted.waitFor(() => panel() === null, 'panel closes under StrictMode');
+        assert.equal(customerSelect().value, '7');
+        assert.equal(mounted.hasText('sales_customer_created'), true);
+        assert.equal(mounted.hasText('sales_customer_saving'), false, 'not stuck in submitting state');
+        assertDraftIntact();
+        assert.deepEqual(storedCommands(), {});
+    });
+
+    test('Enter saves only from the text inputs; buttons keep their normal activation (choose existing, create anyway with a new requestId)', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => orderForm(), 'order form');
+        await typeDraft();
+        await click(newCustomerButton());
+        await act(async () => { setValue(input('customer-name-input'), 'demo klant b'); });
+        const pressEnter = (target: HTMLElement) => {
+            const event = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+            target.dispatchEvent(event);
+            return event.defaultPrevented;
+        };
+        // Enter in een tekstveld: opslaan (één verzoek), de Enter bereikt het orderformulier niet als submit.
+        nextPost = async () => json(409, { message: 'similar', code: 'similar-names', similarCustomers: [{ id: 2, name: 'DEMO Klant B', contactPerson: null, phone: null }] });
+        let prevented = false;
+        await act(async () => { prevented = pressEnter(input('customer-name-input')); });
+        await mounted.waitFor(() => mounted.hasText('sales_customer_similar_title'), 'similar panel');
+        assert.equal(prevented, true, 'Enter in a text input is handled by the panel');
+        assert.equal(posted.length, 1);
+        assert.equal(posted[0].url.endsWith('/customers'), true, 'only the customer request was sent');
+        // Enter op "Deze klant kiezen": niet onderschept; de gewone activatie (klik) kiest de bestaande klant, zonder verzoek.
+        const useExisting = mounted.button('sales_customer_use_existing')!;
+        await act(async () => { prevented = pressEnter(useExisting); });
+        assert.equal(prevented, false, 'Enter on a button is left to the browser');
+        assert.equal(posted.length, 1, 'no save triggered by Enter on the button');
+        await click(useExisting);
+        assert.equal(customerSelect().value, '2');
+        assert.equal(panel(), null);
+        // Opnieuw: Enter op "Toch aanmaken" wordt niet onderschept; de activatie stuurt een NIEUWE opdracht met bevestiging.
+        await click(newCustomerButton());
+        await act(async () => { setValue(input('customer-name-input'), 'demo klant b'); });
+        await savePanel();
+        await mounted.waitFor(() => mounted.button('sales_customer_create_anyway'), 'create anyway button');
+        const firstRequestId = JSON.parse(posted[posted.length - 1].body).requestId;
+        const createAnyway = mounted.button('sales_customer_create_anyway')!;
+        nextPost = async () => json(201, { ...created, id: 8, name: 'demo klant b' });
+        await act(async () => { prevented = pressEnter(createAnyway); });
+        assert.equal(prevented, false);
+        const before = posted.length;
+        await click(createAnyway);
+        await mounted.waitFor(() => panel() === null, 'created anyway');
+        assert.equal(posted.length, before + 1, 'exactly one request from the button activation');
+        const body = JSON.parse(posted[posted.length - 1].body);
+        assert.equal(body.acknowledgeSimilarNames, true);
+        assert.notEqual(body.requestId, firstRequestId, 'new requestId for the acknowledged command');
+        assert.equal(customerSelect().value, '8');
+        assertDraftIntact();
     });
 
     test('a request that completes after the panel was unmounted selects nothing in the rebuilt draft', async () => {

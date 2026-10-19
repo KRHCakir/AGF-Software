@@ -60,8 +60,12 @@ export default function NewCustomerPanel({ customers, onCreated, onChooseExistin
     const inFlight = useRef(false);
     // Na ontkoppelen (paneel gesloten of weggenavigeerd tijdens het verzoek) wordt niets meer gekozen in een order:
     // de uitkomst wordt alleen nog in de opslag verwerkt.
+    // StrictMode voert setup -> cleanup -> setup uit: de setup zet de vlag dus zelf weer op true.
     const mounted = useRef(true);
-    useEffect(() => () => { mounted.current = false; }, []);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
 
     const locked = submitting || pending !== null;
     const liveSimilar = useMemo(() => (draft.name.trim().length >= 3 ? similarCustomers(draft.name, customers).slice(0, 5) : []), [draft.name, customers]);
@@ -146,9 +150,10 @@ export default function NewCustomerPanel({ customers, onCreated, onChooseExistin
     );
 
     // Geen eigen <form>: het paneel staat binnen het orderformulier en een geneste form wordt door browsers niet verstuurd.
-    // Enter in een veld van dit paneel slaat de klant op en bereikt het orderformulier niet.
+    // Enter in een tekstveld van dit paneel slaat de klant op en bereikt het orderformulier niet. Knoppen houden hun
+    // gewone toetsenbordactivatie (Enter = klik), dus die worden hier niet onderschept.
     const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
-        if (event.key !== 'Enter' || event.target instanceof HTMLTextAreaElement) return;
+        if (event.key !== 'Enter' || !(event.target instanceof HTMLInputElement)) return;
         event.preventDefault();
         event.stopPropagation();
         if (!locked || pending !== null) void submit();
