@@ -170,6 +170,104 @@ public class SalesOrderModelTests : IDisposable
         Assert.True(reservation.FindProperty(nameof(StockReservation.SalesOrderLineId))!.IsNullable);
     }
 
+    // ---- Annulering: database-checks, unieke sleutel en append-only orderhistorie ----
+
+    [Theory]
+    [InlineData("reason-null")]
+    [InlineData("reason-empty")]
+    [InlineData("reason-whitespace")]
+    [InlineData("cancelled-at-null")]
+    public async Task Cancelled_Order_Requires_CancelledAt_And_A_Non_Blank_Reason(string invalidCase)
+    {
+        var seed = await SalesTestData.SeedAsync(_factory);
+        await AssertRejectedAsync(db =>
+        {
+            var order = NewOrder(seed.CustomerId, status: "Cancelled");
+            order.CancelledAt = invalidCase == "cancelled-at-null" ? null : DateTime.UtcNow;
+            order.CancelReason = invalidCase switch
+            {
+                "reason-null" => null,
+                "reason-empty" => "",
+                "reason-whitespace" => "   ",
+                _ => "Klant heeft afgezegd"
+            };
+            db.SalesOrders.Add(order);
+        });
+
+        await using var ok = _factory.CreateContext();
+        var valid = NewOrder(seed.CustomerId, status: "Cancelled");
+        valid.CancelledAt = DateTime.UtcNow;
+        valid.CancelReason = "Klant heeft afgezegd";
+        ok.SalesOrders.Add(valid);
+        await ok.SaveChangesAsync();
+        // Een Open order mag de annuleringsvelden leeg laten.
+        ok.SalesOrders.Add(NewOrder(seed.CustomerId));
+        await ok.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task CancelRequestId_Is_Unique_But_Null_Is_Allowed_Many_Times()
+    {
+        var seed = await SalesTestData.SeedAsync(_factory);
+        var cancelId = Guid.NewGuid();
+        await using (var db = _factory.CreateContext())
+        {
+            var first = NewOrder(seed.CustomerId, status: "Cancelled");
+            first.CancelledAt = DateTime.UtcNow;
+            first.CancelReason = "Eerste";
+            first.CancelRequestId = cancelId;
+            db.SalesOrders.AddRange(first, NewOrder(seed.CustomerId), NewOrder(seed.CustomerId));
+            await db.SaveChangesAsync();
+        }
+        await AssertRejectedAsync(db =>
+        {
+            var duplicate = NewOrder(seed.CustomerId, status: "Cancelled");
+            duplicate.CancelledAt = DateTime.UtcNow;
+            duplicate.CancelReason = "Tweede";
+            duplicate.CancelRequestId = cancelId;
+            db.SalesOrders.Add(duplicate);
+        });
+    }
+
+    [Fact]
+    public async Task SalesOrder_Audit_Events_Are_Append_Only_With_Unique_RequestId_And_Restrict()
+    {
+        var seed = await SalesTestData.SeedAsync(_factory);
+        var (orderId, _, _) = await SalesTestData.SeedOrderAsync(_factory, seed);
+        var requestId = Guid.NewGuid();
+        await using (var db = _factory.CreateContext())
+        {
+            db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent { SalesOrderId = orderId, EventType = "SalesOrderCancelled", Reason = "Test", ActorReference = "office-1", OccurredAt = DateTime.UtcNow, RequestId = requestId });
+            await db.SaveChangesAsync();
+        }
+        await AssertRejectedAsync(db => db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent { SalesOrderId = orderId, EventType = "SalesOrderCancelled", OccurredAt = DateTime.UtcNow, RequestId = requestId }));
+
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.SalesOrderAuditEvents.SingleAsync()).Reason = "Gewijzigd";
+            await Assert.ThrowsAsync<AgfAdmin.Data.TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            db.SalesOrderAuditEvents.Remove(await db.SalesOrderAuditEvents.SingleAsync());
+            Assert.Throws<AgfAdmin.Data.TraceabilityViolationException>(() => db.SaveChanges());
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            db.SalesOrders.Remove(await db.SalesOrders.SingleAsync(o => o.Id == orderId));
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+
+        await using var meta = _factory.CreateContext();
+        var entity = meta.Model.FindEntityType(typeof(SalesOrderAuditEvent))!;
+        Assert.True(Assert.Single(entity.GetIndexes(), i => i.Properties.Single().Name == nameof(SalesOrderAuditEvent.RequestId)).IsUnique);
+        Assert.Equal(DeleteBehavior.Restrict, Assert.Single(entity.GetForeignKeys()).DeleteBehavior);
+        Assert.Equal(2000, entity.FindProperty(nameof(SalesOrderAuditEvent.NewValue))!.GetMaxLength());
+        var order = meta.Model.FindEntityType(typeof(SalesOrder))!;
+        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Single().Name == nameof(SalesOrder.CancelRequestId)).IsUnique);
+        Assert.Equal(500, order.FindProperty(nameof(SalesOrder.CancelReason))!.GetMaxLength());
+    }
+
     // ---- StockReservation: eigenaar, status en compleetheid van de verkoopflow ----
 
     [Fact]

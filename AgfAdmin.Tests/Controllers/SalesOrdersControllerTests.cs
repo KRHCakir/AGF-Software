@@ -136,4 +136,42 @@ public class SalesOrdersControllerTests : IDisposable
         var ok = Assert.IsType<OkObjectResult>(await Reservations(c => c.Release(reservation.Id, Release(reservation.Version))));
         Assert.Equal(("Released", 1), (Assert.IsType<StockReservationDto>(ok.Value).Status, Assert.IsType<StockReservationDto>(ok.Value).Version));
     }
+
+    [Fact]
+    public async Task Cancel_Returns_200_Then_200_On_Replay_400_404_And_409()
+    {
+        var order = await CreatedOrderAsync();
+        Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
+        {
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+        })));
+        CancelSalesOrderDto Cancel(int? version, string reason = "Klant heeft afgezegd", Guid? requestId = null) => new()
+        {
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = reason
+        };
+
+        Assert.Contains("reason", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.Cancel(order.Id, Cancel(0, reason: " ")))).Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.Cancel(999_999, Cancel(0))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, Cancel(order.Version + 1))));
+
+        var request = Cancel(order.Version);
+        var cancelled = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.Cancel(order.Id, request))).Value);
+        Assert.Equal(("Cancelled", "Klant heeft afgezegd", "office-1"), (cancelled.Status, cancelled.CancelReason, cancelled.CancelledBy));
+        Assert.All(cancelled.Lines.SelectMany(l => l.Reservations), r => Assert.Equal("Released", r.Status));
+
+        Assert.IsType<OkObjectResult>(await Orders(c => c.Cancel(order.Id, request)));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, Cancel(order.Version, reason: "Andere reden", requestId: request.RequestId))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, Cancel(cancelled.Version))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
+        {
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m, ActorReference = "office-1"
+        })));
+
+        var events = Assert.IsAssignableFrom<IReadOnlyList<SalesOrderAuditEventDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetAuditEvents(order.Id))).Value);
+        var single = Assert.Single(events);
+        Assert.Equal(("SalesOrderCancelled", request.RequestId, order.Id), (single.EventType, single.RequestId, single.SalesOrderId));
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.GetAuditEvents(999_999)));
+        Assert.Equal("Cancelled", Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value).Status);
+        Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<SalesOrderDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.List(customerId: null, status: "Cancelled"))).Value));
+    }
 }

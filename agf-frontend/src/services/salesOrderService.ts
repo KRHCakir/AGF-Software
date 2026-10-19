@@ -3,14 +3,17 @@ import { getAvailabilityOverview } from './availabilityService';
 import { SaveResult } from './supplyService';
 import { AvailabilityQuantity, PackageUnit } from '../types/availability';
 import {
+    CancelSalesOrderRequest,
     CreateSalesOrderRequest,
     CreateStockReservationRequest,
     ReleaseStockReservationRequest,
     ReservableStockLine,
     SalesOrder,
+    SalesOrderAuditEvent,
     StockReservation,
     isReservableStockList,
     isSalesOrder,
+    isSalesOrderAuditEventList,
     isSalesOrderList,
     isStockReservation,
 } from '../types/salesOrder';
@@ -72,6 +75,24 @@ export async function releaseReservation(reservationId: number, request: Release
     const { json } = await postJson(`/stock-reservations/${reservationId}/release`, request, signal);
     if (!isStockReservation(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij het vrijgeven.');
+    }
+    return json;
+}
+
+// Annuleren geeft 200 bij succes én bij een exacte herhaling; 409 bij een verouderde versie, een niet-Open order,
+// afgeboekte reserveringen of een hergebruikte requestId met een andere payload.
+export async function cancelSalesOrder(orderId: number, request: CancelSalesOrderRequest, signal?: AbortSignal): Promise<SalesOrder> {
+    const { json } = await postJson(`/sales-orders/${orderId}/cancel`, request, signal);
+    if (!isSalesOrder(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het annuleren van de verkooporder.');
+    }
+    return json;
+}
+
+export async function getSalesOrderAuditEvents(orderId: number, signal?: AbortSignal): Promise<SalesOrderAuditEvent[]> {
+    const json = await getJson(`/sales-orders/${orderId}/audit-events`, signal);
+    if (!isSalesOrderAuditEventList(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de orderhistorie.');
     }
     return json;
 }

@@ -41,6 +41,7 @@ namespace AgfAdmin.Data
         // Schone verkoopflow (los van legacy Order/OrderLine/OrderLineAllocation/Inventory).
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
+        public DbSet<SalesOrderAuditEvent> SalesOrderAuditEvents { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
@@ -242,10 +243,19 @@ namespace AgfAdmin.Data
                 b.Property(o => o.Status).IsRequired().HasMaxLength(32);
                 b.Property(o => o.CustomerReference).HasMaxLength(100);
                 b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
+                b.Property(o => o.CancelReason).HasMaxLength(500);
                 b.Property(o => o.Version).IsConcurrencyToken();
                 b.HasIndex(o => o.RequestId).IsUnique();
+                // NULL telt als verschillend: alleen geannuleerde orders hebben een sleutel.
+                b.HasIndex(o => o.CancelRequestId).IsUnique();
 
-                b.ToTable(t => t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')"));
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')");
+                    // Expliciet IS NOT NULL: een CHECK laat UNKNOWN door, dus NULL-reden of -tijdstip moet apart worden geweigerd.
+                    t.HasCheckConstraint("CK_SalesOrders_CancelledConsistent",
+                        "\"Status\" <> 'Cancelled' OR (\"CancelledAt\" IS NOT NULL AND \"CancelReason\" IS NOT NULL AND length(trim(\"CancelReason\")) > 0)");
+                });
 
                 b.HasOne(o => o.Customer)
                     .WithMany()
@@ -355,6 +365,23 @@ namespace AgfAdmin.Data
                 b.HasOne(c => c.SupplyCommitmentLine)
                     .WithMany()
                     .HasForeignKey(c => c.SupplyCommitmentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<SalesOrderAuditEvent>(b =>
+            {
+                b.Property(e => e.EventType).IsRequired().HasMaxLength(64);
+                b.Property(e => e.OldValue).HasMaxLength(2000);
+                b.Property(e => e.NewValue).HasMaxLength(2000);
+                b.Property(e => e.Reason).HasMaxLength(500);
+                b.Property(e => e.ActorReference).HasMaxLength(100);
+
+                b.HasIndex(e => e.RequestId).IsUnique();
+                b.HasIndex(e => e.SalesOrderId);
+
+                b.HasOne(e => e.SalesOrder)
+                    .WithMany()
+                    .HasForeignKey(e => e.SalesOrderId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

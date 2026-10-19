@@ -16,8 +16,10 @@ namespace AgfAdmin.Data
     // 4. inhoud met een DirectTrade-bron staat nooit op een pallet met LocationContext Warehouse;
     // 5. een nieuwe Active verkoopreservering (SalesOrderLineId) staat op Approved inhoud van een Received + Warehouse-pallet,
     //    met route Warehouse en exact dezelfde eenheid;
-    // 6. de som van Active verkoopreserveringen per inhoudsregel overschrijdt nooit de hoeveelheid of het netto-kg.
-    // Regels 5 en 6 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven of afboeken wordt nooit geblokkeerd.
+    // 6. de som van Active verkoopreserveringen per inhoudsregel overschrijdt nooit de hoeveelheid of het netto-kg;
+    // 7. een nieuwe Active verkoopreservering hoort bij een orderregel van een Open verkooporder (ook als die order in dezelfde save wordt geannuleerd).
+    // Regels 5 t/m 7 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven of afboeken wordt nooit geblokkeerd.
+    // SalesOrderAuditEvents zijn, net als PalletAuditEvents, append-only (regel 3).
     // Er wordt nooit automatisch omgekoppeld. Een niet-bestaande inhoudsregel laten we over aan de FK in de database.
     // Let op: ExecuteUpdate/ExecuteDelete en ruwe SQL gaan buiten de change tracker om en dus ook buiten deze guard.
     internal static class TraceabilityGuard
@@ -43,10 +45,63 @@ namespace AgfAdmin.Data
             {
                 throw new TraceabilityViolationException("Pallet audit events are append-only and cannot be modified or deleted.");
             }
+            if (db.ChangeTracker.Entries<SalesOrderAuditEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Sales order audit events are append-only and cannot be modified or deleted.");
+            }
 
             await CheckSourceLinksAsync(db, async, cancellationToken);
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
             await CheckSalesReservationsAsync(db, async, cancellationToken);
+            await CheckReservationsOnOpenOrdersAsync(db, async, cancellationToken);
+        }
+
+        // ---- Regel 7 ----
+
+        private static async Task CheckReservationsOnOpenOrdersAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var lineIds = db.ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State == EntityState.Added && IsActiveSalesReservation(e.Entity))
+                .Select(e => e.Entity.SalesOrderLineId!.Value)
+                .Distinct()
+                .ToList();
+            if (lineIds.Count == 0)
+            {
+                return;
+            }
+
+            // Orderregel -> order, met voorrang voor gevolgde (in dezelfde save gewijzigde) regels en orders.
+            var lineOrders = (await ToListAsync(
+                    db.SalesOrderLines.AsNoTracking().Where(l => lineIds.Contains(l.Id)).Select(l => new { l.Id, l.SalesOrderId }),
+                    async, cancellationToken))
+                .ToDictionary(l => l.Id, l => l.SalesOrderId);
+            foreach (var entry in db.ChangeTracker.Entries<SalesOrderLine>().Where(e => e.State is not (EntityState.Deleted or EntityState.Detached) && lineIds.Contains(e.Entity.Id)))
+            {
+                lineOrders[entry.Entity.Id] = entry.Property(l => l.SalesOrderId).CurrentValue;
+            }
+
+            var orderIds = lineOrders.Values.Distinct().ToList();
+            var orderStatuses = (await ToListAsync(
+                    db.SalesOrders.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.Status }),
+                    async, cancellationToken))
+                .ToDictionary(o => o.Id, o => o.Status);
+            foreach (var entry in db.ChangeTracker.Entries<SalesOrder>().Where(e => e.State is not (EntityState.Deleted or EntityState.Detached) && orderIds.Contains(e.Entity.Id)))
+            {
+                orderStatuses[entry.Entity.Id] = entry.Property(o => o.Status).CurrentValue;
+            }
+
+            foreach (var lineId in lineIds)
+            {
+                if (!lineOrders.TryGetValue(lineId, out var orderId))
+                {
+                    continue; // bestaat niet: de FK-constraint weigert dit bij het opslaan
+                }
+                if (orderStatuses.TryGetValue(orderId, out var status) && status != ReservationRules.OrderStatusOpen)
+                {
+                    throw new TraceabilityViolationException(
+                        $"Sales order {orderId} is {status}; an active reservation requires an open sales order.");
+                }
+            }
         }
 
         // ---- Regels 5 en 6 ----

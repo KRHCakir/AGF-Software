@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
@@ -11,6 +12,8 @@ namespace AgfAdmin.Services
         Task<ServiceResult<SalesOrderDto>> GetAsync(int id, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<SalesOrderDto>>> ListAsync(SalesOrderFilter filter, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<ReservableStockLineDto>>> GetReservableStockAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default);
+        Task<ServiceResult<SalesOrderDto>> CancelAsync(int salesOrderId, CancelSalesOrderDto request, CancellationToken cancellationToken = default);
+        Task<ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>> GetAuditEventsAsync(int salesOrderId, CancellationToken cancellationToken = default);
     }
 
     // Schone verkooporders voor het nieuwe domein. Raakt nooit legacy Order/OrderLine/OrderLineAllocation/Inventory.
@@ -191,7 +194,27 @@ namespace AgfAdmin.Services
             var order = await OrderQuery().SingleOrDefaultAsync(o => o.Id == id, cancellationToken);
             return order == null
                 ? ServiceResult<SalesOrderDto>.NotFound($"Sales order {id} does not exist.")
-                : ServiceResult<SalesOrderDto>.Ok(ToDto(order));
+                : ServiceResult<SalesOrderDto>.Ok(await ToDtoWithCancellationAsync(order, cancellationToken));
+        }
+
+        // De actor van een annulering staat alleen in het SalesOrderCancelled-event (één extra leesactie per order).
+        private async Task<SalesOrderDto> ToDtoWithCancellationAsync(SalesOrder order, CancellationToken cancellationToken)
+        {
+            var actors = await CancelledByAsync(new List<int> { order.Id }, cancellationToken);
+            return ToDto(order, actors.GetValueOrDefault(order.Id));
+        }
+
+        private async Task<Dictionary<int, string>> CancelledByAsync(List<int> orderIds, CancellationToken cancellationToken)
+        {
+            if (orderIds.Count == 0)
+            {
+                return new Dictionary<int, string>();
+            }
+            var events = await _db.SalesOrderAuditEvents.AsNoTracking()
+                .Where(e => orderIds.Contains(e.SalesOrderId) && e.EventType == ReservationRules.OrderCancelledEvent)
+                .Select(e => new { e.SalesOrderId, e.ActorReference, e.Id })
+                .ToListAsync(cancellationToken);
+            return events.GroupBy(e => e.SalesOrderId).ToDictionary(g => g.Key, g => g.OrderBy(e => e.Id).Last().ActorReference);
         }
 
         public async Task<ServiceResult<IReadOnlyList<SalesOrderDto>>> ListAsync(SalesOrderFilter filter, CancellationToken cancellationToken = default)
@@ -209,7 +232,234 @@ namespace AgfAdmin.Services
             if (filter.CustomerId != null) query = query.Where(o => o.CustomerId == filter.CustomerId);
             if (filter.Status != null) query = query.Where(o => o.Status == filter.Status);
             var orders = await query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id).Take(ReservationRules.MaxListResults).ToListAsync(cancellationToken);
-            return ServiceResult<IReadOnlyList<SalesOrderDto>>.Ok(orders.Select(ToDto).ToList());
+            var actors = await CancelledByAsync(orders.Where(o => o.Status == ReservationRules.OrderStatusCancelled).Select(o => o.Id).ToList(), cancellationToken);
+            return ServiceResult<IReadOnlyList<SalesOrderDto>>.Ok(orders.Select(o => ToDto(o, actors.GetValueOrDefault(o.Id))).ToList());
+        }
+
+        // ======================== Annuleren ========================
+
+        private sealed record CancelCommand(Guid RequestId, int SalesOrderId, int ExpectedVersion, string Actor, string Reason);
+
+        private static readonly JsonSerializerOptions SnapshotJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+        // Annuleert een Open order en geeft alle Active reserveringen (ook on hold) vrij in één transactie, met één
+        // orderevent en per reservering één palletevent. Concurrency: de order (expectedOrderVersion), elke orderregel
+        // (botst met gelijktijdig reserveren), elke vrijgegeven reservering (botst met gelijktijdig vrijgeven) en elke
+        // inhoudsregel worden aangeraakt; precies één van twee gelijktijdige schrijvers wint.
+        public async Task<ServiceResult<SalesOrderDto>> CancelAsync(int salesOrderId, CancelSalesOrderDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            CancelCommand command = null;
+            if (request == null)
+            {
+                ValidationErrors.Add(errors, "request", "A request body is required.");
+            }
+            else
+            {
+                if (request.RequestId == null || request.RequestId == Guid.Empty)
+                {
+                    ValidationErrors.Add(errors, "requestId", "A client-generated, non-empty requestId is required.");
+                }
+                if (request.ExpectedOrderVersion == null)
+                {
+                    ValidationErrors.Add(errors, "expectedOrderVersion", "The order version the cancellation is based on is required.");
+                }
+                var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+                var reason = ValidationErrors.RequiredText(request.Reason, ReservationRules.MaxReasonLength, "reason", errors);
+                if (errors.Count == 0)
+                {
+                    command = new CancelCommand(request.RequestId!.Value, salesOrderId, request.ExpectedOrderVersion!.Value, actor, reason);
+                }
+            }
+            if (errors.Count > 0)
+            {
+                return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
+            }
+
+            var replay = await ReplayCancelAsync(command, cancellationToken);
+            if (replay != null)
+            {
+                return replay;
+            }
+
+            var order = await _db.SalesOrders
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine)
+                .SingleOrDefaultAsync(o => o.Id == salesOrderId, cancellationToken);
+            if (order == null)
+            {
+                return ServiceResult<SalesOrderDto>.NotFound($"Sales order {salesOrderId} does not exist.");
+            }
+            if (order.Status != ReservationRules.OrderStatusOpen)
+            {
+                return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} is {order.Status} and cannot be cancelled again.");
+            }
+            if (order.Version != command.ExpectedVersion)
+            {
+                return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} is at version {order.Version}, not {command.ExpectedVersion}; reload it and decide again.");
+            }
+            var reservations = order.Lines.SelectMany(l => l.Reservations).ToList();
+            if (reservations.Any(r => r.Status == ReservationRules.StatusConsumed))
+            {
+                return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} has consumed reservations; returns and shipment corrections are a separate flow.");
+            }
+
+            var now = DateTime.UtcNow;
+            order.Status = ReservationRules.OrderStatusCancelled;
+            order.CancelledAt = now;
+            order.CancelReason = command.Reason;
+            order.CancelRequestId = command.RequestId;
+            order.UpdatedAt = now;
+
+            // Elke regel aanraken: een gelijktijdige reservering op welke regel dan ook kan nooit samen met deze annulering slagen.
+            foreach (var line in order.Lines)
+            {
+                _db.Entry(line).Property(l => l.Version).IsModified = true;
+            }
+
+            var active = reservations.Where(r => r.Status == ReservationRules.StatusActive).OrderBy(r => r.Id).ToList();
+            foreach (var reservation in active)
+            {
+                var expectedReservationVersion = reservation.Version;
+                reservation.Status = ReservationRules.StatusReleased;
+                reservation.ReleasedAt = now;
+                // De genormaliseerde reden ongewijzigd (geen voorvoegsel: dat zou de 500 tekens kunnen overschrijden);
+                // dat de vrijgave uit een annulering komt, staat in het event.
+                reservation.ReleaseReason = command.Reason;
+                reservation.UpdatedAt = now;
+                if (reservation.PalletContentLine != null)
+                {
+                    _db.Entry(reservation.PalletContentLine).Property(c => c.Version).IsModified = true;
+                }
+                _db.PalletAuditEvents.Add(new PalletAuditEvent
+                {
+                    PalletId = reservation.PalletContentLine?.PalletId,
+                    PalletContentLineId = reservation.PalletContentLineId,
+                    EventType = ReservationRules.ReservationReleasedEvent,
+                    OldValue = JsonSerializer.Serialize(new { reservationId = reservation.Id, status = ReservationRules.StatusActive, version = expectedReservationVersion }, SnapshotJson),
+                    NewValue = JsonSerializer.Serialize(new
+                    {
+                        reservationId = reservation.Id,
+                        status = ReservationRules.StatusReleased,
+                        quantity = reservation.Quantity,
+                        unit = reservation.Unit,
+                        netWeightKg = reservation.NetWeightKg,
+                        cause = ReservationRules.OrderCancelledEvent,
+                        salesOrderId = order.Id,
+                        cancellationRequestId = command.RequestId
+                    }, SnapshotJson),
+                    Reason = command.Reason,
+                    ActorReference = command.Actor,
+                    OccurredAt = now,
+                    // De unieke RequestId hoort bij het orderevent; de palletevents verwijzen via cancellationRequestId.
+                    RequestId = null
+                });
+            }
+
+            // Begrensde snapshot: aantallen, geen lijst van reserverings-id's.
+            _db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent
+            {
+                SalesOrder = order,
+                EventType = ReservationRules.OrderCancelledEvent,
+                OldValue = JsonSerializer.Serialize(new { status = ReservationRules.OrderStatusOpen, version = command.ExpectedVersion }, SnapshotJson),
+                NewValue = JsonSerializer.Serialize(new
+                {
+                    status = ReservationRules.OrderStatusCancelled,
+                    releasedReservationCount = active.Count,
+                    releasedQuantityByUnit = active.GroupBy(r => r.Unit).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key ?? "", g => g.Sum(r => r.Quantity)),
+                    releasedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
+                    lineCount = order.Lines.Count
+                }, SnapshotJson),
+                Reason = command.Reason,
+                ActorReference = command.Actor,
+                OccurredAt = now,
+                RequestId = command.RequestId
+            });
+
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (DbErrors.IsConcurrencyConflict(exception) || DbErrors.IsUniqueViolation(exception))
+            {
+                // Alleen een herkende botsing wordt 409: een andere schrijver (reserveren, vrijgeven, annuleren) was eerder,
+                // of dezelfde requestId is net door een gelijktijdige retry vastgelegd. Andere databasefouten blijven zichtbaar.
+                _db.ChangeTracker.Clear();
+                var concurrent = await ReplayCancelAsync(command, cancellationToken);
+                if (concurrent != null)
+                {
+                    return concurrent;
+                }
+                return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} or its reservations were changed concurrently; reload and decide again.");
+            }
+
+            _db.ChangeTracker.Clear();
+            var cancelled = await OrderQuery().SingleAsync(o => o.Id == salesOrderId, cancellationToken);
+            return ServiceResult<SalesOrderDto>.Ok(ToDto(cancelled, command.Actor));
+        }
+
+        // Replay: dezelfde requestId voor dezelfde order, actor, genormaliseerde reden en oorspronkelijke versie geeft de huidige toestand terug.
+        private async Task<ServiceResult<SalesOrderDto>> ReplayCancelAsync(CancelCommand command, CancellationToken cancellationToken)
+        {
+            var existing = await OrderQuery().SingleOrDefaultAsync(o => o.CancelRequestId == command.RequestId, cancellationToken);
+            var audit = await _db.SalesOrderAuditEvents.AsNoTracking()
+                .SingleOrDefaultAsync(e => e.RequestId == command.RequestId && e.EventType == ReservationRules.OrderCancelledEvent, cancellationToken);
+            if (existing == null && audit == null)
+            {
+                return null;
+            }
+            var same = existing != null
+                && audit != null
+                && existing.Id == command.SalesOrderId
+                && audit.SalesOrderId == command.SalesOrderId
+                && string.Equals(audit.ActorReference, command.Actor, StringComparison.Ordinal)
+                && string.Equals(audit.Reason, command.Reason, StringComparison.Ordinal)
+                && RecordedVersion(audit.OldValue) == command.ExpectedVersion;
+            return same
+                ? ServiceResult<SalesOrderDto>.Ok(ToDto(existing, audit.ActorReference))
+                : ServiceResult<SalesOrderDto>.Conflict($"RequestId {command.RequestId} was already used for a different cancellation.");
+        }
+
+        private static int? RecordedVersion(string json)
+        {
+            if (json == null) return null;
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                return document.RootElement.TryGetProperty("version", out var version) && version.TryGetInt32(out var value) ? value : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        public async Task<ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>> GetAuditEventsAsync(int salesOrderId, CancellationToken cancellationToken = default)
+        {
+            if (!await _db.SalesOrders.AnyAsync(o => o.Id == salesOrderId, cancellationToken))
+            {
+                return ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>.NotFound($"Sales order {salesOrderId} does not exist.");
+            }
+            var events = await _db.SalesOrderAuditEvents.AsNoTracking()
+                .Where(e => e.SalesOrderId == salesOrderId)
+                .OrderBy(e => e.OccurredAt).ThenBy(e => e.Id)
+                .Select(e => new SalesOrderAuditEventDto
+                {
+                    Id = e.Id,
+                    SalesOrderId = e.SalesOrderId,
+                    EventType = e.EventType,
+                    OldValue = e.OldValue,
+                    NewValue = e.NewValue,
+                    Reason = e.Reason,
+                    ActorReference = e.ActorReference,
+                    OccurredAt = e.OccurredAt,
+                    RequestId = e.RequestId
+                })
+                .ToListAsync(cancellationToken);
+            foreach (var item in events)
+            {
+                item.OccurredAt = DateTime.SpecifyKind(item.OccurredAt, DateTimeKind.Utc);
+            }
+            return ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>.Ok(events);
         }
 
         public async Task<ServiceResult<IReadOnlyList<ReservableStockLineDto>>> GetReservableStockAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default)
@@ -286,7 +536,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .AsSplitQuery();
 
-        internal static SalesOrderDto ToDto(SalesOrder order) => new()
+        internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null) => new()
         {
             Id = order.Id,
             RequestId = order.RequestId,
@@ -298,6 +548,9 @@ namespace AgfAdmin.Services
             ActorReference = order.ActorReference,
             CreatedAt = DateTime.SpecifyKind(order.CreatedAt, DateTimeKind.Utc),
             Version = order.Version,
+            CancelledAt = order.CancelledAt == null ? null : DateTime.SpecifyKind(order.CancelledAt.Value, DateTimeKind.Utc),
+            CancelReason = order.CancelReason,
+            CancelledBy = order.Status == ReservationRules.OrderStatusCancelled ? cancelledBy : null,
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
                 var active = line.Reservations.Where(r => r.Status == ReservationRules.StatusActive).ToList();

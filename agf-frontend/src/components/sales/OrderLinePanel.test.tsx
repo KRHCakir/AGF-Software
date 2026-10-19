@@ -6,7 +6,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { parseStoredCommands } from '../../lib/pendingCommands.ts';
 import { SalesOrder, SalesOrderLine } from '../../types/salesOrder';
 import OrderLinePanel from './OrderLinePanel';
-import { PendingCommandsProvider } from './PendingCommandsContext';
+import { HydratedGate, PendingCommandsProvider } from './PendingCommandsContext';
 
 // Levenscyclus van het reserveerformulier door de echte componenten heen (OrderLinePanel + ReserveForm + context):
 // dezelfde formulierinstantie blijft staan tijdens een traag verzoek, bij 409 en bij een onbekende uitkomst.
@@ -20,7 +20,8 @@ const line: SalesOrderLine = {
 };
 const order: SalesOrder = {
     id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status: 'Open', customerReference: null,
-    requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T10:00:00.000Z', version: 0, lines: [line],
+    requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T10:00:00.000Z', version: 0,
+    cancelledAt: null, cancelReason: null, cancelledBy: null, lines: [line],
 };
 const stockRow = {
     palletContentLineId: 2, palletId: 2, palletReference: 'SMOKE-PAL-002', warehouseLocation: null, lotNumber: 'LOT-SALES-1', unit: 'box',
@@ -108,7 +109,9 @@ describe('ReserveForm identity through submission and outcome handling', () => {
         await act(async () => {
             root.render(
                 <PendingCommandsProvider>
-                    <OrderLinePanel order={order} line={line} actor="office-1" readOnly={false} onOrderChanged={async () => { orderChanged += 1; return true; }} />
+                    <HydratedGate>
+                        <OrderLinePanel order={order} line={line} actor="office-1" readOnly={false} onOrderChanged={async () => { orderChanged += 1; return true; }} />
+                    </HydratedGate>
                 </PendingCommandsProvider>,
             );
         });

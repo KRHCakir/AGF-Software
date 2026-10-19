@@ -44,7 +44,12 @@ export default function SalesOrderList({ orders, selectedId, onSelect }: {
                                     <span className="block text-xs text-gray-600">
                                         {order.customerReference ? `${t('sales_reference_short')} ${order.customerReference}` : t('sales_no_reference')}
                                     </span>
-                                    {order.status !== 'Open' && <span className="mt-1 block"><OrderStatusBadge status={order.status} /></span>}
+                                    {order.status !== 'Open' && (
+                                        <span className="mt-1 block">
+                                            <OrderStatusBadge status={order.status} />
+                                            {order.cancelReason && <span className="ml-1 text-xs italic text-gray-600">“{order.cancelReason}”</span>}
+                                        </span>
+                                    )}
                                 </td>
                                 <td className="whitespace-nowrap px-2 py-1.5 align-top">{formatCalendarDate(order.requestedDeliveryDate, locale)}</td>
                                 <td className="px-2 py-1.5 align-top">

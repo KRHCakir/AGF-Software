@@ -17,6 +17,12 @@ namespace AgfAdmin.Models
         public DateTime RequestedDeliveryDate { get; set; } // UTC, afgekapt op microseconden
         public string ActorReference { get; set; }
 
+        // Annulering: alleen gevuld bij Status Cancelled (database-check). De reden is genormaliseerd (getrimd, max 500).
+        public DateTime? CancelledAt { get; set; }
+        public string CancelReason { get; set; }
+        // Idempotentiesleutel van het annuleringscommando (uniek); de vrijgaven die eruit volgen dragen deze sleutel in hun event-snapshot.
+        public Guid? CancelRequestId { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

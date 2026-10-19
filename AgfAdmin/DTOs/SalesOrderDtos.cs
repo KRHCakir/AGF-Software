@@ -35,7 +35,33 @@ namespace AgfAdmin.DTOs
         public string ActorReference { get; set; }
         public DateTime CreatedAt { get; set; }
         public int Version { get; set; }
+        // Alleen gevuld bij Status Cancelled; de actor komt uit het SalesOrderCancelled-event.
+        public DateTime? CancelledAt { get; set; }
+        public string CancelReason { get; set; }
+        public string CancelledBy { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
+    }
+
+    // Annuleren van een Open order: alle Active reserveringen (ook on hold) worden in dezelfde transactie vrijgegeven.
+    public sealed class CancelSalesOrderDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+    }
+
+    public sealed class SalesOrderAuditEventDto
+    {
+        public int Id { get; set; }
+        public int SalesOrderId { get; set; }
+        public string EventType { get; set; }
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+        public string Reason { get; set; }
+        public string ActorReference { get; set; }
+        public DateTime OccurredAt { get; set; }
+        public Guid? RequestId { get; set; }
     }
 
     public sealed class SalesOrderLineDto
