@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import CreateSalesOrderForm from '../../../components/sales/CreateSalesOrderForm';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
@@ -63,6 +63,11 @@ function SalesWorkspace() {
     const [detailRefreshing, setDetailRefreshing] = useState(false);
     const [detailRefreshFailed, setDetailRefreshFailed] = useState(false);
     const [detail, setDetail] = useState<LoadState<SalesOrder> | null>(null);
+    // Elke orderlezing (selectie, herladen na een actie, vernieuwen) krijgt een volgnummer. Alleen het antwoord van de
+    // laatste lezing mag het detail zetten: een traag antwoord van een eerder gekozen order vervangt nooit de huidige.
+    const detailRequest = useRef(0);
+    const beginDetailRequest = () => ++detailRequest.current;
+    const isCurrentDetailRequest = (token: number) => token === detailRequest.current;
     const [creating, setCreating] = useState(false);
     const [search, setSearch] = useState('');
     const [customerFilter, setCustomerFilter] = useState('');
@@ -99,18 +104,20 @@ function SalesWorkspace() {
     }, [ordersToken]);
 
     useEffect(() => {
+        const token = beginDetailRequest();
+        setDetailRefreshing(false);
+        setDetailRefreshFailed(false);
         if (selectedId === null) {
             setDetail(null);
             return;
         }
         const controller = new AbortController();
         setDetail({ status: 'loading' });
-        setDetailRefreshFailed(false);
         getSalesOrder(selectedId, controller.signal)
-            .then((order) => setDetail({ status: 'ready', data: order }))
+            .then((order) => { if (isCurrentDetailRequest(token)) setDetail({ status: 'ready', data: order }); })
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
-                if (apiError.kind !== 'aborted') setDetail({ status: 'error', error: apiError });
+                if (apiError.kind !== 'aborted' && isCurrentDetailRequest(token)) setDetail({ status: 'error', error: apiError });
             });
         return () => controller.abort();
     }, [selectedId]);
@@ -150,13 +157,15 @@ function SalesWorkspace() {
     // Na een schrijfactie: de order opnieuw lezen (leidend voor reserveringen en on hold) en de lijst verversen.
     const reloadOrder = useCallback(async (): Promise<boolean> => {
         if (selectedId === null) return false;
+        const token = beginDetailRequest();
         setOrdersToken((n) => n + 1);
         try {
             const order = await getSalesOrder(selectedId);
+            if (!isCurrentDetailRequest(token)) return false; // intussen een andere order gekozen: antwoord negeren
             setDetail({ status: 'ready', data: order });
             return true;
         } catch (caught) {
-            setDetail({ status: 'error', error: toApiError(caught) });
+            if (isCurrentDetailRequest(token)) setDetail({ status: 'error', error: toApiError(caught) });
             return false;
         }
     }, [selectedId]);
@@ -165,18 +174,20 @@ function SalesWorkspace() {
     // detail (met open formulieren en bevroren commando's) staan tot de verse order er is. Mislukt het: melding, geen wissel.
     const refreshOrder = useCallback(async (): Promise<boolean> => {
         if (selectedId === null) return false;
+        const token = beginDetailRequest();
         setDetailRefreshing(true);
         setDetailRefreshFailed(false);
         setOrdersToken((n) => n + 1);
         try {
             const order = await getSalesOrder(selectedId);
+            if (!isCurrentDetailRequest(token)) return false; // verouderd antwoord: de gekozen order blijft staan
             setDetail({ status: 'ready', data: order });
             return true;
         } catch {
-            setDetailRefreshFailed(true);
+            if (isCurrentDetailRequest(token)) setDetailRefreshFailed(true);
             return false;
         } finally {
-            setDetailRefreshing(false);
+            if (isCurrentDetailRequest(token)) setDetailRefreshing(false);
         }
     }, [selectedId]);
 

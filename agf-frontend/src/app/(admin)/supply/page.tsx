@@ -8,6 +8,7 @@ import PlanSupplyForm, { ReferenceData } from '../../../components/supply/PlanSu
 import ReceivePalletForm from '../../../components/supply/ReceivePalletForm';
 import { useActorReference } from '../../../components/supply/useActorReference';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { SupplyShortcutMode, modeFromHash, subscribeSupplyMode } from '../../../lib/supplyShortcut';
 import { toApiError } from '../../../services/apiClient';
 import { getCustomers, getProductsWithVariants, getVendors } from '../../../services/referenceDataService';
 import { SupplyRoute } from '../../../types/availability';
@@ -22,12 +23,17 @@ export default function SupplyPage() {
     const [actor, setActor] = useActorReference();
     const [destination, setDestination] = useState<SupplyRoute | null>(null);
     const [mode, setMode] = useState<Mode>('plan');
-    // Snelkoppeling uit de zijbalk (/supply#receive): meteen naar "Pallet ontvangen" voor het eigen magazijn.
+    // Snelkoppelingen uit de zijbalk: bij aankomst via de hash (#plan of #receive), en terwijl de pagina open staat via de
+    // gebeurtenis van de zijbalk of een hashwijziging. Altijd expliciet: "Aanvoer plannen" zet plannen, ook als ontvangen actief was.
     useEffect(() => {
-        if (typeof window !== 'undefined' && window.location.hash === '#receive') {
+        const apply = (shortcut: SupplyShortcutMode) => {
             setDestination('Warehouse');
-            setMode('receive');
-        }
+            setMode(shortcut);
+            setPreselected(null);
+        };
+        const initial = modeFromHash(window.location.hash);
+        if (initial !== null) apply(initial);
+        return subscribeSupplyMode(apply);
     }, []);
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
     const [referenceToken, setReferenceToken] = useState(0);

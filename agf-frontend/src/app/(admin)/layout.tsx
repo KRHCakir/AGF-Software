@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import '../globals.css';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
 import { showLegacyDemoChrome } from '../../lib/featureFlags';
+import { requestSupplyMode, supplyShortcutHref } from '../../lib/supplyShortcut';
 
 function AdminLayoutContent({
     children,
@@ -62,8 +63,8 @@ function AdminLayoutContent({
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('workspaces')}</h3>
                         <nav className="flex flex-col space-y-1" aria-label={t('workspaces')}>
                             <SidebarLink href="/sales-orders" label={t('sidebar_new_sales_order')} icon="🧾" />
-                            <SidebarLink href="/supply" label={t('sidebar_plan_supply')} icon="📅" />
-                            <SidebarLink href="/supply#receive" label={t('sidebar_receive_pallet')} icon="📦" />
+                            <SidebarLink href={supplyShortcutHref('plan')} label={t('sidebar_plan_supply')} icon="📅" onClick={() => requestSupplyMode('plan')} />
+                            <SidebarLink href={supplyShortcutHref('receive')} label={t('sidebar_receive_pallet')} icon="📦" onClick={() => requestSupplyMode('receive')} />
                             <SidebarLink href="/inspection" label={t('sidebar_inspection')} icon="🔍" />
                             <SidebarLink href="/availability" label={t('sidebar_availability')} icon="📊" />
                         </nav>
@@ -122,9 +123,9 @@ function NavLink({ href, label }: { href: string; label: string }) {
     );
 }
 
-function SidebarLink({ href, label, icon }: { href: string; label: string; icon: string }) {
+function SidebarLink({ href, label, icon, onClick }: { href: string; label: string; icon: string; onClick?: () => void }) {
     return (
-        <Link href={href} className="flex items-center w-full px-2 py-1.5 text-left text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded transition-all">
+        <Link href={href} onClick={onClick} className="flex items-center w-full px-2 py-1.5 text-left text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded transition-all">
             <span className="mr-2" aria-hidden="true">{icon}</span>
             {label}
         </Link>
