@@ -1,106 +1,81 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { DashboardService, DashboardData } from '../../../services/dashboardService';
+import { useEffect, useState } from 'react';
+import { useTranslation } from '../../../i18n/LanguageContext';
+import { DashboardData, DashboardService } from '../../../services/dashboardService';
+import { showLegacyDemoChrome } from '../../../lib/featureFlags';
 
+// Startpagina: ingang naar de werkplekken. De oude kengetallen (deels vaste voorbeeldwaarden) staan standaard uit.
 export default function Home() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    DashboardService.getDashboardData()
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return <div className="p-8 text-gray-500">Loading Dashboard...</div>;
-  }
-
-  if (!data) {
-    return <div className="p-8 text-red-500">Failed to load Dashboard data. Is the backend running?</div>;
-  }
-
+  const { t } = useTranslation();
+  const workspaces = [
+    { href: '/sales-orders', title: t('sales'), description: t('start_sales_desc'), icon: '🧾' },
+    { href: '/supply', title: t('supply'), description: t('start_supply_desc'), icon: '📦' },
+    { href: '/inspection', title: t('inspection'), description: t('start_inspection_desc'), icon: '🔍' },
+    { href: '/availability', title: t('availability'), description: t('start_availability_desc'), icon: '📊' },
+  ];
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-
-      {/* KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Sales Today" value={`€ ${data.kpis.totalSalesToday.toLocaleString()}`} change="Real-time" color="blue" />
-        <KPICard title="Unpaid Invoices" value={data.kpis.unpaidInvoices.toString()} change="Action Needed" color="red" />
-        <KPICard title="Shipments Arriving" value={data.kpis.shipmentsArriving.toString()} change="In 24h" color="green" />
-        <KPICard title="Margin %" value={data.kpis.margin} change="Estimated" color="yellow" />
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800">{t('start_title')}</h1>
+        <p className="text-sm text-gray-600">{t('start_subtitle')}</p>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Orders */}
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-bold text-gray-700">Recent Orders</h2>
-            <Link href="/orders" className="text-blue-600 text-xs hover:underline">View All</Link>
-          </div>
-          <table className="w-full text-sm">
-            <thead className="text-gray-500 border-b">
-              <tr>
-                <th className="text-left pb-2">Order #</th>
-                <th className="text-left pb-2">Customer</th>
-                <th className="text-left pb-2">Product</th>
-                <th className="text-right pb-2">Amount</th>
-                <th className="text-center pb-2">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {data.recentOrders.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-4 text-center text-gray-500">No recent orders found.</td>
-                </tr>
-              )}
-              {data.recentOrders.map((order: any) => (
-                <tr key={order.id}>
-                  <td className="py-2">{order.orderNumber}</td>
-                  <td>{order.customerName}</td>
-                  <td>{order.productName}</td>
-                  <td className="text-right">€ {order.amount.toFixed(2)}</td>
-                  <td className="text-center">
-                    <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full text-xs">{order.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Incoming Container Status */}
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-bold text-gray-700">In Transit</h2>
-            <Link href="/tracking" className="text-blue-600 text-xs hover:underline">Map</Link>
-          </div>
-          <div className="space-y-3">
-            {data.shipments.length === 0 && (
-              <div className="text-sm text-gray-500 text-center py-4">No shipments in transit.</div>
-            )}
-            {data.shipments.map((shipment: any) => (
-              <ContainerStatus
-                key={shipment.id}
-                code={shipment.containerCode}
-                origin={shipment.origin}
-                eta={new Date(shipment.estimatedTimeOfArrival).toLocaleDateString()}
-                status={shipment.status}
-              />
-            ))}
-          </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {workspaces.map((workspace) => (
+          <Link key={workspace.href} href={workspace.href}
+            className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:bg-blue-50/40 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div className="text-2xl" aria-hidden="true">{workspace.icon}</div>
+            <h2 className="mt-2 text-base font-semibold text-gray-900">{workspace.title}</h2>
+            <p className="mt-1 text-sm text-gray-600">{workspace.description}</p>
+          </Link>
+        ))}
       </div>
+      <section aria-labelledby="start-legacy" className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+        <h2 id="start-legacy" className="text-sm font-semibold text-amber-950">{t('start_legacy_title')}</h2>
+        <p className="mt-1 text-sm text-amber-950">{t('start_legacy_desc')}</p>
+        <div className="mt-2 flex flex-wrap gap-3 text-sm">
+          <Link href="/orders" className="font-medium text-amber-950 underline underline-offset-2">{t('orders_legacy_nav')}</Link>
+          <Link href="/inventory" className="font-medium text-amber-950 underline underline-offset-2">{t('inventory_legacy_nav')}</Link>
+          <Link href="/incoming-invoices" className="font-medium text-amber-950 underline underline-offset-2">{t('invoices_legacy_nav')}</Link>
+          <Link href="/tracking" className="font-medium text-amber-950 underline underline-offset-2">{t('tracking_nav')}</Link>
+        </div>
+      </section>
+      {showLegacyDemoChrome && <LegacyMetrics />}
     </div>
   );
 }
 
-function KPICard({ title, value, change, color }: { title: string, value: string, change: string, color: string }) {
+// Alleen achter de vlag: de oude kengetallen en de legacy-lijsten, met een expliciete melding over hun herkomst.
+function LegacyMetrics() {
+  const { t } = useTranslation();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    DashboardService.getDashboardData()
+      .then(setData)
+      .catch(() => setFailed(true));
+  }, []);
+
+  return (
+    <section aria-labelledby="start-legacy-metrics" className="space-y-3">
+      <h2 id="start-legacy-metrics" className="text-sm font-semibold text-gray-700">{t('start_legacy_metrics_title')}</h2>
+      <p role="note" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">{t('start_legacy_metrics_notice')}</p>
+      {failed && <p className="text-sm text-red-700">{t('availability_error_network')}</p>}
+      {data && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard title="Total Sales Today" value={`€ ${data.kpis.totalSalesToday.toLocaleString()}`} color="blue" />
+          <KPICard title="Unpaid Invoices" value={data.kpis.unpaidInvoices.toString()} color="red" />
+          <KPICard title="Shipments Arriving" value={data.kpis.shipmentsArriving.toString()} color="green" />
+          <KPICard title="Margin %" value={data.kpis.margin} color="yellow" />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function KPICard({ title, value, color }: { title: string, value: string, color: string }) {
   const colors = {
     blue: "border-l-4 border-blue-500",
     red: "border-l-4 border-red-500",
@@ -111,26 +86,7 @@ function KPICard({ title, value, change, color }: { title: string, value: string
   return (
     <div className={`bg-white p-4 rounded-lg shadow-sm ${colors[color as keyof typeof colors]}`}>
       <h3 className="text-gray-500 text-xs uppercase font-semibold">{title}</h3>
-      <div className="flex justify-between items-end mt-1">
-        <span className="text-2xl font-bold text-gray-800">{value}</span>
-        <span className={`text-xs px-2 py-0.5 rounded bg-${color}-50 text-${color}-700 font-medium`}>
-          {change}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ContainerStatus({ code, origin, eta, status }: { code: string, origin: string, eta: string, status: string }) {
-  return (
-    <div className="flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200 transition">
-      <div>
-        <div className="text-sm font-bold text-gray-800">{code}</div>
-        <div className="text-xs text-gray-500">From {origin} • ETA: {eta}</div>
-      </div>
-      <div className="text-xs font-semibold bg-gray-100 px-2 py-1 rounded text-gray-600">
-        {status}
-      </div>
+      <div className="mt-1 text-2xl font-bold text-gray-800">{value}</div>
     </div>
   );
 }

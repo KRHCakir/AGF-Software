@@ -4,39 +4,28 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { AvailabilityQuantity, ExpectedUnregistered, PackageUnit } from '../../types/availability';
 
-function Zero() {
-    return (
-        <span className="text-gray-400">
-            <span aria-hidden="true">–</span>
-            <span className="sr-only">0</span>
-        </span>
-    );
-}
-
-// Werkelijke hoeveelheid met daaronder het werkelijke netto-gewicht uit palletinhoud.
+// Een bekende nul is een getal en wordt als "0" getoond (gedempt), nooit als streepje: de API levert hier altijd een
+// werkelijk geteld aantal en gewogen gewicht. Onbekende waarden (null) krijgen een eigen, expliciete weergave.
 export function QuantityCell({ value, emphasis = false }: { value: AvailabilityQuantity; emphasis?: boolean }) {
     const { locale } = useTranslation();
-    if (value.quantity === 0 && value.netWeightKg === 0) {
-        return <Zero />;
-    }
+    const zero = value.quantity === 0 && value.netWeightKg === 0;
+    const tone = zero ? 'text-gray-400' : 'text-gray-900';
     return (
-        <div className="leading-tight">
-            <div className={emphasis ? 'text-base font-semibold text-gray-900' : 'text-gray-900'}>{formatQuantity(value.quantity, locale)}</div>
-            <div className="text-xs text-gray-500">{formatKg(value.netWeightKg, locale)}</div>
+        <div className="leading-tight" data-zero={zero ? 'true' : undefined}>
+            <div className={emphasis && !zero ? `text-base font-semibold ${tone}` : tone}>{formatQuantity(value.quantity, locale)}</div>
+            <div className={zero ? 'text-xs text-gray-400' : 'text-xs text-gray-500'}>{formatKg(value.netWeightKg, locale)}</div>
         </div>
     );
 }
 
-// Verwacht maar nog niet op een pallet: alleen een hoeveelheid, het gewicht is bewust onbekend.
+// Verwacht maar nog niet op een pallet: alleen een hoeveelheid; het gewicht is onbekend (null) en wordt nooit als 0 getoond.
 export function ExpectedCell({ value }: { value: ExpectedUnregistered }) {
     const { t, locale } = useTranslation();
-    if (value.quantity === 0) {
-        return <Zero />;
-    }
+    const zero = value.quantity === 0;
     return (
-        <div className="leading-tight">
-            <div className="text-gray-900">{formatQuantity(value.quantity, locale)}</div>
-            <div className="text-xs italic text-gray-500">{t('availability_kg_not_known_yet')}</div>
+        <div className="leading-tight" data-zero={zero ? 'true' : undefined}>
+            <div className={zero ? 'text-gray-400' : 'text-gray-900'}>{formatQuantity(value.quantity, locale)}</div>
+            {!zero && <div className="text-xs italic text-gray-500">{t('availability_kg_not_known_yet')}</div>}
         </div>
     );
 }

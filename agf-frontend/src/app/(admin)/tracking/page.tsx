@@ -2,16 +2,13 @@
 
 import { useTranslation } from '../../../i18n/LanguageContext';
 
+// Placeholder: er is geen tracking-integratie. De pagina zegt dat expliciet en toont geen voorbeeldkaart of -gegevens.
 export default function TrackingPage() {
     const { t } = useTranslation();
     return (
         <div className="p-4">
             <h1 className="text-2xl font-bold mb-4">{t('shipment_tracking')}</h1>
-            <div className="bg-white p-8 rounded shadow text-center text-gray-500 h-96 flex flex-col justify-center items-center bg-blue-50">
-                <span className="text-4xl block mb-2">🌍</span>
-                <p>{t('live_map_integration')}</p>
-                <p className="text-xs mt-2">{t('marine_traffic_api')}</p>
-            </div>
+            <p role="note" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">{t('placeholder_not_available')}</p>
         </div>
     );
 }

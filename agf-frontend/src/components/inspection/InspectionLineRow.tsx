@@ -22,6 +22,7 @@ import FieldError, { inputClass } from '../supply/FieldError';
 import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import LineHistory from './LineHistory';
+import TechnicalDetails from '../supply/TechnicalDetails';
 
 // Eén inhoudsregel met zijn eigen, losse kwaliteitsacties. Nooit voor de hele pallet en nooit in bulk.
 export default function InspectionLineRow({ context, line, actor, readOnly, onSucceeded, onReload }: {
@@ -188,7 +189,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
                                 <p className="font-medium">
                                     {conflict ? t('inspection_conflict') : unknown ? t('supply_error_outcome_unknown') : t('supply_error_http_400')}
                                 </p>
-                                {error.kind === 'http' && error.status !== 400 && <p className="mt-1">{error.message}</p>}
+                                {error.status !== 400 && <TechnicalDetails error={error} />}
                                 <div className="mt-2 flex flex-wrap gap-2">
                                     {unknown && <button type="submit" className={primaryButtonClass} disabled={submitting}>{t('inspection_retry_same')}</button>}
                                     {(conflict || unknown) && <button type="button" className={secondaryButtonClass} onClick={onReload}>{t('inspection_reload')}</button>}

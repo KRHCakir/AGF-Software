@@ -19,10 +19,14 @@ import { usePendingCommands } from './PendingCommandsContext';
 import { OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
-export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
+export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false }: {
     order: SalesOrder;
     actor: string;
     onOrderChanged: () => Promise<boolean>;
+    // Expliciet vernieuwen (alleen lezen). Zonder onRefresh wordt onOrderChanged gebruikt.
+    onRefresh?: () => Promise<boolean>;
+    refreshing?: boolean;
+    refreshFailed?: boolean;
 }) {
     const { t, locale } = useTranslation();
     const { commands } = usePendingCommands();
@@ -108,6 +112,29 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
         }
     };
 
+    // Vernieuwen leest de order, de verzendingen en de historie opnieuw. Beslissingstellers veranderen niet, dus open
+    // formulieren blijven gemonteerd; bevroren commando's staan in de opslag en worden hier niet aangeraakt.
+    const [localRefreshing, setLocalRefreshing] = useState(false);
+    const [localRefreshFailed, setLocalRefreshFailed] = useState(false);
+    const busy = refreshing || localRefreshing;
+    const refresh = async () => {
+        if (busy) return;
+        setLocalRefreshing(true);
+        setLocalRefreshFailed(false);
+        try {
+            const ok = await (onRefresh ?? onOrderChanged)();
+            if (ok) {
+                setDispatchToken((n) => n + 1);
+                setHistoryToken((n) => n + 1);
+            } else {
+                setLocalRefreshFailed(true);
+            }
+        } finally {
+            setLocalRefreshing(false);
+        }
+    };
+    const showRefreshFailed = refreshFailed || localRefreshFailed;
+
     return (
         <div className="space-y-3">
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
@@ -116,6 +143,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                     <OrderStatusBadge status={order.status} />
                     {progress.onHoldCount > 0 && <OnHoldBadge />}
                     <div className="ml-auto flex flex-wrap gap-2">
+                        <button type="button" className={secondaryButtonClass} onClick={() => void refresh()} disabled={busy} aria-busy={busy}>
+                            <span aria-hidden="true">↻ </span>{busy ? t('sales_refreshing') : t('sales_refresh')}
+                        </button>
                         <button type="button" className={secondaryButtonClass} onClick={() => setShowHistory((value) => !value)} aria-expanded={showHistory}>
                             {showHistory ? t('sales_history_hide') : t('sales_history')}
                         </button>
@@ -134,6 +164,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                         )}
                     </div>
                 </div>
+                {showRefreshFailed && (
+                    <p role="alert" className="mt-2 rounded border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-900">{t('sales_refresh_failed')}</p>
+                )}
                 {cancelled && (
                     <div role="status" className="mt-2 rounded border border-gray-400 bg-gray-100 px-3 py-2 text-sm text-gray-900">
                         <p className="font-medium">{t('sales_cancelled_notice', { date: order.cancelledAt ? formatDateTime(order.cancelledAt, locale) : t('availability_unknown'), actor: order.cancelledBy ?? t('availability_unknown') })}</p>

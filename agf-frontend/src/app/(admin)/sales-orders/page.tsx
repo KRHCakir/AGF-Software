@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import CreateSalesOrderForm from '../../../components/sales/CreateSalesOrderForm';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
@@ -56,7 +56,18 @@ function SalesWorkspace() {
     const [referenceToken, setReferenceToken] = useState(0);
     const [orders, setOrders] = useState<LoadState<SalesOrder[]>>({ status: 'loading' });
     const [ordersToken, setOrdersToken] = useState(0);
+    // Expliciet vernieuwen: alleen lezen. De bestaande lijst en het bestaande detail blijven staan tot er verse gegevens zijn;
+    // mislukt het, dan blijft alles zoals het was met een melding. Formulieren en onafgeronde commando's worden niet aangeraakt.
+    const [listRefreshing, setListRefreshing] = useState(false);
+    const [listRefreshFailed, setListRefreshFailed] = useState(false);
+    const [detailRefreshing, setDetailRefreshing] = useState(false);
+    const [detailRefreshFailed, setDetailRefreshFailed] = useState(false);
     const [detail, setDetail] = useState<LoadState<SalesOrder> | null>(null);
+    // Elke orderlezing (selectie, herladen na een actie, vernieuwen) krijgt een volgnummer. Alleen het antwoord van de
+    // laatste lezing mag het detail zetten: een traag antwoord van een eerder gekozen order vervangt nooit de huidige.
+    const detailRequest = useRef(0);
+    const beginDetailRequest = () => ++detailRequest.current;
+    const isCurrentDetailRequest = (token: number) => token === detailRequest.current;
     const [creating, setCreating] = useState(false);
     const [search, setSearch] = useState('');
     const [customerFilter, setCustomerFilter] = useState('');
@@ -78,16 +89,24 @@ function SalesWorkspace() {
     useEffect(() => {
         const controller = new AbortController();
         setOrders((current) => (current.status === 'ready' ? current : { status: 'loading' }));
+        setListRefreshing(true);
         listSalesOrders({}, controller.signal)
-            .then((data) => setOrders({ status: 'ready', data }))
+            .then((data) => { setOrders({ status: 'ready', data }); setListRefreshFailed(false); })
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
-                if (apiError.kind !== 'aborted') setOrders({ status: 'error', error: apiError });
-            });
+                if (apiError.kind === 'aborted') return;
+                // Een eerder geladen lijst blijft zichtbaar; alleen zonder lijst wordt de foutweergave getoond.
+                setOrders((current) => (current.status === 'ready' ? current : { status: 'error', error: apiError }));
+                setListRefreshFailed(true);
+            })
+            .finally(() => { if (!controller.signal.aborted) setListRefreshing(false); });
         return () => controller.abort();
     }, [ordersToken]);
 
     useEffect(() => {
+        const token = beginDetailRequest();
+        setDetailRefreshing(false);
+        setDetailRefreshFailed(false);
         if (selectedId === null) {
             setDetail(null);
             return;
@@ -95,10 +114,10 @@ function SalesWorkspace() {
         const controller = new AbortController();
         setDetail({ status: 'loading' });
         getSalesOrder(selectedId, controller.signal)
-            .then((order) => setDetail({ status: 'ready', data: order }))
+            .then((order) => { if (isCurrentDetailRequest(token)) setDetail({ status: 'ready', data: order }); })
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
-                if (apiError.kind !== 'aborted') setDetail({ status: 'error', error: apiError });
+                if (apiError.kind !== 'aborted' && isCurrentDetailRequest(token)) setDetail({ status: 'error', error: apiError });
             });
         return () => controller.abort();
     }, [selectedId]);
@@ -138,14 +157,37 @@ function SalesWorkspace() {
     // Na een schrijfactie: de order opnieuw lezen (leidend voor reserveringen en on hold) en de lijst verversen.
     const reloadOrder = useCallback(async (): Promise<boolean> => {
         if (selectedId === null) return false;
+        const token = beginDetailRequest();
         setOrdersToken((n) => n + 1);
         try {
             const order = await getSalesOrder(selectedId);
+            if (!isCurrentDetailRequest(token)) return false; // intussen een andere order gekozen: antwoord negeren
             setDetail({ status: 'ready', data: order });
             return true;
         } catch (caught) {
-            setDetail({ status: 'error', error: toApiError(caught) });
+            if (isCurrentDetailRequest(token)) setDetail({ status: 'error', error: toApiError(caught) });
             return false;
+        }
+    }, [selectedId]);
+
+    // Knop "Vernieuwen" bij de geselecteerde order: leest de order en de lijst opnieuw, verstuurt niets en laat het huidige
+    // detail (met open formulieren en bevroren commando's) staan tot de verse order er is. Mislukt het: melding, geen wissel.
+    const refreshOrder = useCallback(async (): Promise<boolean> => {
+        if (selectedId === null) return false;
+        const token = beginDetailRequest();
+        setDetailRefreshing(true);
+        setDetailRefreshFailed(false);
+        setOrdersToken((n) => n + 1);
+        try {
+            const order = await getSalesOrder(selectedId);
+            if (!isCurrentDetailRequest(token)) return false; // verouderd antwoord: de gekozen order blijft staan
+            setDetail({ status: 'ready', data: order });
+            return true;
+        } catch {
+            if (isCurrentDetailRequest(token)) setDetailRefreshFailed(true);
+            return false;
+        } finally {
+            if (isCurrentDetailRequest(token)) setDetailRefreshing(false);
         }
     }, [selectedId]);
 
@@ -185,11 +227,20 @@ function SalesWorkspace() {
                 <aside className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                         <h2 className="text-sm font-semibold text-gray-900">{t('sales_orders_title')}</h2>
-                        <button type="button" className={creating ? secondaryButtonClass : primaryButtonClass} onClick={() => setCreating(true)}
-                            disabled={creating || reference.status !== 'ready' || !hydrated}>
-                            {createPending ? t('sales_pending_open_create') : `+ ${t('sales_new_order')}`}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button type="button" className={secondaryButtonClass} onClick={() => setOrdersToken((n) => n + 1)} disabled={listRefreshing}
+                                aria-busy={listRefreshing} aria-label={t('sales_refresh')} title={t('sales_refresh')}>
+                                <span aria-hidden="true">↻</span>{listRefreshing && <span className="sr-only">{t('sales_refreshing')}</span>}
+                            </button>
+                            <button type="button" className={creating ? secondaryButtonClass : primaryButtonClass} onClick={() => setCreating(true)}
+                                disabled={creating || reference.status !== 'ready' || !hydrated}>
+                                {createPending ? t('sales_pending_open_create') : `+ ${t('sales_new_order')}`}
+                            </button>
+                        </div>
                     </div>
+                    {listRefreshFailed && orders.status === 'ready' && (
+                        <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-900">{t('sales_list_refresh_failed')}</p>
+                    )}
                     <div className="grid grid-cols-3 gap-2">
                         <label className="text-xs font-medium text-gray-700">
                             {t('sales_col_status')}
@@ -238,7 +289,8 @@ function SalesWorkspace() {
                     {!creating && detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => void reloadOrder()} />}
                     {!creating && detail?.status === 'ready' && (
                         <HydratedGate fallback={<LoadingRows rows={4} label={t('sales_loading_order')} />}>
-                            <SalesOrderDetail order={detail.data} actor={actor} onOrderChanged={reloadOrder} />
+                            <SalesOrderDetail order={detail.data} actor={actor} onOrderChanged={reloadOrder}
+                                onRefresh={refreshOrder} refreshing={detailRefreshing} refreshFailed={detailRefreshFailed} />
                         </HydratedGate>
                     )}
                 </section>

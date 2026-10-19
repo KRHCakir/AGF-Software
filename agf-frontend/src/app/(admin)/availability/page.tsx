@@ -7,7 +7,7 @@ import AvailabilityDrawer, { DrillDownSelection } from '../../../components/avai
 import DataBasisNote from '../../../components/availability/DataBasisNote';
 import DirectTradeSupplyTable from '../../../components/availability/DirectTradeSupplyTable';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
-import WarehouseSupplyTable from '../../../components/availability/WarehouseSupplyTable';
+import WarehouseSupplyTable, { AvailabilityView, DETAILED_ONLY_FOCUS } from '../../../components/availability/WarehouseSupplyTable';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { DirectTradeRow, UnitFilter, WarehouseRow, directTradeRows, formatTime, warehouseRows } from '../../../lib/availability';
 import { parseAvailabilityParams } from '../../../lib/availabilityLinks';
@@ -25,6 +25,8 @@ export default function AvailabilityPage() {
     );
 }
 
+const VIEW_STORAGE_KEY = 'agf_availability_view';
+
 function AvailabilityWorkspace() {
     const { t, locale } = useTranslation();
     // URL-filters uit contextlinks (bijvoorbeeld vanuit Aanvoer): echte API-filters; focus markeert alleen een kolom.
@@ -40,6 +42,26 @@ function AvailabilityWorkspace() {
     const [showWarehouse, setShowWarehouse] = useState(true);
     const [showDirectTrade, setShowDirectTrade] = useState(true);
     const [selection, setSelection] = useState<DrillDownSelection | null>(null);
+    // Compact is de standaard; de keuze wordt per browser onthouden. Een contextlink die een kolom markeert die alleen in
+    // de uitgebreide weergave staat, toont die weergave altijd.
+    const [view, setViewState] = useState<AvailabilityView>('compact');
+    useEffect(() => {
+        try {
+            if (localStorage.getItem(VIEW_STORAGE_KEY) === 'detailed') setViewState('detailed');
+        } catch {
+            // Opslag niet beschikbaar: compact blijft de standaard.
+        }
+    }, []);
+    const setView = (next: AvailabilityView) => {
+        setViewState(next);
+        try {
+            localStorage.setItem(VIEW_STORAGE_KEY, next);
+        } catch {
+            // Alleen een gemak per browser; zonder opslag werkt de keuze voor deze pagina.
+        }
+    };
+    const forcedDetailed = focus !== null && DETAILED_ONLY_FOCUS.includes(focus);
+    const effectiveView: AvailabilityView = forcedDetailed ? 'detailed' : view;
 
     useEffect(() => {
         const controller = new AbortController();
@@ -181,14 +203,27 @@ function AvailabilityWorkspace() {
                 <>
                     {showWarehouse && route !== 'DirectTrade' && (
                         <section aria-labelledby="availability-warehouse" className="space-y-2">
-                            <div>
-                                <h2 id="availability-warehouse" className="text-lg font-semibold text-gray-900">{t('availability_warehouse_title')}</h2>
-                                <p className="text-sm text-gray-600">{t('availability_warehouse_hint')}</p>
+                            <div className="flex flex-wrap items-end justify-between gap-3">
+                                <div>
+                                    <h2 id="availability-warehouse" className="text-lg font-semibold text-gray-900">{t('availability_warehouse_title')}</h2>
+                                    <p className="text-sm text-gray-600">{t('availability_warehouse_hint')}</p>
+                                </div>
+                                <div role="group" aria-label={t('availability_sections_label')} className="inline-flex rounded border border-gray-300 bg-white text-sm">
+                                    <button type="button" onClick={() => setView('compact')} aria-pressed={effectiveView === 'compact'} disabled={forcedDetailed}
+                                        className={`rounded-l px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${effectiveView === 'compact' ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
+                                        {t('availability_view_compact')}
+                                    </button>
+                                    <button type="button" onClick={() => setView('detailed')} aria-pressed={effectiveView === 'detailed'}
+                                        className={`rounded-r border-l border-gray-300 px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 ${effectiveView === 'detailed' ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
+                                        {t('availability_view_detailed')}
+                                    </button>
+                                </div>
                             </div>
+                            {effectiveView === 'compact' && <p className="text-xs text-gray-600">{t('availability_view_hint_compact')}</p>}
                             {warehouse.length === 0
                                 ? <EmptyState title={filtersActive ? t('availability_no_results', { search: search.trim() }) : t('availability_warehouse_empty')}
                                     action={filtersActive ? clearFilters : undefined} />
-                                : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} />}
+                                : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} view={effectiveView} />}
                         </section>
                     )}
 

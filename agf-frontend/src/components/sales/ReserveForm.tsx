@@ -18,6 +18,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 import { PendingNotice } from './PendingCommandsBanner';
 import { usePendingCommand } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
+import TechnicalDetails from '../supply/TechnicalDetails';
 
 // Reserveren op precies één inhoudsregel. Hoeveelheid en netto-kg worden expliciet ingevoerd; kg wordt nooit berekend.
 // "Volledige rest reserveren" kopieert beide exacte saldi, maar alleen als die in de resterende klantvraag passen.
@@ -207,7 +208,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
             {error && pending === null && (
                 <div role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-900">
                     <p className="font-medium">{conflict ? t('sales_conflict') : t('supply_error_http_400')}</p>
-                    {error.kind === 'http' && error.status !== 400 && <p className="mt-1">{error.message}</p>}
+                    {error.status !== 400 && <TechnicalDetails error={error} />}
                     {conflict && (
                         <div className="mt-2 flex flex-wrap gap-2">
                             <button type="button" className={secondaryButtonClass} onClick={onReload}>{t('sales_reload_and_decide')}</button>

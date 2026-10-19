@@ -8,7 +8,12 @@ import { getSalesOrderAuditEvents } from '../../services/salesOrderService';
 import { SalesOrderAuditEvent } from '../../types/salesOrder';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
 
-const EVENT_KEYS: Record<string, string> = { SalesOrderCancelled: 'sales_event_cancelled' };
+// Vertaalde namen per gebeurtenistype; een onbekend type (nieuwe backendgebeurtenis) blijft zichtbaar onder zijn eigen naam.
+const EVENT_KEYS: Record<string, string> = {
+    SalesOrderCancelled: 'sales_event_cancelled',
+    SalesOrderDispatched: 'sales_event_dispatched',
+    SalesOrderDispatchCorrected: 'sales_event_dispatch_corrected',
+};
 
 // Orderhistorie uit GET /api/sales-orders/{id}/audit-events (append-only, alleen lezen).
 export default function OrderHistory({ orderId, token }: { orderId: number; token: number }) {

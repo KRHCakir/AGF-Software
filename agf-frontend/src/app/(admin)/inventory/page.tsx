@@ -1,5 +1,7 @@
 'use client';
 
+import LegacyNotice from '../../../components/LegacyNotice';
+
 import { useState, useEffect } from 'react';
 import { InventoryService, InventoryItem } from '../../../services/inventoryService';
 import ReceiveShipmentModal from '../../../components/ReceiveShipmentModal';
@@ -46,8 +48,9 @@ export default function InventoryPage() {
 
     return (
         <div className="p-6">
+            <div className="mb-4"><LegacyNotice noticeKey="inventory_legacy_notice" linkHref="/availability" linkKey="legacy_go_to_availability" /></div>
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-800">{t('warehouse_inventory_batched')}</h1>
+                <h1 className="text-2xl font-bold text-gray-800">{t('inventory_legacy_title')} · {t('warehouse_inventory_batched')}</h1>
                 <button 
                     onClick={() => setIsModalOpen(true)}
                     className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors flex items-center"
