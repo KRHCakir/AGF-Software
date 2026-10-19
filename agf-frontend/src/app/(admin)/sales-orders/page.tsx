@@ -6,7 +6,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import CreateSalesOrderForm from '../../../components/sales/CreateSalesOrderForm';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
-import { PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
+import { HydratedGate, PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
 import SalesOrderDetail from '../../../components/sales/SalesOrderDetail';
 import SalesOrderList from '../../../components/sales/SalesOrderList';
 import { inputClass } from '../../../components/supply/FieldError';
@@ -60,6 +60,8 @@ function SalesWorkspace() {
     const [creating, setCreating] = useState(false);
     const [search, setSearch] = useState('');
     const [customerFilter, setCustomerFilter] = useState('');
+    // Standaard alleen Open orders; geannuleerde orders blijven met reden en historie opvraagbaar.
+    const [statusFilter, setStatusFilter] = useState<'Open' | 'Cancelled' | 'all'>('Open');
 
     useEffect(() => {
         const controller = new AbortController();
@@ -150,9 +152,10 @@ function SalesWorkspace() {
     const visibleOrders = useMemo(() => {
         if (orders.status !== 'ready') return [];
         return orders.data
+            .filter((order) => statusFilter === 'all' || order.status === statusFilter)
             .filter((order) => customerFilter === '' || String(order.customerId) === customerFilter)
             .filter((order) => matchesOrderSearch(order, search));
-    }, [orders, customerFilter, search]);
+    }, [orders, customerFilter, search, statusFilter]);
 
     const customers = reference.status === 'ready' ? reference.data.customers : [];
 
@@ -187,7 +190,15 @@ function SalesWorkspace() {
                             {createPending ? t('sales_pending_open_create') : `+ ${t('sales_new_order')}`}
                         </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
+                        <label className="text-xs font-medium text-gray-700">
+                            {t('sales_col_status')}
+                            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'Open' | 'Cancelled' | 'all')} className={inputClass}>
+                                <option value="Open">{t('sales_status_open')}</option>
+                                <option value="Cancelled">{t('sales_status_cancelled')}</option>
+                                <option value="all">{t('sales_status_all')}</option>
+                            </select>
+                        </label>
                         <label className="text-xs font-medium text-gray-700">
                             {t('supply_receive_search')}
                             <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('sales_search_placeholder')} className={inputClass} />
@@ -214,17 +225,21 @@ function SalesWorkspace() {
                 <section aria-live="polite">
                     {creating && reference.status === 'loading' && <LoadingRows rows={4} label={t('supply_loading_reference')} />}
                     {creating && reference.status === 'error' && <ErrorState error={reference.error} onRetry={() => setReferenceToken((n) => n + 1)} />}
-                    {creating && reference.status === 'ready' && hydrated && (
-                        <CreateSalesOrderForm actor={actor} customers={reference.data.customers} products={reference.data.products}
-                            onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => setCreating(false)} />
+                    {creating && reference.status === 'ready' && (
+                        <HydratedGate>
+                            <CreateSalesOrderForm actor={actor} customers={reference.data.customers} products={reference.data.products}
+                                onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => setCreating(false)} />
+                        </HydratedGate>
                     )}
                     {!creating && selectedId === null && (
                         <EmptyState title={t('sales_select_order')} description={t('sales_select_order_hint')} />
                     )}
                     {!creating && detail?.status === 'loading' && <LoadingRows rows={4} label={t('sales_loading_order')} />}
                     {!creating && detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => void reloadOrder()} />}
-                    {!creating && detail?.status === 'ready' && hydrated && (
-                        <SalesOrderDetail order={detail.data} actor={actor} onOrderChanged={reloadOrder} />
+                    {!creating && detail?.status === 'ready' && (
+                        <HydratedGate fallback={<LoadingRows rows={4} label={t('sales_loading_order')} />}>
+                            <SalesOrderDetail order={detail.data} actor={actor} onOrderChanged={reloadOrder} />
+                        </HydratedGate>
                     )}
                 </section>
             </div>

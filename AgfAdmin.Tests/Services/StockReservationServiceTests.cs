@@ -218,7 +218,10 @@ public class StockReservationServiceTests : IDisposable
         if (scenario == "order-not-open")
         {
             await using var db = _factory.CreateContext();
-            (await db.SalesOrders.FindAsync(_orderId))!.Status = "Cancelled";
+            var cancelled = (await db.SalesOrders.FindAsync(_orderId))!;
+            cancelled.Status = "Cancelled";
+            cancelled.CancelledAt = DateTime.UtcNow;
+            cancelled.CancelReason = "Test";
             await db.SaveChangesAsync();
         }
 

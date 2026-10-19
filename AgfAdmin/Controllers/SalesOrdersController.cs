@@ -37,6 +37,16 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> GetReservableStock(int id, int lineId) =>
             this.ToActionResult(await _orders.GetReservableStockAsync(id, lineId, HttpContext?.RequestAborted ?? default));
 
+        // Annuleren: verplichte reden en verwachte orderversie; alle Active reserveringen worden in dezelfde transactie vrijgegeven.
+        [HttpPost("{id:int}/cancel")]
+        public async Task<IActionResult> Cancel(int id, [FromBody] CancelSalesOrderDto request) =>
+            this.ToActionResult(await _orders.CancelAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // Alleen lezen: orderhistorie (append-only).
+        [HttpGet("{id:int}/audit-events")]
+        public async Task<IActionResult> GetAuditEvents(int id) =>
+            this.ToActionResult(await _orders.GetAuditEventsAsync(id, HttpContext?.RequestAborted ?? default));
+
         [HttpPost("{id:int}/lines/{lineId:int}/reservations")]
         public async Task<IActionResult> Reserve(int id, int lineId, [FromBody] CreateStockReservationDto request)
         {

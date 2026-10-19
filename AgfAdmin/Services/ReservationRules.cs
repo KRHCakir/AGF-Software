@@ -14,6 +14,7 @@ namespace AgfAdmin.Services
 
         public const string ReservationCreatedEvent = "ReservationCreated";
         public const string ReservationReleasedEvent = "ReservationReleased";
+        public const string OrderCancelledEvent = "SalesOrderCancelled";
 
         public static readonly IReadOnlyList<string> OrderStatuses = new[] { OrderStatusOpen, OrderStatusCancelled };
 

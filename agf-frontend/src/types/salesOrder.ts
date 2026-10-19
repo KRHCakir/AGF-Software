@@ -42,6 +42,26 @@ export interface ReleaseStockReservationRequest {
     reason: string;
 }
 
+// Annuleren van een Open order: alle Active reserveringen (ook on hold) worden door de server in dezelfde transactie vrijgegeven.
+export interface CancelSalesOrderRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    actorReference: string;
+    reason: string;
+}
+
+export interface SalesOrderAuditEvent {
+    id: number;
+    salesOrderId: number;
+    eventType: string;
+    oldValue: string | null;
+    newValue: string | null;
+    reason: string | null;
+    actorReference: string | null;
+    occurredAt: string;
+    requestId: string | null;
+}
+
 export interface StockReservation {
     id: number;
     requestId: string | null;
@@ -92,6 +112,10 @@ export interface SalesOrder {
     actorReference: string;
     createdAt: string;
     version: number;
+    // Alleen gevuld bij status Cancelled; rechtstreeks uit de server, nooit afgeleid.
+    cancelledAt: string | null;
+    cancelReason: string | null;
+    cancelledBy: string | null;
     lines: SalesOrderLine[];
 }
 
@@ -172,7 +196,27 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && isString(value.actorReference)
         && isString(value.createdAt)
         && isNumber(value.version)
+        && isNullableString(value.cancelledAt)
+        && isNullableString(value.cancelReason)
+        && isNullableString(value.cancelledBy)
         && isArrayOf(value.lines, isSalesOrderLine);
+}
+
+export function isSalesOrderAuditEvent(value: unknown): value is SalesOrderAuditEvent {
+    return isObject(value)
+        && isNumber(value.id)
+        && isNumber(value.salesOrderId)
+        && isString(value.eventType)
+        && isNullableString(value.oldValue)
+        && isNullableString(value.newValue)
+        && isNullableString(value.reason)
+        && isNullableString(value.actorReference)
+        && isString(value.occurredAt)
+        && isNullableString(value.requestId);
+}
+
+export function isSalesOrderAuditEventList(value: unknown): value is SalesOrderAuditEvent[] {
+    return isArrayOf(value, isSalesOrderAuditEvent);
 }
 
 export function isSalesOrderList(value: unknown): value is SalesOrder[] {

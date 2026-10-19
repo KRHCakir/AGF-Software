@@ -61,6 +61,12 @@ export function PendingCommandsProvider({ children }: { children: React.ReactNod
     return <PendingCommandsContext.Provider value={value}>{children}</PendingCommandsContext.Provider>;
 }
 
+// Pas renderen zodra de opslag is teruggelezen: formulieren lezen hun onafgeronde commando bij het opbouwen.
+export function HydratedGate({ children, fallback = null }: { children: React.ReactNode; fallback?: React.ReactNode }) {
+    const { hydrated } = usePendingCommands();
+    return hydrated ? <>{children}</> : <>{fallback}</>;
+}
+
 export function usePendingCommands(): PendingCommandsContextValue {
     return useContext(PendingCommandsContext);
 }

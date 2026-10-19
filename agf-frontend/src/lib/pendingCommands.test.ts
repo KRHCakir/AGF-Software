@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
     CREATE_ORDER_KEY,
     blockedBy,
+    cancelKey,
     commandsForLine,
     commandsForOrder,
     isPendingCommand,
@@ -33,9 +34,22 @@ const create = (requestId = 'c-1'): PendingCommand => ({
     display: { customerName: 'Local Market Stalls' },
 });
 
+const cancel = (orderId: number, requestId = 'k-1'): PendingCommand => ({
+    kind: 'cancel-order', key: cancelKey(orderId), orderId, requestId, attempts: 1, lastError: 'HTTP 504', frozenAt: '2026-10-19T11:00:00.000Z',
+    payload: { requestId, expectedOrderVersion: 3, actorReference: 'office-1', reason: 'Klant heeft afgezegd' },
+    display: { customerName: 'Local Market Stalls', activeReservationCount: 2 },
+});
+
 const toMap = (...commands: PendingCommand[]): PendingCommands => Object.fromEntries(commands.map((command) => [command.key, command]));
 
 describe('unresolved commands', () => {
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+
     test('a new command never replaces an unresolved one on the same order line, nor a new order an unresolved order', () => {
         const commands = toMap(reserve(4, 7), create());
         assert.equal(blockedBy(commands, { kind: 'line', orderId: 4, lineId: 7 })?.requestId, 'r-1');
@@ -50,6 +64,42 @@ describe('unresolved commands', () => {
         assert.equal(blockedBy(commands, { kind: 'line', orderId: 4, lineId: 7 })?.kind, 'release');
         assert.deepEqual(commandsForLine(commands, 4, 7).map((command) => command.key), [releaseKey(4, 7, 11)]);
         assert.deepEqual(commandsForOrder(toMap(reserve(4, 7), release(4, 9, 12), reserve(5, 1)), 4).map((command) => command.key).sort(), [releaseKey(4, 9, 12), reserveKey(4, 7)]);
+    });
+
+    test('an unresolved cancellation blocks every line of that order, and any line command blocks cancelling that order', () => {
+        const pendingCancel = toMap(cancel(4));
+        assert.equal(blockedBy(pendingCancel, { kind: 'line', orderId: 4, lineId: 7 })?.kind, 'cancel-order');
+        assert.equal(blockedBy(pendingCancel, { kind: 'line', orderId: 4, lineId: 99 })?.kind, 'cancel-order');
+        assert.equal(blockedBy(pendingCancel, { kind: 'line', orderId: 5, lineId: 7 }), null);
+        assert.equal(blockedBy(pendingCancel, { kind: 'cancel-order', orderId: 4 })?.kind, 'cancel-order');
+        assert.equal(blockedBy(pendingCancel, { kind: 'cancel-order', orderId: 5 }), null);
+        assert.equal(blockedBy(pendingCancel, { kind: 'create-order' }), null);
+
+        assert.equal(blockedBy(toMap(reserve(4, 7)), { kind: 'cancel-order', orderId: 4 })?.kind, 'reserve');
+        assert.equal(blockedBy(toMap(release(4, 7, 11)), { kind: 'cancel-order', orderId: 4 })?.kind, 'release');
+        assert.equal(blockedBy(toMap(reserve(5, 1)), { kind: 'cancel-order', orderId: 4 }), null);
+        assert.deepEqual(commandsForLine(pendingCancel, 4, 7), [], 'a cancellation is not a line command');
+        assert.deepEqual(commandsForOrder(toMap(cancel(4), reserve(4, 7), reserve(5, 1)), 4).map((command) => command.kind).sort(), ['cancel-order', 'reserve']);
+    });
+
+    test('cancel-order payload: non-negative integer version, non-blank actor and reason, bounded display', () => {
+        assert.equal(isPendingCommand(cancel(4)), true);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(cancel(4)))), toMap(cancel(4)));
+        assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { c.payload = { requestId: 'k-1' }; })), {});
+        for (const field of ['expectedOrderVersion', 'actorReference', 'reason']) {
+            assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { delete payloadOf(c)[field]; })), {}, `cancel without ${field}`);
+        }
+        const bad: [string, unknown][] = [
+            ['expectedOrderVersion', -1], ['expectedOrderVersion', 1.5], ['expectedOrderVersion', '3'],
+            ['actorReference', ''], ['reason', ''], ['reason', '   '], ['reason', null], ['reason', 7],
+        ];
+        for (const [field, value] of bad) {
+            assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { payloadOf(c)[field] = value; })), {}, `cancel ${field}=${String(value)}`);
+        }
+        assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { c.orderId = 0; c.key = cancelKey(0); })), {});
+        assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { c.display = { customerName: 'X' }; })), {});
+        assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { c.display = { customerName: 'X', activeReservationCount: -1 }; })), {});
+        assert.equal(Object.keys(parseStoredCommands(stored(cancel(4), (c) => { payloadOf(c).expectedOrderVersion = 0; }))).length, 1);
     });
 
     test('attempts are counted on the same frozen requestId and payload; the command itself never changes', () => {
@@ -68,13 +118,6 @@ describe('unresolved commands', () => {
         assert.deepEqual(restored, commands);
         assert.deepEqual(sortedCommands(restored).map((command) => command.kind), ['create-order', 'release', 'reserve']);
     });
-
-    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
-        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
-        mutate(copy);
-        return JSON.stringify({ [String(copy.key)]: copy });
-    };
-    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
 
     test('a payload with only a requestId, or with a missing or wrongly typed field, is never restored', () => {
         assert.equal(isPendingCommand(reserve(4, 7)), true);

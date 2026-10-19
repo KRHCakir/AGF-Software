@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Tests.Data;
 
-// Guard-regels 5 en 6: vangnet voor elke writer. Alleen voor nieuwe Active reserveringen van een SalesOrderLine.
+// Guard-regels 5, 6 en 7: vangnet voor elke writer. Alleen voor nieuwe Active reserveringen van een SalesOrderLine.
 public class ReservationGuardTests : IDisposable
 {
     private readonly SqliteAppDbContextFactory _factory = new();
@@ -220,6 +220,74 @@ public class ReservationGuardTests : IDisposable
             reservation.ReleasedAt = DateTime.UtcNow;
             reservation.ReleaseReason = "Partij geblokkeerd";
             await SaveAsync(db, async);
+        }
+        Assert.Equal(0, await ActiveCountAsync());
+    }
+
+    // ---- Regel 7: alleen op een Open order ----
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task New_Active_Reservation_On_A_Cancelled_Order_Is_Rejected_By_The_Guard(bool async)
+    {
+        await ArrangeAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var order = await db.SalesOrders.SingleAsync(o => o.Lines.Any(l => l.Id == _boxLine));
+            order.Status = "Cancelled";
+            order.CancelledAt = DateTime.UtcNow;
+            order.CancelReason = "Klant heeft afgezegd";
+            await SaveAsync(db, async);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            db.StockReservations.Add(await ReservationAsync(db, _boxLine, _seed.ApprovedBox, 1m, 4m));
+            var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            Assert.Contains("Cancelled", exception.Message);
+        }
+        Assert.Equal(0, await ActiveCountAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reservation_And_Cancellation_Of_The_Same_Order_In_One_Save_Is_Rejected(bool async)
+    {
+        await ArrangeAsync();
+        await using var db = _factory.CreateContext();
+        var order = await db.SalesOrders.SingleAsync(o => o.Lines.Any(l => l.Id == _boxLine));
+        order.Status = "Cancelled";
+        order.CancelledAt = DateTime.UtcNow;
+        order.CancelReason = "Klant heeft afgezegd";
+        db.StockReservations.Add(await ReservationAsync(db, _boxLine, _seed.ApprovedBox, 1m, 4m));
+
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+    }
+
+    [Fact]
+    public async Task Releasing_Reservations_Of_A_Cancelled_Order_Is_Never_Blocked_By_Rule_7()
+    {
+        await ArrangeAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            db.StockReservations.Add(await ReservationAsync(db, _boxLine, _seed.ApprovedBox, 1m, 4m));
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var order = await db.SalesOrders.Include(o => o.Lines).ThenInclude(l => l.Reservations).SingleAsync(o => o.Lines.Any(l => l.Id == _boxLine));
+            order.Status = "Cancelled";
+            order.CancelledAt = DateTime.UtcNow;
+            order.CancelReason = "Klant heeft afgezegd";
+            foreach (var reservation in order.Lines.SelectMany(l => l.Reservations))
+            {
+                reservation.Status = "Released";
+                reservation.ReleasedAt = DateTime.UtcNow;
+                reservation.ReleaseReason = "Klant heeft afgezegd";
+            }
+            await db.SaveChangesAsync();
         }
         Assert.Equal(0, await ActiveCountAsync());
     }
