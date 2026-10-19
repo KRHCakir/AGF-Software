@@ -26,6 +26,9 @@ export interface PalletDetailLine {
     onHandQuantity: number;
     onHandNetWeightKg: number;
     depleted: boolean;
+    // Receipt of DispatchCorrection (teruggeboekt uit een gecorrigeerde verzending).
+    origin: string;
+    originCorrectionLineId: number | null;
     qualityStatus: QualityStatus;
     qualityReason: string | null;
     createdAt: string;
@@ -44,6 +47,8 @@ export interface PalletDetail {
     version: number;
     // Minstens één regel en elke regel uitgeput; zegt niets over de fysieke pallet.
     depleted: boolean;
+    // Historische ontvangst-kg (zonder teruggeboekte correctie-inhoud), apart van het fysieke contentNetKg.
+    receivedNetKg: number;
     contentLines: PalletDetailLine[];
 }
 
@@ -92,6 +97,8 @@ export function isPalletDetailLine(value: unknown): value is PalletDetailLine {
         && isNumber(value.onHandQuantity)
         && isNumber(value.onHandNetWeightKg)
         && typeof value.depleted === 'boolean'
+        && isString(value.origin)
+        && (value.originCorrectionLineId === null || isNumber(value.originCorrectionLineId))
         && isQualityStatus(value.qualityStatus)
         && isNullableString(value.qualityReason)
         && isString(value.createdAt)
@@ -110,6 +117,7 @@ export function isPalletDetail(value: unknown): value is PalletDetail {
         && isString(value.createdAt)
         && isNumber(value.version)
         && typeof value.depleted === 'boolean'
+        && isNumber(value.receivedNetKg)
         && isArrayOf(value.contentLines, isPalletDetailLine);
 }
 

@@ -7,6 +7,7 @@ const STYLES: Record<ReservationStatus, { key: string; icon: string; className: 
     Active: { key: 'sales_reservation_active', icon: '●', className: 'bg-blue-100 text-blue-800 border-blue-300' },
     Released: { key: 'sales_reservation_released', icon: '↩', className: 'bg-gray-100 text-gray-800 border-gray-300' },
     Consumed: { key: 'sales_reservation_consumed', icon: '✓', className: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
+    Corrected: { key: 'sales_reservation_corrected', icon: '↺', className: 'bg-amber-100 text-amber-900 border-amber-300' },
 };
 
 // Status altijd als icoon + tekst, nooit alleen als kleur.

@@ -18,6 +18,7 @@ const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed', onH
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
     releaseReason: status === 'Released' ? 'eerder' : null, version, contentQualityStatus: onHold ? 'Blocked' : 'Approved', onHold,
     consumedAt: status === 'Consumed' ? '2026-10-19T13:00:00.000Z' : null, dispatchId: status === 'Consumed' ? 9 : null, dispatchReference: status === 'Consumed' ? 'VRB-9' : null,
+    correctedAt: null, correctionId: null,
 });
 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {
@@ -36,7 +37,7 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
     };
 };
 
-const dispatchResponse = { id: 9, requestId: 'd-lost', salesOrderId: 4, reference: 'VRB-9', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z',
+const dispatchResponse = { id: 9, requestId: 'd-lost', salesOrderId: 4, reference: 'VRB-9', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', correction: null,
     lines: [{ id: 1, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 1 }] };
 
 const frozen: PendingCommand = {

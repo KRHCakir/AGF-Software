@@ -375,17 +375,8 @@ namespace AgfAdmin.Services
                 return contentConflict;
             }
 
-            // Alleen gemeten waarden: is bruto bekend, dan past tara (indien gemeten) plus alle ingevoerde netto-kg daarbinnen.
-            if (pallet.GrossKg != null)
-            {
-                var totalKg = (pallet.TareKg ?? 0m) + pallet.ContentLines.Sum(c => c.NetWeightKg) + candidate.NetWeightKg;
-                if (totalKg > pallet.GrossKg.Value)
-                {
-                    return $"Tare plus content net weight ({totalKg} kg) would exceed the measured gross weight ({pallet.GrossKg} kg).";
-                }
-            }
-
-            return null;
+            // Alleen gemeten waarden: is bruto bekend, dan past tara plus de voorraad-kg (ontvangst minus afgeboekt) plus het nieuwe kg daarbinnen.
+            return PalletInvariants.CheckGrossWeight(pallet.GrossKg, pallet.TareKg, pallet.ContentLines, candidate.NetWeightKg);
         }
 
         private static ServiceResult<PalletContentLineDto> ResultForContentLineRetry(PalletContentLine existing, PalletContentLine candidate)
@@ -941,6 +932,8 @@ namespace AgfAdmin.Services
             GrossKg = pallet.GrossKg,
             DeclaredNetKg = pallet.DeclaredNetKg,
             ContentNetKg = pallet.ContentLines.Sum(c => ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg)),
+            // Historische ontvangst apart herkenbaar: alleen fysiek ontvangen inhoud, niet de teruggeboekte correctie-inhoud.
+            ReceivedNetKg = pallet.ContentLines.Where(c => c.OriginCorrectionLineId == null).Sum(c => c.NetWeightKg),
             Depleted = pallet.ContentLines.Count > 0 && pallet.ContentLines.All(c => ReservationRules.IsDepleted(c.Quantity, c.NetWeightKg, c.DispatchedQuantity, c.DispatchedNetWeightKg)),
             LogisticsStatus = pallet.LogisticsStatus,
             LocationContext = pallet.LocationContext,
@@ -973,6 +966,8 @@ namespace AgfAdmin.Services
             OnHandQuantity = ReservationRules.OnHandQuantity(line.Quantity, line.DispatchedQuantity),
             OnHandNetWeightKg = ReservationRules.OnHandQuantity(line.NetWeightKg, line.DispatchedNetWeightKg),
             Depleted = ReservationRules.IsDepleted(line.Quantity, line.NetWeightKg, line.DispatchedQuantity, line.DispatchedNetWeightKg),
+            Origin = line.OriginCorrectionLineId == null ? "Receipt" : "DispatchCorrection",
+            OriginCorrectionLineId = line.OriginCorrectionLineId,
             QualityStatus = line.QualityStatus,
             QualityReason = line.QualityReason,
             CreatedAt = DateTime.SpecifyKind(line.CreatedAt, DateTimeKind.Utc),

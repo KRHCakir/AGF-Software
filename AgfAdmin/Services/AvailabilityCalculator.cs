@@ -43,8 +43,11 @@ namespace AgfAdmin.Services
         decimal ReservedNetWeightKg = 0m,
         // Afgeboekt door verzendingen; Quantity/NetWeightKg blijven de ontvangst, voorraad = ontvangst - afgeboekt.
         decimal DispatchedQuantity = 0m,
-        decimal DispatchedNetWeightKg = 0m)
+        decimal DispatchedNetWeightKg = 0m,
+        // Teruggeboekt uit een gecorrigeerde verzending: telt niet als registratie tegen de bronregel (al geteld bij de oorspronkelijke regel).
+        bool FromCorrection = false)
     {
+        public string Origin => FromCorrection ? "DispatchCorrection" : "Receipt";
         public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity);
         public decimal OnHandNetWeightKg => ReservationRules.OnHandQuantity(NetWeightKg, DispatchedNetWeightKg);
         public bool Depleted => ReservationRules.IsDepleted(Quantity, NetWeightKg, DispatchedQuantity, DispatchedNetWeightKg);
@@ -239,6 +242,7 @@ namespace AgfAdmin.Services
                     OnHandQuantity = c.Fact.OnHandQuantity,
                     OnHandNetWeightKg = c.Fact.OnHandNetWeightKg,
                     Depleted = c.Fact.Depleted,
+                    Origin = c.Fact.Origin,
                     QualityStatus = c.Fact.QualityStatus,
                     ReservedQuantity = c.Fact.ReservedQuantity,
                     ReservedNetWeightKg = c.Fact.ReservedNetWeightKg,
@@ -263,7 +267,8 @@ namespace AgfAdmin.Services
             var sourceUnits = sources.ToDictionary(s => s.SupplyCommitmentLineId, s => s.Unit);
             var registered = sources.ToDictionary(s => s.SupplyCommitmentLineId, _ => 0m);
 
-            foreach (var content in contents.Where(c => c.LogisticsStatus != PalletRules.StatusCancelled))
+            // Correctie-inhoud is geen nieuwe ontvangst: de goederen zijn al bij de oorspronkelijke inhoudsregel geregistreerd.
+            foreach (var content in contents.Where(c => c.LogisticsStatus != PalletRules.StatusCancelled && !c.FromCorrection))
             {
                 if (sourceUnits.TryGetValue(content.SupplyCommitmentLineId, out var unit)
                     && unit != null

@@ -41,6 +41,9 @@ namespace AgfAdmin.Models
         public DateTime? ConsumedAt { get; set; }
         public SalesDispatchLine DispatchLine { get; set; }
 
+        // Gezet bij Corrected (eindtoestand na een verzendcorrectie; database-check). Telt niet als gereserveerd of verzonden.
+        public DateTime? CorrectedAt { get; set; }
+
         // Optimistisch concurrency-token; centraal verhoogd in AppDbContext bij elke wijziging (vrijgeven, afboeken).
         public int Version { get; set; }
     }

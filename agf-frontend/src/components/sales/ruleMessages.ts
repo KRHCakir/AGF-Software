@@ -20,6 +20,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
     switch (error.code) {
         case 'required':
             return error.field === 'actorReference' ? t('supply_error_actor_required')
+                : error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
                 : error.field === 'requestedDeliveryDate' ? t('supply_error_required_date')
                 : error.field === 'lines' ? t('supply_error_lines_required')
                 : error.field.endsWith('.unit') ? t('supply_error_required_unit')

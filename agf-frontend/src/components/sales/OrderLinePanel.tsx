@@ -209,6 +209,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 {reservation.status === 'Released' && reservation.releaseReason && (
                                                     <span className="mt-1 block text-xs italic text-gray-700">“{reservation.releaseReason}”</span>
                                                 )}
+                                                {reservation.status === 'Corrected' && reservation.correctionId !== null && (
+                                                    <span className="mt-1 block text-xs text-amber-950">
+                                                        {t('sales_corrected_reservation', { id: String(reservation.correctionId) })}
+                                                    </span>
+                                                )}
                                                 {reservation.status === 'Consumed' && reservation.dispatchId !== null && (
                                                     <span className="mt-1 block text-xs text-gray-700">
                                                         {t('sales_dispatch_heading', { id: String(reservation.dispatchId) })}{reservation.dispatchReference && <> · {reservation.dispatchReference}</>}

@@ -201,7 +201,18 @@ namespace AgfAdmin.Services
         private async Task<SalesOrderDto> ToDtoWithCancellationAsync(SalesOrder order, CancellationToken cancellationToken)
         {
             var actors = await CancelledByAsync(new List<int> { order.Id }, cancellationToken);
-            return ToDto(order, actors.GetValueOrDefault(order.Id));
+            var corrections = await CorrectionIdsAsync(new List<int> { order.Id }, cancellationToken);
+            return ToDto(order, actors.GetValueOrDefault(order.Id), corrections);
+        }
+
+        // Reservering -> correctie-id voor Corrected reserveringen (één leesactie per aanroep).
+        private async Task<Dictionary<int, int>> CorrectionIdsAsync(List<int> orderIds, CancellationToken cancellationToken)
+        {
+            if (orderIds.Count == 0) return new Dictionary<int, int>();
+            return await _db.SalesDispatchCorrectionLines.AsNoTracking()
+                .Where(l => orderIds.Contains(l.SalesDispatchCorrection.SalesOrderId))
+                .Select(l => new { l.StockReservationId, l.SalesDispatchCorrectionId })
+                .ToDictionaryAsync(l => l.StockReservationId, l => l.SalesDispatchCorrectionId, cancellationToken);
         }
 
         private async Task<Dictionary<int, string>> CancelledByAsync(List<int> orderIds, CancellationToken cancellationToken)
@@ -233,7 +244,8 @@ namespace AgfAdmin.Services
             if (filter.Status != null) query = query.Where(o => o.Status == filter.Status);
             var orders = await query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id).Take(ReservationRules.MaxListResults).ToListAsync(cancellationToken);
             var actors = await CancelledByAsync(orders.Where(o => o.Status == ReservationRules.OrderStatusCancelled).Select(o => o.Id).ToList(), cancellationToken);
-            return ServiceResult<IReadOnlyList<SalesOrderDto>>.Ok(orders.Select(o => ToDto(o, actors.GetValueOrDefault(o.Id))).ToList());
+            var corrections = await CorrectionIdsAsync(orders.Select(o => o.Id).ToList(), cancellationToken);
+            return ServiceResult<IReadOnlyList<SalesOrderDto>>.Ok(orders.Select(o => ToDto(o, actors.GetValueOrDefault(o.Id), corrections)).ToList());
         }
 
         // ======================== Annuleren ========================
@@ -544,7 +556,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch)
                 .AsSplitQuery();
 
-        internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null) => new()
+        internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null, IReadOnlyDictionary<int, int> correctionIds = null) => new()
         {
             Id = order.Id,
             RequestId = order.RequestId,
@@ -582,7 +594,8 @@ namespace AgfAdmin.Services
                     OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity - dispatchedQuantity),
                     Fulfilled = dispatchedQuantity == line.Quantity,
                     Version = line.Version,
-                    Reservations = line.Reservations.OrderBy(r => r.Id).Select(r => StockReservationService.ToDto(r, order.Id)).ToList()
+                    Reservations = line.Reservations.OrderBy(r => r.Id).Select(r => StockReservationService.ToDto(r, order.Id,
+                        correctionIds != null && correctionIds.TryGetValue(r.Id, out var correctionId) ? correctionId : null)).ToList()
                 };
             }).ToList()
         };

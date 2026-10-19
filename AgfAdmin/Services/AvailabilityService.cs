@@ -157,7 +157,8 @@ namespace AgfAdmin.Services
                     0m,
                     0m,
                     c.DispatchedQuantity,
-                    c.DispatchedNetWeightKg))
+                    c.DispatchedNetWeightKg,
+                    c.OriginCorrectionLineId != null))
                 .ToListAsync(cancellationToken);
 
             // Alleen Active Physical verkoopreserveringen (SalesOrderLineId); legacy OrderLineId-reserveringen nooit.

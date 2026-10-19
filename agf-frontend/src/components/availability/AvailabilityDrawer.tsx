@@ -79,7 +79,12 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
                     </span>
                 )}
             </td>
-            <td className={td}>{line.lotNumber}</td>
+            <td className={td}>
+                {line.lotNumber}
+                {line.origin === 'DispatchCorrection' && (
+                    <span className="ml-1 inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{t('sales_origin_correction')}</span>
+                )}
+            </td>
             <td className={td}>{label(categoryKey(line.category), line.category)}</td>
             <td className={td}>{label(logisticsKey(line.logisticsStatus), line.logisticsStatus)}</td>
             <td className={td}>

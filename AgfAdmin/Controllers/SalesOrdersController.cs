@@ -12,12 +12,14 @@ namespace AgfAdmin.Controllers
         private readonly ISalesOrderService _orders;
         private readonly IStockReservationService _reservations;
         private readonly ISalesDispatchService _dispatches;
+        private readonly ISalesDispatchCorrectionService _corrections;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections)
         {
             _orders = orders;
             _reservations = reservations;
             _dispatches = dispatches;
+            _corrections = corrections;
         }
 
         [HttpPost]
@@ -54,6 +56,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Dispatch(int id, [FromBody] CreateSalesDispatchDto request)
         {
             var result = await _dispatches.DispatchAsync(id, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        // Administratieve correctie van een hele verzending (goederen hebben het magazijn niet verlaten, door de gebruiker bevestigd).
+        [HttpPost("{id:int}/dispatches/{dispatchId:int}/corrections")]
+        public async Task<IActionResult> CorrectDispatch(int id, int dispatchId, [FromBody] CorrectSalesDispatchDto request)
+        {
+            var result = await _corrections.CorrectAsync(id, dispatchId, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
 

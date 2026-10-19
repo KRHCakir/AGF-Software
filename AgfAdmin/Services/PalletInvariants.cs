@@ -1,3 +1,4 @@
+using AgfAdmin.Models;
 namespace AgfAdmin.Services
 {
     // Centrale controle van de toestand die na een wijziging ontstaat, gebruikt door elk pallet-schrijfpad
@@ -45,5 +46,21 @@ namespace AgfAdmin.Services
 
             return null;
         }
-    }
+    
+        // Fysieke gewichtsgrens: tara (indien gemeten) plus de voorraad-kg van alle inhoud (ontvangst minus afgeboekt) plus het
+        // toe te voegen kg past binnen het gemeten bruto. Historische ontvangsten worden hier bewust niet opgeteld:
+        // verzonden kg is niet meer op de pallet, en teruggeboekte inhoud zou anders dubbel wegen.
+        public static string CheckGrossWeight(decimal? grossKg, decimal? tareKg, IEnumerable<PalletContentLine> contentLines, decimal addedNetWeightKg)
+        {
+            if (grossKg == null)
+            {
+                return null;
+            }
+            var onHand = contentLines.Sum(c => ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg));
+            var totalKg = (tareKg ?? 0m) + onHand + addedNetWeightKg;
+            return totalKg > grossKg.Value
+                ? $"Tare plus on-hand content net weight ({totalKg} kg) would exceed the measured gross weight ({grossKg} kg)."
+                : null;
+        }
+}
 }

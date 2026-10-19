@@ -38,8 +38,10 @@ namespace AgfAdmin.DTOs
         public decimal? GrossKg { get; set; }
         public decimal? DeclaredNetKg { get; set; }
         // Som van de werkelijk ingevoerde netto-kg van de inhoudsregels; niet opgeslagen en nooit geschat.
-        // Som van de voorraad-kg van de inhoudsregels (ontvangst minus afgeboekt).
+        // Som van de voorraad-kg van de inhoudsregels (ontvangst minus afgeboekt): het fysieke gewicht op de pallet.
         public decimal ContentNetKg { get; set; }
+        // Som van de historische ontvangst-kg van fysiek ontvangen inhoud (zonder teruggeboekte correctie-inhoud).
+        public decimal ReceivedNetKg { get; set; }
         // Afgeleid: minstens één inhoudsregel en elke regel is uitgeput (voorraad en kg 0). Zegt niets over de fysieke pallet.
         public bool Depleted { get; set; }
         public string LogisticsStatus { get; set; }
@@ -73,6 +75,9 @@ namespace AgfAdmin.DTOs
         public decimal OnHandQuantity { get; set; }
         public decimal OnHandNetWeightKg { get; set; }
         public bool Depleted { get; set; }
+        // Receipt (fysieke ontvangst) of DispatchCorrection (teruggeboekt uit een gecorrigeerde verzending; telt niet als registratie).
+        public string Origin { get; set; }
+        public int? OriginCorrectionLineId { get; set; }
         public string QualityStatus { get; set; }
         public string QualityReason { get; set; }
         public DateTime CreatedAt { get; set; }

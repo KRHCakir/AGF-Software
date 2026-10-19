@@ -5,9 +5,9 @@ import { isQualityStatus } from './inspection';
 // Exact het contract van /api/sales-orders en /api/stock-reservations (backend: AgfAdmin/DTOs/SalesOrderDtos.cs).
 // Getallen zijn decimals uit de backend; de frontend rekent er niet mee, behalve vergelijken en aftrekken voor weergave.
 
-export type ReservationStatus = 'Active' | 'Released' | 'Consumed';
+export type ReservationStatus = 'Active' | 'Released' | 'Consumed' | 'Corrected';
 
-export const RESERVATION_STATUSES: readonly ReservationStatus[] = ['Active', 'Released', 'Consumed'];
+export const RESERVATION_STATUSES: readonly ReservationStatus[] = ['Active', 'Released', 'Consumed', 'Corrected'];
 
 export interface CreateSalesOrderLineRequest {
     productVariantId: number;
@@ -80,6 +80,43 @@ export interface SalesDispatchLine {
     stockMovementId: number;
 }
 
+// Administratieve correctie van een hele verzending: goederen hebben het magazijn niet verlaten (door de gebruiker bevestigd).
+export interface CorrectSalesDispatchRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    actorReference: string;
+    reason: string;
+    goodsNeverLeftWarehouse: true;
+    lines: CreateSalesDispatchLineRequest[];
+}
+
+export interface SalesDispatchCorrectionLine {
+    id: number;
+    salesDispatchLineId: number;
+    stockReservationId: number;
+    restoredPalletContentLineId: number;
+    palletId: number;
+    palletReference: string | null;
+    lotNumber: string | null;
+    quantity: number;
+    unit: PackageUnit;
+    netWeightKg: number;
+    restoredQualityStatus: QualityStatus | null;
+    stockMovementId: number;
+}
+
+export interface SalesDispatchCorrection {
+    id: number;
+    requestId: string;
+    salesDispatchId: number;
+    salesOrderId: number;
+    reason: string;
+    actorReference: string;
+    goodsNeverLeftWarehouseConfirmed: boolean;
+    correctedAt: string;
+    lines: SalesDispatchCorrectionLine[];
+}
+
 export interface SalesDispatch {
     id: number;
     requestId: string;
@@ -87,6 +124,8 @@ export interface SalesDispatch {
     reference: string | null;
     actorReference: string;
     dispatchedAt: string;
+    // Gevuld zodra de verzending administratief is gecorrigeerd; de verzending zelf blijft ongewijzigd.
+    correction: SalesDispatchCorrection | null;
     lines: SalesDispatchLine[];
 }
 
@@ -129,6 +168,9 @@ export interface StockReservation {
     consumedAt: string | null;
     dispatchId: number | null;
     dispatchReference: string | null;
+    // Alleen bij Corrected (eindtoestand na een verzendcorrectie): telt niet als gereserveerd of verzonden.
+    correctedAt: string | null;
+    correctionId: number | null;
 }
 
 export interface SalesOrderLine {
@@ -225,7 +267,9 @@ export function isStockReservation(value: unknown): value is StockReservation {
         && typeof value.onHold === 'boolean'
         && isNullableString(value.consumedAt)
         && (value.dispatchId === null || isNumber(value.dispatchId))
-        && isNullableString(value.dispatchReference);
+        && isNullableString(value.dispatchReference)
+        && isNullableString(value.correctedAt)
+        && (value.correctionId === null || isNumber(value.correctionId));
 }
 
 function isSalesOrderLine(value: unknown): value is SalesOrderLine {
@@ -282,6 +326,35 @@ function isSalesDispatchLine(value: unknown): value is SalesDispatchLine {
         && isNumber(value.stockMovementId);
 }
 
+function isSalesDispatchCorrectionLine(value: unknown): value is SalesDispatchCorrectionLine {
+    return isObject(value)
+        && isNumber(value.id)
+        && isNumber(value.salesDispatchLineId)
+        && isNumber(value.stockReservationId)
+        && isNumber(value.restoredPalletContentLineId)
+        && isNumber(value.palletId)
+        && isNullableString(value.palletReference)
+        && isNullableString(value.lotNumber)
+        && isNumber(value.quantity)
+        && isUnit(value.unit)
+        && isNumber(value.netWeightKg)
+        && (value.restoredQualityStatus === null || isQualityStatus(value.restoredQualityStatus))
+        && isNumber(value.stockMovementId);
+}
+
+export function isSalesDispatchCorrection(value: unknown): value is SalesDispatchCorrection {
+    return isObject(value)
+        && isNumber(value.id)
+        && isString(value.requestId)
+        && isNumber(value.salesDispatchId)
+        && isNumber(value.salesOrderId)
+        && isString(value.reason)
+        && isString(value.actorReference)
+        && typeof value.goodsNeverLeftWarehouseConfirmed === 'boolean'
+        && isString(value.correctedAt)
+        && isArrayOf(value.lines, isSalesDispatchCorrectionLine);
+}
+
 export function isSalesDispatch(value: unknown): value is SalesDispatch {
     return isObject(value)
         && isNumber(value.id)
@@ -290,6 +363,7 @@ export function isSalesDispatch(value: unknown): value is SalesDispatch {
         && isNullableString(value.reference)
         && isString(value.actorReference)
         && isString(value.dispatchedAt)
+        && (value.correction === null || isSalesDispatchCorrection(value.correction))
         && isArrayOf(value.lines, isSalesDispatchLine);
 }
 
