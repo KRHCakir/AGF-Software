@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { ReserveCommand, blockedBy, releaseKey, reserveKey } from '../../lib/pendingCommands';
@@ -85,9 +85,15 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
         await afterWrite('released', false);
     };
 
-    // Als de gekozen regel na herladen niet meer (ongewijzigd) in de lijst staat, vervalt de keuze.
+    // Eén stabiele callback (geen herladen van de tabel zodra een commando ontstaat of afloopt): bij een onafgeronde
+    // reservering volgt de keuze de inhoudsregel van dat commando; anders vervalt een keuze die niet meer ongewijzigd in de lijst staat.
+    const pendingContentId = useRef<number | null>(null);
+    pendingContentId.current = pendingReserve?.payload.palletContentLineId ?? null;
     const onStockLoaded = useCallback((rows: ReservableStockLine[]) => {
         setSelected((current) => {
+            if (pendingContentId.current !== null) {
+                return rows.find((row) => row.palletContentLineId === pendingContentId.current) ?? null;
+            }
             if (current === null) return null;
             const fresh = rows.find((row) => row.palletContentLineId === current.palletContentLineId);
             return fresh && fresh.contentLineVersion === current.contentLineVersion
@@ -97,14 +103,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
         });
     }, []);
 
-    // Bij een onafgeronde reservering hoort het formulier bij die inhoudsregel, ook als die niet meer in de lijst staat.
-    const pendingStock = pendingReserve === null ? null : selected?.palletContentLineId === pendingReserve.payload.palletContentLineId ? selected : null;
-    const onStockLoadedForPending = useCallback((rows: ReservableStockLine[]) => {
-        onStockLoaded(rows);
-        if (pendingReserve !== null) {
-            setSelected(rows.find((row) => row.palletContentLineId === pendingReserve.payload.palletContentLineId) ?? null);
-        }
-    }, [onStockLoaded, pendingReserve]);
+    // Het reserveerformulier hoort bij één inhoudsregel: die van het onafgeronde commando, anders de gekozen rij.
+    // De sleutel hangt alleen van die inhoudsregel af, niet van het bestaan van een commando: zo blijft dezelfde
+    // formulierinstantie staan tijdens het versturen en bij de afhandeling (bevriezen, 400/409, onbekende uitkomst).
+    const formContentId = pendingReserve?.payload.palletContentLineId ?? selected?.palletContentLineId ?? null;
+    const formStock = formContentId !== null && selected?.palletContentLineId === formContentId ? selected : null;
 
     const reservations = [...line.reservations].sort((a, b) => Number(b.status === 'Active') - Number(a.status === 'Active') || b.id - a.id);
 
@@ -243,17 +246,13 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                             )}
                         </div>
                         <p className="text-xs text-gray-600">{t('sales_stock_rules')}</p>
-                        <ReservableStockTable orderId={order.id} line={line} token={stockToken} selectedId={(pendingReserve?.payload.palletContentLineId ?? selected?.palletContentLineId) ?? null}
-                            onSelect={setSelected} onLoaded={pendingReserve === null ? onStockLoaded : onStockLoadedForPending} selectable={pendingReserve === null} />
-                        {pendingReserve !== null && (
-                            <ReserveForm key={`pending:${pendingReserve.requestId}:${line.version}:${decisionToken}`}
-                                orderId={order.id} line={line} stock={pendingStock} actor={actor}
-                                onSucceeded={onReserved} onReload={() => void reload()} onCancel={() => setChoosing(false)} />
-                        )}
-                        {pendingReserve === null && selected && (
-                            <ReserveForm key={`${selected.palletContentLineId}:${selected.contentLineVersion}:${line.version}:${decisionToken}`}
-                                orderId={order.id} line={line} stock={selected} actor={actor}
-                                onSucceeded={onReserved} onReload={() => void reload()} onCancel={() => setSelected(null)} />
+                        <ReservableStockTable orderId={order.id} line={line} token={stockToken} selectedId={formContentId}
+                            onSelect={setSelected} onLoaded={onStockLoaded} selectable={pendingReserve === null} />
+                        {formContentId !== null && (
+                            <ReserveForm key={`${formContentId}:${line.version}:${decisionToken}`}
+                                orderId={order.id} line={line} stock={formStock} actor={actor}
+                                onSucceeded={onReserved} onReload={() => void reload()}
+                                onCancel={() => (pendingReserve === null ? setSelected(null) : setChoosing(false))} />
                         )}
                     </div>
                 )}

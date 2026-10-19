@@ -5,6 +5,7 @@ import {
     blockedBy,
     commandsForLine,
     commandsForOrder,
+    isPendingCommand,
     parseStoredCommands,
     releaseKey,
     reserveKey,
@@ -66,6 +67,84 @@ describe('unresolved commands', () => {
         const restored = parseStoredCommands(serializeCommands(commands));
         assert.deepEqual(restored, commands);
         assert.deepEqual(sortedCommands(restored).map((command) => command.kind), ['create-order', 'release', 'reserve']);
+    });
+
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+
+    test('a payload with only a requestId, or with a missing or wrongly typed field, is never restored', () => {
+        assert.equal(isPendingCommand(reserve(4, 7)), true);
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.payload = { requestId: 'r-1' }; })), {});
+        assert.deepEqual(parseStoredCommands(stored(create(), (c) => { c.payload = { requestId: 'c-1' }; })), {});
+        assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { c.payload = { requestId: 'x-1' }; })), {});
+        for (const field of ['palletContentLineId', 'quantity', 'unit', 'netWeightKg', 'actorReference', 'reason']) {
+            assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { delete payloadOf(c)[field]; })), {}, `reserve without ${field}`);
+        }
+        for (const field of ['customerId', 'customerReference', 'requestedDeliveryDate', 'actorReference', 'lines']) {
+            assert.deepEqual(parseStoredCommands(stored(create(), (c) => { delete payloadOf(c)[field]; })), {}, `create without ${field}`);
+        }
+        for (const field of ['expectedReservationVersion', 'actorReference', 'reason']) {
+            assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { delete payloadOf(c)[field]; })), {}, `release without ${field}`);
+        }
+    });
+
+    test('reserve payload: positive integer id, positive quantity and kg, allowed unit, non-blank actor, nullable reason', () => {
+        const bad: [string, unknown][] = [
+            ['palletContentLineId', 0], ['palletContentLineId', -2], ['palletContentLineId', 2.5], ['palletContentLineId', '2'],
+            ['quantity', 0], ['quantity', -1], ['quantity', '5'], ['quantity', Number.NaN],
+            ['netWeightKg', 0], ['netWeightKg', -20], ['netWeightKg', '20'],
+            ['unit', 'kg'], ['unit', 'Box'], ['unit', ''], ['unit', 1],
+            ['actorReference', ''], ['actorReference', '   '], ['actorReference', 7],
+            ['reason', 5], ['reason', undefined],
+        ];
+        for (const [field, value] of bad) {
+            assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { payloadOf(c)[field] = value; })), {}, `reserve ${field}=${String(value)}`);
+        }
+        assert.equal(Object.keys(parseStoredCommands(stored(reserve(4, 7), (c) => { payloadOf(c).reason = 'spoed'; }))).length, 1);
+        assert.equal(Object.keys(parseStoredCommands(stored(reserve(4, 7), (c) => { payloadOf(c).quantity = 0.5; payloadOf(c).netWeightKg = 2.25; }))).length, 1);
+    });
+
+    test('create-order payload: positive customer, nullable reference, valid date, actor and well-formed non-empty lines', () => {
+        const bad: [string, unknown][] = [
+            ['customerId', 0], ['customerId', '1'], ['customerId', 1.5],
+            ['customerReference', 12], ['customerReference', undefined],
+            ['requestedDeliveryDate', 'gisteren'], ['requestedDeliveryDate', 20261029],
+            ['actorReference', ''], ['actorReference', null],
+            ['lines', []], ['lines', 'lines'], ['lines', [{ productVariantId: 2, quantity: 10 }]],
+            ['lines', [{ productVariantId: 2, quantity: 10, unit: 'kg' }]], ['lines', [{ productVariantId: 0, quantity: 10, unit: 'box' }]],
+            ['lines', [{ productVariantId: 2, quantity: 0, unit: 'box' }]], ['lines', [{ productVariantId: 2, quantity: '10', unit: 'box' }]],
+            ['lines', [{ productVariantId: 2, quantity: 10, unit: 'box' }, null]],
+        ];
+        for (const [field, value] of bad) {
+            assert.deepEqual(parseStoredCommands(stored(create(), (c) => { payloadOf(c)[field] = value; })), {}, `create ${field}=${JSON.stringify(value)}`);
+        }
+        assert.equal(Object.keys(parseStoredCommands(stored(create(), (c) => { payloadOf(c).customerReference = 'PO-1'; }))).length, 1);
+    });
+
+    test('release payload: non-negative integer version, non-blank actor and a required non-blank reason', () => {
+        const bad: [string, unknown][] = [
+            ['expectedReservationVersion', -1], ['expectedReservationVersion', 1.5], ['expectedReservationVersion', '0'], ['expectedReservationVersion', null],
+            ['actorReference', ''], ['reason', ''], ['reason', '  '], ['reason', null], ['reason', 3],
+        ];
+        for (const [field, value] of bad) {
+            assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { payloadOf(c)[field] = value; })), {}, `release ${field}=${String(value)}`);
+        }
+        assert.equal(Object.keys(parseStoredCommands(stored(release(4, 7, 11), (c) => { payloadOf(c).expectedReservationVersion = 0; }))).length, 1);
+    });
+
+    test('command metadata: positive ids, matching key, non-negative attempts, timestamps and display texts', () => {
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.orderId = 0; c.key = reserveKey(0, 7); })), {});
+        assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { c.reservationId = -11; c.key = releaseKey(4, 7, -11); })), {});
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.attempts = -1; })), {});
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.frozenAt = 'ooit'; })), {});
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.requestId = ''; payloadOf(c).requestId = ''; })), {});
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.display = { palletReference: 'P' }; })), {});
+        assert.deepEqual(parseStoredCommands(stored(create(), (c) => { c.display = {}; })), {});
+        assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.lastError = 5; })), {});
     });
 
     test('corrupt or foreign storage is ignored instead of restoring a wrong command', () => {

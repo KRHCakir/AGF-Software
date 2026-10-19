@@ -1,9 +1,10 @@
+import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
 // opdracht teruggeeft en nooit een nieuw commando dezelfde plaats inneemt voordat de uitkomst bekend is.
-// Zonder imports met uitvoer, zodat node:test dit bestand kan laden.
+// Alleen pure imports (met .ts-extensie), zodat node:test dit bestand kan laden.
 
 export interface CommandMeta {
     requestId: string;
@@ -77,32 +78,101 @@ export function withAttempt(command: PendingCommand, lastError: string | null): 
     return { ...command, attempts: command.attempts + 1, lastError };
 }
 
-// ---- Opslag per tabblad: alleen wat exact de verwachte vorm heeft, wordt teruggelezen ----
+// ---- Opslag per tabblad: alleen wat volledig de verwachte vorm heeft, wordt teruggelezen ----
+// Elke payload wordt veld voor veld gecontroleerd (ids, hoeveelheden, kg, eenheid, actor, reden, versie, regels),
+// zodat een verminkte of vreemde opslag nooit een onvolledig of fout commando kan herstellen.
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function hasMeta(value: Record<string, unknown>): boolean {
-    return typeof value.requestId === 'string' && value.requestId !== ''
-        && typeof value.attempts === 'number'
-        && (value.lastError === null || typeof value.lastError === 'string')
-        && typeof value.frozenAt === 'string'
-        && isRecord(value.payload)
-        && value.payload.requestId === value.requestId
-        && isRecord(value.display);
+function isPositiveInt(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
-function isPendingCommand(value: unknown): value is PendingCommand {
+function isNonNegativeInt(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isPositiveAmount(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isText(value: unknown): value is string {
+    return typeof value === 'string' && value.trim() !== '';
+}
+
+function isNullableText(value: unknown): value is string | null {
+    return value === null || typeof value === 'string';
+}
+
+function isUnit(value: unknown): value is PackageUnit {
+    return typeof value === 'string' && (PACKAGE_UNITS as readonly string[]).includes(value);
+}
+
+function isTimestamp(value: unknown): value is string {
+    return typeof value === 'string' && !Number.isNaN(new Date(value).getTime());
+}
+
+function isCreateOrderPayload(value: unknown, requestId: string): value is CreateSalesOrderRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isPositiveInt(value.customerId)
+        && isNullableText(value.customerReference)
+        && isTimestamp(value.requestedDeliveryDate)
+        && isText(value.actorReference)
+        && Array.isArray(value.lines)
+        && value.lines.length > 0
+        && value.lines.every((line: unknown) => isRecord(line) && isPositiveInt(line.productVariantId) && isPositiveAmount(line.quantity) && isUnit(line.unit));
+}
+
+function isReservePayload(value: unknown, requestId: string): value is CreateStockReservationRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isPositiveInt(value.palletContentLineId)
+        && isPositiveAmount(value.quantity)
+        && isUnit(value.unit)
+        && isPositiveAmount(value.netWeightKg)
+        && isText(value.actorReference)
+        && isNullableText(value.reason);
+}
+
+function isReleasePayload(value: unknown, requestId: string): value is ReleaseStockReservationRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isNonNegativeInt(value.expectedReservationVersion)
+        && isText(value.actorReference)
+        && isText(value.reason);
+}
+
+function hasMeta(value: Record<string, unknown>): value is Record<string, unknown> & CommandMeta {
+    return isText(value.requestId)
+        && isNonNegativeInt(value.attempts)
+        && isNullableText(value.lastError)
+        && isTimestamp(value.frozenAt);
+}
+
+function isLineDisplay(value: unknown): value is ReserveCommand['display'] {
+    return isRecord(value) && typeof value.palletReference === 'string' && typeof value.lotNumber === 'string' && typeof value.productLabel === 'string';
+}
+
+export function isPendingCommand(value: unknown): value is PendingCommand {
     if (!isRecord(value) || !hasMeta(value) || typeof value.key !== 'string') return false;
     switch (value.kind) {
         case 'create-order':
-            return value.key === CREATE_ORDER_KEY && Array.isArray((value.payload as Record<string, unknown>).lines);
+            return value.key === CREATE_ORDER_KEY
+                && isCreateOrderPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.customerName === 'string';
         case 'reserve':
-            return typeof value.orderId === 'number' && typeof value.lineId === 'number' && value.key === reserveKey(value.orderId, value.lineId);
+            return isPositiveInt(value.orderId) && isPositiveInt(value.lineId)
+                && value.key === reserveKey(value.orderId, value.lineId)
+                && isReservePayload(value.payload, value.requestId)
+                && isLineDisplay(value.display);
         case 'release':
-            return typeof value.orderId === 'number' && typeof value.lineId === 'number' && typeof value.reservationId === 'number'
-                && value.key === releaseKey(value.orderId, value.lineId, value.reservationId);
+            return isPositiveInt(value.orderId) && isPositiveInt(value.lineId) && isPositiveInt(value.reservationId)
+                && value.key === releaseKey(value.orderId, value.lineId, value.reservationId)
+                && isReleasePayload(value.payload, value.requestId)
+                && isLineDisplay(value.display);
         default:
             return false;
     }
