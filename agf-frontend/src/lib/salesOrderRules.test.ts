@@ -3,6 +3,9 @@ import { describe, test } from 'node:test';
 import {
     MAX_ORDER_LINES,
     buildOrderPayload,
+    dispatchTotals,
+    isDispatchable,
+    normalizeDispatchReference,
     fullRemainderFits,
     groupErrors,
     lineProgress,
@@ -157,40 +160,80 @@ describe('progress and search', () => {
         id: 12,
         customerName: 'Groente & Fruit Zuid',
         customerReference: 'PO-77',
+        fulfilled: false,
         lines: [
-            { id: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 30, reservedQuantity: 30, openQuantity: 0, reservations: [reservation(false), reservation(true)] },
-            { id: 2, productName: 'Mango', productVariantName: 'Kent', quantity: 5, reservedQuantity: 2, openQuantity: 3, reservations: [reservation(false)] },
+            { id: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 30, reservedQuantity: 30, dispatchedQuantity: 0, openQuantity: 0, fulfilled: false, reservations: [reservation(false), reservation(true)] },
+            { id: 2, productName: 'Mango', productVariantName: 'Kent', quantity: 5, reservedQuantity: 2, dispatchedQuantity: 0, openQuantity: 3, fulfilled: false, reservations: [reservation(false)] },
         ],
     };
 
     test('line progress comes straight from the server totals; on hold comes from the server flag only', () => {
-        assert.deepEqual(lineProgress(order.lines[0]), { reserved: 30, total: 30, open: 0, complete: true, onHold: true, ready: false });
-        assert.deepEqual(lineProgress(order.lines[1]), { reserved: 2, total: 5, open: 3, complete: false, onHold: false, ready: false });
+        assert.deepEqual(lineProgress(order.lines[0]), { reserved: 30, dispatched: 0, total: 30, open: 0, complete: true, onHold: true, ready: false, fulfilled: false, partiallyDispatched: false });
+        assert.deepEqual(lineProgress(order.lines[1]), { reserved: 2, dispatched: 0, total: 5, open: 3, complete: false, onHold: false, ready: false, fulfilled: false, partiallyDispatched: false });
     });
 
     test('a fully reserved line on blocked content is complete but never ready; the totals stay unchanged', () => {
-        const blockedLine = { quantity: 30, reservedQuantity: 30, openQuantity: 0, reservations: [reservation(true)] };
-        assert.deepEqual(lineProgress(blockedLine), { reserved: 30, total: 30, open: 0, complete: true, onHold: true, ready: false });
+        const blockedLine = { quantity: 30, reservedQuantity: 30, dispatchedQuantity: 0, openQuantity: 0, fulfilled: false, reservations: [reservation(true)] };
+        assert.deepEqual(lineProgress(blockedLine), { reserved: 30, dispatched: 0, total: 30, open: 0, complete: true, onHold: true, ready: false, fulfilled: false, partiallyDispatched: false });
         const approvedLine = { ...blockedLine, reservations: [reservation(false), reservation(false)] };
-        assert.deepEqual(lineProgress(approvedLine), { reserved: 30, total: 30, open: 0, complete: true, onHold: false, ready: true });
+        assert.deepEqual(lineProgress(approvedLine), { reserved: 30, dispatched: 0, total: 30, open: 0, complete: true, onHold: false, ready: true, fulfilled: false, partiallyDispatched: false });
         // Een vrijgegeven reservering op geblokkeerde inhoud is volgens de server niet on hold en blokkeert dus niet.
         const releasedOnBlocked = { ...blockedLine, reservations: [reservation(false)] };
         assert.equal(lineProgress(releasedOnBlocked).ready, true);
     });
 
     test('order progress counts complete lines and reservations on hold', () => {
-        assert.deepEqual(orderProgress(order), { linesComplete: 1, linesTotal: 2, onHoldCount: 1, complete: false, ready: false });
-        assert.deepEqual(orderProgress({ lines: [] }), { linesComplete: 0, linesTotal: 0, onHoldCount: 0, complete: false, ready: false });
+        assert.deepEqual(orderProgress(order), { linesComplete: 1, linesFulfilled: 0, linesTotal: 2, onHoldCount: 1, complete: false, ready: false, fulfilled: false, partiallyDispatched: false });
+        assert.deepEqual(orderProgress({ fulfilled: false, lines: [] }), { linesComplete: 0, linesFulfilled: 0, linesTotal: 0, onHoldCount: 0, complete: false, ready: false, fulfilled: false, partiallyDispatched: false });
     });
 
     test('a fully reserved order with a blocked line is complete but not ready; without on hold it is ready', () => {
-        const fullyReservedBlocked = { lines: [
-            { quantity: 30, reservedQuantity: 30, openQuantity: 0, reservations: [reservation(true)] },
-            { quantity: 5, reservedQuantity: 5, openQuantity: 0, reservations: [reservation(false)] },
+        const fullyReservedBlocked = { fulfilled: false, lines: [
+            { quantity: 30, reservedQuantity: 30, dispatchedQuantity: 0, openQuantity: 0, fulfilled: false, reservations: [reservation(true)] },
+            { quantity: 5, reservedQuantity: 5, dispatchedQuantity: 0, openQuantity: 0, fulfilled: false, reservations: [reservation(false)] },
         ] };
-        assert.deepEqual(orderProgress(fullyReservedBlocked), { linesComplete: 2, linesTotal: 2, onHoldCount: 1, complete: true, ready: false });
-        const fullyReservedApproved = { lines: fullyReservedBlocked.lines.map((line) => ({ ...line, reservations: [reservation(false)] })) };
-        assert.deepEqual(orderProgress(fullyReservedApproved), { linesComplete: 2, linesTotal: 2, onHoldCount: 0, complete: true, ready: true });
+        assert.deepEqual(orderProgress(fullyReservedBlocked), { linesComplete: 2, linesFulfilled: 0, linesTotal: 2, onHoldCount: 1, complete: true, ready: false, fulfilled: false, partiallyDispatched: false });
+        const fullyReservedApproved = { fulfilled: false, lines: fullyReservedBlocked.lines.map((line) => ({ ...line, reservations: [reservation(false)] })) };
+        assert.deepEqual(orderProgress(fullyReservedApproved), { linesComplete: 2, linesFulfilled: 0, linesTotal: 2, onHoldCount: 0, complete: true, ready: true, fulfilled: false, partiallyDispatched: false });
+    });
+
+    test('a partly dispatched line is complete-or-open by totals but never fulfilled; a fully dispatched line is fulfilled, not "fully reserved"', () => {
+        // Deels verzonden: 10 verzonden, 15 gereserveerd, 5 open.
+        const partly = { quantity: 30, reservedQuantity: 15, dispatchedQuantity: 10, openQuantity: 5, fulfilled: false, reservations: [reservation(false)] };
+        assert.deepEqual(lineProgress(partly), { reserved: 15, dispatched: 10, total: 30, open: 5, complete: false, onHold: false, ready: false, fulfilled: false, partiallyDispatched: true });
+        // Volledig verzonden: 0 gereserveerd, open 0; dit is "geleverd", niet "volledig gereserveerd".
+        const delivered = { quantity: 30, reservedQuantity: 0, dispatchedQuantity: 30, openQuantity: 0, fulfilled: true, reservations: [] };
+        const progress = lineProgress(delivered);
+        assert.equal(progress.fulfilled, true);
+        assert.equal(progress.ready, true, 'totals are complete');
+        assert.equal(progress.partiallyDispatched, false);
+    });
+
+    test('order progress: partly dispatched order versus fully fulfilled order', () => {
+        const partlyOrder = { fulfilled: false, lines: [
+            { quantity: 30, reservedQuantity: 0, dispatchedQuantity: 30, openQuantity: 0, fulfilled: true, reservations: [] },
+            { quantity: 5, reservedQuantity: 5, dispatchedQuantity: 0, openQuantity: 0, fulfilled: false, reservations: [reservation(false)] },
+        ] };
+        assert.deepEqual(orderProgress(partlyOrder), { linesComplete: 2, linesFulfilled: 1, linesTotal: 2, onHoldCount: 0, complete: true, ready: true, fulfilled: false, partiallyDispatched: true });
+        const fulfilledOrder = { fulfilled: true, lines: partlyOrder.lines.map((line) => ({ ...line, reservedQuantity: 0, dispatchedQuantity: line.quantity, fulfilled: true, reservations: [] })) };
+        assert.deepEqual(orderProgress(fulfilledOrder), { linesComplete: 2, linesFulfilled: 2, linesTotal: 2, onHoldCount: 0, complete: true, ready: true, fulfilled: true, partiallyDispatched: false });
+    });
+
+    test('dispatch selection: only active reservations that are not on hold; totals per unit, never merged', () => {
+        const active = { id: 1, status: 'Active', onHold: false, quantity: 5, unit: 'box', netWeightKg: 20 };
+        const held = { id: 2, status: 'Active', onHold: true, quantity: 5, unit: 'box', netWeightKg: 20 };
+        const released = { id: 3, status: 'Released', onHold: false, quantity: 5, unit: 'box', netWeightKg: 20 };
+        const consumed = { id: 4, status: 'Consumed', onHold: false, quantity: 5, unit: 'box', netWeightKg: 20 };
+        const colli = { id: 5, status: 'Active', onHold: false, quantity: 2.5, unit: 'colli', netWeightKg: 13.75 };
+        assert.deepEqual([active, held, released, consumed, colli].map(isDispatchable), [true, false, false, false, true]);
+        assert.deepEqual(dispatchTotals([active, colli, { ...active, id: 6, quantity: 1, netWeightKg: 4 }]), [
+            { unit: 'box', quantity: 6, netWeightKg: 24, count: 2 },
+            { unit: 'colli', quantity: 2.5, netWeightKg: 13.75, count: 1 },
+        ]);
+        assert.deepEqual(dispatchTotals([]), []);
+        assert.deepEqual(normalizeDispatchReference('  VRB-1 '), { ok: true, value: 'VRB-1' });
+        assert.deepEqual(normalizeDispatchReference('   '), { ok: true, value: null });
+        assert.equal(normalizeDispatchReference('x'.repeat(101)).ok, false);
     });
 
     test('search matches order number, customer (accent-insensitive), reference and products', () => {

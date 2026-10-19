@@ -1,5 +1,5 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
-import type { CancelSalesOrderRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
+import type { CancelSalesOrderRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
@@ -47,7 +47,15 @@ export interface CancelOrderCommand extends CommandMeta {
     display: { customerName: string; activeReservationCount: number };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | ReleaseCommand | CancelOrderCommand;
+export interface DispatchCommand extends CommandMeta {
+    kind: 'dispatch';
+    key: string;
+    orderId: number;
+    payload: CreateSalesDispatchRequest;
+    display: { customerName: string; lineCount: number };
+}
+
+export type PendingCommand = CreateOrderCommand | ReserveCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand;
 
 export type PendingCommands = Record<string, PendingCommand>;
 
@@ -65,6 +73,10 @@ export function cancelKey(orderId: number): string {
     return `cancel-order:${orderId}`;
 }
 
+export function dispatchKey(orderId: number): string {
+    return `dispatch:${orderId}`;
+}
+
 export function commandsForLine(commands: PendingCommands, orderId: number, lineId: number): PendingCommand[] {
     return Object.values(commands).filter((command) => (command.kind === 'reserve' || command.kind === 'release') && command.orderId === orderId && command.lineId === lineId);
 }
@@ -77,19 +89,20 @@ export function commandsForOrder(commands: PendingCommands, orderId: number): Pe
 export type CommandScope =
     | { kind: 'create-order' }
     | { kind: 'line'; orderId: number; lineId: number }
-    | { kind: 'cancel-order'; orderId: number };
+    | { kind: 'cancel-order'; orderId: number }
+    | { kind: 'dispatch'; orderId: number };
 
 // Een nieuw commando mag een onafgerond commando op dezelfde plaats nooit vervangen: eerst de uitkomst afwachten.
-// Lezen van andere orders blijft altijd mogelijk. Een onafgeronde annulering blokkeert elke regel van die order,
-// en een onafgerond regelcommando blokkeert het annuleren van die order.
+// Lezen van andere orders blijft altijd mogelijk. Een onafgeronde annulering of verzending (ordercommando's)
+// blokkeert elke regel van die order en elkaar; een onafgerond regelcommando blokkeert annuleren en verzenden.
 export function blockedBy(commands: PendingCommands, scope: CommandScope): PendingCommand | null {
     if (scope.kind === 'create-order') {
         return commands[CREATE_ORDER_KEY] ?? null;
     }
-    if (scope.kind === 'cancel-order') {
+    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch') {
         return commandsForOrder(commands, scope.orderId)[0] ?? null;
     }
-    return commandsForLine(commands, scope.orderId, scope.lineId)[0] ?? commands[cancelKey(scope.orderId)] ?? null;
+    return commandsForLine(commands, scope.orderId, scope.lineId)[0] ?? commands[cancelKey(scope.orderId)] ?? commands[dispatchKey(scope.orderId)] ?? null;
 }
 
 export function sortedCommands(commands: PendingCommands): PendingCommand[] {
@@ -175,6 +188,18 @@ function isCancelPayload(value: unknown, requestId: string): value is CancelSale
         && isText(value.reason);
 }
 
+function isDispatchPayload(value: unknown, requestId: string): value is CreateSalesDispatchRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isNonNegativeInt(value.expectedOrderVersion)
+        && isText(value.actorReference)
+        && (value.reference === null || (typeof value.reference === 'string' && value.reference.length <= 100))
+        && Array.isArray(value.lines)
+        && value.lines.length > 0
+        && value.lines.every((line: unknown) => isRecord(line) && isPositiveInt(line.stockReservationId) && isNonNegativeInt(line.expectedReservationVersion))
+        && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
+}
+
 function hasMeta(value: Record<string, unknown>): value is Record<string, unknown> & CommandMeta {
     return isText(value.requestId)
         && isNonNegativeInt(value.attempts)
@@ -208,6 +233,11 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
                 && value.key === cancelKey(value.orderId)
                 && isCancelPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isNonNegativeInt(value.display.activeReservationCount);
+        case 'dispatch':
+            return isPositiveInt(value.orderId)
+                && value.key === dispatchKey(value.orderId)
+                && isDispatchPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
         default:
             return false;
     }

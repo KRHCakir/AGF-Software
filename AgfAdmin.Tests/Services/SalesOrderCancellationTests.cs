@@ -297,11 +297,7 @@ public class SalesOrderCancellationTests : IDisposable
                 Assert.Equal(ServiceResultStatus.Ok, (await CancelAsync(Cancel())).Status);
                 break;
             case "consumed":
-                await using (var db = _factory.CreateContext())
-                {
-                    (await db.StockReservations.FindAsync(reservation.Id))!.Status = "Consumed";
-                    await db.SaveChangesAsync();
-                }
+                await SalesTestData.ConsumeAsync(_factory, reservation.Id);
                 break;
         }
         var before = await StateAsync();

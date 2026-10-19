@@ -40,7 +40,15 @@ namespace AgfAdmin.Services
         string QualityStatus,
         // Som van Active Physical verkoopreserveringen (SalesOrderLineId) op deze inhoudsregel.
         decimal ReservedQuantity = 0m,
-        decimal ReservedNetWeightKg = 0m);
+        decimal ReservedNetWeightKg = 0m,
+        // Afgeboekt door verzendingen; Quantity/NetWeightKg blijven de ontvangst, voorraad = ontvangst - afgeboekt.
+        decimal DispatchedQuantity = 0m,
+        decimal DispatchedNetWeightKg = 0m)
+    {
+        public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity);
+        public decimal OnHandNetWeightKg => ReservationRules.OnHandQuantity(NetWeightKg, DispatchedNetWeightKg);
+        public bool Depleted => ReservationRules.IsDepleted(Quantity, NetWeightKg, DispatchedQuantity, DispatchedNetWeightKg);
+    }
 
     // Pure berekening in het geheugen (decimal, dus exact; geen decimal-SUM in SQL vanwege SQLite).
     // - Nooit eenheden omrekenen: groeperen per variant + route (+ klant bij DirectTrade) + eenheid.
@@ -120,7 +128,8 @@ namespace AgfAdmin.Services
                     continue;
                 }
 
-                Add(group.For(category), content.QualityStatus, content.Quantity, content.NetWeightKg);
+                // Kwaliteitsemmers tellen de voorraad (ontvangst minus afgeboekt); verzonden goederen zijn geen voorraad meer.
+                Add(group.For(category), content.QualityStatus, content.OnHandQuantity, content.OnHandNetWeightKg);
                 AddReservations(group, content, category);
             }
 
@@ -225,16 +234,21 @@ namespace AgfAdmin.Services
                     Unit = c.Fact.Unit,
                     Quantity = c.Fact.Quantity,
                     NetWeightKg = c.Fact.NetWeightKg,
+                    DispatchedQuantity = c.Fact.DispatchedQuantity,
+                    DispatchedNetWeightKg = c.Fact.DispatchedNetWeightKg,
+                    OnHandQuantity = c.Fact.OnHandQuantity,
+                    OnHandNetWeightKg = c.Fact.OnHandNetWeightKg,
+                    Depleted = c.Fact.Depleted,
                     QualityStatus = c.Fact.QualityStatus,
                     ReservedQuantity = c.Fact.ReservedQuantity,
                     ReservedNetWeightKg = c.Fact.ReservedNetWeightKg,
                     OnHold = c.Fact.ReservedQuantity > 0m && c.Fact.QualityStatus != PalletRules.QualityApproved,
                     AvailableQuantity = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route)
-                        ? Math.Max(0m, c.Fact.Quantity - c.Fact.ReservedQuantity) : 0m,
+                        ? Math.Max(0m, c.Fact.OnHandQuantity - c.Fact.ReservedQuantity) : 0m,
                     AvailableNetWeightKg = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route)
-                        ? Math.Max(0m, c.Fact.NetWeightKg - c.Fact.ReservedNetWeightKg) : 0m,
+                        ? Math.Max(0m, c.Fact.OnHandNetWeightKg - c.Fact.ReservedNetWeightKg) : 0m,
                     SellableNow = AvailabilityRules.IsAvailableNow(c.Category, c.Fact.QualityStatus, c.Fact.Route)
-                        && c.Fact.Quantity - c.Fact.ReservedQuantity > 0m,
+                        && c.Fact.OnHandQuantity - c.Fact.ReservedQuantity > 0m,
                     Closed = c.Category == AvailabilityRules.CategoryClosed
                 })
                 .ToList();
@@ -338,7 +352,7 @@ namespace AgfAdmin.Services
             }
             group.ReservedQuantity += content.ReservedQuantity;
             group.ReservedNetWeightKg += content.ReservedNetWeightKg;
-            if (content.ReservedQuantity > content.Quantity || content.ReservedNetWeightKg > content.NetWeightKg)
+            if (content.ReservedQuantity > content.OnHandQuantity || content.ReservedNetWeightKg > content.OnHandNetWeightKg)
             {
                 group.Warnings.Add(Warning(AvailabilityRules.WarningReservationExceedsContent, content, content.ReservedQuantity));
             }

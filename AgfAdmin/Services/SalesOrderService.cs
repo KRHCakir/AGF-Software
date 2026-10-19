@@ -480,7 +480,7 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Unit,
-                    c.Quantity, c.NetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
+                    c.Quantity, c.NetWeightKg, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
                 })
                 .ToListAsync(cancellationToken);
 
@@ -489,6 +489,8 @@ namespace AgfAdmin.Services
                 .Select(c =>
                 {
                     var (quantity, kg) = reserved.GetValueOrDefault(c.Id);
+                    var onHandQuantity = ReservationRules.OnHandQuantity(c.Quantity, c.DispatchedQuantity);
+                    var onHandKg = ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg);
                     return new ReservableStockLineDto
                     {
                         PalletContentLineId = c.Id,
@@ -499,10 +501,15 @@ namespace AgfAdmin.Services
                         Unit = c.Unit,
                         Quantity = c.Quantity,
                         NetWeightKg = c.NetWeightKg,
+                        DispatchedQuantity = c.DispatchedQuantity,
+                        DispatchedNetWeightKg = c.DispatchedNetWeightKg,
+                        OnHandQuantity = onHandQuantity,
+                        OnHandNetWeightKg = onHandKg,
                         ReservedQuantity = quantity,
                         ReservedNetWeightKg = kg,
-                        AvailableQuantity = Math.Max(0m, c.Quantity - quantity),
-                        AvailableNetWeightKg = Math.Max(0m, c.NetWeightKg - kg),
+                        // Beschikbaar = voorraad - Active gereserveerd; verbruikte reserveringen zitten al in afgeboekt.
+                        AvailableQuantity = Math.Max(0m, onHandQuantity - quantity),
+                        AvailableNetWeightKg = Math.Max(0m, onHandKg - kg),
                         QualityStatus = c.QualityStatus,
                         ContentLineVersion = c.Version
                     };
@@ -534,6 +541,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Customer)
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch)
                 .AsSplitQuery();
 
         internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null) => new()
@@ -551,10 +559,13 @@ namespace AgfAdmin.Services
             CancelledAt = order.CancelledAt == null ? null : DateTime.SpecifyKind(order.CancelledAt.Value, DateTimeKind.Utc),
             CancelReason = order.CancelReason,
             CancelledBy = order.Status == ReservationRules.OrderStatusCancelled ? cancelledBy : null,
+            Fulfilled = order.Lines.Count > 0 && order.Lines.All(l => l.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity) == l.Quantity),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
                 var active = line.Reservations.Where(r => r.Status == ReservationRules.StatusActive).ToList();
+                var consumed = line.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed).ToList();
                 var reservedQuantity = active.Sum(r => r.Quantity);
+                var dispatchedQuantity = consumed.Sum(r => r.Quantity);
                 return new SalesOrderLineDto
                 {
                     Id = line.Id,
@@ -565,7 +576,11 @@ namespace AgfAdmin.Services
                     Unit = line.Unit,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
-                    OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity),
+                    DispatchedQuantity = dispatchedQuantity,
+                    DispatchedNetWeightKg = consumed.Sum(r => r.NetWeightKg ?? 0m),
+                    // Open = gevraagd - Active - Consumed: verzonden komt nooit terug als open vraag.
+                    OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity - dispatchedQuantity),
+                    Fulfilled = dispatchedQuantity == line.Quantity,
                     Version = line.Version,
                     Reservations = line.Reservations.OrderBy(r => r.Id).Select(r => StockReservationService.ToDto(r, order.Id)).ToList()
                 };

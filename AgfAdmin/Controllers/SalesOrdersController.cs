@@ -11,11 +11,13 @@ namespace AgfAdmin.Controllers
     {
         private readonly ISalesOrderService _orders;
         private readonly IStockReservationService _reservations;
+        private readonly ISalesDispatchService _dispatches;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches)
         {
             _orders = orders;
             _reservations = reservations;
+            _dispatches = dispatches;
         }
 
         [HttpPost]
@@ -46,6 +48,18 @@ namespace AgfAdmin.Controllers
         [HttpGet("{id:int}/audit-events")]
         public async Task<IActionResult> GetAuditEvents(int id) =>
             this.ToActionResult(await _orders.GetAuditEventsAsync(id, HttpContext?.RequestAborted ?? default));
+
+        // Verzenden: gekozen Active reserveringen in hun geheel verbruiken; één transactie met mutaties, audit en versies.
+        [HttpPost("{id:int}/dispatches")]
+        public async Task<IActionResult> Dispatch(int id, [FromBody] CreateSalesDispatchDto request)
+        {
+            var result = await _dispatches.DispatchAsync(id, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        [HttpGet("{id:int}/dispatches")]
+        public async Task<IActionResult> GetDispatches(int id) =>
+            this.ToActionResult(await _dispatches.ListAsync(id, HttpContext?.RequestAborted ?? default));
 
         [HttpPost("{id:int}/lines/{lineId:int}/reservations")]
         public async Task<IActionResult> Reserve(int id, int lineId, [FromBody] CreateStockReservationDto request)

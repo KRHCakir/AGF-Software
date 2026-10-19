@@ -17,9 +17,15 @@ export interface PalletDetailLine {
     productName: string | null;
     productVariantName: string | null;
     lotNumber: string;
+    // Historische ontvangst; voorraad = ontvangst - afgeboekt door verzendingen.
     quantity: number;
     unit: PackageUnit;
     netWeightKg: number;
+    dispatchedQuantity: number;
+    dispatchedNetWeightKg: number;
+    onHandQuantity: number;
+    onHandNetWeightKg: number;
+    depleted: boolean;
     qualityStatus: QualityStatus;
     qualityReason: string | null;
     createdAt: string;
@@ -36,6 +42,8 @@ export interface PalletDetail {
     warehouseLocation: string | null;
     createdAt: string;
     version: number;
+    // Minstens één regel en elke regel uitgeput; zegt niets over de fysieke pallet.
+    depleted: boolean;
     contentLines: PalletDetailLine[];
 }
 
@@ -79,6 +87,11 @@ export function isPalletDetailLine(value: unknown): value is PalletDetailLine {
         && isNumber(value.quantity)
         && isString(value.unit) && (PACKAGE_UNITS as readonly string[]).includes(value.unit)
         && isNumber(value.netWeightKg)
+        && isNumber(value.dispatchedQuantity)
+        && isNumber(value.dispatchedNetWeightKg)
+        && isNumber(value.onHandQuantity)
+        && isNumber(value.onHandNetWeightKg)
+        && typeof value.depleted === 'boolean'
         && isQualityStatus(value.qualityStatus)
         && isNullableString(value.qualityReason)
         && isString(value.createdAt)
@@ -96,6 +109,7 @@ export function isPalletDetail(value: unknown): value is PalletDetail {
         && isNullableString(value.warehouseLocation)
         && isString(value.createdAt)
         && isNumber(value.version)
+        && typeof value.depleted === 'boolean'
         && isArrayOf(value.contentLines, isPalletDetailLine);
 }
 

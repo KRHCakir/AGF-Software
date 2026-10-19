@@ -1,5 +1,6 @@
 using AgfAdmin.Data;
 using AgfAdmin.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Tests.Infrastructure;
 
@@ -131,4 +132,41 @@ public static class SalesTestData
 
     public static async Task<int> SupplyLineOfAsync(AppDbContext db, int contentLineId) =>
         (await db.PalletContentLines.FindAsync(contentLineId))!.SupplyCommitmentLineId;
+
+    // Volledige afboeking van één Active reservering rechtstreeks in de database (zoals de dispatch-service die schrijft):
+    // Consumed + ConsumedAt, Dispatch-mutatie, verzending met regel en de verhoging van afgeboekt op de inhoudsregel.
+    // Alleen zo accepteert guard-regel 8 een Consumed; een losse statuswijziging wordt geweigerd.
+    public static async Task<int> ConsumeAsync(SqliteAppDbContextFactory factory, int reservationId, string reference = null)
+    {
+        await using var db = factory.CreateContext();
+        var dispatch = await ConsumeInContextAsync(db, reservationId, reference);
+        await db.SaveChangesAsync();
+        return dispatch.Id;
+    }
+
+    // Zelfde volledige afboeking, maar in een meegegeven context (voor race-tests met een interceptor); slaat niet zelf op.
+    public static async Task<SalesDispatch> ConsumeInContextAsync(AppDbContext db, int reservationId, string reference = null)
+    {
+        var reservation = await db.StockReservations.Include(r => r.PalletContentLine).Include(r => r.SalesOrderLine).SingleAsync(r => r.Id == reservationId);
+        var now = DateTime.UtcNow;
+        var content = reservation.PalletContentLine;
+        reservation.Status = "Consumed";
+        reservation.ConsumedAt = now;
+        content.DispatchedQuantity += reservation.Quantity;
+        content.DispatchedNetWeightKg += reservation.NetWeightKg ?? 0m;
+        var movement = new StockMovement
+        {
+            Type = "Dispatch", Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = reservation.NetWeightKg,
+            SupplyCommitmentLineId = content.SupplyCommitmentLineId, PalletContentLine = content, StockReservation = reservation, CreatedAt = now
+        };
+        var dispatch = new SalesDispatch { RequestId = Guid.NewGuid(), SalesOrderId = reservation.SalesOrderLine.SalesOrderId, Reference = reference, ActorReference = "test", DispatchedAt = now };
+        dispatch.Lines.Add(new SalesDispatchLine
+        {
+            StockReservation = reservation, SalesOrderLineId = reservation.SalesOrderLineId!.Value, PalletContentLine = content,
+            Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = reservation.NetWeightKg ?? 0m, ExpectedReservationVersion = reservation.Version, StockMovement = movement
+        });
+        db.StockMovements.Add(movement);
+        db.SalesDispatches.Add(dispatch);
+        return dispatch;
+    }
 }

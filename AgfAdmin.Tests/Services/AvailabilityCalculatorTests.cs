@@ -576,4 +576,51 @@ public class AvailabilityCalculatorTests
         Assert.Equal(new[] { 1, 2 }, result.SourceLines.Select(s => s.SupplyCommitmentLineId));
         Assert.Equal(new int?[] { null, 7 }, result.ContentLines.Select(c => c.CustomerId));
     }
+
+    // ---- Afboeking: kwaliteitsemmers en beschikbaarheid op voorraad, registratie op ontvangst ----
+
+    [Fact]
+    public void Dispatched_Content_Counts_On_Hand_In_Quality_Buckets_But_Receipt_For_Registration()
+    {
+        var source = Source(1, 100m);
+        var content = Content(source, 40m, 160m, "Received", "Warehouse", "Approved") with { DispatchedQuantity = 25m, DispatchedNetWeightKg = 100m, ReservedQuantity = 5m, ReservedNetWeightKg = 20m };
+
+        var entry = WarehouseEntry(Overview(new[] { source }, new[] { content }));
+
+        Assert.Equal((15m, 60m), (entry.Warehouse.Approved.Quantity, entry.Warehouse.Approved.NetWeightKg));
+        Assert.Equal((15m, 60m), (entry.AvailableBeforeReservations.Quantity, entry.AvailableBeforeReservations.NetWeightKg));
+        Assert.Equal((5m, 20m), (entry.Reserved.Quantity, entry.Reserved.NetWeightKg));
+        Assert.Equal((10m, 40m), (entry.AvailableAfterReservations.Quantity, entry.AvailableAfterReservations.NetWeightKg));
+        // Verwacht-minus-geregistreerd gebruikt de ontvangst (40), niet de voorraad (15).
+        Assert.Equal(60m, entry.ExpectedUnregistered.Quantity);
+        Assert.Empty(entry.Warnings);
+    }
+
+    [Fact]
+    public void Depleted_Content_Shows_Zero_On_Hand_And_Depleted_Flag_In_Drill_Down_But_Keeps_Receipt()
+    {
+        var source = Source(1, 100m);
+        var content = Content(source, 40m, 160m, "Received", "Warehouse", "Approved") with { DispatchedQuantity = 40m, DispatchedNetWeightKg = 160m };
+
+        var (sourceLines, contentLines) = AvailabilityCalculator.BuildDrillDown(new[] { source }, new[] { content }, new AvailabilityQuery { Route = "Warehouse" });
+
+        var line = Assert.Single(contentLines);
+        Assert.Equal((40m, 160m, 40m, 0m, 0m, true, 0m, false), (line.Quantity, line.NetWeightKg, line.DispatchedQuantity, line.OnHandQuantity, line.OnHandNetWeightKg, line.Depleted, line.AvailableQuantity, line.SellableNow));
+        Assert.Equal(40m, Assert.Single(sourceLines).RegisteredQuantity);
+        var entry = WarehouseEntry(Overview(new[] { source }, new[] { content }));
+        Assert.Equal(0m, entry.AvailableBeforeReservations.Quantity);
+        Assert.Equal(60m, entry.ExpectedUnregistered.Quantity);
+    }
+
+    [Fact]
+    public void Reservation_Above_On_Hand_Is_Flagged_Even_When_Below_Receipt()
+    {
+        var source = Source(1, 100m);
+        var content = Content(source, 40m, 160m, "Received", "Warehouse", "Approved") with { DispatchedQuantity = 35m, DispatchedNetWeightKg = 140m, ReservedQuantity = 10m, ReservedNetWeightKg = 40m };
+
+        var entry = WarehouseEntry(Overview(new[] { source }, new[] { content }));
+
+        Assert.Contains(entry.Warnings, w => w.Code == "RESERVATION_EXCEEDS_CONTENT");
+        Assert.Equal(0m, entry.AvailableAfterReservations.Quantity);
+    }
 }

@@ -42,6 +42,8 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
         public DbSet<SalesOrderAuditEvent> SalesOrderAuditEvents { get; set; }
+        public DbSet<SalesDispatch> SalesDispatches { get; set; }
+        public DbSet<SalesDispatchLine> SalesDispatchLines { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
@@ -181,6 +183,12 @@ namespace AgfAdmin.Data
                     .HasForeignKey(m => m.StockReservationId)
                     .OnDelete(DeleteBehavior.Restrict);
 
+                // Gewone FK-index blijft bestaan; daarnaast één Dispatch-mutatie per reservering: dubbel afboeken is op databaseniveau onmogelijk.
+                b.HasIndex(m => m.StockReservationId);
+                b.HasIndex(m => m.StockReservationId, "IX_StockMovements_Dispatch_StockReservationId")
+                    .IsUnique()
+                    .HasFilter("\"Type\" = 'Dispatch'");
+
                 b.HasOne(m => m.PalletContentLine)
                     .WithMany()
                     .HasForeignKey(m => m.PalletContentLineId)
@@ -213,6 +221,8 @@ namespace AgfAdmin.Data
                         "AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"Source\" = 'Physical')");
                     t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent",
                         "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
+                    t.HasCheckConstraint("CK_StockReservations_ConsumedConsistent",
+                        "\"Status\" <> 'Consumed' OR \"ConsumedAt\" IS NOT NULL");
                 });
 
                 b.HasOne(r => r.OrderLine)
@@ -334,6 +344,8 @@ namespace AgfAdmin.Data
 
             modelBuilder.Entity<PalletContentLine>(b =>
             {
+                b.Property(c => c.DispatchedQuantity).HasPrecision(18, 3).HasDefaultValue(0m);
+                b.Property(c => c.DispatchedNetWeightKg).HasPrecision(18, 3).HasDefaultValue(0m);
                 b.Property(c => c.LotNumber).IsRequired().HasMaxLength(100);
                 b.Property(c => c.Quantity).HasPrecision(18, 3);
                 b.Property(c => c.Unit).IsRequired().HasMaxLength(32);
@@ -351,6 +363,10 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
                         "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
+                    // Afgeboekt ligt tussen 0 en de ontvangst; de ontvangst zelf wordt nooit gewijzigd.
+                    t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds",
+                        "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) " +
+                        "AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) >= 0 AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) <= CAST(\"NetWeightKg\" AS NUMERIC)");
                 });
 
                 b.Property(c => c.Version).IsConcurrencyToken();
@@ -382,6 +398,53 @@ namespace AgfAdmin.Data
                 b.HasOne(e => e.SalesOrder)
                     .WithMany()
                     .HasForeignKey(e => e.SalesOrderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<SalesDispatch>(b =>
+            {
+                b.Property(d => d.Reference).HasMaxLength(100);
+                b.Property(d => d.ActorReference).IsRequired().HasMaxLength(100);
+                b.HasIndex(d => d.RequestId).IsUnique();
+                b.HasIndex(d => d.SalesOrderId);
+                b.HasOne(d => d.SalesOrder)
+                    .WithMany()
+                    .HasForeignKey(d => d.SalesOrderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<SalesDispatchLine>(b =>
+            {
+                b.Property(l => l.Quantity).HasPrecision(18, 3);
+                b.Property(l => l.NetWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
+                // Een reservering wordt hooguit één keer verbruikt; elke regel heeft precies één Dispatch-mutatie.
+                b.HasIndex(l => l.StockReservationId).IsUnique();
+                b.HasIndex(l => l.StockMovementId).IsUnique();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesDispatchLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_SalesDispatchLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+                });
+                b.HasOne(l => l.SalesDispatch)
+                    .WithMany(d => d.Lines)
+                    .HasForeignKey(l => l.SalesDispatchId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.StockReservation)
+                    .WithOne(r => r.DispatchLine)
+                    .HasForeignKey<SalesDispatchLine>(l => l.StockReservationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SalesOrderLine)
+                    .WithMany()
+                    .HasForeignKey(l => l.SalesOrderLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.PalletContentLine)
+                    .WithMany()
+                    .HasForeignKey(l => l.PalletContentLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.StockMovement)
+                    .WithMany()
+                    .HasForeignKey(l => l.StockMovementId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

@@ -4,14 +4,18 @@ import { SaveResult } from './supplyService';
 import { AvailabilityQuantity, PackageUnit } from '../types/availability';
 import {
     CancelSalesOrderRequest,
+    CreateSalesDispatchRequest,
     CreateSalesOrderRequest,
     CreateStockReservationRequest,
     ReleaseStockReservationRequest,
     ReservableStockLine,
+    SalesDispatch,
     SalesOrder,
     SalesOrderAuditEvent,
     StockReservation,
     isReservableStockList,
+    isSalesDispatch,
+    isSalesDispatchList,
     isSalesOrder,
     isSalesOrderAuditEventList,
     isSalesOrderList,
@@ -93,6 +97,23 @@ export async function getSalesOrderAuditEvents(orderId: number, signal?: AbortSi
     const json = await getJson(`/sales-orders/${orderId}/audit-events`, signal);
     if (!isSalesOrderAuditEventList(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij de orderhistorie.');
+    }
+    return json;
+}
+
+// Verzenden: 201 = nieuw, 200 = exact dezelfde opdracht was al verwerkt; 409 = herladen en opnieuw beslissen.
+export async function createSalesDispatch(orderId: number, request: CreateSalesDispatchRequest, signal?: AbortSignal): Promise<SaveResult<SalesDispatch>> {
+    const { status, json } = await postJson(`/sales-orders/${orderId}/dispatches`, request, signal);
+    if (!isSalesDispatch(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het verzenden.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+export async function listSalesDispatches(orderId: number, signal?: AbortSignal): Promise<SalesDispatch[]> {
+    const json = await getJson(`/sales-orders/${orderId}/dispatches`, signal);
+    if (!isSalesDispatchList(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de verzendingen.');
     }
     return json;
 }

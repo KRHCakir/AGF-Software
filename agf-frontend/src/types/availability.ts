@@ -130,8 +130,15 @@ export interface ContentLineAvailability {
     supplyCommitmentLineId: number;
     lotNumber: string;
     unit: PackageUnit;
+    // Historische ontvangst; voorraad = ontvangst - afgeboekt door verzendingen.
     quantity: number;
     netWeightKg: number;
+    dispatchedQuantity: number;
+    dispatchedNetWeightKg: number;
+    onHandQuantity: number;
+    onHandNetWeightKg: number;
+    // Voorraad én kg zijn 0; zegt niets over de fysieke pallet.
+    depleted: boolean;
     qualityStatus: QualityStatus;
     reservedQuantity: number;
     reservedNetWeightKg: number;
@@ -299,6 +306,11 @@ function isContentLine(value: unknown): value is ContentLineAvailability {
         && isUnit(value.unit)
         && isNumber(value.quantity)
         && isNumber(value.netWeightKg)
+        && isNumber(value.dispatchedQuantity)
+        && isNumber(value.dispatchedNetWeightKg)
+        && isNumber(value.onHandQuantity)
+        && isNumber(value.onHandNetWeightKg)
+        && typeof value.depleted === 'boolean'
         && typeof value.qualityStatus === 'string'
         && isNumber(value.reservedQuantity)
         && isNumber(value.reservedNetWeightKg)

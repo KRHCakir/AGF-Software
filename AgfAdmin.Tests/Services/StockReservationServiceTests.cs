@@ -468,9 +468,7 @@ public class StockReservationServiceTests : IDisposable
             }
             else
             {
-                await using var db = _factory.CreateContext();
-                (await db.StockReservations.FindAsync(reservation.Id))!.Status = "Consumed";
-                await db.SaveChangesAsync();
+                await SalesTestData.ConsumeAsync(_factory, reservation.Id);
             }
             (reservationId, version) = (reservation.Id, 1);
         }
@@ -610,13 +608,8 @@ public class StockReservationServiceTests : IDisposable
         Assert.Equal(1, await db.PalletAuditEvents.CountAsync(e => e.EventType == "ReservationReleased"));
     }
 
-    // Dispatch (PR #26) zet een reservering op Consumed en verhoogt de versie; hier rechtstreeks gesimuleerd.
-    private async Task ConsumeDirectlyAsync(int reservationId)
-    {
-        await using var db = _factory.CreateContext();
-        (await db.StockReservations.FindAsync(reservationId))!.Status = "Consumed";
-        await db.SaveChangesAsync();
-    }
+    // Afboeking met het volledige grootboek (Consumed + mutatie + verzendregel + afgeboekt), zoals de dispatch-service die schrijft.
+    private Task ConsumeDirectlyAsync(int reservationId) => SalesTestData.ConsumeAsync(_factory, reservationId);
 
     [Theory]
     [InlineData("release-saves-last")]
@@ -634,7 +627,7 @@ public class StockReservationServiceTests : IDisposable
         {
             ServiceResultStatus released = default;
             await using var db = _factory.CreateContext(new ConcurrentSaveInterceptor(async () => released = (await ReleaseAsync(reservation.Id, Release(reservation.Version))).Status));
-            (await db.StockReservations.FindAsync(reservation.Id))!.Status = "Consumed";
+            await SalesTestData.ConsumeInContextAsync(db, reservation.Id);
             await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => db.SaveChangesAsync());
             Assert.Equal(ServiceResultStatus.Ok, released);
         }

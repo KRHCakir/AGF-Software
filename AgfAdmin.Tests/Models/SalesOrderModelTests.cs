@@ -411,7 +411,7 @@ public class SalesOrderModelTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            (await db.StockReservations.SingleAsync()).Status = "Consumed";
+            (await db.StockReservations.SingleAsync()).UpdatedAt = DateTime.UtcNow.AddMinutes(1);
             (await db.SalesOrders.SingleAsync(o => o.Id == orderId)).CustomerReference = "PO-1";
             (await db.SalesOrderLines.SingleAsync(l => l.Id == boxLineId)).Quantity = 51m;
             if (async) await db.SaveChangesAsync(); else db.SaveChanges();
@@ -436,7 +436,10 @@ public class SalesOrderModelTests : IDisposable
 
         await using var first = _factory.CreateContext();
         await using var second = _factory.CreateContext();
-        (await first.StockReservations.SingleAsync()).Status = "Consumed";
+        var winner = await first.StockReservations.SingleAsync();
+        winner.Status = "Released";
+        winner.ReleasedAt = DateTime.UtcNow;
+        winner.ReleaseReason = "Eerst";
         var stale = await second.StockReservations.SingleAsync();
         stale.Status = "Released";
         stale.ReleasedAt = DateTime.UtcNow;
@@ -445,6 +448,6 @@ public class SalesOrderModelTests : IDisposable
 
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
         await using var verify = _factory.CreateContext();
-        Assert.Equal("Consumed", (await verify.StockReservations.SingleAsync()).Status);
+        Assert.Equal("Eerst", (await verify.StockReservations.SingleAsync()).ReleaseReason);
     }
 }

@@ -4,11 +4,14 @@ import { useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { blockedBy, cancelKey } from '../../lib/pendingCommands';
+import { blockedBy, cancelKey, dispatchKey } from '../../lib/pendingCommands';
 import { orderProgress } from '../../lib/salesOrderRules';
-import { SalesOrder } from '../../types/salesOrder';
+import { SaveResult } from '../../services/supplyService';
+import { SalesDispatch, SalesOrder } from '../../types/salesOrder';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import CancelOrderPanel from './CancelOrderPanel';
+import DispatchList from './DispatchList';
+import DispatchPanel from './DispatchPanel';
 import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
@@ -37,6 +40,17 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
     // Een onafgeronde annulering blijft zichtbaar, ook als de order intussen Cancelled is (de server kan het commando
     // al hebben verwerkt terwijl het antwoord verloren ging): alleen de identieke herhaling rondt haar af.
     const showCancel = pendingCancel || (!readOnly && cancelling);
+    // Verzenden: zelfde regels. Een onafgeronde verzending blijft zichtbaar, ook als een verse orderrespons de gekozen
+    // reserveringen al als Consumed toont (verwerkt, antwoord verloren): alleen de identieke herhaling rondt haar af.
+    const [dispatching, setDispatching] = useState(false);
+    const [dispatchNotice, setDispatchNotice] = useState<SaveResult<SalesDispatch> | null>(null);
+    const [dispatchToken, setDispatchToken] = useState(0);
+    const [dispatchDecisionToken, setDispatchDecisionToken] = useState(0);
+    const pendingDispatch = commands[dispatchKey(order.id)] !== undefined;
+    const dispatchBlocker = blockedBy(commands, { kind: 'dispatch', orderId: order.id });
+    const showDispatch = pendingDispatch || (!readOnly && dispatching);
+    const hasDispatchable = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Active' && !reservation.onHold));
+    const hasDispatches = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
 
     const onCancelled = async () => {
         setCancelling(false);
@@ -51,6 +65,20 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
         }
     };
 
+    const onDispatched = async (saved: SaveResult<SalesDispatch>) => {
+        setDispatching(false);
+        setDispatchNotice(saved);
+        setHistoryToken((n) => n + 1);
+        setDispatchToken((n) => n + 1);
+        await onOrderChanged();
+    };
+
+    const reloadForNewDispatchDecision = async () => {
+        if (await onOrderChanged()) {
+            setDispatchDecisionToken((n) => n + 1);
+        }
+    };
+
     return (
         <div className="space-y-3">
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
@@ -62,9 +90,16 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                         <button type="button" className={secondaryButtonClass} onClick={() => setShowHistory((value) => !value)} aria-expanded={showHistory}>
                             {showHistory ? t('sales_history_hide') : t('sales_history')}
                         </button>
+                        {!readOnly && !showDispatch && (
+                            <button type="button" className={`${secondaryButtonClass} border-emerald-300 text-emerald-900 hover:bg-emerald-50`} onClick={() => { setDispatchNotice(null); setDispatching(true); }}
+                                disabled={!hasDispatchable || (dispatchBlocker !== null && dispatchBlocker.kind !== 'dispatch')}>
+                                {t('sales_dispatch_order')}
+                            </button>
+                        )}
                         {!readOnly && !showCancel && (
                             <button type="button" className={`${secondaryButtonClass} border-red-300 text-red-800 hover:bg-red-50`} onClick={() => { setCancelNotice(false); setCancelling(true); }}
-                                disabled={cancelBlocker !== null && cancelBlocker.kind !== 'cancel-order'}>
+                                disabled={hasDispatches || (cancelBlocker !== null && cancelBlocker.kind !== 'cancel-order')}
+                                title={hasDispatches ? t('sales_cancel_after_dispatch') : undefined}>
                                 {t('sales_cancel_order')}
                             </button>
                         )}
@@ -88,9 +123,12 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                     </div>
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
-                        <dd className={`font-medium ${progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-900'}`}>
-                            {t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
-                            {progress.complete && !progress.ready && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
+                        <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-900'}`}>
+                            {progress.fulfilled
+                                ? t('sales_order_fulfilled')
+                                : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
+                                    {progress.linesFulfilled > 0 && <span className="block text-xs">{t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</span>}</>}
+                            {progress.complete && !progress.ready && !progress.fulfilled && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
                         </dd>
                     </div>
                     <div>
@@ -112,9 +150,28 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged }: {
                 )}
             </header>
 
+            {dispatchNotice && (
+                <div role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
+                    <p className="font-medium"><span aria-hidden="true">✓ </span>{t('sales_notice_dispatched', { id: String(dispatchNotice.value.id), count: String(dispatchNotice.value.lines.length) })}</p>
+                    {dispatchNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
+                </div>
+            )}
+
+            {showDispatch && (
+                <DispatchPanel key={`${order.id}:${dispatchDecisionToken}`} order={order} actor={actor} onDispatched={onDispatched}
+                    onReload={() => void reloadForNewDispatchDecision()} onClose={() => setDispatching(false)} />
+            )}
+
             {showCancel && (
                 <CancelOrderPanel key={`${order.id}:${decisionToken}`} order={order} actor={actor} onCancelled={onCancelled}
                     onReload={() => void reloadForNewDecision()} onClose={() => setCancelling(false)} />
+            )}
+
+            {(hasDispatches || dispatchNotice) && (
+                <section aria-labelledby={`dispatches-${order.id}`} className="rounded-md border border-gray-300 bg-white px-4 py-3">
+                    <h3 id={`dispatches-${order.id}`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">{t('sales_dispatches_title')}</h3>
+                    <DispatchList orderId={order.id} token={dispatchToken} />
+                </section>
             )}
 
             {order.lines.map((line) => (

@@ -37,6 +37,10 @@ namespace AgfAdmin.Models
         public DateTime? ReleasedAt { get; set; }
         public string ReleaseReason { get; set; }
 
+        // Gezet bij Consumed (database-check); de verzending volgt via DispatchLine.
+        public DateTime? ConsumedAt { get; set; }
+        public SalesDispatchLine DispatchLine { get; set; }
+
         // Optimistisch concurrency-token; centraal verhoogd in AppDbContext bij elke wijziging (vrijgeven, afboeken).
         public int Version { get; set; }
     }

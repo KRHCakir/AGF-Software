@@ -111,9 +111,15 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
 
     const reservations = [...line.reservations].sort((a, b) => Number(b.status === 'Active') - Number(a.status === 'Active') || b.id - a.id);
 
-    const statusClass = progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-amber-900';
-    const statusText = progress.ready ? t('sales_line_complete') : progress.complete ? t('sales_line_complete_on_hold') : t('sales_line_open', { quantity: formatQuantity(line.openQuantity, locale) });
-    const barClass = progress.ready ? 'bg-green-600' : progress.complete ? 'bg-red-600' : 'bg-blue-600';
+    // Vervuld (alles verzonden) toont als geleverd, nooit als "volledig gereserveerd" met 0 gereserveerd.
+    const statusClass = progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-amber-900';
+    const statusText = progress.fulfilled
+        ? t('sales_line_fulfilled')
+        : progress.ready ? t('sales_line_complete')
+            : progress.complete ? t('sales_line_complete_on_hold')
+                : t('sales_line_open', { quantity: formatQuantity(line.openQuantity, locale) });
+    const barClass = progress.fulfilled ? 'bg-emerald-600' : progress.ready ? 'bg-green-600' : progress.complete ? 'bg-red-600' : 'bg-blue-600';
+    const committedShare = line.quantity > 0 ? Math.min(100, ((line.reservedQuantity + line.dispatchedQuantity) / line.quantity) * 100) : 0;
 
     return (
         <section aria-labelledby={`line-${line.id}`} className="rounded-md border border-gray-300 bg-white">
@@ -124,11 +130,16 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 <span className="text-gray-800">
                     {t('sales_line_reserved', { quantity: formatQuantity(line.reservedQuantity, locale), kg: formatKg(line.reservedNetWeightKg, locale) })}
                 </span>
+                {line.dispatchedQuantity > 0 && (
+                    <span className="text-emerald-900">
+                        {t('sales_line_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale), kg: formatKg(line.dispatchedNetWeightKg, locale) })}
+                    </span>
+                )}
                 <span className={`font-medium ${statusClass}`}>{statusText}</span>
                 {progress.onHold && <OnHoldBadge />}
-                <div className="ml-auto h-2 w-40 overflow-hidden rounded bg-gray-200" role="progressbar" aria-valuemin={0} aria-valuemax={line.quantity} aria-valuenow={line.reservedQuantity}
+                <div className="ml-auto h-2 w-40 overflow-hidden rounded bg-gray-200" role="progressbar" aria-valuemin={0} aria-valuemax={line.quantity} aria-valuenow={line.reservedQuantity + line.dispatchedQuantity}
                     aria-label={t('sales_col_progress')}>
-                    <div className={`h-full ${barClass}`} style={{ width: `${line.quantity > 0 ? Math.min(100, (line.reservedQuantity / line.quantity) * 100) : 0}%` }} />
+                    <div className={`h-full ${barClass}`} style={{ width: `${committedShare}%` }} />
                 </div>
             </header>
 
@@ -198,6 +209,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 {reservation.status === 'Released' && reservation.releaseReason && (
                                                     <span className="mt-1 block text-xs italic text-gray-700">“{reservation.releaseReason}”</span>
                                                 )}
+                                                {reservation.status === 'Consumed' && reservation.dispatchId !== null && (
+                                                    <span className="mt-1 block text-xs text-gray-700">
+                                                        {t('sales_dispatch_heading', { id: String(reservation.dispatchId) })}{reservation.dispatchReference && <> · {reservation.dispatchReference}</>}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className={td}>
                                                 {reservation.contentQualityStatus === null
@@ -236,7 +252,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                         {t('sales_choose_stock')}
                     </button>
                 )}
-                {!showChooser && !readOnly && line.openQuantity === 0 && <span className="ml-3 text-xs text-gray-600">{t('sales_line_fully_reserved_hint')}</span>}
+                {!showChooser && !readOnly && line.openQuantity === 0 && (
+                    <span className="ml-3 text-xs text-gray-600">{progress.fulfilled ? t('sales_line_fulfilled_hint') : t('sales_line_fully_reserved_hint')}</span>
+                )}
                 {showChooser && (
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">

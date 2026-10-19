@@ -156,8 +156,16 @@ namespace AgfAdmin.DTOs
         public int SupplyCommitmentLineId { get; set; }
         public string LotNumber { get; set; }
         public string Unit { get; set; }
+        // Historische ontvangst; wordt nooit gewijzigd door verzendingen.
         public decimal Quantity { get; set; }
         public decimal NetWeightKg { get; set; }
+        // Afgeboekt door verzendingen en de huidige voorraad (ontvangst - afgeboekt).
+        public decimal DispatchedQuantity { get; set; }
+        public decimal DispatchedNetWeightKg { get; set; }
+        public decimal OnHandQuantity { get; set; }
+        public decimal OnHandNetWeightKg { get; set; }
+        // Afgeleid: voorraad én kg zijn allebei 0. Zegt niets over de fysieke pallet.
+        public bool Depleted { get; set; }
         public string QualityStatus { get; set; }
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }

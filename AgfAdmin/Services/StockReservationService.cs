@@ -198,8 +198,9 @@ namespace AgfAdmin.Services
                 return $"Unit {command.Unit} must exactly match the content unit {content.Unit} and the order line unit {line.Unit}; units are never converted.";
             }
 
-            var remainingQuantity = content.Quantity - reservedOnContent.Quantity;
-            var remainingKg = content.NetWeightKg - reservedOnContent.NetWeightKg;
+            // Voorraad = ontvangst - afgeboekt; verbruikte reserveringen zitten in afgeboekt en tellen niet dubbel.
+            var remainingQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity) - reservedOnContent.Quantity;
+            var remainingKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg) - reservedOnContent.NetWeightKg;
             if (command.Quantity > remainingQuantity || command.NetWeightKg > remainingKg)
             {
                 return $"Only {remainingQuantity} {content.Unit} and {remainingKg} kg of this content line are still unreserved.";
@@ -209,6 +210,7 @@ namespace AgfAdmin.Services
             {
                 return $"Reserving the full remainder requires both the remaining quantity ({remainingQuantity}) and the remaining net weight ({remainingKg} kg).";
             }
+            // Vastgelegd op de regel = Active gereserveerd + Consumed verzonden; verzonden komt nooit terug als open vraag.
             if (reservedOnLine + command.Quantity > line.Quantity)
             {
                 return $"The sales order line still needs only {line.Quantity - reservedOnLine} {line.Unit}.";
@@ -216,10 +218,11 @@ namespace AgfAdmin.Services
             return null;
         }
 
+        // Active + Consumed: beide leggen klantvraag vast; alleen Released komt terug als open vraag.
         private async Task<decimal> ActiveOnOrderLineAsync(int salesOrderLineId, CancellationToken cancellationToken)
         {
             var quantities = await _db.StockReservations.AsNoTracking()
-                .Where(r => r.SalesOrderLineId == salesOrderLineId && r.Status == ReservationRules.StatusActive)
+                .Where(r => r.SalesOrderLineId == salesOrderLineId && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
                 .Select(r => r.Quantity)
                 .ToListAsync(cancellationToken);
             return quantities.Sum();
@@ -398,6 +401,7 @@ namespace AgfAdmin.Services
             var reservation = await _db.StockReservations.AsNoTracking()
                 .Include(r => r.SalesOrderLine)
                 .Include(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
+                .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch)
                 .SingleAsync(r => r.Id == reservationId, cancellationToken);
             return ToDto(reservation, reservation.SalesOrderLine?.SalesOrderId ?? 0);
         }
@@ -425,7 +429,10 @@ namespace AgfAdmin.Services
             ContentQualityStatus = reservation.PalletContentLine?.QualityStatus,
             OnHold = reservation.Status == ReservationRules.StatusActive
                 && reservation.PalletContentLine != null
-                && reservation.PalletContentLine.QualityStatus != PalletRules.QualityApproved
+                && reservation.PalletContentLine.QualityStatus != PalletRules.QualityApproved,
+            ConsumedAt = reservation.ConsumedAt == null ? null : DateTime.SpecifyKind(reservation.ConsumedAt.Value, DateTimeKind.Utc),
+            DispatchId = reservation.DispatchLine?.SalesDispatchId,
+            DispatchReference = reservation.DispatchLine?.SalesDispatch?.Reference
         };
     }
 }

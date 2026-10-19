@@ -20,6 +20,11 @@ namespace AgfAdmin.Models
         public string Unit { get; set; }           // verplicht, niet leeg: box, colli, tray, piece of dozen
         public decimal NetWeightKg { get; set; }   // > 0, werkelijk netto kg; nooit afgeleid
 
+        // Lopende afboeking door verzendingen (som van Dispatch-mutaties; alleen stijgend, nooit boven de ontvangst).
+        // Quantity/NetWeightKg blijven de historische ontvangst; voorraad = ontvangst - afgeboekt.
+        public decimal DispatchedQuantity { get; set; }
+        public decimal DispatchedNetWeightKg { get; set; }
+
         public string QualityStatus { get; set; }  // Quarantine, Approved, Blocked, Rejected
         public string QualityReason { get; set; }  // optioneel
 
