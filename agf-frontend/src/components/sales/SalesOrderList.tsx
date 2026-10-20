@@ -54,12 +54,13 @@ export default function SalesOrderList({ orders, selectedId, onSelect }: {
                                 <td className="whitespace-nowrap px-2 py-1.5 align-top">{formatCalendarDate(order.requestedDeliveryDate, locale)}</td>
                                 <td className="px-2 py-1.5 align-top">
                                     {/* Groen alleen als alles gereserveerd is én niets on hold staat; volledig gereserveerd met on hold is een waarschuwing. */}
-                                    <span className={`block text-xs font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-800'}`}>
+                                    <span className={`block text-xs font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-800'}`}>
                                         {progress.fulfilled
                                             ? t('sales_order_fulfilled')
                                             : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                                 {progress.partiallyDispatched && <> · {t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</>}
-                                                {progress.complete && !progress.ready && <> · {t('sales_on_hold')}</>}</>}
+                                                {progress.complete && !progress.ready && progress.onHoldCount > 0 && <> · {t('sales_on_hold')}</>}
+                                                {progress.allocatedLines > 0 && <> · {t('sales_list_allocated', { count: String(progress.allocatedLines) })}</>}</>}
                                     </span>
                                     <ul className="mt-0.5 space-y-0.5 text-xs text-gray-700">
                                         {order.lines.map((line) => (

@@ -734,5 +734,6 @@
   "sales_event_allocation_released": "Allocation released",
   "sales_release_allocation_label": "Release allocation from {vendor} · lot {lot}",
   "sales_error_exceeds_remaining": "More than still allocatable on this source line.",
-  "sales_col_allocated_progress": "allocated (expected)"
+  "sales_col_allocated_progress": "allocated (expected)",
+  "sales_list_allocated": "{count} line(s) on expected customer-bound supply (not ready)"
 }
