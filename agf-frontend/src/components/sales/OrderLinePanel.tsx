@@ -149,7 +149,8 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 : progress.completeWithExpected ? 'text-violet-900'
                     : 'text-amber-900';
     const statusText = progress.fulfilled
-        ? t('sales_line_fulfilled')
+        // Met een DirectTrade-deel weet het systeem alleen dat het verzonden is; aflevering is niet vastgelegd.
+        ? (line.directTradeShippedQuantity > 0 ? t('sales_line_fulfilled_dt') : t('sales_line_fulfilled'))
         : progress.ready ? t('sales_line_complete')
             : progress.complete && progress.onHold ? t('sales_line_complete_on_hold')
                 : progress.completeWithExpected ? t('sales_line_complete_expected', { quantity: formatQuantity(line.allocatedQuantity, locale) })
@@ -272,7 +273,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 </>
                                             )}
                                             <td className={td}>
-                                                <ReservationStatusBadge status={reservation.status} />
+                                                {allocation && reservation.status === 'Consumed'
+                                                    ? <span className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-950"><span aria-hidden="true">🚚</span>{t('sales_reservation_dt_shipped')}</span>
+                                                    : <ReservationStatusBadge status={reservation.status} />}
                                                 {reservation.onHold && <span className="mt-1 block"><OnHoldBadge /></span>}
                                                 {reservation.status === 'Released' && reservation.releaseReason && (
                                                     <span className="mt-1 block text-xs italic text-gray-700">“{reservation.releaseReason}”</span>

@@ -777,5 +777,8 @@
   "sales_notice_dt_shipped_next": "Aflevering is nog niet vastgelegd. Magazijnvoorraad is ongewijzigd.",
   "sales_pending_ship_direct_trade": "DirectTrade-verzending van order #{id} ({customer}, {count} toewijzing(en))",
   "sales_event_direct_trade_shipped": "DirectTrade verzonden",
-  "sales_line_dt_shipped": "waarvan DirectTrade {quantity}"
+  "sales_line_dt_shipped": "waarvan DirectTrade {quantity}",
+  "sales_line_fulfilled_dt": "Volledig verzonden · aflevering nog niet vastgelegd",
+  "sales_order_fulfilled_dt": "Volledig verzonden · aflevering nog niet vastgelegd",
+  "sales_reservation_dt_shipped": "Verzonden (DirectTrade)"
 }

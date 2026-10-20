@@ -179,4 +179,20 @@ describe('DirectTradeShipmentPanel through SalesOrderDetail', () => {
         assert.ok(mounted.buttons().find((b) => b.textContent?.includes('sales_ship_order'))?.disabled, 'nothing left to ship');
         assert.ok(mounted.button('sales_cancel_order')?.disabled, 'cancel is disabled after a shipment');
     });
+
+    test('a fully shipped line with a DirectTrade part says "fully shipped, delivery not yet recorded", never "delivered" or "written off"', async () => {
+        const fulfilled = orderWith(5, [allocation(21, 'Consumed')]);
+        fulfilled.lines[0] = { ...fulfilled.lines[0], quantity: 20, openQuantity: 0, fulfilled: true };
+        fulfilled.fulfilled = true;
+        shipments = [shipmentResponse('s-1')];
+        await mounted.render(element(fulfilled));
+        await mounted.waitFor(() => (mounted.hasText('sales_ship_heading') ? true : null), 'DirectTrade shipment list');
+        assert.ok(mounted.hasText('sales_line_fulfilled_dt'));
+        assert.ok(mounted.hasText('sales_order_fulfilled_dt'));
+        assert.equal(mounted.hasText('sales_line_fulfilled '), false);
+        assert.ok(!Array.from(mounted.container.querySelectorAll('span')).some((span) => span.textContent === 'sales_line_fulfilled' || span.textContent === 'sales_order_fulfilled'));
+        assert.ok(mounted.hasText('sales_reservation_dt_shipped'));
+        assert.equal(mounted.hasText('sales_reservation_consumed'), false, 'a DirectTrade row is never labelled as written off from stock');
+    });
 });
+

@@ -223,7 +223,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
                         <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>
                             {progress.fulfilled
-                                ? t('sales_order_fulfilled')
+                                ? (order.lines.some((line) => line.directTradeShippedQuantity > 0) ? t('sales_order_fulfilled_dt') : t('sales_order_fulfilled'))
                                 : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                     {progress.linesFulfilled > 0 && <span className="block text-xs">{t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</span>}</>}
                             {progress.complete && !progress.ready && !progress.fulfilled && progress.onHoldCount > 0 && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
