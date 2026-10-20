@@ -31,7 +31,9 @@ namespace AgfAdmin.Data
     //    Capaciteit per bronregel = Active + Consumed toewijzingen: een verzending maakt nooit capaciteit vrij. Consumed is eindtoestand.
     // 11. een DirectTrade-toewijzing wordt alleen Consumed (vanuit Active, met tijdstip) samen met precies één nieuwe DirectTrade-verzendregel
     //    in dezelfde save, en omgekeerd; de regel kopieert hoeveelheid (hele toewijzing), eenheid, orderregel en bronregel, valt onder een
-    //    verzending van dezelfde order en klant, en een afwijkende partij van een ingevulde bronpartij heeft een toelichting. Er ontstaat
+    //    verzending van dezelfde order en klant, kopieert de echte bronpartij, toezegging en leverancier van de opgeslagen bronregel, en
+    //    een afwijkende partij van een ingevulde (echte) bronpartij heeft een toelichting. Hoeveelheid, eenheid, bronregel en orderregel
+    //    van een DirectTrade-toewijzing liggen vast (tegen OriginalValues), ook bij en na Consumed. Er ontstaat
     //    geen voorraadmutatie of magazijnverzendregel (regel 8 geldt alleen voor Physical). DirectTrade-verzendingen zijn append-only.
     // Regels 5 t/m 7, 10 en 11 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
@@ -686,6 +688,14 @@ namespace AgfAdmin.Data
             var orderIds = lineOrders.Values.Distinct().ToList();
             var orderCustomers = (await ToListAsync(db.SalesOrders.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.CustomerId }), async, cancellationToken))
                 .ToDictionary(o => o.Id, o => o.CustomerId);
+            // De echte bron (opgeslagen waarden, niet wat in dezelfde save is aangepast): partij van de bronregel, toezegging en leverancier.
+            // De gekopieerde bronpartij, toezeggings- en leverancier-id in de verzendregel worden daartegen gecontroleerd.
+            var sourceIds = lines.Select(l => l.SupplyCommitmentLine != null ? db.Entry(l.SupplyCommitmentLine).Property(x => x.Id).CurrentValue : l.SupplyCommitmentLineId).Distinct().ToList();
+            var realSources = (await ToListAsync(
+                    db.SupplyCommitmentLines.AsNoTracking().Where(l => sourceIds.Contains(l.Id))
+                        .Select(l => new { l.Id, l.LotNumber, l.SupplyCommitmentId, l.SupplyCommitment.VendorId }),
+                    async, cancellationToken))
+                .ToDictionary(l => l.Id, l => (l.LotNumber, l.SupplyCommitmentId, l.VendorId));
             var storedShipmentIds = lines.Where(l => l.DirectTradeShipment == null).Select(l => l.DirectTradeShipmentId).Distinct().ToList();
             var storedShipments = (await ToListAsync(db.DirectTradeShipments.AsNoTracking().Where(d => storedShipmentIds.Contains(d.Id)).Select(d => new { d.Id, d.SalesOrderId, d.CustomerId }), async, cancellationToken))
                 .ToDictionary(d => d.Id, d => (d.SalesOrderId, d.CustomerId));
@@ -710,9 +720,22 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"DirectTrade shipment line for allocation {reservation.Id} needs an explicit net weight and lot.");
                 }
-                if (line.SourceLotNumber != null && !string.Equals(line.LotNumber, line.SourceLotNumber, StringComparison.Ordinal) && string.IsNullOrWhiteSpace(line.LotDeviationReason))
+                if (!realSources.TryGetValue(sourceId, out var real))
                 {
-                    throw new TraceabilityViolationException($"DirectTrade shipment line for allocation {reservation.Id} deviates from source lot {line.SourceLotNumber} without a reason.");
+                    throw new TraceabilityViolationException($"DirectTrade shipment line for allocation {reservation.Id} refers to a supply line that does not exist.");
+                }
+                if (!string.Equals(line.SourceLotNumber, real.LotNumber, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment line for allocation {reservation.Id} must copy the real source lot ({real.LotNumber ?? "none"}), not {line.SourceLotNumber ?? "none"}.");
+                }
+                if (line.SupplyCommitmentId != real.SupplyCommitmentId || line.VendorId != real.VendorId)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment line for allocation {reservation.Id} must copy the supply commitment ({real.SupplyCommitmentId}) and vendor ({real.VendorId}) of its supply line.");
+                }
+                // De afwijkingsregel tegen de echte bronpartij, niet tegen een (mogelijk vervalste) kopie.
+                if (real.LotNumber != null && !string.Equals(line.LotNumber, real.LotNumber, StringComparison.Ordinal) && string.IsNullOrWhiteSpace(line.LotDeviationReason))
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment line for allocation {reservation.Id} deviates from source lot {real.LotNumber} without a reason.");
                 }
                 var (shipmentOrderId, shipmentCustomerId) = line.DirectTradeShipment != null
                     ? (db.Entry(line.DirectTradeShipment).Property(d => d.SalesOrderId).CurrentValue, line.DirectTradeShipment.CustomerId)
@@ -757,6 +780,20 @@ namespace AgfAdmin.Data
                 if (originalStatus == ReservationRules.StatusConsumed && entry.Entity.Status != ReservationRules.StatusConsumed)
                 {
                     throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} is shipped (Consumed) and can never become {entry.Entity.Status}; a DirectTrade shipment correction is a separate flow.");
+                }
+                // De toewijzing zelf ligt vast: hoeveelheid, eenheid, bronregel en orderregel worden vergeleken met de opgeslagen waarden
+                // (OriginalValues), niet met wat er in dezelfde save van gemaakt is. Zo kan niemand vlak vóór het verbruiken de toegewezen
+                // hoeveelheid wijzigen en die verzenden, en na Consumed blijven broncapaciteit en ordertotalen gelijk aan de verzending.
+                // Dit geldt ook voor een Active toewijzing: een in-place wijziging zou de capaciteitscontrole (alleen nieuwe rijen) omzeilen.
+                var changed = new List<string>();
+                if (entry.OriginalValues.GetValue<decimal>(nameof(StockReservation.Quantity)) != entry.Entity.Quantity) changed.Add("quantity");
+                if (!string.Equals(entry.OriginalValues.GetValue<string>(nameof(StockReservation.Unit)), entry.Entity.Unit, StringComparison.Ordinal)) changed.Add("unit");
+                if (entry.OriginalValues.GetValue<int>(nameof(StockReservation.SupplyCommitmentLineId)) != entry.Property(r => r.SupplyCommitmentLineId).CurrentValue) changed.Add("supply line");
+                if (entry.OriginalValues.GetValue<int?>(nameof(StockReservation.SalesOrderLineId)) != entry.Property(r => r.SalesOrderLineId).CurrentValue) changed.Add("order line");
+                if (originalStatus == ReservationRules.StatusConsumed && entry.OriginalValues.GetValue<DateTime?>(nameof(StockReservation.ConsumedAt)) != entry.Entity.ConsumedAt) changed.Add("consumption time");
+                if (changed.Count > 0)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} ({originalStatus}) cannot change its {string.Join(", ", changed)}; release it and allocate anew, or use a DirectTrade shipment correction once it is shipped.");
                 }
             }
 

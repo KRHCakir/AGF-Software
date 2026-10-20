@@ -14,14 +14,17 @@ public class DirectTradeShipmentGuardTests : IDisposable
     private SalesSeed _seed;
     private int _orderId;
     private int _boxLine;
+    private int _colliLine;
+    private int _vendorId;
 
     public void Dispose() => _factory.Dispose();
 
     private async Task<int> ArrangeAllocationAsync(decimal quantity = 20m)
     {
         _seed = await SalesTestData.SeedAsync(_factory);
-        (_orderId, _boxLine, _) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity: 500m, colliQuantity: 500m);
+        (_orderId, _boxLine, _colliLine) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity: 500m, colliQuantity: 500m);
         await using var db = _factory.CreateContext();
+        _vendorId = (await db.SupplyCommitments.AsNoTracking().SingleAsync(c => c.Id == _seed.DirectTradeCommitmentId)).VendorId;
         var allocation = new StockReservation
         {
             RequestId = Guid.NewGuid(), SalesOrderLineId = _boxLine, SupplyCommitmentLineId = _seed.DirectTradeSourceLine,
@@ -58,7 +61,7 @@ public class DirectTradeShipmentGuardTests : IDisposable
         var line = new DirectTradeShipmentLine
         {
             StockReservation = reservation, SalesOrderLineId = reservation.SalesOrderLineId!.Value, SupplyCommitmentLineId = reservation.SupplyCommitmentLineId,
-            SupplyCommitmentId = _seed.DirectTradeCommitmentId, VendorId = 1, VendorNameSnapshot = "Supplier B", OriginSnapshot = "Peru", DestinationSnapshot = "Turkije",
+            SupplyCommitmentId = _seed.DirectTradeCommitmentId, VendorId = _vendorId, VendorNameSnapshot = "Supplier B", OriginSnapshot = "Peru", DestinationSnapshot = "Turkije",
             AllocatedQuantity = reservation.Quantity, Quantity = reservation.Quantity, Unit = reservation.Unit, NetWeightKg = 81.4m, LotNumber = "LOT-DT-SRC",
             SourceLotNumber = "LOT-DT-SRC", ExpectedReservationVersion = reservation.Version
         };
@@ -277,4 +280,216 @@ public class DirectTradeShipmentGuardTests : IDisposable
     {
         Assert.Equal(1, await RawLineAsync(20, 20, lot, sourceLot, reason));
     }
+
+    // ---- Review PR #31: de oorspronkelijke toewijzing ligt vast bij en na verbruik ----
+
+    private async Task<(string Status, decimal Quantity, string Unit, int SourceLine, int? OrderLine, int Shipments, decimal Remaining, decimal LineAllocated, decimal LineDispatched, decimal LineOpen)> SnapshotAsync(int id)
+    {
+        await using var db = _factory.CreateContext();
+        var r = await db.StockReservations.AsNoTracking().SingleAsync(x => x.Id == id);
+        var remaining = (await new AgfAdmin.Services.DirectTradeAllocationService(db).GetAllocatableSupplyAsync(_orderId, _boxLine)).Value
+            .SingleOrDefault(x => x.SupplyCommitmentLineId == _seed.DirectTradeSourceLine)?.RemainingQuantity ?? 0m;
+        var line = (await new AgfAdmin.Services.SalesOrderService(db).GetAsync(_orderId)).Value.Lines.Single(l => l.Id == _boxLine);
+        return (r.Status, r.Quantity, r.Unit, r.SupplyCommitmentLineId, r.SalesOrderLineId, await db.DirectTradeShipmentLines.CountAsync(), remaining, line.AllocatedQuantity, line.DispatchedQuantity, line.OpenQuantity);
+    }
+
+    private void Tamper(StockReservation reservation, DirectTradeShipmentLine line, string field)
+    {
+        switch (field)
+        {
+            case "quantity":
+                reservation.Quantity = 25m;
+                if (line != null) { line.Quantity = 25m; line.AllocatedQuantity = 25m; }
+                break;
+            case "unit":
+                reservation.Unit = "colli";
+                if (line != null) line.Unit = "colli";
+                break;
+            case "source-line":
+                reservation.SupplyCommitmentLineId = _seed.DirectTradeColliSourceLine;
+                if (line != null) line.SupplyCommitmentLineId = _seed.DirectTradeColliSourceLine;
+                break;
+            case "order-line":
+                reservation.SalesOrderLineId = _colliLine;
+                if (line != null) line.SalesOrderLineId = _colliLine;
+                break;
+        }
+    }
+
+    // De verzendregel kopieert de gewijzigde waarden exact, dus een vergelijking met de huidige reservering zou slagen.
+    [Theory]
+    [InlineData("quantity", false)]
+    [InlineData("quantity", true)]
+    [InlineData("unit", false)]
+    [InlineData("unit", true)]
+    [InlineData("source-line", false)]
+    [InlineData("source-line", true)]
+    [InlineData("order-line", false)]
+    [InlineData("order-line", true)]
+    public async Task Changing_The_Allocation_In_The_Same_Save_As_Shipping_It_Is_Rejected(string field, bool async)
+    {
+        var id = await ArrangeAllocationAsync();
+        var before = await SnapshotAsync(id);
+        await using (var db = _factory.CreateContext())
+        {
+            var (reservation, _, line) = await ShipInContextAsync(db, id);
+            Tamper(reservation, line, field);
+            var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            Assert.Contains("cannot change", exception.Message);
+        }
+        var after = await SnapshotAsync(id);
+        Assert.Equal(("Active", 20m, "box", _seed.DirectTradeSourceLine, (int?)_boxLine, 0), (after.Status, after.Quantity, after.Unit, after.SourceLine, after.OrderLine, after.Shipments));
+        Assert.Equal((before.Remaining, before.LineAllocated, before.LineDispatched, before.LineOpen), (after.Remaining, after.LineAllocated, after.LineDispatched, after.LineOpen));
+    }
+
+    [Theory]
+    [InlineData("quantity", false)]
+    [InlineData("quantity", true)]
+    [InlineData("unit", false)]
+    [InlineData("unit", true)]
+    [InlineData("source-line", false)]
+    [InlineData("source-line", true)]
+    [InlineData("order-line", false)]
+    [InlineData("order-line", true)]
+    [InlineData("consumed-at", false)]
+    [InlineData("consumed-at", true)]
+    public async Task A_Shipped_Allocation_Cannot_Change_While_Staying_Consumed(string field, bool async)
+    {
+        var id = await ArrangeAllocationAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            await ShipInContextAsync(db, id);
+            await SaveAsync(db, async);
+        }
+        var shipped = await SnapshotAsync(id);
+        Assert.Equal(("Consumed", 80m, 0m, 20m, 480m), (shipped.Status, shipped.Remaining, shipped.LineAllocated, shipped.LineDispatched, shipped.LineOpen));
+        DirectTradeShipmentLine lineBefore;
+        await using (var db = _factory.CreateContext())
+        {
+            lineBefore = await db.DirectTradeShipmentLines.AsNoTracking().SingleAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var reservation = await db.StockReservations.SingleAsync(r => r.Id == id);
+            if (field == "consumed-at") reservation.ConsumedAt = reservation.ConsumedAt!.Value.AddDays(-1);
+            else Tamper(reservation, null, field);
+            var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            Assert.Contains("cannot change", exception.Message);
+        }
+
+        var after = await SnapshotAsync(id);
+        Assert.Equal(shipped, after);
+        await using var verify = _factory.CreateContext();
+        var lineAfter = await verify.DirectTradeShipmentLines.AsNoTracking().SingleAsync();
+        Assert.Equal((lineBefore.Quantity, lineBefore.Unit, lineBefore.NetWeightKg, lineBefore.SupplyCommitmentLineId, lineBefore.SalesOrderLineId),
+            (lineAfter.Quantity, lineAfter.Unit, lineAfter.NetWeightKg, lineAfter.SupplyCommitmentLineId, lineAfter.SalesOrderLineId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_Active_Allocation_Cannot_Grow_In_Place_Past_The_Capacity_Check(bool async)
+    {
+        var id = await ArrangeAllocationAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.StockReservations.SingleAsync(r => r.Id == id)).Quantity = 150m;
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+        Assert.Equal(20m, (await SnapshotAsync(id)).Quantity);
+    }
+
+    // ---- Review PR #31: bronpartij, toezegging en leverancier tegen de echte bron ----
+
+    [Theory]
+    [InlineData("snapshot-null-deviating-no-reason", false)]
+    [InlineData("snapshot-null-deviating-no-reason", true)]
+    [InlineData("snapshot-forged-to-actual-lot", false)]
+    [InlineData("snapshot-forged-to-actual-lot", true)]
+    [InlineData("snapshot-null-same-lot", false)]
+    [InlineData("snapshot-null-same-lot", true)]
+    [InlineData("wrong-commitment", false)]
+    [InlineData("wrong-commitment", true)]
+    [InlineData("wrong-vendor", false)]
+    [InlineData("wrong-vendor", true)]
+    public async Task Source_Lot_Commitment_And_Vendor_Are_Checked_Against_The_Real_Source(string scenario, bool async)
+    {
+        var id = await ArrangeAllocationAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var (_, _, line) = await ShipInContextAsync(db, id);
+            switch (scenario)
+            {
+                case "snapshot-null-deviating-no-reason": line.SourceLotNumber = null; line.LotNumber = "LOT-ANDERS"; line.LotDeviationReason = null; break;
+                case "snapshot-forged-to-actual-lot": line.SourceLotNumber = "LOT-ANDERS"; line.LotNumber = "LOT-ANDERS"; line.LotDeviationReason = null; break;
+                case "snapshot-null-same-lot": line.SourceLotNumber = null; break;
+                case "wrong-commitment": line.SupplyCommitmentId = _seed.DirectTradeCommitmentId + 1; break;
+                case "wrong-vendor": line.VendorId = _vendorId + 1000; break;
+            }
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+        Assert.Equal(("Active", 0), ((await SnapshotAsync(id)).Status, (await SnapshotAsync(id)).Shipments));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Without_A_Real_Source_Lot_The_Actual_Lot_Suffices_But_A_Forged_Source_Lot_Is_Rejected(bool async)
+    {
+        _seed = await SalesTestData.SeedAsync(_factory);
+        (_orderId, _boxLine, _colliLine) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity: 500m, colliQuantity: 500m);
+        int id;
+        await using (var db = _factory.CreateContext())
+        {
+            _vendorId = (await db.SupplyCommitments.AsNoTracking().SingleAsync(c => c.Id == _seed.DirectTradeCommitmentId)).VendorId;
+            var allocation = new StockReservation { RequestId = Guid.NewGuid(), SalesOrderLineId = _colliLine, SupplyCommitmentLineId = _seed.DirectTradeColliSourceLine, Quantity = 5m, Unit = "colli", Source = "DirectTrade", Status = "Active" };
+            db.StockReservations.Add(allocation);
+            await db.SaveChangesAsync();
+            id = allocation.Id;
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var (_, _, line) = await ShipInContextAsync(db, id);
+            line.SourceLotNumber = "LOT-VERZONNEN";
+            line.LotNumber = "LOT-VERZONNEN";
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var (_, _, line) = await ShipInContextAsync(db, id);
+            line.SourceLotNumber = null;
+            line.LotNumber = "LOT-KOLLI-1";
+            line.LotDeviationReason = null;
+            await SaveAsync(db, async);
+        }
+        await using var verify = _factory.CreateContext();
+        Assert.Equal("Consumed", (await verify.StockReservations.AsNoTracking().SingleAsync(r => r.Id == id)).Status);
+    }
+
+    // Stamgegevens mogen na verzending wijzigen; de historische verzendregel blijft gelijk en de guard controleert haar niet opnieuw.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Master_Data_Changes_After_Shipping_Are_Allowed_And_Leave_The_Historical_Line_Intact(bool async)
+    {
+        var id = await ArrangeAllocationAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            await ShipInContextAsync(db, id);
+            await SaveAsync(db, async);
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.SupplyCommitmentLines.FindAsync(_seed.DirectTradeSourceLine))!.LotNumber = "LOT-GEWIJZIGD";
+            var commitment = await db.SupplyCommitments.Include(c => c.Vendor).SingleAsync(c => c.Id == _seed.DirectTradeCommitmentId);
+            commitment.Vendor.Name = "Supplier B (hernoemd)";
+            commitment.Origin = "Chili";
+            await SaveAsync(db, async);
+        }
+        await using var verify = _factory.CreateContext();
+        var line = await verify.DirectTradeShipmentLines.AsNoTracking().SingleAsync();
+        Assert.Equal(("LOT-DT-SRC", "LOT-DT-SRC", "Supplier B", "Peru"), (line.LotNumber, line.SourceLotNumber, line.VendorNameSnapshot, line.OriginSnapshot));
+    }
 }
+
