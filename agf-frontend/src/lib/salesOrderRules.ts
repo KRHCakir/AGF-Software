@@ -401,3 +401,8 @@ export function validateShippedOn(value: string, today: string): BuildResult<str
     return { ok: true, value };
 }
 
+// Teruggenomen DirectTrade-verzending: historie, telt niet meer als verzonden of als bezette capaciteit.
+export function isCorrectedAllocation(reservation: { source: string; status: string }): boolean {
+    return reservation.source === 'DirectTrade' && reservation.status === 'Corrected';
+}
+

@@ -202,6 +202,8 @@ export interface StockReservation {
     shippedOn: string | null;
     shippedNetWeightKg: number | null;
     shippedLotNumber: string | null;
+    // Alleen bij een teruggenomen DirectTrade-verzending (Corrected); verzenddatum, kg en partij hierboven blijven historie.
+    directTradeCorrectionId: number | null;
     status: ReservationStatus;
     createdAt: string;
     releasedAt: string | null;
@@ -320,6 +322,7 @@ export function isStockReservation(value: unknown): value is StockReservation {
         && isNullableString(value.shippedOn)
         && (value.shippedNetWeightKg === null || isNumber(value.shippedNetWeightKg))
         && isNullableString(value.shippedLotNumber)
+        && (value.directTradeCorrectionId === null || isNumber(value.directTradeCorrectionId))
         && isReservationStatus(value.status)
         && isString(value.createdAt)
         && isNullableString(value.releasedAt)
@@ -563,7 +566,57 @@ export interface DirectTradeShipment {
     recordedAt: string;
     // Altijd false: het systeem kent (nog) geen afleverbevestiging.
     deliveryRecorded: boolean;
+    // Gevuld zodra de verzending administratief is teruggenomen; de verzending zelf blijft ongewijzigd.
+    correction: DirectTradeShipmentCorrection | null;
     lines: DirectTradeShipmentLine[];
+}
+
+// Terugnemen van een volledige DirectTrade-verzending die niet heeft plaatsgevonden: alle toewijzingen met hun verwachte versies.
+export interface CorrectDirectTradeShipmentRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    actorReference: string;
+    reason: string;
+    shipmentDidNotTakePlace: true;
+    lines: CreateSalesDispatchLineRequest[];
+}
+
+export interface DirectTradeShipmentCorrectionLine {
+    id: number;
+    directTradeShipmentLineId: number;
+    stockReservationId: number;
+    supplyCommitmentLineId: number;
+    salesOrderLineId: number;
+    quantity: number;
+    unit: PackageUnit;
+    netWeightKg: number;
+}
+
+export interface DirectTradeShipmentCorrection {
+    id: number;
+    requestId: string;
+    directTradeShipmentId: number;
+    salesOrderId: number;
+    reason: string;
+    actorReference: string;
+    shipmentDidNotTakePlaceConfirmed: boolean;
+    // Taalonafhankelijke code en vaste (Nederlandse) verklaringstekst zoals vastgelegd.
+    confirmationCode: string;
+    confirmationStatement: string;
+    correctedAt: string;
+    lines: DirectTradeShipmentCorrectionLine[];
+}
+
+function isDirectTradeShipmentCorrectionLine(value: unknown): value is DirectTradeShipmentCorrectionLine {
+    return isObject(value) && isNumber(value.id) && isNumber(value.directTradeShipmentLineId) && isNumber(value.stockReservationId)
+        && isNumber(value.supplyCommitmentLineId) && isNumber(value.salesOrderLineId) && isNumber(value.quantity) && isUnit(value.unit) && isNumber(value.netWeightKg);
+}
+
+export function isDirectTradeShipmentCorrection(value: unknown): value is DirectTradeShipmentCorrection {
+    return isObject(value) && isNumber(value.id) && isString(value.requestId) && isNumber(value.directTradeShipmentId) && isNumber(value.salesOrderId)
+        && isString(value.reason) && isString(value.actorReference) && value.shipmentDidNotTakePlaceConfirmed === true
+        && isString(value.confirmationCode) && isString(value.confirmationStatement) && isString(value.correctedAt)
+        && isArrayOf(value.lines, isDirectTradeShipmentCorrectionLine);
 }
 
 function isDirectTradeShipmentLine(value: unknown): value is DirectTradeShipmentLine {
@@ -581,6 +634,7 @@ export function isDirectTradeShipment(value: unknown): value is DirectTradeShipm
         && isNumber(value.id) && isString(value.requestId) && isNumber(value.salesOrderId) && isNumber(value.customerId)
         && isString(value.customerName) && isString(value.shippedOn) && isNullableString(value.reference)
         && isString(value.actorReference) && isString(value.recordedAt) && value.deliveryRecorded === false
+        && (value.correction === null || isDirectTradeShipmentCorrection(value.correction))
         && isArrayOf(value.lines, isDirectTradeShipmentLine);
 }
 

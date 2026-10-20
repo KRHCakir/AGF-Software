@@ -16,7 +16,7 @@ const allocation = (id: number, status: 'Active' | 'Consumed', lot: string | nul
     warehouseLocation: null, lotNumber: lot, quantity: 20, unit: 'box', netWeightKg: null, source: 'DirectTrade',
     supplyCommitmentLineId: 11, supplyCommitmentId: 10, vendorName: 'Example Supplier', origin: 'Peru', destination: 'Rotterdam', expectedAt: '2026-10-27T22:00:00.000Z',
     directTradeShipmentId: status === 'Consumed' ? 5 : null, shippedOn: status === 'Consumed' ? '2026-10-19' : null,
-    shippedNetWeightKg: status === 'Consumed' ? 81.4 : null, shippedLotNumber: status === 'Consumed' ? 'LOT-DT-SRC' : null,
+    shippedNetWeightKg: status === 'Consumed' ? 81.4 : null, shippedLotNumber: status === 'Consumed' ? 'LOT-DT-SRC' : null, directTradeCorrectionId: null,
     status, createdAt: '2026-10-20T08:00:00.000Z', releasedAt: null, releaseReason: null, version, contentQualityStatus: null, onHold: false,
     consumedAt: status === 'Consumed' ? '2026-10-20T09:00:00.000Z' : null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null,
 });
@@ -38,7 +38,7 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
 
 const shipmentResponse = (requestId: string) => ({
     id: 5, requestId, salesOrderId: 4, customerId: 6, customerName: 'SMOKE DT klant', shippedOn: '2026-10-19', reference: 'CMR-1', actorReference: 'office-1',
-    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: false,
+    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: false, correction: null,
     lines: [{ id: 1, stockReservationId: 21, salesOrderLineId: 7, supplyCommitmentLineId: 11, supplyCommitmentId: 10, vendorId: 1, vendorName: 'Example Supplier',
         origin: 'Peru', destination: 'Rotterdam', productName: 'Avocado', productVariantName: 'Hass', quantity: 20, unit: 'box', netWeightKg: 81.4,
         lotNumber: 'LOT-DT-SRC', sourceLotNumber: 'LOT-DT-SRC', lotDeviationReason: null }],

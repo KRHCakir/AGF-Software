@@ -15,9 +15,11 @@ namespace AgfAdmin.Controllers
         private readonly ISalesDispatchCorrectionService _corrections;
         private readonly IDirectTradeAllocationService _allocations;
         private readonly IDirectTradeShipmentService _shipments;
+        private readonly IDirectTradeShipmentCorrectionService _shipmentCorrections;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections)
         {
+            _shipmentCorrections = shipmentCorrections;
             _shipments = shipments;
             _orders = orders;
             _reservations = reservations;
@@ -94,6 +96,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> ShipDirectTrade(int id, [FromBody] CreateDirectTradeShipmentDto request)
         {
             var result = await _shipments.ShipAsync(id, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        // Volledige DirectTrade-verzending administratief terugnemen (heeft niet plaatsgevonden, door de gebruiker verklaard).
+        [HttpPost("{id:int}/direct-trade-shipments/{shipmentId:int}/corrections")]
+        public async Task<IActionResult> CorrectDirectTradeShipment(int id, int shipmentId, [FromBody] CorrectDirectTradeShipmentDto request)
+        {
+            var result = await _shipmentCorrections.CorrectAsync(id, shipmentId, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
 

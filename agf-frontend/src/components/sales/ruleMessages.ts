@@ -23,6 +23,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
         case 'required':
             return error.field === 'actorReference' ? t('supply_error_actor_required')
                 : error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
+                : error.field === 'shipmentDidNotTakePlace' ? t('sales_dt_correct_confirm_required')
                 : error.field === 'acknowledgeExpectedSupply' ? t('sales_allocate_acknowledge_required')
                 : error.field.endsWith('.lotDeviationReason') ? t('sales_ship_lot_reason_required')
                 : error.field.endsWith('.lotNumber') ? t('sales_ship_lot_required')

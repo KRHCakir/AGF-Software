@@ -1,6 +1,6 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
-import type { CancelSalesOrderRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
+import type { CancelSalesOrderRequest, CorrectDirectTradeShipmentRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
@@ -77,6 +77,16 @@ export interface ShipDirectTradeCommand extends CommandMeta {
     display: { customerName: string; lineCount: number };
 }
 
+// Terugnemen van een DirectTrade-verzending: ordercommando, net als de magazijncorrectie.
+export interface CorrectDtShipmentCommand extends CommandMeta {
+    kind: 'correct-dt-shipment';
+    key: string;
+    orderId: number;
+    shipmentId: number;
+    payload: CorrectDirectTradeShipmentRequest;
+    display: { customerName: string; lineCount: number };
+}
+
 export interface CorrectDispatchCommand extends CommandMeta {
     kind: 'correct-dispatch';
     key: string;
@@ -94,7 +104,7 @@ export interface CreateCustomerCommand extends CommandMeta {
     display: { name: string };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDispatchCommand | CreateCustomerCommand;
+export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | CorrectDispatchCommand | CreateCustomerCommand;
 
 // Regelcommando's: horen bij één orderregel en blokkeren elkaar daar.
 const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'allocate-direct-trade', 'release'];
@@ -132,6 +142,10 @@ export function shipDirectTradeKey(orderId: number): string {
     return `ship-direct-trade:${orderId}`;
 }
 
+export function correctDtShipmentKey(orderId: number, shipmentId: number): string {
+    return `correct-dt-shipment:${orderId}:${shipmentId}`;
+}
+
 export function correctDispatchKey(orderId: number, dispatchId: number): string {
     return `correct-dispatch:${orderId}:${dispatchId}`;
 }
@@ -152,6 +166,7 @@ export type CommandScope =
     | { kind: 'cancel-order'; orderId: number }
     | { kind: 'dispatch'; orderId: number }
     | { kind: 'ship-direct-trade'; orderId: number }
+    | { kind: 'correct-dt-shipment'; orderId: number }
     | { kind: 'correct-dispatch'; orderId: number };
 
 // Een nieuw commando mag een onafgerond commando op dezelfde plaats nooit vervangen: eerst de uitkomst afwachten.
@@ -164,7 +179,7 @@ export function blockedBy(commands: PendingCommands, scope: CommandScope): Pendi
     if (scope.kind === 'create-customer') {
         return commands[CREATE_CUSTOMER_KEY] ?? null;
     }
-    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dispatch') {
+    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dt-shipment' || scope.kind === 'correct-dispatch') {
         return commandsForOrder(commands, scope.orderId)[0] ?? null;
     }
     // Regelcommando's worden ook geblokkeerd door elk ordercommando (annuleren, verzenden, verzending corrigeren).
@@ -300,6 +315,20 @@ function isShipDirectTradePayload(value: unknown, requestId: string): value is C
         && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
 }
 
+// De verklaring moet letterlijk true zijn; reden verplicht; volledige, unieke regelset met versies.
+function isCorrectDtShipmentPayload(value: unknown, requestId: string): value is CorrectDirectTradeShipmentRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isNonNegativeInt(value.expectedOrderVersion)
+        && isText(value.actorReference)
+        && isText(value.reason) && (value.reason as string).length <= 500
+        && value.shipmentDidNotTakePlace === true
+        && Array.isArray(value.lines)
+        && value.lines.length > 0
+        && value.lines.every((line: unknown) => isRecord(line) && isPositiveInt(line.stockReservationId) && isNonNegativeInt(line.expectedReservationVersion))
+        && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
+}
+
 function isCorrectDispatchPayload(value: unknown, requestId: string): value is CorrectSalesDispatchRequest {
     return isRecord(value)
         && value.requestId === requestId
@@ -380,6 +409,11 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
             return isPositiveInt(value.orderId)
                 && value.key === shipDirectTradeKey(value.orderId)
                 && isShipDirectTradePayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'correct-dt-shipment':
+            return isPositiveInt(value.orderId) && isPositiveInt(value.shipmentId)
+                && value.key === correctDtShipmentKey(value.orderId, value.shipmentId)
+                && isCorrectDtShipmentPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
         case 'create-customer':
             return value.key === CREATE_CUSTOMER_KEY

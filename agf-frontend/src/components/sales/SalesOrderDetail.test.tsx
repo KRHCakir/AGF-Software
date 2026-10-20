@@ -19,7 +19,7 @@ const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed' | 'C
     releaseReason: status === 'Released' ? 'eerder' : null, version: status === 'Active' ? 0 : status === 'Corrected' ? 2 : 1, contentQualityStatus: 'Approved', onHold: false,
     consumedAt: status === 'Consumed' || status === 'Corrected' ? '2026-10-19T13:00:00.000Z' : null,
     dispatchId: status === 'Consumed' || status === 'Corrected' ? 9 : null, dispatchReference: status === 'Consumed' || status === 'Corrected' ? 'VRB-9' : null,
-    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
 });
 
 // Verzending 9 met de opgegeven reserveringen; `corrected` vult de correctie zodat de historie beide toont.

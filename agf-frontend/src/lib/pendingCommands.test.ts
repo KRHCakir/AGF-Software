@@ -4,6 +4,7 @@ import {
     CREATE_ORDER_KEY,
     allocateKey,
     blockedBy,
+    correctDtShipmentKey,
     shipDirectTradeKey,
     CREATE_CUSTOMER_KEY,
     cancelKey,
@@ -406,6 +407,46 @@ describe('DirectTrade shipment commands', () => {
             ['date missing', (copy) => { delete payloadOf(copy).shippedOn; }],
             ['duplicate lines', (copy) => { payloadOf(copy).lines = [lineOf(copy), lineOf(copy)]; }],
             ['key mismatch', (copy) => { copy.key = shipDirectTradeKey(5); }],
+        ];
+        for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
+    });
+});
+
+describe('DirectTrade shipment correction commands', () => {
+    const correctDt = (orderId: number, shipmentId: number, requestId = 'c-dt'): PendingCommand => ({
+        kind: 'correct-dt-shipment', key: correctDtShipmentKey(orderId, shipmentId), orderId, shipmentId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T11:00:00.000Z',
+        payload: { requestId, expectedOrderVersion: 4, actorReference: 'office-1', reason: 'Vervoerder heeft niet geladen', shipmentDidNotTakePlace: true,
+            lines: [{ stockReservationId: 21, expectedReservationVersion: 1 }, { stockReservationId: 22, expectedReservationVersion: 1 }] },
+        display: { customerName: 'Customer T', lineCount: 2 },
+    });
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+
+    test('a take-back is an order command with its own key per shipment', () => {
+        assert.equal(correctDtShipmentKey(4, 7), 'correct-dt-shipment:4:7');
+        const commands = toMap(correctDt(4, 7));
+        assert.equal(blockedBy(commands, { kind: 'line', orderId: 4, lineId: 1 })?.requestId, 'c-dt');
+        assert.equal(blockedBy(commands, { kind: 'cancel-order', orderId: 4 })?.requestId, 'c-dt');
+        assert.equal(blockedBy(commands, { kind: 'ship-direct-trade', orderId: 4 })?.requestId, 'c-dt');
+        assert.equal(blockedBy(commands, { kind: 'correct-dt-shipment', orderId: 5 }), null);
+        assert.equal(blockedBy(toMap(reserve(4, 1)), { kind: 'correct-dt-shipment', orderId: 4 })?.requestId, 'r-1');
+    });
+
+    test('a stored take-back is restored only with the literal statement, a reason and a unique full line set', () => {
+        const command = correctDt(4, 7);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(command))), toMap(command));
+        const rejected: [string, (copy: Record<string, unknown>) => void][] = [
+            ['statement false', (copy) => { payloadOf(copy).shipmentDidNotTakePlace = false; }],
+            ['statement missing', (copy) => { delete payloadOf(copy).shipmentDidNotTakePlace; }],
+            ['statement as string', (copy) => { payloadOf(copy).shipmentDidNotTakePlace = 'true'; }],
+            ['reason blank', (copy) => { payloadOf(copy).reason = ' '; }],
+            ['no lines', (copy) => { payloadOf(copy).lines = []; }],
+            ['duplicate lines', (copy) => { const lines = payloadOf(copy).lines as unknown[]; payloadOf(copy).lines = [lines[0], lines[0]]; }],
+            ['key mismatch', (copy) => { copy.key = correctDtShipmentKey(4, 8); }],
         ];
         for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
     });

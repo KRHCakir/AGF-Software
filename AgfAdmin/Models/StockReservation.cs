@@ -43,6 +43,8 @@ namespace AgfAdmin.Models
         public SalesDispatchLine DispatchLine { get; set; }
         // Alleen bij een verbruikte DirectTrade-toewijzing: de DirectTrade-verzendregel (nooit een magazijnverzendregel).
         public DirectTradeShipmentLine DirectTradeShipmentLine { get; set; }
+        // Alleen bij een teruggenomen DirectTrade-verzending (Corrected): de DirectTrade-correctieregel (nooit een magazijncorrectieregel).
+        public DirectTradeShipmentCorrectionLine DirectTradeCorrectionLine { get; set; }
 
         // Gezet bij Corrected (eindtoestand na een verzendcorrectie; database-check). Telt niet als gereserveerd of verzonden.
         public DateTime? CorrectedAt { get; set; }

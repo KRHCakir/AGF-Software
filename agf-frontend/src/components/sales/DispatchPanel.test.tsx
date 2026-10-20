@@ -18,7 +18,7 @@ const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed', onH
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
     releaseReason: status === 'Released' ? 'eerder' : null, version, contentQualityStatus: onHold ? 'Blocked' : 'Approved', onHold,
     consumedAt: status === 'Consumed' ? '2026-10-19T13:00:00.000Z' : null, dispatchId: status === 'Consumed' ? 9 : null, dispatchReference: status === 'Consumed' ? 'VRB-9' : null,
-    correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
 });
 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {

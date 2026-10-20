@@ -25,7 +25,7 @@ public class SalesOrdersControllerTests : IDisposable
     private async Task<IActionResult> Orders(Func<SalesOrdersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20)))));
+        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DirectTradeShipmentCorrectionService(db)));
     }
 
     private async Task<IActionResult> Reservations(Func<StockReservationsController, Task<IActionResult>> action)
@@ -326,4 +326,28 @@ public class SalesOrdersControllerTests : IDisposable
         Assert.Equal(shipment.Id, Assert.Single(list).Id);
         Assert.IsType<NotFoundObjectResult>(await Orders(c => c.GetDirectTradeShipments(999_999)));
     }
+
+    [Fact]
+    public async Task DirectTrade_Shipment_Correction_Endpoint_Maps_201_200_400_404_And_409()
+    {
+        var order = await CreatedOrderAsync();
+        var line = order.Lines[0];
+        var allocation = await DirectTradeTestFlow.AllocateAsync(_factory, order.Id, line.Id, _seed.DirectTradeSourceLine, 5m);
+        var shipment = await DirectTradeTestFlow.ShipAsync(_factory, order.Id, (allocation, 20.2m, "LOT-DT-SRC"));
+        var version = await DirectTradeTestFlow.OrderVersionAsync(_factory, order.Id);
+
+        Assert.Contains("shipmentDidNotTakePlace", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(
+            await Orders(c => c.CorrectDirectTradeShipment(order.Id, shipment.Id, DirectTradeTestFlow.Correction(version, shipment, confirmed: false)))).Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.CorrectDirectTradeShipment(order.Id, 999_999, DirectTradeTestFlow.Correction(version, shipment))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.CorrectDirectTradeShipment(order.Id, shipment.Id, DirectTradeTestFlow.Correction(version + 1, shipment))));
+        var request = DirectTradeTestFlow.Correction(version, shipment);
+        var created = Assert.IsType<CreatedAtActionResult>(await Orders(c => c.CorrectDirectTradeShipment(order.Id, shipment.Id, request)));
+        var correction = Assert.IsType<DirectTradeShipmentCorrectionDto>(created.Value);
+        Assert.Equal(("SHIPMENT_DID_NOT_TAKE_PLACE", "Deze geregistreerde verzending heeft niet plaatsgevonden."), (correction.ConfirmationCode, correction.ConfirmationStatement));
+        Assert.Equal(correction.Id, Assert.IsType<DirectTradeShipmentCorrectionDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.CorrectDirectTradeShipment(order.Id, shipment.Id, request))).Value).Id);
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.CorrectDirectTradeShipment(order.Id, shipment.Id, DirectTradeTestFlow.Correction(version, shipment))));
+        var list = Assert.IsAssignableFrom<IReadOnlyList<DirectTradeShipmentDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetDirectTradeShipments(order.Id))).Value);
+        Assert.Equal(correction.Id, Assert.Single(list).Correction!.Id);
+    }
 }
+

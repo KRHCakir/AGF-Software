@@ -123,6 +123,9 @@ namespace AgfAdmin.DTOs
         public DateOnly? ShippedOn { get; set; }
         public decimal? ShippedNetWeightKg { get; set; }
         public string ShippedLotNumber { get; set; }
+        // Alleen bij een teruggenomen DirectTrade-verzending (Corrected): de DirectTrade-correctie. Verzenddatum, kg en partij hierboven
+        // blijven als historie zichtbaar; de hoeveelheid telt niet meer als verzonden of als bezette broncapaciteit.
+        public int? DirectTradeCorrectionId { get; set; }
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ReleasedAt { get; set; }
@@ -347,7 +350,48 @@ namespace AgfAdmin.DTOs
         public DateTime RecordedAt { get; set; }
         // Het systeem kent geen afleverbevestiging; dit veld zegt alleen dat er (nog) geen is vastgelegd.
         public bool DeliveryRecorded => false;
+        // Gevuld zodra de verzending administratief is teruggenomen; de verzending zelf blijft ongewijzigd.
+        public DirectTradeShipmentCorrectionDto Correction { get; set; }
         public List<DirectTradeShipmentLineDto> Lines { get; set; } = new();
+    }
+
+    // Terugnemen van een volledige DirectTrade-verzending die niet heeft plaatsgevonden. Alle toewijzingen van de verzending met hun
+    // verwachte versies; de verklaring is verplicht (shipmentDidNotTakePlace = true).
+    public sealed class CorrectDirectTradeShipmentDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+        public bool? ShipmentDidNotTakePlace { get; set; }
+        public List<CreateSalesDispatchLineDto> Lines { get; set; }
+    }
+
+    public sealed class DirectTradeShipmentCorrectionDto
+    {
+        public int Id { get; set; }
+        public Guid RequestId { get; set; }
+        public int DirectTradeShipmentId { get; set; }
+        public int SalesOrderId { get; set; }
+        public string Reason { get; set; }
+        public string ActorReference { get; set; }
+        public bool ShipmentDidNotTakePlaceConfirmed { get; set; }
+        public string ConfirmationCode { get; set; }
+        public string ConfirmationStatement { get; set; }
+        public DateTime CorrectedAt { get; set; }
+        public List<DirectTradeShipmentCorrectionLineDto> Lines { get; set; } = new();
+    }
+
+    public sealed class DirectTradeShipmentCorrectionLineDto
+    {
+        public int Id { get; set; }
+        public int DirectTradeShipmentLineId { get; set; }
+        public int StockReservationId { get; set; }
+        public int SupplyCommitmentLineId { get; set; }
+        public int SalesOrderLineId { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public decimal NetWeightKg { get; set; }
     }
 
     public sealed class DirectTradeShipmentLineDto

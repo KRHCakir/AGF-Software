@@ -7,8 +7,10 @@ import {
     CorrectSalesDispatchRequest,
     CreateSalesDispatchRequest,
     CreateDirectTradeAllocationRequest,
+    CorrectDirectTradeShipmentRequest,
     CreateDirectTradeShipmentRequest,
     DirectTradeShipment,
+    DirectTradeShipmentCorrection,
     CreateSalesOrderRequest,
     CreateStockReservationRequest,
     DirectTradeSupplyLine,
@@ -20,6 +22,7 @@ import {
     SalesOrderAuditEvent,
     StockReservation,
     isDirectTradeShipment,
+    isDirectTradeShipmentCorrection,
     isDirectTradeShipmentList,
     isDirectTradeSupplyList,
     isReservableStockList,
@@ -107,6 +110,15 @@ export async function createDirectTradeShipment(orderId: number, request: Create
     const { status, json } = await postJson(`/sales-orders/${orderId}/direct-trade-shipments`, request, signal);
     if (!isDirectTradeShipment(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij de DirectTrade-verzending.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+// Volledige DirectTrade-verzending terugnemen: 201 = nieuw, 200 = exact dezelfde opdracht was al verwerkt (nooit dubbel teruggenomen); 409 = herladen.
+export async function correctDirectTradeShipment(orderId: number, shipmentId: number, request: CorrectDirectTradeShipmentRequest, signal?: AbortSignal): Promise<SaveResult<DirectTradeShipmentCorrection>> {
+    const { status, json } = await postJson(`/sales-orders/${orderId}/direct-trade-shipments/${shipmentId}/corrections`, request, signal);
+    if (!isDirectTradeShipmentCorrection(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het terugnemen van de DirectTrade-verzending.');
     }
     return { value: json, replayed: status === 200 };
 }

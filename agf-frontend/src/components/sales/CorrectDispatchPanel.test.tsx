@@ -17,7 +17,7 @@ const reservation = (id: number, status: 'Active' | 'Consumed' | 'Corrected', ve
     warehouseLocation: null, lotNumber: `LOT-${id}`, quantity: 5, unit: 'box', netWeightKg: 20, source: 'Physical', status,
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: null, releaseReason: null, version, contentQualityStatus: 'Approved', onHold: false,
     consumedAt: status === 'Active' ? null : '2026-10-19T13:00:00.000Z', dispatchId: status === 'Active' ? null : 9, dispatchReference: status === 'Active' ? null : 'VRB-9',
-    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
 });
 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {

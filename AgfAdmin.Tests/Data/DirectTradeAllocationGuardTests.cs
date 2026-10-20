@@ -170,8 +170,8 @@ public class DirectTradeAllocationGuardTests : IDisposable
     [Theory]
     [InlineData("Consumed", false, "must be shipped by exactly one new DirectTrade shipment line")]
     [InlineData("Consumed", true, "must be shipped by exactly one new DirectTrade shipment line")]
-    [InlineData("Corrected", false, "only be Active, Released or Consumed")]
-    [InlineData("Corrected", true, "only be Active, Released or Consumed")]
+    [InlineData("Corrected", false, "Only a shipped (Consumed) DirectTrade allocation can become Corrected")]
+    [InlineData("Corrected", true, "Only a shipped (Consumed) DirectTrade allocation can become Corrected")]
     public async Task An_Allocation_Can_Never_Become_Consumed_Without_A_Shipment_Or_Corrected(string status, bool async, string message)
     {
         await ArrangeAsync();
@@ -217,7 +217,6 @@ public class DirectTradeAllocationGuardTests : IDisposable
     [InlineData("Physical", "Active", "content", "'0'")]     // Physical met kg 0
     [InlineData("DirectTrade", "Active", "content", "NULL")] // DirectTrade op inhoud
     [InlineData("DirectTrade", "Active", "NULL", "'4.0'")]   // DirectTrade met kg
-    [InlineData("DirectTrade", "Corrected", "NULL", "NULL")] // DirectTrade gecorrigeerd (correctieflow bestaat nog niet)
     public async Task Database_Check_Rejects_Null_Unknown_And_Mismatched_Sources(string source, string status, string contentLine, string kg)
     {
         await ArrangeAsync();
@@ -229,10 +228,7 @@ public class DirectTradeAllocationGuardTests : IDisposable
 
         // Een NULL bron strandt al op NOT NULL; elke andere combinatie op de check zelf.
         Assert.Contains("constraint failed", exception.Message);
-        if (status == "Corrected")
-        {
-            Assert.Contains("CK_StockReservations_DirectTrade_StatusAllowed", exception.Message);
-        }
+
         Assert.Equal(0, await db.StockReservations.CountAsync(r => r.SalesOrderLineId != null));
     }
 
@@ -245,7 +241,9 @@ public class DirectTradeAllocationGuardTests : IDisposable
         Assert.Equal(1, await RawInsertAsync("Physical", "Active", _seed.ApprovedBox.ToString(), "'4.0'", sourceLine: warehouseSource));
         Assert.Equal(1, await RawInsertAsync("DirectTrade", "Active", "NULL", "NULL"));
         Assert.Equal(1, await RawInsertAsync("DirectTrade", "Released", "NULL", "NULL"));
-        Assert.Equal(3, await db.StockReservations.CountAsync(r => r.SalesOrderLineId != null));
+        // Sinds de DirectTrade-verzendcorrectie: Corrected is een toegestane (terminale) DirectTrade-status in de database.
+        Assert.Equal(1, await RawInsertAsync("DirectTrade", "Corrected", "NULL", "NULL"));
+        Assert.Equal(4, await db.StockReservations.CountAsync(r => r.SalesOrderLineId != null));
     }
 
     // Regressie (review PR #30): vrijgeven, de vrijgekomen capaciteit elders toewijzen en daarna de oude toewijzing reactiveren

@@ -4,10 +4,10 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { blockedBy, cancelKey, correctDispatchKey, dispatchKey, shipDirectTradeKey } from '../../lib/pendingCommands';
-import { isDispatchable, isShippableAllocation, isShippedAllocation, orderProgress } from '../../lib/salesOrderRules';
+import { blockedBy, cancelKey, correctDispatchKey, correctDtShipmentKey, dispatchKey, shipDirectTradeKey } from '../../lib/pendingCommands';
+import { isCorrectedAllocation, isDispatchable, isShippableAllocation, isShippedAllocation, orderProgress } from '../../lib/salesOrderRules';
 import { SaveResult } from '../../services/supplyService';
-import { DirectTradeShipment, SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
+import { DirectTradeShipment, DirectTradeShipmentCorrection, SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import CancelOrderPanel from './CancelOrderPanel';
 import CorrectDispatchPanel from './CorrectDispatchPanel';
@@ -15,6 +15,7 @@ import DispatchList from './DispatchList';
 import DispatchPanel from './DispatchPanel';
 import DirectTradeShipmentList from './DirectTradeShipmentList';
 import DirectTradeShipmentPanel from './DirectTradeShipmentPanel';
+import DirectTradeShipmentCorrectionPanel from './DirectTradeShipmentCorrectionPanel';
 import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
@@ -71,7 +72,18 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
     const dtBlocker = blockedBy(commands, { kind: 'ship-direct-trade', orderId: order.id });
     const showDtShipment = pendingDtShipment || (!readOnly && shippingDt);
     const hasShippableAllocation = order.lines.some((line) => line.reservations.some((reservation) => isShippableAllocation(reservation)));
-    const hasDtShipments = order.lines.some((line) => line.reservations.some((reservation) => isShippedAllocation(reservation)));
+    // De DirectTrade-historie blijft zichtbaar na terugnemen (Corrected), niet alleen zolang iets verzonden is.
+    const hasDtShipments = order.lines.some((line) => line.reservations.some((reservation) => isShippedAllocation(reservation) || isCorrectedAllocation(reservation)));
+    // Terugnemen van een DirectTrade-verzending: paneel per verzending; een onafgerond commando opent het paneel ook na verversen.
+    const [dtShipments, setDtShipments] = useState<DirectTradeShipment[]>([]);
+    const [dtCorrectingId, setDtCorrectingId] = useState<number | null>(null);
+    const [dtCorrectionNotice, setDtCorrectionNotice] = useState<SaveResult<DirectTradeShipmentCorrection> | null>(null);
+    const [dtCorrectionDecisionToken, setDtCorrectionDecisionToken] = useState(0);
+    const onDtShipmentsLoaded = useCallback((loaded: DirectTradeShipment[]) => setDtShipments(loaded), []);
+    const pendingDtCorrection = dtShipments.find((shipment) => commands[correctDtShipmentKey(order.id, shipment.id)] !== undefined) ?? null;
+    const dtCorrecting = pendingDtCorrection ?? dtShipments.find((shipment) => shipment.id === dtCorrectingId) ?? null;
+    const dtCorrectionBlocker = blockedBy(commands, { kind: 'correct-dt-shipment', orderId: order.id });
+    const canStartDtCorrection = !readOnly && dtCorrectionBlocker === null;
     const hasUncorrectedConsumption = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
     // Verzendcorrectie: paneel per verzending; een onafgerond correctiecommando opent het paneel ook na verversen.
     const [dispatches, setDispatches] = useState<SalesDispatch[]>([]);
@@ -125,6 +137,21 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
         setHistoryToken((n) => n + 1);
         setDtToken((n) => n + 1);
         await onOrderChanged();
+    };
+
+    const onDtCorrected = async (saved: SaveResult<DirectTradeShipmentCorrection>) => {
+        setDtCorrectingId(null);
+        setDtCorrectionNotice(saved);
+        setHistoryToken((n) => n + 1);
+        setDtToken((n) => n + 1);
+        await onOrderChanged();
+    };
+
+    const reloadForNewDtCorrectionDecision = async () => {
+        if (await onOrderChanged()) {
+            setDtToken((n) => n + 1);
+            setDtCorrectionDecisionToken((n) => n + 1);
+        }
     };
 
     const reloadForNewDtDecision = async () => {
@@ -281,10 +308,24 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     onReload={() => void reloadForNewDtDecision()} onClose={() => setShippingDt(false)} />
             )}
 
-            {(hasDtShipments || dtNotice) && (
+            {dtCorrectionNotice && (
+                <div role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    <p className="font-medium"><span aria-hidden="true">↺ </span>{t('sales_notice_dt_corrected', { id: String(dtCorrectionNotice.value.directTradeShipmentId), count: String(dtCorrectionNotice.value.lines.length) })}</p>
+                    {dtCorrectionNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
+                    <p className="mt-1">{t('sales_notice_dt_corrected_next')}</p>
+                </div>
+            )}
+
+            {dtCorrecting !== null && (
+                <DirectTradeShipmentCorrectionPanel key={`${dtCorrecting.id}:${dtCorrectionDecisionToken}`} order={order} shipment={dtCorrecting} actor={actor}
+                    onCorrected={onDtCorrected} onReload={() => void reloadForNewDtCorrectionDecision()} onClose={() => setDtCorrectingId(null)} />
+            )}
+
+            {(hasDtShipments || dtNotice || dtCorrectionNotice) && (
                 <section aria-labelledby={`dt-shipments-${order.id}`} className="rounded-md border border-violet-300 bg-white px-4 py-3">
                     <h3 id={`dt-shipments-${order.id}`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-900">{t('sales_ship_list_title')}</h3>
-                    <DirectTradeShipmentList orderId={order.id} token={dtToken} />
+                    <DirectTradeShipmentList orderId={order.id} token={dtToken} onShipments={onDtShipmentsLoaded} canCorrect={canStartDtCorrection}
+                        correctingId={dtCorrecting?.id ?? null} onCorrect={(shipment) => { setDtCorrectionNotice(null); setDtCorrectingId(shipment.id); }} />
                 </section>
             )}
 

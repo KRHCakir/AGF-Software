@@ -437,6 +437,7 @@ namespace AgfAdmin.Services
                 .Include(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
                 .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch)
                 .Include(r => r.DirectTradeShipmentLine).ThenInclude(l => l.DirectTradeShipment)
+                .Include(r => r.DirectTradeCorrectionLine)
                 .SingleAsync(r => r.Id == reservationId, cancellationToken);
             return ToDto(reservation, reservation.SalesOrderLine?.SalesOrderId ?? 0);
         }
@@ -467,6 +468,7 @@ namespace AgfAdmin.Services
             ShippedOn = reservation.DirectTradeShipmentLine?.DirectTradeShipment?.ShippedOn,
             ShippedNetWeightKg = reservation.DirectTradeShipmentLine?.NetWeightKg,
             ShippedLotNumber = reservation.DirectTradeShipmentLine?.LotNumber,
+            DirectTradeCorrectionId = reservation.DirectTradeCorrectionLine?.DirectTradeShipmentCorrectionId,
             Status = reservation.Status,
             CreatedAt = DateTime.SpecifyKind(reservation.CreatedAt, DateTimeKind.Utc),
             ReleasedAt = reservation.ReleasedAt == null ? null : DateTime.SpecifyKind(reservation.ReleasedAt.Value, DateTimeKind.Utc),

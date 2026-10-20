@@ -5,6 +5,7 @@ import {
     buildOrderPayload,
     dispatchTotals,
     expectedAfterRequested,
+    isCorrectedAllocation,
     isShippableAllocation,
     isShippedAllocation,
     lotDeviates,
@@ -327,6 +328,16 @@ describe('DirectTrade shipment rules', () => {
         assert.deepEqual(codes(validateShippedOn('2026-10-21', '2026-10-20')), { shippedOn: ['future_date'] });
         assert.deepEqual(codes(validateShippedOn('', '2026-10-20')), { shippedOn: ['required'] });
         assert.deepEqual(codes(validateShippedOn('20-10-2026', '2026-10-20')), { shippedOn: ['invalid_date'] });
+    });
+});
+
+describe('DirectTrade take-back rules', () => {
+    test('a corrected DirectTrade allocation is history, never shippable or shipped', () => {
+        const corrected = { source: 'DirectTrade', status: 'Corrected' };
+        assert.equal(isCorrectedAllocation(corrected), true);
+        assert.equal(isShippedAllocation(corrected), false);
+        assert.equal(isShippableAllocation(corrected), false);
+        assert.equal(isCorrectedAllocation({ source: 'Physical', status: 'Corrected' }), false);
     });
 });
 

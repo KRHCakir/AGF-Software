@@ -30,14 +30,14 @@ const supplyRow = {
 const allocationResponse = (requestId: string, quantity = 10): StockReservation => ({
     id: 21, requestId, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: null, palletId: null, palletReference: null,
     warehouseLocation: null, lotNumber: 'LOT-DT-1', quantity, unit: 'box', netWeightKg: null, source: 'DirectTrade',
-    supplyCommitmentLineId: 2, supplyCommitmentId: 10, vendorName: 'Example Supplier', origin: 'Peru', destination: 'Rotterdam', expectedAt: '2026-10-27T22:00:00.000Z', directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    supplyCommitmentLineId: 2, supplyCommitmentId: 10, vendorName: 'Example Supplier', origin: 'Peru', destination: 'Rotterdam', expectedAt: '2026-10-27T22:00:00.000Z', directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
     status: 'Active', createdAt: '2026-10-20T08:05:00.000Z', releasedAt: null, releaseReason: null, version: 0, contentQualityStatus: null, onHold: false,
     consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null,
 });
 const physicalReservation: StockReservation = {
     id: 22, requestId: 'r-22', salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-2',
     warehouseLocation: 'A-01', lotNumber: 'LOT-A', quantity: 20, unit: 'box', netWeightKg: 80, source: 'Physical',
-    supplyCommitmentLineId: 1, supplyCommitmentId: 9, vendorName: 'Example Supplier', origin: 'Peru', destination: null, expectedAt: '2026-10-21T22:00:00.000Z', directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    supplyCommitmentLineId: 1, supplyCommitmentId: 9, vendorName: 'Example Supplier', origin: 'Peru', destination: null, expectedAt: '2026-10-21T22:00:00.000Z', directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
     status: 'Active', createdAt: '2026-10-20T08:06:00.000Z', releasedAt: null, releaseReason: null, version: 0, contentQualityStatus: 'Approved', onHold: false,
     consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null,
 };

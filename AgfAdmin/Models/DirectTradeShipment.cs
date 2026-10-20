@@ -27,6 +27,9 @@ namespace AgfAdmin.Models
         public DateTime RecordedAt { get; set; }
 
         public ICollection<DirectTradeShipmentLine> Lines { get; set; } = new List<DirectTradeShipmentLine>();
+
+        // Omgekeerde navigatie: de (hooguit ene) terugname van deze verzending.
+        public DirectTradeShipmentCorrection Correction { get; set; }
     }
 
     // Eén verbruikte toewijzing met de werkelijk verzonden hoeveelheid, eenheid, netto kg en partij (expliciet ingevoerd, nooit afgeleid).
