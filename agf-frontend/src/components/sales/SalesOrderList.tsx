@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
@@ -8,20 +9,43 @@ import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import { OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 
-const th = 'px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
+// Kopcellen blijven bovenaan staan binnen het eigen scrollgebied van de lijst (sticky per cel; werkt ook in tabellen).
+const th = 'sticky top-0 z-10 bg-gray-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 shadow-[inset_0_-1px_0_rgb(229,231,235)]';
 
 // Overzicht van verkooporders: klant, gevraagde leverdatum, referentie en reserveringsvoortgang per regel.
-export default function SalesOrderList({ orders, selectedId, onSelect }: {
+// De lijst is haar eigen scrollgebied (hoogte bepaald door de pagina via className); de gekozen order wordt in beeld gehouden
+// als die buiten het zichtbare deel valt, bijvoorbeeld na openen via een URL-link of een onafgerond commando. Alleen de lijst
+// scrolt daarbij, nooit de pagina.
+export default function SalesOrderList({ orders, selectedId, onSelect, className = '' }: {
     orders: SalesOrder[];
     selectedId: number | null;
     onSelect: (id: number) => void;
+    className?: string;
 }) {
     const { t, locale } = useTranslation();
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const container = scrollRef.current;
+        if (!container || selectedId === null) return;
+        const row = container.querySelector<HTMLElement>(`tr[data-order-id="${selectedId}"]`);
+        if (!row) return;
+        const header = container.querySelector<HTMLElement>('thead');
+        const headerHeight = header?.getBoundingClientRect().height ?? 0;
+        const box = container.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        if (rowBox.top < box.top + headerHeight) {
+            container.scrollTop -= box.top + headerHeight - rowBox.top + 8;
+        } else if (rowBox.bottom > box.bottom) {
+            container.scrollTop += rowBox.bottom - box.bottom + 8;
+        }
+    }, [selectedId, orders]);
+
     return (
-        <div className="overflow-x-auto rounded-md border border-gray-300 bg-white">
+        <div ref={scrollRef} className={`overflow-auto overscroll-contain rounded-md border border-gray-300 bg-white ${className}`} data-testid="sales-order-list-scroll">
             <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <caption className="sr-only">{t('sales_orders_title')}</caption>
-                <thead className="bg-gray-50">
+                <thead>
                     <tr>
                         <th scope="col" className={th}>{t('sales_col_order')}</th>
                         <th scope="col" className={th}>{t('sales_col_delivery')}</th>
@@ -33,7 +57,8 @@ export default function SalesOrderList({ orders, selectedId, onSelect }: {
                         const progress = orderProgress(order);
                         const selected = order.id === selectedId;
                         return (
-                            <tr key={order.id} className={selected ? 'bg-blue-50' : 'hover:bg-blue-50/40'} aria-selected={selected}>
+                            <tr key={order.id} data-order-id={order.id} aria-selected={selected}
+                                className={selected ? 'bg-blue-100 shadow-[inset_4px_0_0_rgb(29,78,216)]' : 'hover:bg-blue-50/60'}>
                                 <td className="px-2 py-1.5 align-top">
                                     <button type="button" onClick={() => onSelect(order.id)}
                                         className="text-left font-medium text-blue-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500"

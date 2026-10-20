@@ -18,9 +18,10 @@ function AdminLayoutContent({
         <div className="flex flex-col min-h-dvh">
             {/* TOP HEADER */}
             <header className="bg-white border-b border-gray-300 h-12 flex items-center px-4 shadow-sm z-20">
-                <div className="font-bold text-xl text-blue-800 mr-8 tracking-tight">AGF<span className="text-gray-600 font-normal">ERP</span></div>
+                <div className="font-bold text-xl text-blue-800 mr-4 md:mr-8 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></div>
 
-                <nav className="flex space-x-1 h-full items-center">
+                {/* Smalle schermen: de navigatie scrolt horizontaal in plaats van de pagina te verbreden. */}
+                <nav className="flex min-w-0 space-x-1 h-full items-center overflow-x-auto">
                     <NavLink href="/dashboard" label={t('home')} />
                     <NavLink href="/sales-orders" label={t('sales')} />
                     <NavLink href="/supply" label={t('supply')} />
@@ -31,7 +32,7 @@ function AdminLayoutContent({
                     <NavLink href="/help" label={t('help')} />
                 </nav>
 
-                <div className="ml-auto flex items-center space-x-4 text-gray-500">
+                <div className="ml-auto flex shrink-0 items-center space-x-4 pl-2 text-gray-500">
                     <div className="flex items-center space-x-1 border border-gray-200 rounded p-1">
                         <button
                             type="button"
@@ -52,13 +53,14 @@ function AdminLayoutContent({
                             🇳🇱
                         </button>
                     </div>
-                    <span>{t('user')}: <strong>Admin</strong></span>
+                    <span className="hidden sm:inline">{t('user')}: <strong>Admin</strong></span>
                 </div>
             </header>
 
             <div className="flex flex-1 overflow-hidden">
                 {/* LEFT SIDEBAR: snelkoppelingen naar de nieuwe werkplekken; geen oude modals meer. */}
-                <aside className="w-56 bg-gray-100 border-r border-gray-300 flex flex-col p-2 space-y-4">
+                {/* Onder 768 px verborgen: de zijbalk zou anders het grootste deel van een telefoonscherm innemen. */}
+                <aside className="hidden md:flex w-56 shrink-0 bg-gray-100 border-r border-gray-300 flex-col p-2 space-y-4">
                     <div>
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('workspaces')}</h3>
                         <nav className="flex flex-col space-y-1" aria-label={t('workspaces')}>
@@ -97,7 +99,7 @@ function AdminLayoutContent({
                 </aside>
 
                 {/* MAIN CONTENT AREA */}
-                <main className="flex-1 overflow-auto bg-gray-50 p-4 relative">
+                <main className="min-w-0 flex-1 overflow-auto bg-gray-50 p-2 md:p-4 relative">
                     {children}
                 </main>
             </div>
@@ -117,7 +119,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
     const pathname = usePathname();
     const active = pathname === href || pathname.startsWith(href + '/');
     return (
-        <Link href={href} aria-current={active ? 'page' : undefined} className={`px-3 h-8 flex items-center rounded-md text-sm font-medium transition-colors ${active ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
+        <Link href={href} aria-current={active ? 'page' : undefined} className={`px-3 h-8 flex shrink-0 items-center whitespace-nowrap rounded-md text-sm font-medium transition-colors ${active ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
             {label}
         </Link>
     );
