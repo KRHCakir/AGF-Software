@@ -205,7 +205,10 @@ namespace AgfAdmin.DTOs
         // Gevuld zodra de verzending administratief is gecorrigeerd; de verzending zelf blijft ongewijzigd.
         public SalesDispatchCorrectionDto Correction { get; set; }
         // Gevuld zodra de volledige aflevering van deze verzending is bevestigd.
+        // De actieve afleverbevestiging (zonder intrekking), of null.
         public DeliveryConfirmationDto Delivery { get; set; }
+        // Alle bevestigingen met hun intrekking, op volgnummer.
+        public List<DeliveryConfirmationDto> DeliveryHistory { get; set; } = new();
         public List<SalesDispatchLineDto> Lines { get; set; } = new();
     }
 
@@ -359,12 +362,15 @@ namespace AgfAdmin.DTOs
         public string Reference { get; set; }
         public string ActorReference { get; set; }
         public DateTime RecordedAt { get; set; }
-        // Waar zodra er een afleverbevestiging is (zie Delivery).
+        // Waar zolang er een actieve afleverbevestiging is (zie Delivery).
         public bool DeliveryRecorded => Delivery != null;
         // Gevuld zodra de verzending administratief is teruggenomen; de verzending zelf blijft ongewijzigd.
         public DirectTradeShipmentCorrectionDto Correction { get; set; }
         // Gevuld zodra de volledige aflevering van deze verzending is bevestigd.
+        // De actieve afleverbevestiging (zonder intrekking), of null.
         public DeliveryConfirmationDto Delivery { get; set; }
+        // Alle bevestigingen met hun intrekking, op volgnummer.
+        public List<DeliveryConfirmationDto> DeliveryHistory { get; set; } = new();
         public List<DirectTradeShipmentLineDto> Lines { get; set; } = new();
     }
 
@@ -456,6 +462,36 @@ namespace AgfAdmin.DTOs
         public string ConfirmationCode { get; set; }
         public string ConfirmationStatement { get; set; }
         public DateTime RecordedAt { get; set; }
+        public int Sequence { get; set; }
+        // Gevuld als deze bevestiging is ingetrokken; dan telt ze nergens meer mee.
+        public DeliveryRetractionDto Retraction { get; set; }
+    }
+
+    // Intrekken van een administratief onjuiste afleverbevestiging.
+    public sealed class RetractDeliveryDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+        // Moet expliciet true zijn: "Deze afleverbevestiging is ten onrechte vastgelegd."
+        public bool? RecordedInError { get; set; }
+    }
+
+    public sealed class DeliveryRetractionDto
+    {
+        public int Id { get; set; }
+        public Guid RequestId { get; set; }
+        public int ShipmentDeliveryConfirmationId { get; set; }
+        public string ShipmentKind { get; set; }
+        public int? SalesDispatchId { get; set; }
+        public int? DirectTradeShipmentId { get; set; }
+        public int SalesOrderId { get; set; }
+        public string Reason { get; set; }
+        public string ActorReference { get; set; }
+        public bool RecordedInErrorConfirmed { get; set; }
+        public string ConfirmationCode { get; set; }
+        public string ConfirmationStatement { get; set; }
+        public DateTime RecordedAt { get; set; }
     }
 }
-

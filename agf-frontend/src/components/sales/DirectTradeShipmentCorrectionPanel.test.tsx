@@ -43,7 +43,7 @@ const correctionResponse = (requestId: string) => ({
 
 const shipment = (correction: unknown = null) => ({
     id: 5, requestId: 's-5', salesOrderId: 4, customerId: 6, customerName: 'SMOKE DT klant', shippedOn: '2026-10-19', reference: 'CMR-1', actorReference: 'office-1',
-    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: false, delivery: null, correction,
+    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: false, delivery: null, deliveryHistory: [], correction,
     lines: [21, 22].map((id, i) => ({ id: i + 1, stockReservationId: id, salesOrderLineId: 7, supplyCommitmentLineId: 11, supplyCommitmentId: 10, vendorId: 1, vendorName: 'Example Supplier',
         origin: 'Peru', destination: 'Rotterdam', productName: 'Avocado', productVariantName: 'Hass', quantity: 10, unit: 'box', netWeightKg: 40.5,
         lotNumber: 'LOT-DT-SRC', sourceLotNumber: 'LOT-DT-SRC', lotDeviationReason: null })),

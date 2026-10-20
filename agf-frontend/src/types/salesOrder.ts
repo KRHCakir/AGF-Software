@@ -1,4 +1,5 @@
 import { PACKAGE_UNITS, PackageUnit, QualityStatus } from './availability';
+import { hasConsistentDeliveryState } from '../lib/deliveryState';
 import { isArrayOf, isNullableString, isNumber, isObject, isString } from './guards';
 import { isQualityStatus } from './inspection';
 
@@ -158,8 +159,10 @@ export interface SalesDispatch {
     dispatchedAt: string;
     // Gevuld zodra de verzending administratief is gecorrigeerd; de verzending zelf blijft ongewijzigd.
     correction: SalesDispatchCorrection | null;
-    // Gevuld zodra de volledige aflevering is bevestigd.
+    // De actieve afleverbevestiging (zonder intrekking), of null.
     delivery: DeliveryConfirmation | null;
+    // Alle bevestigingen met hun intrekking, op volgnummer.
+    deliveryHistory: DeliveryConfirmation[];
     lines: SalesDispatchLine[];
 }
 
@@ -447,6 +450,8 @@ export function isSalesDispatch(value: unknown): value is SalesDispatch {
         && isString(value.dispatchedAt)
         && (value.correction === null || isSalesDispatchCorrection(value.correction))
         && (value.delivery === null || isDeliveryConfirmation(value.delivery))
+        && isArrayOf(value.deliveryHistory, isDeliveryConfirmation)
+        && hasConsistentDeliveryState(value.delivery as DeliveryConfirmation | null, value.deliveryHistory as DeliveryConfirmation[])
         && isArrayOf(value.lines, isSalesDispatchLine);
 }
 
@@ -580,9 +585,10 @@ export interface DirectTradeShipment {
     reference: string | null;
     actorReference: string;
     recordedAt: string;
-    // Waar zodra er een afleverbevestiging is (zie delivery).
+    // Waar zolang er een actieve afleverbevestiging is (zie delivery).
     deliveryRecorded: boolean;
     delivery: DeliveryConfirmation | null;
+    deliveryHistory: DeliveryConfirmation[];
     // Gevuld zodra de verzending administratief is teruggenomen; de verzending zelf blijft ongewijzigd.
     correction: DirectTradeShipmentCorrection | null;
     lines: DirectTradeShipmentLine[];
@@ -652,6 +658,9 @@ export function isDirectTradeShipment(value: unknown): value is DirectTradeShipm
         && isString(value.customerName) && isString(value.shippedOn) && isNullableString(value.reference)
         && isString(value.actorReference) && isString(value.recordedAt) && typeof value.deliveryRecorded === 'boolean'
         && (value.delivery === null || isDeliveryConfirmation(value.delivery))
+        && isArrayOf(value.deliveryHistory, isDeliveryConfirmation)
+        && hasConsistentDeliveryState(value.delivery as DeliveryConfirmation | null, value.deliveryHistory as DeliveryConfirmation[])
+        && value.deliveryRecorded === (value.delivery !== null)
         && (value.correction === null || isDirectTradeShipmentCorrection(value.correction))
         && isArrayOf(value.lines, isDirectTradeShipmentLine);
 }
@@ -687,6 +696,41 @@ export interface DeliveryConfirmation {
     confirmationCode: string;
     confirmationStatement: string;
     recordedAt: string;
+    sequence: number;
+    // Gevuld als deze bevestiging is ingetrokken; dan telt ze nergens meer mee (zie lib/deliveryState).
+    retraction: DeliveryRetraction | null;
+}
+
+export interface RetractDeliveryRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    actorReference: string;
+    reason: string;
+    recordedInError: true;
+}
+
+export interface DeliveryRetraction {
+    id: number;
+    requestId: string;
+    shipmentDeliveryConfirmationId: number;
+    shipmentKind: ShipmentKind;
+    salesDispatchId: number | null;
+    directTradeShipmentId: number | null;
+    salesOrderId: number;
+    reason: string;
+    actorReference: string;
+    recordedInErrorConfirmed: boolean;
+    confirmationCode: string;
+    confirmationStatement: string;
+    recordedAt: string;
+}
+
+export function isDeliveryRetraction(value: unknown): value is DeliveryRetraction {
+    return isObject(value) && isNumber(value.id) && isString(value.requestId) && isNumber(value.shipmentDeliveryConfirmationId)
+        && (value.shipmentKind === 'Warehouse' || value.shipmentKind === 'DirectTrade')
+        && (value.salesDispatchId === null || isNumber(value.salesDispatchId)) && (value.directTradeShipmentId === null || isNumber(value.directTradeShipmentId))
+        && isNumber(value.salesOrderId) && isString(value.reason) && isString(value.actorReference) && value.recordedInErrorConfirmed === true
+        && isString(value.confirmationCode) && isString(value.confirmationStatement) && isString(value.recordedAt);
 }
 
 export function isDeliveryConfirmation(value: unknown): value is DeliveryConfirmation {
@@ -694,6 +738,8 @@ export function isDeliveryConfirmation(value: unknown): value is DeliveryConfirm
         && (value.shipmentKind === 'Warehouse' || value.shipmentKind === 'DirectTrade')
         && (value.salesDispatchId === null || isNumber(value.salesDispatchId)) && (value.directTradeShipmentId === null || isNumber(value.directTradeShipmentId))
         && isNumber(value.salesOrderId) && isString(value.deliveredOn) && isNullableString(value.receiptReference) && isString(value.actorReference)
-        && value.deliveredInFullConfirmed === true && isString(value.confirmationCode) && isString(value.confirmationStatement) && isString(value.recordedAt);
+        && value.deliveredInFullConfirmed === true && isString(value.confirmationCode) && isString(value.confirmationStatement) && isString(value.recordedAt)
+        && isNumber(value.sequence) && value.sequence >= 1
+        && (value.retraction === null || (isDeliveryRetraction(value.retraction) && value.retraction.shipmentDeliveryConfirmationId === value.id));
 }
 

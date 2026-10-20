@@ -25,7 +25,7 @@ public class SalesOrdersControllerTests : IDisposable
     private async Task<IActionResult> Orders(Func<SalesOrdersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DirectTradeShipmentCorrectionService(db), new DeliveryConfirmationService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20)))));
+        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DirectTradeShipmentCorrectionService(db), new DeliveryConfirmationService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DeliveryRetractionService(db)));
     }
 
     private async Task<IActionResult> Reservations(Func<StockReservationsController, Task<IActionResult>> action)
@@ -376,6 +376,36 @@ public class SalesOrdersControllerTests : IDisposable
         Assert.IsType<ConflictObjectResult>(await Orders(c => c.ConfirmDirectTradeDelivery(order.Id, shipment.Id, Confirm(fresh))));
         var after = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
         Assert.Equal((5m, false), (after.Lines[0].DeliveredQuantity, after.Delivered));
+    }
+
+    [Fact]
+    public async Task Delivery_Retraction_Endpoints_Map_201_200_400_404_And_409()
+    {
+        var order = await CreatedOrderAsync();
+        var line = order.Lines[0];
+        var allocation = await DirectTradeTestFlow.AllocateAsync(_factory, order.Id, line.Id, _seed.DirectTradeSourceLine, 5m);
+        var shipment = await DirectTradeTestFlow.ShipAsync(_factory, order.Id, (allocation, 20.2m, "LOT-DT-SRC"));
+        var confirmed = Assert.IsType<DeliveryConfirmationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.ConfirmDirectTradeDelivery(order.Id, shipment.Id, new ConfirmDeliveryDto
+        {
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version + 1, ActorReference = "office-1", DeliveredOn = new DateOnly(2026, 10, 20), DeliveredInFull = true
+        }))).Value);
+        var version = await DirectTradeTestFlow.OrderVersionAsync(_factory, order.Id);
+        RetractDeliveryDto Body(int v, bool? inError = true, Guid? requestId = null) => new()
+        {
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = v, ActorReference = "office-1", Reason = "Verkeerde verzending", RecordedInError = inError
+        };
+
+        Assert.Contains("recordedInError", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.RetractDirectTradeDelivery(order.Id, shipment.Id, confirmed.Id, Body(version, false)))).Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.RetractWarehouseDelivery(order.Id, shipment.Id, confirmed.Id, Body(version))));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.RetractDirectTradeDelivery(order.Id, shipment.Id, confirmed.Id, Body(version - 1))));
+        var request = Body(version);
+        var created = Assert.IsType<DeliveryRetractionDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.RetractDirectTradeDelivery(order.Id, shipment.Id, confirmed.Id, request))).Value);
+        Assert.Equal((confirmed.Id, "DELIVERY_CONFIRMATION_RECORDED_IN_ERROR"), (created.ShipmentDeliveryConfirmationId, created.ConfirmationCode));
+        Assert.Equal(created.Id, Assert.IsType<DeliveryRetractionDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.RetractDirectTradeDelivery(order.Id, shipment.Id, confirmed.Id, request))).Value).Id);
+        var fresh = await DirectTradeTestFlow.OrderVersionAsync(_factory, order.Id);
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.RetractDirectTradeDelivery(order.Id, shipment.Id, confirmed.Id, Body(fresh))));
+        var after = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
+        Assert.Equal(0m, after.Lines[0].DeliveredQuantity);
     }
 }
 

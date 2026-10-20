@@ -25,6 +25,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
                 : error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
                 : error.field === 'shipmentDidNotTakePlace' ? t('sales_dt_correct_confirm_required')
                 : error.field === 'deliveredInFull' ? t('sales_delivery_confirm_required')
+                : error.field === 'recordedInError' ? t('sales_retract_confirm_required')
                 : error.field === 'deliveredOn' ? t('sales_delivery_date_required')
                 : error.field === 'acknowledgeExpectedSupply' ? t('sales_allocate_acknowledge_required')
                 : error.field.endsWith('.lotDeviationReason') ? t('sales_ship_lot_reason_required')

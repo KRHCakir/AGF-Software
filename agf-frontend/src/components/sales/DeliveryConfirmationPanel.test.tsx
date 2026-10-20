@@ -52,17 +52,17 @@ const orderWith = (version: number, warehouseDelivered = false, dtDelivered = fa
 const deliveryResponse = (kind: 'Warehouse' | 'DirectTrade', requestId: string, id = kind === 'Warehouse' ? 1 : 2) => ({
     id, requestId, shipmentKind: kind, salesDispatchId: kind === 'Warehouse' ? 5 : null, directTradeShipmentId: kind === 'DirectTrade' ? 5 : null, salesOrderId: 4,
     deliveredOn: '2026-10-19', receiptReference: 'CMR-OK-1', actorReference: 'office-1', deliveredInFullConfirmed: true,
-    confirmationCode: 'DELIVERED_IN_FULL', confirmationStatement: 'Deze verzending is volledig en zonder afwijkingen afgeleverd.', recordedAt: '2026-10-20T10:00:00.000Z',
+    confirmationCode: 'DELIVERED_IN_FULL', confirmationStatement: 'Deze verzending is volledig en zonder afwijkingen afgeleverd.', recordedAt: '2026-10-20T10:00:00.000Z', sequence: 1, retraction: null,
 });
 
 const dispatch = (delivery: unknown = null) => ({
-    id: 5, requestId: 'd-5', salesOrderId: 4, reference: 'VRB-5', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', delivery, correction: null,
+    id: 5, requestId: 'd-5', salesOrderId: 4, reference: 'VRB-5', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', delivery, deliveryHistory: delivery === null ? [] : [delivery], correction: null,
     lines: [{ id: 20, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', productName: 'Avocado', productVariantName: 'Hass', quantity: 10, unit: 'box', netWeightKg: 40, stockMovementId: 30 }],
 });
 
 const shipment = (delivery: unknown = null) => ({
     id: 5, requestId: 's-5', salesOrderId: 4, customerId: 6, customerName: 'SMOKE klant', shippedOn: '2026-10-19', reference: 'CMR-1', actorReference: 'office-1',
-    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: delivery !== null, delivery, correction: null,
+    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: delivery !== null, delivery, deliveryHistory: delivery === null ? [] : [delivery], correction: null,
     lines: [{ id: 1, stockReservationId: 21, salesOrderLineId: 7, supplyCommitmentLineId: 11, supplyCommitmentId: 10, vendorId: 1, vendorName: 'Example Supplier',
         origin: 'Peru', destination: 'Rotterdam', productName: 'Avocado', productVariantName: 'Hass', quantity: 10, unit: 'box', netWeightKg: 40.5,
         lotNumber: 'LOT-DT-SRC', sourceLotNumber: 'LOT-DT-SRC', lotDeviationReason: null }],

@@ -380,7 +380,7 @@ namespace AgfAdmin.Services
             _db.DirectTradeShipments.AsNoTracking()
                 .Include(d => d.Lines).ThenInclude(l => l.SalesOrderLine).ThenInclude(s => s.ProductVariant).ThenInclude(v => v.Product)
                 .Include(d => d.Correction).ThenInclude(c => c.Lines)
-                .Include(d => d.Delivery)
+                .Include(d => d.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .AsSplitQuery();
 
         internal static DirectTradeShipmentDto ToDto(DirectTradeShipment shipment) => new()
@@ -395,7 +395,8 @@ namespace AgfAdmin.Services
             ActorReference = shipment.ActorReference,
             RecordedAt = DateTime.SpecifyKind(shipment.RecordedAt, DateTimeKind.Utc),
             Correction = shipment.Correction == null ? null : DirectTradeShipmentCorrectionService.ToDto(shipment.Correction),
-            Delivery = shipment.Delivery == null ? null : DeliveryConfirmationService.ToDto(shipment.Delivery),
+            Delivery = DeliveryState.ActiveOf(shipment.DeliveryConfirmations) is { } active ? DeliveryConfirmationService.ToDto(active) : null,
+            DeliveryHistory = shipment.DeliveryConfirmations.OrderBy(c => c.Sequence).Select(DeliveryConfirmationService.ToDto).ToList(),
             Lines = shipment.Lines.OrderBy(l => l.Id).Select(l => new DirectTradeShipmentLineDto
             {
                 Id = l.Id,

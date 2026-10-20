@@ -1479,6 +1479,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("SalesOrderId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ShipmentKind")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1486,18 +1489,18 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DirectTradeShipmentId")
-                        .IsUnique()
-                        .HasFilter("\"DirectTradeShipmentId\" IS NOT NULL");
-
                     b.HasIndex("RequestId")
                         .IsUnique();
 
-                    b.HasIndex("SalesDispatchId")
+                    b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("DirectTradeShipmentId", "Sequence")
+                        .IsUnique()
+                        .HasFilter("\"DirectTradeShipmentId\" IS NOT NULL");
+
+                    b.HasIndex("SalesDispatchId", "Sequence")
                         .IsUnique()
                         .HasFilter("\"SalesDispatchId\" IS NOT NULL");
-
-                    b.HasIndex("SalesOrderId");
 
                     b.ToTable("ShipmentDeliveryConfirmations", t =>
                         {
@@ -1509,7 +1512,87 @@ namespace AgfAdmin.Migrations
 
                             t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Reference_NullOrNotBlank", "\"ReceiptReference\" IS NULL OR length(trim(\"ReceiptReference\")) > 0");
 
+                            t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Sequence_Positive", "\"Sequence\" >= 1");
+
                             t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Statement", "\"ConfirmationStatement\" = 'Deze verzending is volledig en zonder afwijkingen afgeleverd.'");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.ShipmentDeliveryRetraction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ConfirmationCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ConfirmationStatement")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("DirectTradeShipmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("RecordedInErrorConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("SalesDispatchId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ShipmentDeliveryConfirmationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ShipmentKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("ShipmentDeliveryConfirmationId")
+                        .IsUnique();
+
+                    b.ToTable("ShipmentDeliveryRetractions", t =>
+                        {
+                            t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Code", "\"ConfirmationCode\" = 'DELIVERY_CONFIRMATION_RECORDED_IN_ERROR'");
+
+                            t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Confirmed", "\"RecordedInErrorConfirmed\" = TRUE");
+
+                            t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_OneShipment", "(\"ShipmentKind\" = 'Warehouse' AND \"SalesDispatchId\" IS NOT NULL AND \"DirectTradeShipmentId\" IS NULL) OR (\"ShipmentKind\" = 'DirectTrade' AND \"DirectTradeShipmentId\" IS NOT NULL AND \"SalesDispatchId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Reason_NotBlank", "length(trim(\"Reason\")) > 0");
+
+                            t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Statement", "\"ConfirmationStatement\" = 'Deze afleverbevestiging is ten onrechte vastgelegd.'");
                         });
                 });
 
@@ -2335,13 +2418,13 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.ShipmentDeliveryConfirmation", b =>
                 {
                     b.HasOne("AgfAdmin.Models.DirectTradeShipment", "DirectTradeShipment")
-                        .WithOne("Delivery")
-                        .HasForeignKey("AgfAdmin.Models.ShipmentDeliveryConfirmation", "DirectTradeShipmentId")
+                        .WithMany("DeliveryConfirmations")
+                        .HasForeignKey("DirectTradeShipmentId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.SalesDispatch", "SalesDispatch")
-                        .WithOne("Delivery")
-                        .HasForeignKey("AgfAdmin.Models.ShipmentDeliveryConfirmation", "SalesDispatchId")
+                        .WithMany("DeliveryConfirmations")
+                        .HasForeignKey("SalesDispatchId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
@@ -2353,6 +2436,25 @@ namespace AgfAdmin.Migrations
                     b.Navigation("DirectTradeShipment");
 
                     b.Navigation("SalesDispatch");
+
+                    b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.ShipmentDeliveryRetraction", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.ShipmentDeliveryConfirmation", "Confirmation")
+                        .WithOne("Retraction")
+                        .HasForeignKey("AgfAdmin.Models.ShipmentDeliveryRetraction", "ShipmentDeliveryConfirmationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Confirmation");
 
                     b.Navigation("SalesOrder");
                 });
@@ -2504,7 +2606,7 @@ namespace AgfAdmin.Migrations
                 {
                     b.Navigation("Correction");
 
-                    b.Navigation("Delivery");
+                    b.Navigation("DeliveryConfirmations");
 
                     b.Navigation("Lines");
                 });
@@ -2555,7 +2657,7 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>
                 {
-                    b.Navigation("Delivery");
+                    b.Navigation("DeliveryConfirmations");
 
                     b.Navigation("Lines");
                 });
@@ -2580,6 +2682,11 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
                 {
                     b.Navigation("Reservations");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.ShipmentDeliveryConfirmation", b =>
+                {
+                    b.Navigation("Retraction");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.StockReservation", b =>

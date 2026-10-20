@@ -600,8 +600,8 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
-                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch).ThenInclude(s => s.Delivery)
-                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment).ThenInclude(s => s.Delivery)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeCorrectionLine)
                 .AsSplitQuery();
 

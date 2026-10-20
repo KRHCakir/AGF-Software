@@ -6,6 +6,7 @@ import {
     blockedBy,
     correctDtShipmentKey,
     confirmDeliveryKey,
+    retractDeliveryKey,
     shipDirectTradeKey,
     CREATE_CUSTOMER_KEY,
     cancelKey,
@@ -498,6 +499,53 @@ describe('delivery confirmation commands', () => {
             ['unknown kind', (copy) => { copy.shipmentKind = 'Truck'; }],
             ['kind does not match key', (copy) => { copy.shipmentKind = 'Warehouse'; }],
             ['request id mismatch', (copy) => { payloadOf(copy).requestId = 'other'; }],
+        ];
+        for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
+    });
+});
+
+describe('delivery retraction commands', () => {
+    const retract = (orderId: number, kind: 'Warehouse' | 'DirectTrade', shipmentId: number, confirmationId: number, requestId = 'rt-1'): PendingCommand => ({
+        kind: 'retract-delivery', key: retractDeliveryKey(orderId, kind, shipmentId, confirmationId), orderId, shipmentKind: kind, shipmentId, confirmationId, requestId,
+        attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T11:00:00.000Z',
+        payload: { requestId, expectedOrderVersion: 7, actorReference: 'office-1', reason: 'Verkeerde verzending aangeklikt', recordedInError: true },
+        display: { customerName: 'Customer T', sequence: 1 },
+    });
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+
+    test('the key carries kind, shipment and confirmation, and the command blocks every other order action', () => {
+        assert.equal(retractDeliveryKey(4, 'Warehouse', 5, 9), 'retract-delivery:4:warehouse:5:9');
+        assert.equal(retractDeliveryKey(4, 'DirectTrade', 5, 9), 'retract-delivery:4:direct-trade:5:9');
+        const commands = toMap(retract(4, 'Warehouse', 5, 9));
+        for (const kind of ['confirm-delivery', 'correct-dispatch', 'correct-dt-shipment', 'cancel-order', 'dispatch', 'ship-direct-trade'] as const) {
+            assert.equal(blockedBy(commands, { kind, orderId: 4 })?.requestId, 'rt-1', kind);
+        }
+        assert.equal(blockedBy(commands, { kind: 'retract-delivery', orderId: 5 }), null);
+        assert.equal(blockedBy(toMap(correct(4, 9)), { kind: 'retract-delivery', orderId: 4 })?.kind, 'correct-dispatch');
+    });
+
+    test('a stored retraction is restored only with the literal statement, a bounded reason and a matching key', () => {
+        const command = retract(4, 'DirectTrade', 7, 3);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(command))), toMap(command));
+        const rejected: [string, (copy: Record<string, unknown>) => void][] = [
+            ['statement false', (copy) => { payloadOf(copy).recordedInError = false; }],
+            ['statement missing', (copy) => { delete payloadOf(copy).recordedInError; }],
+            ['statement as string', (copy) => { payloadOf(copy).recordedInError = 'true'; }],
+            ['reason blank', (copy) => { payloadOf(copy).reason = '  '; }],
+            ['reason too long', (copy) => { payloadOf(copy).reason = 'r'.repeat(501); }],
+            ['reason missing', (copy) => { delete payloadOf(copy).reason; }],
+            ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
+            ['version missing', (copy) => { delete payloadOf(copy).expectedOrderVersion; }],
+            ['confirmation id missing', (copy) => { delete copy.confirmationId; }],
+            ['confirmation does not match key', (copy) => { copy.confirmationId = 4; }],
+            ['kind does not match key', (copy) => { copy.shipmentKind = 'Warehouse'; }],
+            ['request id mismatch', (copy) => { payloadOf(copy).requestId = 'other'; }],
+            ['sequence missing', (copy) => { delete (copy.display as Record<string, unknown>).sequence; }],
         ];
         for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
     });

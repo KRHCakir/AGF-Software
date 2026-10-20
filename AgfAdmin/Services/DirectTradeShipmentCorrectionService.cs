@@ -67,9 +67,9 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} has already been taken back.");
             }
-            if (await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.DirectTradeShipmentId == shipmentId, cancellationToken))
+            if (await _db.ShipmentDeliveryConfirmations.Where(c => c.DirectTradeShipmentId == shipmentId).AnyAsync(DeliveryState.IsActive, cancellationToken))
             {
-                return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place. Retract the delivery confirmation first (separate flow).");
+                return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place. Retract the active delivery confirmation first if it was recorded in error.");
             }
 
             // Hele verzending: exact de toewijzingen van deze verzending, elk met de verwachte versie. Een id van een magazijnreservering,
@@ -166,7 +166,7 @@ namespace AgfAdmin.Services
             {
                 await _db.SaveChangesAsync(cancellationToken);
             }
-            catch (DeliveryCorrectionConflictException conflict)
+            catch (ShipmentDeliveryConflictException conflict)
             {
                 // Een andere schrijver heeft na onze controles en vóór de guard een aflevering of correctie van deze verzending gecommit.
                 // Er is niets opgeslagen (de guard draait vóór de database-update). Alleen dit herkenbare conflict wordt 409.

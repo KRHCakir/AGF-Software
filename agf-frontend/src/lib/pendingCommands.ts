@@ -1,6 +1,6 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
-import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
+import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, RetractDeliveryRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
@@ -98,6 +98,18 @@ export interface ConfirmDeliveryCommand extends CommandMeta {
     display: { customerName: string; lineCount: number };
 }
 
+// Intrekken van een afleverbevestiging: ordercommando per bevestiging; soort, verzending en bevestiging staan in de sleutel.
+export interface RetractDeliveryCommand extends CommandMeta {
+    kind: 'retract-delivery';
+    key: string;
+    orderId: number;
+    shipmentKind: 'Warehouse' | 'DirectTrade';
+    shipmentId: number;
+    confirmationId: number;
+    payload: RetractDeliveryRequest;
+    display: { customerName: string; sequence: number };
+}
+
 export interface CorrectDispatchCommand extends CommandMeta {
     kind: 'correct-dispatch';
     key: string;
@@ -115,7 +127,7 @@ export interface CreateCustomerCommand extends CommandMeta {
     display: { name: string };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand;
+export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | RetractDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand;
 
 // Regelcommando's: horen bij één orderregel en blokkeren elkaar daar.
 const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'allocate-direct-trade', 'release'];
@@ -161,6 +173,10 @@ export function confirmDeliveryKey(orderId: number, shipmentKind: 'Warehouse' | 
     return `confirm-delivery:${orderId}:${shipmentKind === 'Warehouse' ? 'warehouse' : 'direct-trade'}:${shipmentId}`;
 }
 
+export function retractDeliveryKey(orderId: number, shipmentKind: 'Warehouse' | 'DirectTrade', shipmentId: number, confirmationId: number): string {
+    return `retract-delivery:${orderId}:${shipmentKind === 'Warehouse' ? 'warehouse' : 'direct-trade'}:${shipmentId}:${confirmationId}`;
+}
+
 export function correctDispatchKey(orderId: number, dispatchId: number): string {
     return `correct-dispatch:${orderId}:${dispatchId}`;
 }
@@ -183,6 +199,7 @@ export type CommandScope =
     | { kind: 'ship-direct-trade'; orderId: number }
     | { kind: 'correct-dt-shipment'; orderId: number }
     | { kind: 'confirm-delivery'; orderId: number }
+    | { kind: 'retract-delivery'; orderId: number }
     | { kind: 'correct-dispatch'; orderId: number };
 
 // Een nieuw commando mag een onafgerond commando op dezelfde plaats nooit vervangen: eerst de uitkomst afwachten.
@@ -195,7 +212,7 @@ export function blockedBy(commands: PendingCommands, scope: CommandScope): Pendi
     if (scope.kind === 'create-customer') {
         return commands[CREATE_CUSTOMER_KEY] ?? null;
     }
-    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dt-shipment' || scope.kind === 'confirm-delivery' || scope.kind === 'correct-dispatch') {
+    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dt-shipment' || scope.kind === 'confirm-delivery' || scope.kind === 'retract-delivery' || scope.kind === 'correct-dispatch') {
         return commandsForOrder(commands, scope.orderId)[0] ?? null;
     }
     // Regelcommando's worden ook geblokkeerd door elk ordercommando (annuleren, verzenden, verzending corrigeren).
@@ -356,6 +373,16 @@ function isConfirmDeliveryPayload(value: unknown, requestId: string): value is C
         && value.deliveredInFull === true;
 }
 
+// De verklaring moet letterlijk true zijn; reden verplicht en begrensd.
+function isRetractDeliveryPayload(value: unknown, requestId: string): value is RetractDeliveryRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isNonNegativeInt(value.expectedOrderVersion)
+        && isText(value.actorReference)
+        && typeof value.reason === 'string' && value.reason.trim() !== '' && value.reason.length <= 500
+        && value.recordedInError === true;
+}
+
 function isCorrectDispatchPayload(value: unknown, requestId: string): value is CorrectSalesDispatchRequest {
     return isRecord(value)
         && value.requestId === requestId
@@ -448,6 +475,12 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
                 && value.key === confirmDeliveryKey(value.orderId, value.shipmentKind, value.shipmentId)
                 && isConfirmDeliveryPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'retract-delivery':
+            return isPositiveInt(value.orderId) && isPositiveInt(value.shipmentId) && isPositiveInt(value.confirmationId)
+                && (value.shipmentKind === 'Warehouse' || value.shipmentKind === 'DirectTrade')
+                && value.key === retractDeliveryKey(value.orderId, value.shipmentKind, value.shipmentId, value.confirmationId)
+                && isRetractDeliveryPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.sequence);
         case 'create-customer':
             return value.key === CREATE_CUSTOMER_KEY
                 && isCreateCustomerPayload(value.payload, value.requestId)

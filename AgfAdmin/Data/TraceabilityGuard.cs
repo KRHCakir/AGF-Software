@@ -9,13 +9,14 @@ namespace AgfAdmin.Data
         public TraceabilityViolationException(string message) : base(message) {}
     }
 
-    // Regel 13, alleen wanneer de tegenpartij al is opgeslagen: een afleverbevestiging voor een verzending die intussen is gecorrigeerd
-    // of teruggenomen, of een correctie/terugname van een verzending die intussen als afgeleverd is bevestigd. De services controleren
-    // dit vooraf; deze fout ontstaat dus alleen als een andere schrijver na die controle en vóór deze save heeft gecommit. Alleen dit
-    // type mogen de services als 409 behandelen; elke andere guardfout blijft een fout van de schrijver.
-    public sealed class DeliveryCorrectionConflictException : TraceabilityViolationException
+    // Regel 13, alleen wanneer de tegenpartij al is opgeslagen: een bevestiging voor een verzending die intussen is gecorrigeerd of
+    // teruggenomen of al een actieve bevestiging (of dit volgnummer) heeft, een tweede intrekking van dezelfde bevestiging, of een
+    // correctie/terugname terwijl er intussen een actieve bevestiging is. De services controleren dit vooraf; deze fout ontstaat dus alleen
+    // als een andere schrijver na die controle en vóór deze save heeft gecommit. Alleen dit type mogen de services als 409 behandelen;
+    // elke andere guardfout blijft een fout van de schrijver.
+    public sealed class ShipmentDeliveryConflictException : TraceabilityViolationException
     {
-        public DeliveryCorrectionConflictException(string message) : base(message) {}
+        public ShipmentDeliveryConflictException(string message) : base(message) {}
     }
 
     // Draait vóór elke SaveChanges/SaveChangesAsync, zodat geen enkele writer de regels kan vergeten:
@@ -51,8 +52,12 @@ namespace AgfAdmin.Data
     //    Na Corrected liggen hoeveelheid, eenheid, bronregel, orderregel, ConsumedAt en CorrectedAt vast.
     // 13. een afleverbevestiging verwijst naar precies één bestaande verzending van de juiste soort en dezelfde order, draagt de verklaring
     //    (vlag, code, vaste tekst), heeft een afleverdatum tussen de verzenddatum en vandaag (Europe/Amsterdam, gedeelde kalender) en
-    //    hoort nooit bij een gecorrigeerde of teruggenomen verzending; omgekeerd krijgt een bevestigde verzending nooit meer een
-    //    (magazijn- of DirectTrade-)correctie. Bevestigingen zijn append-only. Een nieuwe DirectTrade-verzending heeft ShippedOn <= vandaag.
+    //    hoort nooit bij een gecorrigeerde of teruggenomen verzending; omgekeerd krijgt een verzending met een ACTIEVE bevestiging
+    //    (zonder opgeslagen intrekking, DeliveryState) geen (magazijn- of DirectTrade-)correctie. Per verzending hooguit één actieve
+    //    bevestiging: volgnummer = hoogste + 1 en alle eerdere ingetrokken. Een intrekking hoort bij een opgeslagen, nog niet ingetrokken
+    //    bevestiging, kopieert soort/verzending/order, draagt verklaring en reden. Intrekking samen met bevestiging of correctie van dezelfde
+    //    verzending in één save is verboden. Bevestigingen en intrekkingen zijn append-only. Een nieuwe DirectTrade-verzending heeft
+    //    ShippedOn <= vandaag.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -104,6 +109,10 @@ namespace AgfAdmin.Data
                 || db.ChangeTracker.Entries<DirectTradeShipmentLine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             {
                 throw new TraceabilityViolationException("DirectTrade shipments are append-only and cannot be modified or deleted.");
+            }
+            if (db.ChangeTracker.Entries<ShipmentDeliveryRetraction>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Shipment delivery retractions are append-only and cannot be modified or deleted.");
             }
             if (db.ChangeTracker.Entries<ShipmentDeliveryConfirmation>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             {
@@ -671,7 +680,28 @@ namespace AgfAdmin.Data
             }
         }
 
-        // ---- Regel 13: afleverbevestigingen, datumgrenzen en uitsluiting met correcties ----
+        // ---- Regel 13: afleverbevestigingen, intrekkingen, datumgrenzen en uitsluiting met correcties ----
+        // "Actief" komt uitsluitend uit DeliveryState.IsActive (geen opgeslagen intrekking). Conflicten met een al opgeslagen tegenpartij
+        // gooien ShipmentDeliveryConflictException (services: 409); fouten binnen één save en alle andere schendingen het basistype.
+
+        private sealed record StoredShipment(int SalesOrderId, DateTime? DispatchedAt, DateOnly? ShippedOn, bool Corrected, bool HasActive, int MaxSequence);
+
+        private static async Task<StoredShipment> StoredShipmentAsync(AppDbContext db, string kind, int id, bool async, CancellationToken cancellationToken)
+        {
+            if (kind == ReservationRules.ShipmentKindWarehouse)
+            {
+                return await FirstOrDefaultAsync(db.SalesDispatches.AsNoTracking().Where(d => d.Id == id).Select(d => new StoredShipment(
+                    d.SalesOrderId, d.DispatchedAt, null,
+                    db.SalesDispatchCorrections.Any(c => c.SalesDispatchId == d.Id),
+                    db.ShipmentDeliveryConfirmations.Where(c => c.SalesDispatchId == d.Id).Any(DeliveryState.IsActive),
+                    db.ShipmentDeliveryConfirmations.Where(c => c.SalesDispatchId == d.Id).Max(c => (int?)c.Sequence) ?? 0)), async, cancellationToken);
+            }
+            return await FirstOrDefaultAsync(db.DirectTradeShipments.AsNoTracking().Where(s => s.Id == id).Select(s => new StoredShipment(
+                s.SalesOrderId, null, s.ShippedOn,
+                db.DirectTradeShipmentCorrections.Any(c => c.DirectTradeShipmentId == s.Id),
+                db.ShipmentDeliveryConfirmations.Where(c => c.DirectTradeShipmentId == s.Id).Any(DeliveryState.IsActive),
+                db.ShipmentDeliveryConfirmations.Where(c => c.DirectTradeShipmentId == s.Id).Max(c => (int?)c.Sequence) ?? 0)), async, cancellationToken);
+        }
 
         private static async Task CheckDeliveryConfirmationsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
@@ -689,15 +719,64 @@ namespace AgfAdmin.Data
 
             int DispatchIdOf(ShipmentDeliveryConfirmation c) => c.SalesDispatch != null ? db.Entry(c.SalesDispatch).Property(x => x.Id).CurrentValue : c.SalesDispatchId ?? 0;
             int ShipmentIdOf(ShipmentDeliveryConfirmation c) => c.DirectTradeShipment != null ? db.Entry(c.DirectTradeShipment).Property(x => x.Id).CurrentValue : c.DirectTradeShipmentId ?? 0;
+            (string Kind, int Id) KeyOf(ShipmentDeliveryConfirmation c) => c.ShipmentKind == ReservationRules.ShipmentKindWarehouse ? (c.ShipmentKind, DispatchIdOf(c)) : (c.ShipmentKind, ShipmentIdOf(c));
+            (string Kind, int Id) RetractionKeyOf(ShipmentDeliveryRetraction r) => (r.ShipmentKind, r.ShipmentKind == ReservationRules.ShipmentKindWarehouse ? r.SalesDispatchId ?? 0 : r.DirectTradeShipmentId ?? 0);
+            int WarehouseCorrectionIdOf(SalesDispatchCorrection c) => c.SalesDispatch != null ? db.Entry(c.SalesDispatch).Property(x => x.Id).CurrentValue : c.SalesDispatchId;
+            int DirectTradeCorrectionIdOf(DirectTradeShipmentCorrection c) => c.DirectTradeShipment != null ? db.Entry(c.DirectTradeShipment).Property(x => x.Id).CurrentValue : c.DirectTradeShipmentId;
 
             var deliveries = db.ChangeTracker.Entries<ShipmentDeliveryConfirmation>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            var retractions = db.ChangeTracker.Entries<ShipmentDeliveryRetraction>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
             var newWarehouseCorrections = db.ChangeTracker.Entries<SalesDispatchCorrection>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
             var newDirectTradeCorrections = db.ChangeTracker.Entries<DirectTradeShipmentCorrection>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
-            if (deliveries.Count == 0 && newWarehouseCorrections.Count == 0 && newDirectTradeCorrections.Count == 0)
+            if (deliveries.Count == 0 && retractions.Count == 0 && newWarehouseCorrections.Count == 0 && newDirectTradeCorrections.Count == 0)
             {
                 return;
             }
 
+            // ---- Intrekkingen ----
+            var retractedShipments = new HashSet<(string, int)>();
+            var retractedConfirmations = new HashSet<int>();
+            foreach (var retraction in retractions)
+            {
+                if (retraction.Confirmation != null && db.Entry(retraction.Confirmation).State == EntityState.Added)
+                {
+                    throw new TraceabilityViolationException("A delivery confirmation can only be retracted after it has been saved, never in the same save.");
+                }
+                var confirmationId = retraction.Confirmation != null ? db.Entry(retraction.Confirmation).Property(x => x.Id).CurrentValue : retraction.ShipmentDeliveryConfirmationId;
+                if (!retractedConfirmations.Add(confirmationId))
+                {
+                    throw new TraceabilityViolationException($"Delivery confirmation {confirmationId} can be retracted at most once.");
+                }
+                if (!retraction.RecordedInErrorConfirmed
+                    || !string.Equals(retraction.ConfirmationCode, ReservationRules.RecordedInErrorCode, StringComparison.Ordinal)
+                    || !string.Equals(retraction.ConfirmationStatement, ReservationRules.RecordedInErrorStatement, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException("A retraction needs the explicit statement that the delivery confirmation was recorded in error.");
+                }
+                if (string.IsNullOrWhiteSpace(retraction.Reason))
+                {
+                    throw new TraceabilityViolationException("A retraction needs a reason.");
+                }
+                var stored = await FirstOrDefaultAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(c => c.Id == confirmationId)
+                    .Select(c => new { c.ShipmentKind, c.SalesDispatchId, c.DirectTradeShipmentId, c.SalesOrderId, Retracted = c.Retraction != null }), async, cancellationToken);
+                if (stored == null)
+                {
+                    throw new TraceabilityViolationException($"Delivery confirmation {confirmationId} does not exist.");
+                }
+                if (!string.Equals(stored.ShipmentKind, retraction.ShipmentKind, StringComparison.Ordinal) || stored.SalesDispatchId != retraction.SalesDispatchId
+                    || stored.DirectTradeShipmentId != retraction.DirectTradeShipmentId || stored.SalesOrderId != retraction.SalesOrderId)
+                {
+                    throw new TraceabilityViolationException($"A retraction must copy kind, shipment and sales order of delivery confirmation {confirmationId} exactly.");
+                }
+                if (stored.Retracted)
+                {
+                    throw new ShipmentDeliveryConflictException($"Delivery confirmation {confirmationId} has already been retracted.");
+                }
+                retractedShipments.Add(RetractionKeyOf(retraction));
+            }
+
+            // ---- Nieuwe bevestigingen ----
+            var confirmedShipments = new HashSet<(string, int)>();
             foreach (var delivery in deliveries)
             {
                 var isWarehouse = delivery.ShipmentKind == ReservationRules.ShipmentKindWarehouse;
@@ -718,88 +797,92 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"A delivery cannot be confirmed for {delivery.DeliveredOn:yyyy-MM-dd}, after today ({today:yyyy-MM-dd}, Europe/Amsterdam).");
                 }
-                var orderId = delivery.SalesOrder != null ? db.Entry(delivery.SalesOrder).Property(x => x.Id).CurrentValue : delivery.SalesOrderId;
-
-                if (isWarehouse)
+                var key = KeyOf(delivery);
+                var label = isWarehouse ? $"Dispatch {key.Id}" : $"DirectTrade shipment {key.Id}";
+                if (!confirmedShipments.Add(key))
                 {
-                    var dispatchId = DispatchIdOf(delivery);
-                    var stored = await FirstOrDefaultAsync(db.SalesDispatches.AsNoTracking().Where(d => d.Id == dispatchId)
-                        .Select(d => new { d.SalesOrderId, d.DispatchedAt, Corrected = db.SalesDispatchCorrections.Any(c => c.SalesDispatchId == d.Id) }), async, cancellationToken);
-                    if (stored == null)
-                    {
-                        continue; // bestaat niet: de FK-constraint weigert dit bij het opslaan
-                    }
-                    if (stored.SalesOrderId != orderId)
-                    {
-                        throw new TraceabilityViolationException($"A delivery confirmation for dispatch {dispatchId} must belong to its sales order {stored.SalesOrderId}.");
-                    }
-                    if (stored.Corrected)
-                    {
-                        throw new DeliveryCorrectionConflictException($"Dispatch {dispatchId} has been corrected and can never be confirmed as delivered.");
-                    }
-                    if (newWarehouseCorrections.Any(c => (c.SalesDispatch != null ? db.Entry(c.SalesDispatch).Property(x => x.Id).CurrentValue : c.SalesDispatchId) == dispatchId))
-                    {
-                        throw new TraceabilityViolationException($"Dispatch {dispatchId} has been corrected and can never be confirmed as delivered.");
-                    }
-                    var shippedOn = calendar.DateOf(stored.DispatchedAt);
-                    if (delivery.DeliveredOn < shippedOn)
-                    {
-                        throw new TraceabilityViolationException($"Dispatch {dispatchId} was dispatched on {shippedOn:yyyy-MM-dd} (Europe/Amsterdam); it cannot be delivered on {delivery.DeliveredOn:yyyy-MM-dd}.");
-                    }
+                    throw new TraceabilityViolationException($"{label} can get at most one delivery confirmation per save.");
                 }
-                else
+                if (retractedShipments.Contains(key))
                 {
-                    var shipmentId = ShipmentIdOf(delivery);
-                    var stored = await FirstOrDefaultAsync(db.DirectTradeShipments.AsNoTracking().Where(s => s.Id == shipmentId)
-                        .Select(s => new { s.SalesOrderId, s.ShippedOn, Corrected = db.DirectTradeShipmentCorrections.Any(c => c.DirectTradeShipmentId == s.Id) }), async, cancellationToken);
-                    if (stored == null)
-                    {
-                        continue;
-                    }
-                    if (stored.SalesOrderId != orderId)
-                    {
-                        throw new TraceabilityViolationException($"A delivery confirmation for DirectTrade shipment {shipmentId} must belong to its sales order {stored.SalesOrderId}.");
-                    }
-                    if (stored.Corrected)
-                    {
-                        throw new DeliveryCorrectionConflictException($"DirectTrade shipment {shipmentId} has been taken back and can never be confirmed as delivered.");
-                    }
-                    if (newDirectTradeCorrections.Any(c => (c.DirectTradeShipment != null ? db.Entry(c.DirectTradeShipment).Property(x => x.Id).CurrentValue : c.DirectTradeShipmentId) == shipmentId))
-                    {
-                        throw new TraceabilityViolationException($"DirectTrade shipment {shipmentId} has been taken back and can never be confirmed as delivered.");
-                    }
-                    if (delivery.DeliveredOn < stored.ShippedOn)
-                    {
-                        throw new TraceabilityViolationException($"DirectTrade shipment {shipmentId} was shipped on {stored.ShippedOn:yyyy-MM-dd}; it cannot be delivered on {delivery.DeliveredOn:yyyy-MM-dd}.");
-                    }
+                    throw new TraceabilityViolationException($"{label}: a retraction must be saved before a new delivery confirmation, never in the same save.");
+                }
+                var orderId = delivery.SalesOrder != null ? db.Entry(delivery.SalesOrder).Property(o => o.Id).CurrentValue : delivery.SalesOrderId;
+                var stored = await StoredShipmentAsync(db, delivery.ShipmentKind, key.Id, async, cancellationToken);
+                if (stored == null)
+                {
+                    throw new TraceabilityViolationException($"{label} does not exist.");
+                }
+                if (stored.SalesOrderId != orderId)
+                {
+                    throw new TraceabilityViolationException($"A delivery confirmation for {label.ToLowerInvariant()} must belong to its sales order {stored.SalesOrderId}.");
+                }
+                if (stored.Corrected)
+                {
+                    throw new ShipmentDeliveryConflictException(isWarehouse
+                        ? $"Dispatch {key.Id} has been corrected and can never be confirmed as delivered."
+                        : $"DirectTrade shipment {key.Id} has been taken back and can never be confirmed as delivered.");
+                }
+                if (isWarehouse ? newWarehouseCorrections.Any(c => WarehouseCorrectionIdOf(c) == key.Id) : newDirectTradeCorrections.Any(c => DirectTradeCorrectionIdOf(c) == key.Id))
+                {
+                    throw new TraceabilityViolationException(isWarehouse
+                        ? $"Dispatch {key.Id} has been corrected and can never be confirmed as delivered."
+                        : $"DirectTrade shipment {key.Id} has been taken back and can never be confirmed as delivered.");
+                }
+                if (stored.HasActive)
+                {
+                    throw new ShipmentDeliveryConflictException($"{label} already has an active delivery confirmation; retract it before confirming again.");
+                }
+                if (delivery.Sequence < 1 || delivery.Sequence > stored.MaxSequence + 1)
+                {
+                    throw new TraceabilityViolationException($"{label}: delivery confirmation number {delivery.Sequence} must be {stored.MaxSequence + 1}.");
+                }
+                if (delivery.Sequence <= stored.MaxSequence)
+                {
+                    throw new ShipmentDeliveryConflictException($"{label}: delivery confirmation number {delivery.Sequence} was already recorded concurrently.");
+                }
+                var shippedOn = isWarehouse ? calendar.DateOf(stored.DispatchedAt!.Value) : stored.ShippedOn!.Value;
+                if (delivery.DeliveredOn < shippedOn)
+                {
+                    throw new TraceabilityViolationException(isWarehouse
+                        ? $"Dispatch {key.Id} was dispatched on {shippedOn:yyyy-MM-dd} (Europe/Amsterdam); it cannot be delivered on {delivery.DeliveredOn:yyyy-MM-dd}."
+                        : $"DirectTrade shipment {key.Id} was shipped on {shippedOn:yyyy-MM-dd}; it cannot be delivered on {delivery.DeliveredOn:yyyy-MM-dd}.");
                 }
             }
 
-            // Omgekeerd: een bevestigde aflevering blokkeert elke administratieve correctie van die verzending.
+            // ---- Correcties: alleen geblokkeerd door een ACTIEVE bevestiging ----
             foreach (var correction in newWarehouseCorrections)
             {
-                var dispatchId = correction.SalesDispatch != null ? db.Entry(correction.SalesDispatch).Property(x => x.Id).CurrentValue : correction.SalesDispatchId;
-                var message = $"Dispatch {dispatchId} is confirmed as delivered; it cannot be corrected as goods that never left the warehouse.";
-                if (deliveries.Any(d => d.ShipmentKind == ReservationRules.ShipmentKindWarehouse && DispatchIdOf(d) == dispatchId))
+                var dispatchId = WarehouseCorrectionIdOf(correction);
+                var message = $"Dispatch {dispatchId} has an active delivery confirmation; it cannot be corrected as goods that never left the warehouse.";
+                if (confirmedShipments.Contains((ReservationRules.ShipmentKindWarehouse, dispatchId)))
                 {
                     throw new TraceabilityViolationException(message);
                 }
-                if (await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.SalesDispatchId == dispatchId), async, cancellationToken))
+                if (retractedShipments.Contains((ReservationRules.ShipmentKindWarehouse, dispatchId)))
                 {
-                    throw new DeliveryCorrectionConflictException(message);
+                    throw new TraceabilityViolationException($"Dispatch {dispatchId}: a retraction must be saved before a correction, never in the same save.");
+                }
+                if (await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.SalesDispatchId == dispatchId).Where(DeliveryState.IsActive), async, cancellationToken))
+                {
+                    throw new ShipmentDeliveryConflictException(message);
                 }
             }
             foreach (var correction in newDirectTradeCorrections)
             {
-                var shipmentId = correction.DirectTradeShipment != null ? db.Entry(correction.DirectTradeShipment).Property(x => x.Id).CurrentValue : correction.DirectTradeShipmentId;
-                var message = $"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place.";
-                if (deliveries.Any(d => d.ShipmentKind == ReservationRules.ShipmentKindDirectTrade && ShipmentIdOf(d) == shipmentId))
+                var shipmentId = DirectTradeCorrectionIdOf(correction);
+                var message = $"DirectTrade shipment {shipmentId} has an active delivery confirmation; it cannot be taken back as a shipment that did not take place.";
+                if (confirmedShipments.Contains((ReservationRules.ShipmentKindDirectTrade, shipmentId)))
                 {
                     throw new TraceabilityViolationException(message);
                 }
-                if (await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.DirectTradeShipmentId == shipmentId), async, cancellationToken))
+                if (retractedShipments.Contains((ReservationRules.ShipmentKindDirectTrade, shipmentId)))
                 {
-                    throw new DeliveryCorrectionConflictException(message);
+                    throw new TraceabilityViolationException($"DirectTrade shipment {shipmentId}: a retraction must be saved before a take-back, never in the same save.");
+                }
+                if (await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.DirectTradeShipmentId == shipmentId).Where(DeliveryState.IsActive), async, cancellationToken))
+                {
+                    throw new ShipmentDeliveryConflictException(message);
                 }
             }
         }

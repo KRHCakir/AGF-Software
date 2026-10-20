@@ -33,7 +33,7 @@ namespace AgfAdmin.Services
         private sealed record ConfirmCommand(Guid RequestId, string Kind, int SalesOrderId, int ShipmentId, int ExpectedOrderVersion, string Actor, DateOnly DeliveredOn, string ReceiptReference);
 
         // Wat de kern van een verzending moet weten, ongeacht de soort.
-        private sealed record ShipmentFacts(int SalesOrderId, DateOnly ShippedOn, bool Corrected, bool Delivered, int LineCount, IReadOnlyDictionary<string, decimal> QuantityByUnit, decimal NetWeightKg);
+        private sealed record ShipmentFacts(int SalesOrderId, DateOnly ShippedOn, bool Corrected, bool Delivered, int NextSequence, int LineCount, IReadOnlyDictionary<string, decimal> QuantityByUnit, decimal NetWeightKg);
 
         public Task<ServiceResult<DeliveryConfirmationDto>> ConfirmWarehouseAsync(int salesOrderId, int dispatchId, ConfirmDeliveryDto request, CancellationToken cancellationToken = default) =>
             ConfirmAsync(ReservationRules.ShipmentKindWarehouse, salesOrderId, dispatchId, request, async () =>
@@ -42,7 +42,8 @@ namespace AgfAdmin.Services
                 if (dispatch == null) return null;
                 return new ShipmentFacts(dispatch.SalesOrderId, _calendar.DateOf(dispatch.DispatchedAt),
                     await _db.SalesDispatchCorrections.AnyAsync(c => c.SalesDispatchId == dispatchId, cancellationToken),
-                    await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.SalesDispatchId == dispatchId, cancellationToken),
+                    await _db.ShipmentDeliveryConfirmations.Where(c => c.SalesDispatchId == dispatchId).AnyAsync(DeliveryState.IsActive, cancellationToken),
+                    (await _db.ShipmentDeliveryConfirmations.Where(c => c.SalesDispatchId == dispatchId).MaxAsync(c => (int?)c.Sequence, cancellationToken) ?? 0) + 1,
                     dispatch.Lines.Count, dispatch.Lines.GroupBy(l => l.Unit).ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity)), dispatch.Lines.Sum(l => l.NetWeightKg));
             }, (confirmation, id) => confirmation.SalesDispatchId = id, cancellationToken);
 
@@ -53,7 +54,8 @@ namespace AgfAdmin.Services
                 if (shipment == null) return null;
                 return new ShipmentFacts(shipment.SalesOrderId, shipment.ShippedOn,
                     await _db.DirectTradeShipmentCorrections.AnyAsync(c => c.DirectTradeShipmentId == shipmentId, cancellationToken),
-                    await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.DirectTradeShipmentId == shipmentId, cancellationToken),
+                    await _db.ShipmentDeliveryConfirmations.Where(c => c.DirectTradeShipmentId == shipmentId).AnyAsync(DeliveryState.IsActive, cancellationToken),
+                    (await _db.ShipmentDeliveryConfirmations.Where(c => c.DirectTradeShipmentId == shipmentId).MaxAsync(c => (int?)c.Sequence, cancellationToken) ?? 0) + 1,
                     shipment.Lines.Count, shipment.Lines.GroupBy(l => l.Unit).ToDictionary(g => g.Key, g => g.Sum(l => l.Quantity)), shipment.Lines.Sum(l => l.NetWeightKg));
             }, (confirmation, id) => confirmation.DirectTradeShipmentId = id, cancellationToken);
 
@@ -99,7 +101,7 @@ namespace AgfAdmin.Services
             }
             if (facts.Delivered)
             {
-                return ServiceResult<DeliveryConfirmationDto>.Conflict($"{label} {shipmentId} is already confirmed as delivered.");
+                return ServiceResult<DeliveryConfirmationDto>.Conflict($"{label} {shipmentId} already has an active delivery confirmation; retract it first if it was recorded in error.");
             }
 
             var now = DateTime.UtcNow;
@@ -108,6 +110,7 @@ namespace AgfAdmin.Services
                 RequestId = command.RequestId,
                 ShipmentKind = kind,
                 SalesOrder = order,
+                Sequence = facts.NextSequence,
                 DeliveredOn = command.DeliveredOn,
                 ReceiptReference = command.ReceiptReference,
                 ActorReference = command.Actor,
@@ -131,6 +134,7 @@ namespace AgfAdmin.Services
                 {
                     shipmentKind = kind,
                     shipmentId,
+                    sequence = facts.NextSequence,
                     deliveredOn = command.DeliveredOn.ToString("yyyy-MM-dd"),
                     receiptReference = command.ReceiptReference,
                     lineCount = facts.LineCount,
@@ -148,7 +152,7 @@ namespace AgfAdmin.Services
             {
                 await _db.SaveChangesAsync(cancellationToken);
             }
-            catch (DeliveryCorrectionConflictException conflict)
+            catch (ShipmentDeliveryConflictException conflict)
             {
                 // Een andere schrijver heeft na onze controles en vóór de guard een aflevering of correctie van deze verzending gecommit.
                 // Er is niets opgeslagen (de guard draait vóór de database-update). Alleen dit herkenbare conflict wordt 409.
@@ -158,7 +162,7 @@ namespace AgfAdmin.Services
                 {
                     return concurrent;
                 }
-                return ServiceResult<DeliveryConfirmationDto>.Conflict($"{conflict.Message} It was corrected concurrently; reload and decide again.");
+                return ServiceResult<DeliveryConfirmationDto>.Conflict($"{conflict.Message} The shipment was changed concurrently; reload and decide again.");
             }
             catch (DbUpdateException exception) when (DbErrors.IsConcurrencyConflict(exception) || DbErrors.IsUniqueViolation(exception))
             {
@@ -172,7 +176,7 @@ namespace AgfAdmin.Services
             }
 
             _db.ChangeTracker.Clear();
-            return ServiceResult<DeliveryConfirmationDto>.Created(ToDto(await _db.ShipmentDeliveryConfirmations.AsNoTracking().SingleAsync(c => c.Id == confirmation.Id, cancellationToken)));
+            return ServiceResult<DeliveryConfirmationDto>.Created(ToDto(await _db.ShipmentDeliveryConfirmations.AsNoTracking().Include(c => c.Retraction).SingleAsync(c => c.Id == confirmation.Id, cancellationToken)));
         }
 
         private ConfirmCommand Build(string kind, int salesOrderId, int shipmentId, ConfirmDeliveryDto request, Dictionary<string, List<string>> errors)
@@ -218,7 +222,7 @@ namespace AgfAdmin.Services
         // Replay: dezelfde requestId voor dezelfde soort, verzending, order, actor, referentie, datum, verklaring en orderversie.
         private async Task<ServiceResult<DeliveryConfirmationDto>> ReplayAsync(ConfirmCommand command, CancellationToken cancellationToken)
         {
-            var existing = await _db.ShipmentDeliveryConfirmations.AsNoTracking().SingleOrDefaultAsync(c => c.RequestId == command.RequestId, cancellationToken);
+            var existing = await _db.ShipmentDeliveryConfirmations.AsNoTracking().Include(c => c.Retraction).SingleOrDefaultAsync(c => c.RequestId == command.RequestId, cancellationToken);
             if (existing == null)
             {
                 return null;
@@ -268,7 +272,9 @@ namespace AgfAdmin.Services
             DeliveredInFullConfirmed = c.DeliveredInFullConfirmed,
             ConfirmationCode = c.ConfirmationCode,
             ConfirmationStatement = c.ConfirmationStatement,
-            RecordedAt = DateTime.SpecifyKind(c.RecordedAt, DateTimeKind.Utc)
+            RecordedAt = DateTime.SpecifyKind(c.RecordedAt, DateTimeKind.Utc),
+            Sequence = c.Sequence,
+            Retraction = c.Retraction == null ? null : DeliveryRetractionService.ToDto(c.Retraction)
         };
     }
 }

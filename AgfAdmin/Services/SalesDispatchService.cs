@@ -396,7 +396,7 @@ namespace AgfAdmin.Services
 
         private IQueryable<SalesDispatch> DispatchQuery() =>
             _db.SalesDispatches.AsNoTracking()
-                .Include(d => d.Delivery)
+                .Include(d => d.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .Include(d => d.Lines).ThenInclude(l => l.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(d => d.Lines).ThenInclude(l => l.SalesOrderLine).ThenInclude(s => s.ProductVariant).ThenInclude(v => v.Product)
                 .AsSplitQuery();
@@ -422,7 +422,8 @@ namespace AgfAdmin.Services
             ActorReference = dispatch.ActorReference,
             DispatchedAt = DateTime.SpecifyKind(dispatch.DispatchedAt, DateTimeKind.Utc),
             Correction = correction == null ? null : SalesDispatchCorrectionService.ToDto(correction),
-            Delivery = dispatch.Delivery == null ? null : DeliveryConfirmationService.ToDto(dispatch.Delivery),
+            Delivery = DeliveryState.ActiveOf(dispatch.DeliveryConfirmations) is { } active ? DeliveryConfirmationService.ToDto(active) : null,
+            DeliveryHistory = dispatch.DeliveryConfirmations.OrderBy(c => c.Sequence).Select(DeliveryConfirmationService.ToDto).ToList(),
             Lines = dispatch.Lines.OrderBy(l => l.Id).Select(l => new SalesDispatchLineDto
             {
                 Id = l.Id,
