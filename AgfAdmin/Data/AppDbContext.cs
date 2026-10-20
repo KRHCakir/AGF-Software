@@ -5,7 +5,19 @@ namespace AgfAdmin.Data
 {
     public class AppDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) {}
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+        {
+            BusinessCalendar = new AgfAdmin.Services.AmsterdamBusinessCalendar(TimeProvider.System);
+        }
+
+        // Met DI: dezelfde kalender als de services, zodat service en centrale guard exact dezelfde datumregels toepassen.
+        public AppDbContext(DbContextOptions<AppDbContext> options, AgfAdmin.Services.IBusinessCalendar calendar) : base(options)
+        {
+            BusinessCalendar = calendar ?? new AgfAdmin.Services.AmsterdamBusinessCalendar(TimeProvider.System);
+        }
+
+        // Kalender (Europe/Amsterdam) voor de datumcontroles in de TraceabilityGuard.
+        public AgfAdmin.Services.IBusinessCalendar BusinessCalendar { get; }
 
         public DbSet<Customer> Customers { get; set; }
         public DbSet<Product> Products { get; set; }
@@ -50,6 +62,7 @@ namespace AgfAdmin.Data
         public DbSet<DirectTradeShipmentLine> DirectTradeShipmentLines { get; set; }
         public DbSet<DirectTradeShipmentCorrection> DirectTradeShipmentCorrections { get; set; }
         public DbSet<DirectTradeShipmentCorrectionLine> DirectTradeShipmentCorrectionLines { get; set; }
+        public DbSet<ShipmentDeliveryConfirmation> ShipmentDeliveryConfirmations { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
@@ -613,6 +626,33 @@ namespace AgfAdmin.Data
                 b.HasOne(l => l.DirectTradeShipmentCorrection).WithMany(c => c.Lines).HasForeignKey(l => l.DirectTradeShipmentCorrectionId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(l => l.DirectTradeShipmentLine).WithMany().HasForeignKey(l => l.DirectTradeShipmentLineId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(l => l.StockReservation).WithOne(r => r.DirectTradeCorrectionLine).HasForeignKey<DirectTradeShipmentCorrectionLine>(l => l.StockReservationId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ShipmentDeliveryConfirmation>(b =>
+            {
+                b.Property(c => c.ShipmentKind).IsRequired().HasMaxLength(32);
+                b.Property(c => c.ReceiptReference).HasMaxLength(100);
+                b.Property(c => c.ActorReference).IsRequired().HasMaxLength(100);
+                b.Property(c => c.ConfirmationCode).IsRequired().HasMaxLength(64);
+                b.Property(c => c.ConfirmationStatement).IsRequired().HasMaxLength(200);
+                b.HasIndex(c => c.RequestId).IsUnique();
+                // Eerste versie: hooguit één bevestiging per verzending, per soort (de intrekflow versoepelt dit later).
+                b.HasIndex(c => c.SalesDispatchId).IsUnique().HasFilter("\"SalesDispatchId\" IS NOT NULL");
+                b.HasIndex(c => c.DirectTradeShipmentId).IsUnique().HasFilter("\"DirectTradeShipmentId\" IS NOT NULL");
+                b.HasIndex(c => c.SalesOrderId);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_OneShipment",
+                        "(\"ShipmentKind\" = 'Warehouse' AND \"SalesDispatchId\" IS NOT NULL AND \"DirectTradeShipmentId\" IS NULL) " +
+                        "OR (\"ShipmentKind\" = 'DirectTrade' AND \"DirectTradeShipmentId\" IS NOT NULL AND \"SalesDispatchId\" IS NULL)");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Confirmed", "\"DeliveredInFullConfirmed\" = TRUE");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Code", "\"ConfirmationCode\" = 'DELIVERED_IN_FULL'");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Statement", "\"ConfirmationStatement\" = 'Deze verzending is volledig en zonder afwijkingen afgeleverd.'");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Reference_NullOrNotBlank", "\"ReceiptReference\" IS NULL OR length(trim(\"ReceiptReference\")) > 0");
+                });
+                b.HasOne(c => c.SalesDispatch).WithOne(d => d.Delivery).HasForeignKey<ShipmentDeliveryConfirmation>(c => c.SalesDispatchId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.DirectTradeShipment).WithOne(s => s.Delivery).HasForeignKey<ShipmentDeliveryConfirmation>(c => c.DirectTradeShipmentId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.SalesOrder).WithMany().HasForeignKey(c => c.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<PalletAuditEvent>(b =>

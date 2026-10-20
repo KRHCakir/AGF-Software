@@ -150,7 +150,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                     : 'text-amber-900';
     const statusText = progress.fulfilled
         // Met een DirectTrade-deel weet het systeem alleen dat het verzonden is; aflevering is niet vastgelegd.
-        ? (line.directTradeShippedQuantity > 0 ? t('sales_line_fulfilled_dt') : t('sales_line_fulfilled'))
+        ? (line.delivered ? t('sales_line_delivered') : t('sales_line_shipped_not_confirmed'))
         : progress.ready ? t('sales_line_complete')
             : progress.complete && progress.onHold ? t('sales_line_complete_on_hold')
                 : progress.completeWithExpected ? t('sales_line_complete_expected', { quantity: formatQuantity(line.allocatedQuantity, locale) })
@@ -171,6 +171,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 </span>
                 {line.allocatedQuantity > 0 && (
                     <span className="text-violet-900">{t('sales_line_allocated', { quantity: formatQuantity(line.allocatedQuantity, locale) })}</span>
+                )}
+                {line.deliveredQuantity > 0 && (
+                    <span className="text-emerald-900">{t('sales_line_delivered_quantity', { quantity: formatQuantity(line.deliveredQuantity, locale) })}</span>
                 )}
                 {line.dispatchedQuantity > 0 && (
                     <span className="text-emerald-900">
@@ -290,6 +293,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                     <span className="mt-1 block text-xs text-amber-950">
                                                         {t('sales_corrected_reservation', { id: String(reservation.correctionId) })}
                                                     </span>
+                                                )}
+                                                {reservation.status === 'Consumed' && reservation.deliveredOn !== null && (
+                                                    <span className="mt-1 block text-xs font-medium text-emerald-900">{t('sales_delivered_badge', { date: formatDateOnly(reservation.deliveredOn, locale) })}</span>
                                                 )}
                                                 {reservation.status === 'Consumed' && reservation.dispatchId !== null && (
                                                     <span className="mt-1 block text-xs text-gray-700">

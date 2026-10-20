@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
     MAX_ORDER_LINES,
+    validateDeliveredOn,
     buildOrderPayload,
     dispatchTotals,
     expectedAfterRequested,
@@ -338,6 +339,17 @@ describe('DirectTrade take-back rules', () => {
         assert.equal(isShippedAllocation(corrected), false);
         assert.equal(isShippableAllocation(corrected), false);
         assert.equal(isCorrectedAllocation({ source: 'Physical', status: 'Corrected' }), false);
+    });
+});
+
+describe('delivery date', () => {
+    test('required, a calendar date, not after today and not before the shipping date', () => {
+        assert.deepEqual(validateDeliveredOn('2026-10-20', '2026-10-19', '2026-10-20'), { ok: true, value: '2026-10-20' });
+        assert.deepEqual(validateDeliveredOn('2026-10-19', '2026-10-19', '2026-10-20'), { ok: true, value: '2026-10-19' });
+        assert.deepEqual(validateDeliveredOn('', '2026-10-19', '2026-10-20'), { ok: false, errors: [{ field: 'deliveredOn', code: 'required' }] });
+        assert.deepEqual(validateDeliveredOn('20-10-2026', '2026-10-19', '2026-10-20'), { ok: false, errors: [{ field: 'deliveredOn', code: 'invalid_date' }] });
+        assert.deepEqual(validateDeliveredOn('2026-10-21', '2026-10-19', '2026-10-20'), { ok: false, errors: [{ field: 'deliveredOn', code: 'future_date' }] });
+        assert.deepEqual(validateDeliveredOn('2026-10-18', '2026-10-19', '2026-10-20'), { ok: false, errors: [{ field: 'deliveredOn', code: 'before_shipping' }] });
     });
 });
 

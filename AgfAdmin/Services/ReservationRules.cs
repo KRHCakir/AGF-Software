@@ -29,6 +29,13 @@ namespace AgfAdmin.Services
         public const string DirectTradeReleasedEvent = "DirectTradeReleased";
         public const string DirectTradeShippedEvent = "DirectTradeShipped";
         public const string DirectTradeShipmentCorrectedEvent = "DirectTradeShipmentCorrected";
+        // Afleverbevestiging: soort verzending, event en de vaste verklaring (code en tekst, beide database-check).
+        public const string ShipmentKindWarehouse = "Warehouse";
+        public const string ShipmentKindDirectTrade = "DirectTrade";
+        public const string DeliveryConfirmedEvent = "ShipmentDeliveryConfirmed";
+        public const string DeliveredInFullCode = "DELIVERED_IN_FULL";
+        public const string DeliveredInFullStatement = "Deze verzending is volledig en zonder afwijkingen afgeleverd.";
+        public const int MaxReceiptReferenceLength = 100;
         // Verklaring bij het terugnemen: taalonafhankelijke code en vaste tekst (beide database-check).
         public const string ShipmentDidNotTakePlaceCode = "SHIPMENT_DID_NOT_TAKE_PLACE";
         public const string ShipmentDidNotTakePlaceStatement = "Deze geregistreerde verzending heeft niet plaatsgevonden.";

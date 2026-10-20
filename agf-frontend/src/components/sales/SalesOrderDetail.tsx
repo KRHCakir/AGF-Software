@@ -5,9 +5,11 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
 import { blockedBy, cancelKey, correctDispatchKey, correctDtShipmentKey, dispatchKey, shipDirectTradeKey } from '../../lib/pendingCommands';
+import { amsterdamDateOf } from '../../lib/calendarDate';
 import { isCorrectedAllocation, isDispatchable, isShippableAllocation, isShippedAllocation, orderProgress } from '../../lib/salesOrderRules';
 import { SaveResult } from '../../services/supplyService';
-import { DirectTradeShipment, DirectTradeShipmentCorrection, SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
+import { DeliveryConfirmation, DirectTradeShipment, DirectTradeShipmentCorrection, SalesDispatch, SalesDispatchCorrection, SalesOrder, ShipmentKind } from '../../types/salesOrder';
+import DeliveryConfirmationPanel, { DeliverableShipment } from './DeliveryConfirmationPanel';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import CancelOrderPanel from './CancelOrderPanel';
 import CorrectDispatchPanel from './CorrectDispatchPanel';
@@ -87,6 +89,30 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
     const hasUncorrectedConsumption = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
     // Verzendcorrectie: paneel per verzending; een onafgerond correctiecommando opent het paneel ook na verversen.
     const [dispatches, setDispatches] = useState<SalesDispatch[]>([]);
+    // Afleverbevestiging per verzending (magazijn of DirectTrade); de soort hoort bij de keuze, nooit alleen het nummer.
+    const [confirming, setConfirming] = useState<{ kind: ShipmentKind; id: number } | null>(null);
+    const [deliveryNotice, setDeliveryNotice] = useState<SaveResult<DeliveryConfirmation> | null>(null);
+    const [deliveryDecisionToken, setDeliveryDecisionToken] = useState(0);
+    const deliveryBlocker = blockedBy(commands, { kind: 'confirm-delivery', orderId: order.id });
+    const canStartDelivery = !readOnly && deliveryBlocker === null;
+    const deliverableOf = (kind: ShipmentKind, id: number): DeliverableShipment | null => {
+        if (kind === 'Warehouse') {
+            const dispatch = dispatches.find((d) => d.id === id);
+            return dispatch ? {
+                kind, id, shippedOn: amsterdamDateOf(dispatch.dispatchedAt), customerName: order.customerName ?? String(order.customerId), delivered: dispatch.delivery !== null,
+                lines: dispatch.lines.map((l) => ({ id: l.id, label: `${l.palletReference ?? ''} · ${l.productName ?? ''} · ${l.productVariantName ?? ''}`, lot: l.lotNumber, quantity: l.quantity, unit: l.unit, netWeightKg: l.netWeightKg })),
+            } : null;
+        }
+        const shipment = dtShipments.find((s) => s.id === id);
+        return shipment ? {
+            kind, id, shippedOn: shipment.shippedOn, customerName: shipment.customerName, delivered: shipment.delivery !== null,
+            lines: shipment.lines.map((l) => ({ id: l.id, label: `${l.vendorName} · ${l.origin} → ${l.destination ?? ''} · ${l.productName ?? ''} · ${l.productVariantName ?? ''}`, lot: l.lotNumber, quantity: l.quantity, unit: l.unit, netWeightKg: l.netWeightKg })),
+        } : null;
+    };
+    const pendingDelivery = Object.values(commands).find((command) => command.kind === 'confirm-delivery' && command.orderId === order.id);
+    const deliveryTarget = pendingDelivery && pendingDelivery.kind === 'confirm-delivery'
+        ? deliverableOf(pendingDelivery.shipmentKind, pendingDelivery.shipmentId)
+        : confirming ? deliverableOf(confirming.kind, confirming.id) : null;
     const [correctingId, setCorrectingId] = useState<number | null>(null);
     const [correctionNotice, setCorrectionNotice] = useState<SaveResult<SalesDispatchCorrection> | null>(null);
     const [correctionDecisionToken, setCorrectionDecisionToken] = useState(0);
@@ -145,6 +171,23 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
         setHistoryToken((n) => n + 1);
         setDtToken((n) => n + 1);
         await onOrderChanged();
+    };
+
+    const onDeliveryConfirmed = async (saved: SaveResult<DeliveryConfirmation>) => {
+        setConfirming(null);
+        setDeliveryNotice(saved);
+        setHistoryToken((n) => n + 1);
+        setDispatchToken((n) => n + 1);
+        setDtToken((n) => n + 1);
+        await onOrderChanged();
+    };
+
+    const reloadForNewDeliveryDecision = async () => {
+        if (await onOrderChanged()) {
+            setDispatchToken((n) => n + 1);
+            setDtToken((n) => n + 1);
+            setDeliveryDecisionToken((n) => n + 1);
+        }
     };
 
     const reloadForNewDtCorrectionDecision = async () => {
@@ -250,7 +293,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
                         <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>
                             {progress.fulfilled
-                                ? (order.lines.some((line) => line.directTradeShippedQuantity > 0) ? t('sales_order_fulfilled_dt') : t('sales_order_fulfilled'))
+                                ? (order.delivered ? t('sales_order_delivered') : t('sales_order_shipped_not_confirmed'))
                                 : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                     {progress.linesFulfilled > 0 && <span className="block text-xs">{t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</span>}</>}
                             {progress.complete && !progress.ready && !progress.fulfilled && progress.onHoldCount > 0 && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
@@ -308,6 +351,19 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     onReload={() => void reloadForNewDtDecision()} onClose={() => setShippingDt(false)} />
             )}
 
+            {deliveryNotice && (
+                <div role="status" className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+                    <p className="font-medium"><span aria-hidden="true">✓ </span>{t('sales_notice_delivery_confirmed', { id: String(deliveryNotice.value.salesDispatchId ?? deliveryNotice.value.directTradeShipmentId ?? '') })}</p>
+                    {deliveryNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
+                    <p className="mt-1">{t('sales_notice_delivery_confirmed_next')}</p>
+                </div>
+            )}
+
+            {deliveryTarget !== null && (
+                <DeliveryConfirmationPanel key={`${deliveryTarget.kind}:${deliveryTarget.id}:${deliveryDecisionToken}`} order={order} shipment={deliveryTarget} actor={actor}
+                    onConfirmed={onDeliveryConfirmed} onReload={() => void reloadForNewDeliveryDecision()} onClose={() => setConfirming(null)} />
+            )}
+
             {dtCorrectionNotice && (
                 <div role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                     <p className="font-medium"><span aria-hidden="true">↺ </span>{t('sales_notice_dt_corrected', { id: String(dtCorrectionNotice.value.directTradeShipmentId), count: String(dtCorrectionNotice.value.lines.length) })}</p>
@@ -325,7 +381,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                 <section aria-labelledby={`dt-shipments-${order.id}`} className="rounded-md border border-violet-300 bg-white px-4 py-3">
                     <h3 id={`dt-shipments-${order.id}`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-900">{t('sales_ship_list_title')}</h3>
                     <DirectTradeShipmentList orderId={order.id} token={dtToken} onShipments={onDtShipmentsLoaded} canCorrect={canStartDtCorrection}
-                        correctingId={dtCorrecting?.id ?? null} onCorrect={(shipment) => { setDtCorrectionNotice(null); setDtCorrectingId(shipment.id); }} />
+                        correctingId={dtCorrecting?.id ?? null} onCorrect={(shipment) => { setDtCorrectionNotice(null); setDtCorrectingId(shipment.id); }}
+                        canConfirm={canStartDelivery} confirmingId={deliveryTarget?.kind === 'DirectTrade' ? deliveryTarget.id : null}
+                        onConfirmDelivery={(shipment) => { setDeliveryNotice(null); setConfirming({ kind: 'DirectTrade', id: shipment.id }); }} />
                 </section>
             )}
 
@@ -351,7 +409,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                 <section aria-labelledby={`dispatches-${order.id}`} className="rounded-md border border-gray-300 bg-white px-4 py-3">
                     <h3 id={`dispatches-${order.id}`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">{t('sales_dispatches_title')}</h3>
                     <DispatchList orderId={order.id} token={dispatchToken} onDispatches={onDispatchesLoaded} canCorrect={canStartCorrection}
-                        correctingId={correctingDispatch?.id ?? null} onCorrect={(dispatch) => { setCorrectionNotice(null); setCorrectingId(dispatch.id); }} />
+                        correctingId={correctingDispatch?.id ?? null} onCorrect={(dispatch) => { setCorrectionNotice(null); setCorrectingId(dispatch.id); }}
+                        canConfirm={canStartDelivery} confirmingId={deliveryTarget?.kind === 'Warehouse' ? deliveryTarget.id : null}
+                        onConfirmDelivery={(dispatch) => { setDeliveryNotice(null); setConfirming({ kind: 'Warehouse', id: dispatch.id }); }} />
                 </section>
             )}
 

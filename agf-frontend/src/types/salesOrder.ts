@@ -158,6 +158,8 @@ export interface SalesDispatch {
     dispatchedAt: string;
     // Gevuld zodra de verzending administratief is gecorrigeerd; de verzending zelf blijft ongewijzigd.
     correction: SalesDispatchCorrection | null;
+    // Gevuld zodra de volledige aflevering is bevestigd.
+    delivery: DeliveryConfirmation | null;
     lines: SalesDispatchLine[];
 }
 
@@ -204,6 +206,9 @@ export interface StockReservation {
     shippedLotNumber: string | null;
     // Alleen bij een teruggenomen DirectTrade-verzending (Corrected); verzenddatum, kg en partij hierboven blijven historie.
     directTradeCorrectionId: number | null;
+    // Alleen bij een Consumed reservering waarvan de verzending als afgeleverd is bevestigd.
+    deliveryConfirmationId: number | null;
+    deliveredOn: string | null;
     status: ReservationStatus;
     createdAt: string;
     releasedAt: string | null;
@@ -242,6 +247,9 @@ export interface SalesOrderLine {
     // Open = gevraagd - gereserveerd - toegewezen - verzonden; vervuld = verzonden == gevraagd.
     openQuantity: number;
     fulfilled: boolean;
+    // Bevestigd afgeleverd in de eigen eenheid van de regel; afgeleverd = bevestigd afgeleverd == gevraagd.
+    deliveredQuantity: number;
+    delivered: boolean;
     version: number;
     reservations: StockReservation[];
 }
@@ -263,6 +271,8 @@ export interface SalesOrder {
     cancelledBy: string | null;
     // Afgeleid: elke regel volledig verzonden; de status blijft Open.
     fulfilled: boolean;
+    // Afgeleid: elke regel volledig verzonden én bevestigd afgeleverd (per regel en eenheid).
+    delivered: boolean;
     lines: SalesOrderLine[];
 }
 
@@ -323,6 +333,8 @@ export function isStockReservation(value: unknown): value is StockReservation {
         && (value.shippedNetWeightKg === null || isNumber(value.shippedNetWeightKg))
         && isNullableString(value.shippedLotNumber)
         && (value.directTradeCorrectionId === null || isNumber(value.directTradeCorrectionId))
+        && (value.deliveryConfirmationId === null || isNumber(value.deliveryConfirmationId))
+        && isNullableString(value.deliveredOn)
         && isReservationStatus(value.status)
         && isString(value.createdAt)
         && isNullableString(value.releasedAt)
@@ -350,6 +362,8 @@ function isSalesOrderLine(value: unknown): value is SalesOrderLine {
         && isNumber(value.allocatedQuantity)
         && isNumber(value.dispatchedQuantity)
         && isNumber(value.directTradeShippedQuantity)
+        && isNumber(value.deliveredQuantity)
+        && typeof value.delivered === 'boolean'
         && isNumber(value.dispatchedNetWeightKg)
         && isNumber(value.openQuantity)
         && typeof value.fulfilled === 'boolean'
@@ -373,6 +387,7 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && isNullableString(value.cancelReason)
         && isNullableString(value.cancelledBy)
         && typeof value.fulfilled === 'boolean'
+        && typeof value.delivered === 'boolean'
         && isArrayOf(value.lines, isSalesOrderLine);
 }
 
@@ -431,6 +446,7 @@ export function isSalesDispatch(value: unknown): value is SalesDispatch {
         && isString(value.actorReference)
         && isString(value.dispatchedAt)
         && (value.correction === null || isSalesDispatchCorrection(value.correction))
+        && (value.delivery === null || isDeliveryConfirmation(value.delivery))
         && isArrayOf(value.lines, isSalesDispatchLine);
 }
 
@@ -564,8 +580,9 @@ export interface DirectTradeShipment {
     reference: string | null;
     actorReference: string;
     recordedAt: string;
-    // Altijd false: het systeem kent (nog) geen afleverbevestiging.
+    // Waar zodra er een afleverbevestiging is (zie delivery).
     deliveryRecorded: boolean;
+    delivery: DeliveryConfirmation | null;
     // Gevuld zodra de verzending administratief is teruggenomen; de verzending zelf blijft ongewijzigd.
     correction: DirectTradeShipmentCorrection | null;
     lines: DirectTradeShipmentLine[];
@@ -633,12 +650,50 @@ export function isDirectTradeShipment(value: unknown): value is DirectTradeShipm
     return isObject(value)
         && isNumber(value.id) && isString(value.requestId) && isNumber(value.salesOrderId) && isNumber(value.customerId)
         && isString(value.customerName) && isString(value.shippedOn) && isNullableString(value.reference)
-        && isString(value.actorReference) && isString(value.recordedAt) && value.deliveryRecorded === false
+        && isString(value.actorReference) && isString(value.recordedAt) && typeof value.deliveryRecorded === 'boolean'
+        && (value.delivery === null || isDeliveryConfirmation(value.delivery))
         && (value.correction === null || isDirectTradeShipmentCorrection(value.correction))
         && isArrayOf(value.lines, isDirectTradeShipmentLine);
 }
 
 export function isDirectTradeShipmentList(value: unknown): value is DirectTradeShipment[] {
     return isArrayOf(value, isDirectTradeShipment);
+}
+
+// Afleverbevestiging van één volledige verzending (magazijn of DirectTrade).
+export type ShipmentKind = 'Warehouse' | 'DirectTrade';
+
+export interface ConfirmDeliveryRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    actorReference: string;
+    // Kalenderdatum yyyy-MM-dd: niet vóór de verzenddatum en niet na vandaag (Europe/Amsterdam).
+    deliveredOn: string;
+    receiptReference: string | null;
+    deliveredInFull: true;
+}
+
+export interface DeliveryConfirmation {
+    id: number;
+    requestId: string;
+    shipmentKind: ShipmentKind;
+    salesDispatchId: number | null;
+    directTradeShipmentId: number | null;
+    salesOrderId: number;
+    deliveredOn: string;
+    receiptReference: string | null;
+    actorReference: string;
+    deliveredInFullConfirmed: boolean;
+    confirmationCode: string;
+    confirmationStatement: string;
+    recordedAt: string;
+}
+
+export function isDeliveryConfirmation(value: unknown): value is DeliveryConfirmation {
+    return isObject(value) && isNumber(value.id) && isString(value.requestId)
+        && (value.shipmentKind === 'Warehouse' || value.shipmentKind === 'DirectTrade')
+        && (value.salesDispatchId === null || isNumber(value.salesDispatchId)) && (value.directTradeShipmentId === null || isNumber(value.directTradeShipmentId))
+        && isNumber(value.salesOrderId) && isString(value.deliveredOn) && isNullableString(value.receiptReference) && isString(value.actorReference)
+        && value.deliveredInFullConfirmed === true && isString(value.confirmationCode) && isString(value.confirmationStatement) && isString(value.recordedAt);
 }
 

@@ -24,6 +24,8 @@ export function ruleMessage(error: RuleError, t: Translate): string {
             return error.field === 'actorReference' ? t('supply_error_actor_required')
                 : error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
                 : error.field === 'shipmentDidNotTakePlace' ? t('sales_dt_correct_confirm_required')
+                : error.field === 'deliveredInFull' ? t('sales_delivery_confirm_required')
+                : error.field === 'deliveredOn' ? t('sales_delivery_date_required')
                 : error.field === 'acknowledgeExpectedSupply' ? t('sales_allocate_acknowledge_required')
                 : error.field.endsWith('.lotDeviationReason') ? t('sales_ship_lot_reason_required')
                 : error.field.endsWith('.lotNumber') ? t('sales_ship_lot_required')
@@ -39,7 +41,8 @@ export function ruleMessage(error: RuleError, t: Translate): string {
         case 'exceeds_available': return t('sales_error_exceeds_available');
         case 'exceeds_demand': return t('sales_error_exceeds_demand');
         case 'exceeds_remaining': return t('sales_error_exceeds_remaining');
-        case 'future_date': return t('sales_ship_date_future');
+        case 'future_date': return error.field === 'deliveredOn' ? t('sales_delivery_date_future') : t('sales_ship_date_future');
+        case 'before_shipping': return t('sales_delivery_date_before_shipping');
         case 'remainder_mismatch': return t('sales_error_remainder_mismatch');
         default: return t('supply_error_required');
     }

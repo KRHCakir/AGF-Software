@@ -1,6 +1,6 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
-import type { CancelSalesOrderRequest, CorrectDirectTradeShipmentRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
+import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
@@ -87,6 +87,17 @@ export interface CorrectDtShipmentCommand extends CommandMeta {
     display: { customerName: string; lineCount: number };
 }
 
+// Afleverbevestiging: ordercommando; de soort staat in de sleutel, zodat gelijke nummers in beide reeksen nooit botsen.
+export interface ConfirmDeliveryCommand extends CommandMeta {
+    kind: 'confirm-delivery';
+    key: string;
+    orderId: number;
+    shipmentKind: 'Warehouse' | 'DirectTrade';
+    shipmentId: number;
+    payload: ConfirmDeliveryRequest;
+    display: { customerName: string; lineCount: number };
+}
+
 export interface CorrectDispatchCommand extends CommandMeta {
     kind: 'correct-dispatch';
     key: string;
@@ -104,7 +115,7 @@ export interface CreateCustomerCommand extends CommandMeta {
     display: { name: string };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | CorrectDispatchCommand | CreateCustomerCommand;
+export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand;
 
 // Regelcommando's: horen bij één orderregel en blokkeren elkaar daar.
 const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'allocate-direct-trade', 'release'];
@@ -146,6 +157,10 @@ export function correctDtShipmentKey(orderId: number, shipmentId: number): strin
     return `correct-dt-shipment:${orderId}:${shipmentId}`;
 }
 
+export function confirmDeliveryKey(orderId: number, shipmentKind: 'Warehouse' | 'DirectTrade', shipmentId: number): string {
+    return `confirm-delivery:${orderId}:${shipmentKind === 'Warehouse' ? 'warehouse' : 'direct-trade'}:${shipmentId}`;
+}
+
 export function correctDispatchKey(orderId: number, dispatchId: number): string {
     return `correct-dispatch:${orderId}:${dispatchId}`;
 }
@@ -167,6 +182,7 @@ export type CommandScope =
     | { kind: 'dispatch'; orderId: number }
     | { kind: 'ship-direct-trade'; orderId: number }
     | { kind: 'correct-dt-shipment'; orderId: number }
+    | { kind: 'confirm-delivery'; orderId: number }
     | { kind: 'correct-dispatch'; orderId: number };
 
 // Een nieuw commando mag een onafgerond commando op dezelfde plaats nooit vervangen: eerst de uitkomst afwachten.
@@ -179,7 +195,7 @@ export function blockedBy(commands: PendingCommands, scope: CommandScope): Pendi
     if (scope.kind === 'create-customer') {
         return commands[CREATE_CUSTOMER_KEY] ?? null;
     }
-    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dt-shipment' || scope.kind === 'correct-dispatch') {
+    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dt-shipment' || scope.kind === 'confirm-delivery' || scope.kind === 'correct-dispatch') {
         return commandsForOrder(commands, scope.orderId)[0] ?? null;
     }
     // Regelcommando's worden ook geblokkeerd door elk ordercommando (annuleren, verzenden, verzending corrigeren).
@@ -329,6 +345,17 @@ function isCorrectDtShipmentPayload(value: unknown, requestId: string): value is
         && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
 }
 
+// De verklaring moet letterlijk true zijn; datum yyyy-MM-dd; referentie optioneel en begrensd.
+function isConfirmDeliveryPayload(value: unknown, requestId: string): value is ConfirmDeliveryRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isNonNegativeInt(value.expectedOrderVersion)
+        && isText(value.actorReference)
+        && typeof value.deliveredOn === 'string' && DATE_ONLY.test(value.deliveredOn)
+        && isBoundedNullableText(value.receiptReference, 100)
+        && value.deliveredInFull === true;
+}
+
 function isCorrectDispatchPayload(value: unknown, requestId: string): value is CorrectSalesDispatchRequest {
     return isRecord(value)
         && value.requestId === requestId
@@ -414,6 +441,12 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
             return isPositiveInt(value.orderId) && isPositiveInt(value.shipmentId)
                 && value.key === correctDtShipmentKey(value.orderId, value.shipmentId)
                 && isCorrectDtShipmentPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'confirm-delivery':
+            return isPositiveInt(value.orderId) && isPositiveInt(value.shipmentId)
+                && (value.shipmentKind === 'Warehouse' || value.shipmentKind === 'DirectTrade')
+                && value.key === confirmDeliveryKey(value.orderId, value.shipmentKind, value.shipmentId)
+                && isConfirmDeliveryPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
         case 'create-customer':
             return value.key === CREATE_CUSTOMER_KEY

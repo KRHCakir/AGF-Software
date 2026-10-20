@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { formatCalendarDate, formatDateOnly, isDateOnly, isoToDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
+import { amsterdamDateOf, formatCalendarDate, formatDateOnly, isDateOnly, isoToDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
 
 // Rondreis van de gevraagde leverdatum in Europe/Amsterdam, zomer- en wintertijd: de kalenderdag die de gebruiker koos
 // moet na UTC-normalisatie door de server exact zo worden teruggetoond. node:test draait elk bestand in een eigen proces.
@@ -66,6 +66,16 @@ describe('DirectTrade shipping date helpers', () => {
         assert.equal(isDateOnly('2026-02-29'), false);
         assert.equal(isDateOnly('2028-02-29'), true);
         assert.equal(isDateOnly('2026-10-19T00:00:00Z'), false);
+    });
+});
+
+describe('shipping date of a UTC instant in Europe/Amsterdam', () => {
+    test('a dispatch at 00:30 Amsterdam time on 21 October is shipped on 21 October, also in winter time', () => {
+        assert.equal(amsterdamDateOf('2026-10-20T21:30:00Z'), '2026-10-20');
+        assert.equal(amsterdamDateOf('2026-10-20T22:30:00Z'), '2026-10-21');
+        assert.equal(amsterdamDateOf('2026-12-31T22:59:59Z'), '2026-12-31');
+        assert.equal(amsterdamDateOf('2026-12-31T23:00:00Z'), '2027-01-01');
+        assert.equal(amsterdamDateOf('not a date'), null);
     });
 });
 

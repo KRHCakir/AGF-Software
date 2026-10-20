@@ -56,7 +56,7 @@ export default function SalesOrderList({ orders, selectedId, onSelect }: {
                                     {/* Groen alleen als alles gereserveerd is én niets on hold staat; volledig gereserveerd met on hold is een waarschuwing. */}
                                     <span className={`block text-xs font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-800'}`}>
                                         {progress.fulfilled
-                                            ? (order.lines.some((line) => line.directTradeShippedQuantity > 0) ? t('sales_order_fulfilled_dt') : t('sales_order_fulfilled'))
+                                            ? (order.delivered ? t('sales_order_delivered') : t('sales_order_shipped_not_confirmed'))
                                             : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                                 {progress.partiallyDispatched && <> · {t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</>}
                                                 {progress.complete && !progress.ready && progress.onHoldCount > 0 && <> · {t('sales_on_hold')}</>}

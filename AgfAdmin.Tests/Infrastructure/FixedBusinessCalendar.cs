@@ -8,6 +8,8 @@ public sealed class FixedBusinessCalendar : IBusinessCalendar
     private readonly DateOnly _today;
     public FixedBusinessCalendar(DateOnly today) => _today = today;
     public DateOnly Today() => _today;
+    // Dezelfde omrekening als in productie: UTC-tijdstip naar kalenderdatum in Europe/Amsterdam.
+    public DateOnly DateOf(DateTime utc) => AmsterdamBusinessCalendar.ToAmsterdamDate(utc);
 }
 
 // Vaste UTC-klok voor de tijdzonetests van AmsterdamBusinessCalendar.

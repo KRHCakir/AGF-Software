@@ -67,6 +67,10 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} has already been taken back.");
             }
+            if (await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.DirectTradeShipmentId == shipmentId, cancellationToken))
+            {
+                return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place. Retract the delivery confirmation first (separate flow).");
+            }
 
             // Hele verzending: exact de toewijzingen van deze verzending, elk met de verwachte versie. Een id van een magazijnreservering,
             // magazijnverzending of andere verzending hoort daar nooit bij, ook niet als het nummer toevallig gelijk is.
@@ -161,6 +165,18 @@ namespace AgfAdmin.Services
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DeliveryCorrectionConflictException conflict)
+            {
+                // Een andere schrijver heeft na onze controles en vóór de guard een aflevering of correctie van deze verzending gecommit.
+                // Er is niets opgeslagen (de guard draait vóór de database-update). Alleen dit herkenbare conflict wordt 409.
+                _db.ChangeTracker.Clear();
+                var concurrent = await ReplayAsync(command, cancellationToken);
+                if (concurrent != null)
+                {
+                    return concurrent;
+                }
+                return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"{conflict.Message} The delivery was confirmed concurrently; reload and decide again.");
             }
             catch (DbUpdateException exception) when (DbErrors.IsConcurrencyConflict(exception) || DbErrors.IsUniqueViolation(exception))
             {

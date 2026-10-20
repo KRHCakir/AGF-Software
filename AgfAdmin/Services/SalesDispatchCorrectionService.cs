@@ -65,6 +65,10 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<SalesDispatchCorrectionDto>.Conflict($"Dispatch {dispatchId} has already been corrected.");
             }
+            if (await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.SalesDispatchId == dispatchId, cancellationToken))
+            {
+                return ServiceResult<SalesDispatchCorrectionDto>.Conflict($"Dispatch {dispatchId} is confirmed as delivered; goods that were delivered cannot be corrected as never having left the warehouse. Retract the delivery confirmation first (separate flow).");
+            }
 
             // Hele verzending: exact de verzendregels, elk met de verwachte reserveringsversie.
             var byReservation = dispatch.Lines.ToDictionary(l => l.StockReservationId);
@@ -237,6 +241,18 @@ namespace AgfAdmin.Services
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DeliveryCorrectionConflictException conflict)
+            {
+                // Een andere schrijver heeft na onze controles en vóór de guard een aflevering of correctie van deze verzending gecommit.
+                // Er is niets opgeslagen (de guard draait vóór de database-update). Alleen dit herkenbare conflict wordt 409.
+                _db.ChangeTracker.Clear();
+                var concurrent = await ReplayAsync(command, cancellationToken);
+                if (concurrent != null)
+                {
+                    return concurrent;
+                }
+                return ServiceResult<SalesDispatchCorrectionDto>.Conflict($"{conflict.Message} The delivery was confirmed concurrently; reload and decide again.");
             }
             catch (DbUpdateException exception) when (DbErrors.IsConcurrencyConflict(exception) || DbErrors.IsUniqueViolation(exception))
             {

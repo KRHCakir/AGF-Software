@@ -600,10 +600,14 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
-                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch)
-                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch).ThenInclude(s => s.Delivery)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment).ThenInclude(s => s.Delivery)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeCorrectionLine)
                 .AsSplitQuery();
+
+        // Bevestigd afgeleverd op een regel: uitsluitend Consumed reserveringen waarvan de bijbehorende verzending een bevestiging heeft.
+        internal static decimal DeliveredQuantity(SalesOrderLine line) =>
+            line.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed && StockReservationService.DeliveryOf(r) != null).Sum(r => r.Quantity);
 
         internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null, IReadOnlyDictionary<int, int> correctionIds = null) => new()
         {
@@ -621,6 +625,8 @@ namespace AgfAdmin.Services
             CancelReason = order.CancelReason,
             CancelledBy = order.Status == ReservationRules.OrderStatusCancelled ? cancelledBy : null,
             Fulfilled = order.Lines.Count > 0 && order.Lines.All(l => l.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity) == l.Quantity),
+            // Per regel in de eigen eenheid; nooit één ordertotaal over box en colli heen.
+            Delivered = order.Lines.Count > 0 && order.Lines.All(l => DeliveredQuantity(l) == l.Quantity),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
                 // Gereserveerd = Active Physical; toegewezen = Active DirectTrade; verzonden = Consumed. Open trekt alle drie af.
@@ -648,6 +654,8 @@ namespace AgfAdmin.Services
                     // Open = gevraagd - Active Physical - Active DirectTrade - Consumed: verzonden komt nooit terug als open vraag.
                     OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity - allocatedQuantity - dispatchedQuantity),
                     Fulfilled = dispatchedQuantity == line.Quantity,
+                    DeliveredQuantity = DeliveredQuantity(line),
+                    Delivered = DeliveredQuantity(line) == line.Quantity,
                     Version = line.Version,
                     Reservations = line.Reservations.OrderBy(r => r.Id).Select(r => StockReservationService.ToDto(r, order.Id,
                         correctionIds != null && correctionIds.TryGetValue(r.Id, out var correctionId) ? correctionId : null)).ToList()

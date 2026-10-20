@@ -41,6 +41,8 @@ namespace AgfAdmin.DTOs
         public string CancelledBy { get; set; }
         // Afgeleid: elke regel volledig verzonden. De status blijft Open; er is geen aparte vervulde status.
         public bool Fulfilled { get; set; }
+        // Afgeleid: elke regel volledig verzonden én bevestigd afgeleverd (per regel en eenheid, nooit over eenheden heen opgeteld).
+        public bool Delivered { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
     }
 
@@ -88,6 +90,10 @@ namespace AgfAdmin.DTOs
         public decimal OpenQuantity { get; set; }
         // Afgeleid: verzonden == gevraagd.
         public bool Fulfilled { get; set; }
+        // Bevestigd afgeleverd: Consumed reserveringen van deze regel waarvan de verzending een afleverbevestiging heeft (eigen eenheid).
+        public decimal DeliveredQuantity { get; set; }
+        // Afgeleid: bevestigd afgeleverd == gevraagd.
+        public bool Delivered { get; set; }
         public int Version { get; set; }
         public List<StockReservationDto> Reservations { get; set; } = new();
     }
@@ -126,6 +132,9 @@ namespace AgfAdmin.DTOs
         // Alleen bij een teruggenomen DirectTrade-verzending (Corrected): de DirectTrade-correctie. Verzenddatum, kg en partij hierboven
         // blijven als historie zichtbaar; de hoeveelheid telt niet meer als verzonden of als bezette broncapaciteit.
         public int? DirectTradeCorrectionId { get; set; }
+        // Alleen bij een Consumed reservering waarvan de verzending (magazijn of DirectTrade) als afgeleverd is bevestigd.
+        public int? DeliveryConfirmationId { get; set; }
+        public DateOnly? DeliveredOn { get; set; }
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ReleasedAt { get; set; }
@@ -195,6 +204,8 @@ namespace AgfAdmin.DTOs
         public DateTime DispatchedAt { get; set; }
         // Gevuld zodra de verzending administratief is gecorrigeerd; de verzending zelf blijft ongewijzigd.
         public SalesDispatchCorrectionDto Correction { get; set; }
+        // Gevuld zodra de volledige aflevering van deze verzending is bevestigd.
+        public DeliveryConfirmationDto Delivery { get; set; }
         public List<SalesDispatchLineDto> Lines { get; set; } = new();
     }
 
@@ -348,10 +359,12 @@ namespace AgfAdmin.DTOs
         public string Reference { get; set; }
         public string ActorReference { get; set; }
         public DateTime RecordedAt { get; set; }
-        // Het systeem kent geen afleverbevestiging; dit veld zegt alleen dat er (nog) geen is vastgelegd.
-        public bool DeliveryRecorded => false;
+        // Waar zodra er een afleverbevestiging is (zie Delivery).
+        public bool DeliveryRecorded => Delivery != null;
         // Gevuld zodra de verzending administratief is teruggenomen; de verzending zelf blijft ongewijzigd.
         public DirectTradeShipmentCorrectionDto Correction { get; set; }
+        // Gevuld zodra de volledige aflevering van deze verzending is bevestigd.
+        public DeliveryConfirmationDto Delivery { get; set; }
         public List<DirectTradeShipmentLineDto> Lines { get; set; } = new();
     }
 
@@ -415,4 +428,34 @@ namespace AgfAdmin.DTOs
         public string SourceLotNumber { get; set; }
         public string LotDeviationReason { get; set; }
     }
+
+    // Volledige aflevering van één verzending bevestigen. De soort volgt uit het endpoint (magazijn of DirectTrade).
+    public sealed class ConfirmDeliveryDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public string ActorReference { get; set; }
+        // Kalenderdatum (yyyy-MM-dd): niet vóór de verzenddatum en niet na vandaag, beide in Europe/Amsterdam.
+        public DateOnly? DeliveredOn { get; set; }
+        public string ReceiptReference { get; set; }
+        public bool? DeliveredInFull { get; set; }
+    }
+
+    public sealed class DeliveryConfirmationDto
+    {
+        public int Id { get; set; }
+        public Guid RequestId { get; set; }
+        public string ShipmentKind { get; set; }
+        public int? SalesDispatchId { get; set; }
+        public int? DirectTradeShipmentId { get; set; }
+        public int SalesOrderId { get; set; }
+        public DateOnly DeliveredOn { get; set; }
+        public string ReceiptReference { get; set; }
+        public string ActorReference { get; set; }
+        public bool DeliveredInFullConfirmed { get; set; }
+        public string ConfirmationCode { get; set; }
+        public string ConfirmationStatement { get; set; }
+        public DateTime RecordedAt { get; set; }
+    }
 }
+

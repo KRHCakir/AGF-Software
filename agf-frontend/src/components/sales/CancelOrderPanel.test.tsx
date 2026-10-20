@@ -15,16 +15,16 @@ const reservation = (id: number, status: 'Active' | 'Released', onHold = false) 
     id, requestId: `r-${id}`, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: `PAL-${id}`,
     warehouseLocation: null, lotNumber: `LOT-${id}`, quantity: 5, unit: 'box' as const, netWeightKg: 20, source: 'Physical', status,
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
-    releaseReason: status === 'Released' ? 'eerder' : null, version: 0, contentQualityStatus: onHold ? 'Blocked' as const : 'Approved' as const, onHold, consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
+    releaseReason: status === 'Released' ? 'eerder' : null, version: 0, contentQualityStatus: onHold ? 'Blocked' as const : 'Approved' as const, onHold, consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null, deliveryConfirmationId: null, deliveredOn: null,
 });
 
 const order: SalesOrder = {
     id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status: 'Open', customerReference: null,
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version: 2,
-    cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false,
+    cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, delivered: false,
     lines: [{
         id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
-        reservedQuantity: 10, reservedNetWeightKg: 40, allocatedQuantity: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, directTradeShippedQuantity: 0, openQuantity: 10, fulfilled: false, version: 3,
+        reservedQuantity: 10, reservedNetWeightKg: 40, allocatedQuantity: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false, openQuantity: 10, fulfilled: false, version: 3,
         reservations: [reservation(11, 'Active', true), reservation(12, 'Released'), reservation(13, 'Active')],
     }],
 };
