@@ -19,8 +19,8 @@ namespace AgfAdmin.Models
 
         public ICollection<SalesDispatchLine> Lines { get; set; } = new List<SalesDispatchLine>();
 
-        // Omgekeerde navigatie: de (hooguit ene) afleverbevestiging van deze verzending.
-        public ShipmentDeliveryConfirmation Delivery { get; set; }
+        // Omgekeerde navigatie: alle afleverbevestigingen (historie), waarvan hooguit één actief is (DeliveryState).
+        public ICollection<ShipmentDeliveryConfirmation> DeliveryConfirmations { get; set; } = new List<ShipmentDeliveryConfirmation>();
     }
 
     // Eén verbruikte reservering: hoeveelheid, eenheid en netto-kg zijn een kopie van de reservering (nooit afgeleid).

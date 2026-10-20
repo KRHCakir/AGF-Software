@@ -609,7 +609,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
         }
 
         Assert.Equal((ServiceResultStatus.Created, ServiceResultStatus.Conflict), (winnerStatus, loserStatus));
-        Assert.Contains(winner == "correction-wins" ? "corrected concurrently" : "delivery was confirmed concurrently", loserMessage);
+        Assert.Contains(winner == "correction-wins" ? "changed concurrently" : "delivery was confirmed concurrently", loserMessage);
         // Geen gedeeltelijke wijziging en geen extra audit van de verliezer: de staat is exact die direct na de winnaar.
         Assert.Equal(afterWinner, await WriteStateAsync());
         Assert.Equal(winner == "correction-wins" ? (0, 1) : (1, 0), (await AuditCountAsync(ReservationRules.DeliveryConfirmedEvent), await AuditCountAsync(correctionEvent)));

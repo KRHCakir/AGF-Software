@@ -17,10 +17,12 @@ namespace AgfAdmin.Controllers
         private readonly IDirectTradeShipmentService _shipments;
         private readonly IDirectTradeShipmentCorrectionService _shipmentCorrections;
         private readonly IDeliveryConfirmationService _deliveries;
+        private readonly IDeliveryRetractionService _retractions;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections, IDeliveryConfirmationService deliveries)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections, IDeliveryConfirmationService deliveries, IDeliveryRetractionService retractions)
         {
             _deliveries = deliveries;
+            _retractions = retractions;
             _shipmentCorrections = shipmentCorrections;
             _shipments = shipments;
             _orders = orders;
@@ -87,6 +89,21 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> ConfirmDirectTradeDelivery(int id, int shipmentId, [FromBody] ConfirmDeliveryDto request)
         {
             var result = await _deliveries.ConfirmDirectTradeAsync(id, shipmentId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        // Intrekken van een administratief onjuiste afleverbevestiging. De bevestiging moet bij deze verzending, soort en order horen (anders 404).
+        [HttpPost("{id:int}/dispatches/{dispatchId:int}/delivery-confirmations/{confirmationId:int}/retractions")]
+        public async Task<IActionResult> RetractWarehouseDelivery(int id, int dispatchId, int confirmationId, [FromBody] RetractDeliveryDto request)
+        {
+            var result = await _retractions.RetractWarehouseAsync(id, dispatchId, confirmationId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        [HttpPost("{id:int}/direct-trade-shipments/{shipmentId:int}/delivery-confirmations/{confirmationId:int}/retractions")]
+        public async Task<IActionResult> RetractDirectTradeDelivery(int id, int shipmentId, int confirmationId, [FromBody] RetractDeliveryDto request)
+        {
+            var result = await _retractions.RetractDirectTradeAsync(id, shipmentId, confirmationId, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
 

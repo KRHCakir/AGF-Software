@@ -53,7 +53,7 @@ public class DeliveryConfirmationGuardTests : IDisposable
     private ShipmentDeliveryConfirmation Delivery(string kind, int? dispatchId, int? shipmentId, DateOnly? on = null, int? orderId = null) => new()
     {
         RequestId = Guid.NewGuid(), ShipmentKind = kind, SalesDispatchId = dispatchId, DirectTradeShipmentId = shipmentId, SalesOrderId = orderId ?? _orderId,
-        DeliveredOn = on ?? new DateOnly(2026, 10, 20), ActorReference = "t", DeliveredInFullConfirmed = true,
+        DeliveredOn = on ?? new DateOnly(2026, 10, 20), ActorReference = "t", DeliveredInFullConfirmed = true, Sequence = 1,
         ConfirmationCode = ReservationRules.DeliveredInFullCode, ConfirmationStatement = ReservationRules.DeliveredInFullStatement, RecordedAt = DateTime.UtcNow
     };
 
@@ -235,7 +235,7 @@ public class DeliveryConfirmationGuardTests : IDisposable
         await using var db = _factory.CreateContext();
         db.ShipmentDeliveryConfirmations.Add(kind == "Warehouse" ? Delivery(kind, dispatchId, null) : Delivery(kind, null, shipmentId));
         // Opgeslagen correctie: het herkenbare conflict dat services als 409 mogen behandelen.
-        var exception = await Assert.ThrowsAsync<DeliveryCorrectionConflictException>(() => SaveAsync(db, async));
+        var exception = await Assert.ThrowsAsync<ShipmentDeliveryConflictException>(() => SaveAsync(db, async));
         Assert.Contains("can never be confirmed as delivered", exception.Message);
     }
 
@@ -286,8 +286,8 @@ public class DeliveryConfirmationGuardTests : IDisposable
             // Opgeslagen bevestiging = herkenbaar conflict; bevestiging en correctie in dezelfde save = fout van de schrijver (exact basistype).
             if (when == "stored")
             {
-                var conflict = await Assert.ThrowsAsync<DeliveryCorrectionConflictException>(() => SaveAsync(db, async));
-                Assert.Contains("is confirmed as delivered", conflict.Message);
+                var conflict = await Assert.ThrowsAsync<ShipmentDeliveryConflictException>(() => SaveAsync(db, async));
+                Assert.Contains("has an active delivery confirmation", conflict.Message);
             }
             else
             {
@@ -328,8 +328,8 @@ public class DeliveryConfirmationGuardTests : IDisposable
     {
         await using var raw = _factory.CreateContext();
         return await raw.Database.ExecuteSqlRawAsync(
-            "INSERT INTO \"ShipmentDeliveryConfirmations\" (\"RequestId\", \"ShipmentKind\", \"SalesDispatchId\", \"DirectTradeShipmentId\", \"SalesOrderId\", \"DeliveredOn\", \"ReceiptReference\", \"ActorReference\", \"DeliveredInFullConfirmed\", \"ConfirmationCode\", \"ConfirmationStatement\", \"RecordedAt\") " +
-            $"VALUES ('{Guid.NewGuid()}', '{kind}', {dispatchId}, {shipmentId}, {_orderId}, '2026-10-20', {reference}, 't', {confirmed}, '{code}', '{statement}', '2026-10-20 08:00:00')");
+            "INSERT INTO \"ShipmentDeliveryConfirmations\" (\"RequestId\", \"ShipmentKind\", \"SalesDispatchId\", \"DirectTradeShipmentId\", \"SalesOrderId\", \"DeliveredOn\", \"ReceiptReference\", \"ActorReference\", \"DeliveredInFullConfirmed\", \"ConfirmationCode\", \"ConfirmationStatement\", \"RecordedAt\", \"Sequence\") " +
+            $"VALUES ('{Guid.NewGuid()}', '{kind}', {dispatchId}, {shipmentId}, {_orderId}, '2026-10-20', {reference}, 't', {confirmed}, '{code}', '{statement}', '2026-10-20 08:00:00', 1)");
     }
 
     [Fact]
@@ -351,4 +351,190 @@ public class DeliveryConfirmationGuardTests : IDisposable
         await Rejected(() => RawAsync("Warehouse", dispatchId.ToString(), "NULL"), "UNIQUE constraint failed");
         await Rejected(() => RawAsync("DirectTrade", "NULL", shipmentId.ToString()), "UNIQUE constraint failed");
     }
+
+    // ======================== Intrekkingen en volgnummers (regel 13, sync en async) ========================
+
+    private ShipmentDeliveryRetraction Retraction(ShipmentDeliveryConfirmation confirmation, int confirmationId) => new()
+    {
+        RequestId = Guid.NewGuid(), ShipmentDeliveryConfirmationId = confirmationId, ShipmentKind = confirmation.ShipmentKind,
+        SalesDispatchId = confirmation.SalesDispatchId, DirectTradeShipmentId = confirmation.DirectTradeShipmentId, SalesOrderId = confirmation.SalesOrderId,
+        Reason = "Verkeerde verzending", ActorReference = "t", RecordedInErrorConfirmed = true,
+        ConfirmationCode = ReservationRules.RecordedInErrorCode, ConfirmationStatement = ReservationRules.RecordedInErrorStatement, RecordedAt = DateTime.UtcNow
+    };
+
+    private async Task<ShipmentDeliveryConfirmation> StoredDeliveryAsync(string kind, int dispatchId, int shipmentId, int sequence = 1)
+    {
+        var delivery = kind == "Warehouse" ? Delivery(kind, dispatchId, null) : Delivery(kind, null, shipmentId);
+        delivery.Sequence = sequence;
+        await using var db = _factory.CreateContext();
+        db.ShipmentDeliveryConfirmations.Add(delivery);
+        await db.SaveChangesAsync();
+        return delivery;
+    }
+
+    private async Task RetractStoredAsync(ShipmentDeliveryConfirmation delivery)
+    {
+        await using var db = _factory.CreateContext();
+        db.ShipmentDeliveryRetractions.Add(Retraction(delivery, delivery.Id));
+        await db.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData("Warehouse", false)]
+    [InlineData("Warehouse", true)]
+    [InlineData("DirectTrade", false)]
+    [InlineData("DirectTrade", true)]
+    public async Task Retract_Then_Confirm_Number_2_Is_Accepted_And_A_Correction_Is_Allowed_Without_An_Active_Confirmation(string kind, bool async)
+    {
+        var (dispatchId, shipmentId, _, _) = await ArrangeAsync();
+        var first = await StoredDeliveryAsync(kind, dispatchId, shipmentId);
+        await using (var db = _factory.CreateContext())
+        {
+            db.ShipmentDeliveryRetractions.Add(Retraction(first, first.Id));
+            await SaveAsync(db, async);
+        }
+        var second = await StoredDeliveryAsync(kind, dispatchId, shipmentId, sequence: 2);
+        await RetractStoredAsync(second);
+        if (kind == "Warehouse") await SalesTestData.CorrectAsync(_factory, dispatchId);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal((2, 2, kind == "Warehouse" ? 1 : 0), (await verify.ShipmentDeliveryConfirmations.CountAsync(), await verify.ShipmentDeliveryRetractions.CountAsync(), await verify.SalesDispatchCorrections.CountAsync()));
+    }
+
+    [Theory]
+    [InlineData("active-exists", false, true)]
+    [InlineData("active-exists", true, true)]
+    [InlineData("number-taken", false, true)]
+    [InlineData("number-taken", true, true)]
+    [InlineData("number-gap", false, false)]
+    [InlineData("number-gap", true, false)]
+    [InlineData("number-zero", false, false)]
+    [InlineData("number-zero", true, false)]
+    [InlineData("two-in-one-save", false, false)]
+    [InlineData("two-in-one-save", true, false)]
+    [InlineData("retract-and-confirm-in-one-save", false, false)]
+    [InlineData("retract-and-confirm-in-one-save", true, false)]
+    public async Task Confirmation_Numbers_Allow_At_Most_One_Active_Confirmation(string scenario, bool async, bool recognisableConflict)
+    {
+        var (dispatchId, shipmentId, _, _) = await ArrangeAsync();
+        var first = await StoredDeliveryAsync("Warehouse", dispatchId, shipmentId);
+        if (scenario is "number-taken" or "number-gap" or "number-zero" or "two-in-one-save") await RetractStoredAsync(first);
+        await using var db = _factory.CreateContext();
+        var next = Delivery("Warehouse", dispatchId, null);
+        next.Sequence = scenario switch { "active-exists" => 2, "number-taken" => 1, "number-gap" => 3, "number-zero" => 0, _ => 2 };
+        db.ShipmentDeliveryConfirmations.Add(next);
+        if (scenario == "two-in-one-save")
+        {
+            var another = Delivery("Warehouse", dispatchId, null);
+            another.Sequence = 2;
+            db.ShipmentDeliveryConfirmations.Add(another);
+        }
+        if (scenario == "retract-and-confirm-in-one-save") db.ShipmentDeliveryRetractions.Add(Retraction(first, first.Id));
+
+        var exception = await Assert.ThrowsAnyAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        Assert.Equal(recognisableConflict, exception is ShipmentDeliveryConflictException);
+    }
+
+    [Theory]
+    [InlineData("already-retracted", false, true)]
+    [InlineData("already-retracted", true, true)]
+    [InlineData("twice-in-one-save", false, false)]
+    [InlineData("twice-in-one-save", true, false)]
+    [InlineData("unsaved-confirmation", false, false)]
+    [InlineData("unsaved-confirmation", true, false)]
+    [InlineData("wrong-copy", false, false)]
+    [InlineData("wrong-copy", true, false)]
+    [InlineData("no-statement", false, false)]
+    [InlineData("no-statement", true, false)]
+    [InlineData("wrong-code", false, false)]
+    [InlineData("wrong-code", true, false)]
+    [InlineData("blank-reason", false, false)]
+    [InlineData("blank-reason", true, false)]
+    [InlineData("missing-confirmation", false, false)]
+    [InlineData("missing-confirmation", true, false)]
+    [InlineData("retract-and-correct-in-one-save", false, false)]
+    [InlineData("retract-and-correct-in-one-save", true, false)]
+    public async Task Invalid_Retractions_Are_Rejected(string scenario, bool async, bool recognisableConflict)
+    {
+        var (dispatchId, shipmentId, _, _) = await ArrangeAsync();
+        var stored = await StoredDeliveryAsync("Warehouse", dispatchId, shipmentId);
+        if (scenario == "already-retracted") await RetractStoredAsync(stored);
+        await using var db = _factory.CreateContext();
+        var retraction = Retraction(stored, stored.Id);
+        switch (scenario)
+        {
+            case "twice-in-one-save": db.ShipmentDeliveryRetractions.Add(Retraction(stored, stored.Id)); break;
+            case "unsaved-confirmation":
+                var fresh = Delivery("DirectTrade", null, shipmentId);
+                db.ShipmentDeliveryConfirmations.Add(fresh);
+                retraction = Retraction(fresh, 0);
+                retraction.Confirmation = fresh;
+                break;
+            case "wrong-copy": retraction.SalesOrderId = _orderId + 1; break;
+            case "no-statement": retraction.RecordedInErrorConfirmed = false; break;
+            case "wrong-code": retraction.ConfirmationCode = "OTHER"; break;
+            case "blank-reason": retraction.Reason = "  "; break;
+            case "missing-confirmation": retraction.ShipmentDeliveryConfirmationId = 999; break;
+            case "retract-and-correct-in-one-save": await SalesTestData.CorrectInContextAsync(db, dispatchId); break;
+        }
+        db.ShipmentDeliveryRetractions.Add(retraction);
+
+        var exception = await Assert.ThrowsAnyAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        Assert.Equal(recognisableConflict, exception is ShipmentDeliveryConflictException);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Retractions_Are_Append_Only(bool async)
+    {
+        var (dispatchId, shipmentId, _, _) = await ArrangeAsync();
+        await RetractStoredAsync(await StoredDeliveryAsync("Warehouse", dispatchId, shipmentId));
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.ShipmentDeliveryRetractions.SingleAsync()).Reason = "gewijzigd";
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            db.ShipmentDeliveryRetractions.Remove(await db.ShipmentDeliveryRetractions.SingleAsync());
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        }
+    }
+
+    // Databasechecks buiten de guard: volgnummer uniek per verzending en soort, hooguit één intrekking per bevestiging, verklaring en reden.
+    [Fact]
+    public async Task Database_Enforces_Unique_Numbers_Per_Shipment_And_One_Retraction_Per_Confirmation()
+    {
+        var (dispatchId, shipmentId, _, _) = await ArrangeAsync();
+        async Task<int> Confirmation(string kind, int sequence)
+        {
+            await using var raw = _factory.CreateContext();
+            var (d, s) = kind == "Warehouse" ? (dispatchId.ToString(), "NULL") : ("NULL", shipmentId.ToString());
+            return await raw.Database.ExecuteSqlRawAsync(
+                "INSERT INTO \"ShipmentDeliveryConfirmations\" (\"RequestId\", \"ShipmentKind\", \"SalesDispatchId\", \"DirectTradeShipmentId\", \"SalesOrderId\", \"DeliveredOn\", \"ActorReference\", \"DeliveredInFullConfirmed\", \"ConfirmationCode\", \"ConfirmationStatement\", \"RecordedAt\", \"Sequence\") " +
+                $"VALUES ('{Guid.NewGuid()}', '{kind}', {d}, {s}, {_orderId}, '2026-10-20', 't', TRUE, 'DELIVERED_IN_FULL', 'Deze verzending is volledig en zonder afwijkingen afgeleverd.', '2026-10-20 08:00:00', {sequence})");
+        }
+        async Task<int> RetractionRow(int confirmationId, string statement = "Deze afleverbevestiging is ten onrechte vastgelegd.", string reason = "x")
+        {
+            await using var raw = _factory.CreateContext();
+            return await raw.Database.ExecuteSqlRawAsync(
+                "INSERT INTO \"ShipmentDeliveryRetractions\" (\"RequestId\", \"ShipmentDeliveryConfirmationId\", \"ShipmentKind\", \"SalesDispatchId\", \"DirectTradeShipmentId\", \"SalesOrderId\", \"Reason\", \"ActorReference\", \"RecordedInErrorConfirmed\", \"ConfirmationCode\", \"ConfirmationStatement\", \"RecordedAt\") " +
+                $"VALUES ('{Guid.NewGuid()}', {confirmationId}, 'Warehouse', {dispatchId}, NULL, {_orderId}, '{reason}', 't', TRUE, 'DELIVERY_CONFIRMATION_RECORDED_IN_ERROR', '{statement}', '2026-10-20 09:00:00')");
+        }
+        async Task Rejected(Func<Task<int>> insert, string check) => Assert.Contains(check, (await Assert.ThrowsAsync<SqliteException>(insert)).Message);
+
+        Assert.Equal(1, await Confirmation("Warehouse", 1));
+        Assert.Equal(1, await Confirmation("Warehouse", 2));        // de oude "één per verzending"-index is weg
+        Assert.Equal(1, await Confirmation("DirectTrade", 1));
+        await Rejected(() => Confirmation("Warehouse", 2), "UNIQUE constraint failed");
+        await Rejected(() => Confirmation("DirectTrade", 1), "UNIQUE constraint failed");
+        await Rejected(() => Confirmation("Warehouse", 0), "CK_ShipmentDeliveryConfirmations_Sequence_Positive");
+        int firstId;
+        await using (var db = _factory.CreateContext()) { firstId = await db.ShipmentDeliveryConfirmations.Where(c => c.SalesDispatchId == dispatchId && c.Sequence == 1).Select(c => c.Id).SingleAsync(); }
+        await Rejected(() => RetractionRow(firstId, statement: "Iets anders."), "CK_ShipmentDeliveryRetractions_Statement");
+        await Rejected(() => RetractionRow(firstId, reason: "  "), "CK_ShipmentDeliveryRetractions_Reason_NotBlank");
+        Assert.Equal(1, await RetractionRow(firstId));
+        await Rejected(() => RetractionRow(firstId), "UNIQUE constraint failed");
+    }
 }
+

@@ -435,16 +435,18 @@ namespace AgfAdmin.Services
                 .Include(r => r.SalesOrderLine)
                 .Include(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
-                .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch).ThenInclude(d => d.Delivery)
-                .Include(r => r.DirectTradeShipmentLine).ThenInclude(l => l.DirectTradeShipment).ThenInclude(s => s.Delivery)
+                .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch).ThenInclude(d => d.DeliveryConfirmations).ThenInclude(c => c.Retraction)
+                .Include(r => r.DirectTradeShipmentLine).ThenInclude(l => l.DirectTradeShipment).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .Include(r => r.DirectTradeCorrectionLine)
                 .SingleAsync(r => r.Id == reservationId, cancellationToken);
             return ToDto(reservation, reservation.SalesOrderLine?.SalesOrderId ?? 0);
         }
 
         // De afleverbevestiging van de verzending van deze reservering (magazijn of DirectTrade), als die geladen is.
+        // De ACTIEVE bevestiging van de verzending die deze reservering verbruikte (DeliveryState), of null. Ingetrokken bevestigingen tellen nooit.
         internal static ShipmentDeliveryConfirmation DeliveryOf(StockReservation reservation) =>
-            reservation.DispatchLine?.SalesDispatch?.Delivery ?? reservation.DirectTradeShipmentLine?.DirectTradeShipment?.Delivery;
+            DeliveryState.ActiveOf(reservation.DispatchLine?.SalesDispatch?.DeliveryConfirmations)
+            ?? DeliveryState.ActiveOf(reservation.DirectTradeShipmentLine?.DirectTradeShipment?.DeliveryConfirmations);
 
         // Physical: pallet, partij en gemeten kg van de inhoudsregel. DirectTrade: geen pallet en geen kg (null), partij en bron van de toezegging.
         internal static StockReservationDto ToDto(StockReservation reservation, int salesOrderId, int? correctionId = null) => new()

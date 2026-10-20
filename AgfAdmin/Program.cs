@@ -34,6 +34,7 @@ builder.Services.AddSingleton<IBusinessCalendar, AmsterdamBusinessCalendar>();
 builder.Services.AddScoped<IDirectTradeShipmentService, DirectTradeShipmentService>();
 builder.Services.AddScoped<IDirectTradeShipmentCorrectionService, DirectTradeShipmentCorrectionService>();
 builder.Services.AddScoped<IDeliveryConfirmationService, DeliveryConfirmationService>();
+builder.Services.AddScoped<IDeliveryRetractionService, DeliveryRetractionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 
 // Database configuratie

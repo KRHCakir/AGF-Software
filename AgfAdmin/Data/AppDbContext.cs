@@ -63,6 +63,7 @@ namespace AgfAdmin.Data
         public DbSet<DirectTradeShipmentCorrection> DirectTradeShipmentCorrections { get; set; }
         public DbSet<DirectTradeShipmentCorrectionLine> DirectTradeShipmentCorrectionLines { get; set; }
         public DbSet<ShipmentDeliveryConfirmation> ShipmentDeliveryConfirmations { get; set; }
+        public DbSet<ShipmentDeliveryRetraction> ShipmentDeliveryRetractions { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
@@ -636,9 +637,10 @@ namespace AgfAdmin.Data
                 b.Property(c => c.ConfirmationCode).IsRequired().HasMaxLength(64);
                 b.Property(c => c.ConfirmationStatement).IsRequired().HasMaxLength(200);
                 b.HasIndex(c => c.RequestId).IsUnique();
-                // Eerste versie: hooguit één bevestiging per verzending, per soort (de intrekflow versoepelt dit later).
-                b.HasIndex(c => c.SalesDispatchId).IsUnique().HasFilter("\"SalesDispatchId\" IS NOT NULL");
-                b.HasIndex(c => c.DirectTradeShipmentId).IsUnique().HasFilter("\"DirectTradeShipmentId\" IS NOT NULL");
+                // Volgnummer uniek per verzending en soort. Met de guard (volgnummer = hoogste + 1, alle eerdere ingetrokken) en de orderversie
+                // geeft dit hooguit één actieve bevestiging: twee gelijktijdige herbevestigingen kiezen hetzelfde nummer en botsen hier.
+                b.HasIndex(c => new { c.SalesDispatchId, c.Sequence }).IsUnique().HasFilter("\"SalesDispatchId\" IS NOT NULL");
+                b.HasIndex(c => new { c.DirectTradeShipmentId, c.Sequence }).IsUnique().HasFilter("\"DirectTradeShipmentId\" IS NOT NULL");
                 b.HasIndex(c => c.SalesOrderId);
                 b.ToTable(t =>
                 {
@@ -649,10 +651,35 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Code", "\"ConfirmationCode\" = 'DELIVERED_IN_FULL'");
                     t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Statement", "\"ConfirmationStatement\" = 'Deze verzending is volledig en zonder afwijkingen afgeleverd.'");
                     t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Reference_NullOrNotBlank", "\"ReceiptReference\" IS NULL OR length(trim(\"ReceiptReference\")) > 0");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryConfirmations_Sequence_Positive", "\"Sequence\" >= 1");
                 });
-                b.HasOne(c => c.SalesDispatch).WithOne(d => d.Delivery).HasForeignKey<ShipmentDeliveryConfirmation>(c => c.SalesDispatchId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
-                b.HasOne(c => c.DirectTradeShipment).WithOne(s => s.Delivery).HasForeignKey<ShipmentDeliveryConfirmation>(c => c.DirectTradeShipmentId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.SalesDispatch).WithMany(d => d.DeliveryConfirmations).HasForeignKey(c => c.SalesDispatchId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.DirectTradeShipment).WithMany(s => s.DeliveryConfirmations).HasForeignKey(c => c.DirectTradeShipmentId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(c => c.SalesOrder).WithMany().HasForeignKey(c => c.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ShipmentDeliveryRetraction>(b =>
+            {
+                b.Property(r => r.ShipmentKind).IsRequired().HasMaxLength(32);
+                b.Property(r => r.Reason).IsRequired().HasMaxLength(AgfAdmin.Services.ReservationRules.MaxReasonLength);
+                b.Property(r => r.ActorReference).IsRequired().HasMaxLength(100);
+                b.Property(r => r.ConfirmationCode).IsRequired().HasMaxLength(64);
+                b.Property(r => r.ConfirmationStatement).IsRequired().HasMaxLength(200);
+                b.HasIndex(r => r.RequestId).IsUnique();
+                b.HasIndex(r => r.SalesOrderId);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_OneShipment",
+                        "(\"ShipmentKind\" = 'Warehouse' AND \"SalesDispatchId\" IS NOT NULL AND \"DirectTradeShipmentId\" IS NULL) " +
+                        "OR (\"ShipmentKind\" = 'DirectTrade' AND \"DirectTradeShipmentId\" IS NOT NULL AND \"SalesDispatchId\" IS NULL)");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Confirmed", "\"RecordedInErrorConfirmed\" = TRUE");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Code", "\"ConfirmationCode\" = 'DELIVERY_CONFIRMATION_RECORDED_IN_ERROR'");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Statement", "\"ConfirmationStatement\" = 'Deze afleverbevestiging is ten onrechte vastgelegd.'");
+                    t.HasCheckConstraint("CK_ShipmentDeliveryRetractions_Reason_NotBlank", "length(trim(\"Reason\")) > 0");
+                });
+                // Hooguit één intrekking per bevestiging: de één-op-één-relatie maakt de FK uniek.
+                b.HasOne(r => r.Confirmation).WithOne(c => c.Retraction).HasForeignKey<ShipmentDeliveryRetraction>(r => r.ShipmentDeliveryConfirmationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.SalesOrder).WithMany().HasForeignKey(r => r.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<PalletAuditEvent>(b =>

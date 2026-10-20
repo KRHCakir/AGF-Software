@@ -36,6 +36,9 @@ namespace AgfAdmin.Services
         public const string DeliveredInFullCode = "DELIVERED_IN_FULL";
         public const string DeliveredInFullStatement = "Deze verzending is volledig en zonder afwijkingen afgeleverd.";
         public const int MaxReceiptReferenceLength = 100;
+        public const string DeliveryRetractedEvent = "ShipmentDeliveryRetracted";
+        public const string RecordedInErrorCode = "DELIVERY_CONFIRMATION_RECORDED_IN_ERROR";
+        public const string RecordedInErrorStatement = "Deze afleverbevestiging is ten onrechte vastgelegd.";
         // Verklaring bij het terugnemen: taalonafhankelijke code en vaste tekst (beide database-check).
         public const string ShipmentDidNotTakePlaceCode = "SHIPMENT_DID_NOT_TAKE_PLACE";
         public const string ShipmentDidNotTakePlaceStatement = "Deze geregistreerde verzending heeft niet plaatsgevonden.";
