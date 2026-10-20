@@ -32,7 +32,7 @@ const reservationResponse = (requestId: string) => ({
     id: 9, requestId, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'SMOKE-PAL-002',
     warehouseLocation: null, lotNumber: 'LOT-SALES-1', quantity: 5, unit: 'box', netWeightKg: 20, source: 'Physical', status: 'Active',
     createdAt: '2026-10-19T10:05:00.000Z', releasedAt: null, releaseReason: null, version: 0, contentQualityStatus: 'Approved', onHold: false,
-    consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
 });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

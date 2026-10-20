@@ -16,6 +16,7 @@ const EVENT_KEYS: Record<string, string> = {
     DirectTradeAllocated: 'sales_event_allocated',
     DirectTradeReleased: 'sales_event_allocation_released',
     DirectTradeShipped: 'sales_event_direct_trade_shipped',
+    DirectTradeShipmentCorrected: 'sales_event_direct_trade_corrected',
 };
 
 // Orderhistorie uit GET /api/sales-orders/{id}/audit-events (append-only, alleen lezen).

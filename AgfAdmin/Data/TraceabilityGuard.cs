@@ -35,7 +35,12 @@ namespace AgfAdmin.Data
     //    een afwijkende partij van een ingevulde (echte) bronpartij heeft een toelichting. Hoeveelheid, eenheid, bronregel en orderregel
     //    van een DirectTrade-toewijzing liggen vast (tegen OriginalValues), ook bij en na Consumed. Er ontstaat
     //    geen voorraadmutatie of magazijnverzendregel (regel 8 geldt alleen voor Physical). DirectTrade-verzendingen zijn append-only.
-    // Regels 5 t/m 7, 10 en 11 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
+    // 12. een DirectTrade-toewijzing gaat alleen Consumed -> Corrected samen met precies één nieuwe DirectTrade-correctieregel in dezelfde
+    //    save, en omgekeerd; de regel hoort bij de (opgeslagen) verzendregel van díe toewijzing en kopieert haar hoeveelheid, eenheid, kg,
+    //    bronregel en orderregel; een correctie dekt alle regels van één verzending, hoort bij dezelfde order, draagt de verklaring
+    //    (vlag, code, vaste tekst) en een reden. Geen voorraadmutatie, inhoudsregel of magazijncorrectieregel (regel 9 is Physical).
+    //    Na Corrected liggen hoeveelheid, eenheid, bronregel, orderregel, ConsumedAt en CorrectedAt vast.
+    // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
     //    bronregel en exact dezelfde hoeveelheid/kg (herkomst = die correctieregel), en één compenserende Correction-mutatie; de correctie
@@ -87,6 +92,11 @@ namespace AgfAdmin.Data
             {
                 throw new TraceabilityViolationException("DirectTrade shipments are append-only and cannot be modified or deleted.");
             }
+            if (db.ChangeTracker.Entries<DirectTradeShipmentCorrection>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+                || db.ChangeTracker.Entries<DirectTradeShipmentCorrectionLine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("DirectTrade shipment corrections are append-only and cannot be modified or deleted.");
+            }
             if (db.ChangeTracker.Entries<SalesDispatchCorrection>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
                 || db.ChangeTracker.Entries<SalesDispatchCorrectionLine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             {
@@ -125,6 +135,7 @@ namespace AgfAdmin.Data
             await CheckReservationsOnOpenOrdersAsync(db, async, cancellationToken);
             await CheckDispatchLedgerAsync(db, async, cancellationToken);
             await CheckDirectTradeShipmentsAsync(db, async, cancellationToken);
+            await CheckDirectTradeShipmentCorrectionsAsync(db, async, cancellationToken);
             await CheckCorrectionLedgerAsync(db, async, cancellationToken);
         }
 
@@ -145,7 +156,9 @@ namespace AgfAdmin.Data
             {
                 throw new TraceabilityViolationException("A reservation can only become Corrected through a dispatch correction, never be created as Corrected.");
             }
-            var corrected = correctedEntries.Select(e => e.Entity).ToList();
+            // Magazijncorrectie: alleen fysieke reserveringen. Een DirectTrade-toewijzing wordt teruggenomen via regel 12 en kan hier nooit
+            // aan een magazijncorrectieregel, herstelde inhoud of Correction-mutatie hangen (de aantallen kloppen dan niet en worden geweigerd).
+            var corrected = correctedEntries.Where(e => e.Entity.Source != ReservationRules.SourceDirectTrade).Select(e => e.Entity).ToList();
             var correctionLines = db.ChangeTracker.Entries<SalesDispatchCorrectionLine>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
             var restoredLines = db.ChangeTracker.Entries<PalletContentLine>()
                 .Where(e => e.State == EntityState.Added && (e.Entity.OriginCorrectionLine != null || e.Entity.OriginCorrectionLineId != null))
@@ -640,6 +653,108 @@ namespace AgfAdmin.Data
             }
         }
 
+        // ---- Regel 12: DirectTrade-verzendcorrecties in beide richtingen ----
+
+        private static async Task CheckDirectTradeShipmentCorrectionsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var correctedEntries = db.ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State == EntityState.Modified && e.Entity.SalesOrderLineId != null
+                    && e.Entity.Source == ReservationRules.SourceDirectTrade
+                    && e.Entity.Status == ReservationRules.StatusCorrected
+                    && e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) != ReservationRules.StatusCorrected)
+                .ToList();
+            if (correctedEntries.Any(e => e.OriginalValues.GetValue<string>(nameof(StockReservation.Status)) != ReservationRules.StatusConsumed))
+            {
+                throw new TraceabilityViolationException("Only a shipped (Consumed) DirectTrade allocation can become Corrected.");
+            }
+            var corrected = correctedEntries.Select(e => e.Entity).ToList();
+            var lines = db.ChangeTracker.Entries<DirectTradeShipmentCorrectionLine>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            var corrections = db.ChangeTracker.Entries<DirectTradeShipmentCorrection>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            if (corrected.Count == 0 && lines.Count == 0 && corrections.Count == 0)
+            {
+                return;
+            }
+
+            StockReservation ReservationOf(DirectTradeShipmentCorrectionLine line) =>
+                line.StockReservation ?? corrected.FirstOrDefault(r => r.Id == line.StockReservationId);
+
+            foreach (var reservation in corrected)
+            {
+                if (reservation.CorrectedAt == null || reservation.ConsumedAt == null)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade allocation {reservation.Id} becomes Corrected without a correction time.");
+                }
+                if (lines.Count(l => ReferenceEquals(ReservationOf(l), reservation)) != 1)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade allocation {reservation.Id} must be taken back by exactly one new DirectTrade shipment correction line in the same save.");
+                }
+            }
+
+            // De opgeslagen verzendregels (append-only) en per verzending het aantal regels en de order.
+            var shipmentLineIds = lines.Select(l => l.DirectTradeShipmentLine != null ? db.Entry(l.DirectTradeShipmentLine).Property(x => x.Id).CurrentValue : l.DirectTradeShipmentLineId).Distinct().ToList();
+            var shipmentLines = (await ToListAsync(db.DirectTradeShipmentLines.AsNoTracking().Where(l => shipmentLineIds.Contains(l.Id)), async, cancellationToken)).ToDictionary(l => l.Id);
+            var shipmentIds = shipmentLines.Values.Select(l => l.DirectTradeShipmentId)
+                .Concat(corrections.Select(c => c.DirectTradeShipment != null ? db.Entry(c.DirectTradeShipment).Property(x => x.Id).CurrentValue : c.DirectTradeShipmentId))
+                .Distinct().ToList();
+            var shipments = (await ToListAsync(db.DirectTradeShipments.AsNoTracking().Where(s => shipmentIds.Contains(s.Id)).Select(s => new { s.Id, s.SalesOrderId, LineCount = s.Lines.Count() }), async, cancellationToken))
+                .ToDictionary(s => s.Id, s => (s.SalesOrderId, s.LineCount));
+
+            foreach (var line in lines)
+            {
+                var reservation = ReservationOf(line);
+                if (reservation == null || !corrected.Contains(reservation))
+                {
+                    throw new TraceabilityViolationException("A DirectTrade shipment correction line requires its DirectTrade allocation to become Corrected in the same save.");
+                }
+                var shipmentLineId = line.DirectTradeShipmentLine != null ? db.Entry(line.DirectTradeShipmentLine).Property(x => x.Id).CurrentValue : line.DirectTradeShipmentLineId;
+                if (!shipmentLines.TryGetValue(shipmentLineId, out var shipmentLine) || shipmentLine.StockReservationId != reservation.Id)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment correction line for allocation {reservation.Id} must refer to the DirectTrade shipment line of that allocation.");
+                }
+                if (line.Quantity != shipmentLine.Quantity || !string.Equals(line.Unit, shipmentLine.Unit, StringComparison.Ordinal) || line.NetWeightKg != shipmentLine.NetWeightKg
+                    || line.SupplyCommitmentLineId != shipmentLine.SupplyCommitmentLineId || line.SalesOrderLineId != shipmentLine.SalesOrderLineId)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment correction line for allocation {reservation.Id} must copy quantity, unit, net weight, supply line and order line of the shipment line exactly.");
+                }
+                var correction = line.DirectTradeShipmentCorrection;
+                if (correction == null || !corrections.Contains(correction))
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment correction line for allocation {reservation.Id} must belong to a new correction in the same save.");
+                }
+                var correctionShipmentId = correction.DirectTradeShipment != null ? db.Entry(correction.DirectTradeShipment).Property(x => x.Id).CurrentValue : correction.DirectTradeShipmentId;
+                if (correctionShipmentId != shipmentLine.DirectTradeShipmentId)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment correction for shipment {correctionShipmentId} cannot take back a line of shipment {shipmentLine.DirectTradeShipmentId}.");
+                }
+            }
+
+            foreach (var correction in corrections)
+            {
+                if (!correction.ShipmentDidNotTakePlaceConfirmed
+                    || !string.Equals(correction.ConfirmationCode, ReservationRules.ShipmentDidNotTakePlaceCode, StringComparison.Ordinal)
+                    || !string.Equals(correction.ConfirmationStatement, ReservationRules.ShipmentDidNotTakePlaceStatement, StringComparison.Ordinal)
+                    || string.IsNullOrWhiteSpace(correction.Reason))
+                {
+                    throw new TraceabilityViolationException("A DirectTrade shipment correction needs the explicit statement that the shipment did not take place and a reason.");
+                }
+                var shipmentId = correction.DirectTradeShipment != null ? db.Entry(correction.DirectTradeShipment).Property(x => x.Id).CurrentValue : correction.DirectTradeShipmentId;
+                if (!shipments.TryGetValue(shipmentId, out var shipment))
+                {
+                    continue; // bestaat niet: de FK-constraint weigert dit bij het opslaan
+                }
+                var orderId = correction.SalesOrder != null ? db.Entry(correction.SalesOrder).Property(x => x.Id).CurrentValue : correction.SalesOrderId;
+                if (orderId != shipment.SalesOrderId)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment correction for shipment {shipmentId} must belong to its sales order {shipment.SalesOrderId}.");
+                }
+                var correctionLines = lines.Count(l => ReferenceEquals(l.DirectTradeShipmentCorrection, correction));
+                if (correctionLines != shipment.LineCount)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade shipment correction for shipment {shipmentId} must take back all {shipment.LineCount} lines, not {correctionLines}.");
+                }
+            }
+        }
+
         // ---- Regel 11: DirectTrade-verzendingen in beide richtingen ----
 
         private static async Task CheckDirectTradeShipmentsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
@@ -777,9 +892,13 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} is Released and can never become {entry.Entity.Status} again; allocate anew instead.");
                 }
-                if (originalStatus == ReservationRules.StatusConsumed && entry.Entity.Status != ReservationRules.StatusConsumed)
+                if (originalStatus == ReservationRules.StatusConsumed && entry.Entity.Status != ReservationRules.StatusConsumed && entry.Entity.Status != ReservationRules.StatusCorrected)
                 {
-                    throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} is shipped (Consumed) and can never become {entry.Entity.Status}; a DirectTrade shipment correction is a separate flow.");
+                    throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} is shipped (Consumed) and can never become {entry.Entity.Status}; only a DirectTrade shipment correction can take it back (Corrected).");
+                }
+                if (originalStatus == ReservationRules.StatusCorrected && entry.Entity.Status != ReservationRules.StatusCorrected)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} is Corrected (terminal) and can never become {entry.Entity.Status}.");
                 }
                 // De toewijzing zelf ligt vast: hoeveelheid, eenheid, bronregel en orderregel worden vergeleken met de opgeslagen waarden
                 // (OriginalValues), niet met wat er in dezelfde save van gemaakt is. Zo kan niemand vlak vóór het verbruiken de toegewezen
@@ -790,7 +909,9 @@ namespace AgfAdmin.Data
                 if (!string.Equals(entry.OriginalValues.GetValue<string>(nameof(StockReservation.Unit)), entry.Entity.Unit, StringComparison.Ordinal)) changed.Add("unit");
                 if (entry.OriginalValues.GetValue<int>(nameof(StockReservation.SupplyCommitmentLineId)) != entry.Property(r => r.SupplyCommitmentLineId).CurrentValue) changed.Add("supply line");
                 if (entry.OriginalValues.GetValue<int?>(nameof(StockReservation.SalesOrderLineId)) != entry.Property(r => r.SalesOrderLineId).CurrentValue) changed.Add("order line");
-                if (originalStatus == ReservationRules.StatusConsumed && entry.OriginalValues.GetValue<DateTime?>(nameof(StockReservation.ConsumedAt)) != entry.Entity.ConsumedAt) changed.Add("consumption time");
+                if ((originalStatus == ReservationRules.StatusConsumed || originalStatus == ReservationRules.StatusCorrected)
+                    && entry.OriginalValues.GetValue<DateTime?>(nameof(StockReservation.ConsumedAt)) != entry.Entity.ConsumedAt) changed.Add("consumption time");
+                if (originalStatus == ReservationRules.StatusCorrected && entry.OriginalValues.GetValue<DateTime?>(nameof(StockReservation.CorrectedAt)) != entry.Entity.CorrectedAt) changed.Add("correction time");
                 if (changed.Count > 0)
                 {
                     throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} ({originalStatus}) cannot change its {string.Join(", ", changed)}; release it and allocate anew, or use a DirectTrade shipment correction once it is shipped.");

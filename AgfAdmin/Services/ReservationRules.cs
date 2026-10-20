@@ -21,12 +21,17 @@ namespace AgfAdmin.Services
         public static bool IsSalesSource(string value) => value != null && SalesSources.Contains(value, StringComparer.Ordinal);
 
         // Een toewijzing kent Active, Released en Consumed (verzonden via een DirectTrade-verzending). Corrected volgt met de correctieflow.
-        public static readonly IReadOnlyList<string> DirectTradeStatuses = new[] { StatusActive, StatusReleased, StatusConsumed };
+        // Corrected: de verzending is administratief teruggenomen (eindtoestand; telt niet als verzonden en niet als bezette capaciteit).
+        public static readonly IReadOnlyList<string> DirectTradeStatuses = new[] { StatusActive, StatusReleased, StatusConsumed, StatusCorrected };
 
         public const string ReservationCreatedEvent = "ReservationCreated";
         public const string DirectTradeAllocatedEvent = "DirectTradeAllocated";
         public const string DirectTradeReleasedEvent = "DirectTradeReleased";
         public const string DirectTradeShippedEvent = "DirectTradeShipped";
+        public const string DirectTradeShipmentCorrectedEvent = "DirectTradeShipmentCorrected";
+        // Verklaring bij het terugnemen: taalonafhankelijke code en vaste tekst (beide database-check).
+        public const string ShipmentDidNotTakePlaceCode = "SHIPMENT_DID_NOT_TAKE_PLACE";
+        public const string ShipmentDidNotTakePlaceStatement = "Deze geregistreerde verzending heeft niet plaatsgevonden.";
         public const int MaxLotNumberLength = 100;
         public const string ReservationReleasedEvent = "ReservationReleased";
         public const string OrderCancelledEvent = "SalesOrderCancelled";

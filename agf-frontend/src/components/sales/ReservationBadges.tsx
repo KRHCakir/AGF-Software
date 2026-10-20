@@ -62,3 +62,13 @@ export function DirectTradeShippedBadge() {
     );
 }
 
+// Teruggenomen DirectTrade-verzending: de gebruiker heeft verklaard dat deze geregistreerde verzending niet heeft plaatsgevonden.
+export function DirectTradeCorrectedBadge() {
+    const { t } = useTranslation();
+    return (
+        <span className="inline-flex items-center gap-1 rounded border border-amber-400 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-950">
+            <span aria-hidden="true">↺</span>{t('sales_dt_corrected_badge')}
+        </span>
+    );
+}
+

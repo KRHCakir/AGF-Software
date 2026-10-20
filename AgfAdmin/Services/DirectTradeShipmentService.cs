@@ -379,6 +379,7 @@ namespace AgfAdmin.Services
         private IQueryable<DirectTradeShipment> Query() =>
             _db.DirectTradeShipments.AsNoTracking()
                 .Include(d => d.Lines).ThenInclude(l => l.SalesOrderLine).ThenInclude(s => s.ProductVariant).ThenInclude(v => v.Product)
+                .Include(d => d.Correction).ThenInclude(c => c.Lines)
                 .AsSplitQuery();
 
         internal static DirectTradeShipmentDto ToDto(DirectTradeShipment shipment) => new()
@@ -392,6 +393,7 @@ namespace AgfAdmin.Services
             Reference = shipment.Reference,
             ActorReference = shipment.ActorReference,
             RecordedAt = DateTime.SpecifyKind(shipment.RecordedAt, DateTimeKind.Utc),
+            Correction = shipment.Correction == null ? null : DirectTradeShipmentCorrectionService.ToDto(shipment.Correction),
             Lines = shipment.Lines.OrderBy(l => l.Id).Select(l => new DirectTradeShipmentLineDto
             {
                 Id = l.Id,

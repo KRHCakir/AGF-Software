@@ -158,6 +158,128 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentCorrection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ConfirmationCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ConfirmationStatement")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CorrectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DirectTradeShipmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ShipmentDidNotTakePlaceConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DirectTradeShipmentId")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("DirectTradeShipmentCorrections", t =>
+                        {
+                            t.HasCheckConstraint("CK_DirectTradeShipmentCorrections_Code", "\"ConfirmationCode\" = 'SHIPMENT_DID_NOT_TAKE_PLACE'");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentCorrections_Confirmed", "\"ShipmentDidNotTakePlaceConfirmed\" = TRUE");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentCorrections_Reason_NotBlank", "length(trim(\"Reason\")) > 0");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentCorrections_Statement", "\"ConfirmationStatement\" = 'Deze geregistreerde verzending heeft niet plaatsgevonden.'");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentCorrectionLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DirectTradeShipmentCorrectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DirectTradeShipmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExpectedReservationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("SalesOrderLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StockReservationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DirectTradeShipmentCorrectionId");
+
+                    b.HasIndex("DirectTradeShipmentLineId")
+                        .IsUnique();
+
+                    b.HasIndex("StockReservationId")
+                        .IsUnique();
+
+                    b.ToTable("DirectTradeShipmentCorrectionLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_DirectTradeShipmentCorrectionLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentCorrectionLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentLine", b =>
                 {
                     b.Property<int>("Id")
@@ -1500,7 +1622,7 @@ namespace AgfAdmin.Migrations
 
                             t.HasCheckConstraint("CK_StockReservations_CorrectedConsistent", "\"Status\" <> 'Corrected' OR (\"CorrectedAt\" IS NOT NULL AND \"ConsumedAt\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed", "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released', 'Consumed')");
+                            t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed", "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released', 'Consumed', 'Corrected')");
 
                             t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
@@ -1713,6 +1835,52 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentCorrection", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.DirectTradeShipment", "DirectTradeShipment")
+                        .WithOne("Correction")
+                        .HasForeignKey("AgfAdmin.Models.DirectTradeShipmentCorrection", "DirectTradeShipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DirectTradeShipment");
+
+                    b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentCorrectionLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.DirectTradeShipmentCorrection", "DirectTradeShipmentCorrection")
+                        .WithMany("Lines")
+                        .HasForeignKey("DirectTradeShipmentCorrectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.DirectTradeShipmentLine", "DirectTradeShipmentLine")
+                        .WithMany()
+                        .HasForeignKey("DirectTradeShipmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.StockReservation", "StockReservation")
+                        .WithOne("DirectTradeCorrectionLine")
+                        .HasForeignKey("AgfAdmin.Models.DirectTradeShipmentCorrectionLine", "StockReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DirectTradeShipmentCorrection");
+
+                    b.Navigation("DirectTradeShipmentLine");
+
+                    b.Navigation("StockReservation");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentLine", b =>
@@ -2227,6 +2395,13 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipment", b =>
                 {
+                    b.Navigation("Correction");
+
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentCorrection", b =>
+                {
                     b.Navigation("Lines");
                 });
 
@@ -2298,6 +2473,8 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.StockReservation", b =>
                 {
+                    b.Navigation("DirectTradeCorrectionLine");
+
                     b.Navigation("DirectTradeShipmentLine");
 
                     b.Navigation("DispatchLine");

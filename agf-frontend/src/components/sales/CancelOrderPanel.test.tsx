@@ -15,7 +15,7 @@ const reservation = (id: number, status: 'Active' | 'Released', onHold = false) 
     id, requestId: `r-${id}`, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: `PAL-${id}`,
     warehouseLocation: null, lotNumber: `LOT-${id}`, quantity: 5, unit: 'box' as const, netWeightKg: 20, source: 'Physical', status,
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
-    releaseReason: status === 'Released' ? 'eerder' : null, version: 0, contentQualityStatus: onHold ? 'Blocked' as const : 'Approved' as const, onHold, consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
+    releaseReason: status === 'Released' ? 'eerder' : null, version: 0, contentQualityStatus: onHold ? 'Blocked' as const : 'Approved' as const, onHold, consumedAt: null, dispatchId: null, dispatchReference: null, correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
 });
 
 const order: SalesOrder = {
