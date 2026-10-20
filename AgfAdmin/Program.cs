@@ -29,6 +29,9 @@ builder.Services.AddScoped<IStockReservationService, StockReservationService>();
 builder.Services.AddScoped<ISalesDispatchService, SalesDispatchService>();
 builder.Services.AddScoped<ISalesDispatchCorrectionService, SalesDispatchCorrectionService>();
 builder.Services.AddScoped<IDirectTradeAllocationService, DirectTradeAllocationService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IBusinessCalendar, AmsterdamBusinessCalendar>();
+builder.Services.AddScoped<IDirectTradeShipmentService, DirectTradeShipmentService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 
 // Database configuratie

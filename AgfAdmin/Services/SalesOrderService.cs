@@ -313,7 +313,7 @@ namespace AgfAdmin.Services
             var reservations = order.Lines.SelectMany(l => l.Reservations).ToList();
             if (reservations.Any(r => r.Status == ReservationRules.StatusConsumed))
             {
-                return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} has consumed reservations; returns and shipment corrections are a separate flow.");
+                return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} has consumed reservations (dispatched from the warehouse or shipped as DirectTrade); returns and shipment corrections are a separate flow.");
             }
 
             var now = DateTime.UtcNow;
@@ -601,6 +601,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment)
                 .AsSplitQuery();
 
         internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null, IReadOnlyDictionary<int, int> correctionIds = null) => new()
@@ -640,7 +641,9 @@ namespace AgfAdmin.Services
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
                     AllocatedQuantity = allocatedQuantity,
                     DispatchedQuantity = dispatchedQuantity,
-                    DispatchedNetWeightKg = consumed.Sum(r => r.NetWeightKg ?? 0m),
+                    // Physical: kg van de reservering; DirectTrade: de werkelijk verzonden kg uit de verzendregel (nooit afgeleid).
+                    DispatchedNetWeightKg = consumed.Sum(r => r.NetWeightKg ?? r.DirectTradeShipmentLine?.NetWeightKg ?? 0m),
+                    DirectTradeShippedQuantity = consumed.Where(r => r.Source == ReservationRules.SourceDirectTrade).Sum(r => r.Quantity),
                     // Open = gevraagd - Active Physical - Active DirectTrade - Consumed: verzonden komt nooit terug als open vraag.
                     OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity - allocatedQuantity - dispatchedQuantity),
                     Fulfilled = dispatchedQuantity == line.Quantity,

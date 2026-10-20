@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { formatCalendarDate, isoToDateInput, toLocalMidnightIso } from './calendarDate.ts';
+import { formatCalendarDate, formatDateOnly, isDateOnly, isoToDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
 
 // Rondreis van de gevraagde leverdatum in Europe/Amsterdam, zomer- en wintertijd: de kalenderdag die de gebruiker koos
 // moet na UTC-normalisatie door de server exact zo worden teruggetoond. node:test draait elk bestand in een eigen proces.
@@ -49,3 +49,23 @@ describe('requested delivery date in Europe/Amsterdam', () => {
         assert.equal(formatCalendarDate('not-a-date', 'nl'), 'not-a-date');
     });
 });
+
+describe('DirectTrade shipping date helpers', () => {
+    test('today in Europe/Amsterdam follows local midnight, not UTC, including DST changes', () => {
+        assert.equal(todayInAmsterdam(new Date('2026-10-20T21:59:59Z')), '2026-10-20');
+        assert.equal(todayInAmsterdam(new Date('2026-10-20T22:00:00Z')), '2026-10-21');
+        assert.equal(todayInAmsterdam(new Date('2026-12-31T22:59:59Z')), '2026-12-31');
+        assert.equal(todayInAmsterdam(new Date('2026-12-31T23:00:00Z')), '2027-01-01');
+        assert.equal(todayInAmsterdam(new Date('2026-10-25T22:59:59Z')), '2026-10-25');
+        assert.equal(todayInAmsterdam(new Date('2026-10-25T23:00:00Z')), '2026-10-26');
+    });
+
+    test('a date-only value is shown as exactly that calendar day and validated strictly', () => {
+        assert.match(formatDateOnly('2026-10-19', 'nl'), /19 okt/);
+        assert.match(formatDateOnly('2026-12-31', 'en'), /31 Dec/);
+        assert.equal(isDateOnly('2026-02-29'), false);
+        assert.equal(isDateOnly('2028-02-29'), true);
+        assert.equal(isDateOnly('2026-10-19T00:00:00Z'), false);
+    });
+});
+

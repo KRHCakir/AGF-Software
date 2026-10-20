@@ -7,6 +7,8 @@ import {
     CorrectSalesDispatchRequest,
     CreateSalesDispatchRequest,
     CreateDirectTradeAllocationRequest,
+    CreateDirectTradeShipmentRequest,
+    DirectTradeShipment,
     CreateSalesOrderRequest,
     CreateStockReservationRequest,
     DirectTradeSupplyLine,
@@ -17,6 +19,8 @@ import {
     SalesOrder,
     SalesOrderAuditEvent,
     StockReservation,
+    isDirectTradeShipment,
+    isDirectTradeShipmentList,
     isDirectTradeSupplyList,
     isReservableStockList,
     isSalesDispatch,
@@ -96,6 +100,23 @@ export async function allocateDirectTrade(orderId: number, lineId: number, reque
         throw new ApiError('shape', 'Onverwacht antwoord bij het toewijzen.');
     }
     return { value: json, replayed: status === 200 };
+}
+
+// DirectTrade-verzending: 201 = nieuw, 200 = exact dezelfde opdracht was al verwerkt (nooit dubbel verzonden); 409 = herladen.
+export async function createDirectTradeShipment(orderId: number, request: CreateDirectTradeShipmentRequest, signal?: AbortSignal): Promise<SaveResult<DirectTradeShipment>> {
+    const { status, json } = await postJson(`/sales-orders/${orderId}/direct-trade-shipments`, request, signal);
+    if (!isDirectTradeShipment(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de DirectTrade-verzending.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+export async function listDirectTradeShipments(orderId: number, signal?: AbortSignal): Promise<DirectTradeShipment[]> {
+    const json = await getJson(`/sales-orders/${orderId}/direct-trade-shipments`, signal);
+    if (!isDirectTradeShipmentList(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de DirectTrade-verzendingen.');
+    }
+    return json;
 }
 
 // Vrijgeven geeft 200 bij succes én bij een exacte herhaling; de teruggegeven toestand is leidend.

@@ -14,9 +14,11 @@ namespace AgfAdmin.Controllers
         private readonly ISalesDispatchService _dispatches;
         private readonly ISalesDispatchCorrectionService _corrections;
         private readonly IDirectTradeAllocationService _allocations;
+        private readonly IDirectTradeShipmentService _shipments;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments)
         {
+            _shipments = shipments;
             _orders = orders;
             _reservations = reservations;
             _dispatches = dispatches;
@@ -85,6 +87,19 @@ namespace AgfAdmin.Controllers
             var result = await _allocations.AllocateAsync(id, lineId, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
+
+        // DirectTrade-verzending: hele Active toewijzingen van deze order verbruiken met werkelijke hoeveelheid, kg, partij en datum.
+        // Geen voorraadmutatie en geen magazijnverzending; verzonden betekent niet afgeleverd.
+        [HttpPost("{id:int}/direct-trade-shipments")]
+        public async Task<IActionResult> ShipDirectTrade(int id, [FromBody] CreateDirectTradeShipmentDto request)
+        {
+            var result = await _shipments.ShipAsync(id, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        [HttpGet("{id:int}/direct-trade-shipments")]
+        public async Task<IActionResult> GetDirectTradeShipments(int id) =>
+            this.ToActionResult(await _shipments.ListAsync(id, HttpContext?.RequestAborted ?? default));
 
         [HttpPost("{id:int}/lines/{lineId:int}/reservations")]
         public async Task<IActionResult> Reserve(int id, int lineId, [FromBody] CreateStockReservationDto request)

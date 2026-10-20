@@ -41,6 +41,8 @@ namespace AgfAdmin.Models
         // Gezet bij Consumed (database-check); de verzending volgt via DispatchLine.
         public DateTime? ConsumedAt { get; set; }
         public SalesDispatchLine DispatchLine { get; set; }
+        // Alleen bij een verbruikte DirectTrade-toewijzing: de DirectTrade-verzendregel (nooit een magazijnverzendregel).
+        public DirectTradeShipmentLine DirectTradeShipmentLine { get; set; }
 
         // Gezet bij Corrected (eindtoestand na een verzendcorrectie; database-check). Telt niet als gereserveerd of verzonden.
         public DateTime? CorrectedAt { get; set; }

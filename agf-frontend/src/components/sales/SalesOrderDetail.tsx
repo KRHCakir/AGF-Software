@@ -4,15 +4,17 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { blockedBy, cancelKey, correctDispatchKey, dispatchKey } from '../../lib/pendingCommands';
-import { isDispatchable, orderProgress } from '../../lib/salesOrderRules';
+import { blockedBy, cancelKey, correctDispatchKey, dispatchKey, shipDirectTradeKey } from '../../lib/pendingCommands';
+import { isDispatchable, isShippableAllocation, isShippedAllocation, orderProgress } from '../../lib/salesOrderRules';
 import { SaveResult } from '../../services/supplyService';
-import { SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
+import { DirectTradeShipment, SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import CancelOrderPanel from './CancelOrderPanel';
 import CorrectDispatchPanel from './CorrectDispatchPanel';
 import DispatchList from './DispatchList';
 import DispatchPanel from './DispatchPanel';
+import DirectTradeShipmentList from './DirectTradeShipmentList';
+import DirectTradeShipmentPanel from './DirectTradeShipmentPanel';
 import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
@@ -58,7 +60,18 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
     const hasDispatchable = order.lines.some((line) => line.reservations.some((reservation) => isDispatchable(reservation)));
     // Twee aparte begrippen: verzendhistorie (Consumed of Corrected) wordt getoond; alleen nog niet gecorrigeerd verbruik
     // (Consumed) blokkeert annuleren. Een order waarvan alle verzendingen gecorrigeerd zijn, kan dus weer geannuleerd worden.
-    const hasDispatchHistory = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed' || reservation.status === 'Corrected'));
+    // Magazijnverzendhistorie: alleen fysieke reserveringen. DirectTrade-verzendingen hebben een eigen lijst.
+    const hasDispatchHistory = order.lines.some((line) => line.reservations.some((reservation) => reservation.source !== 'DirectTrade' && (reservation.status === 'Consumed' || reservation.status === 'Corrected')));
+    // DirectTrade-verzending: eigen paneel en lijst; een onafgeronde verzending blijft zichtbaar, ook als de toewijzingen al verzonden zijn.
+    const [shippingDt, setShippingDt] = useState(false);
+    const [dtNotice, setDtNotice] = useState<SaveResult<DirectTradeShipment> | null>(null);
+    const [dtToken, setDtToken] = useState(0);
+    const [dtDecisionToken, setDtDecisionToken] = useState(0);
+    const pendingDtShipment = commands[shipDirectTradeKey(order.id)] !== undefined;
+    const dtBlocker = blockedBy(commands, { kind: 'ship-direct-trade', orderId: order.id });
+    const showDtShipment = pendingDtShipment || (!readOnly && shippingDt);
+    const hasShippableAllocation = order.lines.some((line) => line.reservations.some((reservation) => isShippableAllocation(reservation)));
+    const hasDtShipments = order.lines.some((line) => line.reservations.some((reservation) => isShippedAllocation(reservation)));
     const hasUncorrectedConsumption = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed'));
     // Verzendcorrectie: paneel per verzending; een onafgerond correctiecommando opent het paneel ook na verversen.
     const [dispatches, setDispatches] = useState<SalesDispatch[]>([]);
@@ -106,6 +119,20 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
         await onOrderChanged();
     };
 
+    const onDtShipped = async (saved: SaveResult<DirectTradeShipment>) => {
+        setShippingDt(false);
+        setDtNotice(saved);
+        setHistoryToken((n) => n + 1);
+        setDtToken((n) => n + 1);
+        await onOrderChanged();
+    };
+
+    const reloadForNewDtDecision = async () => {
+        if (await onOrderChanged()) {
+            setDtDecisionToken((n) => n + 1);
+        }
+    };
+
     const reloadForNewCorrectionDecision = async () => {
         if (await onOrderChanged()) {
             setDispatchToken((n) => n + 1);
@@ -126,6 +153,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             const ok = await (onRefresh ?? onOrderChanged)();
             if (ok) {
                 setDispatchToken((n) => n + 1);
+                setDtToken((n) => n + 1);
                 setHistoryToken((n) => n + 1);
             } else {
                 setLocalRefreshFailed(true);
@@ -155,6 +183,12 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                             <button type="button" className={`${secondaryButtonClass} border-emerald-300 text-emerald-900 hover:bg-emerald-50`} onClick={() => { setDispatchNotice(null); setDispatching(true); }}
                                 disabled={!hasDispatchable || (dispatchBlocker !== null && dispatchBlocker.kind !== 'dispatch')}>
                                 {t('sales_dispatch_order')}
+                            </button>
+                        )}
+                        {!readOnly && !showDtShipment && (
+                            <button type="button" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} onClick={() => { setDtNotice(null); setShippingDt(true); }}
+                                disabled={!hasShippableAllocation || (dtBlocker !== null && dtBlocker.kind !== 'ship-direct-trade')}>
+                                <span aria-hidden="true">🔒 </span>{t('sales_ship_order')}
                             </button>
                         )}
                         {!readOnly && !showCancel && (
@@ -189,7 +223,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
                         <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>
                             {progress.fulfilled
-                                ? t('sales_order_fulfilled')
+                                ? (order.lines.some((line) => line.directTradeShippedQuantity > 0) ? t('sales_order_fulfilled_dt') : t('sales_order_fulfilled'))
                                 : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                     {progress.linesFulfilled > 0 && <span className="block text-xs">{t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</span>}</>}
                             {progress.complete && !progress.ready && !progress.fulfilled && progress.onHoldCount > 0 && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
@@ -232,6 +266,26 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             {showDispatch && (
                 <DispatchPanel key={`${order.id}:${dispatchDecisionToken}`} order={order} actor={actor} onDispatched={onDispatched}
                     onReload={() => void reloadForNewDispatchDecision()} onClose={() => setDispatching(false)} />
+            )}
+
+            {dtNotice && (
+                <div role="status" className="rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+                    <p className="font-medium"><span aria-hidden="true">🚚 </span>{t('sales_notice_dt_shipped', { id: String(dtNotice.value.id), count: String(dtNotice.value.lines.length) })}</p>
+                    {dtNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
+                    <p className="mt-1">{t('sales_notice_dt_shipped_next')}</p>
+                </div>
+            )}
+
+            {showDtShipment && (
+                <DirectTradeShipmentPanel key={`${order.id}:${dtDecisionToken}`} order={order} actor={actor} onShipped={onDtShipped}
+                    onReload={() => void reloadForNewDtDecision()} onClose={() => setShippingDt(false)} />
+            )}
+
+            {(hasDtShipments || dtNotice) && (
+                <section aria-labelledby={`dt-shipments-${order.id}`} className="rounded-md border border-violet-300 bg-white px-4 py-3">
+                    <h3 id={`dt-shipments-${order.id}`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-violet-900">{t('sales_ship_list_title')}</h3>
+                    <DirectTradeShipmentList orderId={order.id} token={dtToken} />
+                </section>
             )}
 
             {showCancel && (

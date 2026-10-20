@@ -25,7 +25,7 @@ public class SalesOrdersControllerTests : IDisposable
     private async Task<IActionResult> Orders(Func<SalesOrdersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db)));
+        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20)))));
     }
 
     private async Task<IActionResult> Reservations(Func<StockReservationsController, Task<IActionResult>> action)
@@ -295,5 +295,35 @@ public class SalesOrdersControllerTests : IDisposable
             RequestId = Guid.NewGuid(), ExpectedReservationVersion = allocation.Version, ActorReference = "office-1", Reason = "Toch uit magazijn"
         }))).Value);
         Assert.Equal("Released", released.Status);
+    }
+
+    [Fact]
+    public async Task DirectTrade_Shipment_Endpoints_Map_201_200_400_404_And_409()
+    {
+        var order = await CreatedOrderAsync();
+        var line = order.Lines[0];
+        var allocation = Assert.IsType<StockReservationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, new CreateDirectTradeAllocationDto
+        {
+            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = 5m, Unit = "box", AcknowledgeExpectedSupply = true, ActorReference = "office-1"
+        }))).Value);
+        var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
+        CreateDirectTradeShipmentDto Ship(Guid? requestId = null, decimal kg = 20.2m, DateOnly? on = null) => new()
+        {
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = current.Version, ActorReference = "office-1", ShippedOn = on ?? new DateOnly(2026, 10, 20), Reference = "CMR-1",
+            Lines = new List<CreateDirectTradeShipmentLineDto> { new() { StockReservationId = allocation.Id, ExpectedReservationVersion = allocation.Version, Quantity = 5m, Unit = "box", NetWeightKg = kg, LotNumber = "LOT-DT-SRC" } }
+        };
+
+        Assert.Contains("shippedOn", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.ShipDirectTrade(order.Id, Ship(on: new DateOnly(2026, 10, 21))))).Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.ShipDirectTrade(999_999, Ship())));
+        var request = Ship();
+        var created = Assert.IsType<CreatedAtActionResult>(await Orders(c => c.ShipDirectTrade(order.Id, request)));
+        Assert.Equal(nameof(SalesOrdersController.GetById), created.ActionName);
+        var shipment = Assert.IsType<DirectTradeShipmentDto>(created.Value);
+        Assert.Equal((false, 20.2m), (shipment.DeliveryRecorded, shipment.Lines.Single().NetWeightKg));
+        Assert.Equal(shipment.Id, Assert.IsType<DirectTradeShipmentDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.ShipDirectTrade(order.Id, request))).Value).Id);
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.ShipDirectTrade(order.Id, Ship(requestId: request.RequestId, kg: 20.3m))));
+        var list = Assert.IsAssignableFrom<IReadOnlyList<DirectTradeShipmentDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetDirectTradeShipments(order.Id))).Value);
+        Assert.Equal(shipment.Id, Assert.Single(list).Id);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.GetDirectTradeShipments(999_999)));
     }
 }

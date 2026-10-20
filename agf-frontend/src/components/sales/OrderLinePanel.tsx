@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
-import { formatCalendarDate } from '../../lib/calendarDate';
+import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { AllocateDirectTradeCommand, ReserveCommand, allocateKey, blockedBy, releaseKey, reserveKey } from '../../lib/pendingCommands';
 import { isDirectTradeAllocation, lineProgress } from '../../lib/salesOrderRules';
 import { toApiError } from '../../services/apiClient';
@@ -17,7 +17,7 @@ import AllocateDirectTradeForm from './AllocateDirectTradeForm';
 import DirectTradeSupplyPicker, { sourceLabel } from './DirectTradeSupplyPicker';
 import { usePendingCommands } from './PendingCommandsContext';
 import ReleaseReservationForm from './ReleaseReservationForm';
-import { ExpectedAllocationBadge, OnHoldBadge, ReservationStatusBadge } from './ReservationBadges';
+import { DirectTradeShippedBadge, ExpectedAllocationBadge, OnHoldBadge, ReservationStatusBadge } from './ReservationBadges';
 import ReservableStockTable from './ReservableStockTable';
 import ReserveForm from './ReserveForm';
 
@@ -149,7 +149,8 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 : progress.completeWithExpected ? 'text-violet-900'
                     : 'text-amber-900';
     const statusText = progress.fulfilled
-        ? t('sales_line_fulfilled')
+        // Met een DirectTrade-deel weet het systeem alleen dat het verzonden is; aflevering is niet vastgelegd.
+        ? (line.directTradeShippedQuantity > 0 ? t('sales_line_fulfilled_dt') : t('sales_line_fulfilled'))
         : progress.ready ? t('sales_line_complete')
             : progress.complete && progress.onHold ? t('sales_line_complete_on_hold')
                 : progress.completeWithExpected ? t('sales_line_complete_expected', { quantity: formatQuantity(line.allocatedQuantity, locale) })
@@ -174,6 +175,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 {line.dispatchedQuantity > 0 && (
                     <span className="text-emerald-900">
                         {t('sales_line_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale), kg: formatKg(line.dispatchedNetWeightKg, locale) })}
+                        {line.directTradeShippedQuantity > 0 && <span className="ml-1 text-violet-900">({t('sales_line_dt_shipped', { quantity: formatQuantity(line.directTradeShippedQuantity, locale) })})</span>}
                     </span>
                 )}
                 <span className={`font-medium ${statusClass}`}>{statusText}</span>
@@ -247,15 +249,19 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                             {allocation ? (
                                                 <>
                                                     <td className={td}>
-                                                        <ExpectedAllocationBadge />
+                                                        {reservation.status === 'Consumed' ? <DirectTradeShippedBadge /> : <ExpectedAllocationBadge />}
                                                         <span className="mt-1 block text-xs text-gray-800">{sourceLabel(reservation, t('availability_unknown'))}</span>
                                                     </td>
-                                                    <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
+                                                    <td className={td}>{reservation.status === 'Consumed' && reservation.shippedLotNumber ? reservation.shippedLotNumber : reservation.lotNumber ?? t('availability_unknown')}</td>
                                                     <td className={`${td} text-xs text-violet-900`}>
-                                                        {reservation.expectedAt ? t('sales_allocation_expected_on', { date: formatCalendarDate(reservation.expectedAt, locale) }) : t('availability_unknown')}
+                                                        {reservation.status === 'Consumed' && reservation.shippedOn
+                                                            ? t('sales_ship_shipped_on', { date: formatDateOnly(reservation.shippedOn, locale) })
+                                                            : reservation.expectedAt ? t('sales_allocation_expected_on', { date: formatCalendarDate(reservation.expectedAt, locale) }) : t('availability_unknown')}
                                                     </td>
                                                     <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
-                                                    <td className={`${td} text-right text-gray-600`} title={t('sales_allocation_no_kg')}>— <span className="block text-xs">{t('sales_allocation_no_kg')}</span></td>
+                                                    {reservation.status === 'Consumed' && reservation.shippedNetWeightKg !== null
+                                                        ? <td className={`${td} text-right`}>{formatKg(reservation.shippedNetWeightKg, locale)} <span className="block text-xs text-gray-600">{t('sales_ship_kg_actual')}</span></td>
+                                                        : <td className={`${td} text-right text-gray-600`} title={t('sales_allocation_no_kg')}>— <span className="block text-xs">{t('sales_allocation_no_kg')}</span></td>}
                                                 </>
                                             ) : (
                                                 <>
@@ -267,7 +273,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 </>
                                             )}
                                             <td className={td}>
-                                                <ReservationStatusBadge status={reservation.status} />
+                                                {allocation && reservation.status === 'Consumed'
+                                                    ? <span className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-950"><span aria-hidden="true">🚚</span>{t('sales_reservation_dt_shipped')}</span>
+                                                    : <ReservationStatusBadge status={reservation.status} />}
                                                 {reservation.onHold && <span className="mt-1 block"><OnHoldBadge /></span>}
                                                 {reservation.status === 'Released' && reservation.releaseReason && (
                                                     <span className="mt-1 block text-xs italic text-gray-700">“{reservation.releaseReason}”</span>

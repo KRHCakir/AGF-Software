@@ -17,7 +17,7 @@ const reservation = (id: number, status: 'Active' | 'Consumed' | 'Corrected', ve
     warehouseLocation: null, lotNumber: `LOT-${id}`, quantity: 5, unit: 'box', netWeightKg: 20, source: 'Physical', status,
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: null, releaseReason: null, version, contentQualityStatus: 'Approved', onHold: false,
     consumedAt: status === 'Active' ? null : '2026-10-19T13:00:00.000Z', dispatchId: status === 'Active' ? null : 9, dispatchReference: status === 'Active' ? null : 'VRB-9',
-    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null,
+    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null,
 });
 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {
@@ -29,7 +29,7 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
         cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: consumed.length * 5 === 10,
         lines: [{
             id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 10, unit: 'box',
-            reservedQuantity: active.length * 5, reservedNetWeightKg: active.length * 20, allocatedQuantity: 0, dispatchedQuantity: consumed.length * 5, dispatchedNetWeightKg: consumed.length * 20,
+            reservedQuantity: active.length * 5, reservedNetWeightKg: active.length * 20, allocatedQuantity: 0, dispatchedQuantity: consumed.length * 5, dispatchedNetWeightKg: consumed.length * 20, directTradeShippedQuantity: 0,
             openQuantity: 10 - active.length * 5 - consumed.length * 5, fulfilled: consumed.length * 5 === 10, version: 3, reservations,
         }],
     };
