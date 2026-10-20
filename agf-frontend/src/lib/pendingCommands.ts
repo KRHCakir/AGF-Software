@@ -1,6 +1,6 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
-import type { CancelSalesOrderRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
+import type { CancelSalesOrderRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
@@ -68,6 +68,15 @@ export interface DispatchCommand extends CommandMeta {
     display: { customerName: string; lineCount: number };
 }
 
+// DirectTrade-verzending: ordercommando (blokkeert regelcommando's, annuleren en magazijnverzending, en wordt erdoor geblokkeerd).
+export interface ShipDirectTradeCommand extends CommandMeta {
+    kind: 'ship-direct-trade';
+    key: string;
+    orderId: number;
+    payload: CreateDirectTradeShipmentRequest;
+    display: { customerName: string; lineCount: number };
+}
+
 export interface CorrectDispatchCommand extends CommandMeta {
     kind: 'correct-dispatch';
     key: string;
@@ -85,7 +94,7 @@ export interface CreateCustomerCommand extends CommandMeta {
     display: { name: string };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | CorrectDispatchCommand | CreateCustomerCommand;
+export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDispatchCommand | CreateCustomerCommand;
 
 // Regelcommando's: horen bij één orderregel en blokkeren elkaar daar.
 const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'allocate-direct-trade', 'release'];
@@ -119,6 +128,10 @@ export function dispatchKey(orderId: number): string {
     return `dispatch:${orderId}`;
 }
 
+export function shipDirectTradeKey(orderId: number): string {
+    return `ship-direct-trade:${orderId}`;
+}
+
 export function correctDispatchKey(orderId: number, dispatchId: number): string {
     return `correct-dispatch:${orderId}:${dispatchId}`;
 }
@@ -138,6 +151,7 @@ export type CommandScope =
     | { kind: 'line'; orderId: number; lineId: number }
     | { kind: 'cancel-order'; orderId: number }
     | { kind: 'dispatch'; orderId: number }
+    | { kind: 'ship-direct-trade'; orderId: number }
     | { kind: 'correct-dispatch'; orderId: number };
 
 // Een nieuw commando mag een onafgerond commando op dezelfde plaats nooit vervangen: eerst de uitkomst afwachten.
@@ -150,7 +164,7 @@ export function blockedBy(commands: PendingCommands, scope: CommandScope): Pendi
     if (scope.kind === 'create-customer') {
         return commands[CREATE_CUSTOMER_KEY] ?? null;
     }
-    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'correct-dispatch') {
+    if (scope.kind === 'cancel-order' || scope.kind === 'dispatch' || scope.kind === 'ship-direct-trade' || scope.kind === 'correct-dispatch') {
         return commandsForOrder(commands, scope.orderId)[0] ?? null;
     }
     // Regelcommando's worden ook geblokkeerd door elk ordercommando (annuleren, verzenden, verzending corrigeren).
@@ -266,6 +280,26 @@ function isDispatchPayload(value: unknown, requestId: string): value is CreateSa
         && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+// Kg strikt positief; partij verplicht; toelichting optioneel (de server eist haar alleen bij afwijking van een ingevulde bronpartij).
+function isShipDirectTradePayload(value: unknown, requestId: string): value is CreateDirectTradeShipmentRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && isNonNegativeInt(value.expectedOrderVersion)
+        && isText(value.actorReference)
+        && typeof value.shippedOn === 'string' && DATE_ONLY.test(value.shippedOn)
+        && (value.reference === null || (typeof value.reference === 'string' && value.reference.length <= 100))
+        && Array.isArray(value.lines)
+        && value.lines.length > 0
+        && value.lines.every((line: unknown) => isRecord(line)
+            && isPositiveInt(line.stockReservationId) && isNonNegativeInt(line.expectedReservationVersion)
+            && isPositiveAmount(line.quantity) && isUnit(line.unit) && isPositiveAmount(line.netWeightKg)
+            && isText(line.lotNumber) && (line.lotNumber as string).length <= 100
+            && (line.lotDeviationReason === null || isText(line.lotDeviationReason)))
+        && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
+}
+
 function isCorrectDispatchPayload(value: unknown, requestId: string): value is CorrectSalesDispatchRequest {
     return isRecord(value)
         && value.requestId === requestId
@@ -341,6 +375,11 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
             return isPositiveInt(value.orderId)
                 && value.key === dispatchKey(value.orderId)
                 && isDispatchPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'ship-direct-trade':
+            return isPositiveInt(value.orderId)
+                && value.key === shipDirectTradeKey(value.orderId)
+                && isShipDirectTradePayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
         case 'create-customer':
             return value.key === CREATE_CUSTOMER_KEY

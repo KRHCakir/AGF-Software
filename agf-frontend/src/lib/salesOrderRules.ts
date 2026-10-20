@@ -23,7 +23,8 @@ export type RuleCode =
     | 'exceeds_available'
     | 'exceeds_demand'
     | 'remainder_mismatch'
-    | 'exceeds_remaining';
+    | 'exceeds_remaining'
+    | 'future_date';
 
 export interface RuleError {
     field: string;
@@ -351,3 +352,52 @@ export function groupErrors(errors: RuleError[]): Record<string, RuleCode[]> {
     }
     return grouped;
 }
+
+// ---- DirectTrade-verzending ----
+
+// Alleen Active DirectTrade-toewijzingen zijn te verzenden (hele toewijzingen); de server controleert dit opnieuw.
+export function isShippableAllocation(reservation: { source: string; status: string }): boolean {
+    return reservation.source === 'DirectTrade' && reservation.status === 'Active';
+}
+
+export function isShippedAllocation(reservation: { source: string; status: string }): boolean {
+    return reservation.source === 'DirectTrade' && reservation.status === 'Consumed';
+}
+
+export interface ShipmentLineInput {
+    netKg: string;
+    lotNumber: string;
+    lotDeviationReason: string;
+}
+
+// Werkelijk verzonden kg (ingevoerd, nooit afgeleid) en partij; een afwijking van een ingevulde bronpartij vraagt een toelichting.
+// Veldsleutels gelijk aan de backend: lines[i].netWeightKg, lines[i].lotNumber, lines[i].lotDeviationReason.
+export function validateShipmentLine(index: number, input: ShipmentLineInput, sourceLot: string | null): BuildResult<{ netWeightKg: number; lotNumber: string; lotDeviationReason: string | null }> {
+    const errors: RuleError[] = [];
+    const key = `lines[${index}]`;
+    const kg = parsePositiveDecimal(input.netKg);
+    if (!kg.ok) errors.push({ field: `${key}.netWeightKg`, code: kg.error });
+    const lot = input.lotNumber.trim();
+    if (lot === '') errors.push({ field: `${key}.lotNumber`, code: 'required' });
+    else if (lot.length > 100) errors.push({ field: `${key}.lotNumber`, code: 'too_long' });
+    const reason = input.lotDeviationReason.trim();
+    const deviates = sourceLot !== null && lot !== '' && lot !== sourceLot;
+    if (deviates && reason === '') errors.push({ field: `${key}.lotDeviationReason`, code: 'required' });
+    if (reason.length > MAX_REASON_LENGTH) errors.push({ field: `${key}.lotDeviationReason`, code: 'too_long' });
+    if (errors.length > 0 || !kg.ok) return { ok: false, errors };
+    return { ok: true, value: { netWeightKg: kg.value, lotNumber: lot, lotDeviationReason: deviates ? reason : null } };
+}
+
+export function lotDeviates(sourceLot: string | null, lotText: string): boolean {
+    const lot = lotText.trim();
+    return sourceLot !== null && lot !== '' && lot !== sourceLot;
+}
+
+// De verzenddatum: verplicht, geldige kalenderdatum, niet na vandaag in Europe/Amsterdam.
+export function validateShippedOn(value: string, today: string): BuildResult<string> {
+    if (value.trim() === '') return { ok: false, errors: [{ field: 'shippedOn', code: 'required' }] };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return { ok: false, errors: [{ field: 'shippedOn', code: 'invalid_date' }] };
+    if (value > today) return { ok: false, errors: [{ field: 'shippedOn', code: 'future_date' }] };
+    return { ok: true, value };
+}
+

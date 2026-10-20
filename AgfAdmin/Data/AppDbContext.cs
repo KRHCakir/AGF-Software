@@ -46,6 +46,8 @@ namespace AgfAdmin.Data
         public DbSet<SalesDispatchLine> SalesDispatchLines { get; set; }
         public DbSet<SalesDispatchCorrection> SalesDispatchCorrections { get; set; }
         public DbSet<SalesDispatchCorrectionLine> SalesDispatchCorrectionLines { get; set; }
+        public DbSet<DirectTradeShipment> DirectTradeShipments { get; set; }
+        public DbSet<DirectTradeShipmentLine> DirectTradeShipmentLines { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
@@ -239,9 +241,9 @@ namespace AgfAdmin.Data
                         "\"SalesOrderLineId\" IS NULL OR (\"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"Source\" IS NOT NULL AND \"Source\" IN ('Physical', 'DirectTrade') " +
                         "AND ((\"Source\" = 'Physical' AND \"PalletContentLineId\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0) " +
                         "OR (\"Source\" = 'DirectTrade' AND \"PalletContentLineId\" IS NULL AND \"NetWeightKg\" IS NULL)))");
-                    // Een toewijzing kan in deze fase niet worden verbruikt of gecorrigeerd: verzenden van DirectTrade volgt later.
+                    // Een toewijzing kan via een DirectTrade-verzending worden verbruikt, maar (nog) niet gecorrigeerd.
                     t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed",
-                        "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released')");
+                        "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released', 'Consumed')");
                     t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent",
                         "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
                     t.HasCheckConstraint("CK_StockReservations_ConsumedConsistent",
@@ -527,6 +529,50 @@ namespace AgfAdmin.Data
                     .WithMany()
                     .HasForeignKey(l => l.StockReservationId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<DirectTradeShipment>(b =>
+            {
+                b.Property(d => d.CustomerNameSnapshot).IsRequired().HasMaxLength(200);
+                b.Property(d => d.Reference).HasMaxLength(100);
+                b.Property(d => d.ActorReference).IsRequired().HasMaxLength(100);
+                b.HasIndex(d => d.RequestId).IsUnique();
+                b.HasIndex(d => d.SalesOrderId);
+                b.HasOne(d => d.SalesOrder).WithMany().HasForeignKey(d => d.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.Customer).WithMany().HasForeignKey(d => d.CustomerId).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t => t.HasCheckConstraint("CK_DirectTradeShipments_CustomerName_NotBlank", "length(trim(\"CustomerNameSnapshot\")) > 0"));
+            });
+
+            modelBuilder.Entity<DirectTradeShipmentLine>(b =>
+            {
+                b.Property(l => l.AllocatedQuantity).HasPrecision(18, 3);
+                b.Property(l => l.Quantity).HasPrecision(18, 3);
+                b.Property(l => l.NetWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
+                b.Property(l => l.LotNumber).IsRequired().HasMaxLength(100);
+                b.Property(l => l.SourceLotNumber).HasMaxLength(100);
+                b.Property(l => l.LotDeviationReason).HasMaxLength(500);
+                b.Property(l => l.VendorNameSnapshot).IsRequired().HasMaxLength(200);
+                b.Property(l => l.OriginSnapshot).IsRequired().HasMaxLength(200);
+                b.Property(l => l.DestinationSnapshot).HasMaxLength(200);
+                // Een toewijzing wordt hooguit één keer verzonden.
+                b.HasIndex(l => l.StockReservationId).IsUnique();
+                b.HasIndex(l => l.SupplyCommitmentLineId);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_DirectTradeShipmentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_DirectTradeShipmentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+                    // Eerste versie: alleen hele toewijzingen.
+                    t.HasCheckConstraint("CK_DirectTradeShipmentLines_WholeAllocation", "CAST(\"Quantity\" AS NUMERIC) = CAST(\"AllocatedQuantity\" AS NUMERIC)");
+                    t.HasCheckConstraint("CK_DirectTradeShipmentLines_Lot_NotBlank", "length(trim(\"LotNumber\")) > 0");
+                    // Afwijking van een ingevulde bronpartij vraagt een niet-lege toelichting.
+                    t.HasCheckConstraint("CK_DirectTradeShipmentLines_LotDeviation_Reason",
+                        "\"SourceLotNumber\" IS NULL OR \"LotNumber\" = \"SourceLotNumber\" OR (\"LotDeviationReason\" IS NOT NULL AND length(trim(\"LotDeviationReason\")) > 0)");
+                });
+                b.HasOne(l => l.DirectTradeShipment).WithMany(d => d.Lines).HasForeignKey(l => l.DirectTradeShipmentId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.StockReservation).WithOne(r => r.DirectTradeShipmentLine).HasForeignKey<DirectTradeShipmentLine>(l => l.StockReservationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SalesOrderLine).WithMany().HasForeignKey(l => l.SalesOrderLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SupplyCommitmentLine).WithMany().HasForeignKey(l => l.SupplyCommitmentLineId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<PalletAuditEvent>(b =>

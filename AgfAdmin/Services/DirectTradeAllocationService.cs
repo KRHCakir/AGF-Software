@@ -93,8 +93,9 @@ namespace AgfAdmin.Services
         // Resterend = verwacht - toegewezen; nooit negatief.
         public static decimal Remaining(decimal expectedQuantity, decimal allocatedQuantity) => Math.Max(0m, expectedQuantity - allocatedQuantity);
 
-        // Som (in het geheugen, exact decimal) van Active DirectTrade-toewijzingen per bronregel, over alle verkooporders
-        // (of alleen die van één orderregel). Geregistreerde palletinhoud tegen de bronregel verandert hier niets aan.
+        // Bezette capaciteit (in het geheugen, exact decimal) per bronregel: Active + Consumed (verzonden) DirectTrade-toewijzingen,
+        // over alle verkooporders (of alleen die van één orderregel). Verzenden maakt dus nooit capaciteit vrij.
+        // Geregistreerde palletinhoud tegen de bronregel verandert hier niets aan.
         internal static async Task<Dictionary<int, decimal>> AllocatedBySourceLineAsync(AppDbContext db, List<int> sourceLineIds, CancellationToken cancellationToken, int? salesOrderLineId = null)
         {
             if (sourceLineIds.Count == 0)
@@ -103,7 +104,8 @@ namespace AgfAdmin.Services
             }
             var query = db.StockReservations.AsNoTracking()
                 .Where(r => sourceLineIds.Contains(r.SupplyCommitmentLineId)
-                    && r.SalesOrderLineId != null && r.Source == ReservationRules.SourceDirectTrade && r.Status == ReservationRules.StatusActive);
+                    && r.SalesOrderLineId != null && r.Source == ReservationRules.SourceDirectTrade
+                    && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed));
             if (salesOrderLineId != null)
             {
                 query = query.Where(r => r.SalesOrderLineId == salesOrderLineId);

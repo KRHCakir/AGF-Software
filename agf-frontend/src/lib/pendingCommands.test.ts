@@ -4,6 +4,7 @@ import {
     CREATE_ORDER_KEY,
     allocateKey,
     blockedBy,
+    shipDirectTradeKey,
     CREATE_CUSTOMER_KEY,
     cancelKey,
     correctDispatchKey,
@@ -366,3 +367,47 @@ describe('direct trade allocation commands', () => {
         assert.equal(isPendingCommand(withoutDate), true, 'a null snapshot (no date known) is still a valid command');
     });
 });
+
+describe('DirectTrade shipment commands', () => {
+    const ship = (orderId: number, requestId = 's-1'): PendingCommand => ({
+        kind: 'ship-direct-trade', key: shipDirectTradeKey(orderId), orderId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T10:00:00.000Z',
+        payload: { requestId, expectedOrderVersion: 3, actorReference: 'office-1', shippedOn: '2026-10-19', reference: 'CMR-1',
+            lines: [{ stockReservationId: 21, expectedReservationVersion: 0, quantity: 20, unit: 'box', netWeightKg: 81.4, lotNumber: 'LOT-DT-SRC', lotDeviationReason: null }] },
+        display: { customerName: 'Customer T', lineCount: 1 },
+    });
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+    const lineOf = (copy: Record<string, unknown>) => (payloadOf(copy).lines as Record<string, unknown>[])[0];
+
+    test('a DirectTrade shipment is an order command: it blocks line commands, cancel and warehouse dispatch, and is blocked by them', () => {
+        assert.equal(shipDirectTradeKey(4), 'ship-direct-trade:4');
+        const commands = toMap(ship(4));
+        assert.equal(blockedBy(commands, { kind: 'line', orderId: 4, lineId: 7 })?.requestId, 's-1');
+        assert.equal(blockedBy(commands, { kind: 'cancel-order', orderId: 4 })?.requestId, 's-1');
+        assert.equal(blockedBy(commands, { kind: 'dispatch', orderId: 4 })?.requestId, 's-1');
+        assert.equal(blockedBy(commands, { kind: 'ship-direct-trade', orderId: 5 }), null);
+        assert.equal(blockedBy(toMap(reserve(4, 7)), { kind: 'ship-direct-trade', orderId: 4 })?.requestId, 'r-1');
+        assert.equal(blockedBy(toMap(dispatch(4)), { kind: 'ship-direct-trade', orderId: 4 })?.requestId, 'd-1');
+    });
+
+    test('a stored shipment is restored only when complete: positive kg, lot, calendar date, unique lines', () => {
+        const command = ship(4);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(command))), toMap(command));
+        const rejected: [string, (copy: Record<string, unknown>) => void][] = [
+            ['kg zero', (copy) => { lineOf(copy).netWeightKg = 0; }],
+            ['kg missing', (copy) => { delete lineOf(copy).netWeightKg; }],
+            ['lot blank', (copy) => { lineOf(copy).lotNumber = ' '; }],
+            ['reason blank string', (copy) => { lineOf(copy).lotDeviationReason = ' '; }],
+            ['date with time', (copy) => { payloadOf(copy).shippedOn = '2026-10-19T00:00:00Z'; }],
+            ['date missing', (copy) => { delete payloadOf(copy).shippedOn; }],
+            ['duplicate lines', (copy) => { payloadOf(copy).lines = [lineOf(copy), lineOf(copy)]; }],
+            ['key mismatch', (copy) => { copy.key = shipDirectTradeKey(5); }],
+        ];
+        for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
+    });
+});
+

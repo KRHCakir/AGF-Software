@@ -50,3 +50,15 @@ export function ExpectedAllocationBadge() {
         </span>
     );
 }
+
+// Verzonden DirectTrade-toewijzing. Bewust niet "afgeleverd" of "niet afgeleverd": het systeem weet alleen dat er nog geen
+// afleverbevestiging is vastgelegd.
+export function DirectTradeShippedBadge() {
+    const { t } = useTranslation();
+    return (
+        <span className="inline-flex items-center gap-1 rounded border border-violet-400 bg-white px-2 py-0.5 text-xs font-semibold text-violet-950">
+            <span aria-hidden="true">🚚</span>{t('sales_ship_badge')}
+        </span>
+    );
+}
+

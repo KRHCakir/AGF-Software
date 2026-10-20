@@ -130,7 +130,7 @@ public class DirectTradeAllocationGuardTests : IDisposable
             "null-source" => (_ => Task.FromResult(Allocation(1m, source: null)), "known source"),
             "unknown-source" => (_ => Task.FromResult(Allocation(1m, source: "Expected")), "known source"),
             "physical-without-content" => (_ => { var r = Allocation(1m, source: "Physical"); r.NetWeightKg = 4m; return Task.FromResult(r); }, "exactly one pallet content line"),
-            "created-consumed" => (_ => { var r = Allocation(1m, status: "Consumed"); r.ConsumedAt = DateTime.UtcNow; return Task.FromResult(r); }, "only be Active or Released"),
+            "created-consumed" => (_ => { var r = Allocation(1m, status: "Consumed"); r.ConsumedAt = DateTime.UtcNow; return Task.FromResult(r); }, "never be created as Consumed"),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario))
         };
 
@@ -166,12 +166,13 @@ public class DirectTradeAllocationGuardTests : IDisposable
         Assert.Equal(2, await ActiveAllocationCountAsync());
     }
 
+    // Sinds de DirectTrade-verzending: Consumed alleen samen met een verzendregel (regel 11); Corrected bestaat nog niet voor DirectTrade.
     [Theory]
-    [InlineData("Consumed", false)]
-    [InlineData("Consumed", true)]
-    [InlineData("Corrected", false)]
-    [InlineData("Corrected", true)]
-    public async Task An_Allocation_Can_Never_Become_Consumed_Or_Corrected(string status, bool async)
+    [InlineData("Consumed", false, "must be shipped by exactly one new DirectTrade shipment line")]
+    [InlineData("Consumed", true, "must be shipped by exactly one new DirectTrade shipment line")]
+    [InlineData("Corrected", false, "only be Active, Released or Consumed")]
+    [InlineData("Corrected", true, "only be Active, Released or Consumed")]
+    public async Task An_Allocation_Can_Never_Become_Consumed_Without_A_Shipment_Or_Corrected(string status, bool async, string message)
     {
         await ArrangeAsync();
         int id;
@@ -189,7 +190,7 @@ public class DirectTradeAllocationGuardTests : IDisposable
             allocation.ConsumedAt = DateTime.UtcNow;
             allocation.CorrectedAt = status == "Corrected" ? DateTime.UtcNow : null;
             var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
-            Assert.Contains("only be Active or Released", exception.Message);
+            Assert.Contains(message, exception.Message);
         }
         Assert.Equal(1, await ActiveAllocationCountAsync());
     }
@@ -201,9 +202,9 @@ public class DirectTradeAllocationGuardTests : IDisposable
         await using var db = _factory.CreateContext();
         var sourceSql = source == null ? "NULL" : $"'{source}'";
         var released = status == "Released";
-        var sql = "INSERT INTO \"StockReservations\" (\"RequestId\", \"SalesOrderLineId\", \"SupplyCommitmentLineId\", \"PalletContentLineId\", \"Quantity\", \"Unit\", \"NetWeightKg\", \"Source\", \"Status\", \"CreatedAt\", \"UpdatedAt\", \"Version\", \"ConsumedAt\", \"ReleasedAt\", \"ReleaseReason\") " +
+        var sql = "INSERT INTO \"StockReservations\" (\"RequestId\", \"SalesOrderLineId\", \"SupplyCommitmentLineId\", \"PalletContentLineId\", \"Quantity\", \"Unit\", \"NetWeightKg\", \"Source\", \"Status\", \"CreatedAt\", \"UpdatedAt\", \"Version\", \"ConsumedAt\", \"CorrectedAt\", \"ReleasedAt\", \"ReleaseReason\") " +
                   $"VALUES ('{Guid.NewGuid()}', {salesLine ?? _boxLine}, {sourceLine ?? _seed.DirectTradeSourceLine}, {contentLine}, '1.0', 'box', {kg}, {sourceSql}, '{status}', '2026-10-20 08:00:00', '2026-10-20 08:00:00', 0, " +
-                  $"{(status == "Consumed" ? "'2026-10-20 08:00:00'" : "NULL")}, {(released ? "'2026-10-20 08:00:00'" : "NULL")}, {(released ? "'test'" : "NULL")})";
+                  $"{(status is "Consumed" or "Corrected" ? "'2026-10-20 08:00:00'" : "NULL")}, {(status == "Corrected" ? "'2026-10-20 08:00:00'" : "NULL")}, {(released ? "'2026-10-20 08:00:00'" : "NULL")}, {(released ? "'test'" : "NULL")})";
         return await db.Database.ExecuteSqlRawAsync(sql);
     }
 
@@ -216,7 +217,7 @@ public class DirectTradeAllocationGuardTests : IDisposable
     [InlineData("Physical", "Active", "content", "'0'")]     // Physical met kg 0
     [InlineData("DirectTrade", "Active", "content", "NULL")] // DirectTrade op inhoud
     [InlineData("DirectTrade", "Active", "NULL", "'4.0'")]   // DirectTrade met kg
-    [InlineData("DirectTrade", "Consumed", "NULL", "NULL")]  // DirectTrade verbruikt
+    [InlineData("DirectTrade", "Corrected", "NULL", "NULL")] // DirectTrade gecorrigeerd (correctieflow bestaat nog niet)
     public async Task Database_Check_Rejects_Null_Unknown_And_Mismatched_Sources(string source, string status, string contentLine, string kg)
     {
         await ArrangeAsync();
@@ -228,6 +229,10 @@ public class DirectTradeAllocationGuardTests : IDisposable
 
         // Een NULL bron strandt al op NOT NULL; elke andere combinatie op de check zelf.
         Assert.Contains("constraint failed", exception.Message);
+        if (status == "Corrected")
+        {
+            Assert.Contains("CK_StockReservations_DirectTrade_StatusAllowed", exception.Message);
+        }
         Assert.Equal(0, await db.StockReservations.CountAsync(r => r.SalesOrderLineId != null));
     }
 

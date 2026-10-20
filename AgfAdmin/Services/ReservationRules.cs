@@ -20,12 +20,14 @@ namespace AgfAdmin.Services
 
         public static bool IsSalesSource(string value) => value != null && SalesSources.Contains(value, StringComparer.Ordinal);
 
-        // Een toewijzing kent in deze fase alleen Active en Released; verzenden van DirectTrade volgt in een latere versie.
-        public static readonly IReadOnlyList<string> DirectTradeStatuses = new[] { StatusActive, StatusReleased };
+        // Een toewijzing kent Active, Released en Consumed (verzonden via een DirectTrade-verzending). Corrected volgt met de correctieflow.
+        public static readonly IReadOnlyList<string> DirectTradeStatuses = new[] { StatusActive, StatusReleased, StatusConsumed };
 
         public const string ReservationCreatedEvent = "ReservationCreated";
         public const string DirectTradeAllocatedEvent = "DirectTradeAllocated";
         public const string DirectTradeReleasedEvent = "DirectTradeReleased";
+        public const string DirectTradeShippedEvent = "DirectTradeShipped";
+        public const int MaxLotNumberLength = 100;
         public const string ReservationReleasedEvent = "ReservationReleased";
         public const string OrderCancelledEvent = "SalesOrderCancelled";
         public const string OrderDispatchedEvent = "SalesOrderDispatched";

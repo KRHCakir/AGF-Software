@@ -5,6 +5,11 @@ import {
     buildOrderPayload,
     dispatchTotals,
     expectedAfterRequested,
+    isShippableAllocation,
+    isShippedAllocation,
+    lotDeviates,
+    validateShipmentLine,
+    validateShippedOn,
     fullAllocationRemainder,
     validateAllocationInput,
     isDispatchable,
@@ -292,3 +297,36 @@ describe('direct trade allocation rules', () => {
         assert.deepEqual(orderProgress({ fulfilled: false, lines: [committed] }), { linesComplete: 1, linesFulfilled: 0, linesTotal: 1, onHoldCount: 0, allocatedLines: 1, complete: true, ready: false, fulfilled: false, partiallyDispatched: false });
     });
 });
+
+describe('DirectTrade shipment rules', () => {
+    test('only active DirectTrade allocations are shippable; a consumed one is shipped', () => {
+        assert.equal(isShippableAllocation({ source: 'DirectTrade', status: 'Active' }), true);
+        assert.equal(isShippableAllocation({ source: 'Physical', status: 'Active' }), false);
+        assert.equal(isShippableAllocation({ source: 'DirectTrade', status: 'Released' }), false);
+        assert.equal(isShippedAllocation({ source: 'DirectTrade', status: 'Consumed' }), true);
+        assert.equal(isShippedAllocation({ source: 'Physical', status: 'Consumed' }), false);
+    });
+
+    test('kg is required and positive, lot is required, a deviating lot needs a reason; without source lot no reason is needed', () => {
+        assert.deepEqual(validateShipmentLine(0, { netKg: '81,4', lotNumber: ' LOT-DT-SRC ', lotDeviationReason: 'ignored' }, 'LOT-DT-SRC'),
+            { ok: true, value: { netWeightKg: 81.4, lotNumber: 'LOT-DT-SRC', lotDeviationReason: null } });
+        assert.deepEqual(codes(validateShipmentLine(0, { netKg: '', lotNumber: 'L', lotDeviationReason: '' }, null)), { 'lines[0].netWeightKg': ['empty'] });
+        assert.deepEqual(codes(validateShipmentLine(1, { netKg: '0', lotNumber: ' ', lotDeviationReason: '' }, null)), { 'lines[1].netWeightKg': ['not_positive'], 'lines[1].lotNumber': ['required'] });
+        assert.deepEqual(codes(validateShipmentLine(0, { netKg: '10', lotNumber: 'LOT-ANDERS', lotDeviationReason: ' ' }, 'LOT-DT-SRC')), { 'lines[0].lotDeviationReason': ['required'] });
+        assert.deepEqual(validateShipmentLine(0, { netKg: '10', lotNumber: 'LOT-ANDERS', lotDeviationReason: ' herpakt ' }, 'LOT-DT-SRC'),
+            { ok: true, value: { netWeightKg: 10, lotNumber: 'LOT-ANDERS', lotDeviationReason: 'herpakt' } });
+        assert.deepEqual(validateShipmentLine(0, { netKg: '10', lotNumber: 'LOT-VRIJ', lotDeviationReason: '' }, null),
+            { ok: true, value: { netWeightKg: 10, lotNumber: 'LOT-VRIJ', lotDeviationReason: null } });
+        assert.equal(lotDeviates('LOT-A', 'LOT-A'), false);
+        assert.equal(lotDeviates('LOT-A', 'LOT-B'), true);
+        assert.equal(lotDeviates(null, 'LOT-B'), false);
+    });
+
+    test('the shipping date is a required calendar date, never after today', () => {
+        assert.deepEqual(validateShippedOn('2026-10-20', '2026-10-20'), { ok: true, value: '2026-10-20' });
+        assert.deepEqual(codes(validateShippedOn('2026-10-21', '2026-10-20')), { shippedOn: ['future_date'] });
+        assert.deepEqual(codes(validateShippedOn('', '2026-10-20')), { shippedOn: ['required'] });
+        assert.deepEqual(codes(validateShippedOn('20-10-2026', '2026-10-20')), { shippedOn: ['invalid_date'] });
+    });
+});
+

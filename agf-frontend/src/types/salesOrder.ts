@@ -46,6 +46,27 @@ export interface CreateDirectTradeAllocationRequest {
     reason: string | null;
 }
 
+// DirectTrade-verzending: hele Active toewijzingen met de werkelijke hoeveelheid, eenheid, netto kg (ingevoerd, nooit afgeleid) en partij.
+export interface CreateDirectTradeShipmentLineRequest {
+    stockReservationId: number;
+    expectedReservationVersion: number;
+    quantity: number;
+    unit: PackageUnit;
+    netWeightKg: number;
+    lotNumber: string;
+    lotDeviationReason: string | null;
+}
+
+export interface CreateDirectTradeShipmentRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    actorReference: string;
+    // Kalenderdatum yyyy-MM-dd, niet na vandaag in Europe/Amsterdam (backend handhaaft).
+    shippedOn: string;
+    reference: string | null;
+    lines: CreateDirectTradeShipmentLineRequest[];
+}
+
 export interface ReleaseStockReservationRequest {
     requestId: string;
     expectedReservationVersion: number;
@@ -176,6 +197,11 @@ export interface StockReservation {
     origin: string | null;
     destination: string | null;
     expectedAt: string | null;
+    // Alleen bij een verzonden (Consumed) DirectTrade-toewijzing. Verzonden betekent niet afgeleverd: er is (nog) geen afleverbevestiging.
+    directTradeShipmentId: number | null;
+    shippedOn: string | null;
+    shippedNetWeightKg: number | null;
+    shippedLotNumber: string | null;
     status: ReservationStatus;
     createdAt: string;
     releasedAt: string | null;
@@ -209,6 +235,8 @@ export interface SalesOrderLine {
     // Verzonden (Consumed): telt niet meer als gereserveerd en komt nooit terug als vrije voorraad.
     dispatchedQuantity: number;
     dispatchedNetWeightKg: number;
+    // Deel van verzonden dat als DirectTrade (leverancier -> klant) is verzonden.
+    directTradeShippedQuantity: number;
     // Open = gevraagd - gereserveerd - toegewezen - verzonden; vervuld = verzonden == gevraagd.
     openQuantity: number;
     fulfilled: boolean;
@@ -288,6 +316,10 @@ export function isStockReservation(value: unknown): value is StockReservation {
         && isNullableString(value.origin)
         && isNullableString(value.destination)
         && isNullableString(value.expectedAt)
+        && (value.directTradeShipmentId === null || isNumber(value.directTradeShipmentId))
+        && isNullableString(value.shippedOn)
+        && (value.shippedNetWeightKg === null || isNumber(value.shippedNetWeightKg))
+        && isNullableString(value.shippedLotNumber)
         && isReservationStatus(value.status)
         && isString(value.createdAt)
         && isNullableString(value.releasedAt)
@@ -314,6 +346,7 @@ function isSalesOrderLine(value: unknown): value is SalesOrderLine {
         && isNumber(value.reservedNetWeightKg)
         && isNumber(value.allocatedQuantity)
         && isNumber(value.dispatchedQuantity)
+        && isNumber(value.directTradeShippedQuantity)
         && isNumber(value.dispatchedNetWeightKg)
         && isNumber(value.openQuantity)
         && typeof value.fulfilled === 'boolean'
@@ -496,3 +529,62 @@ export function isDirectTradeSupplyLine(value: unknown): value is DirectTradeSup
 export function isDirectTradeSupplyList(value: unknown): value is DirectTradeSupplyLine[] {
     return isArrayOf(value, isDirectTradeSupplyLine);
 }
+
+export interface DirectTradeShipmentLine {
+    id: number;
+    stockReservationId: number;
+    salesOrderLineId: number;
+    supplyCommitmentLineId: number;
+    supplyCommitmentId: number;
+    vendorId: number;
+    // Snapshots bij verzending.
+    vendorName: string;
+    origin: string;
+    destination: string | null;
+    productName: string | null;
+    productVariantName: string | null;
+    quantity: number;
+    unit: PackageUnit;
+    netWeightKg: number;
+    lotNumber: string;
+    sourceLotNumber: string | null;
+    lotDeviationReason: string | null;
+}
+
+export interface DirectTradeShipment {
+    id: number;
+    requestId: string;
+    salesOrderId: number;
+    customerId: number;
+    customerName: string;
+    shippedOn: string;
+    reference: string | null;
+    actorReference: string;
+    recordedAt: string;
+    // Altijd false: het systeem kent (nog) geen afleverbevestiging.
+    deliveryRecorded: boolean;
+    lines: DirectTradeShipmentLine[];
+}
+
+function isDirectTradeShipmentLine(value: unknown): value is DirectTradeShipmentLine {
+    return isObject(value)
+        && isNumber(value.id) && isNumber(value.stockReservationId) && isNumber(value.salesOrderLineId)
+        && isNumber(value.supplyCommitmentLineId) && isNumber(value.supplyCommitmentId) && isNumber(value.vendorId)
+        && isString(value.vendorName) && isString(value.origin) && isNullableString(value.destination)
+        && isNullableString(value.productName) && isNullableString(value.productVariantName)
+        && isNumber(value.quantity) && isUnit(value.unit) && isNumber(value.netWeightKg)
+        && isString(value.lotNumber) && isNullableString(value.sourceLotNumber) && isNullableString(value.lotDeviationReason);
+}
+
+export function isDirectTradeShipment(value: unknown): value is DirectTradeShipment {
+    return isObject(value)
+        && isNumber(value.id) && isString(value.requestId) && isNumber(value.salesOrderId) && isNumber(value.customerId)
+        && isString(value.customerName) && isString(value.shippedOn) && isNullableString(value.reference)
+        && isString(value.actorReference) && isString(value.recordedAt) && value.deliveryRecorded === false
+        && isArrayOf(value.lines, isDirectTradeShipmentLine);
+}
+
+export function isDirectTradeShipmentList(value: unknown): value is DirectTradeShipment[] {
+    return isArrayOf(value, isDirectTradeShipment);
+}
+

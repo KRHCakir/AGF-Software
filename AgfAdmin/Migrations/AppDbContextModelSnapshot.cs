@@ -106,6 +106,156 @@ namespace AgfAdmin.Migrations
                     b.ToTable("Customers");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("CustomerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CustomerNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("ShippedOn")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("DirectTradeShipments", t =>
+                        {
+                            t.HasCheckConstraint("CK_DirectTradeShipments_CustomerName_NotBlank", "length(trim(\"CustomerNameSnapshot\")) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("DestinationSnapshot")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("DirectTradeShipmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExpectedReservationVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LotDeviationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("LotNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("OriginSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("SalesOrderLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceLotNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("StockReservationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("VendorId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("VendorNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DirectTradeShipmentId");
+
+                    b.HasIndex("SalesOrderLineId");
+
+                    b.HasIndex("StockReservationId")
+                        .IsUnique();
+
+                    b.HasIndex("SupplyCommitmentLineId");
+
+                    b.ToTable("DirectTradeShipmentLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_DirectTradeShipmentLines_LotDeviation_Reason", "\"SourceLotNumber\" IS NULL OR \"LotNumber\" = \"SourceLotNumber\" OR (\"LotDeviationReason\" IS NOT NULL AND length(trim(\"LotDeviationReason\")) > 0)");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentLines_Lot_NotBlank", "length(trim(\"LotNumber\")) > 0");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_DirectTradeShipmentLines_WholeAllocation", "CAST(\"Quantity\" AS NUMERIC) = CAST(\"AllocatedQuantity\" AS NUMERIC)");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoice", b =>
                 {
                     b.Property<int>("Id")
@@ -1350,7 +1500,7 @@ namespace AgfAdmin.Migrations
 
                             t.HasCheckConstraint("CK_StockReservations_CorrectedConsistent", "\"Status\" <> 'Corrected' OR (\"CorrectedAt\" IS NOT NULL AND \"ConsumedAt\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed", "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released')");
+                            t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed", "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released', 'Consumed')");
 
                             t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
@@ -1544,6 +1694,60 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("ProductVariantId");
 
                     b.ToTable("WasteLogs");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipment", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipmentLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.DirectTradeShipment", "DirectTradeShipment")
+                        .WithMany("Lines")
+                        .HasForeignKey("DirectTradeShipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrderLine", "SalesOrderLine")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.StockReservation", "StockReservation")
+                        .WithOne("DirectTradeShipmentLine")
+                        .HasForeignKey("AgfAdmin.Models.DirectTradeShipmentLine", "StockReservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DirectTradeShipment");
+
+                    b.Navigation("SalesOrderLine");
+
+                    b.Navigation("StockReservation");
+
+                    b.Navigation("SupplyCommitmentLine");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoice", b =>
@@ -2021,6 +2225,11 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Orders");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipment", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoice", b =>
                 {
                     b.Navigation("InvoiceLines");
@@ -2089,6 +2298,8 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.StockReservation", b =>
                 {
+                    b.Navigation("DirectTradeShipmentLine");
+
                     b.Navigation("DispatchLine");
                 });
 

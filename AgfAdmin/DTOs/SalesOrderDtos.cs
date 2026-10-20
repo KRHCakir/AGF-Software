@@ -82,6 +82,8 @@ namespace AgfAdmin.DTOs
         // Verbruikt (Consumed) door verzendingen; telt niet meer als gereserveerd en komt nooit terug als vrije voorraad.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }
+        // Deel van verzonden dat via DirectTrade is verzonden (leverancier -> klant); de kg daarvan zit in DispatchedNetWeightKg.
+        public decimal DirectTradeShippedQuantity { get; set; }
         // Open = gevraagd - gereserveerd (Physical) - toegewezen (DirectTrade) - verzonden.
         public decimal OpenQuantity { get; set; }
         // Afgeleid: verzonden == gevraagd.
@@ -115,6 +117,12 @@ namespace AgfAdmin.DTOs
         public string Origin { get; set; }
         public string Destination { get; set; }
         public DateTime? ExpectedAt { get; set; }
+        // Alleen bij een verzonden (Consumed) DirectTrade-toewijzing: de verzending met werkelijke datum, kg en partij.
+        // Verzonden betekent niet afgeleverd: een afleverbevestiging bestaat (nog) niet.
+        public int? DirectTradeShipmentId { get; set; }
+        public DateOnly? ShippedOn { get; set; }
+        public decimal? ShippedNetWeightKg { get; set; }
+        public string ShippedLotNumber { get; set; }
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ReleasedAt { get; set; }
@@ -282,7 +290,7 @@ namespace AgfAdmin.DTOs
         public decimal ExpectedQuantity { get; set; }
         // Door de leverancier opgegeven verwacht gewicht van de HELE bronregel; nooit het gewicht van een (deel)toewijzing en nooit opgeteld bij gemeten kg.
         public decimal? DeclaredExpectedNetWeightKg { get; set; }
-        // Toegewezen = som van Active DirectTrade-toewijzingen van alle orders; resterend = verwacht - toegewezen.
+        // Toegewezen = Active + verzonden (Consumed) DirectTrade-toewijzingen van alle orders; resterend = verwacht - toegewezen.
         public decimal AllocatedQuantity { get; set; }
         public decimal RemainingQuantity { get; set; }
         public decimal AllocatedToThisLineQuantity { get; set; }
@@ -300,5 +308,67 @@ namespace AgfAdmin.DTOs
         public bool? AcknowledgeExpectedSupply { get; set; }
         public string ActorReference { get; set; }
         public string Reason { get; set; }
+    }
+
+    // DirectTrade-verzending: hele Active toewijzingen van één order verbruiken met de werkelijke hoeveelheid, eenheid, netto kg en partij.
+    public sealed class CreateDirectTradeShipmentDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public string ActorReference { get; set; }
+        // Kalenderdatum (yyyy-MM-dd) zonder tijdstip; niet na vandaag in Europe/Amsterdam.
+        public DateOnly? ShippedOn { get; set; }
+        public string Reference { get; set; }
+        public List<CreateDirectTradeShipmentLineDto> Lines { get; set; }
+    }
+
+    public sealed class CreateDirectTradeShipmentLineDto
+    {
+        public int? StockReservationId { get; set; }
+        public int? ExpectedReservationVersion { get; set; }
+        public decimal? Quantity { get; set; }
+        public string Unit { get; set; }
+        public decimal? NetWeightKg { get; set; }
+        public string LotNumber { get; set; }
+        public string LotDeviationReason { get; set; }
+    }
+
+    public sealed class DirectTradeShipmentDto
+    {
+        public int Id { get; set; }
+        public Guid RequestId { get; set; }
+        public int SalesOrderId { get; set; }
+        public int CustomerId { get; set; }
+        // Snapshot bij verzending; verandert niet als de klantnaam later wijzigt.
+        public string CustomerName { get; set; }
+        public DateOnly ShippedOn { get; set; }
+        public string Reference { get; set; }
+        public string ActorReference { get; set; }
+        public DateTime RecordedAt { get; set; }
+        // Het systeem kent geen afleverbevestiging; dit veld zegt alleen dat er (nog) geen is vastgelegd.
+        public bool DeliveryRecorded => false;
+        public List<DirectTradeShipmentLineDto> Lines { get; set; } = new();
+    }
+
+    public sealed class DirectTradeShipmentLineDto
+    {
+        public int Id { get; set; }
+        public int StockReservationId { get; set; }
+        public int SalesOrderLineId { get; set; }
+        public int SupplyCommitmentLineId { get; set; }
+        public int SupplyCommitmentId { get; set; }
+        public int VendorId { get; set; }
+        // Snapshots bij verzending.
+        public string VendorName { get; set; }
+        public string Origin { get; set; }
+        public string Destination { get; set; }
+        public string ProductName { get; set; }
+        public string ProductVariantName { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public decimal NetWeightKg { get; set; }
+        public string LotNumber { get; set; }
+        public string SourceLotNumber { get; set; }
+        public string LotDeviationReason { get; set; }
     }
 }
