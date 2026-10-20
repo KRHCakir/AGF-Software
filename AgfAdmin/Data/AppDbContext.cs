@@ -91,6 +91,11 @@ namespace AgfAdmin.Data
             {
                 entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
             }
+
+            foreach (var entry in ChangeTracker.Entries<SupplyCommitmentLine>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
+            }
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -140,6 +145,7 @@ namespace AgfAdmin.Data
                 b.Property(l => l.ExpectedQuantity).HasPrecision(18, 3);
                 b.Property(l => l.ExpectedUnit).HasMaxLength(32);
                 b.Property(l => l.ExpectedNetWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.Version).IsConcurrencyToken();
 
                 b.HasOne(l => l.SupplyCommitment)
                     .WithMany(c => c.Lines)
@@ -219,7 +225,9 @@ namespace AgfAdmin.Data
                 b.HasIndex(r => r.RequestId).IsUnique();
                 b.HasIndex(r => r.ReleaseRequestId).IsUnique();
 
-                // Precies één eigenaar; de nieuwe verkoopflow is altijd volledig en fysiek; Released heeft tijd en reden.
+                // Precies één eigenaar; de verkoopflow is altijd volledig: Physical op een inhoudsregel met gemeten kg, DirectTrade
+                // (toewijzing van verwachte, klantgebonden aanvoer) zonder inhoudsregel en zonder kg. Source staat expliciet IS NOT NULL
+                // en in een toelatingslijst: een NULL of onbekende bron valt anders in UNKNOWN en zou de check passeren.
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_StockReservations_SingleOwner",
@@ -228,8 +236,12 @@ namespace AgfAdmin.Data
                         "\"Status\" IN ('Active', 'Released', 'Consumed', 'Corrected')");
                     t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_StockReservations_SalesFlowComplete",
-                        "\"SalesOrderLineId\" IS NULL OR (\"PalletContentLineId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL " +
-                        "AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"Source\" = 'Physical')");
+                        "\"SalesOrderLineId\" IS NULL OR (\"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"Source\" IS NOT NULL AND \"Source\" IN ('Physical', 'DirectTrade') " +
+                        "AND ((\"Source\" = 'Physical' AND \"PalletContentLineId\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0) " +
+                        "OR (\"Source\" = 'DirectTrade' AND \"PalletContentLineId\" IS NULL AND \"NetWeightKg\" IS NULL)))");
+                    // Een toewijzing kan in deze fase niet worden verbruikt of gecorrigeerd: verzenden van DirectTrade volgt later.
+                    t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed",
+                        "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released')");
                     t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent",
                         "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
                     t.HasCheckConstraint("CK_StockReservations_ConsumedConsistent",

@@ -67,7 +67,8 @@ export default function ReleaseReservationForm({ orderId, line, reservation, act
                 reservationId: reservation.id,
                 requestId,
                 payload: { requestId, expectedReservationVersion: reservation.version, actorReference: actorResult.value, reason: reasonResult.value },
-                display: { palletReference: reservation.palletReference ?? '', lotNumber: reservation.lotNumber ?? '', productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}` },
+                // Een toewijzing heeft geen pallet: dan de leverancier als herkenbare bron in de melding.
+                display: { palletReference: reservation.palletReference ?? reservation.vendorName ?? '', lotNumber: reservation.lotNumber ?? '', productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}` },
                 attempts: 0,
                 lastError: null,
                 frozenAt: new Date().toISOString(),

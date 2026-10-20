@@ -55,6 +55,11 @@ namespace AgfAdmin.DTOs
         public string LotNumber { get; set; }
         public decimal ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }
+        // Opgegeven verwacht gewicht van de hele bronregel; nooit afgeleid en nooit het gewicht van een deeltoewijzing.
         public decimal? ExpectedNetWeightKg { get; set; }
+        // Alleen bij route DirectTrade: som van Active toewijzingen aan verkooporders en wat daarvan nog toewijsbaar is.
+        // Null bij route Warehouse: magazijnaanvoer heeft geen toewijsbare verwachte capaciteit (die wordt pas voorraad na ontvangst en keuring).
+        public decimal? DirectTradeAllocatedQuantity { get; set; }
+        public decimal? DirectTradeRemainingQuantity { get; set; }
     }
 }

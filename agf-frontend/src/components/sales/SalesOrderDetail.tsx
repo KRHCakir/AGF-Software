@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
 import { blockedBy, cancelKey, correctDispatchKey, dispatchKey } from '../../lib/pendingCommands';
-import { orderProgress } from '../../lib/salesOrderRules';
+import { isDispatchable, orderProgress } from '../../lib/salesOrderRules';
 import { SaveResult } from '../../services/supplyService';
 import { SalesDispatch, SalesDispatchCorrection, SalesOrder } from '../../types/salesOrder';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
@@ -16,7 +16,7 @@ import DispatchPanel from './DispatchPanel';
 import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
-import { OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
+import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
 export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false }: {
@@ -54,7 +54,8 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
     const pendingDispatch = commands[dispatchKey(order.id)] !== undefined;
     const dispatchBlocker = blockedBy(commands, { kind: 'dispatch', orderId: order.id });
     const showDispatch = pendingDispatch || (!readOnly && dispatching);
-    const hasDispatchable = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Active' && !reservation.onHold));
+    // Alleen fysieke reserveringen zijn te verzenden; een toewijzing van verwachte klantgebonden aanvoer nooit vanuit het magazijn.
+    const hasDispatchable = order.lines.some((line) => line.reservations.some((reservation) => isDispatchable(reservation)));
     // Twee aparte begrippen: verzendhistorie (Consumed of Corrected) wordt getoond; alleen nog niet gecorrigeerd verbruik
     // (Consumed) blokkeert annuleren. Een order waarvan alle verzendingen gecorrigeerd zijn, kan dus weer geannuleerd worden.
     const hasDispatchHistory = order.lines.some((line) => line.reservations.some((reservation) => reservation.status === 'Consumed' || reservation.status === 'Corrected'));
@@ -142,6 +143,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: String(order.id) })} · {order.customerName ?? t('availability_unknown')}</h2>
                     <OrderStatusBadge status={order.status} />
                     {progress.onHoldCount > 0 && <OnHoldBadge />}
+                    {progress.allocatedLines > 0 && <ExpectedAllocationBadge />}
                     <div className="ml-auto flex flex-wrap gap-2">
                         <button type="button" className={secondaryButtonClass} onClick={() => void refresh()} disabled={busy} aria-busy={busy}>
                             <span aria-hidden="true">↻ </span>{busy ? t('sales_refreshing') : t('sales_refresh')}
@@ -185,12 +187,15 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     </div>
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
-                        <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-gray-900'}`}>
+                        <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>
                             {progress.fulfilled
                                 ? t('sales_order_fulfilled')
                                 : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                     {progress.linesFulfilled > 0 && <span className="block text-xs">{t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</span>}</>}
-                            {progress.complete && !progress.ready && !progress.fulfilled && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
+                            {progress.complete && !progress.ready && !progress.fulfilled && progress.onHoldCount > 0 && <span className="block text-xs">{t('sales_order_complete_on_hold')}</span>}
+                            {progress.complete && !progress.ready && !progress.fulfilled && progress.onHoldCount === 0 && progress.allocatedLines > 0 && (
+                                <span className="block text-xs text-violet-900">{t('sales_order_complete_expected', { count: String(progress.allocatedLines) })}</span>
+                            )}
                         </dd>
                     </div>
                     <div>
@@ -201,6 +206,11 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                 {progress.onHoldCount > 0 && (
                     <p role="alert" className="mt-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-900">
                         {t('sales_order_on_hold_notice', { count: String(progress.onHoldCount) })}
+                    </p>
+                )}
+                {progress.allocatedLines > 0 && (
+                    <p role="status" className="mt-2 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-sm text-violet-950">
+                        <span aria-hidden="true">🔒 </span>{t('sales_order_allocated_notice', { count: String(progress.allocatedLines) })}
                     </p>
                 )}
                 {readOnly && !cancelled && <p className="mt-2 text-sm text-gray-700">{t('sales_order_not_open')}</p>}

@@ -18,5 +18,9 @@ namespace AgfAdmin.Models
         public string LotNumber { get; set; } // optioneel
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Optimistisch concurrency-token: wordt aangeraakt bij elke DirectTrade-toewijzing of vrijgave op deze regel,
+        // zodat twee gelijktijdige toewijzingen nooit samen boven de verwachte hoeveelheid uitkomen. Centraal verhoogd in AppDbContext.
+        public int Version { get; set; }
     }
 }

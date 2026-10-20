@@ -74,13 +74,15 @@ namespace AgfAdmin.DTOs
         public string ProductVariantName { get; set; }
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
-        // Alleen Active verkoopreserveringen; nooit omgerekend.
+        // Alleen Active Physical verkoopreserveringen (magazijnvoorraad); nooit omgerekend.
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }
+        // Alleen Active DirectTrade-toewijzingen: verwachte, klantgebonden aanvoer. Geen voorraad, geen kg, nooit "gereed".
+        public decimal AllocatedQuantity { get; set; }
         // Verbruikt (Consumed) door verzendingen; telt niet meer als gereserveerd en komt nooit terug als vrije voorraad.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }
-        // Open = gevraagd - gereserveerd - verzonden.
+        // Open = gevraagd - gereserveerd (Physical) - toegewezen (DirectTrade) - verzonden.
         public decimal OpenQuantity { get; set; }
         // Afgeleid: verzonden == gevraagd.
         public bool Fulfilled { get; set; }
@@ -94,15 +96,25 @@ namespace AgfAdmin.DTOs
         public Guid? RequestId { get; set; }
         public int SalesOrderId { get; set; }
         public int SalesOrderLineId { get; set; }
-        public int PalletContentLineId { get; set; }
-        public int PalletId { get; set; }
+        // Alleen bij Source Physical; een DirectTrade-toewijzing staat nooit op een pallet (null).
+        public int? PalletContentLineId { get; set; }
+        public int? PalletId { get; set; }
         public string PalletReference { get; set; }
         public string WarehouseLocation { get; set; }
+        // Partij: van de inhoudsregel (Physical) of van de bronregel (DirectTrade); kan leeg zijn.
         public string LotNumber { get; set; }
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
-        public decimal NetWeightKg { get; set; }
+        // Gemeten netto kg; null bij een DirectTrade-toewijzing (er is geen gemeten kg, en er wordt nooit kg afgeleid).
+        public decimal? NetWeightKg { get; set; }
         public string Source { get; set; }
+        // Bron van de reservering of toewijzing; bij DirectTrade ook de toezegging met leverancier, herkomst, bestemming en verwachte datum.
+        public int SupplyCommitmentLineId { get; set; }
+        public int SupplyCommitmentId { get; set; }
+        public string VendorName { get; set; }
+        public string Origin { get; set; }
+        public string Destination { get; set; }
+        public DateTime? ExpectedAt { get; set; }
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? ReleasedAt { get; set; }
@@ -248,6 +260,44 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedReservationVersion { get; set; }
+        public string ActorReference { get; set; }
+        public string Reason { get; set; }
+    }
+
+    // Klantgebonden DirectTrade-bronregel die aan een orderregel kan worden toegewezen: zelfde klant als de order, zelfde variant
+    // en expliciete eenheid, toezegging in een toewijsbare status. Verwachte aanvoer: geen voorraad, geen kwaliteit, geen gemeten kg.
+    public sealed class DirectTradeSupplyLineDto
+    {
+        public int SupplyCommitmentLineId { get; set; }
+        public int SupplyCommitmentId { get; set; }
+        public int CustomerId { get; set; }
+        public string CustomerName { get; set; }
+        public string VendorName { get; set; }
+        public string Origin { get; set; }
+        public string Destination { get; set; }
+        public string CommitmentStatus { get; set; }
+        public DateTime? ExpectedAt { get; set; }
+        public string LotNumber { get; set; }
+        public string Unit { get; set; }
+        public decimal ExpectedQuantity { get; set; }
+        // Door de leverancier opgegeven verwacht gewicht van de HELE bronregel; nooit het gewicht van een (deel)toewijzing en nooit opgeteld bij gemeten kg.
+        public decimal? DeclaredExpectedNetWeightKg { get; set; }
+        // Toegewezen = som van Active DirectTrade-toewijzingen van alle orders; resterend = verwacht - toegewezen.
+        public decimal AllocatedQuantity { get; set; }
+        public decimal RemainingQuantity { get; set; }
+        public decimal AllocatedToThisLineQuantity { get; set; }
+        public int SourceLineVersion { get; set; }
+    }
+
+    // Toewijzen van verwachte, klantgebonden aanvoer aan een orderregel. Alleen hoeveelheid en eenheid; nooit kg.
+    // De gebruiker bevestigt expliciet dat dit verwachte aanvoer is (niet in ons magazijn, niet verzonden); zonder bevestiging 400.
+    public sealed class CreateDirectTradeAllocationDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? SupplyCommitmentLineId { get; set; }
+        public decimal? Quantity { get; set; }
+        public string Unit { get; set; }
+        public bool? AcknowledgeExpectedSupply { get; set; }
         public string ActorReference { get; set; }
         public string Reason { get; set; }
     }

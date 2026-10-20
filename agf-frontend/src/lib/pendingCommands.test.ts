@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
     CREATE_ORDER_KEY,
+    allocateKey,
     blockedBy,
     CREATE_CUSTOMER_KEY,
     cancelKey,
@@ -308,5 +309,56 @@ describe('unresolved commands', () => {
         assert.deepEqual(parseStoredCommands(JSON.stringify(differentRequestId)), {});
         const unknownKind = { x: { ...reserve(4, 7), kind: 'cancel', key: 'x' } };
         assert.deepEqual(parseStoredCommands(JSON.stringify(unknownKind)), {});
+    });
+});
+
+describe('direct trade allocation commands', () => {
+    const allocate = (orderId: number, lineId: number, requestId = 'a-1'): PendingCommand => ({
+        kind: 'allocate-direct-trade', key: allocateKey(orderId, lineId), orderId, lineId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T09:00:00.000Z',
+        payload: { requestId, supplyCommitmentLineId: 2, quantity: 10, unit: 'box', acknowledgeExpectedSupply: true, actorReference: 'office-1', reason: null },
+        display: { sourceLabel: 'Supplier B · Peru → Turkije', lotNumber: 'LOT-DT-SRC', productLabel: 'Avocado · Hass' },
+    });
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+
+    test('an allocation is a line command: it blocks and is blocked on its own line and by order commands, like a reservation', () => {
+        assert.equal(allocateKey(4, 7), 'allocate:4:7');
+        const commands = toMap(allocate(4, 7));
+        assert.equal(blockedBy(commands, { kind: 'line', orderId: 4, lineId: 7 })?.requestId, 'a-1');
+        assert.equal(blockedBy(commands, { kind: 'line', orderId: 4, lineId: 8 }), null);
+        assert.equal(blockedBy(commands, { kind: 'cancel-order', orderId: 4 })?.requestId, 'a-1');
+        assert.equal(blockedBy(commands, { kind: 'dispatch', orderId: 4 })?.requestId, 'a-1');
+        assert.equal(blockedBy(commands, { kind: 'cancel-order', orderId: 5 }), null);
+        assert.deepEqual(commandsForLine(commands, 4, 7).map((c) => c.requestId), ['a-1']);
+        assert.deepEqual(commandsForOrder(commands, 4).map((c) => c.requestId), ['a-1']);
+        // Een onafgeronde annulering blokkeert een nieuwe toewijzing op elke regel van die order.
+        assert.equal(blockedBy(toMap(cancel(4)), { kind: 'line', orderId: 4, lineId: 7 })?.requestId, 'k-1');
+        assert.deepEqual(sortedCommands(toMap(allocate(4, 7), reserve(4, 8))).map((c) => c.kind), ['reserve', 'allocate-direct-trade']);
+    });
+
+    test('a stored allocation is restored only when it is complete and the acknowledgement is literally true', () => {
+        const command = allocate(4, 7);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(command))), toMap(command));
+        assert.equal(isPendingCommand(command), true);
+        const rejected: [string, (copy: Record<string, unknown>) => void][] = [
+            ['acknowledgement false', (copy) => { payloadOf(copy).acknowledgeExpectedSupply = false; }],
+            ['acknowledgement missing', (copy) => { delete payloadOf(copy).acknowledgeExpectedSupply; }],
+            ['acknowledgement as string', (copy) => { payloadOf(copy).acknowledgeExpectedSupply = 'true'; }],
+            ['quantity zero', (copy) => { payloadOf(copy).quantity = 0; }],
+            ['unit kg', (copy) => { payloadOf(copy).unit = 'kg'; }],
+            ['source line missing', (copy) => { payloadOf(copy).supplyCommitmentLineId = 0; }],
+            ['requestId mismatch', (copy) => { payloadOf(copy).requestId = 'other'; }],
+            ['key mismatch', (copy) => { copy.key = allocateKey(4, 8); }],
+            ['display incomplete', (copy) => { copy.display = { sourceLabel: 'x' }; }],
+            ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
+        ];
+        for (const [name, mutate] of rejected) {
+            assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
+        }
+        assert.equal(withAttempt(command, 'HTTP 502').attempts, 2);
     });
 });

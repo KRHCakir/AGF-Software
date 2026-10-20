@@ -13,13 +13,15 @@ namespace AgfAdmin.Controllers
         private readonly IStockReservationService _reservations;
         private readonly ISalesDispatchService _dispatches;
         private readonly ISalesDispatchCorrectionService _corrections;
+        private readonly IDirectTradeAllocationService _allocations;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations)
         {
             _orders = orders;
             _reservations = reservations;
             _dispatches = dispatches;
             _corrections = corrections;
+            _allocations = allocations;
         }
 
         [HttpPost]
@@ -70,6 +72,19 @@ namespace AgfAdmin.Controllers
         [HttpGet("{id:int}/dispatches")]
         public async Task<IActionResult> GetDispatches(int id) =>
             this.ToActionResult(await _dispatches.ListAsync(id, HttpContext?.RequestAborted ?? default));
+
+        // Klantgebonden DirectTrade-aanvoer (zelfde klant, variant en eenheid) die aan deze regel kan worden toegewezen; verwachte aanvoer, geen voorraad.
+        [HttpGet("{id:int}/lines/{lineId:int}/direct-trade-supply")]
+        public async Task<IActionResult> GetDirectTradeSupply(int id, int lineId) =>
+            this.ToActionResult(await _allocations.GetAllocatableSupplyAsync(id, lineId, HttpContext?.RequestAborted ?? default));
+
+        // Toewijzen van verwachte, klantgebonden aanvoer: alleen hoeveelheid en eenheid, met expliciete bevestiging; geen voorraadmutatie.
+        [HttpPost("{id:int}/lines/{lineId:int}/direct-trade-allocations")]
+        public async Task<IActionResult> AllocateDirectTrade(int id, int lineId, [FromBody] CreateDirectTradeAllocationDto request)
+        {
+            var result = await _allocations.AllocateAsync(id, lineId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
 
         [HttpPost("{id:int}/lines/{lineId:int}/reservations")]
         public async Task<IActionResult> Reserve(int id, int lineId, [FromBody] CreateStockReservationDto request)

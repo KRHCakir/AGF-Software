@@ -296,6 +296,7 @@ namespace AgfAdmin.Services
 
             var order = await _db.SalesOrders
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine)
                 .SingleOrDefaultAsync(o => o.Id == salesOrderId, cancellationToken);
             if (order == null)
             {
@@ -338,36 +339,68 @@ namespace AgfAdmin.Services
                 // dat de vrijgave uit een annulering komt, staat in het event.
                 reservation.ReleaseReason = command.Reason;
                 reservation.UpdatedAt = now;
+                var oldValue = JsonSerializer.Serialize(new { reservationId = reservation.Id, status = ReservationRules.StatusActive, version = expectedReservationVersion }, SnapshotJson);
                 if (reservation.PalletContentLine != null)
                 {
                     _db.Entry(reservation.PalletContentLine).Property(c => c.Version).IsModified = true;
-                }
-                _db.PalletAuditEvents.Add(new PalletAuditEvent
-                {
-                    PalletId = reservation.PalletContentLine?.PalletId,
-                    PalletContentLineId = reservation.PalletContentLineId,
-                    EventType = ReservationRules.ReservationReleasedEvent,
-                    OldValue = JsonSerializer.Serialize(new { reservationId = reservation.Id, status = ReservationRules.StatusActive, version = expectedReservationVersion }, SnapshotJson),
-                    NewValue = JsonSerializer.Serialize(new
+                    _db.PalletAuditEvents.Add(new PalletAuditEvent
                     {
-                        reservationId = reservation.Id,
-                        status = ReservationRules.StatusReleased,
-                        quantity = reservation.Quantity,
-                        unit = reservation.Unit,
-                        netWeightKg = reservation.NetWeightKg,
-                        cause = ReservationRules.OrderCancelledEvent,
-                        salesOrderId = order.Id,
-                        cancellationRequestId = command.RequestId
-                    }, SnapshotJson),
-                    Reason = command.Reason,
-                    ActorReference = command.Actor,
-                    OccurredAt = now,
-                    // De unieke RequestId hoort bij het orderevent; de palletevents verwijzen via cancellationRequestId.
-                    RequestId = null
-                });
+                        PalletId = reservation.PalletContentLine.PalletId,
+                        PalletContentLineId = reservation.PalletContentLineId,
+                        EventType = ReservationRules.ReservationReleasedEvent,
+                        OldValue = oldValue,
+                        NewValue = JsonSerializer.Serialize(new
+                        {
+                            reservationId = reservation.Id,
+                            status = ReservationRules.StatusReleased,
+                            quantity = reservation.Quantity,
+                            unit = reservation.Unit,
+                            netWeightKg = reservation.NetWeightKg,
+                            cause = ReservationRules.OrderCancelledEvent,
+                            salesOrderId = order.Id,
+                            cancellationRequestId = command.RequestId
+                        }, SnapshotJson),
+                        Reason = command.Reason,
+                        ActorReference = command.Actor,
+                        OccurredAt = now,
+                        // De unieke RequestId hoort bij het orderevent; de palletevents verwijzen via cancellationRequestId.
+                        RequestId = null
+                    });
+                }
+                else
+                {
+                    // DirectTrade-toewijzing (geen pallet): de bronregel wordt aangeraakt en het event hoort bij de order.
+                    if (reservation.SupplyCommitmentLine != null)
+                    {
+                        _db.Entry(reservation.SupplyCommitmentLine).Property(l => l.Version).IsModified = true;
+                    }
+                    _db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent
+                    {
+                        SalesOrder = order,
+                        EventType = ReservationRules.DirectTradeReleasedEvent,
+                        OldValue = oldValue,
+                        NewValue = JsonSerializer.Serialize(new
+                        {
+                            reservationId = reservation.Id,
+                            status = ReservationRules.StatusReleased,
+                            salesOrderLineId = reservation.SalesOrderLineId,
+                            supplyCommitmentLineId = reservation.SupplyCommitmentLineId,
+                            quantity = reservation.Quantity,
+                            unit = reservation.Unit,
+                            cause = ReservationRules.OrderCancelledEvent,
+                            cancellationRequestId = command.RequestId
+                        }, SnapshotJson),
+                        Reason = command.Reason,
+                        ActorReference = command.Actor,
+                        OccurredAt = now,
+                        RequestId = null
+                    });
+                }
             }
 
-            // Begrensde snapshot: aantallen, geen lijst van reserverings-id's.
+            // Begrensde snapshot: aantallen, geen lijst van reserverings-id's; fysieke reserveringen en toewijzingen apart.
+            var releasedPhysical = active.Where(r => r.Source != ReservationRules.SourceDirectTrade).ToList();
+            var releasedAllocations = active.Where(r => r.Source == ReservationRules.SourceDirectTrade).ToList();
             _db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent
             {
                 SalesOrder = order,
@@ -376,9 +409,11 @@ namespace AgfAdmin.Services
                 NewValue = JsonSerializer.Serialize(new
                 {
                     status = ReservationRules.OrderStatusCancelled,
-                    releasedReservationCount = active.Count,
-                    releasedQuantityByUnit = active.GroupBy(r => r.Unit).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key ?? "", g => g.Sum(r => r.Quantity)),
-                    releasedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
+                    releasedReservationCount = releasedPhysical.Count,
+                    releasedQuantityByUnit = releasedPhysical.GroupBy(r => r.Unit).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key ?? "", g => g.Sum(r => r.Quantity)),
+                    releasedNetWeightKg = releasedPhysical.Sum(r => r.NetWeightKg ?? 0m),
+                    releasedAllocationCount = releasedAllocations.Count,
+                    releasedAllocationQuantityByUnit = releasedAllocations.GroupBy(r => r.Unit).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key ?? "", g => g.Sum(r => r.Quantity)),
                     lineCount = order.Lines.Count
                 }, SnapshotJson),
                 Reason = command.Reason,
@@ -533,7 +568,18 @@ namespace AgfAdmin.Services
             return ServiceResult<IReadOnlyList<ReservableStockLineDto>>.Ok(result);
         }
 
-        // Som (in het geheugen, exact decimal) van Active verkoopreserveringen per inhoudsregel.
+        // Vastgelegde klantvraag op een orderregel: Active (Physical én DirectTrade) + Consumed; alleen Released komt terug als open vraag.
+        // Eén definitie voor reserveren, toewijzen en de DTO, zodat de regelbewaking nooit uiteenloopt.
+        internal static async Task<decimal> CommittedOnOrderLineAsync(AppDbContext db, int salesOrderLineId, CancellationToken cancellationToken)
+        {
+            var quantities = await db.StockReservations.AsNoTracking()
+                .Where(r => r.SalesOrderLineId == salesOrderLineId && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
+                .Select(r => r.Quantity)
+                .ToListAsync(cancellationToken);
+            return quantities.Sum();
+        }
+
+        // Som (in het geheugen, exact decimal) van Active Physical verkoopreserveringen per inhoudsregel (toewijzingen staan nooit op inhoud).
         internal static async Task<Dictionary<int, (decimal Quantity, decimal NetWeightKg)>> ReservedByContentLineAsync(AppDbContext db, List<int> contentLineIds, CancellationToken cancellationToken)
         {
             if (contentLineIds.Count == 0)
@@ -553,6 +599,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Customer)
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch)
                 .AsSplitQuery();
 
@@ -574,9 +621,12 @@ namespace AgfAdmin.Services
             Fulfilled = order.Lines.Count > 0 && order.Lines.All(l => l.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity) == l.Quantity),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
-                var active = line.Reservations.Where(r => r.Status == ReservationRules.StatusActive).ToList();
+                // Gereserveerd = Active Physical; toegewezen = Active DirectTrade; verzonden = Consumed. Open trekt alle drie af.
+                var active = line.Reservations.Where(r => r.Status == ReservationRules.StatusActive && r.Source != ReservationRules.SourceDirectTrade).ToList();
+                var allocated = line.Reservations.Where(r => r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourceDirectTrade).ToList();
                 var consumed = line.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed).ToList();
                 var reservedQuantity = active.Sum(r => r.Quantity);
+                var allocatedQuantity = allocated.Sum(r => r.Quantity);
                 var dispatchedQuantity = consumed.Sum(r => r.Quantity);
                 return new SalesOrderLineDto
                 {
@@ -588,10 +638,11 @@ namespace AgfAdmin.Services
                     Unit = line.Unit,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
+                    AllocatedQuantity = allocatedQuantity,
                     DispatchedQuantity = dispatchedQuantity,
                     DispatchedNetWeightKg = consumed.Sum(r => r.NetWeightKg ?? 0m),
-                    // Open = gevraagd - Active - Consumed: verzonden komt nooit terug als open vraag.
-                    OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity - dispatchedQuantity),
+                    // Open = gevraagd - Active Physical - Active DirectTrade - Consumed: verzonden komt nooit terug als open vraag.
+                    OpenQuantity = Math.Max(0m, line.Quantity - reservedQuantity - allocatedQuantity - dispatchedQuantity),
                     Fulfilled = dispatchedQuantity == line.Quantity,
                     Version = line.Version,
                     Reservations = line.Reservations.OrderBy(r => r.Id).Select(r => StockReservationService.ToDto(r, order.Id,

@@ -35,6 +35,17 @@ export interface CreateStockReservationRequest {
     reason: string | null;
 }
 
+// Toewijzen van verwachte, klantgebonden DirectTrade-aanvoer: alleen hoeveelheid en eenheid, nooit kg; met expliciete bevestiging.
+export interface CreateDirectTradeAllocationRequest {
+    requestId: string;
+    supplyCommitmentLineId: number;
+    quantity: number;
+    unit: PackageUnit;
+    acknowledgeExpectedSupply: boolean;
+    actorReference: string;
+    reason: string | null;
+}
+
 export interface ReleaseStockReservationRequest {
     requestId: string;
     expectedReservationVersion: number;
@@ -146,15 +157,25 @@ export interface StockReservation {
     requestId: string | null;
     salesOrderId: number;
     salesOrderLineId: number;
-    palletContentLineId: number;
-    palletId: number;
+    // Alleen bij source Physical; een DirectTrade-toewijzing (verwachte, klantgebonden aanvoer) staat nooit op een pallet.
+    palletContentLineId: number | null;
+    palletId: number | null;
     palletReference: string | null;
     warehouseLocation: string | null;
+    // Partij van de inhoudsregel (Physical) of van de bronregel (DirectTrade).
     lotNumber: string | null;
     quantity: number;
     unit: PackageUnit;
-    netWeightKg: number;
+    // Gemeten netto kg; null bij een toewijzing: er is geen gemeten kg en de UI leidt er nooit een af.
+    netWeightKg: number | null;
     source: string;
+    // Bron (toezegging); bij DirectTrade met leverancier, herkomst, bestemming en verwachte leverdatum.
+    supplyCommitmentLineId: number;
+    supplyCommitmentId: number;
+    vendorName: string | null;
+    origin: string | null;
+    destination: string | null;
+    expectedAt: string | null;
     status: ReservationStatus;
     createdAt: string;
     releasedAt: string | null;
@@ -180,12 +201,15 @@ export interface SalesOrderLine {
     productVariantName: string | null;
     quantity: number;
     unit: PackageUnit;
+    // Gereserveerd = Active Physical (magazijnvoorraad).
     reservedQuantity: number;
     reservedNetWeightKg: number;
+    // Toegewezen = Active DirectTrade: verwachte, klantgebonden aanvoer. Geen voorraad, geen kg, nooit "gereed".
+    allocatedQuantity: number;
     // Verzonden (Consumed): telt niet meer als gereserveerd en komt nooit terug als vrije voorraad.
     dispatchedQuantity: number;
     dispatchedNetWeightKg: number;
-    // Open = gevraagd - gereserveerd - verzonden; vervuld = verzonden == gevraagd.
+    // Open = gevraagd - gereserveerd - toegewezen - verzonden; vervuld = verzonden == gevraagd.
     openQuantity: number;
     fulfilled: boolean;
     version: number;
@@ -249,15 +273,21 @@ export function isStockReservation(value: unknown): value is StockReservation {
         && isNullableString(value.requestId)
         && isNumber(value.salesOrderId)
         && isNumber(value.salesOrderLineId)
-        && isNumber(value.palletContentLineId)
-        && isNumber(value.palletId)
+        && (value.palletContentLineId === null || isNumber(value.palletContentLineId))
+        && (value.palletId === null || isNumber(value.palletId))
         && isNullableString(value.palletReference)
         && isNullableString(value.warehouseLocation)
         && isNullableString(value.lotNumber)
         && isNumber(value.quantity)
         && isUnit(value.unit)
-        && isNumber(value.netWeightKg)
+        && (value.netWeightKg === null || isNumber(value.netWeightKg))
         && isString(value.source)
+        && isNumber(value.supplyCommitmentLineId)
+        && isNumber(value.supplyCommitmentId)
+        && isNullableString(value.vendorName)
+        && isNullableString(value.origin)
+        && isNullableString(value.destination)
+        && isNullableString(value.expectedAt)
         && isReservationStatus(value.status)
         && isString(value.createdAt)
         && isNullableString(value.releasedAt)
@@ -282,6 +312,7 @@ function isSalesOrderLine(value: unknown): value is SalesOrderLine {
         && isUnit(value.unit)
         && isNumber(value.reservedQuantity)
         && isNumber(value.reservedNetWeightKg)
+        && isNumber(value.allocatedQuantity)
         && isNumber(value.dispatchedQuantity)
         && isNumber(value.dispatchedNetWeightKg)
         && isNumber(value.openQuantity)
@@ -416,4 +447,52 @@ export function isReservableStockLine(value: unknown): value is ReservableStockL
 
 export function isReservableStockList(value: unknown): value is ReservableStockLine[] {
     return isArrayOf(value, isReservableStockLine);
+}
+
+// Klantgebonden DirectTrade-bronregel die aan een orderregel kan worden toegewezen (GET …/direct-trade-supply):
+// zelfde klant als de order, zelfde variant en eenheid, toezegging in een toewijsbare status. Verwachte aanvoer, geen voorraad.
+export interface DirectTradeSupplyLine {
+    supplyCommitmentLineId: number;
+    supplyCommitmentId: number;
+    customerId: number;
+    customerName: string | null;
+    vendorName: string | null;
+    origin: string | null;
+    destination: string | null;
+    commitmentStatus: string;
+    expectedAt: string | null;
+    lotNumber: string | null;
+    unit: PackageUnit;
+    expectedQuantity: number;
+    // Opgegeven gewicht van de HELE bronregel; nooit het gewicht van een (deel)toewijzing.
+    declaredExpectedNetWeightKg: number | null;
+    allocatedQuantity: number;
+    remainingQuantity: number;
+    allocatedToThisLineQuantity: number;
+    sourceLineVersion: number;
+}
+
+export function isDirectTradeSupplyLine(value: unknown): value is DirectTradeSupplyLine {
+    return isObject(value)
+        && isNumber(value.supplyCommitmentLineId)
+        && isNumber(value.supplyCommitmentId)
+        && isNumber(value.customerId)
+        && isNullableString(value.customerName)
+        && isNullableString(value.vendorName)
+        && isNullableString(value.origin)
+        && isNullableString(value.destination)
+        && isString(value.commitmentStatus)
+        && isNullableString(value.expectedAt)
+        && isNullableString(value.lotNumber)
+        && isUnit(value.unit)
+        && isNumber(value.expectedQuantity)
+        && (value.declaredExpectedNetWeightKg === null || isNumber(value.declaredExpectedNetWeightKg))
+        && isNumber(value.allocatedQuantity)
+        && isNumber(value.remainingQuantity)
+        && isNumber(value.allocatedToThisLineQuantity)
+        && isNumber(value.sourceLineVersion);
+}
+
+export function isDirectTradeSupplyList(value: unknown): value is DirectTradeSupplyLine[] {
+    return isArrayOf(value, isDirectTradeSupplyLine);
 }

@@ -18,7 +18,7 @@ const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed', onH
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
     releaseReason: status === 'Released' ? 'eerder' : null, version, contentQualityStatus: onHold ? 'Blocked' : 'Approved', onHold,
     consumedAt: status === 'Consumed' ? '2026-10-19T13:00:00.000Z' : null, dispatchId: status === 'Consumed' ? 9 : null, dispatchReference: status === 'Consumed' ? 'VRB-9' : null,
-    correctedAt: null, correctionId: null,
+    correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null,
 });
 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {
@@ -30,7 +30,7 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
         cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: consumed.length * 5 === 20,
         lines: [{
             id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
-            reservedQuantity: active.length * 5, reservedNetWeightKg: active.length * 20,
+            reservedQuantity: active.length * 5, reservedNetWeightKg: active.length * 20, allocatedQuantity: 0,
             dispatchedQuantity: consumed.length * 5, dispatchedNetWeightKg: consumed.length * 20,
             openQuantity: 20 - active.length * 5 - consumed.length * 5, fulfilled: consumed.length * 5 === 20, version: 3, reservations,
         }],

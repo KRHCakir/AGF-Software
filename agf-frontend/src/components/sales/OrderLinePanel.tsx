@@ -3,18 +3,21 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
-import { ReserveCommand, blockedBy, releaseKey, reserveKey } from '../../lib/pendingCommands';
-import { lineProgress } from '../../lib/salesOrderRules';
+import { formatCalendarDate } from '../../lib/calendarDate';
+import { AllocateDirectTradeCommand, ReserveCommand, allocateKey, blockedBy, releaseKey, reserveKey } from '../../lib/pendingCommands';
+import { isDirectTradeAllocation, lineProgress } from '../../lib/salesOrderRules';
 import { toApiError } from '../../services/apiClient';
 import { AvailabilitySnapshot, getAvailabilitySnapshot } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
-import { ReservableStockLine, SalesOrder, SalesOrderLine, StockReservation } from '../../types/salesOrder';
+import { DirectTradeSupplyLine, ReservableStockLine, SalesOrder, SalesOrderLine, StockReservation } from '../../types/salesOrder';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import AllocateDirectTradeForm from './AllocateDirectTradeForm';
+import DirectTradeSupplyPicker, { sourceLabel } from './DirectTradeSupplyPicker';
 import { usePendingCommands } from './PendingCommandsContext';
 import ReleaseReservationForm from './ReleaseReservationForm';
-import { OnHoldBadge, ReservationStatusBadge } from './ReservationBadges';
+import { ExpectedAllocationBadge, OnHoldBadge, ReservationStatusBadge } from './ReservationBadges';
 import ReservableStockTable from './ReservableStockTable';
 import ReserveForm from './ReserveForm';
 
@@ -22,14 +25,15 @@ const th = 'px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide 
 const td = 'px-2 py-1.5 align-top';
 
 interface Notice {
-    kind: 'reserved' | 'released';
+    kind: 'reserved' | 'released' | 'allocated';
     replayed: boolean;
     snapshot: AvailabilitySnapshot | null | 'failed';
 }
 
-// Eén orderregel: klantvraag, voortgang, bestaande reserveringen (met vrijgave) en het reserveren op exacte voorraad.
-// Na elke geslaagde schrijfactie worden de order, de reserveerbare voorraad en de beschikbaarheid opnieuw geladen.
-// Een onafgerond commando op deze regel wordt altijd getoond en blokkeert elk nieuw commando op dezelfde regel.
+// Eén orderregel: klantvraag, voortgang, bestaande reserveringen en toewijzingen (met vrijgave), reserveren op exacte
+// magazijnvoorraad en toewijzen van verwachte, klantgebonden DirectTrade-aanvoer. Na elke geslaagde schrijfactie worden de
+// order, de keuzelijsten en de beschikbaarheid opnieuw geladen. Een onafgerond commando op deze regel wordt altijd getoond
+// en blokkeert elk nieuw commando op dezelfde regel.
 export default function OrderLinePanel({ order, line, actor, readOnly, onOrderChanged }: {
     order: SalesOrder;
     line: SalesOrderLine;
@@ -40,7 +44,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
     const { t, locale } = useTranslation();
     const { commands } = usePendingCommands();
     const [choosing, setChoosing] = useState(false);
+    const [allocating, setAllocating] = useState(false);
     const [selected, setSelected] = useState<ReservableStockLine | null>(null);
+    const [selectedSupply, setSelectedSupply] = useState<DirectTradeSupplyLine | null>(null);
     const [releasingId, setReleasingId] = useState<number | null>(null);
     const [stockToken, setStockToken] = useState(0);
     // Elke herlaadactie na een conflict geeft de formulieren een nieuwe sleutel; een bewaard commando komt daarbij gewoon terug.
@@ -51,8 +57,10 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
     const progress = lineProgress(line);
     const lineBlock = blockedBy(commands, { kind: 'line', orderId: order.id, lineId: line.id });
     const pendingReserve = (commands[reserveKey(order.id, line.id)] as ReserveCommand | undefined) ?? null;
-    const canStartReserve = !readOnly && line.openQuantity > 0 && lineBlock === null;
+    const pendingAllocate = (commands[allocateKey(order.id, line.id)] as AllocateDirectTradeCommand | undefined) ?? null;
+    const canStart = !readOnly && line.openQuantity > 0 && lineBlock === null;
     const showChooser = choosing || pendingReserve !== null;
+    const showAllocator = allocating || pendingAllocate !== null;
 
     const reload = useCallback(async () => {
         setReloadFailed(false);
@@ -61,6 +69,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
         setStockToken((n) => n + 1);
         setDecisionToken((n) => n + 1);
         setSelected(null);
+        setSelectedSupply(null);
         setReleasingId(null);
     }, [onOrderChanged]);
 
@@ -79,6 +88,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
     const onReserved = async (saved: SaveResult<StockReservation>) => {
         setChoosing(false);
         await afterWrite('reserved', saved.replayed);
+    };
+
+    const onAllocated = async (saved: SaveResult<StockReservation>) => {
+        setAllocating(false);
+        await afterWrite('allocated', saved.replayed);
     };
 
     const onReleased = async () => {
@@ -103,23 +117,47 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
         });
     }, []);
 
+    // Zelfde regel voor de klantgebonden aanvoer: de keuze volgt het onafgeronde commando, anders alleen een ongewijzigde rij.
+    const pendingSourceId = useRef<number | null>(null);
+    pendingSourceId.current = pendingAllocate?.payload.supplyCommitmentLineId ?? null;
+    const onSupplyLoaded = useCallback((rows: DirectTradeSupplyLine[]) => {
+        setSelectedSupply((current) => {
+            if (pendingSourceId.current !== null) {
+                return rows.find((row) => row.supplyCommitmentLineId === pendingSourceId.current) ?? null;
+            }
+            if (current === null) return null;
+            const fresh = rows.find((row) => row.supplyCommitmentLineId === current.supplyCommitmentLineId);
+            return fresh && fresh.sourceLineVersion === current.sourceLineVersion && fresh.remainingQuantity === current.remainingQuantity ? current : null;
+        });
+    }, []);
+
     // Het reserveerformulier hoort bij één inhoudsregel: die van het onafgeronde commando, anders de gekozen rij.
     // De sleutel hangt alleen van die inhoudsregel af, niet van het bestaan van een commando: zo blijft dezelfde
     // formulierinstantie staan tijdens het versturen en bij de afhandeling (bevriezen, 400/409, onbekende uitkomst).
     const formContentId = pendingReserve?.payload.palletContentLineId ?? selected?.palletContentLineId ?? null;
     const formStock = formContentId !== null && selected?.palletContentLineId === formContentId ? selected : null;
+    const formSourceId = pendingAllocate?.payload.supplyCommitmentLineId ?? selectedSupply?.supplyCommitmentLineId ?? null;
+    const formSupply = formSourceId !== null && selectedSupply?.supplyCommitmentLineId === formSourceId ? selectedSupply : null;
 
     const reservations = [...line.reservations].sort((a, b) => Number(b.status === 'Active') - Number(a.status === 'Active') || b.id - a.id);
 
-    // Vervuld (alles verzonden) toont als geleverd, nooit als "volledig gereserveerd" met 0 gereserveerd.
-    const statusClass = progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete ? 'text-red-800' : 'text-amber-900';
+    // Vervuld (alles verzonden) toont als geleverd; volledig vastgelegd met verwachte aanvoer toont als "niet gereed" (violet),
+    // nooit als groen "volledig gereserveerd".
+    const statusClass = progress.fulfilled ? 'text-emerald-800'
+        : progress.ready ? 'text-green-800'
+            : progress.complete && progress.onHold ? 'text-red-800'
+                : progress.completeWithExpected ? 'text-violet-900'
+                    : 'text-amber-900';
     const statusText = progress.fulfilled
         ? t('sales_line_fulfilled')
         : progress.ready ? t('sales_line_complete')
-            : progress.complete ? t('sales_line_complete_on_hold')
-                : t('sales_line_open', { quantity: formatQuantity(line.openQuantity, locale) });
-    const barClass = progress.fulfilled ? 'bg-emerald-600' : progress.ready ? 'bg-green-600' : progress.complete ? 'bg-red-600' : 'bg-blue-600';
-    const committedShare = line.quantity > 0 ? Math.min(100, ((line.reservedQuantity + line.dispatchedQuantity) / line.quantity) * 100) : 0;
+            : progress.complete && progress.onHold ? t('sales_line_complete_on_hold')
+                : progress.completeWithExpected ? t('sales_line_complete_expected', { quantity: formatQuantity(line.allocatedQuantity, locale) })
+                    : t('sales_line_open', { quantity: formatQuantity(line.openQuantity, locale) });
+    const barClass = progress.fulfilled ? 'bg-emerald-600' : progress.ready ? 'bg-green-600' : progress.complete && progress.onHold ? 'bg-red-600' : 'bg-blue-600';
+    const committed = line.reservedQuantity + line.dispatchedQuantity;
+    const physicalShare = line.quantity > 0 ? Math.min(100, (committed / line.quantity) * 100) : 0;
+    const allocatedShare = line.quantity > 0 ? Math.min(100 - physicalShare, (line.allocatedQuantity / line.quantity) * 100) : 0;
 
     return (
         <section aria-labelledby={`line-${line.id}`} className="rounded-md border border-gray-300 bg-white">
@@ -130,6 +168,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 <span className="text-gray-800">
                     {t('sales_line_reserved', { quantity: formatQuantity(line.reservedQuantity, locale), kg: formatKg(line.reservedNetWeightKg, locale) })}
                 </span>
+                {line.allocatedQuantity > 0 && (
+                    <span className="text-violet-900">{t('sales_line_allocated', { quantity: formatQuantity(line.allocatedQuantity, locale) })}</span>
+                )}
                 {line.dispatchedQuantity > 0 && (
                     <span className="text-emerald-900">
                         {t('sales_line_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale), kg: formatKg(line.dispatchedNetWeightKg, locale) })}
@@ -137,9 +178,12 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 )}
                 <span className={`font-medium ${statusClass}`}>{statusText}</span>
                 {progress.onHold && <OnHoldBadge />}
-                <div className="ml-auto h-2 w-40 overflow-hidden rounded bg-gray-200" role="progressbar" aria-valuemin={0} aria-valuemax={line.quantity} aria-valuenow={line.reservedQuantity + line.dispatchedQuantity}
+                {line.allocatedQuantity > 0 && <ExpectedAllocationBadge />}
+                <div className="ml-auto flex h-2 w-40 overflow-hidden rounded bg-gray-200" role="progressbar" aria-valuemin={0} aria-valuemax={line.quantity} aria-valuenow={committed + line.allocatedQuantity}
                     aria-label={t('sales_col_progress')}>
-                    <div className={`h-full ${barClass}`} style={{ width: `${committedShare}%` }} />
+                    <div className={`h-full ${barClass}`} style={{ width: `${physicalShare}%` }} />
+                    <div className="h-full bg-violet-400" style={{ width: `${allocatedShare}%`, backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 3px, rgba(255,255,255,0.6) 3px 6px)' }}
+                        title={t('sales_col_allocated_progress')} />
                 </div>
             </header>
 
@@ -152,8 +196,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
             )}
 
             {notice && (
-                <div role="status" className="mx-3 mt-2 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
-                    <p className="font-medium"><span aria-hidden="true">✓ </span>{notice.kind === 'reserved' ? t('sales_notice_reserved') : t('sales_notice_released')}</p>
+                <div role="status" className={`mx-3 mt-2 rounded border px-3 py-2 text-sm ${notice.kind === 'allocated' ? 'border-violet-300 bg-violet-50 text-violet-950' : 'border-green-300 bg-green-50 text-green-900'}`}>
+                    <p className="font-medium"><span aria-hidden="true">{notice.kind === 'allocated' ? '🔒 ' : '✓ '}</span>
+                        {notice.kind === 'reserved' ? t('sales_notice_reserved') : notice.kind === 'allocated' ? t('sales_notice_allocated') : t('sales_notice_released')}</p>
                     {notice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
                     <p className="mt-1">
                         {notice.snapshot === 'failed'
@@ -194,15 +239,33 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {reservations.map((reservation) => {
+                                    const allocation = isDirectTradeAllocation(reservation);
                                     const pendingRelease = commands[releaseKey(order.id, line.id, reservation.id)] !== undefined;
                                     const releaseOpen = pendingRelease || releasingId === reservation.id;
                                     return (
-                                        <tr key={reservation.id} className={reservation.onHold ? 'bg-red-50' : reservation.status !== 'Active' ? 'text-gray-600' : undefined}>
-                                            <td className={`${td} font-mono`}>{reservation.palletReference ?? t('availability_unknown')}</td>
-                                            <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
-                                            <td className={`${td} font-mono text-xs`}>{reservation.warehouseLocation ?? t('supply_no_bin')}</td>
-                                            <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
-                                            <td className={`${td} text-right`}>{formatKg(reservation.netWeightKg, locale)}</td>
+                                        <tr key={reservation.id} className={reservation.onHold ? 'bg-red-50' : allocation && reservation.status === 'Active' ? 'bg-violet-50/60' : reservation.status !== 'Active' ? 'text-gray-600' : undefined}>
+                                            {allocation ? (
+                                                <>
+                                                    <td className={td}>
+                                                        <ExpectedAllocationBadge />
+                                                        <span className="mt-1 block text-xs text-gray-800">{sourceLabel(reservation, t('availability_unknown'))}</span>
+                                                    </td>
+                                                    <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
+                                                    <td className={`${td} text-xs text-violet-900`}>
+                                                        {reservation.expectedAt ? t('sales_allocation_expected_on', { date: formatCalendarDate(reservation.expectedAt, locale) }) : t('availability_unknown')}
+                                                    </td>
+                                                    <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
+                                                    <td className={`${td} text-right text-gray-600`} title={t('sales_allocation_no_kg')}>— <span className="block text-xs">{t('sales_allocation_no_kg')}</span></td>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <td className={`${td} font-mono`}>{reservation.palletReference ?? t('availability_unknown')}</td>
+                                                    <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
+                                                    <td className={`${td} font-mono text-xs`}>{reservation.warehouseLocation ?? t('supply_no_bin')}</td>
+                                                    <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
+                                                    <td className={`${td} text-right`}>{reservation.netWeightKg === null ? '—' : formatKg(reservation.netWeightKg, locale)}</td>
+                                                </>
+                                            )}
                                             <td className={td}>
                                                 <ReservationStatusBadge status={reservation.status} />
                                                 {reservation.onHold && <span className="mt-1 block"><OnHoldBadge /></span>}
@@ -221,9 +284,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 )}
                                             </td>
                                             <td className={td}>
-                                                {reservation.contentQualityStatus === null
-                                                    ? <span className="text-xs text-amber-900">{t('sales_quality_unknown')}</span>
-                                                    : <QualityBadge status={reservation.contentQualityStatus} />}
+                                                {allocation
+                                                    ? <span className="text-xs text-gray-600">{t('sales_allocation_not_applicable')}</span>
+                                                    : reservation.contentQualityStatus === null
+                                                        ? <span className="text-xs text-amber-900">{t('sales_quality_unknown')}</span>
+                                                        : <QualityBadge status={reservation.contentQualityStatus} />}
                                                 {reservation.onHold && <span className="mt-1 block text-xs text-red-900">{t('sales_on_hold_hint')}</span>}
                                             </td>
                                             <td className={`${td} text-xs`}>
@@ -233,7 +298,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                             <td className={`${td} w-80`}>
                                                 {reservation.status === 'Active' && !readOnly && !releaseOpen && (
                                                     <button type="button" className={secondaryButtonClass} onClick={() => setReleasingId(reservation.id)} disabled={lineBlock !== null}
-                                                        aria-label={t('sales_release_label', { pallet: reservation.palletReference ?? '', lot: reservation.lotNumber ?? '' })}>
+                                                        aria-label={allocation
+                                                            ? t('sales_release_allocation_label', { vendor: reservation.vendorName ?? '', lot: reservation.lotNumber ?? '' })
+                                                            : t('sales_release_label', { pallet: reservation.palletReference ?? '', lot: reservation.lotNumber ?? '' })}>
                                                         {t('sales_release')}
                                                     </button>
                                                 )}
@@ -252,13 +319,22 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
             </div>
 
             <div className="border-t border-gray-200 px-3 py-2">
-                {!showChooser && (
-                    <button type="button" className={primaryButtonClass} disabled={!canStartReserve} onClick={() => { setNotice(null); setChoosing(true); }}>
-                        {t('sales_choose_stock')}
-                    </button>
-                )}
-                {!showChooser && !readOnly && line.openQuantity === 0 && (
-                    <span className="ml-3 text-xs text-gray-600">{progress.fulfilled ? t('sales_line_fulfilled_hint') : t('sales_line_fully_reserved_hint')}</span>
+                {!showChooser && !showAllocator && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button type="button" className={primaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
+                            {t('sales_choose_stock')}
+                        </button>
+                        <button type="button" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} disabled={!canStart} onClick={() => { setNotice(null); setAllocating(true); }}>
+                            <span aria-hidden="true">🔒 </span>{t('sales_allocate_direct_trade')}
+                        </button>
+                        {!readOnly && line.openQuantity === 0 && (
+                            <span className="text-xs text-gray-600">
+                                {progress.fulfilled ? t('sales_line_fulfilled_hint')
+                                    : progress.completeWithExpected ? t('sales_line_complete_expected_hint', { quantity: formatQuantity(line.allocatedQuantity, locale), unit: line.unit })
+                                        : t('sales_line_fully_reserved_hint')}
+                            </span>
+                        )}
+                    </div>
                 )}
                 {showChooser && (
                     <div className="space-y-3">
@@ -276,6 +352,25 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                 orderId={order.id} line={line} stock={formStock} actor={actor}
                                 onSucceeded={onReserved} onReload={() => void reload()}
                                 onCancel={() => (pendingReserve === null ? setSelected(null) : setChoosing(false))} />
+                        )}
+                    </div>
+                )}
+                {showAllocator && (
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold text-violet-900"><span aria-hidden="true">🔒 </span>{t('sales_allocate_title')}</h4>
+                            {pendingAllocate === null && (
+                                <button type="button" className={secondaryButtonClass} onClick={() => { setAllocating(false); setSelectedSupply(null); }}>{t('sales_close_stock')}</button>
+                            )}
+                        </div>
+                        <p className="text-xs text-gray-600">{t('sales_allocate_rules')}</p>
+                        <DirectTradeSupplyPicker order={order} line={line} token={stockToken} selectedId={formSourceId}
+                            onSelect={setSelectedSupply} onLoaded={onSupplyLoaded} selectable={pendingAllocate === null} />
+                        {formSourceId !== null && (
+                            <AllocateDirectTradeForm key={`${formSourceId}:${line.version}:${decisionToken}`}
+                                order={order} line={line} supply={formSupply} actor={actor}
+                                onSucceeded={onAllocated} onReload={() => void reload()}
+                                onCancel={() => (pendingAllocate === null ? setSelectedSupply(null) : setAllocating(false))} />
                         )}
                     </div>
                 )}

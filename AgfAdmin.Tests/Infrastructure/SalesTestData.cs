@@ -11,6 +11,8 @@ namespace AgfAdmin.Tests.Infrastructure;
 //   - Pallet P-IN (InTransit): Approved 7 box / 28 kg (LOT-T).
 //   - Pallet P-XD (Received/Crossdock): Approved 3 box / 12 kg (LOT-D, Warehouse-route).
 //   - DirectTrade-pallet P-DT (Received/Crossdock): Approved 9 box / 36 kg (LOT-DT) voor klant 1.
+//   - DirectTrade-toezeggingen: klant 1 Expected (Hass box 100 verwacht, 400 kg opgegeven, partij LOT-DT-SRC; Hass colli 50),
+//     klant 2 Expected (Hass box 30), klant 1 Received (Hass box 10; niet toewijsbaar).
 //   - Variant Avocado Hass (box en colli) en Mango Kent (box). Klanten: 1 "Customer T", 2 "Customer U".
 public sealed record SalesSeed(
     int CustomerId,
@@ -28,7 +30,12 @@ public sealed record SalesSeed(
     int InTransitBox,
     int CrossdockBox,
     int DirectTradeBox,
-    int LegacyOrderLineId);
+    int LegacyOrderLineId,
+    int DirectTradeSourceLine,
+    int DirectTradeColliSourceLine,
+    int OtherCustomerDirectTradeSourceLine,
+    int ReceivedDirectTradeSourceLine,
+    int DirectTradeCommitmentId);
 
 public static class SalesTestData
 {
@@ -42,13 +49,13 @@ public static class SalesTestData
         var customer = new Customer { Name = "Customer T" };
         var otherCustomer = new Customer { Name = "Customer U" };
 
-        SupplyCommitment Commitment(string route, Customer bound) => new()
+        SupplyCommitment Commitment(string route, Customer bound, string status = "Expected") => new()
         {
             RequestId = Guid.NewGuid(),
             Vendor = vendor,
             Customer = bound,
             Route = route,
-            Status = "Expected",
+            Status = status,
             Origin = "Peru",
             Destination = bound == null ? null : "Turkije",
             ExpectedAt = new DateTime(2026, 10, 20, 8, 0, 0, DateTimeKind.Utc)
@@ -66,6 +73,16 @@ public static class SalesTestData
         var avocadoColli = Line(warehouse, avocado, "colli");
         var direct = Commitment("DirectTrade", customer);
         var directBox = Line(direct, avocado, "box");
+        directBox.ExpectedNetWeightKg = 400m;
+        directBox.LotNumber = "LOT-DT-SRC";
+        var directColli = Line(direct, avocado, "colli");
+        directColli.ExpectedQuantity = 50m;
+        var otherDirect = Commitment("DirectTrade", otherCustomer);
+        var otherDirectBox = Line(otherDirect, avocado, "box");
+        otherDirectBox.ExpectedQuantity = 30m;
+        var receivedDirect = Commitment("DirectTrade", customer, "Received");
+        var receivedDirectBox = Line(receivedDirect, avocado, "box");
+        receivedDirectBox.ExpectedQuantity = 10m;
 
         Pallet NewPallet(string reference, string status, string location, string bin = null) =>
             new() { Reference = reference, LogisticsStatus = status, LocationContext = location, WarehouseLocation = bin };
@@ -100,7 +117,8 @@ public static class SalesTestData
         var legacyOrder = new Order { CustomCustomerName = "Legacy" };
         var legacyLine = new OrderLine { Order = legacyOrder, ProductVariant = avocado, Quantity = 1, UnitPrice = 12.5m };
 
-        db.AddRange(product, avocado, mango, vendor, customer, otherCustomer, warehouse, avocadoBox, avocadoColli, direct, directBox,
+        db.AddRange(product, avocado, mango, vendor, customer, otherCustomer, warehouse, avocadoBox, avocadoColli, direct, directBox, directColli,
+            otherDirect, otherDirectBox, receivedDirect, receivedDirectBox,
             wh, wh2, inTransit, crossdock, directPallet,
             approvedBox, approvedColli, quarantineBox, blockedBox, rejectedBox, secondBox, transitBox, crossdockBox, directContent,
             legacyOrder, legacyLine);
@@ -108,7 +126,8 @@ public static class SalesTestData
 
         return new SalesSeed(customer.Id, otherCustomer.Id, avocado.Id, mango.Id, wh.Id, wh2.Id,
             approvedBox.Id, approvedColli.Id, quarantineBox.Id, blockedBox.Id, rejectedBox.Id, secondBox.Id,
-            transitBox.Id, crossdockBox.Id, directContent.Id, legacyLine.Id);
+            transitBox.Id, crossdockBox.Id, directContent.Id, legacyLine.Id,
+            directBox.Id, directColli.Id, otherDirectBox.Id, receivedDirectBox.Id, direct.Id);
     }
 
     // Een open verkooporder rechtstreeks in de database (zonder service), voor model- en guardtests.

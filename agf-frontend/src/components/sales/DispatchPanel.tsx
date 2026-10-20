@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { DispatchCommand, blockedBy, dispatchKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { dispatchTotals, isDispatchable, normalizeActor, normalizeDispatchReference } from '../../lib/salesOrderRules';
+import { dispatchTotals, isDirectTradeAllocation, isDispatchable, normalizeActor, normalizeDispatchReference } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesDispatch } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -47,9 +47,11 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
     const readOnlyOrder = order.status !== 'Open';
     const idPrefix = `dispatch-${order.id}`;
 
+    // Toewijzingen van verwachte, klantgebonden aanvoer (DirectTrade) horen hier niet thuis: die worden nooit vanuit het magazijn verzonden.
     const rows = order.lines.flatMap((line) => line.reservations
-        .filter((reservation) => reservation.status !== 'Released')
+        .filter((reservation) => reservation.status !== 'Released' && !isDirectTradeAllocation(reservation))
         .map((reservation) => ({ line, reservation })));
+    const excludedAllocations = order.lines.flatMap((line) => line.reservations).filter((reservation) => reservation.status === 'Active' && isDirectTradeAllocation(reservation)).length;
     const dispatchable = rows.filter(({ reservation }) => isDispatchable(reservation));
     const selected = rows.filter(({ reservation }) => selectedIds.includes(reservation.id)).map(({ reservation }) => reservation);
     const totals = dispatchTotals(selected);
@@ -169,6 +171,9 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
                     <h4 id={`${idPrefix}-select`} className="text-sm font-semibold text-gray-900">{t('sales_dispatch_select')}</h4>
                     <button type="button" className={secondaryButtonClass} onClick={selectAll} disabled={locked || dispatchable.length === 0}>{t('sales_dispatch_select_all')}</button>
                 </div>
+                {excludedAllocations > 0 && (
+                    <p role="note" className="mt-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-xs text-violet-950">{t('sales_dispatch_allocations_excluded', { count: String(excludedAllocations) })}</p>
+                )}
                 {rows.length === 0 ? (
                     <p className="mt-1 text-sm text-gray-700">{t('sales_dispatch_nothing')}</p>
                 ) : (
@@ -186,7 +191,7 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
                                         <span className="text-gray-700">{line.productName} · {line.productVariantName}</span>
                                         <span className="ml-auto font-medium">{formatQuantity(reservation.quantity, locale)}</span>
                                         <UnitBadge unit={reservation.unit} />
-                                        <span>{formatKg(reservation.netWeightKg, locale)}</span>
+                                        <span>{formatKg(reservation.netWeightKg ?? 0, locale)}</span>
                                         {reservation.status !== 'Active' && <ReservationStatusBadge status={reservation.status} />}
                                         {reservation.onHold && <OnHoldBadge />}
                                     </label>

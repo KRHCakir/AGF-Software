@@ -10,10 +10,18 @@ public class SalesOrderModelTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private async Task AssertRejectedAsync(Action<AgfAdmin.Data.AppDbContext> arrange)
+    private async Task AssertRejectedAsync(Action<AgfAdmin.Data.AppDbContext> arrange, bool guardMayRejectFirst = false)
     {
         await using var db = _factory.CreateContext();
         arrange(db);
+        if (guardMayRejectFirst)
+        {
+            // De TraceabilityGuard vangt deze rij al vóór de database; de database-check zelf wordt met ruwe SQL getest
+            // (DirectTradeAllocationGuardTests.Database_Check_Rejects_Null_Unknown_And_Mismatched_Sources).
+            var exception = await Assert.ThrowsAnyAsync<Exception>(() => db.SaveChangesAsync());
+            Assert.True(exception is DbUpdateException or AgfAdmin.Data.TraceabilityViolationException, exception.GetType().Name);
+            return;
+        }
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
@@ -333,7 +341,7 @@ public class SalesOrderModelTests : IDisposable
                 case "released-without-time": reservation.Status = "Released"; reservation.ReleaseReason = "Klant annuleert"; break;
             }
             db.StockReservations.Add(reservation);
-        });
+        }, guardMayRejectFirst: invalidCase is "sales-no-content-line" or "sales-source-expected");
     }
 
     [Fact]
