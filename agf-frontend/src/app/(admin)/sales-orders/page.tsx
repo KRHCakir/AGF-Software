@@ -15,6 +15,7 @@ import { useActorReference } from '../../../components/supply/useActorReference'
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { CREATE_ORDER_KEY, PendingCommand } from '../../../lib/pendingCommands';
 import { matchesOrderSearch } from '../../../lib/salesOrderRules';
+import { fillHeight, splitLayoutMedia } from '../../../lib/viewportFill';
 import { toApiError } from '../../../services/apiClient';
 import { getCustomers, getProductsWithVariants } from '../../../services/referenceDataService';
 import { getSalesOrder, listSalesOrders } from '../../../services/salesOrderService';
@@ -42,6 +43,32 @@ interface ReferenceData {
 
 function parseOrderId(value: string | null): number | null {
     return value !== null && /^[1-9][0-9]{0,9}$/.test(value) ? Number(value) : null;
+}
+
+// Desktop: lijst en detail vullen samen de resterende vensterhoogte; elk scrolt zelf. Geeft de hoogte terug (of null op
+// smalle schermen, waar de pagina gewoon gestapeld scrolt). Herberekent bij venstergrootte en wanneer de inhoud erboven
+// verandert (bijvoorbeeld de balk met onafgeronde commando's).
+function useSplitHeight(gridRef: React.RefObject<HTMLDivElement | null>, aboveRef: React.RefObject<HTMLDivElement | null>): number | null {
+    const [height, setHeight] = useState<number | null>(null);
+    useEffect(() => {
+        const media = splitLayoutMedia();
+        if (media === null) return;
+        const measure = () => {
+            const grid = gridRef.current;
+            if (!grid || !media.matches) { setHeight(null); return; }
+            const scroller = document.scrollingElement ?? document.documentElement;
+            const top = grid.getBoundingClientRect().top + scroller.scrollTop;
+            // Ruimte onder het blok: padding van de pagina en van het hoofdgebied (p-2 + p-4).
+            setHeight(fillHeight(window.innerHeight, top, 24));
+        };
+        measure();
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+        if (observer && aboveRef.current) observer.observe(aboveRef.current);
+        window.addEventListener('resize', measure);
+        media.addEventListener('change', measure);
+        return () => { observer?.disconnect(); window.removeEventListener('resize', measure); media.removeEventListener('change', measure); };
+    }, [gridRef, aboveRef]);
+    return height;
 }
 
 function SalesWorkspace() {
@@ -129,12 +156,17 @@ function SalesWorkspace() {
         if (id === null) params.delete('orderId');
         else params.set('orderId', String(id));
         const query = params.toString();
-        router.replace(query === '' ? pathname : `${pathname}?${query}`);
+        // scroll: false: de werkplek bepaalt zelf de scrollpositie (desktop: kolommen; smal: naar het detail).
+        router.replace(query === '' ? pathname : `${pathname}?${query}`, { scroll: false });
     }, [router, pathname, searchParams]);
 
     const openOrder = (id: number) => {
         setCreating(false);
         select(id);
+        // Gestapelde weergave: na het kiezen meteen naar het detail onder de lijst.
+        if (splitLayoutMedia()?.matches === false) {
+            requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'start' }));
+        }
     };
 
     // Direct na een geslaagde aanmaak (ook bij een replay) staat de nieuwe order in de lijst, nog vóór de gebruiker kiest.
@@ -203,14 +235,22 @@ function SalesWorkspace() {
 
     const customers = reference.status === 'ready' ? reference.data.customers : [];
 
+    const gridRef = useRef<HTMLDivElement>(null);
+    const aboveRef = useRef<HTMLDivElement>(null);
+    const detailRef = useRef<HTMLElement>(null);
+    const splitHeight = useSplitHeight(gridRef, aboveRef);
+    // Een andere order (of het formulier) begint bovenaan in de detailkolom, niet halverwege de vorige.
+    useEffect(() => { if (detailRef.current) detailRef.current.scrollTop = 0; }, [selectedId, creating]);
+
     return (
         <div className="mx-auto max-w-[96rem] space-y-4 p-2">
+            <div ref={aboveRef} className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">{t('sales')}</h1>
                     <p className="text-sm text-gray-600">{t('sales_subtitle')}</p>
                 </div>
-                <div className="w-64">
+                <div className="w-full sm:w-64">
                     <label htmlFor="actorReference-page" className="text-xs font-medium text-gray-700">{t('supply_actor')} *</label>
                     <input id="actorReference-page" value={actor} maxLength={100} onChange={(event) => setActor(event.target.value)}
                         placeholder={t('supply_actor_placeholder')} className={inputClass} aria-describedby="actorReference-hint" />
@@ -224,9 +264,12 @@ function SalesWorkspace() {
                 <span aria-hidden="true">🔒</span>{t('sales_direct_trade_note')}
                 <Link href="/orders" className="ml-auto text-xs font-medium underline underline-offset-2">{t('sales_legacy_link')}</Link>
             </p>
+            </div>
 
-            <div className="grid grid-cols-[30rem_minmax(0,1fr)] gap-4">
-                <aside className="space-y-2">
+            {/* Desktop: twee kolommen op vensterhoogte, elk met een eigen scrollgebied. Smal: gestapeld, lijst begrensd. */}
+            <div ref={gridRef} data-testid="sales-workspace-grid" style={splitHeight !== null ? { height: splitHeight } : undefined}
+                className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(22rem,30rem)_minmax(0,1fr)]">
+                <aside className="flex min-h-0 min-w-0 flex-col gap-2" aria-label={t('sales_orders_title')}>
                     <div className="flex items-center justify-between gap-2">
                         <h2 className="text-sm font-semibold text-gray-900">{t('sales_orders_title')}</h2>
                         <div className="flex items-center gap-2">
@@ -243,7 +286,7 @@ function SalesWorkspace() {
                     {listRefreshFailed && orders.status === 'ready' && (
                         <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-900">{t('sales_list_refresh_failed')}</p>
                     )}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         <label className="text-xs font-medium text-gray-700">
                             {t('sales_col_status')}
                             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'Open' | 'Cancelled' | 'all')} className={inputClass}>
@@ -270,12 +313,14 @@ function SalesWorkspace() {
                         <EmptyState title={orders.data.length === 0 ? t('sales_no_orders') : t('sales_no_matches')} description={orders.data.length === 0 ? t('sales_no_orders_hint') : undefined} />
                     )}
                     {orders.status === 'ready' && visibleOrders.length > 0 && (
-                        <SalesOrderList orders={visibleOrders} selectedId={creating ? null : selectedId} onSelect={openOrder} />
+                        <SalesOrderList orders={visibleOrders} selectedId={creating ? null : selectedId} onSelect={openOrder}
+                            className="max-h-[55dvh] lg:max-h-none lg:min-h-0 lg:flex-1" />
                     )}
                     {orders.status === 'ready' && orders.data.length >= 200 && <p className="text-xs text-gray-600">{t('sales_list_capped')}</p>}
                 </aside>
 
-                <section aria-live="polite">
+                <section ref={detailRef} aria-live="polite" data-testid="sales-detail-scroll" tabIndex={-1}
+                    className="min-h-0 min-w-0 scroll-mt-2 lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
                     {creating && reference.status === 'loading' && <LoadingRows rows={4} label={t('supply_loading_reference')} />}
                     {creating && reference.status === 'error' && <ErrorState error={reference.error} onRetry={() => setReferenceToken((n) => n + 1)} />}
                     {creating && reference.status === 'ready' && (

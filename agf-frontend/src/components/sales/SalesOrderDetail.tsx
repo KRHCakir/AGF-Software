@@ -320,7 +320,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                         {cancelNotice && <p className="mt-1 text-green-900">{t('sales_notice_cancelled')}</p>}
                     </div>
                 )}
-                <dl className="mt-2 grid grid-cols-4 gap-x-6 gap-y-1 text-sm">
+                <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-6 gap-y-2 text-sm">
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_delivery_date')}</dt>
                         <dd className="font-medium text-gray-900">{formatCalendarDate(order.requestedDeliveryDate, locale)}</dd>
