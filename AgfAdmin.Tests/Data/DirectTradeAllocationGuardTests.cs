@@ -242,4 +242,73 @@ public class DirectTradeAllocationGuardTests : IDisposable
         Assert.Equal(1, await RawInsertAsync("DirectTrade", "Released", "NULL", "NULL"));
         Assert.Equal(3, await db.StockReservations.CountAsync(r => r.SalesOrderLineId != null));
     }
+
+    // Regressie (review PR #30): vrijgeven, de vrijgekomen capaciteit elders toewijzen en daarna de oude toewijzing reactiveren
+    // zou anders boven de verwachte hoeveelheid uitkomen, omdat de capaciteitscontrole alleen nieuwe rijen telt.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_Released_Allocation_Can_Never_Be_Reactivated_After_Its_Capacity_Was_Allocated_Elsewhere(bool async)
+    {
+        await ArrangeAsync();
+        int oldId;
+        await using (var db = _factory.CreateContext())
+        {
+            var full = Allocation(100m);
+            db.StockReservations.Add(full);
+            await SaveAsync(db, async);
+            oldId = full.Id;
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var old = await db.StockReservations.SingleAsync(r => r.Id == oldId);
+            old.Status = "Released";
+            old.ReleasedAt = DateTime.UtcNow;
+            old.ReleaseReason = "vrijgegeven";
+            await SaveAsync(db, async);
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            db.StockReservations.Add(Allocation(100m, salesLineId: _boxLine));
+            await SaveAsync(db, async);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var old = await db.StockReservations.SingleAsync(r => r.Id == oldId);
+            old.Status = "Active";
+            old.ReleasedAt = null;
+            old.ReleaseReason = null;
+            var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            Assert.Contains("can never become Active again", exception.Message);
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal("Released", (await verify.StockReservations.AsNoTracking().SingleAsync(r => r.Id == oldId)).Status);
+        Assert.Equal(100m, (await verify.StockReservations.AsNoTracking()
+            .Where(r => r.Source == "DirectTrade" && r.Status == "Active" && r.SupplyCommitmentLineId == _seed.DirectTradeSourceLine).ToListAsync()).Sum(r => r.Quantity));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_Source_Of_An_Existing_Sales_Reservation_Cannot_Switch_To_Or_From_DirectTrade(bool async)
+    {
+        await ArrangeAsync();
+        int id;
+        await using (var db = _factory.CreateContext())
+        {
+            var allocation = Allocation(10m);
+            db.StockReservations.Add(allocation);
+            await SaveAsync(db, async);
+            id = allocation.Id;
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var allocation = await db.StockReservations.SingleAsync(r => r.Id == id);
+            allocation.Source = "Physical";
+            var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            Assert.Contains("cannot change", exception.Message);
+        }
+    }
 }

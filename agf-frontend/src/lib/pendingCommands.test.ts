@@ -316,7 +316,7 @@ describe('direct trade allocation commands', () => {
     const allocate = (orderId: number, lineId: number, requestId = 'a-1'): PendingCommand => ({
         kind: 'allocate-direct-trade', key: allocateKey(orderId, lineId), orderId, lineId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T09:00:00.000Z',
         payload: { requestId, supplyCommitmentLineId: 2, quantity: 10, unit: 'box', acknowledgeExpectedSupply: true, actorReference: 'office-1', reason: null },
-        display: { sourceLabel: 'Supplier B · Peru → Turkije', lotNumber: 'LOT-DT-SRC', productLabel: 'Avocado · Hass' },
+        display: { sourceLabel: 'Supplier B · Peru → Turkije', lotNumber: 'LOT-DT-SRC', productLabel: 'Avocado · Hass', expectedAt: '2026-10-27T22:00:00.000Z' },
     });
     const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
         const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
@@ -354,11 +354,15 @@ describe('direct trade allocation commands', () => {
             ['requestId mismatch', (copy) => { payloadOf(copy).requestId = 'other'; }],
             ['key mismatch', (copy) => { copy.key = allocateKey(4, 8); }],
             ['display incomplete', (copy) => { copy.display = { sourceLabel: 'x' }; }],
+            ['expected date snapshot missing', (copy) => { delete (copy.display as Record<string, unknown>).expectedAt; }],
+            ['expected date snapshot not a date', (copy) => { (copy.display as Record<string, unknown>).expectedAt = 'morgen'; }],
             ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
         ];
         for (const [name, mutate] of rejected) {
             assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
         }
         assert.equal(withAttempt(command, 'HTTP 502').attempts, 2);
+        const withoutDate = { ...command, display: { ...(command.display as Record<string, unknown>), expectedAt: null } } as PendingCommand;
+        assert.equal(isPendingCommand(withoutDate), true, 'a null snapshot (no date known) is still a valid command');
     });
 });

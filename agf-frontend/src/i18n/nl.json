@@ -735,5 +735,7 @@
   "sales_release_allocation_label": "Toewijzing uit {vendor} · partij {lot} vrijgeven",
   "sales_error_exceeds_remaining": "Meer dan nog toewijsbaar op deze bronregel.",
   "sales_col_allocated_progress": "toegewezen (verwacht)",
-  "sales_list_allocated": "{count} regel(s) op verwachte klantgebonden aanvoer (niet gereed)"
+  "sales_list_allocated": "{count} regel(s) op verwachte klantgebonden aanvoer (niet gereed)",
+  "sales_allocate_expected_date": "Verwachte leverdatum",
+  "sales_allocate_expected_date_snapshot": "zoals getoond bij het verzenden van deze opdracht; de bronregel staat nu niet meer in de lijst"
 }

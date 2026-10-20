@@ -37,7 +37,9 @@ export interface AllocateDirectTradeCommand extends CommandMeta {
     orderId: number;
     lineId: number;
     payload: CreateDirectTradeAllocationRequest;
-    display: { sourceLabel: string; lotNumber: string; productLabel: string };
+    // expectedAt: de verwachte leverdatum zoals getoond bij het bevriezen. Alleen weergave; nooit onderdeel van de payload,
+    // zodat de herhaling byte voor byte gelijk blijft, ook als de bronregel daarna niet meer in de picker staat.
+    display: { sourceLabel: string; lotNumber: string; productLabel: string; expectedAt: string | null };
 }
 
 export interface ReleaseCommand extends CommandMeta {
@@ -304,7 +306,8 @@ function isLineDisplay(value: unknown): value is ReserveCommand['display'] {
 }
 
 function isAllocateDisplay(value: unknown): value is AllocateDirectTradeCommand['display'] {
-    return isRecord(value) && typeof value.sourceLabel === 'string' && typeof value.lotNumber === 'string' && typeof value.productLabel === 'string';
+    return isRecord(value) && typeof value.sourceLabel === 'string' && typeof value.lotNumber === 'string' && typeof value.productLabel === 'string'
+        && (value.expectedAt === null || isTimestamp(value.expectedAt));
 }
 
 export function isPendingCommand(value: unknown): value is PendingCommand {

@@ -190,6 +190,78 @@ describe('AllocateDirectTradeForm through OrderLinePanel', () => {
     });
 });
 
+describe('lost response on the last available quantity', () => {
+    // Review PR #30: de server legt de laatste resterende hoeveelheid vast, het antwoord gaat verloren; na verversen staat de
+    // bronregel niet meer in de picker (rest 0). De verplichte datum moet dan uit het bevroren commando komen, en de herhaling
+    // moet exact dezelfde requestId en body versturen.
+    let supplyRows: unknown[];
+
+    beforeEach(async () => {
+        window.sessionStorage.clear();
+        orderChanged = 0;
+        supplyRows = [{ ...supplyRow, remainingQuantity: 10, allocatedQuantity: 20 }];
+        nextPost = async () => json(500, { message: 'no post handler' });
+        posted = stubFetch({
+            onGet: (url) => (url.includes('/direct-trade-supply') ? json(200, supplyRows) : url.includes('/reservable-stock') ? json(200, []) : json(503, { message: url })),
+            nextPost: () => nextPost(),
+        });
+        mounted = new Mounted();
+        await mounted.render(panel(order, line));
+    });
+
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('after refresh the warning still shows the submitted expected date and the replay is byte-identical', async () => {
+        await click(await mounted.waitFor(() => mounted.buttons().find((b) => b.textContent?.includes('sales_allocate_direct_trade')), 'allocate button'));
+        await click(await mounted.waitFor(() => mounted.button('supply_select'), 'supply row'));
+        const form = await mounted.waitFor(() => mounted.form(), 'allocation form');
+        await click(mounted.button('sales_allocate_full_remainder')!);
+        assert.equal(form.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!.value, '10', 'full remainder = the last 10 on the source');
+        await click(form.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+
+        // Verwerkt door de server, antwoord verloren.
+        nextPost = async () => { throw new TypeError('network down'); };
+        await submit(form);
+        await mounted.waitFor(() => mounted.button('supply_retry_same'), 'retry after lost response');
+        const frozen = Object.values(storedCommands())[0];
+        assert.equal(frozen.kind, 'allocate-direct-trade');
+        assert.equal((frozen.display as { expectedAt: string | null }).expectedAt, supplyRow.expectedAt, 'the displayed date is frozen as metadata');
+        assert.equal('expectedAt' in (JSON.parse(posted[0].body) as Record<string, unknown>), false, 'the date never enters the payload');
+
+        // Verversen: de bron is nu uitgeput en staat niet meer in de picker.
+        supplyRows = [];
+        await mounted.unmount();
+        mounted = new Mounted();
+        await mounted.render(panel(order, line));
+        await mounted.waitFor(() => mounted.button('supply_retry_same'), 'retry after refresh');
+        assert.ok(mounted.hasText('sales_allocate_empty'), 'the source row is gone from the picker');
+        assert.ok(mounted.hasText('sales_pending_supply_missing'));
+        const time = mounted.container.querySelector<HTMLTimeElement>('form time');
+        assert.equal(time?.dateTime, supplyRow.expectedAt, 'the warning still shows the expected date');
+        assert.equal(mounted.container.querySelector('[data-expected-source]')?.getAttribute('data-expected-source'), 'snapshot');
+        assert.ok(mounted.hasText('sales_allocate_expected_date_snapshot'), 'the date is identified as the date at submission');
+        assert.ok(mounted.hasText('sales_allocate_date_warning'), 'the late-date warning survives too (28 okt after requested 27 okt)');
+        assert.equal(mounted.hasText('availability_unknown'), false, 'no "unknown" date');
+
+        nextPost = async () => json(200, allocationResponse(frozen.requestId, 10));
+        await click(mounted.button('supply_retry_same')!);
+        assert.equal(posted.length, 2);
+        assert.equal(posted[1].body, posted[0].body, 'identical requestId and body');
+        assert.equal(JSON.parse(posted[1].body).requestId, frozen.requestId);
+        await mounted.waitFor(() => (mounted.hasText('sales_notice_allocated') ? true : null), 'notice after replay');
+        assert.ok(mounted.hasText('supply_saved_before'));
+        assert.deepEqual(storedCommands(), {});
+    });
+
+    test('with a source row available the date comes live from the picker, not from a snapshot', async () => {
+        await click(await mounted.waitFor(() => mounted.buttons().find((b) => b.textContent?.includes('sales_allocate_direct_trade')), 'allocate button'));
+        await click(await mounted.waitFor(() => mounted.button('supply_select'), 'supply row'));
+        await mounted.waitFor(() => mounted.form(), 'allocation form');
+        assert.equal(mounted.container.querySelector('[data-expected-source]')?.getAttribute('data-expected-source'), 'live');
+        assert.equal(mounted.hasText('sales_allocate_expected_date_snapshot'), false);
+    });
+});
+
 describe('an allocation in the order', () => {
     beforeEach(() => {
         window.sessionStorage.clear();

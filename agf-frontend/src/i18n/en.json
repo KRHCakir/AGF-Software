@@ -735,5 +735,7 @@
   "sales_release_allocation_label": "Release allocation from {vendor} · lot {lot}",
   "sales_error_exceeds_remaining": "More than still allocatable on this source line.",
   "sales_col_allocated_progress": "allocated (expected)",
-  "sales_list_allocated": "{count} line(s) on expected customer-bound supply (not ready)"
+  "sales_list_allocated": "{count} line(s) on expected customer-bound supply (not ready)",
+  "sales_allocate_expected_date": "Expected delivery date",
+  "sales_allocate_expected_date_snapshot": "as shown when this command was submitted; the source line is no longer listed"
 }

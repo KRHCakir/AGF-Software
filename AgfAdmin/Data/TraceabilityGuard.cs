@@ -27,7 +27,7 @@ namespace AgfAdmin.Data
     //    Een DirectTrade-toewijzing (Source DirectTrade) staat nooit op een inhoudsregel, heeft nooit kg, hoort bij een bronregel van een
     //    DirectTrade-toezegging in een toewijsbare status (toelatingslijst) van exact dezelfde klant als de verkooporder, met dezelfde
     //    variant en exact dezelfde eenheid; de som van Active toewijzingen per bronregel overschrijdt nooit de verwachte hoeveelheid;
-    //    en een toewijzing gaat alleen Active -> Released (verzenden van DirectTrade bestaat nog niet).
+    //    en een toewijzing gaat alleen Active -> Released, nooit terug, en de bron van een bestaande verkoopreservering ligt vast.
     // Regels 5 t/m 7 en 10 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -631,6 +631,28 @@ namespace AgfAdmin.Data
 
         private static async Task CheckDirectTradeAllocationsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
+            // Overgangen, niet alleen toegestane waarden: een toewijzing gaat alleen Active -> Released en nooit terug.
+            // Reactiveren zou de capaciteitscontrole (alleen voor nieuwe rijen) omzeilen; de bron van een bestaande
+            // verkoopreservering ligt vast, zodat een rij ook niet via een bronwissel een toewijzing kan worden of ophouden te zijn.
+            foreach (var entry in db.ChangeTracker.Entries<StockReservation>().Where(e => e.State == EntityState.Modified && e.Entity.SalesOrderLineId != null))
+            {
+                var originalSource = entry.OriginalValues.GetValue<string>(nameof(StockReservation.Source));
+                var isAllocation = originalSource == ReservationRules.SourceDirectTrade || entry.Entity.Source == ReservationRules.SourceDirectTrade;
+                if (!isAllocation)
+                {
+                    continue;
+                }
+                if (!string.Equals(originalSource, entry.Entity.Source, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"The source of sales reservation {entry.Entity.Id} cannot change from {originalSource} to {entry.Entity.Source}.");
+                }
+                var originalStatus = entry.OriginalValues.GetValue<string>(nameof(StockReservation.Status));
+                if (originalStatus == ReservationRules.StatusReleased && entry.Entity.Status != ReservationRules.StatusReleased)
+                {
+                    throw new TraceabilityViolationException($"DirectTrade allocation {entry.Entity.Id} is Released and can never become {entry.Entity.Status} again; allocate anew instead.");
+                }
+            }
+
             // Een toewijzing kent alleen Active en Released; elke andere overgang (Consumed, Corrected) is in deze fase een fout.
             foreach (var entry in db.ChangeTracker.Entries<StockReservation>().Where(e => e.State is EntityState.Added or EntityState.Modified
                          && e.Entity.SalesOrderLineId != null && e.Entity.Source == ReservationRules.SourceDirectTrade))

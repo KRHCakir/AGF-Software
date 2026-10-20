@@ -50,7 +50,9 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
     const unitMismatch = supply !== null && supply.unit !== line.unit;
     const label = supply !== null ? sourceLabel(supply, t('availability_unknown')) : pending?.display.sourceLabel ?? '';
     const lotNumber = supply?.lotNumber ?? pending?.display.lotNumber ?? '';
-    const expectedAt = supply?.expectedAt ?? null;
+    // Live uit de picker; zonder bronrij (verwerkt maar antwoord verloren, rest nu 0) de datum zoals getoond bij het verzenden.
+    const expectedFromSnapshot = supply === null && pending !== null;
+    const expectedAt = supply !== null ? supply.expectedAt : pending?.display.expectedAt ?? null;
     const late = expectedAfterRequested(expectedAt, order.requestedDeliveryDate);
     const fullRemainder = supply === null ? 0 : fullAllocationRemainder(supply.remainingQuantity, line.openQuantity);
     const idPrefix = `allocate-${line.id}-${supply?.supplyCommitmentLineId ?? pending?.payload.supplyCommitmentLineId ?? 0}`;
@@ -107,7 +109,7 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
                     actorReference: actorResult.value,
                     reason: reasonResult.value,
                 },
-                display: { sourceLabel: label, lotNumber, productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}` },
+                display: { sourceLabel: label, lotNumber, productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}`, expectedAt },
                 attempts: 0,
                 lastError: null,
                 frozenAt: new Date().toISOString(),
@@ -152,6 +154,11 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
             <div role="alert" className="rounded border-2 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 <p className="font-semibold"><span aria-hidden="true">⚠ </span>{t('sales_allocate_warning_title')}</p>
                 <p className="mt-1">{t('sales_allocate_warning', { date: expectedAt ? formatCalendarDate(expectedAt, locale) : t('availability_unknown') })}</p>
+                <p className="mt-1 font-medium" data-expected-source={expectedFromSnapshot ? 'snapshot' : 'live'}>
+                    {t('sales_allocate_expected_date')}:{' '}
+                    {expectedAt ? <time dateTime={expectedAt}>{formatCalendarDate(expectedAt, locale)}</time> : t('availability_unknown')}
+                    {expectedFromSnapshot && <span className="ml-1 text-xs font-normal">({t('sales_allocate_expected_date_snapshot')})</span>}
+                </p>
                 {late && expectedAt && (
                     <p className="mt-1 font-medium">{t('sales_allocate_date_warning', { expected: formatCalendarDate(expectedAt, locale), requested: formatCalendarDate(order.requestedDeliveryDate, locale) })}</p>
                 )}
