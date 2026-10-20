@@ -242,6 +242,18 @@ namespace AgfAdmin.Services
             {
                 await _db.SaveChangesAsync(cancellationToken);
             }
+            catch (DeliveryCorrectionConflictException conflict)
+            {
+                // Een andere schrijver heeft na onze controles en vóór de guard een aflevering of correctie van deze verzending gecommit.
+                // Er is niets opgeslagen (de guard draait vóór de database-update). Alleen dit herkenbare conflict wordt 409.
+                _db.ChangeTracker.Clear();
+                var concurrent = await ReplayAsync(command, cancellationToken);
+                if (concurrent != null)
+                {
+                    return concurrent;
+                }
+                return ServiceResult<SalesDispatchCorrectionDto>.Conflict($"{conflict.Message} The delivery was confirmed concurrently; reload and decide again.");
+            }
             catch (DbUpdateException exception) when (DbErrors.IsConcurrencyConflict(exception) || DbErrors.IsUniqueViolation(exception))
             {
                 _db.ChangeTracker.Clear();

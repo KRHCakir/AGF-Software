@@ -42,5 +42,8 @@ public sealed class SqliteAppDbContextFactory : IDisposable
             .AddInterceptors(interceptors)
             .Options, calendar ?? Calendar);
 
+    // Context waarvan de eerste SaveChangesAsync eerst `beforeGuard` volledig uitvoert en pas daarna de guard en de database bereikt.
+    public AppDbContext CreateContextBeforeGuard(Func<Task> beforeGuard) => new BeforeGuardDbContext(_options, Calendar, beforeGuard);
+
     public void Dispose() => _connection.Dispose();
 }

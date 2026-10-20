@@ -4,9 +4,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Data
 {
-    public sealed class TraceabilityViolationException : InvalidOperationException
+    public class TraceabilityViolationException : InvalidOperationException
     {
         public TraceabilityViolationException(string message) : base(message) {}
+    }
+
+    // Regel 13, alleen wanneer de tegenpartij al is opgeslagen: een afleverbevestiging voor een verzending die intussen is gecorrigeerd
+    // of teruggenomen, of een correctie/terugname van een verzending die intussen als afgeleverd is bevestigd. De services controleren
+    // dit vooraf; deze fout ontstaat dus alleen als een andere schrijver na die controle en vóór deze save heeft gecommit. Alleen dit
+    // type mogen de services als 409 behandelen; elke andere guardfout blijft een fout van de schrijver.
+    public sealed class DeliveryCorrectionConflictException : TraceabilityViolationException
+    {
+        public DeliveryCorrectionConflictException(string message) : base(message) {}
     }
 
     // Draait vóór elke SaveChanges/SaveChangesAsync, zodat geen enkele writer de regels kan vergeten:
@@ -724,7 +733,11 @@ namespace AgfAdmin.Data
                     {
                         throw new TraceabilityViolationException($"A delivery confirmation for dispatch {dispatchId} must belong to its sales order {stored.SalesOrderId}.");
                     }
-                    if (stored.Corrected || newWarehouseCorrections.Any(c => (c.SalesDispatch != null ? db.Entry(c.SalesDispatch).Property(x => x.Id).CurrentValue : c.SalesDispatchId) == dispatchId))
+                    if (stored.Corrected)
+                    {
+                        throw new DeliveryCorrectionConflictException($"Dispatch {dispatchId} has been corrected and can never be confirmed as delivered.");
+                    }
+                    if (newWarehouseCorrections.Any(c => (c.SalesDispatch != null ? db.Entry(c.SalesDispatch).Property(x => x.Id).CurrentValue : c.SalesDispatchId) == dispatchId))
                     {
                         throw new TraceabilityViolationException($"Dispatch {dispatchId} has been corrected and can never be confirmed as delivered.");
                     }
@@ -747,7 +760,11 @@ namespace AgfAdmin.Data
                     {
                         throw new TraceabilityViolationException($"A delivery confirmation for DirectTrade shipment {shipmentId} must belong to its sales order {stored.SalesOrderId}.");
                     }
-                    if (stored.Corrected || newDirectTradeCorrections.Any(c => (c.DirectTradeShipment != null ? db.Entry(c.DirectTradeShipment).Property(x => x.Id).CurrentValue : c.DirectTradeShipmentId) == shipmentId))
+                    if (stored.Corrected)
+                    {
+                        throw new DeliveryCorrectionConflictException($"DirectTrade shipment {shipmentId} has been taken back and can never be confirmed as delivered.");
+                    }
+                    if (newDirectTradeCorrections.Any(c => (c.DirectTradeShipment != null ? db.Entry(c.DirectTradeShipment).Property(x => x.Id).CurrentValue : c.DirectTradeShipmentId) == shipmentId))
                     {
                         throw new TraceabilityViolationException($"DirectTrade shipment {shipmentId} has been taken back and can never be confirmed as delivered.");
                     }
@@ -762,19 +779,27 @@ namespace AgfAdmin.Data
             foreach (var correction in newWarehouseCorrections)
             {
                 var dispatchId = correction.SalesDispatch != null ? db.Entry(correction.SalesDispatch).Property(x => x.Id).CurrentValue : correction.SalesDispatchId;
-                if (deliveries.Any(d => d.ShipmentKind == ReservationRules.ShipmentKindWarehouse && DispatchIdOf(d) == dispatchId)
-                    || await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.SalesDispatchId == dispatchId), async, cancellationToken))
+                var message = $"Dispatch {dispatchId} is confirmed as delivered; it cannot be corrected as goods that never left the warehouse.";
+                if (deliveries.Any(d => d.ShipmentKind == ReservationRules.ShipmentKindWarehouse && DispatchIdOf(d) == dispatchId))
                 {
-                    throw new TraceabilityViolationException($"Dispatch {dispatchId} is confirmed as delivered; it cannot be corrected as goods that never left the warehouse.");
+                    throw new TraceabilityViolationException(message);
+                }
+                if (await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.SalesDispatchId == dispatchId), async, cancellationToken))
+                {
+                    throw new DeliveryCorrectionConflictException(message);
                 }
             }
             foreach (var correction in newDirectTradeCorrections)
             {
                 var shipmentId = correction.DirectTradeShipment != null ? db.Entry(correction.DirectTradeShipment).Property(x => x.Id).CurrentValue : correction.DirectTradeShipmentId;
-                if (deliveries.Any(d => d.ShipmentKind == ReservationRules.ShipmentKindDirectTrade && ShipmentIdOf(d) == shipmentId)
-                    || await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.DirectTradeShipmentId == shipmentId), async, cancellationToken))
+                var message = $"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place.";
+                if (deliveries.Any(d => d.ShipmentKind == ReservationRules.ShipmentKindDirectTrade && ShipmentIdOf(d) == shipmentId))
                 {
-                    throw new TraceabilityViolationException($"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place.");
+                    throw new TraceabilityViolationException(message);
+                }
+                if (await AnyAsync(db.ShipmentDeliveryConfirmations.AsNoTracking().Where(d => d.DirectTradeShipmentId == shipmentId), async, cancellationToken))
+                {
+                    throw new DeliveryCorrectionConflictException(message);
                 }
             }
         }

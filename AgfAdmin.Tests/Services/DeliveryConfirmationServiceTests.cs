@@ -1,3 +1,4 @@
+using AgfAdmin.Data;
 using System.Text.Json;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
@@ -525,4 +526,116 @@ public class DeliveryConfirmationServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Created, (await ConfirmWarehouseAsync(dispatch.Id, Confirm(await OrderVersionAsync(_factory, _orderId)))).Status);
         Assert.Equal(ServiceResultStatus.Conflict, await CancelAsync());
     }
+
+    // ======================== Concurrente commit ná de servicecontroles en vóór de guard ========================
+
+    // Volledige schrijfstaat: elke rij die een bevestiging of correctie kan raken, inclusief beide audittabellen.
+    private async Task<string> WriteStateAsync()
+    {
+        await using var db = _factory.CreateContext();
+        return JsonSerializer.Serialize(new
+        {
+            deliveries = await db.ShipmentDeliveryConfirmations.AsNoTracking().OrderBy(c => c.Id).Select(c => new { c.Id, c.ShipmentKind, c.SalesDispatchId, c.DirectTradeShipmentId }).ToListAsync(),
+            warehouseCorrections = await db.SalesDispatchCorrections.AsNoTracking().OrderBy(c => c.Id).Select(c => new { c.Id, c.SalesDispatchId }).ToListAsync(),
+            warehouseCorrectionLines = await db.SalesDispatchCorrectionLines.CountAsync(),
+            directTradeCorrections = await db.DirectTradeShipmentCorrections.AsNoTracking().OrderBy(c => c.Id).Select(c => new { c.Id, c.DirectTradeShipmentId }).ToListAsync(),
+            directTradeCorrectionLines = await db.DirectTradeShipmentCorrectionLines.CountAsync(),
+            reservations = await db.StockReservations.AsNoTracking().OrderBy(r => r.Id).Select(r => new { r.Id, r.Status, r.Version }).ToListAsync(),
+            contents = await db.PalletContentLines.AsNoTracking().OrderBy(c => c.Id).Select(c => new { c.Id, c.Quantity, c.DispatchedQuantity, c.QualityStatus, c.Version }).ToListAsync(),
+            movements = await db.StockMovements.AsNoTracking().OrderBy(m => m.Id).Select(m => new { m.Id, m.Type }).ToListAsync(),
+            sources = await db.SupplyCommitmentLines.AsNoTracking().OrderBy(l => l.Id).Select(l => new { l.Id, l.Version }).ToListAsync(),
+            orders = await db.SalesOrders.AsNoTracking().OrderBy(o => o.Id).Select(o => new { o.Id, o.Status, o.Version }).ToListAsync(),
+            orderLines = await db.SalesOrderLines.AsNoTracking().OrderBy(l => l.Id).Select(l => new { l.Id, l.Version }).ToListAsync(),
+            salesAudit = await db.SalesOrderAuditEvents.AsNoTracking().OrderBy(e => e.Id).Select(e => new { e.Id, e.EventType, e.RequestId }).ToListAsync(),
+            palletAudit = await db.PalletAuditEvents.AsNoTracking().OrderBy(e => e.Id).Select(e => new { e.Id, e.EventType }).ToListAsync(),
+        });
+    }
+
+    private async Task<int> AuditCountAsync(string eventType)
+    {
+        await using var db = _factory.CreateContext();
+        return await db.SalesOrderAuditEvents.CountAsync(e => e.EventType == eventType);
+    }
+
+    // De verliezer start eerst en doorloopt al zijn controles; in zijn SaveChangesAsync, vóór de guard, commit de winnaar volledig.
+    // Daarna bereikt de verliezer de guard, die de opgeslagen tegenpartij ziet: 409, en niets van de verliezer belandt in de database.
+    [Theory]
+    [InlineData("warehouse", "correction-wins")]
+    [InlineData("warehouse", "confirmation-wins")]
+    [InlineData("direct-trade", "correction-wins")]
+    [InlineData("direct-trade", "confirmation-wins")]
+    public async Task A_Concurrent_Commit_Between_Service_Checks_And_Guard_Gives_One_Success_And_One_Conflict(string kind, string winner)
+    {
+        await ArrangeAsync();
+        var dispatch = kind == "warehouse" ? await WarehouseDispatchAsync() : null;
+        var shipment = kind == "direct-trade" ? await DirectTradeShipmentAsync() : null;
+        var version = await OrderVersionAsync(_factory, _orderId);
+        var correctionEvent = kind == "warehouse" ? ReservationRules.OrderDispatchCorrectedEvent : ReservationRules.DirectTradeShipmentCorrectedEvent;
+
+        ServiceResultStatus winnerStatus = default;
+        string afterWinner = null;
+        async Task WinnerAsync()
+        {
+            winnerStatus = winner == "correction-wins"
+                ? (kind == "warehouse" ? (await CorrectWarehouseAsync(dispatch!, version)).Status : (await TakeBackAsync(shipment!, version)).Status)
+                : (kind == "warehouse" ? (await ConfirmWarehouseAsync(dispatch!.Id, Confirm(version))).Status : (await ConfirmDirectTradeAsync(shipment!.Id, Confirm(version))).Status);
+            afterWinner = await WriteStateAsync();
+        }
+
+        ServiceResultStatus loserStatus;
+        string loserMessage;
+        await using (var db = _factory.CreateContextBeforeGuard(WinnerAsync))
+        {
+            if (winner == "correction-wins")
+            {
+                var service = new DeliveryConfirmationService(db, _factory.Calendar);
+                var result = kind == "warehouse" ? await service.ConfirmWarehouseAsync(_orderId, dispatch!.Id, Confirm(version)) : await service.ConfirmDirectTradeAsync(_orderId, shipment!.Id, Confirm(version));
+                (loserStatus, loserMessage) = (result.Status, result.Message);
+            }
+            else if (kind == "warehouse")
+            {
+                var result = await new SalesDispatchCorrectionService(db).CorrectAsync(_orderId, dispatch!.Id, new CorrectSalesDispatchDto
+                {
+                    RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
+                    Lines = dispatch.Lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.StockReservationId, ExpectedReservationVersion = 1 }).ToList()
+                });
+                (loserStatus, loserMessage) = (result.Status, result.Message);
+            }
+            else
+            {
+                var result = await new DirectTradeShipmentCorrectionService(db).CorrectAsync(_orderId, shipment!.Id, Correction(version, shipment));
+                (loserStatus, loserMessage) = (result.Status, result.Message);
+            }
+        }
+
+        Assert.Equal((ServiceResultStatus.Created, ServiceResultStatus.Conflict), (winnerStatus, loserStatus));
+        Assert.Contains(winner == "correction-wins" ? "corrected concurrently" : "delivery was confirmed concurrently", loserMessage);
+        // Geen gedeeltelijke wijziging en geen extra audit van de verliezer: de staat is exact die direct na de winnaar.
+        Assert.Equal(afterWinner, await WriteStateAsync());
+        Assert.Equal(winner == "correction-wins" ? (0, 1) : (1, 0), (await AuditCountAsync(ReservationRules.DeliveryConfirmedEvent), await AuditCountAsync(correctionEvent)));
+        await using var verify = _factory.CreateContext();
+        var deliveries = await verify.ShipmentDeliveryConfirmations.CountAsync();
+        var corrections = await verify.SalesDispatchCorrections.CountAsync() + await verify.DirectTradeShipmentCorrections.CountAsync();
+        Assert.Equal(winner == "correction-wins" ? (0, 1) : (1, 0), (deliveries, corrections));
+    }
+
+    // Alleen het herkenbare aflevering/correctie-conflict wordt 409. Een andere guardfout blijft een fout van de schrijver: hier
+    // laat de service een datum door die de guard (andere kalender) als "na vandaag" weigert. Die fout moet doorkomen, niet als 409.
+    [Fact]
+    public async Task Other_Guard_Violations_Are_Not_Translated_To_Conflict()
+    {
+        await ArrangeAsync();
+        var dispatch = await WarehouseDispatchAsync();
+        var version = await OrderVersionAsync(_factory, _orderId);
+        await using var db = _factory.CreateContext(new FixedBusinessCalendar(new DateOnly(2026, 10, 20)));
+        var service = new DeliveryConfirmationService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 21)));
+
+        var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => service.ConfirmWarehouseAsync(_orderId, dispatch.Id, Confirm(version, new DateOnly(2026, 10, 21))));
+
+        Assert.Contains("after today", exception.Message);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.ShipmentDeliveryConfirmations.CountAsync());
+        Assert.Equal(0, await AuditCountAsync(ReservationRules.DeliveryConfirmedEvent));
+    }
 }
+

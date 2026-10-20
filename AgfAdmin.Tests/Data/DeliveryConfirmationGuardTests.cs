@@ -234,7 +234,8 @@ public class DeliveryConfirmationGuardTests : IDisposable
         }
         await using var db = _factory.CreateContext();
         db.ShipmentDeliveryConfirmations.Add(kind == "Warehouse" ? Delivery(kind, dispatchId, null) : Delivery(kind, null, shipmentId));
-        var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+        // Opgeslagen correctie: het herkenbare conflict dat services als 409 mogen behandelen.
+        var exception = await Assert.ThrowsAsync<DeliveryCorrectionConflictException>(() => SaveAsync(db, async));
         Assert.Contains("can never be confirmed as delivered", exception.Message);
     }
 
@@ -282,7 +283,16 @@ public class DeliveryConfirmationGuardTests : IDisposable
                 }
                 db.DirectTradeShipmentCorrections.Add(correction);
             }
-            await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            // Opgeslagen bevestiging = herkenbaar conflict; bevestiging en correctie in dezelfde save = fout van de schrijver (exact basistype).
+            if (when == "stored")
+            {
+                var conflict = await Assert.ThrowsAsync<DeliveryCorrectionConflictException>(() => SaveAsync(db, async));
+                Assert.Contains("is confirmed as delivered", conflict.Message);
+            }
+            else
+            {
+                await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            }
         }
         await using var verify = _factory.CreateContext();
         Assert.Equal((when == "stored" ? 1 : 0, 0, 0), (await verify.ShipmentDeliveryConfirmations.CountAsync(), await verify.SalesDispatchCorrections.CountAsync(), await verify.DirectTradeShipmentCorrections.CountAsync()));
