@@ -1,10 +1,14 @@
 namespace AgfAdmin.Services
 {
-    // "Vandaag" als kalenderdatum voor bedrijfsregels, altijd in Europe/Amsterdam (ongeacht de tijdzone van de server).
-    // Tijdstippen (RecordedAt, ConsumedAt) blijven echte UTC-tijden; alleen kalenderdatums zoals ShippedOn gebruiken dit.
+    // Kalenderdatums voor bedrijfsregels, altijd in Europe/Amsterdam (ongeacht de tijdzone van de server). Eén implementatie,
+    // gedeeld door services en de centrale TraceabilityGuard. Tijdstippen (RecordedAt, ConsumedAt) blijven echte UTC-tijden.
     public interface IBusinessCalendar
     {
+        // Vandaag als kalenderdatum in Europe/Amsterdam.
         DateOnly Today();
+
+        // De kalenderdatum in Europe/Amsterdam van een UTC-tijdstip (bijvoorbeeld SalesDispatch.DispatchedAt).
+        DateOnly DateOf(DateTime utc);
     }
 
     public sealed class AmsterdamBusinessCalendar : IBusinessCalendar
@@ -19,5 +23,11 @@ namespace AgfAdmin.Services
         }
 
         public DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(_clock.GetUtcNow(), Zone).DateTime);
+
+        public DateOnly DateOf(DateTime utc) => ToAmsterdamDate(utc);
+
+        // Gedeelde omrekening; een DateTime zonder soort komt uit de database en is UTC.
+        public static DateOnly ToAmsterdamDate(DateTime utc) =>
+            DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Zone));
     }
 }

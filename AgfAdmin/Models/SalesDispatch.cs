@@ -18,6 +18,9 @@ namespace AgfAdmin.Models
         public DateTime DispatchedAt { get; set; }
 
         public ICollection<SalesDispatchLine> Lines { get; set; } = new List<SalesDispatchLine>();
+
+        // Omgekeerde navigatie: de (hooguit ene) afleverbevestiging van deze verzending.
+        public ShipmentDeliveryConfirmation Delivery { get; set; }
     }
 
     // Eén verbruikte reservering: hoeveelheid, eenheid en netto-kg zijn een kopie van de reservering (nooit afgeleid).

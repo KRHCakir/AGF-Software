@@ -30,6 +30,9 @@ namespace AgfAdmin.Models
 
         // Omgekeerde navigatie: de (hooguit ene) terugname van deze verzending.
         public DirectTradeShipmentCorrection Correction { get; set; }
+
+        // Omgekeerde navigatie: de (hooguit ene) afleverbevestiging van deze verzending.
+        public ShipmentDeliveryConfirmation Delivery { get; set; }
     }
 
     // Eén verbruikte toewijzing met de werkelijk verzonden hoeveelheid, eenheid, netto kg en partij (expliciet ingevoerd, nooit afgeleid).

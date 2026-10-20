@@ -18,7 +18,7 @@ const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed', onH
     createdAt: '2026-10-19T10:00:00.000Z', releasedAt: status === 'Released' ? '2026-10-19T10:30:00.000Z' : null,
     releaseReason: status === 'Released' ? 'eerder' : null, version, contentQualityStatus: onHold ? 'Blocked' : 'Approved', onHold,
     consumedAt: status === 'Consumed' ? '2026-10-19T13:00:00.000Z' : null, dispatchId: status === 'Consumed' ? 9 : null, dispatchReference: status === 'Consumed' ? 'VRB-9' : null,
-    correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null,
+    correctedAt: null, correctionId: null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null, directTradeShipmentId: null, shippedOn: null, shippedNetWeightKg: null, shippedLotNumber: null, directTradeCorrectionId: null, deliveryConfirmationId: null, deliveredOn: null,
 });
 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {
@@ -27,17 +27,17 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
     return {
         id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status: 'Open', customerReference: null,
         requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
-        cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: consumed.length * 5 === 20,
+        cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: consumed.length * 5 === 20, delivered: false,
         lines: [{
             id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
-            reservedQuantity: active.length * 5, reservedNetWeightKg: active.length * 20, allocatedQuantity: 0, directTradeShippedQuantity: 0,
+            reservedQuantity: active.length * 5, reservedNetWeightKg: active.length * 20, allocatedQuantity: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false,
             dispatchedQuantity: consumed.length * 5, dispatchedNetWeightKg: consumed.length * 20,
             openQuantity: 20 - active.length * 5 - consumed.length * 5, fulfilled: consumed.length * 5 === 20, version: 3, reservations,
         }],
     };
 };
 
-const dispatchResponse = { id: 9, requestId: 'd-lost', salesOrderId: 4, reference: 'VRB-9', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', correction: null,
+const dispatchResponse = { id: 9, requestId: 'd-lost', salesOrderId: 4, reference: 'VRB-9', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', delivery: null, correction: null,
     lines: [{ id: 1, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 1 }] };
 
 const frozen: PendingCommand = {
@@ -129,11 +129,12 @@ describe('DispatchPanel through the component lifecycle', () => {
         await mounted.waitFor(() => mounted.hasText('sales_notice_dispatched') && mounted.hasText('supply_saved_before'), 'replay notice');
     });
 
-    test('a fulfilled line shows as delivered, not as fully reserved, and the dispatch button is disabled without dispatchable reservations', async () => {
+    test('a fully dispatched line shows "fully shipped, delivery not yet confirmed", never delivered or fully reserved, and the dispatch button is disabled', async () => {
         current = orderWith(4, [reservation(11, 'Consumed'), reservation(12, 'Consumed'), reservation(13, 'Consumed'), reservation(14, 'Consumed')]);
         await mounted.render(element(current));
-        await mounted.waitFor(() => mounted.hasText('sales_line_fulfilled'), 'fulfilled line');
-        assert.equal(mounted.hasText('sales_order_fulfilled'), true);
+        await mounted.waitFor(() => mounted.hasText('sales_line_shipped_not_confirmed'), 'fulfilled line');
+        assert.equal(mounted.hasText('sales_order_shipped_not_confirmed'), true);
+        assert.equal(mounted.hasText('sales_line_delivered'), false, 'dispatching is never delivery');
         assert.equal(mounted.hasText('sales_line_complete'), false, 'never "fully reserved" with 0 reserved');
         assert.equal(mounted.button('sales_dispatch_order')?.disabled, true);
         assert.equal(mounted.button('sales_cancel_order')?.disabled, true, 'cancellation is refused once something is dispatched');

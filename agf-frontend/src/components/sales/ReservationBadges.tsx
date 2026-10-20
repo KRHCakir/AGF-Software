@@ -72,3 +72,23 @@ export function DirectTradeCorrectedBadge() {
     );
 }
 
+// Bevestigde volledige aflevering van een verzending (magazijn of DirectTrade).
+export function DeliveredBadge({ date }: { date: string }) {
+    const { t } = useTranslation();
+    return (
+        <span className="inline-flex items-center gap-1 rounded border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-900">
+            <span aria-hidden="true">✓</span>{t('sales_delivered_badge', { date })}
+        </span>
+    );
+}
+
+// Verzonden, maar (nog) geen afleverbevestiging. Het systeem veronderstelt geen aflevering.
+export function ShippedNotConfirmedBadge() {
+    const { t } = useTranslation();
+    return (
+        <span className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-800">
+            <span aria-hidden="true">🚚</span>{t('sales_shipped_not_confirmed_badge')}
+        </span>
+    );
+}
+

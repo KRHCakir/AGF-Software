@@ -61,8 +61,10 @@ public class DirectTradeShipmentServiceTests : IDisposable
 
     private async Task<ServiceResult<DirectTradeShipmentDto>> ShipAsync(CreateDirectTradeShipmentDto request, int? orderId = null, IBusinessCalendar calendar = null, params IInterceptor[] interceptors)
     {
-        await using var db = _factory.CreateContext(interceptors);
-        return await new DirectTradeShipmentService(db, calendar ?? new FixedBusinessCalendar(Today)).ShipAsync(orderId ?? _orderId, request);
+        var effective = calendar ?? new FixedBusinessCalendar(Today);
+        // Service en guard delen dezelfde kalender, zoals in productie via DI.
+        await using var db = _factory.CreateContext(effective, interceptors);
+        return await new DirectTradeShipmentService(db, effective).ShipAsync(orderId ?? _orderId, request);
     }
 
     private async Task<SalesOrderDto> OrderAsync(int? orderId = null)

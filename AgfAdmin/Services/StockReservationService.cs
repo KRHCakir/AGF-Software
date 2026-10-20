@@ -435,12 +435,16 @@ namespace AgfAdmin.Services
                 .Include(r => r.SalesOrderLine)
                 .Include(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
-                .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch)
-                .Include(r => r.DirectTradeShipmentLine).ThenInclude(l => l.DirectTradeShipment)
+                .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch).ThenInclude(d => d.Delivery)
+                .Include(r => r.DirectTradeShipmentLine).ThenInclude(l => l.DirectTradeShipment).ThenInclude(s => s.Delivery)
                 .Include(r => r.DirectTradeCorrectionLine)
                 .SingleAsync(r => r.Id == reservationId, cancellationToken);
             return ToDto(reservation, reservation.SalesOrderLine?.SalesOrderId ?? 0);
         }
+
+        // De afleverbevestiging van de verzending van deze reservering (magazijn of DirectTrade), als die geladen is.
+        internal static ShipmentDeliveryConfirmation DeliveryOf(StockReservation reservation) =>
+            reservation.DispatchLine?.SalesDispatch?.Delivery ?? reservation.DirectTradeShipmentLine?.DirectTradeShipment?.Delivery;
 
         // Physical: pallet, partij en gemeten kg van de inhoudsregel. DirectTrade: geen pallet en geen kg (null), partij en bron van de toezegging.
         internal static StockReservationDto ToDto(StockReservation reservation, int salesOrderId, int? correctionId = null) => new()
@@ -469,6 +473,8 @@ namespace AgfAdmin.Services
             ShippedNetWeightKg = reservation.DirectTradeShipmentLine?.NetWeightKg,
             ShippedLotNumber = reservation.DirectTradeShipmentLine?.LotNumber,
             DirectTradeCorrectionId = reservation.DirectTradeCorrectionLine?.DirectTradeShipmentCorrectionId,
+            DeliveryConfirmationId = reservation.Status == ReservationRules.StatusConsumed ? DeliveryOf(reservation)?.Id : null,
+            DeliveredOn = reservation.Status == ReservationRules.StatusConsumed ? DeliveryOf(reservation)?.DeliveredOn : null,
             Status = reservation.Status,
             CreatedAt = DateTime.SpecifyKind(reservation.CreatedAt, DateTimeKind.Utc),
             ReleasedAt = reservation.ReleasedAt == null ? null : DateTime.SpecifyKind(reservation.ReleasedAt.Value, DateTimeKind.Utc),

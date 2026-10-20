@@ -2,6 +2,7 @@ using AgfAdmin.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using AgfAdmin.Services;
 
 namespace AgfAdmin.Tests.Infrastructure;
 
@@ -26,14 +27,20 @@ public sealed class SqliteAppDbContextFactory : IDisposable
         db.Database.EnsureCreated();
     }
 
-    public AppDbContext CreateContext() => new(_options);
+    // Kalender voor de datumcontroles in de guard: vast op 20 oktober 2026 (Europe/Amsterdam), zodat tests niet van de systeemklok afhangen.
+    // Tests die de tijdzone zelf toetsen geven hun eigen kalender mee, en dezelfde aan de service.
+    public IBusinessCalendar Calendar { get; set; } = new FixedBusinessCalendar(new DateOnly(2026, 10, 20));
+
+    public AppDbContext CreateContext() => new(_options, Calendar);
 
     // Voor deterministische concurrency-tests: een interceptor kan midden in SaveChanges een gelijktijdige wijziging doen.
-    public AppDbContext CreateContext(params IInterceptor[] interceptors) => new(
+    public AppDbContext CreateContext(params IInterceptor[] interceptors) => CreateContext(Calendar, interceptors);
+
+    public AppDbContext CreateContext(IBusinessCalendar calendar, params IInterceptor[] interceptors) => new(
         new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlite(_connection)
             .AddInterceptors(interceptors)
-            .Options);
+            .Options, calendar ?? Calendar);
 
     public void Dispose() => _connection.Dispose();
 }

@@ -55,3 +55,10 @@ export function isDateOnly(value: string): boolean {
     return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+// De kalenderdatum in Europe/Amsterdam van een UTC-tijdstip (zelfde definitie als de backend, bijvoorbeeld voor DispatchedAt).
+export function amsterdamDateOf(iso: string): string | null {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return todayInAmsterdam(date);
+}
+

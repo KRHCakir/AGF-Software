@@ -65,6 +65,10 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<SalesDispatchCorrectionDto>.Conflict($"Dispatch {dispatchId} has already been corrected.");
             }
+            if (await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.SalesDispatchId == dispatchId, cancellationToken))
+            {
+                return ServiceResult<SalesDispatchCorrectionDto>.Conflict($"Dispatch {dispatchId} is confirmed as delivered; goods that were delivered cannot be corrected as never having left the warehouse. Retract the delivery confirmation first (separate flow).");
+            }
 
             // Hele verzending: exact de verzendregels, elk met de verwachte reserveringsversie.
             var byReservation = dispatch.Lines.ToDictionary(l => l.StockReservationId);

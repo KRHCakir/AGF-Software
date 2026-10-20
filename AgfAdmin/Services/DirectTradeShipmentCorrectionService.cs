@@ -67,6 +67,10 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} has already been taken back.");
             }
+            if (await _db.ShipmentDeliveryConfirmations.AnyAsync(c => c.DirectTradeShipmentId == shipmentId, cancellationToken))
+            {
+                return ServiceResult<DirectTradeShipmentCorrectionDto>.Conflict($"DirectTrade shipment {shipmentId} is confirmed as delivered; it cannot be taken back as a shipment that did not take place. Retract the delivery confirmation first (separate flow).");
+            }
 
             // Hele verzending: exact de toewijzingen van deze verzending, elk met de verwachte versie. Een id van een magazijnreservering,
             // magazijnverzending of andere verzending hoort daar nooit bij, ook niet als het nummer toevallig gelijk is.

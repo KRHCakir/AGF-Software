@@ -15,7 +15,7 @@ const allocation = (id: number, status: 'Consumed' | 'Corrected', version = 1): 
     id, requestId: `a-${id}`, salesOrderId: 4, salesOrderLineId: 7, palletContentLineId: null, palletId: null, palletReference: null,
     warehouseLocation: null, lotNumber: 'LOT-DT-SRC', quantity: 10, unit: 'box', netWeightKg: null, source: 'DirectTrade',
     supplyCommitmentLineId: 11, supplyCommitmentId: 10, vendorName: 'Example Supplier', origin: 'Peru', destination: 'Rotterdam', expectedAt: '2026-10-27T22:00:00.000Z',
-    directTradeShipmentId: 5, shippedOn: '2026-10-19', shippedNetWeightKg: 40.5, shippedLotNumber: 'LOT-DT-SRC', directTradeCorrectionId: status === 'Corrected' ? 3 : null,
+    directTradeShipmentId: 5, shippedOn: '2026-10-19', shippedNetWeightKg: 40.5, shippedLotNumber: 'LOT-DT-SRC', directTradeCorrectionId: status === 'Corrected' ? 3 : null, deliveryConfirmationId: null, deliveredOn: null,
     status, createdAt: '2026-10-20T08:00:00.000Z', releasedAt: null, releaseReason: null, version, contentQualityStatus: null, onHold: false,
     consumedAt: '2026-10-20T09:00:00.000Z', dispatchId: null, dispatchReference: null, correctedAt: status === 'Corrected' ? '2026-10-20T10:00:00.000Z' : null, correctionId: null,
 });
@@ -25,11 +25,11 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
     return {
         id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE DT klant', status: 'Open', customerReference: null,
         requestedDeliveryDate: '2026-10-26T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
-        cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: shipped === 20,
+        cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: shipped === 20, delivered: false,
         lines: [{
             id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 20, unit: 'box',
             reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, dispatchedQuantity: shipped, dispatchedNetWeightKg: shipped === 0 ? 0 : 81,
-            directTradeShippedQuantity: shipped, openQuantity: 20 - shipped, fulfilled: shipped === 20, version: 3, reservations,
+            directTradeShippedQuantity: shipped, deliveredQuantity: 0, delivered: false, openQuantity: 20 - shipped, fulfilled: shipped === 20, version: 3, reservations,
         }],
     };
 };
@@ -43,7 +43,7 @@ const correctionResponse = (requestId: string) => ({
 
 const shipment = (correction: unknown = null) => ({
     id: 5, requestId: 's-5', salesOrderId: 4, customerId: 6, customerName: 'SMOKE DT klant', shippedOn: '2026-10-19', reference: 'CMR-1', actorReference: 'office-1',
-    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: false, correction,
+    recordedAt: '2026-10-20T09:00:00.000Z', deliveryRecorded: false, delivery: null, correction,
     lines: [21, 22].map((id, i) => ({ id: i + 1, stockReservationId: id, salesOrderLineId: 7, supplyCommitmentLineId: 11, supplyCommitmentId: 10, vendorId: 1, vendorName: 'Example Supplier',
         origin: 'Peru', destination: 'Rotterdam', productName: 'Avocado', productVariantName: 'Hass', quantity: 10, unit: 'box', netWeightKg: 40.5,
         lotNumber: 'LOT-DT-SRC', sourceLotNumber: 'LOT-DT-SRC', lotDeviationReason: null })),

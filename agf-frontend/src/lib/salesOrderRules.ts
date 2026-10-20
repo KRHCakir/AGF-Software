@@ -24,7 +24,8 @@ export type RuleCode =
     | 'exceeds_demand'
     | 'remainder_mismatch'
     | 'exceeds_remaining'
-    | 'future_date';
+    | 'future_date'
+    | 'before_shipping';
 
 export interface RuleError {
     field: string;
@@ -404,5 +405,16 @@ export function validateShippedOn(value: string, today: string): BuildResult<str
 // Teruggenomen DirectTrade-verzending: historie, telt niet meer als verzonden of als bezette capaciteit.
 export function isCorrectedAllocation(reservation: { source: string; status: string }): boolean {
     return reservation.source === 'DirectTrade' && reservation.status === 'Corrected';
+}
+
+// ---- Afleverbevestiging ----
+
+// Afleverdatum: verplicht, geldige kalenderdatum, niet vóór de verzenddatum en niet na vandaag (beide Europe/Amsterdam).
+export function validateDeliveredOn(value: string, shippedOn: string | null, today: string): BuildResult<string> {
+    if (value.trim() === '') return { ok: false, errors: [{ field: 'deliveredOn', code: 'required' }] };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return { ok: false, errors: [{ field: 'deliveredOn', code: 'invalid_date' }] };
+    if (value > today) return { ok: false, errors: [{ field: 'deliveredOn', code: 'future_date' }] };
+    if (shippedOn !== null && value < shippedOn) return { ok: false, errors: [{ field: 'deliveredOn', code: 'before_shipping' }] };
+    return { ok: true, value };
 }
 

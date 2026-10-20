@@ -9,7 +9,7 @@ import { listDirectTradeShipments } from '../../services/salesOrderService';
 import { DirectTradeShipment } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
-import { DirectTradeCorrectedBadge, DirectTradeShippedBadge } from './ReservationBadges';
+import { DeliveredBadge, DirectTradeCorrectedBadge, DirectTradeShippedBadge } from './ReservationBadges';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 
 const th = 'px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-violet-900';
@@ -18,13 +18,16 @@ const td = 'px-2 py-1.5 align-top';
 // DirectTrade-verzendingen van één order, gescheiden van de magazijnverzendingen. Klant, leverancier, herkomst en bestemming zijn de
 // snapshots van het moment van verzenden. Er is geen afleverbevestiging: het systeem weet alleen dat die nog niet is vastgelegd.
 // Een teruggenomen verzending blijft zichtbaar met haar oorspronkelijke regels; de correctie (reden, actor, tijd) staat erbij.
-export default function DirectTradeShipmentList({ orderId, token, onShipments, canCorrect = false, correctingId = null, onCorrect }: {
+export default function DirectTradeShipmentList({ orderId, token, onShipments, canCorrect = false, correctingId = null, onCorrect, canConfirm = false, confirmingId = null, onConfirmDelivery }: {
     orderId: number;
     token: number;
     onShipments?: (shipments: DirectTradeShipment[]) => void;
     canCorrect?: boolean;
     correctingId?: number | null;
     onCorrect?: (shipment: DirectTradeShipment) => void;
+    canConfirm?: boolean;
+    confirmingId?: number | null;
+    onConfirmDelivery?: (shipment: DirectTradeShipment) => void;
 }) {
     const { t, locale } = useTranslation();
     const [state, setState] = useState<LoadState<DirectTradeShipment[]>>({ status: 'loading' });
@@ -52,16 +55,28 @@ export default function DirectTradeShipmentList({ orderId, token, onShipments, c
                 <article key={shipment.id} aria-labelledby={`dt-shipment-${shipment.id}`} className="rounded border border-violet-200 bg-white">
                     <header className="flex flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50 px-3 py-2 text-sm">
                         <h4 id={`dt-shipment-${shipment.id}`} className="font-semibold text-violet-950">{t('sales_ship_heading', { id: String(shipment.id) })}</h4>
-                        {shipment.correction ? <DirectTradeCorrectedBadge /> : <DirectTradeShippedBadge />}
+                        {shipment.correction ? <DirectTradeCorrectedBadge /> : shipment.delivery ? <DeliveredBadge date={formatDateOnly(shipment.delivery.deliveredOn, locale)} /> : <DirectTradeShippedBadge />}
                         <span>{t('sales_ship_shipped_on', { date: formatDateOnly(shipment.shippedOn, locale) })}</span>
                         <span className="text-gray-700">{shipment.customerName}</span>
                         {shipment.reference && <span className="font-mono text-xs">{shipment.reference}</span>}
                         <span className="ml-auto text-xs text-gray-600">{formatDateTime(shipment.recordedAt, locale)} · {shipment.actorReference}</span>
-                        {!shipment.correction && onCorrect && (
+                        {!shipment.correction && !shipment.delivery && onConfirmDelivery && (
+                            <button type="button" className={`${secondaryButtonClass} border-emerald-300 text-emerald-900 hover:bg-emerald-50`} disabled={!canConfirm || confirmingId === shipment.id}
+                                onClick={() => onConfirmDelivery(shipment)}>{t('sales_delivery_confirm')}</button>
+                        )}
+                        {/* Een bevestigde aflevering blokkeert de terugname "heeft niet plaatsgevonden". */}
+                        {!shipment.correction && !shipment.delivery && onCorrect && (
                             <button type="button" className={`${secondaryButtonClass} border-amber-300 text-amber-900 hover:bg-amber-50`} disabled={!canCorrect || correctingId === shipment.id}
                                 onClick={() => onCorrect(shipment)}>{t('sales_dt_correct')}</button>
                         )}
                     </header>
+                    {shipment.delivery && (
+                        <div role="note" className="border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+                            {t('sales_delivery_recorded', { date: formatDateOnly(shipment.delivery.deliveredOn, locale), actor: shipment.delivery.actorReference, recorded: formatDateTime(shipment.delivery.recordedAt, locale) })}
+                            {shipment.delivery.receiptReference && <> · <span className="font-mono">{shipment.delivery.receiptReference}</span></>}
+                            {' '}· {t('sales_delivery_correction_blocked')}
+                        </div>
+                    )}
                     {shipment.correction && (
                         <div role="note" className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
                             <p className="font-medium">{t('sales_dt_corrected_by', { date: formatDateTime(shipment.correction.correctedAt, locale), actor: shipment.correction.actorReference })}</p>

@@ -7,7 +7,9 @@ import {
     CorrectSalesDispatchRequest,
     CreateSalesDispatchRequest,
     CreateDirectTradeAllocationRequest,
+    ConfirmDeliveryRequest,
     CorrectDirectTradeShipmentRequest,
+    DeliveryConfirmation,
     CreateDirectTradeShipmentRequest,
     DirectTradeShipment,
     DirectTradeShipmentCorrection,
@@ -21,6 +23,7 @@ import {
     SalesOrder,
     SalesOrderAuditEvent,
     StockReservation,
+    isDeliveryConfirmation,
     isDirectTradeShipment,
     isDirectTradeShipmentCorrection,
     isDirectTradeShipmentList,
@@ -119,6 +122,16 @@ export async function correctDirectTradeShipment(orderId: number, shipmentId: nu
     const { status, json } = await postJson(`/sales-orders/${orderId}/direct-trade-shipments/${shipmentId}/corrections`, request, signal);
     if (!isDirectTradeShipmentCorrection(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij het terugnemen van de DirectTrade-verzending.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+// Afleverbevestiging: het endpoint bepaalt de soort. 201 = nieuw, 200 = exact dezelfde opdracht was al verwerkt; 409 = herladen.
+export async function confirmDelivery(orderId: number, kind: 'Warehouse' | 'DirectTrade', shipmentId: number, request: ConfirmDeliveryRequest, signal?: AbortSignal): Promise<SaveResult<DeliveryConfirmation>> {
+    const path = kind === 'Warehouse' ? `/sales-orders/${orderId}/dispatches/${shipmentId}/delivery-confirmations` : `/sales-orders/${orderId}/direct-trade-shipments/${shipmentId}/delivery-confirmations`;
+    const { status, json } = await postJson(path, request, signal);
+    if (!isDeliveryConfirmation(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de afleverbevestiging.');
     }
     return { value: json, replayed: status === 200 };
 }

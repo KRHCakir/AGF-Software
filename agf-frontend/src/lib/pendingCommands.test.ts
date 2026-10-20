@@ -5,6 +5,7 @@ import {
     allocateKey,
     blockedBy,
     correctDtShipmentKey,
+    confirmDeliveryKey,
     shipDirectTradeKey,
     CREATE_CUSTOMER_KEY,
     cancelKey,
@@ -447,6 +448,56 @@ describe('DirectTrade shipment correction commands', () => {
             ['no lines', (copy) => { payloadOf(copy).lines = []; }],
             ['duplicate lines', (copy) => { const lines = payloadOf(copy).lines as unknown[]; payloadOf(copy).lines = [lines[0], lines[0]]; }],
             ['key mismatch', (copy) => { copy.key = correctDtShipmentKey(4, 8); }],
+        ];
+        for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
+    });
+});
+
+describe('delivery confirmation commands', () => {
+    const confirm = (orderId: number, kind: 'Warehouse' | 'DirectTrade', shipmentId: number, requestId = 'd-1'): PendingCommand => ({
+        kind: 'confirm-delivery', key: confirmDeliveryKey(orderId, kind, shipmentId), orderId, shipmentKind: kind, shipmentId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T11:00:00.000Z',
+        payload: { requestId, expectedOrderVersion: 6, actorReference: 'office-1', deliveredOn: '2026-10-20', receiptReference: 'CMR-1', deliveredInFull: true },
+        display: { customerName: 'Customer T', lineCount: 1 },
+    });
+    const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
+        const copy = JSON.parse(JSON.stringify(command)) as Record<string, unknown>;
+        mutate(copy);
+        return JSON.stringify({ [String(copy.key)]: copy });
+    };
+    const payloadOf = (copy: Record<string, unknown>) => copy.payload as Record<string, unknown>;
+
+    test('the key carries the kind, so equal shipment numbers never collide, and the command blocks other order actions', () => {
+        assert.equal(confirmDeliveryKey(4, 'Warehouse', 5), 'confirm-delivery:4:warehouse:5');
+        assert.equal(confirmDeliveryKey(4, 'DirectTrade', 5), 'confirm-delivery:4:direct-trade:5');
+        const both = { ...toMap(confirm(4, 'Warehouse', 5, 'w')), ...toMap(confirm(4, 'DirectTrade', 5, 'dt')) };
+        assert.equal(Object.keys(parseStoredCommands(serializeCommands(both))).length, 2);
+        const commands = toMap(confirm(4, 'Warehouse', 5));
+        assert.equal(blockedBy(commands, { kind: 'cancel-order', orderId: 4 })?.requestId, 'd-1');
+        assert.equal(blockedBy(commands, { kind: 'correct-dispatch', orderId: 4 })?.requestId, 'd-1');
+        assert.equal(blockedBy(commands, { kind: 'correct-dt-shipment', orderId: 4 })?.requestId, 'd-1');
+        assert.equal(blockedBy(commands, { kind: 'confirm-delivery', orderId: 5 }), null);
+        assert.equal(blockedBy(toMap(correct(4, 9)), { kind: 'confirm-delivery', orderId: 4 })?.kind, 'correct-dispatch');
+    });
+
+    test('a stored confirmation is restored only with the literal statement, a calendar date and a matching key', () => {
+        const command = confirm(4, 'DirectTrade', 7);
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(command))), toMap(command));
+        const withoutReference = JSON.parse(JSON.stringify(command)) as PendingCommand & { payload: { receiptReference: string | null } };
+        withoutReference.payload.receiptReference = null;
+        assert.deepEqual(parseStoredCommands(serializeCommands(toMap(withoutReference))), toMap(withoutReference), 'the reference is optional');
+        const rejected: [string, (copy: Record<string, unknown>) => void][] = [
+            ['statement false', (copy) => { payloadOf(copy).deliveredInFull = false; }],
+            ['statement missing', (copy) => { delete payloadOf(copy).deliveredInFull; }],
+            ['statement as string', (copy) => { payloadOf(copy).deliveredInFull = 'true'; }],
+            ['date with time', (copy) => { payloadOf(copy).deliveredOn = '2026-10-20T00:00:00Z'; }],
+            ['date missing', (copy) => { delete payloadOf(copy).deliveredOn; }],
+            ['reference too long', (copy) => { payloadOf(copy).receiptReference = 'r'.repeat(101); }],
+            ['reference blank', (copy) => { payloadOf(copy).receiptReference = ' '; }],
+            ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
+            ['version missing', (copy) => { delete payloadOf(copy).expectedOrderVersion; }],
+            ['unknown kind', (copy) => { copy.shipmentKind = 'Truck'; }],
+            ['kind does not match key', (copy) => { copy.shipmentKind = 'Warehouse'; }],
+            ['request id mismatch', (copy) => { payloadOf(copy).requestId = 'other'; }],
         ];
         for (const [name, mutate] of rejected) assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
     });

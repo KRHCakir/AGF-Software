@@ -16,9 +16,11 @@ namespace AgfAdmin.Controllers
         private readonly IDirectTradeAllocationService _allocations;
         private readonly IDirectTradeShipmentService _shipments;
         private readonly IDirectTradeShipmentCorrectionService _shipmentCorrections;
+        private readonly IDeliveryConfirmationService _deliveries;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections, IDeliveryConfirmationService deliveries)
         {
+            _deliveries = deliveries;
             _shipmentCorrections = shipmentCorrections;
             _shipments = shipments;
             _orders = orders;
@@ -70,6 +72,21 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> CorrectDispatch(int id, int dispatchId, [FromBody] CorrectSalesDispatchDto request)
         {
             var result = await _corrections.CorrectAsync(id, dispatchId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        // Afleverbevestiging van één volledige verzending. De soort volgt uit het endpoint; het nummer alleen bepaalt die nooit.
+        [HttpPost("{id:int}/dispatches/{dispatchId:int}/delivery-confirmations")]
+        public async Task<IActionResult> ConfirmWarehouseDelivery(int id, int dispatchId, [FromBody] ConfirmDeliveryDto request)
+        {
+            var result = await _deliveries.ConfirmWarehouseAsync(id, dispatchId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        [HttpPost("{id:int}/direct-trade-shipments/{shipmentId:int}/delivery-confirmations")]
+        public async Task<IActionResult> ConfirmDirectTradeDelivery(int id, int shipmentId, [FromBody] ConfirmDeliveryDto request)
+        {
+            var result = await _deliveries.ConfirmDirectTradeAsync(id, shipmentId, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
 
