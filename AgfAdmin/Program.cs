@@ -28,6 +28,7 @@ builder.Services.AddScoped<ISalesOrderService, SalesOrderService>();
 builder.Services.AddScoped<IStockReservationService, StockReservationService>();
 builder.Services.AddScoped<ISalesDispatchService, SalesDispatchService>();
 builder.Services.AddScoped<ISalesDispatchCorrectionService, SalesDispatchCorrectionService>();
+builder.Services.AddScoped<IDirectTradeAllocationService, DirectTradeAllocationService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 
 // Database configuratie

@@ -17,6 +17,11 @@ namespace AgfAdmin.Services
             StatusExpected, "PartiallyReceived", "Received", StatusCancelled, "Delivered"
         };
 
+        // Expliciete toelatingslijst: alleen in deze statussen kan DirectTrade-aanvoer aan een verkooporder worden toegewezen.
+        // Received, Delivered, Cancelled en elke onbekende waarde zijn nooit toewijsbaar (geen "alles behalve"-regel).
+        public const string StatusPartiallyReceived = "PartiallyReceived";
+        public static readonly IReadOnlyList<string> AllocatableCommitmentStatuses = new[] { StatusExpected, StatusPartiallyReceived };
+
         public static readonly IReadOnlyList<string> PackageUnits = new[] { "box", "colli", "tray", "piece", "dozen" };
 
         // Grootste waarde die in decimal(18,3) past.
@@ -25,6 +30,8 @@ namespace AgfAdmin.Services
         public static bool IsRoute(string value) => value != null && Routes.Contains(value, StringComparer.Ordinal);
 
         public static bool IsCommitmentStatus(string value) => value != null && CommitmentStatuses.Contains(value, StringComparer.Ordinal);
+
+        public static bool IsAllocatableCommitmentStatus(string value) => value != null && AllocatableCommitmentStatuses.Contains(value, StringComparer.Ordinal);
 
         public static bool IsPackageUnit(string value) => value != null && PackageUnits.Contains(value, StringComparer.Ordinal);
 

@@ -19,7 +19,7 @@ const reservation = (id: number, status: 'Active' | 'Released' | 'Consumed' | 'C
     releaseReason: status === 'Released' ? 'eerder' : null, version: status === 'Active' ? 0 : status === 'Corrected' ? 2 : 1, contentQualityStatus: 'Approved', onHold: false,
     consumedAt: status === 'Consumed' || status === 'Corrected' ? '2026-10-19T13:00:00.000Z' : null,
     dispatchId: status === 'Consumed' || status === 'Corrected' ? 9 : null, dispatchReference: status === 'Consumed' || status === 'Corrected' ? 'VRB-9' : null,
-    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null,
+    correctedAt: status === 'Corrected' ? '2026-10-19T14:00:00.000Z' : null, correctionId: status === 'Corrected' ? 3 : null, supplyCommitmentLineId: 1, supplyCommitmentId: 1, vendorName: null, origin: null, destination: null, expectedAt: null,
 });
 
 // Verzending 9 met de opgegeven reserveringen; `corrected` vult de correctie zodat de historie beide toont.
@@ -42,7 +42,7 @@ const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: 
     lines: [{
         id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
         reservedQuantity: reservations.filter((r) => r.status === 'Active').length * 5,
-        reservedNetWeightKg: reservations.filter((r) => r.status === 'Active').length * 20,
+        reservedNetWeightKg: reservations.filter((r) => r.status === 'Active').length * 20, allocatedQuantity: 0,
         dispatchedQuantity: reservations.filter((r) => r.status === 'Consumed').length * 5, dispatchedNetWeightKg: reservations.filter((r) => r.status === 'Consumed').length * 20,
         openQuantity: 20 - reservations.filter((r) => r.status === 'Active' || r.status === 'Consumed').length * 5, fulfilled: false, version: 3, reservations,
     }],

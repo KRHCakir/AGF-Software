@@ -13,6 +13,8 @@ const EVENT_KEYS: Record<string, string> = {
     SalesOrderCancelled: 'sales_event_cancelled',
     SalesOrderDispatched: 'sales_event_dispatched',
     SalesOrderDispatchCorrected: 'sales_event_dispatch_corrected',
+    DirectTradeAllocated: 'sales_event_allocated',
+    DirectTradeReleased: 'sales_event_allocation_released',
 };
 
 // Orderhistorie uit GET /api/sales-orders/{id}/audit-events (append-only, alleen lezen).

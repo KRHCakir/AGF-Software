@@ -21,6 +21,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
         case 'required':
             return error.field === 'actorReference' ? t('supply_error_actor_required')
                 : error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
+                : error.field === 'acknowledgeExpectedSupply' ? t('sales_allocate_acknowledge_required')
                 : error.field === 'requestedDeliveryDate' ? t('supply_error_required_date')
                 : error.field === 'lines' ? t('supply_error_lines_required')
                 : error.field.endsWith('.unit') ? t('supply_error_required_unit')
@@ -31,6 +32,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
         case 'duplicate_line': return t('sales_error_duplicate_line');
         case 'exceeds_available': return t('sales_error_exceeds_available');
         case 'exceeds_demand': return t('sales_error_exceeds_demand');
+        case 'exceeds_remaining': return t('sales_error_exceeds_remaining');
         case 'remainder_mismatch': return t('sales_error_remainder_mismatch');
         default: return t('supply_error_required');
     }

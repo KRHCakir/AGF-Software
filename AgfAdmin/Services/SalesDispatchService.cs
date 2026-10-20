@@ -280,6 +280,10 @@ namespace AgfAdmin.Services
             {
                 return $"Reservation {reservation.Id} is already consumed by a dispatch.";
             }
+            if (reservation.Source == ReservationRules.SourceDirectTrade)
+            {
+                return $"Reservation {reservation.Id} is a DirectTrade allocation of expected, customer-bound supply and can never be dispatched as warehouse stock; DirectTrade shipment is a separate flow.";
+            }
             if (reservation.Status != ReservationRules.StatusActive || reservation.Source != ReservationRules.SourcePhysical || reservation.PalletContentLine == null)
             {
                 return $"Reservation {reservation.Id} is {reservation.Status} and cannot be dispatched; only active physical reservations can.";

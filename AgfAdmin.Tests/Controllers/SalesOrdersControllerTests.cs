@@ -25,7 +25,7 @@ public class SalesOrdersControllerTests : IDisposable
     private async Task<IActionResult> Orders(Func<SalesOrdersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db)));
+        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db)));
     }
 
     private async Task<IActionResult> Reservations(Func<StockReservationsController, Task<IActionResult>> action)
@@ -254,5 +254,46 @@ public class SalesOrdersControllerTests : IDisposable
         Assert.Equal(correction.Id, line.Reservations.Single().CorrectionId);
         var dispatches = Assert.IsAssignableFrom<IReadOnlyList<SalesDispatchDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetDispatches(order.Id))).Value);
         Assert.Equal(correction.Id, Assert.Single(dispatches).Correction!.Id);
+    }
+
+    [Fact]
+    public async Task DirectTrade_Allocation_Endpoints_Map_201_200_400_404_And_409()
+    {
+        var order = await CreatedOrderAsync();
+        var line = order.Lines[0];
+
+        var supply = Assert.IsAssignableFrom<IReadOnlyList<DirectTradeSupplyLineDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetDirectTradeSupply(order.Id, line.Id))).Value);
+        var source = Assert.Single(supply);
+        Assert.Equal((_seed.DirectTradeSourceLine, 100m, 0m, 100m, true), (source.SupplyCommitmentLineId, source.ExpectedQuantity, source.AllocatedQuantity, source.RemainingQuantity, source.ExpectedAt != null));
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.GetDirectTradeSupply(order.Id, 999_999)));
+
+        CreateDirectTradeAllocationDto Allocate(decimal quantity, bool? acknowledge = true, Guid? requestId = null, string reason = null) => new()
+        {
+            RequestId = requestId ?? Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = quantity, Unit = "box",
+            AcknowledgeExpectedSupply = acknowledge, ActorReference = "office-1", Reason = reason
+        };
+
+        Assert.Contains("acknowledgeExpectedSupply", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, Allocate(5m, acknowledge: false)))).Value).Errors.Keys);
+        Assert.IsType<NotFoundObjectResult>(await Orders(c => c.AllocateDirectTrade(order.Id, 999_999, Allocate(5m))));
+
+        var request = Allocate(5m);
+        var created = Assert.IsType<CreatedAtActionResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, request)));
+        Assert.Equal(nameof(SalesOrdersController.GetById), created.ActionName);
+        var allocation = Assert.IsType<StockReservationDto>(created.Value);
+        Assert.Equal(("DirectTrade", 5m, null, null), (allocation.Source, allocation.Quantity, allocation.PalletContentLineId, allocation.NetWeightKg));
+        Assert.Equal(allocation.Id, Assert.IsType<StockReservationDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, request))).Value).Id);
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, Allocate(6m, requestId: request.RequestId))));
+        // Over de klantvraag (20) heen: 5 toegewezen + 16.
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, Allocate(16m))));
+
+        var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
+        Assert.Equal((5m, 0m, 15m), (current.Lines[0].AllocatedQuantity, current.Lines[0].ReservedQuantity, current.Lines[0].OpenQuantity));
+
+        // Vrijgeven via hetzelfde endpoint als een fysieke reservering.
+        var released = Assert.IsType<StockReservationDto>(Assert.IsType<OkObjectResult>(await Reservations(c => c.Release(allocation.Id, new ReleaseStockReservationDto
+        {
+            RequestId = Guid.NewGuid(), ExpectedReservationVersion = allocation.Version, ActorReference = "office-1", Reason = "Toch uit magazijn"
+        }))).Value);
+        Assert.Equal("Released", released.Status);
     }
 }

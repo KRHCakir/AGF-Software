@@ -22,7 +22,8 @@ export type RuleCode =
     | 'duplicate_line'
     | 'exceeds_available'
     | 'exceeds_demand'
-    | 'remainder_mismatch';
+    | 'remainder_mismatch'
+    | 'exceeds_remaining';
 
 export interface RuleError {
     field: string;
@@ -159,21 +160,52 @@ export function validateReservationInput(input: ReservationInput, stock: StockBa
     return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { quantity: quantity.value, netWeightKg: netKg.value } };
 }
 
-// Resterende klantvraag na een voorgenomen reservering; nooit negatief en alleen voor weergave.
+// Resterende klantvraag na een voorgenomen reservering of toewijzing; nooit negatief en alleen voor weergave.
 export function remainingAfter(openQuantity: number, quantity: number): number {
     return Math.max(0, openQuantity - quantity);
 }
 
+// ---- Toewijzen van verwachte, klantgebonden DirectTrade-aanvoer: alleen hoeveelheid ----
+
+// Spiegel van de backendcontrole: niet boven wat op de bronregel nog toewijsbaar is en niet boven de open klantvraag. Geen kg.
+export function validateAllocationInput(quantityText: string, remainingOnSource: number, openQuantity: number): BuildResult<{ quantity: number }> {
+    const quantity = parsePositiveDecimal(quantityText);
+    if (!quantity.ok) return { ok: false, errors: [{ field: 'quantity', code: quantity.error }] };
+    const errors: RuleError[] = [];
+    if (quantity.value > remainingOnSource) errors.push({ field: 'quantity', code: 'exceeds_remaining' });
+    if (quantity.value > openQuantity) errors.push({ field: 'quantity', code: 'exceeds_demand' });
+    return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { quantity: quantity.value } };
+}
+
+// "Volledige rest toewijzen": het kleinste van resterend op de bron en open klantvraag; 0 als een van beide 0 is.
+export function fullAllocationRemainder(remainingOnSource: number, openQuantity: number): number {
+    return Math.max(0, Math.min(remainingOnSource, openQuantity));
+}
+
+// Verwachte leverdatum na de gevraagde leverdatum van de order (kalenderdagen, lokale tijd): alleen een waarschuwing, nooit een blokkade.
+export function expectedAfterRequested(expectedAt: string | null, requestedDeliveryDate: string): boolean {
+    if (expectedAt === null) return false;
+    const expected = new Date(expectedAt);
+    const requested = new Date(requestedDeliveryDate);
+    if (Number.isNaN(expected.getTime()) || Number.isNaN(requested.getTime())) return false;
+    const day = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    return day(expected) > day(requested);
+}
+
 export interface LineProgress {
     reserved: number;
+    // Toegewezen verwachte, klantgebonden aanvoer: telt mee als vastgelegd, maar is nooit voorraad en maakt een regel nooit gereed.
+    allocated: number;
     dispatched: number;
     total: number;
     open: number;
     // Volledig vastgelegd volgens de servertotalen (open = 0): gereserveerd + verzonden = gevraagd.
     complete: boolean;
     onHold: boolean;
-    // Groen zonder verzending betekent: volledig gereserveerd én geen enkele reservering on hold.
+    // Groen zonder verzending betekent: volledig gereserveerd op magazijnvoorraad, geen enkele reservering on hold én niets toegewezen op verwachte aanvoer.
     ready: boolean;
+    // Volledig vastgelegd, maar (deels) op verwachte aanvoer: amber, nooit groen.
+    completeWithExpected: boolean;
     // Volledig verzonden (serverflag); toont als geleverd, nooit als "volledig gereserveerd" met 0 gereserveerd.
     fulfilled: boolean;
     // Deels verzonden, rest nog open of gereserveerd.
@@ -184,6 +216,7 @@ export interface LineProgress {
 export interface LineTotals {
     quantity: number;
     reservedQuantity: number;
+    allocatedQuantity: number;
     dispatchedQuantity: number;
     openQuantity: number;
     fulfilled: boolean;
@@ -195,12 +228,14 @@ export function lineProgress(line: LineTotals): LineProgress {
     const onHold = line.reservations.some((reservation) => reservation.onHold);
     return {
         reserved: line.reservedQuantity,
+        allocated: line.allocatedQuantity,
         dispatched: line.dispatchedQuantity,
         total: line.quantity,
         open: line.openQuantity,
         complete,
         onHold,
-        ready: complete && !onHold,
+        ready: complete && !onHold && line.allocatedQuantity === 0,
+        completeWithExpected: complete && line.allocatedQuantity > 0 && !line.fulfilled,
         fulfilled: line.fulfilled,
         partiallyDispatched: line.dispatchedQuantity > 0 && !line.fulfilled,
     };
@@ -211,9 +246,11 @@ export interface OrderProgress {
     linesFulfilled: number;
     linesTotal: number;
     onHoldCount: number;
+    // Regels met toewijzingen van verwachte, klantgebonden aanvoer.
+    allocatedLines: number;
     // Alle regels volledig vastgelegd volgens de totalen.
     complete: boolean;
-    // Alle regels volledig vastgelegd en nergens een reservering on hold.
+    // Alle regels volledig vastgelegd, nergens een reservering on hold en nergens verwachte aanvoer toegewezen.
     ready: boolean;
     // Alle regels volledig verzonden (serverflag).
     fulfilled: boolean;
@@ -226,14 +263,16 @@ export function orderProgress(order: { fulfilled: boolean; lines: LineTotals[] }
     const onHoldCount = order.lines.reduce((sum, line) => sum + line.reservations.filter((reservation) => reservation.onHold).length, 0);
     const linesComplete = progress.filter((line) => line.complete).length;
     const linesFulfilled = progress.filter((line) => line.fulfilled).length;
+    const allocatedLines = order.lines.filter((line) => line.allocatedQuantity > 0).length;
     const complete = order.lines.length > 0 && linesComplete === order.lines.length;
     return {
         linesComplete,
         linesFulfilled,
         linesTotal: order.lines.length,
         onHoldCount,
+        allocatedLines,
         complete,
-        ready: complete && onHoldCount === 0,
+        ready: complete && onHoldCount === 0 && allocatedLines === 0,
         fulfilled: order.fulfilled,
         partiallyDispatched: !order.fulfilled && progress.some((line) => line.dispatched > 0),
     };
@@ -244,15 +283,21 @@ export function orderProgress(order: { fulfilled: boolean; lines: LineTotals[] }
 export interface DispatchCandidate {
     id: number;
     status: string;
+    source: string;
     onHold: boolean;
     quantity: number;
     unit: string;
-    netWeightKg: number;
+    netWeightKg: number | null;
 }
 
-// Alleen Active reserveringen die niet on hold zijn kunnen worden verzonden; de server controleert dit opnieuw.
+// Alleen Active fysieke reserveringen die niet on hold zijn kunnen worden verzonden; een DirectTrade-toewijzing (verwachte,
+// klantgebonden aanvoer) nooit vanuit het magazijn. De server controleert dit opnieuw.
 export function isDispatchable(reservation: DispatchCandidate): boolean {
-    return reservation.status === 'Active' && !reservation.onHold;
+    return reservation.status === 'Active' && !reservation.onHold && reservation.source !== 'DirectTrade';
+}
+
+export function isDirectTradeAllocation(reservation: { source: string }): boolean {
+    return reservation.source === 'DirectTrade';
 }
 
 // Totalen van de gekozen reserveringen per eenheid; eenheden worden nooit samengevoegd of omgerekend.
@@ -261,7 +306,7 @@ export function dispatchTotals(selected: DispatchCandidate[]): { unit: string; q
     for (const reservation of selected) {
         const total = byUnit.get(reservation.unit) ?? { unit: reservation.unit, quantity: 0, netWeightKg: 0, count: 0 };
         total.quantity += reservation.quantity;
-        total.netWeightKg += reservation.netWeightKg;
+        total.netWeightKg += reservation.netWeightKg ?? 0;
         total.count += 1;
         byUnit.set(reservation.unit, total);
     }

@@ -6,8 +6,10 @@ import {
     CancelSalesOrderRequest,
     CorrectSalesDispatchRequest,
     CreateSalesDispatchRequest,
+    CreateDirectTradeAllocationRequest,
     CreateSalesOrderRequest,
     CreateStockReservationRequest,
+    DirectTradeSupplyLine,
     ReleaseStockReservationRequest,
     ReservableStockLine,
     SalesDispatch,
@@ -15,6 +17,7 @@ import {
     SalesOrder,
     SalesOrderAuditEvent,
     StockReservation,
+    isDirectTradeSupplyList,
     isReservableStockList,
     isSalesDispatch,
     isSalesDispatchCorrection,
@@ -73,6 +76,24 @@ export async function reserveStock(orderId: number, lineId: number, request: Cre
     const { status, json } = await postJson(`/sales-orders/${orderId}/lines/${lineId}/reservations`, request, signal);
     if (!isStockReservation(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij het reserveren.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+// Klantgebonden DirectTrade-aanvoer die aan deze regel kan worden toegewezen (zelfde klant, variant en eenheid; verwachte aanvoer).
+export async function getDirectTradeSupply(orderId: number, lineId: number, signal?: AbortSignal): Promise<DirectTradeSupplyLine[]> {
+    const json = await getJson(`/sales-orders/${orderId}/lines/${lineId}/direct-trade-supply`, signal);
+    if (!isDirectTradeSupplyList(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de klantgebonden aanvoer.');
+    }
+    return json;
+}
+
+// Toewijzen: 201 = nieuw, 200 = exact dezelfde opdracht was al verwerkt; 409 = herladen en opnieuw beslissen. Geen voorraadmutatie.
+export async function allocateDirectTrade(orderId: number, lineId: number, request: CreateDirectTradeAllocationRequest, signal?: AbortSignal): Promise<SaveResult<StockReservation>> {
+    const { status, json } = await postJson(`/sales-orders/${orderId}/lines/${lineId}/direct-trade-allocations`, request, signal);
+    if (!isStockReservation(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het toewijzen.');
     }
     return { value: json, replayed: status === 200 };
 }

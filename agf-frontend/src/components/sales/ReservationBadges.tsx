@@ -40,3 +40,13 @@ export function OrderStatusBadge({ status }: { status: string }) {
         </span>
     );
 }
+
+// Toewijzing van verwachte, klantgebonden DirectTrade-aanvoer: geen voorraad, geen kg, nooit groen. Icoon + tekst, nooit alleen kleur.
+export function ExpectedAllocationBadge() {
+    const { t } = useTranslation();
+    return (
+        <span className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-900">
+            <span aria-hidden="true">🔒</span>{t('sales_allocation_badge')}
+        </span>
+    );
+}

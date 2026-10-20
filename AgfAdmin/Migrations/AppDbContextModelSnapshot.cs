@@ -1350,11 +1350,13 @@ namespace AgfAdmin.Migrations
 
                             t.HasCheckConstraint("CK_StockReservations_CorrectedConsistent", "\"Status\" <> 'Corrected' OR (\"CorrectedAt\" IS NOT NULL AND \"ConsumedAt\" IS NOT NULL)");
 
+                            t.HasCheckConstraint("CK_StockReservations_DirectTrade_StatusAllowed", "\"Source\" IS NULL OR \"Source\" <> 'DirectTrade' OR \"Status\" IN ('Active', 'Released')");
+
                             t.HasCheckConstraint("CK_StockReservations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_StockReservations_ReleasedConsistent", "\"Status\" <> 'Released' OR (\"ReleasedAt\" IS NOT NULL AND \"ReleaseReason\" IS NOT NULL AND length(trim(\"ReleaseReason\")) > 0)");
 
-                            t.HasCheckConstraint("CK_StockReservations_SalesFlowComplete", "\"SalesOrderLineId\" IS NULL OR (\"PalletContentLineId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0 AND \"Source\" = 'Physical')");
+                            t.HasCheckConstraint("CK_StockReservations_SalesFlowComplete", "\"SalesOrderLineId\" IS NULL OR (\"RequestId\" IS NOT NULL AND \"Unit\" IS NOT NULL AND \"Source\" IS NOT NULL AND \"Source\" IN ('Physical', 'DirectTrade') AND ((\"Source\" = 'Physical' AND \"PalletContentLineId\" IS NOT NULL AND \"NetWeightKg\" IS NOT NULL AND CAST(\"NetWeightKg\" AS NUMERIC) > 0) OR (\"Source\" = 'DirectTrade' AND \"PalletContentLineId\" IS NULL AND \"NetWeightKg\" IS NULL)))");
 
                             t.HasCheckConstraint("CK_StockReservations_SingleOwner", "(\"OrderLineId\" IS NOT NULL AND \"SalesOrderLineId\" IS NULL) OR (\"OrderLineId\" IS NULL AND \"SalesOrderLineId\" IS NOT NULL)");
 
@@ -1453,6 +1455,10 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
                         .HasColumnType("integer");
 
                     b.HasKey("Id");

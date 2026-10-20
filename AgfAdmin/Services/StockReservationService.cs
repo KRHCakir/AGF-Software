@@ -62,7 +62,7 @@ namespace AgfAdmin.Services
             }
 
             var reservedOnContent = (await SalesOrderService.ReservedByContentLineAsync(_db, new List<int> { content.Id }, cancellationToken)).GetValueOrDefault(content.Id);
-            var reservedOnLine = await ActiveOnOrderLineAsync(line.Id, cancellationToken);
+            var reservedOnLine = await SalesOrderService.CommittedOnOrderLineAsync(_db, line.Id, cancellationToken);
             var conflict = FindReserveConflict(line, content, command, reservedOnContent, reservedOnLine);
             if (conflict != null)
             {
@@ -210,22 +210,12 @@ namespace AgfAdmin.Services
             {
                 return $"Reserving the full remainder requires both the remaining quantity ({remainingQuantity}) and the remaining net weight ({remainingKg} kg).";
             }
-            // Vastgelegd op de regel = Active gereserveerd + Consumed verzonden; verzonden komt nooit terug als open vraag.
+            // Vastgelegd op de regel = Active (Physical + DirectTrade) + Consumed; verzonden komt nooit terug als open vraag.
             if (reservedOnLine + command.Quantity > line.Quantity)
             {
                 return $"The sales order line still needs only {line.Quantity - reservedOnLine} {line.Unit}.";
             }
             return null;
-        }
-
-        // Active + Consumed: beide leggen klantvraag vast; alleen Released komt terug als open vraag.
-        private async Task<decimal> ActiveOnOrderLineAsync(int salesOrderLineId, CancellationToken cancellationToken)
-        {
-            var quantities = await _db.StockReservations.AsNoTracking()
-                .Where(r => r.SalesOrderLineId == salesOrderLineId && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
-                .Select(r => r.Quantity)
-                .ToListAsync(cancellationToken);
-            return quantities.Sum();
         }
 
         private async Task<ServiceResult<StockReservationDto>> ReplayReserveAsync(ReserveCommand command, CancellationToken cancellationToken)
@@ -292,12 +282,17 @@ namespace AgfAdmin.Services
                 return replay;
             }
 
-            var reservation = await _db.StockReservations.Include(r => r.PalletContentLine).SingleOrDefaultAsync(r => r.Id == reservationId, cancellationToken);
+            var reservation = await _db.StockReservations
+                .Include(r => r.PalletContentLine)
+                .Include(r => r.SupplyCommitmentLine)
+                .Include(r => r.SalesOrderLine)
+                .SingleOrDefaultAsync(r => r.Id == reservationId, cancellationToken);
             if (reservation == null)
             {
                 return ServiceResult<StockReservationDto>.NotFound($"Reservation {reservationId} does not exist.");
             }
-            if (reservation.SalesOrderLineId == null || reservation.PalletContentLine == null)
+            var isAllocation = reservation.Source == ReservationRules.SourceDirectTrade;
+            if (reservation.SalesOrderLineId == null || reservation.SalesOrderLine == null || (!isAllocation && reservation.PalletContentLine == null) || (isAllocation && reservation.SupplyCommitmentLine == null))
             {
                 return ServiceResult<StockReservationDto>.Conflict($"Reservation {reservationId} is not part of the sales reservation flow.");
             }
@@ -316,27 +311,56 @@ namespace AgfAdmin.Services
             reservation.ReleaseReason = command.Reason;
             reservation.ReleaseRequestId = command.RequestId;
             reservation.UpdatedAt = now;
-            _db.Entry(reservation.PalletContentLine).Property(c => c.Version).IsModified = true;
 
-            _db.PalletAuditEvents.Add(new PalletAuditEvent
+            var oldValue = JsonSerializer.Serialize(new { reservationId = reservation.Id, status = ReservationRules.StatusActive, version = command.ExpectedVersion }, SnapshotJson);
+            if (isAllocation)
             {
-                PalletId = reservation.PalletContentLine.PalletId,
-                PalletContentLineId = reservation.PalletContentLine.Id,
-                EventType = ReservationRules.ReservationReleasedEvent,
-                OldValue = JsonSerializer.Serialize(new { reservationId = reservation.Id, status = ReservationRules.StatusActive, version = command.ExpectedVersion }, SnapshotJson),
-                NewValue = JsonSerializer.Serialize(new
+                // Toewijzing van verwachte aanvoer: de bronregel wordt aangeraakt (botst met gelijktijdig toewijzen) en het event hoort bij de order,
+                // niet bij een pallet (er is geen pallet).
+                _db.Entry(reservation.SupplyCommitmentLine).Property(l => l.Version).IsModified = true;
+                _db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent
                 {
-                    reservationId = reservation.Id,
-                    status = ReservationRules.StatusReleased,
-                    quantity = reservation.Quantity,
-                    unit = reservation.Unit,
-                    netWeightKg = reservation.NetWeightKg
-                }, SnapshotJson),
-                Reason = command.Reason,
-                ActorReference = command.Actor,
-                OccurredAt = now,
-                RequestId = command.RequestId
-            });
+                    SalesOrderId = reservation.SalesOrderLine.SalesOrderId,
+                    EventType = ReservationRules.DirectTradeReleasedEvent,
+                    OldValue = oldValue,
+                    NewValue = JsonSerializer.Serialize(new
+                    {
+                        reservationId = reservation.Id,
+                        status = ReservationRules.StatusReleased,
+                        salesOrderLineId = reservation.SalesOrderLineId,
+                        supplyCommitmentLineId = reservation.SupplyCommitmentLineId,
+                        quantity = reservation.Quantity,
+                        unit = reservation.Unit
+                    }, SnapshotJson),
+                    Reason = command.Reason,
+                    ActorReference = command.Actor,
+                    OccurredAt = now,
+                    RequestId = command.RequestId
+                });
+            }
+            else
+            {
+                _db.Entry(reservation.PalletContentLine).Property(c => c.Version).IsModified = true;
+                _db.PalletAuditEvents.Add(new PalletAuditEvent
+                {
+                    PalletId = reservation.PalletContentLine.PalletId,
+                    PalletContentLineId = reservation.PalletContentLine.Id,
+                    EventType = ReservationRules.ReservationReleasedEvent,
+                    OldValue = oldValue,
+                    NewValue = JsonSerializer.Serialize(new
+                    {
+                        reservationId = reservation.Id,
+                        status = ReservationRules.StatusReleased,
+                        quantity = reservation.Quantity,
+                        unit = reservation.Unit,
+                        netWeightKg = reservation.NetWeightKg
+                    }, SnapshotJson),
+                    Reason = command.Reason,
+                    ActorReference = command.Actor,
+                    OccurredAt = now,
+                    RequestId = command.RequestId
+                });
+            }
 
             try
             {
@@ -368,13 +392,20 @@ namespace AgfAdmin.Services
             {
                 return null;
             }
-            var audit = await _db.PalletAuditEvents.AsNoTracking()
-                .SingleOrDefaultAsync(e => e.RequestId == command.RequestId && e.EventType == ReservationRules.ReservationReleasedEvent, cancellationToken);
+            var (actor, reason, oldValue) = existing.Source == ReservationRules.SourceDirectTrade
+                ? await (_db.SalesOrderAuditEvents.AsNoTracking()
+                    .Where(e => e.RequestId == command.RequestId && e.EventType == ReservationRules.DirectTradeReleasedEvent)
+                    .Select(e => new ValueTuple<string, string, string>(e.ActorReference, e.Reason, e.OldValue))
+                    .SingleOrDefaultAsync(cancellationToken))
+                : await (_db.PalletAuditEvents.AsNoTracking()
+                    .Where(e => e.RequestId == command.RequestId && e.EventType == ReservationRules.ReservationReleasedEvent)
+                    .Select(e => new ValueTuple<string, string, string>(e.ActorReference, e.Reason, e.OldValue))
+                    .SingleOrDefaultAsync(cancellationToken));
             var same = existing.Id == reservationId
-                && audit != null
-                && string.Equals(audit.ActorReference, command.Actor, StringComparison.Ordinal)
-                && string.Equals(audit.Reason, command.Reason, StringComparison.Ordinal)
-                && RecordedVersion(audit.OldValue) == command.ExpectedVersion;
+                && oldValue != null
+                && string.Equals(actor, command.Actor, StringComparison.Ordinal)
+                && string.Equals(reason, command.Reason, StringComparison.Ordinal)
+                && RecordedVersion(oldValue) == command.ExpectedVersion;
             return same
                 ? ServiceResult<StockReservationDto>.Ok(await LoadDtoAsync(existing.Id, cancellationToken))
                 : ServiceResult<StockReservationDto>.Conflict($"RequestId {command.RequestId} was already used for a different release.");
@@ -396,31 +427,41 @@ namespace AgfAdmin.Services
 
         // ======================== Mapping ========================
 
-        private async Task<StockReservationDto> LoadDtoAsync(int reservationId, CancellationToken cancellationToken)
+        private Task<StockReservationDto> LoadDtoAsync(int reservationId, CancellationToken cancellationToken) => LoadDtoAsync(_db, reservationId, cancellationToken);
+
+        internal static async Task<StockReservationDto> LoadDtoAsync(AppDbContext db, int reservationId, CancellationToken cancellationToken)
         {
-            var reservation = await _db.StockReservations.AsNoTracking()
+            var reservation = await db.StockReservations.AsNoTracking()
                 .Include(r => r.SalesOrderLine)
                 .Include(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
+                .Include(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
                 .Include(r => r.DispatchLine).ThenInclude(l => l.SalesDispatch)
                 .SingleAsync(r => r.Id == reservationId, cancellationToken);
             return ToDto(reservation, reservation.SalesOrderLine?.SalesOrderId ?? 0);
         }
 
+        // Physical: pallet, partij en gemeten kg van de inhoudsregel. DirectTrade: geen pallet en geen kg (null), partij en bron van de toezegging.
         internal static StockReservationDto ToDto(StockReservation reservation, int salesOrderId, int? correctionId = null) => new()
         {
             Id = reservation.Id,
             RequestId = reservation.RequestId,
             SalesOrderId = salesOrderId,
             SalesOrderLineId = reservation.SalesOrderLineId ?? 0,
-            PalletContentLineId = reservation.PalletContentLineId ?? 0,
-            PalletId = reservation.PalletContentLine?.PalletId ?? 0,
+            PalletContentLineId = reservation.PalletContentLineId,
+            PalletId = reservation.PalletContentLine?.PalletId,
             PalletReference = reservation.PalletContentLine?.Pallet?.Reference,
             WarehouseLocation = reservation.PalletContentLine?.Pallet?.WarehouseLocation,
-            LotNumber = reservation.PalletContentLine?.LotNumber,
+            LotNumber = reservation.PalletContentLine?.LotNumber ?? reservation.SupplyCommitmentLine?.LotNumber,
             Quantity = reservation.Quantity,
             Unit = reservation.Unit,
-            NetWeightKg = reservation.NetWeightKg ?? 0m,
+            NetWeightKg = reservation.NetWeightKg,
             Source = reservation.Source,
+            SupplyCommitmentLineId = reservation.SupplyCommitmentLineId,
+            SupplyCommitmentId = reservation.SupplyCommitmentLine?.SupplyCommitmentId ?? 0,
+            VendorName = reservation.SupplyCommitmentLine?.SupplyCommitment?.Vendor?.Name,
+            Origin = reservation.SupplyCommitmentLine?.SupplyCommitment?.Origin,
+            Destination = reservation.SupplyCommitmentLine?.SupplyCommitment?.Destination,
+            ExpectedAt = reservation.SupplyCommitmentLine?.SupplyCommitment?.ExpectedAt == null ? null : DateTime.SpecifyKind(reservation.SupplyCommitmentLine.SupplyCommitment.ExpectedAt.Value, DateTimeKind.Utc),
             Status = reservation.Status,
             CreatedAt = DateTime.SpecifyKind(reservation.CreatedAt, DateTimeKind.Utc),
             ReleasedAt = reservation.ReleasedAt == null ? null : DateTime.SpecifyKind(reservation.ReleasedAt.Value, DateTimeKind.Utc),

@@ -146,7 +146,7 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
                                 <span className="text-gray-700">{line.productName} · {line.productVariantName}</span>
                                 <span className="ml-auto font-medium">{formatQuantity(reservation.quantity, locale)}</span>
                                 <UnitBadge unit={reservation.unit} />
-                                <span>{formatKg(reservation.netWeightKg, locale)}</span>
+                                <span>{reservation.netWeightKg === null ? t('sales_allocation_no_kg') : formatKg(reservation.netWeightKg, locale)}</span>
                                 {reservation.onHold && <OnHoldBadge />}
                             </li>
                         ))}

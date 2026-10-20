@@ -317,6 +317,10 @@ namespace AgfAdmin.Services
         private static string FindLineConflict(SalesDispatchLine line, int expectedVersion)
         {
             var reservation = line.StockReservation;
+            if (reservation.Source == ReservationRules.SourceDirectTrade || line.PalletContentLine == null)
+            {
+                return $"Reservation {reservation.Id} is a DirectTrade allocation and was never dispatched from the warehouse; a warehouse dispatch correction does not apply.";
+            }
             if (reservation.Status != ReservationRules.StatusConsumed)
             {
                 return $"Reservation {reservation.Id} is {reservation.Status}, not Consumed; it cannot be corrected (again).";

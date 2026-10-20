@@ -21,14 +21,15 @@ namespace AgfAdmin.Models
         public int SupplyCommitmentLineId { get; set; }
         public SupplyCommitmentLine SupplyCommitmentLine { get; set; }
 
-        // Optioneel: de fysieke inhoudsregel (partij op een pallet), zodra die bestaat.
+        // De fysieke inhoudsregel (partij op een pallet): verplicht bij Source Physical, altijd leeg bij Source DirectTrade
+        // (een toewijzing van verwachte, klantgebonden aanvoer staat nooit op een pallet). Database-check.
         public int? PalletContentLineId { get; set; }
         public PalletContentLine PalletContentLine { get; set; }
 
         public decimal Quantity { get; set; }
         public string Unit { get; set; }            // expliciete eenheid; optioneel tijdens de overgang
-        public decimal? NetWeightKg { get; set; }   // werkelijk netto kg; nooit afgeleid
-        public string Source { get; set; } // "Physical", "Expected" of "DirectTrade"
+        public decimal? NetWeightKg { get; set; }   // werkelijk netto kg; nooit afgeleid; altijd leeg bij DirectTrade (geen gemeten kg)
+        public string Source { get; set; } // "Physical" of "DirectTrade" (verkoopflow; database-check); legacy-rijen kunnen anders zijn
         public string Status { get; set; } // "Active", "Released" of "Consumed" (database-check)
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

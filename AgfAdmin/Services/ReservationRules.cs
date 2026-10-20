@@ -12,8 +12,20 @@ namespace AgfAdmin.Services
         public const string StatusCorrected = "Corrected";
 
         public const string SourcePhysical = "Physical";
+        // Toewijzing van klantgebonden, verwachte aanvoer (DirectTrade): nooit fysieke voorraad, nooit op een inhoudsregel, nooit kg.
+        public const string SourceDirectTrade = "DirectTrade";
+
+        // Enige bronnen die de verkoopflow kent; een onbekende of lege bron is nooit geldig (ook als database-check).
+        public static readonly IReadOnlyList<string> SalesSources = new[] { SourcePhysical, SourceDirectTrade };
+
+        public static bool IsSalesSource(string value) => value != null && SalesSources.Contains(value, StringComparer.Ordinal);
+
+        // Een toewijzing kent in deze fase alleen Active en Released; verzenden van DirectTrade volgt in een latere versie.
+        public static readonly IReadOnlyList<string> DirectTradeStatuses = new[] { StatusActive, StatusReleased };
 
         public const string ReservationCreatedEvent = "ReservationCreated";
+        public const string DirectTradeAllocatedEvent = "DirectTradeAllocated";
+        public const string DirectTradeReleasedEvent = "DirectTradeReleased";
         public const string ReservationReleasedEvent = "ReservationReleased";
         public const string OrderCancelledEvent = "SalesOrderCancelled";
         public const string OrderDispatchedEvent = "SalesOrderDispatched";

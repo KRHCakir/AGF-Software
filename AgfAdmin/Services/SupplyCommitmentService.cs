@@ -37,7 +37,7 @@ namespace AgfAdmin.Services
             var existing = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return ResultForRetry(existing, candidate);
+                return await ResultForRetryAsync(existing, candidate, cancellationToken);
             }
 
             var notFound = await FindMissingReferenceAsync(candidate, cancellationToken);
@@ -61,11 +61,11 @@ namespace AgfAdmin.Services
                     throw;
                 }
 
-                return ResultForRetry(concurrent, candidate);
+                return await ResultForRetryAsync(concurrent, candidate, cancellationToken);
             }
 
             var created = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
-            return ServiceResult<SupplyCommitmentDto>.Created(ToDto(created));
+            return ServiceResult<SupplyCommitmentDto>.Created(await ToDtoAsync(created, cancellationToken));
         }
 
         public async Task<ServiceResult<SupplyCommitmentDto>> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -73,7 +73,7 @@ namespace AgfAdmin.Services
             var commitment = await Query().SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
             return commitment == null
                 ? ServiceResult<SupplyCommitmentDto>.NotFound($"Supply commitment {id} does not exist.")
-                : ServiceResult<SupplyCommitmentDto>.Ok(ToDto(commitment));
+                : ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(commitment, cancellationToken));
         }
 
         public async Task<ServiceResult<IReadOnlyList<SupplyCommitmentDto>>> ListAsync(SupplyCommitmentFilter filter, CancellationToken cancellationToken = default)
@@ -106,8 +106,19 @@ namespace AgfAdmin.Services
                 .Take(MaxListResults)
                 .ToListAsync(cancellationToken);
 
-            return ServiceResult<IReadOnlyList<SupplyCommitmentDto>>.Ok(commitments.Select(ToDto).ToList());
+            var allocated = await AllocatedForAsync(commitments, cancellationToken);
+            return ServiceResult<IReadOnlyList<SupplyCommitmentDto>>.Ok(commitments.Select(c => ToDto(c, allocated)).ToList());
         }
+
+        // Toegewezen DirectTrade-capaciteit per bronregel (alleen voor DirectTrade-toezeggingen opgevraagd).
+        private async Task<Dictionary<int, decimal>> AllocatedForAsync(IReadOnlyCollection<SupplyCommitment> commitments, CancellationToken cancellationToken)
+        {
+            var ids = commitments.Where(c => c.Route == SupplyRules.RouteDirectTrade).SelectMany(c => c.Lines).Select(l => l.Id).ToList();
+            return await DirectTradeAllocationService.AllocatedBySourceLineAsync(_db, ids, cancellationToken);
+        }
+
+        private async Task<SupplyCommitmentDto> ToDtoAsync(SupplyCommitment commitment, CancellationToken cancellationToken) =>
+            ToDto(commitment, await AllocatedForAsync(new[] { commitment }, cancellationToken));
 
         private static SupplyCommitment BuildCandidate(CreateSupplyCommitmentDto request, Dictionary<string, List<string>> errors)
         {
@@ -300,9 +311,9 @@ namespace AgfAdmin.Services
             return missingVariantId == null ? null : $"Product variant {missingVariantId} does not exist.";
         }
 
-        private static ServiceResult<SupplyCommitmentDto> ResultForRetry(SupplyCommitment existing, SupplyCommitment candidate) =>
+        private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, SupplyCommitment candidate, CancellationToken cancellationToken) =>
             HasSameContent(existing, candidate)
-                ? ServiceResult<SupplyCommitmentDto>.Ok(ToDto(existing))
+                ? ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(existing, cancellationToken))
                 : ServiceResult<SupplyCommitmentDto>.Conflict(
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");
 
@@ -346,7 +357,9 @@ namespace AgfAdmin.Services
                     .ThenInclude(l => l.ProductVariant)
                         .ThenInclude(v => v.Product);
 
-        private static SupplyCommitmentDto ToDto(SupplyCommitment commitment) => new()
+        // DirectTrade-regels tonen hun toegewezen en resterende capaciteit; Warehouse-regels nooit (null): magazijnaanvoer
+        // wordt pas voorraad na ontvangst en keuring en heeft geen toewijsbare verwachte capaciteit.
+        private static SupplyCommitmentDto ToDto(SupplyCommitment commitment, IReadOnlyDictionary<int, decimal> allocated) => new()
         {
             Id = commitment.Id,
             RequestId = commitment.RequestId,
@@ -371,7 +384,10 @@ namespace AgfAdmin.Services
                     LotNumber = l.LotNumber,
                     ExpectedQuantity = l.ExpectedQuantity,
                     ExpectedUnit = l.ExpectedUnit,
-                    ExpectedNetWeightKg = l.ExpectedNetWeightKg
+                    ExpectedNetWeightKg = l.ExpectedNetWeightKg,
+                    DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
+                    DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
+                        ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null
                 })
                 .ToList()
         };
