@@ -10,6 +10,8 @@ import {
     ConfirmDeliveryRequest,
     CorrectDirectTradeShipmentRequest,
     DeliveryConfirmation,
+    DeliveryRetraction,
+    RetractDeliveryRequest,
     CreateDirectTradeShipmentRequest,
     DirectTradeShipment,
     DirectTradeShipmentCorrection,
@@ -24,6 +26,7 @@ import {
     SalesOrderAuditEvent,
     StockReservation,
     isDeliveryConfirmation,
+    isDeliveryRetraction,
     isDirectTradeShipment,
     isDirectTradeShipmentCorrection,
     isDirectTradeShipmentList,
@@ -132,6 +135,16 @@ export async function confirmDelivery(orderId: number, kind: 'Warehouse' | 'Dire
     const { status, json } = await postJson(path, request, signal);
     if (!isDeliveryConfirmation(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij de afleverbevestiging.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+// Intrekken van een afleverbevestiging; het endpoint bepaalt de soort. 201 = nieuw, 200 = exact dezelfde opdracht al verwerkt; 409 = herladen.
+export async function retractDelivery(orderId: number, kind: 'Warehouse' | 'DirectTrade', shipmentId: number, confirmationId: number, request: RetractDeliveryRequest, signal?: AbortSignal): Promise<SaveResult<DeliveryRetraction>> {
+    const base = kind === 'Warehouse' ? `/sales-orders/${orderId}/dispatches/${shipmentId}` : `/sales-orders/${orderId}/direct-trade-shipments/${shipmentId}`;
+    const { status, json } = await postJson(`${base}/delivery-confirmations/${confirmationId}/retractions`, request, signal);
+    if (!isDeliveryRetraction(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het intrekken van de afleverbevestiging.');
     }
     return { value: json, replayed: status === 200 };
 }

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { formatDateOnly } from '../../lib/calendarDate';
+import { DeliveryHistory } from './DeliveryHistory';
+import { activeConfirmation } from '../../lib/deliveryState';
 import { DeliveredBadge, ShippedNotConfirmedBadge } from './ReservationBadges';
 import { toApiError } from '../../services/apiClient';
 import { listSalesDispatches } from '../../services/salesOrderService';
@@ -13,7 +15,7 @@ import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 
 // Verzendingen van een order uit GET /api/sales-orders/{id}/dispatches (append-only, alleen lezen).
-export default function DispatchList({ orderId, token, onDispatches, canCorrect, correctingId, onCorrect, canConfirm = false, confirmingId = null, onConfirmDelivery }: {
+export default function DispatchList({ orderId, token, onDispatches, canCorrect, correctingId, onCorrect, canConfirm = false, confirmingId = null, onConfirmDelivery, canRetract = false, retractingId = null, onRetractDelivery }: {
     orderId: number;
     token: number;
     // Geeft de geladen verzendingen door, zodat het detail een correctiepaneel kan openen (ook voor een onafgerond commando).
@@ -24,6 +26,9 @@ export default function DispatchList({ orderId, token, onDispatches, canCorrect,
     canConfirm?: boolean;
     confirmingId?: number | null;
     onConfirmDelivery?: (dispatch: SalesDispatch) => void;
+    canRetract?: boolean;
+    retractingId?: number | null;
+    onRetractDelivery?: (dispatch: SalesDispatch) => void;
 }) {
     const { t, locale } = useTranslation();
     const [state, setState] = useState<LoadState<SalesDispatch[]>>({ status: 'loading' });
@@ -49,7 +54,9 @@ export default function DispatchList({ orderId, token, onDispatches, canCorrect,
     if (state.data.length === 0) return <p className="text-sm text-gray-700">{t('sales_dispatches_empty')}</p>;
     return (
         <ol className="space-y-2 text-sm">
-            {state.data.map((dispatch) => (
+            {state.data.map((dispatch) => {
+                const active = activeConfirmation(dispatch.deliveryHistory);
+                return (
                 <li key={dispatch.id} className="rounded border border-gray-200 bg-white px-3 py-2">
                     <p className="flex flex-wrap items-center gap-2 font-medium text-gray-900">
                         <span>{t('sales_dispatch_heading', { id: String(dispatch.id) })}{dispatch.reference && <> · {dispatch.reference}</>}</span>
@@ -59,28 +66,34 @@ export default function DispatchList({ orderId, token, onDispatches, canCorrect,
                                 <span aria-hidden="true">↺</span>{t('sales_dispatch_corrected')}
                             </span>
                         )}
-                        {dispatch.correction === null && (dispatch.delivery
-                            ? <DeliveredBadge date={formatDateOnly(dispatch.delivery.deliveredOn, locale)} />
+                        {dispatch.correction === null && (active
+                            ? <DeliveredBadge date={formatDateOnly(active.deliveredOn, locale)} />
                             : <ShippedNotConfirmedBadge />)}
-                        {canConfirm && dispatch.correction === null && dispatch.delivery === null && confirmingId !== dispatch.id && onConfirmDelivery && (
+                        {canConfirm && dispatch.correction === null && active === null && confirmingId !== dispatch.id && onConfirmDelivery && (
                             <button type="button" className={`${secondaryButtonClass} ml-auto border-emerald-300 text-emerald-900 hover:bg-emerald-50`} onClick={() => onConfirmDelivery(dispatch)}>
                                 {t('sales_delivery_confirm')}
                             </button>
                         )}
-                        {/* Een bevestigde aflevering blokkeert de correctie "goederen hebben het magazijn niet verlaten". */}
-                        {canCorrect && dispatch.correction === null && dispatch.delivery === null && correctingId !== dispatch.id && onCorrect && (
+                        {canRetract && active !== null && retractingId !== dispatch.id && onRetractDelivery && (
+                            <button type="button" className={`${secondaryButtonClass} ml-auto border-amber-300 text-amber-950 hover:bg-amber-50`} onClick={() => onRetractDelivery(dispatch)}>
+                                {t('sales_retract_open')}
+                            </button>
+                        )}
+                        {/* Een actieve afleverbevestiging blokkeert de correctie "goederen hebben het magazijn niet verlaten". */}
+                        {canCorrect && dispatch.correction === null && active === null && correctingId !== dispatch.id && onCorrect && (
                             <button type="button" className={`${secondaryButtonClass} ml-auto border-amber-300 text-amber-950 hover:bg-amber-50`} onClick={() => onCorrect(dispatch)}>
                                 {t('sales_correct_dispatch')}
                             </button>
                         )}
                     </p>
-                    {dispatch.delivery !== null && (
+                    {active !== null && (
                         <p className="mt-1 text-xs text-emerald-900">
-                            {t('sales_delivery_recorded', { date: formatDateOnly(dispatch.delivery.deliveredOn, locale), actor: dispatch.delivery.actorReference, recorded: formatDateTime(dispatch.delivery.recordedAt, locale) })}
-                            {dispatch.delivery.receiptReference && <> · <span className="font-mono">{dispatch.delivery.receiptReference}</span></>}
+                            {t('sales_delivery_recorded', { date: formatDateOnly(active.deliveredOn, locale), actor: active.actorReference, recorded: formatDateTime(active.recordedAt, locale) })}
+                            {active.receiptReference && <> · <span className="font-mono">{active.receiptReference}</span></>}
                             {' '}· {t('sales_delivery_correction_blocked')}
                         </p>
                     )}
+                    <DeliveryHistory history={dispatch.deliveryHistory} />
                     {dispatch.correction !== null && (
                         <p className="mt-1 text-xs text-amber-950">
                             {t('sales_corrected_notice', { date: formatDateTime(dispatch.correction.correctedAt, locale), actor: dispatch.correction.actorReference })}
@@ -101,7 +114,8 @@ export default function DispatchList({ orderId, token, onDispatches, canCorrect,
                         ))}
                     </ul>
                 </li>
-            ))}
+                );
+            })}
         </ol>
     );
 }

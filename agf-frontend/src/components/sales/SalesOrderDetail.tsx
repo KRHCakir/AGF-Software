@@ -8,8 +8,10 @@ import { blockedBy, cancelKey, correctDispatchKey, correctDtShipmentKey, dispatc
 import { amsterdamDateOf } from '../../lib/calendarDate';
 import { isCorrectedAllocation, isDispatchable, isShippableAllocation, isShippedAllocation, orderProgress } from '../../lib/salesOrderRules';
 import { SaveResult } from '../../services/supplyService';
-import { DeliveryConfirmation, DirectTradeShipment, DirectTradeShipmentCorrection, SalesDispatch, SalesDispatchCorrection, SalesOrder, ShipmentKind } from '../../types/salesOrder';
+import { DeliveryConfirmation, DeliveryRetraction, DirectTradeShipment, DirectTradeShipmentCorrection, SalesDispatch, SalesDispatchCorrection, SalesOrder, ShipmentKind } from '../../types/salesOrder';
 import DeliveryConfirmationPanel, { DeliverableShipment } from './DeliveryConfirmationPanel';
+import RetractDeliveryPanel from './RetractDeliveryPanel';
+import { activeConfirmation } from '../../lib/deliveryState';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import CancelOrderPanel from './CancelOrderPanel';
 import CorrectDispatchPanel from './CorrectDispatchPanel';
@@ -99,13 +101,13 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
         if (kind === 'Warehouse') {
             const dispatch = dispatches.find((d) => d.id === id);
             return dispatch ? {
-                kind, id, shippedOn: amsterdamDateOf(dispatch.dispatchedAt), customerName: order.customerName ?? String(order.customerId), delivered: dispatch.delivery !== null,
+                kind, id, shippedOn: amsterdamDateOf(dispatch.dispatchedAt), customerName: order.customerName ?? String(order.customerId), delivered: activeConfirmation(dispatch.deliveryHistory) !== null,
                 lines: dispatch.lines.map((l) => ({ id: l.id, label: `${l.palletReference ?? ''} · ${l.productName ?? ''} · ${l.productVariantName ?? ''}`, lot: l.lotNumber, quantity: l.quantity, unit: l.unit, netWeightKg: l.netWeightKg })),
             } : null;
         }
         const shipment = dtShipments.find((s) => s.id === id);
         return shipment ? {
-            kind, id, shippedOn: shipment.shippedOn, customerName: shipment.customerName, delivered: shipment.delivery !== null,
+            kind, id, shippedOn: shipment.shippedOn, customerName: shipment.customerName, delivered: activeConfirmation(shipment.deliveryHistory) !== null,
             lines: shipment.lines.map((l) => ({ id: l.id, label: `${l.vendorName} · ${l.origin} → ${l.destination ?? ''} · ${l.productName ?? ''} · ${l.productVariantName ?? ''}`, lot: l.lotNumber, quantity: l.quantity, unit: l.unit, netWeightKg: l.netWeightKg })),
         } : null;
     };
@@ -113,6 +115,26 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
     const deliveryTarget = pendingDelivery && pendingDelivery.kind === 'confirm-delivery'
         ? deliverableOf(pendingDelivery.shipmentKind, pendingDelivery.shipmentId)
         : confirming ? deliverableOf(confirming.kind, confirming.id) : null;
+
+    // Intrekken: de actieve bevestiging van de gekozen verzending, of (onafgerond commando) precies de bevroren bevestiging uit de historie.
+    const [retracting, setRetracting] = useState<{ kind: ShipmentKind; id: number } | null>(null);
+    const [retractNotice, setRetractNotice] = useState<SaveResult<DeliveryRetraction> | null>(null);
+    const [retractDecisionToken, setRetractDecisionToken] = useState(0);
+    const canStartRetract = !readOnly && blockedBy(commands, { kind: 'retract-delivery', orderId: order.id }) === null;
+    const historyOf = (kind: ShipmentKind, id: number): DeliveryConfirmation[] =>
+        (kind === 'Warehouse' ? dispatches.find((d) => d.id === id)?.deliveryHistory : dtShipments.find((s) => s.id === id)?.deliveryHistory) ?? [];
+    const pendingRetract = Object.values(commands).find((command) => command.kind === 'retract-delivery' && command.orderId === order.id);
+    const retractTarget = (() => {
+        if (pendingRetract && pendingRetract.kind === 'retract-delivery') {
+            const shipment = deliverableOf(pendingRetract.shipmentKind, pendingRetract.shipmentId);
+            const confirmation = historyOf(pendingRetract.shipmentKind, pendingRetract.shipmentId).find((c) => c.id === pendingRetract.confirmationId) ?? null;
+            return shipment && confirmation ? { shipment, confirmation } : null;
+        }
+        if (!retracting) return null;
+        const shipment = deliverableOf(retracting.kind, retracting.id);
+        const confirmation = activeConfirmation(historyOf(retracting.kind, retracting.id));
+        return shipment && confirmation ? { shipment, confirmation } : null;
+    })();
     const [correctingId, setCorrectingId] = useState<number | null>(null);
     const [correctionNotice, setCorrectionNotice] = useState<SaveResult<SalesDispatchCorrection> | null>(null);
     const [correctionDecisionToken, setCorrectionDecisionToken] = useState(0);
@@ -180,6 +202,24 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
         setDispatchToken((n) => n + 1);
         setDtToken((n) => n + 1);
         await onOrderChanged();
+    };
+
+    const onDeliveryRetracted = async (saved: SaveResult<DeliveryRetraction>) => {
+        setRetracting(null);
+        setRetractNotice(saved);
+        setDeliveryNotice(null);
+        setHistoryToken((n) => n + 1);
+        setDispatchToken((n) => n + 1);
+        setDtToken((n) => n + 1);
+        await onOrderChanged();
+    };
+
+    const reloadForNewRetractDecision = async () => {
+        if (await onOrderChanged()) {
+            setDispatchToken((n) => n + 1);
+            setDtToken((n) => n + 1);
+            setRetractDecisionToken((n) => n + 1);
+        }
     };
 
     const reloadForNewDeliveryDecision = async () => {
@@ -359,6 +399,20 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                 </div>
             )}
 
+            {retractNotice && (
+                <div role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                    <p className="font-medium"><span aria-hidden="true">↺ </span>{t('sales_notice_delivery_retracted', { id: String(retractNotice.value.salesDispatchId ?? retractNotice.value.directTradeShipmentId ?? '') })}</p>
+                    {retractNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
+                    <p className="mt-1">{t('sales_notice_delivery_retracted_next')}</p>
+                </div>
+            )}
+
+            {retractTarget !== null && (
+                <RetractDeliveryPanel key={`${retractTarget.shipment.kind}:${retractTarget.shipment.id}:${retractTarget.confirmation.id}:${retractDecisionToken}`} order={order}
+                    shipment={retractTarget.shipment} confirmation={retractTarget.confirmation} actor={actor}
+                    onRetracted={onDeliveryRetracted} onReload={() => void reloadForNewRetractDecision()} onClose={() => setRetracting(null)} />
+            )}
+
             {deliveryTarget !== null && (
                 <DeliveryConfirmationPanel key={`${deliveryTarget.kind}:${deliveryTarget.id}:${deliveryDecisionToken}`} order={order} shipment={deliveryTarget} actor={actor}
                     onConfirmed={onDeliveryConfirmed} onReload={() => void reloadForNewDeliveryDecision()} onClose={() => setConfirming(null)} />
@@ -383,7 +437,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     <DirectTradeShipmentList orderId={order.id} token={dtToken} onShipments={onDtShipmentsLoaded} canCorrect={canStartDtCorrection}
                         correctingId={dtCorrecting?.id ?? null} onCorrect={(shipment) => { setDtCorrectionNotice(null); setDtCorrectingId(shipment.id); }}
                         canConfirm={canStartDelivery} confirmingId={deliveryTarget?.kind === 'DirectTrade' ? deliveryTarget.id : null}
-                        onConfirmDelivery={(shipment) => { setDeliveryNotice(null); setConfirming({ kind: 'DirectTrade', id: shipment.id }); }} />
+                        onConfirmDelivery={(shipment) => { setDeliveryNotice(null); setRetractNotice(null); setConfirming({ kind: 'DirectTrade', id: shipment.id }); }}
+                        canRetract={canStartRetract} retractingId={retractTarget?.shipment.kind === 'DirectTrade' ? retractTarget.shipment.id : null}
+                        onRetractDelivery={(shipment) => { setRetractNotice(null); setDeliveryNotice(null); setRetracting({ kind: 'DirectTrade', id: shipment.id }); }} />
                 </section>
             )}
 
@@ -411,7 +467,9 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     <DispatchList orderId={order.id} token={dispatchToken} onDispatches={onDispatchesLoaded} canCorrect={canStartCorrection}
                         correctingId={correctingDispatch?.id ?? null} onCorrect={(dispatch) => { setCorrectionNotice(null); setCorrectingId(dispatch.id); }}
                         canConfirm={canStartDelivery} confirmingId={deliveryTarget?.kind === 'Warehouse' ? deliveryTarget.id : null}
-                        onConfirmDelivery={(dispatch) => { setDeliveryNotice(null); setConfirming({ kind: 'Warehouse', id: dispatch.id }); }} />
+                        onConfirmDelivery={(dispatch) => { setDeliveryNotice(null); setRetractNotice(null); setConfirming({ kind: 'Warehouse', id: dispatch.id }); }}
+                        canRetract={canStartRetract} retractingId={retractTarget?.shipment.kind === 'Warehouse' ? retractTarget.shipment.id : null}
+                        onRetractDelivery={(dispatch) => { setRetractNotice(null); setDeliveryNotice(null); setRetracting({ kind: 'Warehouse', id: dispatch.id }); }} />
                 </section>
             )}
 
