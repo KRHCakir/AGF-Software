@@ -176,7 +176,7 @@ function AvailabilityWorkspace() {
                     <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value as UnitFilter)}
                         className="mt-1 rounded border border-gray-300 px-2 py-1 text-sm font-normal text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="all">{t('availability_unit_all')}</option>
-                        {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                        {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
                         <option value="unknown">{t('availability_unit_unknown')}</option>
                     </select>
                 </label>
