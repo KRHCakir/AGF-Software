@@ -17,5 +17,11 @@ namespace AgfAdmin.Models
         
         // Hier slaan we straks de bestandsnaam of URL van het logo op
         public string? LogoPath { get; set; } 
+
+        // Invoer inkoopfacturen (één bedrijf; er is geen tenantstructuur): ingeschakelde optionele velden en voorstellen.
+        public string PurchaseInvoiceOptionalFields { get; set; } = Services.PurchaseInvoiceRules.DefaultOptionalFields;
+        public decimal PurchaseInvoiceDefaultVatPercentage { get; set; } = Services.PurchaseInvoiceRules.DefaultVatPercentage;
+        public int PurchaseInvoiceDefaultPaymentTermsDays { get; set; } = Services.PurchaseInvoiceRules.DefaultPaymentTermsDays;
+        public string PurchaseInvoiceDefaultCurrency { get; set; } = Services.PurchaseInvoiceRules.DefaultCurrency;
     }
 }

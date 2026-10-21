@@ -51,6 +51,29 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<string>("PurchaseInvoiceDefaultCurrency")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("EUR");
+
+                    b.Property<int>("PurchaseInvoiceDefaultPaymentTermsDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
+
+                    b.Property<decimal>("PurchaseInvoiceDefaultVatPercentage")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(21m);
+
+                    b.Property<string>("PurchaseInvoiceOptionalFields")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasDefaultValue("receivedDate,paymentReference,remarks,originCountry,receiptReference");
+
                     b.Property<string>("VatNumber")
                         .HasColumnType("text");
 
@@ -386,14 +409,36 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ContainerNumber")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<decimal?>("CustomsValue")
+                        .HasColumnType("decimal(18,3)");
 
                     b.Property<string>("DetectedIssues")
                         .HasColumnType("text");
 
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("GrossWeightKg")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Incoterms")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<DateTime?>("InvoiceDate")
                         .HasColumnType("timestamp with time zone");
@@ -401,8 +446,40 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("InvoiceNumber")
                         .HasColumnType("text");
 
+                    b.Property<string>("LicensePlate")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<decimal?>("NetWeightKg")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("OriginCountry")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("OriginalFilePath")
                         .HasColumnType("text");
+
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("PaymentTermsDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReceiptReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ReceivedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
 
                     b.Property<double>("ReviewConfidence")
                         .HasColumnType("double precision");
@@ -412,6 +489,10 @@ namespace AgfAdmin.Migrations
 
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Transporter")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -423,6 +504,9 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
 
                     b.HasIndex("VendorId");
 
@@ -440,14 +524,24 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<decimal>("DiscountPercentage")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("IncomingInvoiceId")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("LineTotal")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("ProductVariantId")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("Quantity")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<decimal>("UnitPrice")
                         .HasColumnType("decimal(18,2)");
@@ -461,6 +555,8 @@ namespace AgfAdmin.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("IncomingInvoiceId");
+
+                    b.HasIndex("ProductVariantId");
 
                     b.ToTable("IncomingInvoiceLines");
                 });
@@ -2164,7 +2260,14 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("IncomingInvoice");
+
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Inspection", b =>

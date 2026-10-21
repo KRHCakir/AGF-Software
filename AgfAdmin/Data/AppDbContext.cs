@@ -126,6 +126,36 @@ namespace AgfAdmin.Data
             // Geen inverse navigaties op legacy-entiteiten, zodat bestaande API-responses gelijk blijven.
             // Hoeveelheden en gewichten: decimal(18,3). Eenheden: max 32 tekens. Alle metadata blijft optioneel
             // tijdens de overgang; er worden geen defaults, conversies of afgeleide gewichten vastgelegd.
+            modelBuilder.Entity<IncomingInvoice>(b =>
+            {
+                b.Property(i => i.Currency).HasMaxLength(3);
+                b.Property(i => i.PaymentReference).HasMaxLength(200);
+                b.Property(i => i.Remarks).HasMaxLength(1000);
+                b.Property(i => i.ContainerNumber).HasMaxLength(200);
+                b.Property(i => i.Transporter).HasMaxLength(200);
+                b.Property(i => i.DriverName).HasMaxLength(200);
+                b.Property(i => i.LicensePlate).HasMaxLength(32);
+                b.Property(i => i.Incoterms).HasMaxLength(32);
+                b.Property(i => i.OriginCountry).HasMaxLength(200);
+                b.Property(i => i.ReceiptReference).HasMaxLength(200);
+                // NULL telt als verschillend: facturen van vóór de kantoorinvoer (upload, oude handmatige invoer) hebben geen RequestId.
+                b.HasIndex(i => i.RequestId).IsUnique();
+            });
+
+            modelBuilder.Entity<IncomingInvoiceLine>(b =>
+            {
+                b.Property(l => l.Unit).HasMaxLength(32);
+                b.HasOne(l => l.ProductVariant).WithMany().HasForeignKey(l => l.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CompanySettings>(b =>
+            {
+                b.Property(c => c.PurchaseInvoiceOptionalFields).HasMaxLength(500).HasDefaultValue(PurchaseInvoiceRules.DefaultOptionalFields);
+                b.Property(c => c.PurchaseInvoiceDefaultVatPercentage).HasPrecision(18, 2).HasDefaultValue(PurchaseInvoiceRules.DefaultVatPercentage);
+                b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
+                b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
+            });
+
             modelBuilder.Entity<ProductVariant>(b =>
             {
                 b.Property(v => v.AvailabilityUnit).HasMaxLength(32);

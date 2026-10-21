@@ -18,6 +18,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IEmailIngestionService, EmailIngestionService>();
 builder.Services.AddScoped<IAIExtractorService, MockAIExtractorService>();
 builder.Services.AddScoped<ISalesParserService, SimpleSalesParserService>();
+builder.Services.AddScoped<PurchaseInvoiceService>();
 builder.Services.AddScoped<IDevelopmentDataSeeder, DevelopmentDataSeeder>();
 
 // Beschikbaarheidsdomein

@@ -14,6 +14,29 @@ namespace AgfAdmin.Models
         public DateTime? InvoiceDate { get; set; }
         public DateTime? DueDate { get; set; }
 
+        // Kantoorinvoer (PurchaseInvoiceService): idempotentiesleutel, op het document bewaarde betaaltermijn en valuta
+        // (leveranciersstandaarden zijn alleen voorstellen), en optionele velden volgens de bedrijfsinstellingen.
+        // Valuta is uitsluitend een opgeslagen code: bedragen staan in die valuta, er wordt nooit omgerekend.
+        public Guid? RequestId { get; set; }
+        public int? PaymentTermsDays { get; set; }
+        public string? Currency { get; set; }
+        public DateTime? ReceivedDate { get; set; }   // ontvangstdatum is een ander begrip dan factuurdatum
+        public string? PaymentReference { get; set; }
+        public string? Remarks { get; set; }
+        [Column(TypeName = "decimal(18,3)")]
+        public decimal? GrossWeightKg { get; set; }
+        [Column(TypeName = "decimal(18,3)")]
+        public decimal? NetWeightKg { get; set; }
+        public string? ContainerNumber { get; set; }
+        public string? Transporter { get; set; }
+        public string? DriverName { get; set; }
+        public string? LicensePlate { get; set; }
+        public string? Incoterms { get; set; }
+        [Column(TypeName = "decimal(18,3)")]
+        public decimal? CustomsValue { get; set; }
+        public string? OriginCountry { get; set; }
+        public string? ReceiptReference { get; set; }  // verwijzing naar ontvangst, pallet of SSCC; nooit een ontvangstactie
+
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }
 
