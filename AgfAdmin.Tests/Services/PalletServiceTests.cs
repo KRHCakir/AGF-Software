@@ -429,6 +429,18 @@ public class PalletServiceTests : IDisposable
         Assert.Equal((1, 0, 1), await CountsAsync());
     }
 
+    // Regressie (review #40/#41): twee afzonderlijk toegestane grote waarden mogen samen geen serverfout geven.
+    [Fact]
+    public async Task Calculated_Total_Beyond_Decimal_Range_Is_A_Validation_Error_Not_An_Overflow()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var request = CalculatedRequest(seed.WarehouseLine, 999_999_999_999_999m, 999_999_999_999_999m);
+
+        AssertValidation(await AddContentAsync(palletId, request), "netWeightKg");
+        Assert.Equal((1, 0, 1), await CountsAsync());
+    }
+
     [Fact]
     public async Task Calculated_Total_Given_Explicitly_Must_Match_Exactly_And_Then_Succeeds()
     {

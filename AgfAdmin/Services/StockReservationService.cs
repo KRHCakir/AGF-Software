@@ -198,23 +198,29 @@ namespace AgfAdmin.Services
                 return $"Unit {command.Unit} must exactly match the content unit {content.Unit} and the order line unit {line.Unit}; units are never converted.";
             }
 
-            // Berekend gewicht: een reservering volgt exact dezelfde verhouding (aantal × kg per verpakking); er wordt nooit
-            // een ander kg-getal als gewogen geaccepteerd. Gewogen inhoud houdt de expliciete kg-invoer.
-            if (content.WeightMethod == WeightRules.Calculated && content.NetKgPerPackage != null)
-            {
-                var expectedKg = WeightRules.CalculatedTotal(command.Quantity, content.NetKgPerPackage.Value);
-                if (command.NetWeightKg != expectedKg)
-                {
-                    return $"This content line has a calculated weight of {content.NetKgPerPackage} kg per {content.Unit}: {command.Quantity} {content.Unit} is {expectedKg} kg, not {command.NetWeightKg} kg.";
-                }
-            }
-
             // Voorraad = ontvangst - afgeboekt; verbruikte reserveringen zitten in afgeboekt en tellen niet dubbel.
             var remainingQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity) - reservedOnContent.Quantity;
             var remainingKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg) - reservedOnContent.NetWeightKg;
             if (command.Quantity > remainingQuantity || command.NetWeightKg > remainingKg)
             {
                 return $"Only {remainingQuantity} {content.Unit} and {remainingKg} kg of this content line are still unreserved.";
+            }
+
+            // Berekend gewicht: een deelreservering weegt round(aantal × kg per verpakking); de volledige rest neemt exact de
+            // resterende kg, zodat afronding nooit een rest onverkoopbaar maakt. Er wordt nooit een ander kg-getal geaccepteerd.
+            // Gewogen inhoud houdt de expliciete kg-invoer. (Hier kan geen overflow optreden: aantal ≤ resterend ≤ regeltotaal.)
+            if (content.WeightMethod == WeightRules.Calculated && content.NetKgPerPackage != null)
+            {
+                if (!WeightRules.TryExpectedReservationKg(command.Quantity, content.NetKgPerPackage.Value, remainingQuantity, remainingKg, out var expectedKg))
+                {
+                    return "Quantity × kg per package is out of range for this reservation.";
+                }
+                if (command.NetWeightKg != expectedKg)
+                {
+                    return command.Quantity == remainingQuantity
+                        ? $"This content line has a calculated weight: the full remainder of {remainingQuantity} {content.Unit} is exactly the remaining {remainingKg} kg, not {command.NetWeightKg} kg."
+                        : $"This content line has a calculated weight of {content.NetKgPerPackage} kg per {content.Unit}: {command.Quantity} {content.Unit} is {expectedKg} kg, not {command.NetWeightKg} kg.";
+                }
             }
             // Geen gestrande rest: de volledige resterende hoeveelheid hoort bij het volledige resterende kg (en omgekeerd).
             if ((command.Quantity == remainingQuantity) != (command.NetWeightKg == remainingKg))

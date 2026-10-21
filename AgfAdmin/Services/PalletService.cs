@@ -416,14 +416,14 @@ namespace AgfAdmin.Services
                 else if (request.Quantity != null && SupplyRules.IsPositiveDecimal18_3(request.Quantity.Value))
                 {
                     netKgPerPackage = request.NetKgPerPackage.Value;
-                    var total = WeightRules.CalculatedTotal(request.Quantity.Value, netKgPerPackage.Value);
-                    if (request.NetWeightKg != null && request.NetWeightKg.Value != total)
+                    // Twee afzonderlijk geldige waarden kunnen samen buiten bereik vallen: nette validatiefout, geen overflow.
+                    if (!WeightRules.TryCalculatedTotal(request.Quantity.Value, netKgPerPackage.Value, out var total))
+                    {
+                        AddError(errors, "netWeightKg", "Quantity × kg per package is out of range for a net weight (max 999,999,999,999,999.999 kg).");
+                    }
+                    else if (request.NetWeightKg != null && request.NetWeightKg.Value != total)
                     {
                         AddError(errors, "netWeightKg", $"For a calculated weight the total must be quantity × kg per package = {total} kg, or be omitted.");
-                    }
-                    else if (!SupplyRules.IsPositiveDecimal18_3(total))
-                    {
-                        AddError(errors, "netWeightKg", "The calculated total net weight is out of range.");
                     }
                     netWeightKg = total;
                 }

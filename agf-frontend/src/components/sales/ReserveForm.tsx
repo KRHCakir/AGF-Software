@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
-import { calculatedTotalKg } from '../../lib/weight';
+import { calculatedReservationKg } from '../../lib/weight';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { ReserveCommand, reserveKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
@@ -56,7 +56,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
     const remaining = parsedQuantity.ok ? remainingAfter(line.openQuantity, parsedQuantity.value) : null;
     // Berekend gewicht: de kg volgt het aantal (aantal × kg per verpakking) en is niet vrij in te vullen; nooit "gewogen".
     const calculated = stock !== null && stock.weightMethod === 'Calculated' && stock.netKgPerPackage !== null ? stock.netKgPerPackage : null;
-    const effectiveNetKg = calculated === null ? netKg : parsedQuantity.ok ? String(calculatedTotalKg(parsedQuantity.value, calculated)) : '';
+    const effectiveNetKg = calculated === null || stock === null ? netKg : parsedQuantity.ok ? String(calculatedReservationKg(parsedQuantity.value, calculated, stock.availableQuantity, stock.availableNetWeightKg)) : '';
 
     const edit = (setter: (value: string) => void) => (value: string) => {
         if (locked) return;

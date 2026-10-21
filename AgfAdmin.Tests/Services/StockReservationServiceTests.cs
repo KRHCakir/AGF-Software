@@ -40,6 +40,24 @@ public class StockReservationServiceTests : IDisposable
         return line.Id;
     }
 
+    // Regressie (review #40): afronding van deelreserveringen mag de laatste rest nooit onverkoopbaar maken.
+    [Fact]
+    public async Task Calculated_Line_With_Fractional_Rounding_Lets_The_Full_Remainder_Take_The_Remaining_Kg()
+    {
+        await ArrangeAsync();
+        var lineId = await CalculatedApprovedLineAsync(3m, 1.001m); // 3,003 kg
+
+        var first = await ReserveAsync(Reserve(lineId, 1.5m, 1.502m));
+        Assert.Equal(ServiceResultStatus.Created, first.Status);
+
+        // Rest: 1,5 box met 1,501 kg. De rekensom zou 1,502 eisen; de rest neemt exact de resterende kg.
+        var tooMuch = await ReserveAsync(Reserve(lineId, 1.5m, 1.502m));
+        Assert.Equal(ServiceResultStatus.Conflict, tooMuch.Status);
+        var remainder = await ReserveAsync(Reserve(lineId, 1.5m, 1.501m));
+        Assert.Equal(ServiceResultStatus.Created, remainder.Status);
+        Assert.Equal((2, 3m, 3.003m, 2), await StateAsync(lineId));
+    }
+
     [Fact]
     public async Task Calculated_Line_Accepts_Only_Quantity_Times_Package_Weight()
     {

@@ -430,12 +430,15 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
                         "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
-                    // Gewogen: geen kg per verpakking. Berekend: kg per verpakking > 0 en het totaal is exact aantal × kg per
-                    // verpakking (afgerond op 3 decimalen, dus verschil < 0,001). Een etiketgewicht kan zo nooit als gewogen doorgaan.
+                    // Gewogen: geen kg per verpakking. Berekend: kg per verpakking > 0 en bij fysieke ontvangst is het totaal exact
+                    // aantal × kg per verpakking (afgerond op 3 decimalen, dus verschil < 0,001). Een etiketgewicht kan zo nooit als
+                    // gewogen doorgaan. Teruggeboekte correctie-inhoud (OriginCorrectionLineId) draagt de exact verzonden kg; die kan
+                    // door opgetelde afronding van deelreserveringen iets afwijken en wordt al door de balansregels (guard) bewaakt.
                     t.HasCheckConstraint("CK_PalletContentLines_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
                     t.HasCheckConstraint("CK_PalletContentLines_Weight_Consistent",
                         "(\"WeightMethod\" = 'Weighed' AND \"NetKgPerPackage\" IS NULL) OR (\"WeightMethod\" = 'Calculated' AND \"NetKgPerPackage\" IS NOT NULL " +
-                        "AND CAST(\"NetKgPerPackage\" AS NUMERIC) > 0 AND abs(CAST(\"NetWeightKg\" AS NUMERIC) - CAST(\"Quantity\" AS NUMERIC) * CAST(\"NetKgPerPackage\" AS NUMERIC)) < 0.001)");
+                        "AND CAST(\"NetKgPerPackage\" AS NUMERIC) > 0 AND (\"OriginCorrectionLineId\" IS NOT NULL " +
+                        "OR abs(CAST(\"NetWeightKg\" AS NUMERIC) - CAST(\"Quantity\" AS NUMERIC) * CAST(\"NetKgPerPackage\" AS NUMERIC)) < 0.001))");
                     // Afgeboekt ligt tussen 0 en de ontvangst; de ontvangst zelf wordt nooit gewijzigd.
                     t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds",
                         "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) " +
