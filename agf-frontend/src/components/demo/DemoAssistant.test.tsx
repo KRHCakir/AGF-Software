@@ -3,7 +3,7 @@ import '../../test/nextNavigationStub.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { act } from 'react';
-import { Mounted, click, json, setValue, stubFetch, submit } from '../../test/reactHarness.ts';
+import { Mounted, click, deferred, flush, json, setValue, stubFetch, submit } from '../../test/reactHarness.ts';
 import type { Posted } from '../../test/reactHarness.ts';
 import { currentUrl, navigate } from '../../test/nextNavigationStub.ts';
 import DemoAssistant from './DemoAssistant';
@@ -19,15 +19,20 @@ const order = (id: number, customerName: string, customerReference: string | nul
 let mounted: Mounted;
 let posted: Posted[];
 let gets: string[];
+// Bij een gezette `slow` blijft het zoekantwoord hangen tot de test het vrijgeeft; het negeert het abortsignaal bewust,
+// zodat het late antwoord echt binnenkomt en alleen de component het mag negeren.
+let slow: ReturnType<typeof deferred<Response>> | null;
 const methods: string[] = [];
 
 describe('DemoAssistant', () => {
     beforeEach(() => {
         gets = [];
+        slow = null;
         methods.length = 0;
         posted = stubFetch({
             onGet: (url) => {
                 gets.push(url);
+                if (/\/sales-orders$/.test(url) && slow) { const pending = slow; slow = null; return pending.promise; }
                 if (/\/sales-orders$/.test(url)) return json(200, [order(13, 'DEMO Klant B', 'DEMO-A'), order(14, 'DEMO Klant B', 'DEMO-B'), order(15, 'DEMO Klant C', 'DEMO-C')]);
                 return json(404, { message: `unexpected GET ${url}` });
             },
@@ -91,6 +96,48 @@ describe('DemoAssistant', () => {
         assert.ok(mounted.buttons().some((b) => b.textContent?.includes('#13')));
         await click(choice);
         assert.equal(currentUrl(), '/sales-orders?orderId=14');
+    });
+
+    const lateList = () => json(200, [order(13, 'DEMO Klant B', 'DEMO-A'), order(14, 'DEMO Klant B', 'DEMO-B'), order(15, 'DEMO Klant C', 'DEMO-C')]);
+
+    test('closing the panel during a search ignores the late answer; searching works again afterwards', async () => {
+        await mounted.render(<DemoAssistant />);
+        await open();
+        slow = deferred<Response>();
+        const late = slow;
+        await searchFor('DEMO-C');
+        assert.ok(mounted.hasText('demo_search_loading'));
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-label="demo_close"]')!);
+        late.resolve(lateList());
+        await flush(); await flush();
+        assert.equal(currentUrl(), '/dashboard');
+        await open();
+        await click(mounted.button('demo_tab_search')!);
+        assert.equal(mounted.hasText('demo_search_loading'), false);
+        assert.equal(mounted.hasText('demo_search_opened'), false);
+        assert.equal(mounted.button('demo_search_button')!.disabled, false);
+        await searchFor('DEMO-C');
+        await mounted.waitFor(() => currentUrl() === '/sales-orders?orderId=15', 'order 15 opened after a new search');
+    });
+
+    test('switching to the tour and starting it during a search ignores the late answer', async () => {
+        await mounted.render(<DemoAssistant />);
+        await open();
+        slow = deferred<Response>();
+        const late = slow;
+        await searchFor('demo klant b');
+        await click(mounted.button('demo_tab_tour')!);
+        await click(mounted.button('demo_tour_start')!);
+        assert.equal(currentUrl(), '/supply');
+        late.resolve(lateList());
+        await flush(); await flush();
+        assert.equal(currentUrl(), '/supply');
+        assert.ok(mounted.hasText('demo_step_supply_body'));
+        await click(mounted.button('demo_tab_search')!);
+        assert.equal(mounted.hasText('demo_search_choose'), false);
+        assert.equal(mounted.buttons().some((b) => b.textContent?.includes('#14')), false);
+        assert.equal(mounted.hasText('demo_search_loading'), false);
+        assert.equal(mounted.button('demo_search_button')!.disabled, false);
     });
 
     test('never writes: only GET requests on the sales order list', async () => {

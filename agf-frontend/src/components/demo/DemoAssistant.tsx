@@ -37,7 +37,16 @@ export default function DemoAssistant() {
         router.push(href);
     };
 
+    // Sluiten, naar Rondleiding wisselen of een rondleidingstap tonen breekt een lopende zoekopdracht af; het late antwoord
+    // navigeert dan niet meer en toont niets, en de laadstatus gaat terug zodat zoeken daarna weer werkt.
+    const cancelSearch = () => {
+        request.current?.abort();
+        request.current = null;
+        setSearch((current) => (current.kind === 'loading' ? { kind: 'idle' } : current));
+    };
+
     const showStep = (index: number) => {
+        cancelSearch();
         setStepIndex(index);
         go(TOUR_STEPS[index].href);
     };
@@ -52,7 +61,7 @@ export default function DemoAssistant() {
         setSearch({ kind: 'loading' });
         try {
             const orders = await listSalesOrders({}, controller.signal);
-            if (controller.signal.aborted) return;
+            if (controller.signal.aborted || request.current !== controller) return;
             const found = findSalesOrders(orders, term).orders ?? [];
             if (found.length === 0) {
                 setSearch({ kind: 'none', query: term.trim() });
@@ -63,7 +72,7 @@ export default function DemoAssistant() {
                 setSearch({ kind: 'choose', orders: found });
             }
         } catch {
-            if (!controller.signal.aborted) setSearch({ kind: 'error' });
+            if (!controller.signal.aborted && request.current === controller) setSearch({ kind: 'error' });
         }
     };
 
@@ -88,11 +97,11 @@ export default function DemoAssistant() {
                     <h2 className="text-sm font-semibold text-gray-900">{t('demo_assistant_title')}</h2>
                     <p className="text-xs text-gray-500">{t('demo_no_ai_label')}</p>
                 </div>
-                <button type="button" onClick={() => setOpen(false)} aria-label={t('demo_close')} className="text-gray-400 hover:text-gray-700">✕</button>
+                <button type="button" onClick={() => { cancelSearch(); setOpen(false); }} aria-label={t('demo_close')} className="text-gray-400 hover:text-gray-700">✕</button>
             </header>
 
             <div className="mx-4 mt-3 flex gap-1 rounded bg-gray-100 p-1" role="tablist">
-                <button type="button" role="tab" aria-selected={tab === 'tour'} onClick={() => setTab('tour')} className={tabClass(tab === 'tour')}>{t('demo_tab_tour')}</button>
+                <button type="button" role="tab" aria-selected={tab === 'tour'} onClick={() => { cancelSearch(); setTab('tour'); }} className={tabClass(tab === 'tour')}>{t('demo_tab_tour')}</button>
                 <button type="button" role="tab" aria-selected={tab === 'search'} onClick={() => setTab('search')} className={tabClass(tab === 'search')}>{t('demo_tab_search')}</button>
             </div>
 
