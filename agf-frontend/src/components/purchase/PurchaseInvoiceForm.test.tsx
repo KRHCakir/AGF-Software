@@ -22,9 +22,9 @@ const vendors: PurchaseVendor[] = [
     { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD' },
 ];
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [
-    { id: 1, name: 'Hass', origin: 'Peru', packaging: '4kg Box', sizeCategory: null, shortcutCode: 'avohassper22', defaultPackagesPerPallet: null },
-    { id: 2, name: 'Green', origin: 'Spain', packaging: '10kg Crate', sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null },
-] }, { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: 'Brazil', packaging: '4kg Box', sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null }] }];
+    { id: 1, name: 'Hass', origin: 'Peru', packaging: '4kg Box', sizeCategory: null, shortcutCode: 'avohassper22', defaultPackagesPerPallet: null, packagingUnit: 'box' },
+    { id: 2, name: 'Green', origin: 'Spain', packaging: '10kg Crate', sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: null },
+] }, { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: 'Brazil', packaging: '4kg Box', sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: null }] }];
 
 const saved = (over: Partial<PurchaseInvoice> = {}): PurchaseInvoice => ({
     id: 90, requestId: 'r', vendorId: 7, vendorName: 'The Greenery', invoiceNumber: 'GR-1', invoiceDate: '2026-10-21T00:00:00Z', paymentTermsDays: 30, dueDate: '2026-11-20T00:00:00Z',
@@ -94,6 +94,7 @@ describe('PurchaseInvoiceForm', () => {
             assert.equal(prevented, true, 'Enter on the last cell is handled by the grid');
         };
         await fill(0, 'avohassper22', '80', '12,50', true);
+        assert.equal(input('lines[0].unit').value, 'box', 'the packaging unit of the article prefilled the empty unit');
         assert.equal(posted.length, 0, 'choosing an item never saves');
         assert.ok(input('lines[1].item'), 'Enter on the last cell added line 2');
         assert.equal(window.document.activeElement, input('lines[1].item'), 'focus moved to the new line');
