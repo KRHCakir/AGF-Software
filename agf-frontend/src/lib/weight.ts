@@ -16,6 +16,13 @@ export function calculatedTotalKg(quantity: number, netKgPerPackage: number): nu
     return Math.round(scaled + Number.EPSILON * Math.abs(scaled)) / 1000;
 }
 
+// Afrondingsregel voor reserveringen op een berekende regel (spiegel van WeightRules.TryExpectedReservationKg): een
+// deelreservering weegt round(aantal × kg per verpakking); de volledige rest neemt exact de resterende kg, zodat
+// deelreserveringen altijd optellen tot het regeltotaal (3 × 1,001 kg: 1,5 → 1,502 kg, rest 1,5 → 1,501 kg).
+export function calculatedReservationKg(quantity: number, netKgPerPackage: number, availableQuantity: number, availableNetWeightKg: number): number {
+    return quantity === availableQuantity ? availableNetWeightKg : calculatedTotalKg(quantity, netKgPerPackage);
+}
+
 export const WEIGHT_METHOD_LABEL_KEYS: Readonly<Record<WeightMethod, string>> = {
     Weighed: 'weight_weighed',
     Calculated: 'weight_calculated',

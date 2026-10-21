@@ -245,6 +245,32 @@ public class PalletServiceTests : IDisposable
         Assert.Equal(pallet.RequestId, auditEvent.RequestId);
     }
 
+    // Regressie (review #38): een eigen nummer dat gelijk is aan het volgende gegenereerde nummer mag nooit als "herhaling"
+    // worden teruggegeven; de nieuwe pallet krijgt een vrij nummer met achtervoegsel.
+    [Fact]
+    public async Task Generated_Number_Colliding_With_An_Own_Number_Never_Returns_The_Other_Pallet()
+    {
+        var first = await CreatePalletAsync(PalletRequest(PalletService.GeneratedReference(2)));
+        Assert.Equal(1, first.Value.Id);
+        var own = PalletRequest(PalletService.GeneratedReference(2));
+        Assert.Equal("P-000002", own.Reference);
+
+        // Zelfde velden als de eigen pallet (SSCC leeg), maar zonder nummer: de generator zou P-000002 kiezen.
+        var request = PalletRequestWithoutOwnNumber(Guid.NewGuid());
+        request.PalletType = own.PalletType; request.TareKg = own.TareKg; request.GrossKg = own.GrossKg; request.DeclaredNetKg = own.DeclaredNetKg; request.WarehouseLocation = own.WarehouseLocation;
+        var result = await CreatePalletAsync(request);
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.NotEqual(first.Value.Id, result.Value.Id);
+        Assert.Equal("P-000002-A", result.Value.Reference);
+        Assert.Equal((2, 0, 2), await CountsAsync());
+
+        // Herhaling met dezelfde RequestId geeft de nieuwe pallet terug, niet de eigen.
+        var retry = await CreatePalletAsync(request);
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(result.Value.Id, retry.Value.Id);
+    }
+
     [Fact]
     public async Task Two_Pallets_Without_Own_Number_Get_Different_Generated_References()
     {
@@ -400,6 +426,18 @@ public class PalletServiceTests : IDisposable
         }
 
         AssertValidation(await AddContentAsync(palletId, request), expectedErrorKey);
+        Assert.Equal((1, 0, 1), await CountsAsync());
+    }
+
+    // Regressie (review #40/#41): twee afzonderlijk toegestane grote waarden mogen samen geen serverfout geven.
+    [Fact]
+    public async Task Calculated_Total_Beyond_Decimal_Range_Is_A_Validation_Error_Not_An_Overflow()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var request = CalculatedRequest(seed.WarehouseLine, 999_999_999_999_999m, 999_999_999_999_999m);
+
+        AssertValidation(await AddContentAsync(palletId, request), "netWeightKg");
         Assert.Equal((1, 0, 1), await CountsAsync());
     }
 

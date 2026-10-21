@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { WEIGHT_BASIS_LABEL_KEYS, WEIGHT_METHOD_LABEL_KEYS, calculatedTotalKg, isWeightBasis, isWeightMethod } from './weight.ts';
+import { WEIGHT_BASIS_LABEL_KEYS, WEIGHT_METHOD_LABEL_KEYS, calculatedReservationKg, calculatedTotalKg, isWeightBasis, isWeightMethod } from './weight.ts';
 import nl from '../i18n/nl.json';
 import en from '../i18n/en.json';
 
@@ -12,6 +12,16 @@ describe('calculatedTotalKg', () => {
         assert.equal(calculatedTotalKg(3, 0.3333), 1);
         assert.equal(calculatedTotalKg(7, 1.4285), 10);
         assert.equal(calculatedTotalKg(1, 0.0005), 0.001);
+    });
+});
+
+describe('calculatedReservationKg', () => {
+    test('a partial reservation rounds; the full remainder takes exactly the remaining kg', () => {
+        // 3 × 1,001 = 3,003 kg: 1,5 box → 1,502 kg; daarna rest 1,5 box met 1,501 kg.
+        assert.equal(calculatedReservationKg(1.5, 1.001, 3, 3.003), 1.502);
+        assert.equal(calculatedReservationKg(1.5, 1.001, 1.5, 1.501), 1.501);
+        assert.equal(calculatedReservationKg(30, 10, 80, 800), 300);
+        assert.equal(calculatedReservationKg(80, 10, 80, 800), 800);
     });
 });
 
