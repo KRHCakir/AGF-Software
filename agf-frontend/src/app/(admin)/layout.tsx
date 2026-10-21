@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import '../globals.css';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
-import { showLegacyDemoChrome } from '../../lib/featureFlags';
+import DemoAssistant from '../../components/demo/DemoAssistant';
+import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
 import { requestSupplyMode, supplyShortcutHref } from '../../lib/supplyShortcut';
 
 function AdminLayoutContent({
@@ -103,6 +104,7 @@ function AdminLayoutContent({
                     {children}
                 </main>
             </div>
+            {showDemoAssistant && <DemoAssistant />}
         </div>
     );
 }
