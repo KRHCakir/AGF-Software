@@ -143,7 +143,29 @@ public class ArticleServiceTests : IDisposable
     }
 
     [Theory]
+    [InlineData("0804ABC4000", "CN")]   // letters worden nooit weggelaten (zou anders 08044000 worden)
+    [InlineData("0804 40 0O", "CN")]    // hoofdletter O in plaats van nul
+    [InlineData("0804-40-00", "CN")]    // koppelteken is geen toegestaan scheidingsteken
+    [InlineData("0804/4000", "CN")]
+    [InlineData("0804\t40\t00", "CN")]  // tab is geen toegestaan scheidingsteken
+    [InlineData("080440", "HS")]        // controle: dezelfde opbouw met geldige cijfers wordt wel geaccepteerd (zie onder)
+    public async Task Goods_Codes_With_Letters_Or_Other_Characters_Are_Rejected_Never_Silently_Stripped(string input, string system)
+    {
+        var result = await CreateAsync(new SaveArticleDto { ProductName = "Avocado", GoodsCode = input, GoodsCodeSystem = system });
+        if (input == "080440")
+        {
+            Assert.Equal(ServiceResultStatus.Created, result.Status);
+            return;
+        }
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains("goodsCode", result.Errors.Keys);
+        Assert.Contains("digits only", result.Errors["goodsCode"][0]);
+        Assert.Empty(await ListAsync());
+    }
+
+    [Theory]
     [InlineData("0702 00 00", "CN", "07020000")]
+    [InlineData(" 0702.00.00 ", "CN", "07020000")]
     [InlineData("070200", "HS", "070200")]
     [InlineData("0702.00.00.10", "TARIC", "0702000010")]
     [InlineData("08044000", "CN", "08044000")]

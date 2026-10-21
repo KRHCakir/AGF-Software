@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Article } from '../types/article';
-import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, goodsCodeDigits, groupArticleErrors, searchArticles } from './articleRules.ts';
+import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, groupArticleErrors, normalizeGoodsCode, searchArticles } from './articleRules.ts';
 
 // Artikelregels: alleen productsoort verplicht, leeg = niet vastgelegd, goederencode als tekst met stelsel en voorloopnullen,
 // bruto nooit kleiner dan netto, lijstfilter met exacte zoekcode bovenaan.
@@ -30,7 +30,14 @@ describe('article payload', () => {
     });
 
     test('goods codes are text: leading zeros survive, spaces are allowed, and the length follows the code system', () => {
-        assert.equal(goodsCodeDigits('0702 00 00'), '07020000');
+        assert.equal(normalizeGoodsCode('0702 00 00'), '07020000');
+        assert.equal(normalizeGoodsCode(' 0702.00.00 '), '07020000');
+        assert.equal(normalizeGoodsCode('0804ABC4000'), '0804ABC4000', 'letters are kept so validation can refuse them');
+        for (const bad of ['0804ABC4000', '0804 40 0O', '0804-40-00', '0804/4000', '0804\t40\t00']) {
+            const result = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Avocado', goodsCode: bad, goodsCodeSystem: 'CN' });
+            assert.equal(result.ok, false, `${JSON.stringify(bad)} must be refused`);
+            if (!result.ok) assert.deepEqual(groupArticleErrors(result.errors), { goodsCode: ['invalid'] }, `${JSON.stringify(bad)} gives an inline goods code error`);
+        }
         assert.equal(formatGoodsCode('07020000'), '0702 00 00');
         assert.equal(formatGoodsCode('070200'), '0702 00');
         assert.equal(formatGoodsCode('0702000010'), '0702 00 00 10');

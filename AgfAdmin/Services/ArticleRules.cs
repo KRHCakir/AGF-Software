@@ -29,9 +29,13 @@ namespace AgfAdmin.Services
 
         public static bool IsGoodsCodeSystem(string value) => value != null && GoodsCodeSystems.Contains(value, StringComparer.Ordinal);
 
-        // Alleen cijfers; spaties en punten uit de gebruikelijke schrijfwijze ("0804 40 00") worden verwijderd.
+        // Alleen de toegestane scheidingstekens (spatie en punt uit de gebruikelijke schrijfwijze "0804 40 00" of "0804.40.00")
+        // worden verwijderd. Alle andere tekens blijven staan, zodat de validatie letters of leestekens weigert in plaats van
+        // ze stilzwijgend weg te laten ("0804ABC4000" wordt nooit "08044000").
         public static string NormalizeGoodsCode(string raw) =>
-            string.IsNullOrWhiteSpace(raw) ? null : new string(raw.Where(char.IsDigit).ToArray());
+            string.IsNullOrWhiteSpace(raw) ? null : new string(raw.Trim().Where(c => c != ' ' && c != '.').ToArray());
+
+        public static bool IsDigitsOnly(string normalized) => !string.IsNullOrEmpty(normalized) && normalized.All(c => c >= '0' && c <= '9');
 
         public static bool IsGoodsCodeFor(string system, string normalized) =>
             normalized != null && normalized.Length == GoodsCodeLength(system) && normalized.All(char.IsDigit);

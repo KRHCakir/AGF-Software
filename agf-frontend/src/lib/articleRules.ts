@@ -61,14 +61,19 @@ export function draftFromArticle(article: Article): ArticleDraft {
     };
 }
 
-// Alleen cijfers; spaties en punten uit de gebruikelijke schrijfwijze ("0804 40 00") vallen weg. Voorloopnullen blijven.
-export function goodsCodeDigits(raw: string): string {
-    return raw.replace(/[^0-9]/g, '');
+// Alleen de toegestane scheidingstekens (spatie en punt: "0804 40 00", "0804.40.00") vallen weg; alle andere tekens blijven
+// staan zodat de validatie ze weigert (spiegel van ArticleRules.NormalizeGoodsCode). Voorloopnullen blijven.
+export function normalizeGoodsCode(raw: string): string {
+    return raw.trim().replace(/[ .]/g, '');
 }
 
-// Leesbare schrijfwijze: 0804 40 00 (CN), 0804 40 (HS), 0804 40 00 90 (TARIC).
+export function isDigitsOnly(value: string): boolean {
+    return /^[0-9]+$/.test(value);
+}
+
+// Leesbare schrijfwijze: 0804 40 00 (CN), 0804 40 (HS), 0804 40 00 90 (TARIC). Alleen voor geldige, opgeslagen codes.
 export function formatGoodsCode(code: string): string {
-    const digits = goodsCodeDigits(code);
+    const digits = normalizeGoodsCode(code);
     return digits.replace(/^(\d{4})(\d{2})?(\d{2})?(\d{2})?$/, (_m, a: string, b?: string, c?: string, d?: string) => [a, b, c, d].filter((part) => part !== undefined).join(' '));
 }
 
@@ -111,10 +116,10 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
 
     // Goederencode als tekst met expliciet stelsel; lengte per stelsel (HS 6, CN 8, TARIC 10), voorloopnullen inbegrepen.
     const rawCode = draft.goodsCode.trim();
-    const goodsCode = rawCode === '' ? null : goodsCodeDigits(rawCode);
+    const goodsCode = rawCode === '' ? null : normalizeGoodsCode(rawCode);
     let goodsCodeSystem: GoodsCodeSystem | null = draft.goodsCodeSystem === '' ? null : draft.goodsCodeSystem;
     if (goodsCode !== null) {
-        if (goodsCode === '' || goodsCode.length !== rawCode.replace(/[\s.]/g, '').length) errors.push({ field: 'goodsCode', code: 'invalid' });
+        if (!isDigitsOnly(goodsCode)) errors.push({ field: 'goodsCode', code: 'invalid' });
         else if (goodsCodeSystem === null) errors.push({ field: 'goodsCodeSystem', code: 'system_required' });
         else if (!isGoodsCodeSystem(goodsCodeSystem)) errors.push({ field: 'goodsCodeSystem', code: 'invalid' });
         else if (goodsCode.length !== GOODS_CODE_LENGTH[goodsCodeSystem]) errors.push({ field: 'goodsCode', code: 'wrong_length' });

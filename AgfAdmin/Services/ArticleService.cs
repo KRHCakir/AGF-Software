@@ -172,7 +172,11 @@ namespace AgfAdmin.Services
             // Goederencode: als tekst, cijfers na normalisatie, lengte volgens het expliciete codestelsel.
             var goodsCode = ArticleRules.NormalizeGoodsCode(request.GoodsCode);
             var system = string.IsNullOrWhiteSpace(request.GoodsCodeSystem) ? null : request.GoodsCodeSystem.Trim().ToUpperInvariant();
-            if (goodsCode != null)
+            if (goodsCode != null && !ArticleRules.IsDigitsOnly(goodsCode))
+            {
+                ValidationErrors.Add(errors, "goodsCode", "A goods code consists of digits only; spaces and dots are allowed as separators, letters and other characters are not.");
+            }
+            else if (goodsCode != null)
             {
                 if (system == null)
                 {
@@ -190,10 +194,6 @@ namespace AgfAdmin.Services
             else if (system != null && !ArticleRules.IsGoodsCodeSystem(system))
             {
                 ValidationErrors.Add(errors, "goodsCodeSystem", $"Code system must be one of: {string.Join(", ", ArticleRules.GoodsCodeSystems)}.");
-            }
-            else if (!string.IsNullOrWhiteSpace(request.GoodsCode))
-            {
-                ValidationErrors.Add(errors, "goodsCode", "A goods code consists of digits only.");
             }
             if (goodsCode == null)
             {
