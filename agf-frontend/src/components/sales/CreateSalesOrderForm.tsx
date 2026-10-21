@@ -27,12 +27,13 @@ import { usePendingCommand, usePendingCommands } from './PendingCommandsContext'
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
-const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', requestedDeliveryDate: '', lines: [emptyLine()] });
+const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()] });
 
 // Een onafgerond commando wordt als (vergrendeld) concept getoond; verstuurd wordt altijd de bevroren payload zelf.
 const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     customerId: String(command.payload.customerId),
     customerReference: command.payload.customerReference ?? '',
+    internalNote: command.payload.internalNote ?? '',
     requestedDeliveryDate: isoToDateInput(command.payload.requestedDeliveryDate) ?? '',
     lines: command.payload.lines.map((line) => ({
         key: newRequestId(), productVariantId: String(line.productVariantId), quantity: String(line.quantity), unit: line.unit,
@@ -85,13 +86,15 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
+    // Verpakkingseenheid uit de artikelstamgegevens: vult alleen een nog lege eenheid voor; een gekozen eenheid blijft staan.
+    const variantUnits = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.packagingUnit] as const))), [products]);
 
     const edited = () => {
         setError(null);
         setErrors({});
     };
 
-    const updateHeader = (field: 'customerId' | 'customerReference' | 'requestedDeliveryDate', value: string) => {
+    const updateHeader = (field: 'customerId' | 'customerReference' | 'internalNote' | 'requestedDeliveryDate', value: string) => {
         if (locked) return;
         setDraft((current) => ({ ...current, [field]: value }));
         edited();
@@ -278,6 +281,13 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         onChange={(event) => updateHeader('customerReference', event.target.value)} className={inputClass} />
                     <FieldError id="customerReference" messages={e('customerReference')} />
                 </div>
+                <div className="col-span-4">
+                    <label htmlFor="internalNote-input" className="text-xs font-medium text-gray-700">{t('internal_note_label')}</label>
+                    <input {...fieldProps('internalNote', e('internalNote'))} value={draft.internalNote} disabled={locked} maxLength={1000} placeholder={t('internal_note_placeholder')}
+                        onChange={(event) => updateHeader('internalNote', event.target.value)} className={inputClass} />
+                    <span className="block text-xs text-gray-500">{t('internal_note_hint')}</span>
+                    <FieldError id="internalNote" messages={e('internalNote')} />
+                </div>
             </div>
 
             <fieldset className="space-y-2">
@@ -303,7 +313,11 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <ProductVariantPicker id={`${prefix}.productVariantId`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                                 value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
                                                 describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
-                                                onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
+                                                onChange={(variantId) => {
+                                                    updateLine(line.key, 'productVariantId', variantId);
+                                                    const unit = variantUnits.get(Number(variantId));
+                                                    if (line.unit === '' && unit) updateLine(line.key, 'unit', unit);
+                                                }} />
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>

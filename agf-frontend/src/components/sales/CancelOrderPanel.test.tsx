@@ -19,7 +19,7 @@ const reservation = (id: number, status: 'Active' | 'Released', onHold = false) 
 });
 
 const order: SalesOrder = {
-    id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status: 'Open', customerReference: null,
+    id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status: 'Open', customerReference: null, internalNote: null,
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version: 2,
     cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, delivered: false,
     lines: [{

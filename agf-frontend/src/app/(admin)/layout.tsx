@@ -25,10 +25,11 @@ function AdminLayoutContent({
                 <nav className="flex min-w-0 space-x-1 h-full items-center overflow-x-auto">
                     <NavLink href="/dashboard" label={t('home')} />
                     <NavLink href="/sales-orders" label={t('sales')} />
+                    <NavLink href="/purchase-invoices" label={t('purchase')} />
                     <NavLink href="/supply" label={t('supply')} />
                     <NavLink href="/inspection" label={t('inspection')} />
                     <NavLink href="/availability" label={t('availability')} />
-                    <NavLink href="/products" label={t('products')} />
+                    <NavLink href="/articles" label={t('articles')} />
                     <NavLink href="/reports" label={t('reports')} />
                     <NavLink href="/help" label={t('help')} />
                 </nav>

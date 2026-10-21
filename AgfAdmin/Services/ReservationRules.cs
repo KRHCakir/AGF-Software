@@ -67,6 +67,7 @@ namespace AgfAdmin.Services
         public const int MaxOrderLines = 200;
         public const int MaxListResults = 200;
         public const int MaxCustomerReferenceLength = 100;
+        public const int MaxInternalNoteLength = 1000;
         public const int MaxActorLength = 100;
         public const int MaxReasonLength = 500;
 

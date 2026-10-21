@@ -126,17 +126,57 @@ namespace AgfAdmin.Data
             // Geen inverse navigaties op legacy-entiteiten, zodat bestaande API-responses gelijk blijven.
             // Hoeveelheden en gewichten: decimal(18,3). Eenheden: max 32 tekens. Alle metadata blijft optioneel
             // tijdens de overgang; er worden geen defaults, conversies of afgeleide gewichten vastgelegd.
+            modelBuilder.Entity<IncomingInvoice>(b =>
+            {
+                b.Property(i => i.Currency).HasMaxLength(3);
+                b.Property(i => i.PaymentReference).HasMaxLength(200);
+                b.Property(i => i.Remarks).HasMaxLength(1000);
+                b.Property(i => i.ContainerNumber).HasMaxLength(200);
+                b.Property(i => i.Transporter).HasMaxLength(200);
+                b.Property(i => i.DriverName).HasMaxLength(200);
+                b.Property(i => i.LicensePlate).HasMaxLength(32);
+                b.Property(i => i.Incoterms).HasMaxLength(32);
+                b.Property(i => i.OriginCountry).HasMaxLength(200);
+                b.Property(i => i.ReceiptReference).HasMaxLength(200);
+                b.Property(i => i.InternalNote).HasMaxLength(1000);
+                // NULL telt als verschillend: facturen van vóór de kantoorinvoer (upload, oude handmatige invoer) hebben geen RequestId.
+                b.HasIndex(i => i.RequestId).IsUnique();
+            });
+
+            modelBuilder.Entity<IncomingInvoiceLine>(b =>
+            {
+                b.Property(l => l.Unit).HasMaxLength(32);
+                b.HasOne(l => l.ProductVariant).WithMany().HasForeignKey(l => l.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<CompanySettings>(b =>
+            {
+                b.Property(c => c.PurchaseInvoiceOptionalFields).HasMaxLength(500).HasDefaultValue(PurchaseInvoiceRules.DefaultOptionalFields);
+                b.Property(c => c.PurchaseInvoiceDefaultVatPercentage).HasPrecision(18, 2).HasDefaultValue(PurchaseInvoiceRules.DefaultVatPercentage);
+                b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
+                b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
+            });
+
             modelBuilder.Entity<ProductVariant>(b =>
             {
                 b.Property(v => v.AvailabilityUnit).HasMaxLength(32);
                 b.Property(v => v.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
                 b.Property(v => v.DefaultNetKgPerPackage).HasPrecision(18, 3);
                 b.Property(v => v.DefaultPackagesPerPallet).HasPrecision(18, 3);
+                // Artikelwerkplek: optionele stamgegevens (alle NULL = niet vastgelegd).
+                b.Property(v => v.Brand).HasMaxLength(100);
+                b.Property(v => v.PackagingUnit).HasMaxLength(32);
+                b.Property(v => v.DefaultGrossKgPerPackage).HasPrecision(18, 3);
+                b.Property(v => v.GoodsCode).HasMaxLength(10);
+                b.Property(v => v.GoodsCodeSystem).HasMaxLength(8);
+                b.Property(v => v.TradeClass).HasMaxLength(50);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_ProductVariants_GoodsCodeSystem_Allowed", "\"GoodsCodeSystem\" IS NULL OR \"GoodsCodeSystem\" IN ('HS', 'CN', 'TARIC')");
                 });
             });
 
@@ -319,6 +359,7 @@ namespace AgfAdmin.Data
             {
                 b.Property(o => o.Status).IsRequired().HasMaxLength(32);
                 b.Property(o => o.CustomerReference).HasMaxLength(100);
+                b.Property(o => o.InternalNote).HasMaxLength(1000);
                 b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
                 b.Property(o => o.CancelReason).HasMaxLength(500);
                 b.Property(o => o.Version).IsConcurrencyToken();

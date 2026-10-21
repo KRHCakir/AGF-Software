@@ -329,6 +329,12 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                         <dt className="text-xs text-gray-600">{t('sales_customer_reference')}</dt>
                         <dd className="font-medium text-gray-900">{order.customerReference ?? t('sales_no_reference')}</dd>
                     </div>
+                    {order.internalNote && (
+                        <div className="col-span-full" data-testid="internal-note">
+                            <dt className="text-xs text-gray-600">{t('internal_note_label')} <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-900">{t('internal_note_badge')}</span></dt>
+                            <dd className="font-medium text-gray-900">{order.internalNote}</dd>
+                        </div>
+                    )}
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
                         <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>

@@ -23,7 +23,7 @@ const allocation = (id: number, status: 'Consumed' | 'Corrected', version = 1): 
 const orderWith = (version: number, reservations: StockReservation[]): SalesOrder => {
     const shipped = reservations.filter((r) => r.status === 'Consumed').reduce((sum, r) => sum + r.quantity, 0);
     return {
-        id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE DT klant', status: 'Open', customerReference: null,
+        id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE DT klant', status: 'Open', customerReference: null, internalNote: null,
         requestedDeliveryDate: '2026-10-26T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
         cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: shipped === 20, delivered: false,
         lines: [{

@@ -35,6 +35,19 @@ namespace AgfAdmin.Models
         // Standaard verpakkingen per pallet; alleen een invoerhulp (vooraf ingevuld, aanpasbaar). Nooit een universele conversie.
         public decimal? DefaultPackagesPerPallet { get; set; }
 
+        // Artikelwerkplek (ArticleService): aanvullende stamgegevens, alle optioneel. Standaarden voor nieuwe invoer; nooit een
+        // garantie over een concrete partij en nooit met terugwerkende kracht op bestaande documenten of inhoudsregels.
+        public string? Brand { get; set; }
+        // Verpakkingseenheid voor nieuwe regels (box, colli, tray, piece, dozen); los van de vrije verpakkingsomschrijving.
+        public string? PackagingUnit { get; set; }
+        // Standaard bruto kg per verpakking (informatief; nooit een vervanging van netto gewicht in de voorraadberekening).
+        public decimal? DefaultGrossKgPerPackage { get; set; }
+        // Goederencode als tekst (voorloopnullen blijven), met expliciet codestelsel: HS (6), CN/GN (8) of TARIC (10).
+        public string? GoodsCode { get; set; }
+        public string? GoodsCodeSystem { get; set; }
+        // Handelsklasse (EU-handelsnorm: Extra, I, II; vrije tekst). Geen keuringsstatus: "Klasse I" is niet "Goedgekeurd".
+        public string? TradeClass { get; set; }
+
         // Beschikbaarheidseenheid voor nieuwe voorraadflows: "Kilogram" of "Package".
         // Optioneel tijdens de overgang; nooit afgeleid uit maat of verpakking.
         public string AvailabilityUnit { get; set; }

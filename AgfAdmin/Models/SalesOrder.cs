@@ -14,6 +14,9 @@ namespace AgfAdmin.Models
 
         public string Status { get; set; }               // Open, Cancelled
         public string CustomerReference { get; set; }    // optioneel; getrimd, leeg = null
+        // Interne opmerking bij deze order: alleen voor interne werkplekken, nooit in klantdocumenten, mails of exports;
+        // telt mee in de replayvergelijking en wordt niet naar volgende orders overgenomen.
+        public string InternalNote { get; set; }
         public DateTime RequestedDeliveryDate { get; set; } // UTC, afgekapt op microseconden
         public string ActorReference { get; set; }
 
