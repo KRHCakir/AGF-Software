@@ -29,5 +29,10 @@ namespace AgfAdmin.Services
 
         // ISO 4217-vorm: drie hoofdletters. Alleen een opgeslagen code; er wordt nooit omgerekend en er zijn geen koersen.
         public static bool IsCurrencyCode(string value) => value != null && value.Length == 3 && value.All(c => c >= 'A' && c <= 'Z');
+
+        // Alleen de kalenderdag telt; Kind wordt UTC zodat de waarde door Npgsql wordt geaccepteerd en overal gelijk is
+        // ("2026-10-21" komt binnen als Kind=Unspecified; PostgreSQL eist UTC).
+        public static DateTime? AsUtcDate(DateTime? value) =>
+            value == null ? null : DateTime.SpecifyKind(value.Value.Kind == DateTimeKind.Local ? value.Value.ToUniversalTime().Date : value.Value.Date, DateTimeKind.Utc);
     }
 }

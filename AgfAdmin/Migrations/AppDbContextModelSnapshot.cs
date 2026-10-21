@@ -481,6 +481,9 @@ namespace AgfAdmin.Migrations
                     b.Property<Guid?>("RequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("RequestPayload")
+                        .HasColumnType("text");
+
                     b.Property<double>("ReviewConfidence")
                         .HasColumnType("double precision");
 

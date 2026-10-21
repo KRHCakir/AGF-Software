@@ -1,7 +1,7 @@
 import type { PackageUnit } from '../types/availability';
 import type { CreatePurchaseInvoiceLineRequest, CreatePurchaseInvoiceRequest, OptionalFieldValues, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../types/purchaseInvoice';
 import { parsePositiveDecimal } from './decimal.ts';
-import { lineNet, lineVat, totals } from './invoiceMath.ts';
+import { fitsAmount, lineNet, lineVat, totals } from './invoiceMath.ts';
 
 // Pure regels van de inkoopfactuurwerkplek, los van React en i18n (node:test). Spiegelt PurchaseInvoiceService:
 // leveranciersdefaults zijn voorstellen die op het document worden bewaard; handmatige invoer wordt nooit overschreven;
@@ -215,6 +215,7 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     if (filled.length === 0) errors.push({ field: 'lines', code: 'required' });
     else if (filled.length > MAX_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });
     const lines: CreatePurchaseInvoiceLineRequest[] = [];
+    const amounts: { net: number; vat: number }[] = [];
     for (const line of draft.lines) {
         if (isBlankLine(line)) continue;
         const index = draft.lines.indexOf(line);
@@ -232,6 +233,12 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
         const vat = parseNonNegative(line.vat, 2);
         if (!vat.ok) errors.push({ field: `${prefix}.vatPercentage`, code: vat.code });
         else if (vat.value > 100) errors.push({ field: `${prefix}.vatPercentage`, code: 'out_of_range' });
+        // Twee op zich geldige waarden kunnen samen buiten de geldkolommen vallen (zelfde grens als de server).
+        if (quantity.ok && price.ok && discount.ok && vat.ok) {
+            const net = lineNet(quantity.value, price.value, discount.value);
+            if (!fitsAmount(net) || !fitsAmount(lineVat(net, vat.value))) errors.push({ field: `${prefix}.unitPrice`, code: 'too_large' });
+            else amounts.push({ net, vat: lineVat(net, vat.value) });
+        }
         lines.push({
             productVariantId: hasProduct ? Number(line.productVariantId) : null,
             description: description === '' ? null : description,
@@ -241,6 +248,11 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
             discountPercentage: discount.ok ? discount.value : 0,
             vatPercentage: vat.ok ? vat.value : 0,
         });
+    }
+
+    if (errors.length === 0) {
+        const sum = totals(amounts);
+        if (!fitsAmount(sum.net) || !fitsAmount(sum.vat) || !fitsAmount(sum.gross)) errors.push({ field: 'lines', code: 'too_large' });
     }
 
     if (errors.length > 0) return { ok: false, errors };

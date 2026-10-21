@@ -245,6 +245,200 @@ public class PurchaseInvoiceServiceTests : IDisposable
         request.Lines = new List<CreatePurchaseInvoiceLineDto> { new() { Description = "Kisten", Quantity = 2m, UnitPrice = 5m } };
         Assert.Equal(9m, (await CreateAsync(request)).Value.Lines[0].VatPercentage);
     }
+
+    // ---- Replay: de oorspronkelijke opdracht telt, inclusief optionele kopvelden ----
+
+    [Fact]
+    public async Task Replay_Compares_Optional_Header_Fields_Too()
+    {
+        await SeedAsync();
+        await UpdateSettingsAsync(new UpdatePurchaseInvoiceSettingsDto { OptionalFields = new List<string> { "remarks", "receivedDate" } });
+        var requestId = Guid.NewGuid();
+        var original = Request(requestId);
+        original.Remarks = "Levering vrijdag";
+        original.ReceivedDate = new DateTime(2026, 10, 22, 0, 0, 0, DateTimeKind.Utc);
+        var first = await CreateAsync(original);
+        Assert.Equal(ServiceResultStatus.Created, first.Status);
+
+        var otherRemarks = Request(requestId);
+        otherRemarks.Remarks = "Levering maandag";
+        otherRemarks.ReceivedDate = original.ReceivedDate;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(otherRemarks)).Status);
+
+        var otherDate = Request(requestId);
+        otherDate.Remarks = original.Remarks;
+        otherDate.ReceivedDate = original.ReceivedDate.Value.AddDays(1);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(otherDate)).Status);
+
+        var exact = Request(requestId);
+        exact.Remarks = original.Remarks;
+        exact.ReceivedDate = original.ReceivedDate;
+        var retry = await CreateAsync(exact);
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(first.Value.Id, retry.Value.Id);
+        Assert.Equal(1, await InvoiceCountAsync());
+    }
+
+    [Fact]
+    public async Task Exact_Retry_Follows_The_Original_Command_Even_After_Vendor_And_Company_Defaults_Changed()
+    {
+        await SeedAsync();
+        await UpdateSettingsAsync(new UpdatePurchaseInvoiceSettingsDto { OptionalFields = new List<string> { "containerNumber" } });
+        var requestId = Guid.NewGuid();
+        var original = Request(requestId);               // termijn, valuta en btw van regel 0 leeg: defaults 30 / EUR / 21
+        original.ContainerNumber = "MSCU1234567";
+        var first = await CreateAsync(original);
+        Assert.Equal(ServiceResultStatus.Created, first.Status);
+        Assert.Equal((30, "EUR", 21m, "MSCU1234567"), (first.Value.PaymentTermsDays, first.Value.Currency, first.Value.Lines[0].VatPercentage, first.Value.ContainerNumber));
+
+        // Intussen: leverancier op 60 dagen / USD, bedrijf op 9 % btw en het containerveld uitgeschakeld.
+        await using (var db = _factory.CreateContext())
+        {
+            var vendor = await db.Vendors.SingleAsync();
+            vendor.PaymentTermsDays = 60;
+            vendor.DefaultCurrency = "USD";
+            await db.SaveChangesAsync();
+        }
+        await UpdateSettingsAsync(new UpdatePurchaseInvoiceSettingsDto { OptionalFields = new List<string>(), DefaultVatPercentage = 9m });
+
+        var exact = Request(requestId);
+        exact.ContainerNumber = "MSCU1234567";
+        var retry = await CreateAsync(exact);
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(first.Value.Id, retry.Value.Id);
+        Assert.Equal((30, "EUR", 21m, "MSCU1234567"), (retry.Value.PaymentTermsDays, retry.Value.Currency, retry.Value.Lines[0].VatPercentage, retry.Value.ContainerNumber));
+        Assert.Equal(1, await InvoiceCountAsync());
+
+        // Een expliciete termijn is een andere opdracht dan "leeg = standaard", ook al is de uitkomst toevallig gelijk.
+        var explicitTerms = Request(requestId);
+        explicitTerms.ContainerNumber = "MSCU1234567";
+        explicitTerms.PaymentTermsDays = 30;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(explicitTerms)).Status);
+    }
+
+    [Fact]
+    public async Task Retry_Ignores_Formatting_Only_Differences()
+    {
+        await SeedAsync();
+        var requestId = Guid.NewGuid();
+        var original = Request(requestId);
+        original.Currency = "EUR";
+        var first = await CreateAsync(original);
+
+        var formatted = Request(requestId);
+        formatted.InvoiceNumber = "  GR-2026-001 ";
+        formatted.Currency = "eur";
+        formatted.InvoiceDate = new DateTime(2026, 10, 21, 15, 30, 0, DateTimeKind.Utc);
+        formatted.Lines[0].Quantity = 80.000m;
+        formatted.Lines[0].UnitPrice = 12.50m;
+        formatted.Lines[1].Description = " Transport ";
+        var retry = await CreateAsync(formatted);
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(first.Value.Id, retry.Value.Id);
+
+        var blank = Request(requestId); // leeg (= standaard) versus expliciet EUR is wél een andere opdracht
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(blank)).Status);
+    }
+
+    [Fact]
+    public async Task Invoices_Without_A_Stored_Command_Fall_Back_To_All_Stored_Fields()
+    {
+        await SeedAsync();
+        await UpdateSettingsAsync(new UpdatePurchaseInvoiceSettingsDto { OptionalFields = new List<string> { "remarks" } });
+        var requestId = Guid.NewGuid();
+        var original = Request(requestId);
+        original.Remarks = "Levering vrijdag";
+        var first = await CreateAsync(original);
+        await using (var db = _factory.CreateContext())
+        {
+            // Factuur van vóór de vastlegging van de opdracht.
+            await db.IncomingInvoices.Where(i => i.Id == first.Value.Id).ExecuteUpdateAsync(s => s.SetProperty(i => i.RequestPayload, (string)null));
+        }
+
+        var same = Request(requestId);
+        same.Remarks = "Levering vrijdag";
+        var retry = await CreateAsync(same);
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(first.Value.Id, retry.Value.Id);
+
+        var different = Request(requestId);
+        different.Remarks = "Levering maandag";
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(different)).Status);
+        Assert.Equal(1, await InvoiceCountAsync());
+    }
+
+    // ---- Bereik van de geldkolommen (decimal(18,2)): validatiefout, geen serverfout ----
+
+    [Theory]
+    [InlineData("line-amount-beyond-column", "lines[0].unitPrice")]
+    [InlineData("net-plus-vat-beyond-column", "lines")]
+    [InlineData("totals-beyond-column", "lines")]
+    public async Task Amounts_Beyond_The_Money_Columns_Are_A_Validation_Error(string invalidCase, string expectedErrorKey)
+    {
+        await SeedAsync();
+        var request = Request();
+        switch (invalidCase)
+        {
+            case "line-amount-beyond-column":
+                // Elk op zich toegestaan (18,3 en 12 cijfers), samen 10^27: ver buiten decimal(18,2).
+                request.Lines[0].Quantity = 999_999_999_999_999m;
+                request.Lines[0].UnitPrice = 999_999_999_999m;
+                break;
+            case "net-plus-vat-beyond-column":
+                request.Lines = new List<CreatePurchaseInvoiceLineDto>
+                {
+                    // Regelbedrag 9.999.899.999.999.000,01 en btw-bedrag passen elk, het brutototaal niet meer.
+                    new() { Description = "A", Quantity = 9_999_999_999_999m, UnitPrice = 999.99m, VatPercentage = 100m },
+                };
+                break;
+            case "totals-beyond-column":
+                request.Lines = new List<CreatePurchaseInvoiceLineDto>
+                {
+                    new() { Description = "A", Quantity = 9_999_999_999_999m, UnitPrice = 999m, VatPercentage = 0m },
+                    new() { Description = "B", Quantity = 9_999_999_999_999m, UnitPrice = 999m, VatPercentage = 0m },
+                };
+                break;
+        }
+        var result = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains(expectedErrorKey, result.Errors.Keys);
+        Assert.Equal(0, await InvoiceCountAsync());
+    }
+
+    [Fact]
+    public async Task The_Largest_Fitting_Amount_Is_Still_Accepted()
+    {
+        await SeedAsync();
+        var request = Request();
+        request.Lines = new List<CreatePurchaseInvoiceLineDto> { new() { Description = "Max", Quantity = 1m, UnitPrice = 999_999_999_999m, VatPercentage = 0m } };
+        var result = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal(999_999_999_999m, result.Value.TotalAmount);
+    }
+}
+
+public class PurchaseInvoiceCommandTests
+{
+    [Fact]
+    public void Canonical_Form_Normalises_Text_Case_Dates_And_Decimal_Scale()
+    {
+        var a = new CreatePurchaseInvoiceDto
+        {
+            VendorId = 1, InvoiceNumber = " GR-1 ", InvoiceDate = new DateTime(2026, 10, 21, 0, 0, 0, DateTimeKind.Utc), Currency = "eur", Remarks = "  ",
+            Lines = new List<CreatePurchaseInvoiceLineDto> { new() { Description = "Transport ", Quantity = 1.0m, UnitPrice = 150.00m } }
+        };
+        var b = new CreatePurchaseInvoiceDto
+        {
+            VendorId = 1, InvoiceNumber = "GR-1", InvoiceDate = new DateTime(2026, 10, 21, 23, 59, 0, DateTimeKind.Utc), Currency = "EUR", Remarks = null,
+            Lines = new List<CreatePurchaseInvoiceLineDto> { new() { Description = "Transport", Quantity = 1m, UnitPrice = 150m } }
+        };
+        Assert.Equal(PurchaseInvoiceCommand.Canonical(a), PurchaseInvoiceCommand.Canonical(b));
+        Assert.True(PurchaseInvoiceCommand.Same(PurchaseInvoiceCommand.Canonical(a), b));
+
+        b.ContainerNumber = "MSCU1"; // ook een niet-ingeschakeld optioneel veld telt mee: andere opdracht
+        Assert.NotEqual(PurchaseInvoiceCommand.Canonical(a), PurchaseInvoiceCommand.Canonical(b));
+        Assert.False(PurchaseInvoiceCommand.Same(null, a));
+    }
 }
 
 public class InvoiceMathTests
@@ -267,5 +461,14 @@ public class InvoiceMathTests
     {
         var totals = InvoiceMath.Totals(new[] { (0.34m, 0.07m), (0.34m, 0.07m), (0.34m, 0.07m) });
         Assert.Equal((1.02m, 0.21m, 1.23m), totals);
+    }
+
+    [Fact]
+    public void Fits_Amount_Follows_The_Decimal_18_2_Columns()
+    {
+        Assert.True(InvoiceMath.FitsAmount(9_999_999_999_999_999.99m));
+        Assert.True(InvoiceMath.FitsAmount(-9_999_999_999_999_999.99m));
+        Assert.False(InvoiceMath.FitsAmount(10_000_000_000_000_000m));
+        Assert.False(InvoiceMath.FitsAmount(InvoiceMath.LineNet(999_999_999_999_999m, 999_999_999_999m, 0m)));
     }
 }

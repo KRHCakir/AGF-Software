@@ -122,4 +122,17 @@ describe('lines, amounts and payload', () => {
         const due = buildPurchaseInvoicePayload(changeDueDate(selectVendor(draft(), greenery, settings), '2026-10-01'), settings);
         if (!due.ok) assert.deepEqual(groupErrors(due.errors).dueDate, ['before_invoice_date']);
     });
+
+    test('amounts beyond the money columns are reported per line or on the totals, like the server does', () => {
+        const base = selectVendor(draft(), greenery, settings);
+        base.header.invoiceNumber = 'GR-2';
+        const line = buildPurchaseInvoicePayload({ ...base, lines: [filled({ quantity: '999999999999999', unitPrice: '999999999999' })] }, settings);
+        assert.equal(line.ok, false);
+        if (!line.ok) assert.deepEqual(groupErrors(line.errors), { 'lines[0].unitPrice': ['too_large'] });
+        const big = filled({ quantity: '9999999999999', unitPrice: '999', vat: '0' });
+        const sum = buildPurchaseInvoicePayload({ ...base, lines: [big, { ...big, key: 'line-b' }] }, settings);
+        assert.equal(sum.ok, false);
+        if (!sum.ok) assert.deepEqual(groupErrors(sum.errors), { lines: ['too_large'] });
+        assert.equal(buildPurchaseInvoicePayload({ ...base, lines: [big] }, settings).ok, true, 'one line of 9.999.999.999.999.000 still fits');
+    });
 });

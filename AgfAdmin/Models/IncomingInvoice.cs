@@ -18,6 +18,10 @@ namespace AgfAdmin.Models
         // (leveranciersstandaarden zijn alleen voorstellen), en optionele velden volgens de bedrijfsinstellingen.
         // Valuta is uitsluitend een opgeslagen code: bedragen staan in die valuta, er wordt nooit omgerekend.
         public Guid? RequestId { get; set; }
+        // Genormaliseerde oorspronkelijke opdracht (JSON, zie PurchaseInvoiceCommand). Een herhaling met dezelfde RequestId
+        // wordt hiermee één-op-één vergeleken, los van intussen gewijzigde leveranciers- of bedrijfsstandaarden.
+        // NULL bij facturen van vóór deze vastlegging; die vallen terug op vergelijking van de opgeslagen velden.
+        public string? RequestPayload { get; set; }
         public int? PaymentTermsDays { get; set; }
         public string? Currency { get; set; }
         public DateTime? ReceivedDate { get; set; }   // ontvangstdatum is een ander begrip dan factuurdatum

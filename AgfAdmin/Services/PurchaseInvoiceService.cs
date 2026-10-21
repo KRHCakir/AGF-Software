@@ -109,6 +109,16 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "requestId", "A client-generated, non-empty requestId is required.");
             }
+            else
+            {
+                // Herhaling: vergelijk met de oorspronkelijke opdracht, vóór defaults en validatie, zodat intussen gewijzigde
+                // instellingen of leveranciersstandaarden een exacte retry nooit in een conflict of een andere factuur veranderen.
+                var replay = await Query().SingleOrDefaultAsync(i => i.RequestId == request.RequestId, cancellationToken);
+                if (replay?.RequestPayload != null)
+                {
+                    return ResultForRetry(replay, request, null);
+                }
+            }
 
             var settings = await SettingsAsync(cancellationToken);
             var enabled = PurchaseInvoiceRules.ParseEnabled(settings.PurchaseInvoiceOptionalFields);
@@ -129,7 +139,7 @@ namespace AgfAdmin.Services
 
             var invoiceNumber = ValidationErrors.RequiredText(request.InvoiceNumber, MaxInvoiceNumberLength, "invoiceNumber", errors);
             // Kalenderdatums (factuur-, verval- en ontvangstdatum) worden als UTC-middernacht opgeslagen, ongeacht hoe de client
-            // ze stuurt ("2026-10-21" komt binnen als Kind=Unspecified; PostgreSQL eist UTC).
+            // ze stuurt.
             var invoiceDate = AsUtcDate(request.InvoiceDate);
             if (invoiceDate == null)
             {
@@ -255,7 +265,24 @@ namespace AgfAdmin.Services
                     {
                         continue;
                     }
-                    var net = InvoiceMath.LineNet(line.Quantity!.Value, line.UnitPrice!.Value, discount);
+                    // Twee afzonderlijk geldige waarden kunnen samen buiten decimal(18,2) (of buiten decimal) vallen: dan een
+                    // validatiefout op de regel, nooit een serverfout bij het opslaan.
+                    decimal net, lineVat;
+                    try
+                    {
+                        net = InvoiceMath.LineNet(line.Quantity!.Value, line.UnitPrice!.Value, discount);
+                        lineVat = InvoiceMath.LineVat(net, vat);
+                    }
+                    catch (OverflowException)
+                    {
+                        ValidationErrors.Add(errors, $"{key}.unitPrice", LineAmountTooLarge);
+                        continue;
+                    }
+                    if (!InvoiceMath.FitsAmount(net) || !InvoiceMath.FitsAmount(lineVat))
+                    {
+                        ValidationErrors.Add(errors, $"{key}.unitPrice", LineAmountTooLarge);
+                        continue;
+                    }
                     lines.Add(new IncomingInvoiceLine
                     {
                         ProductVariantId = line.ProductVariantId,
@@ -266,8 +293,26 @@ namespace AgfAdmin.Services
                         DiscountPercentage = discount,
                         LineTotal = net,
                         VATPercentage = vat,
-                        VATAmount = InvoiceMath.LineVat(net, vat)
+                        VATAmount = lineVat
                     });
+                }
+            }
+
+            // Documenttotalen: ook de som van geldige regels moet in decimal(18,2) passen.
+            (decimal Net, decimal Vat, decimal Gross) totals = default;
+            if (errors.Count == 0)
+            {
+                try
+                {
+                    totals = InvoiceMath.Totals(lines.Select(l => (l.LineTotal, l.VATAmount)));
+                    if (!InvoiceMath.FitsAmount(totals.Net) || !InvoiceMath.FitsAmount(totals.Vat) || !InvoiceMath.FitsAmount(totals.Gross))
+                    {
+                        ValidationErrors.Add(errors, "lines", TotalTooLarge);
+                    }
+                }
+                catch (OverflowException)
+                {
+                    ValidationErrors.Add(errors, "lines", TotalTooLarge);
                 }
             }
 
@@ -276,10 +321,11 @@ namespace AgfAdmin.Services
                 return Validation<PurchaseInvoiceDto>(errors);
             }
 
-            var totals = InvoiceMath.Totals(lines.Select(l => (l.LineTotal, l.VATAmount)));
+            var canonical = PurchaseInvoiceCommand.Canonical(request);
             var candidate = new IncomingInvoice
             {
                 RequestId = request.RequestId,
+                RequestPayload = canonical,
                 VendorId = vendor.Id,
                 InvoiceNumber = invoiceNumber,
                 InvoiceDate = invoiceDate,
@@ -308,11 +354,12 @@ namespace AgfAdmin.Services
                 InvoiceLines = lines
             };
 
-            // Idempotentie: dezelfde requestId geeft dezelfde factuur terug, een afwijkende inhoud een conflict.
+            // Idempotentie: dezelfde requestId geeft dezelfde factuur terug, een afwijkende inhoud een conflict. Hier komen alleen
+            // nog facturen van vóór de vastlegging van de opdracht (zonder RequestPayload) en gelijktijdige herhalingen.
             var existing = await Query().SingleOrDefaultAsync(i => i.RequestId == candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return ResultForRetry(existing, candidate);
+                return ResultForRetry(existing, request, candidate);
             }
 
             _db.IncomingInvoices.Add(candidate);
@@ -326,7 +373,7 @@ namespace AgfAdmin.Services
                 var concurrent = await Query().SingleOrDefaultAsync(i => i.RequestId == candidate.RequestId, cancellationToken);
                 if (concurrent != null)
                 {
-                    return ResultForRetry(concurrent, candidate);
+                    return ResultForRetry(concurrent, request, candidate);
                 }
                 throw;
             }
@@ -334,11 +381,30 @@ namespace AgfAdmin.Services
             return ServiceResult<PurchaseInvoiceDto>.Created(ToDto(await Query().SingleAsync(i => i.Id == candidate.Id, cancellationToken)));
         }
 
-        private static ServiceResult<PurchaseInvoiceDto> ResultForRetry(IncomingInvoice existing, IncomingInvoice candidate)
+        private const string LineAmountTooLarge = "The line amount (or its VAT) exceeds the supported maximum of 9,999,999,999,999,999.99.";
+        private const string TotalTooLarge = "The document totals exceed the supported maximum of 9,999,999,999,999,999.99.";
+
+        // Herhaling met een bekende RequestId. Met een bewaarde oorspronkelijke opdracht is de vergelijking exact en onafhankelijk
+        // van actuele defaults; zonder (facturen van vóór de vastlegging) worden alle opgeslagen velden vergeleken, inclusief de
+        // optionele kopvelden, waarbij de kandidaat met de huidige defaults is opgebouwd.
+        private static ServiceResult<PurchaseInvoiceDto> ResultForRetry(IncomingInvoice existing, CreatePurchaseInvoiceDto request, IncomingInvoice candidate)
+        {
+            if (existing.RequestPayload != null)
+            {
+                return PurchaseInvoiceCommand.Same(existing.RequestPayload, request)
+                    ? ServiceResult<PurchaseInvoiceDto>.Ok(ToDto(existing))
+                    : ServiceResult<PurchaseInvoiceDto>.Conflict($"RequestId {request.RequestId} was already used for a different purchase invoice.");
+            }
+            return SameStoredFields(existing, candidate)
+                ? ServiceResult<PurchaseInvoiceDto>.Ok(ToDto(existing))
+                : ServiceResult<PurchaseInvoiceDto>.Conflict($"RequestId {candidate.RequestId} was already used for a different purchase invoice.");
+        }
+
+        private static bool SameStoredFields(IncomingInvoice existing, IncomingInvoice candidate)
         {
             var existingLines = existing.InvoiceLines.OrderBy(l => l.Id).ToList();
             var candidateLines = candidate.InvoiceLines.ToList();
-            var same = existing.VendorId == candidate.VendorId
+            return existing.VendorId == candidate.VendorId
                 && string.Equals(existing.InvoiceNumber, candidate.InvoiceNumber, StringComparison.Ordinal)
                 && existing.InvoiceDate == candidate.InvoiceDate
                 && existing.PaymentTermsDays == candidate.PaymentTermsDays
@@ -346,6 +412,19 @@ namespace AgfAdmin.Services
                 && string.Equals(existing.Currency, candidate.Currency, StringComparison.Ordinal)
                 && existing.TotalAmount == candidate.TotalAmount
                 && existing.VATAmount == candidate.VATAmount
+                && existing.ReceivedDate == candidate.ReceivedDate
+                && string.Equals(existing.PaymentReference, candidate.PaymentReference, StringComparison.Ordinal)
+                && string.Equals(existing.Remarks, candidate.Remarks, StringComparison.Ordinal)
+                && existing.GrossWeightKg == candidate.GrossWeightKg
+                && existing.NetWeightKg == candidate.NetWeightKg
+                && string.Equals(existing.ContainerNumber, candidate.ContainerNumber, StringComparison.Ordinal)
+                && string.Equals(existing.Transporter, candidate.Transporter, StringComparison.Ordinal)
+                && string.Equals(existing.DriverName, candidate.DriverName, StringComparison.Ordinal)
+                && string.Equals(existing.LicensePlate, candidate.LicensePlate, StringComparison.Ordinal)
+                && string.Equals(existing.Incoterms, candidate.Incoterms, StringComparison.Ordinal)
+                && existing.CustomsValue == candidate.CustomsValue
+                && string.Equals(existing.OriginCountry, candidate.OriginCountry, StringComparison.Ordinal)
+                && string.Equals(existing.ReceiptReference, candidate.ReceiptReference, StringComparison.Ordinal)
                 && existingLines.Count == candidateLines.Count
                 && existingLines.Zip(candidateLines).All(pair =>
                     pair.First.ProductVariantId == pair.Second.ProductVariantId
@@ -355,9 +434,6 @@ namespace AgfAdmin.Services
                     && pair.First.UnitPrice == pair.Second.UnitPrice
                     && pair.First.DiscountPercentage == pair.Second.DiscountPercentage
                     && pair.First.VATPercentage == pair.Second.VATPercentage);
-            return same
-                ? ServiceResult<PurchaseInvoiceDto>.Ok(ToDto(existing))
-                : ServiceResult<PurchaseInvoiceDto>.Conflict($"RequestId {candidate.RequestId} was already used for a different purchase invoice.");
         }
 
         // ---- Lezen ----
@@ -376,9 +452,7 @@ namespace AgfAdmin.Services
         private IQueryable<IncomingInvoice> Query() =>
             _db.IncomingInvoices.AsNoTracking().Include(i => i.Vendor).Include(i => i.InvoiceLines);
 
-        // Alleen de kalenderdag telt; Kind wordt UTC zodat de waarde door Npgsql wordt geaccepteerd en overal gelijk is.
-        private static DateTime? AsUtcDate(DateTime? value) =>
-            value == null ? null : DateTime.SpecifyKind(value.Value.Kind == DateTimeKind.Local ? value.Value.ToUniversalTime().Date : value.Value.Date, DateTimeKind.Utc);
+        private static DateTime? AsUtcDate(DateTime? value) => PurchaseInvoiceRules.AsUtcDate(value);
 
         private static bool IsPercentage(decimal value) => value >= 0m && value <= 100m && decimal.Round(value, 2) == value;
 

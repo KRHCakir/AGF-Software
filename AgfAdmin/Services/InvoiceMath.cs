@@ -6,6 +6,12 @@ namespace AgfAdmin.Services
     {
         public static decimal Round2(decimal value) => decimal.Round(value, 2, MidpointRounding.AwayFromZero);
 
+        // Grootste bedrag dat in de kolommen decimal(18,2) past (regelbedrag, btw-bedrag, documenttotalen). Een bedrag
+        // daarbuiten is een validatiefout, nooit een databasefout; gespiegeld als MAX_AMOUNT in invoiceMath.ts.
+        public const decimal MaxAmount = 9_999_999_999_999_999.99m;
+
+        public static bool FitsAmount(decimal value) => value >= -MaxAmount && value <= MaxAmount;
+
         // Regelbedrag exclusief btw: aantal × prijs per eenheid, minus korting in procenten.
         public static decimal LineNet(decimal quantity, decimal unitPrice, decimal discountPercentage) =>
             Round2(quantity * unitPrice * (1m - discountPercentage / 100m));
