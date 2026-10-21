@@ -64,7 +64,8 @@ export default function ArticlesPage() {
             const productNames = current.data.reference.productNames.includes(saved.productName) ? current.data.reference.productNames : [...current.data.reference.productNames, saved.productName].sort();
             return { status: 'ready', data: { articles, reference: { ...current.data.reference, productNames } } };
         });
-        setEditing({ article: saved, key: saved.id });
+        // Dezelfde key: het formulier blijft gemonteerd (melding en focus blijven), maar werkt voortaan op het opgeslagen artikel.
+        setEditing((current) => ({ article: saved, key: current?.key ?? saved.id }));
     };
 
     const number = (value: number | null) => (value === null ? '–' : new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { maximumFractionDigits: 3 }).format(value));
