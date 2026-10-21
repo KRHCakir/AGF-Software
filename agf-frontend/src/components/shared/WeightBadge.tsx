@@ -2,6 +2,7 @@
 
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg } from '../../lib/availability';
+import { unitLabelKey } from '../../lib/units';
 import { WEIGHT_BASIS_LABEL_KEYS, WEIGHT_METHOD_LABEL_KEYS, WeightBasis, WeightMethod } from '../../lib/weight';
 import type { PackageUnit } from '../../types/availability';
 
@@ -14,7 +15,7 @@ export function WeightBadge({ method, kgPerPackage, unit }: { method: WeightMeth
         <span data-weight-method={method} className={`inline-flex max-w-full flex-wrap items-center gap-1 rounded border px-1.5 py-0.5 text-xs ${tone}`}>
             <span>{t(WEIGHT_METHOD_LABEL_KEYS[method])}</span>
             {calculated && kgPerPackage !== null && (
-                <span className="font-mono">{t('weight_per_package', { kg: formatKg(kgPerPackage, locale), unit: unit ?? t('availability_col_unit').toLowerCase() })}</span>
+                <span className="font-mono">{t('weight_per_package', { kg: formatKg(kgPerPackage, locale), unit: unit ? t(unitLabelKey(unit)).toLowerCase() : t('availability_col_unit').toLowerCase() })}</span>
             )}
         </span>
     );

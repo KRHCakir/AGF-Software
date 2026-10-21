@@ -69,7 +69,7 @@ function isVariant(value: unknown): value is Named {
         && isOptionalNullableString(value.origin)
         && isOptionalNullableString(value.packaging)
         && isOptionalNullableString(value.sizeCategory)
-        && isOptionalNullableString(value.shortcutCode);
+        && isOptionalNullableString(value.shortcutCode)
         && (value.defaultPackagesPerPallet === undefined || value.defaultPackagesPerPallet === null || isNumber(value.defaultPackagesPerPallet));
 }
 

@@ -4,6 +4,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { QuantityInputMode, palletTotal } from '../../lib/palletInput';
+import { unitLabelKey } from '../../lib/units';
 import type { PackageUnit } from '../../types/availability';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 
@@ -24,7 +25,8 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
     onChange: (field: QuantityField, value: string) => void;
 }) {
     const { t, locale } = useTranslation();
-    const unit = line.unit === '' ? t('supply_unit').toLowerCase() : line.unit;
+    // Vertaald eenheidslabel (Doos, Colli, …); zonder gekozen eenheid het woord "eenheid".
+    const unit = line.unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(line.unit)).toLowerCase();
     const count = parsePositiveDecimal(line.palletCount);
     const perPallet = parsePositiveDecimal(line.packagesPerPallet);
     const totalKey = `${prefix}.${quantityField}`;
