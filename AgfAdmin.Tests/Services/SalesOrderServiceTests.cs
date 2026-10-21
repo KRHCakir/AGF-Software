@@ -73,6 +73,16 @@ public class SalesOrderServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Pallet_Input_On_An_Order_Beyond_Decimal_Range_Is_A_Validation_Error()
+    {
+        await SeedAsync();
+        var result = await CreateAsync(PalletOrder(palletCount: 999_999_999_999_999m, packagesPerPallet: 999_999_999_999_999m));
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains("lines[0].quantity", result.Errors.Keys);
+        Assert.Equal(0, await OrderCountAsync());
+    }
+
+    [Fact]
     public async Task Order_Retry_With_Other_Pallet_Split_Conflicts()
     {
         await SeedAsync();

@@ -11,6 +11,21 @@ namespace AgfAdmin.Services
         public static decimal Total(decimal palletCount, decimal packagesPerPallet) =>
             decimal.Round(palletCount * packagesPerPallet, 3, MidpointRounding.AwayFromZero);
 
+        // Twee afzonderlijk toegestane waarden kunnen samen buiten decimal (of decimal(18,3)) vallen: dan false, nooit een serverfout.
+        public static bool TryTotal(decimal palletCount, decimal packagesPerPallet, out decimal total)
+        {
+            try
+            {
+                total = Total(palletCount, packagesPerPallet);
+                return SupplyRules.IsPositiveDecimal18_3(total);
+            }
+            catch (OverflowException)
+            {
+                total = 0m;
+                return false;
+            }
+        }
+
         // Beide velden leeg (gewone invoer) of beide positief; met een opgegeven totaal moet dat exact kloppen.
         // Geeft het (eventueel berekende) totaal terug, of null bij fouten.
         public static decimal? Validate(decimal? palletCount, decimal? packagesPerPallet, decimal? quantity, string key, string quantityField,
@@ -36,10 +51,9 @@ namespace AgfAdmin.Services
             {
                 return null;
             }
-            var total = Total(palletCount!.Value, packagesPerPallet!.Value);
-            if (!SupplyRules.IsPositiveDecimal18_3(total))
+            if (!TryTotal(palletCount!.Value, packagesPerPallet!.Value, out var total))
             {
-                addError(errors, $"{key}.{quantityField}", "Pallet count × packages per pallet is out of range.");
+                addError(errors, $"{key}.{quantityField}", "Pallet count × packages per pallet is out of range (max 999,999,999,999,999.999).");
                 return null;
             }
             if (quantity != null && quantity.Value != total)

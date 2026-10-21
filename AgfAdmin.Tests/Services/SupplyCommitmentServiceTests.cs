@@ -126,6 +126,16 @@ public class SupplyCommitmentServiceTests : IDisposable
         Assert.Equal(0, await verify.SupplyCommitments.CountAsync());
     }
 
+    // Regressie (review #41): grote maar afzonderlijk geldige waarden geven een validatiefout, geen overflow.
+    [Fact]
+    public async Task Pallet_Input_Beyond_Decimal_Range_Is_A_Validation_Error_Not_An_Overflow()
+    {
+        var seed = await SeedAsync();
+        AssertValidation(await CreateAsync(PalletRequest(seed, palletCount: 999_999_999_999_999m, packagesPerPallet: 999_999_999_999_999m)), "lines[0].expectedQuantity");
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.SupplyCommitments.CountAsync());
+    }
+
     [Fact]
     public async Task Retry_With_Same_Total_But_Other_Pallet_Split_Conflicts()
     {
