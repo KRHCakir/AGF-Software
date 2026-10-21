@@ -46,6 +46,8 @@ export interface VariantOption {
     origin: string | null;
     packaging: string | null;
     sizeCategory: string | null;
+    // Bestaande snelcode van de variant (beheer via Producten); kiest alleen een variant, nooit hoeveelheid of gewicht.
+    shortcutCode: string | null;
 }
 
 export interface ProductOption {
@@ -64,7 +66,8 @@ function isVariant(value: unknown): value is Named {
     return isNamed(value)
         && isOptionalNullableString(value.origin)
         && isOptionalNullableString(value.packaging)
-        && isOptionalNullableString(value.sizeCategory);
+        && isOptionalNullableString(value.sizeCategory)
+        && isOptionalNullableString(value.shortcutCode);
 }
 
 export function isCreatedCustomer(value: unknown): value is CreatedCustomer {
@@ -99,6 +102,7 @@ export function toVariantOption(value: Named): VariantOption {
         origin: optionalString(value.origin),
         packaging: optionalString(value.packaging),
         sizeCategory: optionalString(value.sizeCategory),
+        shortcutCode: optionalString(value.shortcutCode),
     };
 }
 

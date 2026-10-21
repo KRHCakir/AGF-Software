@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
+import { unitLabelKey } from '../../lib/units';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { newRequestId } from '../../lib/requestId';
@@ -531,10 +532,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
 
             <fieldset className="space-y-2">
                 <legend className="font-semibold text-gray-900">{t('supply_pallet_title')}</legend>
-                <p className="text-sm text-gray-700">
-                    {t('supply_pallet_fixed_state')}{' '}
-                    <span className="inline-flex rounded border border-gray-300 bg-gray-50 px-2 py-0.5 text-xs text-gray-800">{t('availability_logistics_received')} · {t('availability_location_warehouse')}</span>
-                </p>
+                {/* Alleen in deze Warehouse-flow; DirectTrade heeft geen palletontvangst in het eigen magazijn. */}
+                <p className="text-sm text-gray-700">{t('supply_pallet_fixed_state')}</p>
                 <div className="grid grid-cols-4 gap-3">
                     <div>
                         <label htmlFor="pallet.reference-input" className="text-xs font-medium text-gray-700">{t('supply_pallet_reference')} *</label>
@@ -574,7 +573,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                 {entry.line.productName} · {entry.line.productVariantName}
                             </legend>
                             <p className="mb-2 text-xs text-gray-700">
-                                #{entry.commitment.id} · {entry.commitment.vendorName ?? '–'} · {t('supply_expected')} {formatQuantity(entry.line.expectedQuantity, locale)} {entry.line.expectedUnit}
+                                #{entry.commitment.id} · {entry.commitment.vendorName ?? '–'} · {t('supply_expected')} {formatQuantity(entry.line.expectedQuantity, locale)} {entry.line.expectedUnit === null ? t('availability_unit_unknown') : t(unitLabelKey(entry.line.expectedUnit))}
                                 {' · '}
                                 {open === 'loading' || open === undefined
                                     ? t('supply_open_loading')

@@ -2,6 +2,7 @@
 
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
+import { unitLabelKey } from '../../lib/units';
 import { AvailabilityQuantity, ExpectedUnregistered, PackageUnit } from '../../types/availability';
 
 // Een bekende nul is een getal en wordt als "0" getoond (gedempt), nooit als streepje: de API levert hier altijd een
@@ -39,5 +40,6 @@ export function UnitBadge({ unit }: { unit: PackageUnit | null }) {
             </span>
         );
     }
-    return <span className="inline-flex rounded border border-slate-300 bg-slate-50 px-2 py-0.5 font-mono text-xs text-slate-800">{unit}</span>;
+    // Vertaald label; de interne code blijft via data-unit beschikbaar voor tests en scripts.
+    return <span data-unit={unit} className="inline-flex rounded border border-slate-300 bg-slate-50 px-2 py-0.5 text-xs text-slate-800">{t(unitLabelKey(unit))}</span>;
 }

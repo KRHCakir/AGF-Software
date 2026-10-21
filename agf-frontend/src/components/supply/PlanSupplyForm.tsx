@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
+import { unitLabelKey } from '../../lib/units';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -13,6 +14,7 @@ import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from '../../types/availabilit
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
+import ProductVariantPicker from '../shared/ProductVariantPicker';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
@@ -61,7 +63,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     const isDirect = route === 'DirectTrade';
     const [header, setHeader] = useState<HeaderDraft>(emptyHeader);
     const [lines, setLines] = useState<LineDraft[]>(() => [emptyLine()]);
-    const [variantFilter, setVariantFilter] = useState('');
     const [pending, setPending] = useState<PendingSubmission | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
@@ -71,30 +72,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
     // Na een onbekende uitkomst of na succes is het formulier vergrendeld (geen dubbele aanvoer door een gewijzigde retry).
     const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
-
-    const variantLabel = useMemo(() => {
-        const labels = new Map<number, string>();
-        for (const product of reference.products) {
-            for (const variant of product.variants) {
-                labels.set(variant.id, `${product.name} · ${variant.name}`);
-            }
-        }
-        return labels;
-    }, [reference.products]);
-
-    const filteredProducts = useMemo(() => {
-        const term = variantFilter.trim().toLowerCase();
-        if (term === '') {
-            return reference.products;
-        }
-        return reference.products
-            .map((product) => ({
-                ...product,
-                variants: product.variants.filter((variant) =>
-                    `${product.name} ${variant.name} ${variant.packaging ?? ''} ${variant.origin ?? ''}`.toLowerCase().includes(term)),
-            }))
-            .filter((product) => product.variants.length > 0);
-    }, [reference.products, variantFilter]);
 
     const edited = () => {
         // Na een definitieve weigering (of niets verstuurd) hoort een gewijzigde invoer bij een nieuw verzoek.
@@ -345,14 +322,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
             <fieldset className="space-y-2">
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
-                <div className="flex items-end gap-3">
-                    <label className="text-xs font-medium text-gray-700">
-                        {t('supply_variant_filter')}
-                        <input type="search" value={variantFilter} onChange={(event) => setVariantFilter(event.target.value)}
-                            placeholder={t('supply_variant_filter_placeholder')} className={`${inputClass} w-72`} />
-                    </label>
-                    <FieldError id="lines" messages={e('lines')} />
-                </div>
+                <FieldError id="lines" messages={e('lines')} />
                 <div className="overflow-x-auto rounded border border-gray-200">
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
@@ -368,28 +338,14 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         <tbody className="divide-y divide-gray-100">
                             {lines.map((line, index) => {
                                 const prefix = `lines[${index}]`;
-                                const selectedId = Number(line.productVariantId);
-                                const selectedVisible = filteredProducts.some((product) => product.variants.some((variant) => variant.id === selectedId));
                                 return (
                                     <tr key={line.key} className="align-top">
                                         <td className="w-80 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <select {...fieldProps(`${prefix}.productVariantId`, e(`${prefix}.productVariantId`))} value={line.productVariantId}
-                                                disabled={locked} onChange={(event) => updateLine(line.key, 'productVariantId', event.target.value)} className={inputClass}>
-                                                <option value="">{t('supply_choose')}</option>
-                                                {!selectedVisible && line.productVariantId && (
-                                                    <option value={line.productVariantId}>{variantLabel.get(selectedId) ?? line.productVariantId}</option>
-                                                )}
-                                                {filteredProducts.map((product) => (
-                                                    <optgroup key={product.id} label={product.name}>
-                                                        {product.variants.map((variant) => (
-                                                            <option key={variant.id} value={variant.id}>
-                                                                {[variant.name, variant.packaging, variant.origin].filter(Boolean).join(' · ')}
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-                                                ))}
-                                            </select>
+                                            <ProductVariantPicker id={`${prefix}.productVariantId`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={reference.products}
+                                                value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
+                                                describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
+                                                onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>
@@ -410,7 +366,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                             <select {...fieldProps(`${prefix}.expectedUnit`, e(`${prefix}.expectedUnit`))} value={line.unit} disabled={locked}
                                                 onChange={(event) => updateLine(line.key, 'unit', event.target.value)} className={inputClass}>
                                                 <option value="">{t('supply_choose')}</option>
-                                                {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                                                {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
                                             </select>
                                             <FieldError id={`${prefix}.expectedUnit`} messages={e(`${prefix}.expectedUnit`)} />
                                         </td>

@@ -6,6 +6,7 @@ import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
+import { unitLabelKey } from '../../lib/units';
 import { MAX_ORDER_LINES, OrderDraft, OrderLineDraft, buildOrderPayload } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
@@ -14,6 +15,7 @@ import { PACKAGE_UNITS } from '../../types/availability';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
+import ProductVariantPicker from '../shared/ProductVariantPicker';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
@@ -63,7 +65,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
     }, [knownCustomers, createdCustomers]);
     const [draft, setDraft] = useState<OrderDraft>(() => (pending === null ? emptyDraft() : draftFromCommand(pending)));
     const [customerFilter, setCustomerFilter] = useState('');
-    const [variantFilter, setVariantFilter] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
@@ -77,26 +78,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         const term = customerFilter.trim().toLowerCase();
         return term === '' ? customers : customers.filter((customer) => customer.name.toLowerCase().includes(term));
     }, [customers, customerFilter]);
-
-    const filteredProducts = useMemo(() => {
-        const term = variantFilter.trim().toLowerCase();
-        if (term === '') return products;
-        return products
-            .map((product) => ({
-                ...product,
-                variants: product.variants.filter((variant) =>
-                    `${product.name} ${variant.name} ${variant.packaging ?? ''} ${variant.origin ?? ''}`.toLowerCase().includes(term)),
-            }))
-            .filter((product) => product.variants.length > 0);
-    }, [products, variantFilter]);
-
-    const variantLabel = useMemo(() => {
-        const labels = new Map<number, string>();
-        for (const product of products) {
-            for (const variant of product.variants) labels.set(variant.id, `${product.name} · ${variant.name}`);
-        }
-        return labels;
-    }, [products]);
 
     const edited = () => {
         setError(null);
@@ -294,14 +275,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
             <fieldset className="space-y-2">
                 <legend className="text-sm font-semibold text-gray-900">{t('sales_lines')}</legend>
-                <div className="flex items-end gap-3">
-                    <label className="text-xs font-medium text-gray-700">
-                        {t('supply_variant_filter')}
-                        <input type="search" value={variantFilter} onChange={(event) => setVariantFilter(event.target.value)} disabled={locked}
-                            placeholder={t('supply_variant_filter_placeholder')} className={`${inputClass} w-72`} />
-                    </label>
-                    <FieldError id="lines" messages={e('lines')} />
-                </div>
+                <FieldError id="lines" messages={e('lines')} />
                 <div className="overflow-x-auto rounded border border-gray-200">
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
@@ -315,28 +289,14 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         <tbody className="divide-y divide-gray-100">
                             {draft.lines.map((line, index) => {
                                 const prefix = `lines[${index}]`;
-                                const selectedId = Number(line.productVariantId);
-                                const selectedVisible = filteredProducts.some((product) => product.variants.some((variant) => variant.id === selectedId));
                                 return (
                                     <tr key={line.key} className="align-top">
                                         <td className="w-96 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <select {...fieldProps(`${prefix}.productVariantId`, e(`${prefix}.productVariantId`))} value={line.productVariantId}
-                                                disabled={locked} onChange={(event) => updateLine(line.key, 'productVariantId', event.target.value)} className={inputClass}>
-                                                <option value="">{t('supply_choose')}</option>
-                                                {!selectedVisible && line.productVariantId && (
-                                                    <option value={line.productVariantId}>{variantLabel.get(selectedId) ?? line.productVariantId}</option>
-                                                )}
-                                                {filteredProducts.map((product) => (
-                                                    <optgroup key={product.id} label={product.name}>
-                                                        {product.variants.map((variant) => (
-                                                            <option key={variant.id} value={variant.id}>
-                                                                {[variant.name, variant.packaging, variant.origin].filter(Boolean).join(' · ')}
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-                                                ))}
-                                            </select>
+                                            <ProductVariantPicker id={`${prefix}.productVariantId`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
+                                                value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
+                                                describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
+                                                onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>
@@ -351,7 +311,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <select {...fieldProps(`${prefix}.unit`, e(`${prefix}.unit`))} value={line.unit} disabled={locked}
                                                 onChange={(event) => updateLine(line.key, 'unit', event.target.value)} className={inputClass}>
                                                 <option value="">{t('supply_choose')}</option>
-                                                {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                                                {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
                                             </select>
                                             <span className="block text-xs text-gray-500">{t('sales_unit_hint')}</span>
                                             <FieldError id={`${prefix}.unit`} messages={e(`${prefix}.unit`)} />
