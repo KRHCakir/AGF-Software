@@ -63,6 +63,7 @@ interface Failure {
 
 const PALLET_FIELD_KEYS: Record<string, string> = {
     reference: 'pallet.reference',
+    requestId: 'general',
     sscc: 'pallet.sscc',
     warehouseLocation: 'pallet.warehouseLocation',
     actorReference: 'actorReference',
@@ -200,12 +201,11 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
 
     const validate = (): FieldErrors => {
         const found: FieldErrors = {};
-        if (actor.trim() === '') addError(found, 'actorReference', t('supply_error_actor_required'));
-        else if (actor.trim().length > 100) addError(found, 'actorReference', t('supply_error_too_long', { max: '100' }));
+        // Medewerker en eigen palletnummer zijn optioneel bij ontvangst; leeg blokkeert niets.
+        if (actor.trim().length > 100) addError(found, 'actorReference', t('supply_error_too_long', { max: '100' }));
         if (!(frozen?.pallet.done ?? false)) {
             const reference = pallet.reference.trim();
-            if (reference === '') addError(found, 'pallet.reference', t('supply_error_required'));
-            else if (reference.length > 64) addError(found, 'pallet.reference', t('supply_error_too_long', { max: '64' }));
+            if (reference.length > 64) addError(found, 'pallet.reference', t('supply_error_too_long', { max: '64' }));
             if (pallet.sscc !== '' && !isValidSscc(pallet.sscc)) addError(found, 'pallet.sscc', t('supply_error_sscc'));
             if (pallet.bin.trim().length > 64) addError(found, 'pallet.warehouseLocation', t('supply_error_too_long', { max: '64' }));
         }
@@ -224,7 +224,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         return found;
     };
 
-    const buildLine = (id: number, actorReference: string): FrozenLine => {
+    const buildLine = (id: number, actorReference: string | null): FrozenLine => {
         const entry = index.get(id);
         const unit = entry?.line.expectedUnit;
         if (!entry || unit === null || unit === undefined) {
@@ -305,11 +305,12 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         setErrors(found);
         if (Object.keys(found).length > 0) return;
 
-        const actorReference = actor.trim();
+        const actorReference = actor.trim() === '' ? null : actor.trim();
         const next: FrozenSubmission = {
             pallet: frozen?.pallet ?? {
                 payload: {
-                    reference: pallet.reference.trim(),
+                    requestId: newRequestId(),
+                    reference: pallet.reference.trim() === '' ? null : pallet.reference.trim(),
                     sscc: pallet.sscc === '' ? null : pallet.sscc,
                     logisticsStatus: 'Received',
                     locationContext: 'Warehouse',
@@ -344,7 +345,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         if (frozen?.pallet.done) {
             const doneCount = selected.filter((id) => frozen.lines[id]?.done).length;
             reset(t('supply_abandoned_notice', {
-                reference: frozen.pallet.payload.reference,
+                reference: palletLabel(frozen),
                 done: String(doneCount),
                 total: String(selected.length),
             }));
@@ -354,6 +355,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     };
 
     const e = (key: string) => errors[key];
+
+    // Het servergegenereerde nummer zodra het bekend is; anders het eigen nummer; anders "nummer volgt".
+    const palletLabel = (submission: FrozenSubmission) =>
+        submission.pallet.result?.reference ?? submission.pallet.payload.reference ?? t('supply_pallet_number_pending');
 
     const stepState = (step: 'pallet' | number, done: boolean): StepState => {
         if (done) return 'done';
@@ -366,7 +371,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     };
 
     const progress: ProgressStep[] = frozen === null ? [] : [
-        { key: 'pallet', label: t('supply_step_pallet', { reference: frozen.pallet.payload.reference }), state: stepState('pallet', frozen.pallet.done) },
+        { key: 'pallet', label: t('supply_step_pallet', { reference: palletLabel(frozen) }), state: stepState('pallet', frozen.pallet.done) },
         ...selected.map((id) => {
             const entry = index.get(id);
             return {
@@ -387,7 +392,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         });
         return (
             <SuccessPanel
-                title={t('supply_receive_success', { reference: frozen.pallet.result?.reference ?? frozen.pallet.payload.reference })}
+                title={t('supply_receive_success', { reference: palletLabel(frozen) })}
                 note={replayed ? t('supply_saved_before') : undefined}
                 actions={(
                     <>
@@ -537,9 +542,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 </p>
                 <div className="grid grid-cols-4 gap-3">
                     <div>
-                        <label htmlFor="pallet.reference-input" className="text-xs font-medium text-gray-700">{t('supply_pallet_reference')} *</label>
+                        <label htmlFor="pallet.reference-input" className="text-xs font-medium text-gray-700">{t('supply_pallet_reference')}</label>
                         <input {...fieldProps('pallet.reference', e('pallet.reference'))} value={pallet.reference} maxLength={64} disabled={!palletEditable}
-                            onChange={(event) => editPallet('reference', event.target.value)} className={inputClass} />
+                            onChange={(event) => editPallet('reference', event.target.value)} className={inputClass} aria-describedby="pallet.reference-hint" />
+                        <span id="pallet.reference-hint" className="block text-xs text-gray-500">{t('supply_pallet_reference_hint')}</span>
                         <FieldError id="pallet.reference" messages={e('pallet.reference')} />
                     </div>
                     <div>

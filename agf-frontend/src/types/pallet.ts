@@ -5,12 +5,16 @@ import { isNumber, isNullableString, isObject, isString } from './guards';
 // Deze eerste kantoorflow maakt uitsluitend Warehouse + Received-pallets; kwaliteit is geen invoerveld (server: Quarantine).
 
 export interface CreateReceivedWarehousePalletRequest {
-    reference: string;
+    // Idempotentiesleutel: een identieke herhaling geeft dezelfde pallet terug, ook zonder eigen palletnummer.
+    requestId: string;
+    // Eigen palletnummer (optioneel); null laat de server een herkenbaar nummer (P-000123) genereren.
+    reference: string | null;
     sscc: string | null;
     logisticsStatus: 'Received';
     locationContext: 'Warehouse';
     warehouseLocation: string | null;
-    actorReference: string;
+    // Optioneel bij ontvangst; null blijft null in de audit (nooit een verzonnen naam).
+    actorReference: string | null;
     reason: string | null;
 }
 
@@ -21,7 +25,7 @@ export interface AddPalletContentLineRequest {
     quantity: number;
     unit: PackageUnit;
     netWeightKg: number;
-    actorReference: string;
+    actorReference: string | null;
     reason: string | null;
 }
 

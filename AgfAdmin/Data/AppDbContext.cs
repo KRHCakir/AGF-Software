@@ -384,6 +384,8 @@ namespace AgfAdmin.Data
                 b.HasIndex(p => p.Reference).IsUnique();
                 // NULL telt in een unieke index als verschillend (PostgreSQL en SQLite): meerdere pallets zonder SSCC mogen.
                 b.HasIndex(p => p.Sscc).IsUnique();
+                // Idem voor RequestId: oudere pallets hebben er geen.
+                b.HasIndex(p => p.RequestId).IsUnique();
 
                 b.HasOne(p => p.StockReceipt)
                     .WithMany()

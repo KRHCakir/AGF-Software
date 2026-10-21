@@ -784,6 +784,9 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Sscc")
                         .HasMaxLength(18)
                         .HasColumnType("character varying(18)");
@@ -806,6 +809,9 @@ namespace AgfAdmin.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
                         .IsUnique();
 
                     b.HasIndex("Sscc")

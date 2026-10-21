@@ -232,7 +232,7 @@
   "supply_subtitle": "Aanvoer plannen en pallets ontvangen. Elke registratie wordt direct vastgelegd.",
   "supply_actor": "Medewerker",
   "supply_actor_placeholder": "Naam of initialen",
-  "supply_actor_hint": "Verplicht bij palletregistratie (audit). Wordt in deze browser onthouden.",
+  "supply_actor_hint": "Optioneel bij palletontvangst; als het is ingevuld, komt het in de audit. Wordt in deze browser onthouden.",
   "supply_destination_label": "Bestemming",
   "supply_destination_warehouse": "Eigen magazijn (verwacht)",
   "supply_destination_warehouse_hint": "Geplande aanvoer naar ons magazijn; nog geen fysieke pallet.",
@@ -315,9 +315,9 @@
   "supply_expected_on": "verwacht {date}",
   "supply_pallet_title": "2. Pallet",
   "supply_pallet_fixed_state": "Deze kantoorflow registreert altijd:",
-  "supply_pallet_reference": "Palletreferentie",
+  "supply_pallet_reference": "Eigen palletnummer (optioneel)",
   "supply_pallet_sscc": "SSCC (optioneel)",
-  "supply_pallet_sscc_hint": "Alleen een echte gescande SSCC; wordt nooit gegenereerd.",
+  "supply_pallet_sscc_hint": "Alleen een echte gescande GS1-SSCC (18 cijfers); wordt nooit gegenereerd. Dit is geen palletnummer en geen partijnummer.",
   "supply_pallet_bin": "Locatie in magazijn (optioneel)",
   "supply_content_title": "3. Inhoud per bronregel",
   "supply_content_empty": "Kies hierboven één of meer bronregels.",
@@ -888,5 +888,7 @@
   "demo_search_none": "Geen verkooporder gevonden voor '{query}'.",
   "demo_search_opened": "Order {order} geopend.",
   "demo_search_choose": "{count} orders gevonden. Kies een order:",
-  "demo_search_more": "En nog {count} andere; verfijn de zoekterm."
+  "demo_search_more": "En nog {count} andere; verfijn de zoekterm.",
+  "supply_pallet_reference_hint": "Vul dit alleen in als jullie met eigen palletnummers werken. Leeg: de software geeft een nummer (P-000123).",
+  "supply_pallet_number_pending": "(nummer volgt)"
 }

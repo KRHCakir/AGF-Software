@@ -248,7 +248,7 @@
   "supply_subtitle": "Plan supply and receive pallets. Every registration is recorded immediately.",
   "supply_actor": "Employee",
   "supply_actor_placeholder": "Name or initials",
-  "supply_actor_hint": "Required for pallet registration (audit). Remembered in this browser.",
+  "supply_actor_hint": "Optional at pallet receipt; when filled in it is recorded in the audit trail. Remembered in this browser.",
   "supply_destination_label": "Destination",
   "supply_destination_warehouse": "Own warehouse (expected)",
   "supply_destination_warehouse_hint": "Planned supply to our warehouse; no physical pallet yet.",
@@ -331,9 +331,9 @@
   "supply_expected_on": "expected {date}",
   "supply_pallet_title": "2. Pallet",
   "supply_pallet_fixed_state": "This office flow always registers:",
-  "supply_pallet_reference": "Pallet reference",
+  "supply_pallet_reference": "Own pallet number (optional)",
   "supply_pallet_sscc": "SSCC (optional)",
-  "supply_pallet_sscc_hint": "Only a real scanned SSCC; never generated.",
+  "supply_pallet_sscc_hint": "Only a real scanned GS1 SSCC (18 digits); never generated. Not a pallet number and not a lot number.",
   "supply_pallet_bin": "Warehouse location (optional)",
   "supply_content_title": "3. Content per source line",
   "supply_content_empty": "Choose one or more source lines above.",
@@ -888,5 +888,7 @@
   "demo_search_none": "No sales order found for '{query}'.",
   "demo_search_opened": "Opened order {order}.",
   "demo_search_choose": "{count} orders found. Choose one:",
-  "demo_search_more": "And {count} more; refine the search."
+  "demo_search_more": "And {count} more; refine the search.",
+  "supply_pallet_reference_hint": "Only fill this in if you work with your own pallet numbers. Empty: the software assigns a number (P-000123).",
+  "supply_pallet_number_pending": "(number follows)"
 }

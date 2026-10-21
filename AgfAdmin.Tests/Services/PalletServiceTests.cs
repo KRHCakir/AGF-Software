@@ -213,6 +213,131 @@ public class PalletServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Created, (await CreatePalletAsync(request)).Status);
     }
 
+    // ---- Eigen palletnummer optioneel: servergegenereerd nummer, idempotent via RequestId ----
+
+    private static CreatePalletDto PalletRequestWithoutOwnNumber(Guid requestId) => new()
+    {
+        RequestId = requestId,
+        Reference = "   ",
+        LogisticsStatus = "Received",
+        LocationContext = "Warehouse",
+        WarehouseLocation = "DOCK-1",
+        ActorReference = null
+    };
+
+    [Fact]
+    public async Task Create_Pallet_Without_Own_Number_Generates_Recognisable_Unique_Reference()
+    {
+        var result = await CreatePalletAsync(PalletRequestWithoutOwnNumber(Guid.NewGuid()));
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal(PalletService.GeneratedReference(result.Value.Id), result.Value.Reference);
+        Assert.Matches("^P-[0-9]{6}$", result.Value.Reference);
+
+        await using var verify = _factory.CreateContext();
+        var pallet = await verify.Pallets.SingleAsync();
+        Assert.Equal(result.Value.Reference, pallet.Reference);
+        Assert.NotNull(pallet.RequestId);
+        var auditEvent = await verify.PalletAuditEvents.SingleAsync();
+        Assert.Contains(result.Value.Reference, auditEvent.NewValue);
+        Assert.Contains("ReferenceGenerated", auditEvent.NewValue, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(auditEvent.ActorReference);
+        Assert.Equal(pallet.RequestId, auditEvent.RequestId);
+    }
+
+    [Fact]
+    public async Task Two_Pallets_Without_Own_Number_Get_Different_Generated_References()
+    {
+        var first = await CreatePalletAsync(PalletRequestWithoutOwnNumber(Guid.NewGuid()));
+        var second = await CreatePalletAsync(PalletRequestWithoutOwnNumber(Guid.NewGuid()));
+
+        Assert.Equal(ServiceResultStatus.Created, second.Status);
+        Assert.NotEqual(first.Value.Reference, second.Value.Reference);
+        Assert.Equal((2, 0, 2), await CountsAsync());
+    }
+
+    [Fact]
+    public async Task Identical_Retry_Without_Own_Number_Returns_Same_Pallet_And_Creates_Nothing()
+    {
+        var requestId = Guid.NewGuid();
+        var first = await CreatePalletAsync(PalletRequestWithoutOwnNumber(requestId));
+        var retry = await CreatePalletAsync(PalletRequestWithoutOwnNumber(requestId));
+
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(first.Value.Id, retry.Value.Id);
+        Assert.Equal(first.Value.Reference, retry.Value.Reference);
+        Assert.Equal((1, 0, 1), await CountsAsync());
+    }
+
+    [Fact]
+    public async Task Retry_With_Same_RequestId_But_Different_Content_Conflicts()
+    {
+        var requestId = Guid.NewGuid();
+        await CreatePalletAsync(PalletRequestWithoutOwnNumber(requestId));
+        var changed = PalletRequestWithoutOwnNumber(requestId);
+        changed.WarehouseLocation = "DOCK-2";
+
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreatePalletAsync(changed)).Status);
+        Assert.Equal((1, 0, 1), await CountsAsync());
+    }
+
+    [Fact]
+    public async Task Own_Number_With_RequestId_Is_Kept_And_Replayed_On_RequestId()
+    {
+        var requestId = Guid.NewGuid();
+        var request = PalletRequest("EIGEN-7");
+        request.RequestId = requestId;
+        var first = await CreatePalletAsync(request);
+        Assert.Equal("EIGEN-7", first.Value.Reference);
+
+        var retry = PalletRequest("EIGEN-7");
+        retry.RequestId = requestId;
+        Assert.Equal(ServiceResultStatus.Ok, (await CreatePalletAsync(retry)).Status);
+
+        // Zelfde RequestId met een ander eigen nummer is een ander verzoek: conflict, geen tweede pallet.
+        var other = PalletRequest("EIGEN-8");
+        other.RequestId = requestId;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreatePalletAsync(other)).Status);
+        Assert.Equal((1, 0, 1), await CountsAsync());
+    }
+
+    [Fact]
+    public async Task Receipt_Without_Actor_Stores_Null_Actor_And_Never_Invents_One()
+    {
+        var seed = await SeedAsync();
+        var palletRequest = PalletRequest();
+        palletRequest.ActorReference = " ";
+        var palletId = await CreatedPalletIdAsync(palletRequest);
+        var content = ContentRequest(seed.WarehouseLine);
+        content.ActorReference = null;
+
+        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, content)).Status);
+
+        await using var verify = _factory.CreateContext();
+        var events = await verify.PalletAuditEvents.OrderBy(e => e.Id).ToListAsync();
+        Assert.Equal(2, events.Count);
+        Assert.All(events, e => Assert.Null(e.ActorReference));
+    }
+
+    [Fact]
+    public async Task Quality_Decision_Still_Requires_Actor()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var line = (await AddContentAsync(palletId, ContentRequest(seed.WarehouseLine))).Value;
+
+        await using var db = _factory.CreateContext();
+        var result = await CreateService(db).ChangeQualityStatusAsync(palletId, line.Id, new ChangeQualityStatusDto
+        {
+            RequestId = Guid.NewGuid(),
+            ExpectedContentLineVersion = line.Version,
+            ToStatus = "Approved",
+            ActorReference = "  "
+        });
+
+        AssertValidation(result, "actorReference");
+    }
+
     [Fact]
     public async Task Exact_Pallet_Retry_Returns_Same_Pallet_Without_New_Event()
     {
@@ -273,9 +398,9 @@ public class PalletServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData("reference-missing", "reference")]
-    [InlineData("reference-blank", "reference")]
     [InlineData("reference-too-long", "reference")]
+    [InlineData("reference-missing-without-request-id", "requestId")]
+    [InlineData("request-id-empty", "requestId")]
     [InlineData("sscc-check-digit", "sscc")]
     [InlineData("sscc-17-digits", "sscc")]
     [InlineData("sscc-letters", "sscc")]
@@ -300,8 +425,6 @@ public class PalletServiceTests : IDisposable
     [InlineData("gross-too-large", "grossKg")]
     [InlineData("declared-zero", "declaredNetKg")]
     [InlineData("gross-below-tare", "grossKg")]
-    [InlineData("actor-missing", "actorReference")]
-    [InlineData("actor-blank", "actorReference")]
     [InlineData("actor-too-long", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Create_Pallet_Rejects_Invalid_Input_And_Stores_Nothing(string invalidCase, string expectedErrorKey)
@@ -309,8 +432,8 @@ public class PalletServiceTests : IDisposable
         var request = PalletRequest();
         switch (invalidCase)
         {
-            case "reference-missing": request.Reference = null; break;
-            case "reference-blank": request.Reference = "   "; break;
+            case "reference-missing-without-request-id": request.Reference = null; request.RequestId = null; break;
+            case "request-id-empty": request.RequestId = Guid.Empty; break;
             case "reference-too-long": request.Reference = new string('R', 65); break;
             case "sscc-check-digit": request.Sscc = "006141411234567891"; break;
             case "sscc-17-digits": request.Sscc = "00614141123456789"; break;
@@ -336,8 +459,6 @@ public class PalletServiceTests : IDisposable
             case "gross-too-large": request.GrossKg = 1_000_000_000_000_000m; break;
             case "declared-zero": request.DeclaredNetKg = 0m; break;
             case "gross-below-tare": request.GrossKg = 24.999m; break;
-            case "actor-missing": request.ActorReference = null; break;
-            case "actor-blank": request.ActorReference = " "; break;
             case "actor-too-long": request.ActorReference = new string('A', 101); break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
         }
@@ -453,7 +574,7 @@ public class PalletServiceTests : IDisposable
     [InlineData("unit-kg", "unit")]
     [InlineData("unit-capitalised", "unit")]
     [InlineData("unit-pallet", "unit")]
-    [InlineData("actor-missing", "actorReference")]
+    [InlineData("actor-too-long", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Add_ContentLine_Rejects_Invalid_Input_And_Stores_Nothing(string invalidCase, string expectedErrorKey)
     {
@@ -480,7 +601,7 @@ public class PalletServiceTests : IDisposable
             case "unit-kg": request.Unit = "kg"; break;
             case "unit-capitalised": request.Unit = "Box"; break;
             case "unit-pallet": request.Unit = "pallet"; break;
-            case "actor-missing": request.ActorReference = null; break;
+            case "actor-too-long": request.ActorReference = new string('A', 101); break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
         }
 

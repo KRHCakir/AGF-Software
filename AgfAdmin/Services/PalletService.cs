@@ -44,11 +44,13 @@ namespace AgfAdmin.Services
                 return Validation<PalletDto>(errors);
             }
 
-            // Idempotentie: de unieke, scanbare referentie identificeert de pallet.
-            var existing = await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken);
+            var ownReference = candidate.Reference != null;
+
+            // Idempotentie: eerst op RequestId (werkt ook zonder eigen nummer), anders op de unieke, scanbare referentie.
+            var existing = await FindExistingAsync(candidate, cancellationToken);
             if (existing != null)
             {
-                return ResultForPalletRetry(existing, candidate);
+                return ResultForPalletRetry(existing, candidate, ownReference);
             }
 
             if (candidate.Sscc != null && await _db.Pallets.AnyAsync(p => p.Sscc == candidate.Sscc, cancellationToken))
@@ -56,50 +58,89 @@ namespace AgfAdmin.Services
                 return ServiceResult<PalletDto>.Conflict($"SSCC {candidate.Sscc} is already registered on another pallet.");
             }
 
-            _db.Pallets.Add(candidate);
-            _db.PalletAuditEvents.Add(new PalletAuditEvent
+            // Zonder eigen nummer: eerst opslaan met een tijdelijke unieke waarde, dan het herkenbare nummer uit het Id
+            // afleiden (P-000123) in dezelfde transactie. De kolom blijft NOT NULL en de bestaande checks blijven gelden.
+            if (!ownReference)
             {
-                Pallet = candidate,
-                EventType = PalletCreatedEvent,
-                NewValue = Snapshot(new
-                {
-                    candidate.Reference,
-                    candidate.Sscc,
-                    candidate.PalletType,
-                    candidate.TareKg,
-                    candidate.GrossKg,
-                    candidate.DeclaredNetKg,
-                    candidate.LogisticsStatus,
-                    candidate.LocationContext,
-                    candidate.WarehouseLocation
-                }),
-                Reason = reason,
-                ActorReference = actor,
-                OccurredAt = candidate.CreatedAt
-            });
+                candidate.Reference = $"P-tmp-{Guid.NewGuid():N}";
+            }
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             try
             {
+                _db.Pallets.Add(candidate);
+                if (!ownReference)
+                {
+                    await _db.SaveChangesAsync(cancellationToken);
+                    candidate.Reference = GeneratedReference(candidate.Id);
+                }
+
+                _db.PalletAuditEvents.Add(new PalletAuditEvent
+                {
+                    Pallet = candidate,
+                    EventType = PalletCreatedEvent,
+                    NewValue = Snapshot(new
+                    {
+                        candidate.Reference,
+                        candidate.Sscc,
+                        candidate.PalletType,
+                        candidate.TareKg,
+                        candidate.GrossKg,
+                        candidate.DeclaredNetKg,
+                        candidate.LogisticsStatus,
+                        candidate.LocationContext,
+                        candidate.WarehouseLocation,
+                        ReferenceGenerated = !ownReference
+                    }),
+                    Reason = reason,
+                    ActorReference = actor,
+                    RequestId = candidate.RequestId,
+                    OccurredAt = candidate.CreatedAt
+                });
+
                 await _db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException)
             {
-                // Gelijktijdige retry of race op referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
+                // Gelijktijdige retry of race op RequestId/referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
+                await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
-                var concurrent = await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken);
+                var concurrent = await FindExistingAsync(candidate, cancellationToken);
                 if (concurrent != null)
                 {
-                    return ResultForPalletRetry(concurrent, candidate);
+                    return ResultForPalletRetry(concurrent, candidate, ownReference);
                 }
                 if (candidate.Sscc != null && await _db.Pallets.AnyAsync(p => p.Sscc == candidate.Sscc, cancellationToken))
                 {
                     return ServiceResult<PalletDto>.Conflict($"SSCC {candidate.Sscc} is already registered on another pallet.");
+                }
+                if (!ownReference && await _db.Pallets.AnyAsync(p => p.Reference == candidate.Reference, cancellationToken))
+                {
+                    return ServiceResult<PalletDto>.Conflict($"Generated pallet number {candidate.Reference} is already in use as an own pallet number; please retry.");
                 }
                 throw;
             }
 
             var created = await PalletQuery().SingleAsync(p => p.Id == candidate.Id, cancellationToken);
             return ServiceResult<PalletDto>.Created(ToDto(created));
+        }
+
+        public static string GeneratedReference(int palletId) => $"P-{palletId:D6}";
+
+        private async Task<Pallet> FindExistingAsync(Pallet candidate, CancellationToken cancellationToken)
+        {
+            if (candidate.RequestId != null)
+            {
+                var byRequest = await PalletQuery().SingleOrDefaultAsync(p => p.RequestId == candidate.RequestId, cancellationToken);
+                if (byRequest != null)
+                {
+                    return byRequest;
+                }
+            }
+            return candidate.Reference == null
+                ? null
+                : await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken);
         }
 
         private static Pallet BuildPallet(CreatePalletDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
@@ -112,7 +153,21 @@ namespace AgfAdmin.Services
                 return null;
             }
 
-            var reference = RequiredText(request.Reference, MaxReferenceLength, "reference", errors);
+            // Eigen palletnummer is optioneel; leeg of alleen spaties telt als niet opgegeven. Zonder nummer is een RequestId
+            // verplicht, anders kan een herhaling niet als dezelfde pallet worden herkend.
+            var reference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
+            if (reference != null && reference.Length > MaxReferenceLength)
+            {
+                AddError(errors, "reference", $"This field may contain at most {MaxReferenceLength} characters.");
+            }
+            if (reference == null && request.RequestId == null)
+            {
+                AddError(errors, "requestId", "A requestId is required when no own pallet number is given.");
+            }
+            if (request.RequestId == Guid.Empty)
+            {
+                AddError(errors, "requestId", "requestId must be a non-empty GUID.");
+            }
 
             if (request.Sscc != null && !Sscc.IsValid(request.Sscc))
             {
@@ -161,7 +216,8 @@ namespace AgfAdmin.Services
                 AddError(errors, "grossKg", "Measured gross weight cannot be lower than the measured tare weight.");
             }
 
-            actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            // Medewerker is optioneel bij ontvangst: leeg blijft leeg in de audit (geen verzonnen naam).
+            actor = OptionalActor(request.ActorReference, errors);
             reason = OptionalReason(request.Reason, errors);
 
             if (errors.Count > 0)
@@ -171,6 +227,7 @@ namespace AgfAdmin.Services
 
             return new Pallet
             {
+                RequestId = request.RequestId,
                 Reference = reference,
                 Sscc = request.Sscc,
                 PalletType = palletType,
@@ -184,9 +241,11 @@ namespace AgfAdmin.Services
             };
         }
 
-        private static ServiceResult<PalletDto> ResultForPalletRetry(Pallet existing, Pallet candidate)
+        private static ServiceResult<PalletDto> ResultForPalletRetry(Pallet existing, Pallet candidate, bool ownReference)
         {
-            var same = string.Equals(existing.Sscc, candidate.Sscc, StringComparison.Ordinal)
+            // Een eigen nummer moet bij een herhaling op RequestId overeenkomen; een gegenereerd nummer wordt niet vergeleken.
+            var same = (!ownReference || string.Equals(existing.Reference, candidate.Reference, StringComparison.Ordinal))
+                && string.Equals(existing.Sscc, candidate.Sscc, StringComparison.Ordinal)
                 && string.Equals(existing.PalletType, candidate.PalletType, StringComparison.Ordinal)
                 && existing.TareKg == candidate.TareKg
                 && existing.GrossKg == candidate.GrossKg
@@ -197,7 +256,9 @@ namespace AgfAdmin.Services
 
             return same
                 ? ServiceResult<PalletDto>.Ok(ToDto(existing))
-                : ServiceResult<PalletDto>.Conflict($"Pallet reference {candidate.Reference} already exists with different content.");
+                : ServiceResult<PalletDto>.Conflict(ownReference
+                    ? $"Pallet reference {candidate.Reference} already exists with different content."
+                    : $"This request was already registered as pallet {existing.Reference} with different content.");
         }
 
         // ---- Inhoudsregel toevoegen ----
@@ -323,7 +384,8 @@ namespace AgfAdmin.Services
                 AddError(errors, "netWeightKg", "Actual net weight is required, must be positive and may have at most 3 decimals.");
             }
 
-            actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            // Medewerker is optioneel bij ontvangst (zie BuildPallet); keuring en statuswijzigingen blijven hem eisen.
+            actor = OptionalActor(request.ActorReference, errors);
             reason = OptionalReason(request.Reason, errors);
 
             if (errors.Count > 0)
@@ -997,6 +1059,21 @@ namespace AgfAdmin.Services
         }
 
         // Ontbrekend is toegestaan; ingevuld betekent niet-leeg en binnen de maximale lengte.
+        // Leeg of alleen spaties = niet opgegeven (null); anders getrimd en op lengte gecontroleerd.
+        private static string OptionalActor(string value, Dictionary<string, List<string>> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+            var trimmed = value.Trim();
+            if (trimmed.Length > MaxActorLength)
+            {
+                AddError(errors, "actorReference", $"This field may contain at most {MaxActorLength} characters.");
+            }
+            return trimmed;
+        }
+
         private static string OptionalNonBlankText(string value, int maxLength, string key, Dictionary<string, List<string>> errors)
         {
             if (value == null)

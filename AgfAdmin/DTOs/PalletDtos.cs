@@ -2,6 +2,10 @@ namespace AgfAdmin.DTOs
 {
     public sealed class CreatePalletDto
     {
+        // Idempotentiesleutel (aanbevolen). Verplicht als er geen eigen palletnummer wordt opgegeven, zodat een herhaling
+        // zonder nummer dezelfde pallet teruggeeft in plaats van een tweede met een nieuw gegenereerd nummer.
+        public Guid? RequestId { get; set; }
+        // Eigen palletnummer (optioneel). Leeg: de server genereert een uniek, herkenbaar nummer (P-000123).
         public string Reference { get; set; }
         public string Sscc { get; set; }
         public string PalletType { get; set; }
