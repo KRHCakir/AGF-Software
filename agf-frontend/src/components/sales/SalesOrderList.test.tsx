@@ -9,7 +9,7 @@ import SalesOrderList from './SalesOrderList';
 // gebracht (alleen de lijst scrolt). jsdom heeft geen layout; afmetingen worden per element gesimuleerd.
 
 const order = (id: number): SalesOrder => ({
-    id, requestId: `o-${id}`, customerId: id, customerName: `Klant ${id}`, status: 'Open', customerReference: null,
+    id, requestId: `o-${id}`, customerId: id, customerName: `Klant ${id}`, status: 'Open', customerReference: null, internalNote: null,
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version: 1,
     cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, delivered: false,
     lines: [{ id: id * 10, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box', palletCount: null, packagesPerPallet: null, reservedQuantity: 0, reservedNetWeightKg: 0,

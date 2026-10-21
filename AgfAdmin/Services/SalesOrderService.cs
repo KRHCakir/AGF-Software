@@ -91,6 +91,8 @@ namespace AgfAdmin.Services
                 ValidationErrors.Add(errors, "customerId", "A customer is required.");
             }
             var reference = ValidationErrors.OptionalText(request.CustomerReference, ReservationRules.MaxCustomerReferenceLength, "customerReference", errors);
+            // Interne opmerking: hoort bij deze order, alleen intern zichtbaar, telt mee in de replayvergelijking.
+            var internalNote = ValidationErrors.OptionalText(request.InternalNote, ReservationRules.MaxInternalNoteLength, "internalNote", errors);
             if (request.RequestedDeliveryDate == null)
             {
                 ValidationErrors.Add(errors, "requestedDeliveryDate", "A requested delivery date is required.");
@@ -164,6 +166,7 @@ namespace AgfAdmin.Services
                 CustomerId = request.CustomerId!.Value,
                 Status = ReservationRules.OrderStatusOpen,
                 CustomerReference = reference,
+                InternalNote = internalNote,
                 RequestedDeliveryDate = UtcPrecision.ToStoredUtc(request.RequestedDeliveryDate!.Value),
                 ActorReference = actor,
                 CreatedAt = now,
@@ -179,6 +182,7 @@ namespace AgfAdmin.Services
             var candidateLines = candidate.Lines.ToList();
             var same = existing.CustomerId == candidate.CustomerId
                 && string.Equals(existing.CustomerReference, candidate.CustomerReference, StringComparison.Ordinal)
+                && string.Equals(existing.InternalNote, candidate.InternalNote, StringComparison.Ordinal)
                 && existing.RequestedDeliveryDate.Ticks == candidate.RequestedDeliveryDate.Ticks
                 && string.Equals(existing.ActorReference, candidate.ActorReference, StringComparison.Ordinal)
                 && existingLines.Count == candidateLines.Count
@@ -624,6 +628,7 @@ namespace AgfAdmin.Services
             CustomerName = order.Customer?.Name,
             Status = order.Status,
             CustomerReference = order.CustomerReference,
+            InternalNote = order.InternalNote,
             RequestedDeliveryDate = DateTime.SpecifyKind(order.RequestedDeliveryDate, DateTimeKind.Utc),
             ActorReference = order.ActorReference,
             CreatedAt = DateTime.SpecifyKind(order.CreatedAt, DateTimeKind.Utc),

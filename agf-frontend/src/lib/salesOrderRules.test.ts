@@ -37,6 +37,7 @@ const line = (productVariantId: string, quantity: string, unit: 'box' | 'colli' 
 const validDraft = (): OrderDraft => ({
     customerId: '7',
     customerReference: '  PO-2026-1  ',
+    internalNote: '  Klant komt morgen langs  ',
     requestedDeliveryDate: '2026-10-23',
     lines: [line('1', '30'), line('1', '5', 'colli'), line('3', '12,5')],
 });
@@ -50,6 +51,9 @@ describe('buildOrderPayload', () => {
         if (!result.ok) return;
         assert.equal(result.value.customerId, 7);
         assert.equal(result.value.customerReference, 'PO-2026-1');
+        assert.equal(result.value.internalNote, 'Klant komt morgen langs', 'internal note trimmed and sent with the order');
+        assert.equal(buildOrderPayload({ ...validDraft(), internalNote: '   ' }, 'office-1').ok && (buildOrderPayload({ ...validDraft(), internalNote: '   ' }, 'office-1') as { ok: true; value: { internalNote: string | null } }).value.internalNote, null, 'blank note becomes null');
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), internalNote: 'x'.repeat(1001) }, 'office-1')).internalNote, ['too_long']);
         assert.equal(result.value.actorReference, 'office-1');
         assert.equal(result.value.requestedDeliveryDate, new Date(2026, 9, 23).toISOString());
         assert.deepEqual(result.value.lines, [
@@ -76,7 +80,7 @@ describe('buildOrderPayload', () => {
     });
 
     test('customer, date, actor and at least one line are required', () => {
-        const result = buildOrderPayload({ customerId: '', customerReference: '', requestedDeliveryDate: '', lines: [] }, '  ');
+        const result = buildOrderPayload({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [] }, '  ');
         assert.deepEqual(codes(result), {
             actorReference: ['required'],
             customerId: ['required'],

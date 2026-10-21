@@ -40,6 +40,9 @@ namespace AgfAdmin.Models
         public decimal? CustomsValue { get; set; }
         public string? OriginCountry { get; set; }
         public string? ReceiptReference { get; set; }  // verwijzing naar ontvangst, pallet of SSCC; nooit een ontvangstactie
+        // Interne opmerking bij dit document ("Klant komt morgen langs"): alleen voor interne werkplekken, nooit in klantfacturen,
+        // leverbonnen, mails of exports; niet overgenomen naar volgende documenten. Los van Remarks (algemeen opmerkingenveld).
+        public string? InternalNote { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }

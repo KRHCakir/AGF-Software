@@ -5,6 +5,8 @@ namespace AgfAdmin.DTOs
         public Guid? RequestId { get; set; }
         public int? CustomerId { get; set; }
         public string CustomerReference { get; set; }
+        // Interne opmerking bij deze order (alleen intern; telt mee in de replayvergelijking).
+        public string InternalNote { get; set; }
         public DateTimeOffset? RequestedDeliveryDate { get; set; }
         public string ActorReference { get; set; }
         public List<CreateSalesOrderLineDto> Lines { get; set; }
@@ -34,6 +36,7 @@ namespace AgfAdmin.DTOs
         public string CustomerName { get; set; }
         public string Status { get; set; }
         public string CustomerReference { get; set; }
+        public string InternalNote { get; set; }
         public DateTime RequestedDeliveryDate { get; set; }
         public string ActorReference { get; set; }
         public DateTime CreatedAt { get; set; }

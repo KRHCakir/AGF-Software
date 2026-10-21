@@ -1,11 +1,12 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AgfAdmin.DTOs;
 
 namespace AgfAdmin.Services
 {
     // Genormaliseerde weergave van de oorspronkelijke invoeropdracht (POST api/purchase-invoices). Wordt bij het aanmaken op de
-    // factuur bewaard (IncomingInvoice.RequestPayload) en bij een herhaling met dezelfde RequestId tekstueel vergeleken.
+    // factuur bewaard (IncomingInvoice.RequestPayload) en bij een herhaling met dezelfde RequestId structureel vergeleken.
     // Zo blijft een exacte retry een retry, ook als leveranciers- of bedrijfsstandaarden (termijn, valuta, btw, ingeschakelde
     // optionele velden) intussen zijn gewijzigd, en geeft elke inhoudelijke afwijking, ook in optionele kopvelden, een conflict.
     // Normalisatie: tekst getrimd (leeg = null), valuta in hoofdletters, datums als kalenderdag, decimalen zonder slepende
@@ -25,15 +26,48 @@ namespace AgfAdmin.Services
                 .ToList();
             var snapshot = new Snapshot(
                 request.VendorId, Text(request.InvoiceNumber), Day(request.InvoiceDate), request.PaymentTermsDays, Day(request.DueDate),
-                Text(request.Currency)?.ToUpperInvariant(), lines,
+                Text(request.Currency)?.ToUpperInvariant(), lines, Text(request.InternalNote),
                 Day(request.ReceivedDate), Text(request.PaymentReference), Text(request.Remarks), Number(request.GrossWeightKg), Number(request.NetWeightKg),
                 Text(request.ContainerNumber), Text(request.Transporter), Text(request.DriverName), Text(request.LicensePlate), Text(request.Incoterms),
                 Number(request.CustomsValue), Text(request.OriginCountry), Text(request.ReceiptReference));
             return JsonSerializer.Serialize(snapshot, Options);
         }
 
-        public static bool Same(string stored, CreatePurchaseInvoiceDto request) =>
-            stored != null && string.Equals(stored, Canonical(request), StringComparison.Ordinal);
+        // Velden die pas na de eerste vastlegging (#43) aan de opdracht zijn toegevoegd. Een opgeslagen opdracht van vóór zo'n
+        // veld heeft de sleutel niet; "ontbrekend" telt dan als null (niet ingevuld), zodat een identieke retry 200 blijft en een
+        // nu wél ingevulde waarde een conflict geeft. Nieuwe velden hier toevoegen, nooit bestaande verwijderen.
+        private static readonly string[] FieldsAddedLater = { "internalNote" };
+
+        // Structurele vergelijking (volgorde van sleutels doet er niet toe); verder exact: elke andere ontbrekende of extra sleutel,
+        // en elke andere waarde, is een andere opdracht.
+        public static bool Same(string stored, CreatePurchaseInvoiceDto request)
+        {
+            if (stored == null)
+            {
+                return false;
+            }
+            JsonObject storedObject;
+            try
+            {
+                storedObject = JsonNode.Parse(stored) as JsonObject;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+            if (storedObject == null)
+            {
+                return false;
+            }
+            foreach (var field in FieldsAddedLater)
+            {
+                if (!storedObject.ContainsKey(field))
+                {
+                    storedObject[field] = null;
+                }
+            }
+            return JsonNode.DeepEquals(storedObject, JsonNode.Parse(Canonical(request)));
+        }
 
         private static string Text(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -43,7 +77,7 @@ namespace AgfAdmin.Services
         private static decimal? Number(decimal? value) => value == null ? null : value.Value / 1.000000000000000000000000000m;
 
         private sealed record Snapshot(
-            int? VendorId, string InvoiceNumber, string InvoiceDate, int? PaymentTermsDays, string DueDate, string Currency, List<LineSnapshot> Lines,
+            int? VendorId, string InvoiceNumber, string InvoiceDate, int? PaymentTermsDays, string DueDate, string Currency, List<LineSnapshot> Lines, string InternalNote,
             string ReceivedDate, string PaymentReference, string Remarks, decimal? GrossWeightKg, decimal? NetWeightKg, string ContainerNumber,
             string Transporter, string DriverName, string LicensePlate, string Incoterms, decimal? CustomsValue, string OriginCountry, string ReceiptReference);
 

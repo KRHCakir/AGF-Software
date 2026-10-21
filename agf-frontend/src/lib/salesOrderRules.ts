@@ -47,9 +47,13 @@ export interface OrderLineDraft {
 export interface OrderDraft {
     customerId: string;
     customerReference: string;
+    // Interne opmerking bij deze order (alleen intern; nooit overgenomen naar een volgende order).
+    internalNote: string;
     requestedDeliveryDate: string;
     lines: OrderLineDraft[];
 }
+
+export const MAX_INTERNAL_NOTE_LENGTH = 1000;
 
 export type OrderPayload = Omit<CreateSalesOrderRequest, 'requestId'>;
 
@@ -83,6 +87,8 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
 
     const reference = draft.customerReference.trim();
     if (reference.length > MAX_CUSTOMER_REFERENCE_LENGTH) errors.push({ field: 'customerReference', code: 'too_long' });
+    const internalNote = draft.internalNote.trim();
+    if (internalNote.length > MAX_INTERNAL_NOTE_LENGTH) errors.push({ field: 'internalNote', code: 'too_long' });
 
     const requestedDeliveryDate = toLocalMidnightIso(draft.requestedDeliveryDate);
     if (requestedDeliveryDate === null) {
@@ -124,6 +130,7 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
         value: {
             customerId,
             customerReference: reference === '' ? null : reference,
+            internalNote: internalNote === '' ? null : internalNote,
             requestedDeliveryDate,
             actorReference: actorResult.value,
             lines,

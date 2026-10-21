@@ -13,6 +13,7 @@ namespace AgfAdmin.Services
         private const int MaxInvoiceNumberLength = 100;
         private const int MaxTextLength = 200;
         private const int MaxRemarksLength = 1000;
+        private const int MaxInternalNoteLength = 1000;
         private const int MaxDescriptionLength = 200;
 
         private readonly AppDbContext _db;
@@ -167,6 +168,8 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "dueDate", "The due date cannot be before the invoice date.");
             }
+            // Interne opmerking: altijd beschikbaar (geen bedrijfsinstelling), hoort bij dit document en blijft intern.
+            var internalNote = ValidationErrors.OptionalText(request.InternalNote, MaxInternalNoteLength, "internalNote", errors);
 
             // Optionele velden: alleen ingeschakelde velden worden overgenomen; de rest wordt genegeerd (niet geweigerd).
             string Text(string key, string value, int max) => enabled.Contains(key) ? ValidationErrors.OptionalText(value, max, key, errors) : null;
@@ -336,6 +339,7 @@ namespace AgfAdmin.Services
                 ReviewConfidence = 1.0,
                 TotalAmount = totals.Gross,
                 VATAmount = totals.Vat,
+                InternalNote = internalNote,
                 ReceivedDate = receivedDate,
                 PaymentReference = paymentReference,
                 Remarks = remarks,
@@ -412,6 +416,7 @@ namespace AgfAdmin.Services
                 && string.Equals(existing.Currency, candidate.Currency, StringComparison.Ordinal)
                 && existing.TotalAmount == candidate.TotalAmount
                 && existing.VATAmount == candidate.VATAmount
+                && string.Equals(existing.InternalNote, candidate.InternalNote, StringComparison.Ordinal)
                 && existing.ReceivedDate == candidate.ReceivedDate
                 && string.Equals(existing.PaymentReference, candidate.PaymentReference, StringComparison.Ordinal)
                 && string.Equals(existing.Remarks, candidate.Remarks, StringComparison.Ordinal)
@@ -475,6 +480,7 @@ namespace AgfAdmin.Services
             VatAmount = invoice.VATAmount,
             TotalAmount = invoice.TotalAmount,
             CreatedAt = invoice.CreatedAt,
+            InternalNote = invoice.InternalNote,
             ReceivedDate = invoice.ReceivedDate,
             PaymentReference = invoice.PaymentReference,
             Remarks = invoice.Remarks,
