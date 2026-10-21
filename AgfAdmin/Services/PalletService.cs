@@ -44,11 +44,13 @@ namespace AgfAdmin.Services
                 return Validation<PalletDto>(errors);
             }
 
-            // Idempotentie: de unieke, scanbare referentie identificeert de pallet.
-            var existing = await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken);
+            var ownReference = candidate.Reference != null;
+
+            // Idempotentie: eerst op RequestId (werkt ook zonder eigen nummer), anders op de unieke, scanbare referentie.
+            var existing = await FindExistingAsync(candidate, ownReference, cancellationToken);
             if (existing != null)
             {
-                return ResultForPalletRetry(existing, candidate);
+                return ResultForPalletRetry(existing, candidate, ownReference);
             }
 
             if (candidate.Sscc != null && await _db.Pallets.AnyAsync(p => p.Sscc == candidate.Sscc, cancellationToken))
@@ -56,50 +58,109 @@ namespace AgfAdmin.Services
                 return ServiceResult<PalletDto>.Conflict($"SSCC {candidate.Sscc} is already registered on another pallet.");
             }
 
-            _db.Pallets.Add(candidate);
-            _db.PalletAuditEvents.Add(new PalletAuditEvent
+            // Zonder eigen nummer: eerst opslaan met een tijdelijke unieke waarde, dan het herkenbare nummer uit het Id
+            // afleiden (P-000123) in dezelfde transactie. De kolom blijft NOT NULL en de bestaande checks blijven gelden.
+            if (!ownReference)
             {
-                Pallet = candidate,
-                EventType = PalletCreatedEvent,
-                NewValue = Snapshot(new
-                {
-                    candidate.Reference,
-                    candidate.Sscc,
-                    candidate.PalletType,
-                    candidate.TareKg,
-                    candidate.GrossKg,
-                    candidate.DeclaredNetKg,
-                    candidate.LogisticsStatus,
-                    candidate.LocationContext,
-                    candidate.WarehouseLocation
-                }),
-                Reason = reason,
-                ActorReference = actor,
-                OccurredAt = candidate.CreatedAt
-            });
+                candidate.Reference = $"P-tmp-{Guid.NewGuid():N}";
+            }
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             try
             {
+                _db.Pallets.Add(candidate);
+                if (!ownReference)
+                {
+                    await _db.SaveChangesAsync(cancellationToken);
+                    // Het herkenbare nummer uit het Id; als iemand dat nummer al als eigen nummer gebruikt, een vrij nummer met
+                    // achtervoegsel. Nooit een bestaande pallet overnemen.
+                    candidate.Reference = await FreeGeneratedReferenceAsync(candidate.Id, cancellationToken);
+                }
+
+                _db.PalletAuditEvents.Add(new PalletAuditEvent
+                {
+                    Pallet = candidate,
+                    EventType = PalletCreatedEvent,
+                    NewValue = Snapshot(new
+                    {
+                        candidate.Reference,
+                        candidate.Sscc,
+                        candidate.PalletType,
+                        candidate.TareKg,
+                        candidate.GrossKg,
+                        candidate.DeclaredNetKg,
+                        candidate.LogisticsStatus,
+                        candidate.LocationContext,
+                        candidate.WarehouseLocation,
+                        ReferenceGenerated = !ownReference
+                    }),
+                    Reason = reason,
+                    ActorReference = actor,
+                    RequestId = candidate.RequestId,
+                    OccurredAt = candidate.CreatedAt
+                });
+
                 await _db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException)
             {
-                // Gelijktijdige retry of race op referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
+                // Gelijktijdige retry of race op RequestId/referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
+                await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
-                var concurrent = await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken);
+                var concurrent = await FindExistingAsync(candidate, ownReference, cancellationToken);
                 if (concurrent != null)
                 {
-                    return ResultForPalletRetry(concurrent, candidate);
+                    return ResultForPalletRetry(concurrent, candidate, ownReference);
                 }
                 if (candidate.Sscc != null && await _db.Pallets.AnyAsync(p => p.Sscc == candidate.Sscc, cancellationToken))
                 {
                     return ServiceResult<PalletDto>.Conflict($"SSCC {candidate.Sscc} is already registered on another pallet.");
+                }
+                if (!ownReference)
+                {
+                    // Race op het zojuist gekozen gegenereerde nummer: geen bestaande pallet teruggeven, de client herhaalt.
+                    return ServiceResult<PalletDto>.Conflict($"Generated pallet number {candidate.Reference} was taken concurrently; please retry.");
                 }
                 throw;
             }
 
             var created = await PalletQuery().SingleAsync(p => p.Id == candidate.Id, cancellationToken);
             return ServiceResult<PalletDto>.Created(ToDto(created));
+        }
+
+        public static string GeneratedReference(int palletId) => $"P-{palletId:D6}";
+
+        // P-000123, of bij een botsing met een eigen nummer P-000123-A, -B, … (eerste vrije); daarna geeft de unieke index uitsluitsel.
+        private async Task<string> FreeGeneratedReferenceAsync(int palletId, CancellationToken cancellationToken)
+        {
+            var reference = GeneratedReference(palletId);
+            for (var suffix = 'A'; suffix <= 'Z'; suffix++)
+            {
+                if (!await _db.Pallets.AnyAsync(p => p.Reference == reference, cancellationToken))
+                {
+                    return reference;
+                }
+                reference = $"{GeneratedReference(palletId)}-{suffix}";
+            }
+            return reference;
+        }
+
+        // Idempotentie: op RequestId, en alleen bij een eigen nummer ook op de referentie. Een gegenereerd nummer wordt
+        // nooit gebruikt om een bestaande pallet te vinden: dat zou een andere pallet als herhaling kunnen teruggeven.
+        private async Task<Pallet> FindExistingAsync(Pallet candidate, bool ownReference, CancellationToken cancellationToken)
+        {
+            if (candidate.RequestId != null)
+            {
+                var byRequest = await PalletQuery().SingleOrDefaultAsync(p => p.RequestId == candidate.RequestId, cancellationToken);
+                if (byRequest != null)
+                {
+                    return byRequest;
+                }
+            }
+            return ownReference
+                ? await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken)
+                : null;
         }
 
         private static Pallet BuildPallet(CreatePalletDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
@@ -112,7 +173,21 @@ namespace AgfAdmin.Services
                 return null;
             }
 
-            var reference = RequiredText(request.Reference, MaxReferenceLength, "reference", errors);
+            // Eigen palletnummer is optioneel; leeg of alleen spaties telt als niet opgegeven. Zonder nummer is een RequestId
+            // verplicht, anders kan een herhaling niet als dezelfde pallet worden herkend.
+            var reference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
+            if (reference != null && reference.Length > MaxReferenceLength)
+            {
+                AddError(errors, "reference", $"This field may contain at most {MaxReferenceLength} characters.");
+            }
+            if (reference == null && request.RequestId == null)
+            {
+                AddError(errors, "requestId", "A requestId is required when no own pallet number is given.");
+            }
+            if (request.RequestId == Guid.Empty)
+            {
+                AddError(errors, "requestId", "requestId must be a non-empty GUID.");
+            }
 
             if (request.Sscc != null && !Sscc.IsValid(request.Sscc))
             {
@@ -161,7 +236,8 @@ namespace AgfAdmin.Services
                 AddError(errors, "grossKg", "Measured gross weight cannot be lower than the measured tare weight.");
             }
 
-            actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            // Medewerker is optioneel bij ontvangst: leeg blijft leeg in de audit (geen verzonnen naam).
+            actor = OptionalActor(request.ActorReference, errors);
             reason = OptionalReason(request.Reason, errors);
 
             if (errors.Count > 0)
@@ -171,6 +247,7 @@ namespace AgfAdmin.Services
 
             return new Pallet
             {
+                RequestId = request.RequestId,
                 Reference = reference,
                 Sscc = request.Sscc,
                 PalletType = palletType,
@@ -184,9 +261,11 @@ namespace AgfAdmin.Services
             };
         }
 
-        private static ServiceResult<PalletDto> ResultForPalletRetry(Pallet existing, Pallet candidate)
+        private static ServiceResult<PalletDto> ResultForPalletRetry(Pallet existing, Pallet candidate, bool ownReference)
         {
-            var same = string.Equals(existing.Sscc, candidate.Sscc, StringComparison.Ordinal)
+            // Een eigen nummer moet bij een herhaling op RequestId overeenkomen; een gegenereerd nummer wordt niet vergeleken.
+            var same = (!ownReference || string.Equals(existing.Reference, candidate.Reference, StringComparison.Ordinal))
+                && string.Equals(existing.Sscc, candidate.Sscc, StringComparison.Ordinal)
                 && string.Equals(existing.PalletType, candidate.PalletType, StringComparison.Ordinal)
                 && existing.TareKg == candidate.TareKg
                 && existing.GrossKg == candidate.GrossKg
@@ -197,7 +276,9 @@ namespace AgfAdmin.Services
 
             return same
                 ? ServiceResult<PalletDto>.Ok(ToDto(existing))
-                : ServiceResult<PalletDto>.Conflict($"Pallet reference {candidate.Reference} already exists with different content.");
+                : ServiceResult<PalletDto>.Conflict(ownReference
+                    ? $"Pallet reference {candidate.Reference} already exists with different content."
+                    : $"This request was already registered as pallet {existing.Reference} with different content.");
         }
 
         // ---- Inhoudsregel toevoegen ----
@@ -318,12 +399,50 @@ namespace AgfAdmin.Services
                 AddError(errors, "unit", $"Unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}.");
             }
 
-            if (request.NetWeightKg == null || !SupplyRules.IsPositiveDecimal18_3(request.NetWeightKg.Value))
+            // Gewichtsmethode: Weighed (standaard, ook voor oudere clients) of Calculated. Nooit stilzwijgend omrekenen.
+            var weightMethod = string.IsNullOrWhiteSpace(request.WeightMethod) ? WeightRules.Weighed : request.WeightMethod.Trim();
+            decimal? netKgPerPackage = null;
+            decimal? netWeightKg = null;
+            if (!WeightRules.IsWeightMethod(weightMethod))
             {
-                AddError(errors, "netWeightKg", "Actual net weight is required, must be positive and may have at most 3 decimals.");
+                AddError(errors, "weightMethod", $"Weight method must be one of: {string.Join(", ", WeightRules.Methods)}.");
+            }
+            else if (weightMethod == WeightRules.Calculated)
+            {
+                if (request.NetKgPerPackage == null || !SupplyRules.IsPositiveDecimal18_3(request.NetKgPerPackage.Value))
+                {
+                    AddError(errors, "netKgPerPackage", "Net kg per package (label) is required for a calculated weight, must be positive and may have at most 3 decimals.");
+                }
+                else if (request.Quantity != null && SupplyRules.IsPositiveDecimal18_3(request.Quantity.Value))
+                {
+                    netKgPerPackage = request.NetKgPerPackage.Value;
+                    // Twee afzonderlijk geldige waarden kunnen samen buiten bereik vallen: nette validatiefout, geen overflow.
+                    if (!WeightRules.TryCalculatedTotal(request.Quantity.Value, netKgPerPackage.Value, out var total))
+                    {
+                        AddError(errors, "netWeightKg", "Quantity × kg per package is out of range for a net weight (max 999,999,999,999,999.999 kg).");
+                    }
+                    else if (request.NetWeightKg != null && request.NetWeightKg.Value != total)
+                    {
+                        AddError(errors, "netWeightKg", $"For a calculated weight the total must be quantity × kg per package = {total} kg, or be omitted.");
+                    }
+                    netWeightKg = total;
+                }
+            }
+            else
+            {
+                if (request.NetKgPerPackage != null)
+                {
+                    AddError(errors, "netKgPerPackage", "Net kg per package only applies to a calculated weight; a weighed line has no package weight.");
+                }
+                if (request.NetWeightKg == null || !SupplyRules.IsPositiveDecimal18_3(request.NetWeightKg.Value))
+                {
+                    AddError(errors, "netWeightKg", "Actual net weight is required, must be positive and may have at most 3 decimals.");
+                }
+                netWeightKg = request.NetWeightKg;
             }
 
-            actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            // Medewerker is optioneel bij ontvangst (zie BuildPallet); keuring en statuswijzigingen blijven hem eisen.
+            actor = OptionalActor(request.ActorReference, errors);
             reason = OptionalReason(request.Reason, errors);
 
             if (errors.Count > 0)
@@ -339,7 +458,9 @@ namespace AgfAdmin.Services
                 LotNumber = lotNumber,
                 Quantity = request.Quantity!.Value,
                 Unit = request.Unit,
-                NetWeightKg = request.NetWeightKg!.Value,
+                NetWeightKg = netWeightKg!.Value,
+                WeightMethod = weightMethod,
+                NetKgPerPackage = netKgPerPackage,
                 QualityStatus = PalletRules.QualityQuarantine,
                 CreatedAt = DateTime.UtcNow
             };
@@ -386,7 +507,9 @@ namespace AgfAdmin.Services
                 && string.Equals(existing.LotNumber, candidate.LotNumber, StringComparison.Ordinal)
                 && existing.Quantity == candidate.Quantity
                 && string.Equals(existing.Unit, candidate.Unit, StringComparison.Ordinal)
-                && existing.NetWeightKg == candidate.NetWeightKg;
+                && existing.NetWeightKg == candidate.NetWeightKg
+                && string.Equals(existing.WeightMethod, candidate.WeightMethod, StringComparison.Ordinal)
+                && existing.NetKgPerPackage == candidate.NetKgPerPackage;
 
             return same
                 ? ServiceResult<PalletContentLineDto>.Ok(ToDto(existing))
@@ -961,6 +1084,8 @@ namespace AgfAdmin.Services
             Quantity = line.Quantity,
             Unit = line.Unit,
             NetWeightKg = line.NetWeightKg,
+            WeightMethod = line.WeightMethod,
+            NetKgPerPackage = line.NetKgPerPackage,
             DispatchedQuantity = line.DispatchedQuantity,
             DispatchedNetWeightKg = line.DispatchedNetWeightKg,
             OnHandQuantity = ReservationRules.OnHandQuantity(line.Quantity, line.DispatchedQuantity),
@@ -997,6 +1122,21 @@ namespace AgfAdmin.Services
         }
 
         // Ontbrekend is toegestaan; ingevuld betekent niet-leeg en binnen de maximale lengte.
+        // Leeg of alleen spaties = niet opgegeven (null); anders getrimd en op lengte gecontroleerd.
+        private static string OptionalActor(string value, Dictionary<string, List<string>> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+            var trimmed = value.Trim();
+            if (trimmed.Length > MaxActorLength)
+            {
+                AddError(errors, "actorReference", $"This field may contain at most {MaxActorLength} characters.");
+            }
+            return trimmed;
+        }
+
         private static string OptionalNonBlankText(string value, int maxLength, string key, Dictionary<string, List<string>> errors)
         {
             if (value == null)

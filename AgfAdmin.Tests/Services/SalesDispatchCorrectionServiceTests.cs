@@ -50,6 +50,66 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         return result.Value;
     }
 
+    private async Task<int> CalculatedApprovedLineAsync(decimal quantity = 10m, decimal kgPerPackage = 4m)
+    {
+        await using var db = _factory.CreateContext();
+        var source = await db.SupplyCommitmentLines.SingleAsync(l => l.SupplyCommitment.Route == "Warehouse" && l.ExpectedUnit == "box");
+        var line = new PalletContentLine
+        {
+            RequestId = Guid.NewGuid(), PalletId = _seed.SecondWarehousePalletId, SupplyCommitmentLineId = source.Id, LotNumber = "LOT-CALC",
+            Quantity = quantity, Unit = "box", NetWeightKg = WeightRules.CalculatedTotal(quantity, kgPerPackage),
+            WeightMethod = WeightRules.Calculated, NetKgPerPackage = kgPerPackage, QualityStatus = "Approved"
+        };
+        db.PalletContentLines.Add(line);
+        await db.SaveChangesAsync();
+        return line.Id;
+    }
+
+    // Regressie (review #40): ook verzending en correctie van afgeronde deelreserveringen moeten slagen; de teruggeboekte
+    // regels dragen de exact verzonden kg (1,502 en 1,501), niet een herberekend totaal.
+    [Fact]
+    public async Task Dispatch_And_Correction_Of_Rounded_Partial_Reservations_Keep_The_Exact_Kg()
+    {
+        await ArrangeAsync();
+        // 5 × 1,001 = 5,005 kg; drie deelreserveringen van 1,5 (elk 1,502) laten 0,5 box met 0,499 kg over, terwijl
+        // 0,5 × 1,001 = 0,5005: de teruggeboekte restregel wijkt 0,0015 af van de rekensom en moet toch kunnen bestaan.
+        var lineId = await CalculatedApprovedLineAsync(5m, 1.001m);
+        var a = await ReservedAsync(lineId, 1.5m, 1.502m);
+        var b = await ReservedAsync(lineId, 1.5m, 1.502m);
+        var c = await ReservedAsync(lineId, 1.5m, 1.502m);
+        var remainder = await ReservedAsync(lineId, 0.5m, 0.499m);
+        var dispatch = await DispatchedAsync(a, b, c, remainder);
+
+        var result = await CorrectAsync(dispatch.Id, Correct(await OrderAsync(), dispatch));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+
+        var state = await StateAsync(lineId);
+        Assert.Equal(4, state.Restored.Count);
+        Assert.Equal(new[] { 0.499m, 1.502m, 1.502m, 1.502m }, state.Restored.Select(r => r.NetWeightKg).OrderBy(x => x).ToArray());
+        Assert.All(state.Restored, r => { Assert.Equal(WeightRules.Calculated, r.WeightMethod); Assert.Equal(1.001m, r.NetKgPerPackage); });
+        Assert.Equal(5.005m, state.Original.DispatchedNetWeightKg);
+    }
+
+    [Fact]
+    public async Task Restored_Content_Keeps_The_Calculated_Weight_Method_Of_The_Original()
+    {
+        await ArrangeAsync();
+        var lineId = await CalculatedApprovedLineAsync();
+        var reservation = await ReservedAsync(lineId, 5m, 20m);
+        var dispatch = await DispatchedAsync(reservation);
+
+        var result = await CorrectAsync(dispatch.Id, Correct(await OrderAsync(), dispatch));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+
+        var state = await StateAsync(lineId);
+        var restored = Assert.Single(state.Restored);
+        Assert.Equal(WeightRules.Calculated, restored.WeightMethod);
+        Assert.Equal(4m, restored.NetKgPerPackage);
+        Assert.Equal(20m, restored.NetWeightKg);
+        Assert.Equal(5m, restored.Quantity);
+        Assert.Equal(WeightRules.Calculated, state.Original.WeightMethod);
+    }
+
     private async Task<SalesOrderDto> OrderAsync()
     {
         await using var db = _factory.CreateContext();

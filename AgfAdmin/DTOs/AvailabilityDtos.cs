@@ -94,6 +94,8 @@ namespace AgfAdmin.DTOs
         public QualityBreakdownDto ExpectedOnPallets { get; set; } = new();
         public ExpectedUnregisteredDto ExpectedUnregistered { get; set; } = new();
         public List<AvailabilityWarningDto> Warnings { get; set; } = new();
+        // Herkomst van de kg op pallets in deze rij: "weighed", "calculated" of "mixed"; null zonder inhoud op pallets.
+        public string WeightBasis { get; set; }
     }
 
     // Klantgebonden aanvoer. Bewust zonder "available", "warehouse" of "reserved": nooit algemeen verkoopbaar.
@@ -164,6 +166,9 @@ namespace AgfAdmin.DTOs
         public decimal DispatchedNetWeightKg { get; set; }
         public decimal OnHandQuantity { get; set; }
         public decimal OnHandNetWeightKg { get; set; }
+        // Weighed of Calculated (aantal × NetKgPerPackage, etiket; nooit gewogen).
+        public string WeightMethod { get; set; }
+        public decimal? NetKgPerPackage { get; set; }
         // Afgeleid: voorraad én kg zijn allebei 0. Zegt niets over de fysieke pallet.
         public bool Depleted { get; set; }
         // Receipt of DispatchCorrection; correctie-inhoud telt niet als registratie tegen de bronregel.

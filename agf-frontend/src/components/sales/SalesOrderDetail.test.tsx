@@ -41,7 +41,7 @@ const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: 
     fulfilled: false,
     delivered: false,
     lines: [{
-        id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
+        id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box', palletCount: null, packagesPerPallet: null,
         reservedQuantity: reservations.filter((r) => r.status === 'Active').length * 5,
         reservedNetWeightKg: reservations.filter((r) => r.status === 'Active').length * 20, allocatedQuantity: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false,
         dispatchedQuantity: reservations.filter((r) => r.status === 'Consumed').length * 5, dispatchedNetWeightKg: reservations.filter((r) => r.status === 'Consumed').length * 20,

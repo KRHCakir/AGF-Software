@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
-import { parsePositiveDecimal } from '../../lib/decimal';
+import { DecimalError, parsePositiveDecimal } from '../../lib/decimal';
+import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
@@ -15,6 +16,7 @@ import { CustomerOption, ProductOption, VendorOption } from '../../types/referen
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
+import QuantityInput from '../shared/QuantityInput';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
@@ -33,6 +35,10 @@ interface LineDraft {
     quantity: string;
     unit: PackageUnit | '';
     declaredKg: string;
+    // Invoer per pallet: 'pallets' rekent de hoeveelheid uit palletCount × packagesPerPallet.
+    mode: QuantityInputMode;
+    palletCount: string;
+    packagesPerPallet: string;
 }
 
 interface HeaderDraft {
@@ -50,7 +56,7 @@ interface PendingSubmission {
 }
 
 const MAX_LINES = 200;
-const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', declaredKg: '' });
+const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', declaredKg: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyHeader: HeaderDraft = { vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '' };
 
 // Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
@@ -72,6 +78,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
     // Na een onbekende uitkomst of na succes is het formulier vergrendeld (geen dubbele aanvoer door een gewijzigde retry).
     const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
+
+    // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
+    const variantDefaults = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [reference.products]);
 
     const edited = () => {
         // Na een definitieve weigering (of niets verstuurd) hoort een gewijzigde invoer bij een nieuw verzoek.
@@ -134,8 +143,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         const payloadLines = lines.map((line, index) => {
             const prefix = `lines[${index}]`;
             if (!line.productVariantId) addError(found, `${prefix}.productVariantId`, t('supply_error_required'));
-            const quantity = parsePositiveDecimal(line.quantity);
-            if (!quantity.ok) addError(found, `${prefix}.expectedQuantity`, t(decimalErrorKey(quantity.error)));
+            // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet; de server controleert dezelfde rekensom.
+            const amounts = resolvePalletInput({ mode: line.mode, quantity: line.quantity, palletCount: line.palletCount, packagesPerPallet: line.packagesPerPallet });
+            if (!amounts.ok) for (const error of amounts.errors) addError(found, `${prefix}.${error.field === 'quantity' ? 'expectedQuantity' : error.field}`, t(decimalErrorKey(error.code as DecimalError)));
             if (line.unit === '') addError(found, `${prefix}.expectedUnit`, t('supply_error_required_unit'));
             const declared = line.declaredKg.trim() === '' ? null : parsePositiveDecimal(line.declaredKg);
             if (declared !== null && !declared.ok) addError(found, `${prefix}.expectedNetWeightKg`, t(decimalErrorKey(declared.error)));
@@ -148,10 +158,12 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             }
             return {
                 productVariantId: Number(line.productVariantId),
-                expectedQuantity: quantity.ok ? quantity.value : 0,
+                expectedQuantity: amounts.ok ? amounts.value.quantity : 0,
                 expectedUnit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
                 expectedNetWeightKg: declared !== null && declared.ok ? declared.value : null,
                 lotNumber: lot === '' ? null : lot,
+                palletCount: amounts.ok ? amounts.value.palletCount : null,
+                packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
             };
         });
 
@@ -242,6 +254,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     {commitment.lines.map((line) => (
                         <li key={line.id}>
                             {line.productName} · {line.productVariantName}: {formatQuantity(line.expectedQuantity, locale)} <UnitBadge unit={line.expectedUnit} />
+                            {line.palletCount !== null && line.packagesPerPallet !== null && <> ({t('pallet_breakdown', { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) })})</>}
                             {line.lotNumber && <> · {t('supply_lot')} {line.lotNumber}</>}
                             {line.expectedNetWeightKg !== null && <> · {t('supply_declared')} {formatKg(line.expectedNetWeightKg, locale)}</>}
                         </li>
@@ -355,11 +368,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                                 onChange={(event) => updateLine(line.key, 'lotNumber', event.target.value)} className={inputClass} />
                                             <FieldError id={`${prefix}.lotNumber`} messages={e(`${prefix}.lotNumber`)} />
                                         </td>
-                                        <td className="w-32 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.expectedQuantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
-                                            <input {...fieldProps(`${prefix}.expectedQuantity`, e(`${prefix}.expectedQuantity`))} inputMode="decimal" value={line.quantity}
-                                                disabled={locked} onChange={(event) => updateLine(line.key, 'quantity', event.target.value)} className={inputClass} />
-                                            <FieldError id={`${prefix}.expectedQuantity`} messages={e(`${prefix}.expectedQuantity`)} />
+                                        <td className="w-72 px-2 py-1.5">
+                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity"
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
+                                                onChange={(field, value) => updateLine(line.key, field, value)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.expectedUnit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>

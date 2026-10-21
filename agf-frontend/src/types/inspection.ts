@@ -1,3 +1,4 @@
+import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, QualityStatus, SupplyRoute } from './availability';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
 
@@ -21,6 +22,9 @@ export interface PalletDetailLine {
     quantity: number;
     unit: PackageUnit;
     netWeightKg: number;
+    // Weighed (gewogen) of Calculated (quantity × netKgPerPackage, etiket).
+    weightMethod: WeightMethod;
+    netKgPerPackage: number | null;
     dispatchedQuantity: number;
     dispatchedNetWeightKg: number;
     onHandQuantity: number;
@@ -92,6 +96,8 @@ export function isPalletDetailLine(value: unknown): value is PalletDetailLine {
         && isNumber(value.quantity)
         && isString(value.unit) && (PACKAGE_UNITS as readonly string[]).includes(value.unit)
         && isNumber(value.netWeightKg)
+        && isWeightMethod(value.weightMethod)
+        && isNullableNumber(value.netKgPerPackage)
         && isNumber(value.dispatchedQuantity)
         && isNumber(value.dispatchedNetWeightKg)
         && isNumber(value.onHandQuantity)

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AgfAdmin.Models;
+using AgfAdmin.Services;
 
 namespace AgfAdmin.Data
 {
@@ -128,6 +129,15 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<ProductVariant>(b =>
             {
                 b.Property(v => v.AvailabilityUnit).HasMaxLength(32);
+                b.Property(v => v.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
+                b.Property(v => v.DefaultNetKgPerPackage).HasPrecision(18, 3);
+                b.Property(v => v.DefaultPackagesPerPallet).HasPrecision(18, 3);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+                    t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
+                });
             });
 
             modelBuilder.Entity<SupplyCommitment>(b =>
@@ -163,7 +173,15 @@ namespace AgfAdmin.Data
                 b.Property(l => l.ExpectedQuantity).HasPrecision(18, 3);
                 b.Property(l => l.ExpectedUnit).HasMaxLength(32);
                 b.Property(l => l.ExpectedNetWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.PalletCount).HasPrecision(18, 3);
+                b.Property(l => l.PackagesPerPallet).HasPrecision(18, 3);
                 b.Property(l => l.Version).IsConcurrencyToken();
+
+                // Palletinvoer: beide leeg, of beide positief met ExpectedQuantity exact gelijk aan het product (3 decimalen).
+                b.ToTable(t => t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent",
+                    "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
+                    "AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 " +
+                    "AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC)) < 0.001)"));
 
                 b.HasOne(l => l.SupplyCommitment)
                     .WithMany(c => c.Lines)
@@ -326,6 +344,8 @@ namespace AgfAdmin.Data
             {
                 b.Property(l => l.Quantity).HasPrecision(18, 3);
                 b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
+                b.Property(l => l.PalletCount).HasPrecision(18, 3);
+                b.Property(l => l.PackagesPerPallet).HasPrecision(18, 3);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
                 // Eén regel per variant + eenheid per order: anders worden reserveringen dubbelzinnig.
@@ -335,6 +355,11 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
+                    // Palletinvoer: beide leeg, of beide positief met Quantity exact gelijk aan het product (3 decimalen).
+                    t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent",
+                        "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
+                        "AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 " +
+                        "AND abs(CAST(\"Quantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC)) < 0.001)");
                 });
 
                 b.HasOne(l => l.SalesOrder)
@@ -384,6 +409,8 @@ namespace AgfAdmin.Data
                 b.HasIndex(p => p.Reference).IsUnique();
                 // NULL telt in een unieke index als verschillend (PostgreSQL en SQLite): meerdere pallets zonder SSCC mogen.
                 b.HasIndex(p => p.Sscc).IsUnique();
+                // Idem voor RequestId: oudere pallets hebben er geen.
+                b.HasIndex(p => p.RequestId).IsUnique();
 
                 b.HasOne(p => p.StockReceipt)
                     .WithMany()
@@ -405,6 +432,8 @@ namespace AgfAdmin.Data
                 b.Property(c => c.Quantity).HasPrecision(18, 3);
                 b.Property(c => c.Unit).IsRequired().HasMaxLength(32);
                 b.Property(c => c.NetWeightKg).HasPrecision(18, 3);
+                b.Property(c => c.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
+                b.Property(c => c.NetKgPerPackage).HasPrecision(18, 3);
                 b.Property(c => c.QualityStatus).IsRequired().HasMaxLength(32);
                 b.Property(c => c.QualityReason).HasMaxLength(500);
 
@@ -418,6 +447,15 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
                         "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
+                    // Gewogen: geen kg per verpakking. Berekend: kg per verpakking > 0 en bij fysieke ontvangst is het totaal exact
+                    // aantal × kg per verpakking (afgerond op 3 decimalen, dus verschil < 0,001). Een etiketgewicht kan zo nooit als
+                    // gewogen doorgaan. Teruggeboekte correctie-inhoud (OriginCorrectionLineId) draagt de exact verzonden kg; die kan
+                    // door opgetelde afronding van deelreserveringen iets afwijken en wordt al door de balansregels (guard) bewaakt.
+                    t.HasCheckConstraint("CK_PalletContentLines_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+                    t.HasCheckConstraint("CK_PalletContentLines_Weight_Consistent",
+                        "(\"WeightMethod\" = 'Weighed' AND \"NetKgPerPackage\" IS NULL) OR (\"WeightMethod\" = 'Calculated' AND \"NetKgPerPackage\" IS NOT NULL " +
+                        "AND CAST(\"NetKgPerPackage\" AS NUMERIC) > 0 AND (\"OriginCorrectionLineId\" IS NOT NULL " +
+                        "OR abs(CAST(\"NetWeightKg\" AS NUMERIC) - CAST(\"Quantity\" AS NUMERIC) * CAST(\"NetKgPerPackage\" AS NUMERIC)) < 0.001))");
                     // Afgeboekt ligt tussen 0 en de ontvangst; de ontvangst zelf wordt nooit gewijzigd.
                     t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds",
                         "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) " +

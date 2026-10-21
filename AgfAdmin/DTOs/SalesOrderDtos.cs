@@ -15,6 +15,9 @@ namespace AgfAdmin.DTOs
         public int? ProductVariantId { get; set; }
         public decimal? Quantity { get; set; }
         public string Unit { get; set; }
+        // Optioneel, beide of geen: Quantity mag dan weg (server berekent) of moet exact PalletCount × PackagesPerPallet zijn.
+        public decimal? PalletCount { get; set; }
+        public decimal? PackagesPerPallet { get; set; }
     }
 
     public sealed class SalesOrderFilter
@@ -76,6 +79,9 @@ namespace AgfAdmin.DTOs
         public string ProductVariantName { get; set; }
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
+        // Oorspronkelijke palletinvoer ("9 pallets van 120 dozen"); null bij gewone invoer. Quantity blijft de bron.
+        public decimal? PalletCount { get; set; }
+        public decimal? PackagesPerPallet { get; set; }
         // Alleen Active Physical verkoopreserveringen (magazijnvoorraad); nooit omgerekend.
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }
@@ -165,6 +171,9 @@ namespace AgfAdmin.DTOs
         // Historische ontvangst.
         public decimal Quantity { get; set; }
         public decimal NetWeightKg { get; set; }
+        // Weighed of Calculated; bij Calculated moet een reservering exact aantal × NetKgPerPackage kg zijn.
+        public string WeightMethod { get; set; }
+        public decimal? NetKgPerPackage { get; set; }
         // Voorraad = ontvangst - afgeboekt; beschikbaar = voorraad - Active gereserveerd.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }

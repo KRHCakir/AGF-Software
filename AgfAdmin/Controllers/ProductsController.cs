@@ -42,6 +42,55 @@ namespace AgfAdmin.Controllers
             return product;
         }
 
+        // PUT: api/Products/variants/5/weight-settings — gewichtsmethode en standaard kg per verpakking van een variant.
+        // Verandert nooit bestaande inhoudsregels: die houden hun eigen methode en kg per verpakking.
+        [HttpPut("variants/{id}/weight-settings")]
+        public async Task<IActionResult> UpdateWeightSettings(int id, [FromBody] UpdateWeightSettingsDto dto)
+        {
+            var errors = new Dictionary<string, string[]>();
+            var method = dto?.WeightMethod?.Trim();
+            if (method == null || !Services.WeightRules.IsWeightMethod(method))
+            {
+                errors["weightMethod"] = new[] { $"Weight method must be one of: {string.Join(", ", Services.WeightRules.Methods)}." };
+            }
+            if (dto?.DefaultNetKgPerPackage != null && !Services.SupplyRules.IsPositiveDecimal18_3(dto.DefaultNetKgPerPackage.Value))
+            {
+                errors["defaultNetKgPerPackage"] = new[] { "Default net kg per package must be positive and may have at most 3 decimals." };
+            }
+            if (errors.Count > 0)
+            {
+                return BadRequest(new { Message = "Invalid weight settings.", Errors = errors });
+            }
+
+            var variant = await _context.ProductVariants.FindAsync(id);
+            if (variant == null)
+            {
+                return NotFound();
+            }
+            variant.WeightMethod = method;
+            variant.DefaultNetKgPerPackage = dto.DefaultNetKgPerPackage;
+            await _context.SaveChangesAsync();
+            return Ok(new { variant.Id, variant.WeightMethod, variant.DefaultNetKgPerPackage });
+        }
+
+        // PUT: api/Products/variants/5/packaging-settings — standaard verpakkingen per pallet (alleen invoerhulp).
+        [HttpPut("variants/{id}/packaging-settings")]
+        public async Task<IActionResult> UpdatePackagingSettings(int id, [FromBody] UpdatePackagingSettingsDto dto)
+        {
+            if (dto?.DefaultPackagesPerPallet != null && !Services.SupplyRules.IsPositiveDecimal18_3(dto.DefaultPackagesPerPallet.Value))
+            {
+                return BadRequest(new { Message = "Invalid packaging settings.", Errors = new Dictionary<string, string[]> { ["defaultPackagesPerPallet"] = new[] { "Default packages per pallet must be positive and may have at most 3 decimals." } } });
+            }
+            var variant = await _context.ProductVariants.FindAsync(id);
+            if (variant == null)
+            {
+                return NotFound();
+            }
+            variant.DefaultPackagesPerPallet = dto?.DefaultPackagesPerPallet;
+            await _context.SaveChangesAsync();
+            return Ok(new { variant.Id, variant.DefaultPackagesPerPallet });
+        }
+
         // PUT: api/Products/variants/5/shortcut
         [HttpPut("variants/{id}/shortcut")]
         public async Task<IActionResult> UpdateShortcut(int id, [FromBody] UpdateShortcutDto dto)

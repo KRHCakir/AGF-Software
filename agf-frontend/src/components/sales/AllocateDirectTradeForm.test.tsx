@@ -14,7 +14,7 @@ import SalesOrderDetail from './SalesOrderDetail';
 // Zonder LanguageProvider geeft t() de sleutel terug; daar wordt op gezocht.
 
 const line: SalesOrderLine = {
-    id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 40, unit: 'box',
+    id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 40, unit: 'box', palletCount: null, packagesPerPallet: null,
     reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false, openQuantity: 40, fulfilled: false, version: 0, reservations: [],
 };
 const order: SalesOrder = {

@@ -48,6 +48,8 @@ export interface VariantOption {
     sizeCategory: string | null;
     // Bestaande snelcode van de variant (beheer via Producten); kiest alleen een variant, nooit hoeveelheid of gewicht.
     shortcutCode: string | null;
+    // Standaard verpakkingen per pallet (invoerhulp bij "Pallet"-invoer; aanpasbaar per regel).
+    defaultPackagesPerPallet: number | null;
 }
 
 export interface ProductOption {
@@ -68,6 +70,7 @@ function isVariant(value: unknown): value is Named {
         && isOptionalNullableString(value.packaging)
         && isOptionalNullableString(value.sizeCategory)
         && isOptionalNullableString(value.shortcutCode);
+        && (value.defaultPackagesPerPallet === undefined || value.defaultPackagesPerPallet === null || isNumber(value.defaultPackagesPerPallet));
 }
 
 export function isCreatedCustomer(value: unknown): value is CreatedCustomer {
@@ -103,6 +106,7 @@ export function toVariantOption(value: Named): VariantOption {
         packaging: optionalString(value.packaging),
         sizeCategory: optionalString(value.sizeCategory),
         shortcutCode: optionalString(value.shortcutCode),
+        defaultPackagesPerPallet: typeof value.defaultPackagesPerPallet === 'number' ? value.defaultPackagesPerPallet : null,
     };
 }
 

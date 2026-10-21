@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
+import { calculatedReservationKg } from '../../lib/weight';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { ReserveCommand, reserveKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
@@ -53,6 +54,9 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
 
     const parsedQuantity = parsePositiveDecimal(quantity);
     const remaining = parsedQuantity.ok ? remainingAfter(line.openQuantity, parsedQuantity.value) : null;
+    // Berekend gewicht: de kg volgt het aantal (aantal × kg per verpakking) en is niet vrij in te vullen; nooit "gewogen".
+    const calculated = stock !== null && stock.weightMethod === 'Calculated' && stock.netKgPerPackage !== null ? stock.netKgPerPackage : null;
+    const effectiveNetKg = calculated === null || stock === null ? netKg : parsedQuantity.ok ? String(calculatedReservationKg(parsedQuantity.value, calculated, stock.availableQuantity, stock.availableNetWeightKg)) : '';
 
     const edit = (setter: (value: string) => void) => (value: string) => {
         if (locked) return;
@@ -74,7 +78,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
         let command = pending;
         if (command === null) {
             if (stock === null || unitMismatch) return;
-            const amounts = validateReservationInput({ quantity, netKg }, stock, line.openQuantity);
+            const amounts = validateReservationInput({ quantity, netKg: effectiveNetKg }, stock, line.openQuantity);
             const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, false);
             if (!amounts.ok || !actorResult.ok || !reasonResult.ok) {
@@ -171,9 +175,11 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
                 </div>
                 <div>
                     <label htmlFor={`${idPrefix}-kg-input`} className="text-xs font-medium text-gray-700">{t('sales_reserve_kg')} *</label>
-                    <input {...fieldProps(`${idPrefix}-kg`, fieldErrors.netWeightKg)} inputMode="decimal" value={netKg} disabled={locked}
+                    <input {...fieldProps(`${idPrefix}-kg`, fieldErrors.netWeightKg)} inputMode="decimal" value={effectiveNetKg} disabled={locked || calculated !== null} readOnly={calculated !== null}
                         onChange={(event) => edit(setNetKg)(event.target.value)} className={inputClass} />
-                    <span className="block text-xs text-gray-500">{t('sales_reserve_kg_hint')}</span>
+                    <span className="block text-xs text-gray-500">
+                        {calculated === null ? t('sales_reserve_kg_hint') : t('sales_reserve_kg_calculated_hint', { kg: formatKg(calculated, locale), unit: line.unit })}
+                    </span>
                     <FieldError id={`${idPrefix}-kg`} messages={fieldErrors.netWeightKg} />
                 </div>
                 <div className="flex flex-col justify-end">
