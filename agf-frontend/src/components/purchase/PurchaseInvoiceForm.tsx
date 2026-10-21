@@ -288,7 +288,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
             {e('lines') && <FieldError id="lines" messages={e('lines')} />}
 
             {/* Documentkop */}
-            <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-gray-200 bg-white p-3 md:grid-cols-6" disabled={locked}>
+            <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-gray-200 bg-white p-3 md:grid-cols-7" disabled={locked}>
                 <legend className="px-1 text-sm font-semibold text-gray-900">{t('purchase_header')}</legend>
                 <div className="col-span-2">
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('purchase_vendor')} *</label>
