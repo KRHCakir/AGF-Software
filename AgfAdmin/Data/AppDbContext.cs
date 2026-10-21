@@ -138,6 +138,7 @@ namespace AgfAdmin.Data
                 b.Property(i => i.Incoterms).HasMaxLength(32);
                 b.Property(i => i.OriginCountry).HasMaxLength(200);
                 b.Property(i => i.ReceiptReference).HasMaxLength(200);
+                b.Property(i => i.InternalNote).HasMaxLength(1000);
                 // NULL telt als verschillend: facturen van vóór de kantoorinvoer (upload, oude handmatige invoer) hebben geen RequestId.
                 b.HasIndex(i => i.RequestId).IsUnique();
             });
@@ -358,6 +359,7 @@ namespace AgfAdmin.Data
             {
                 b.Property(o => o.Status).IsRequired().HasMaxLength(32);
                 b.Property(o => o.CustomerReference).HasMaxLength(100);
+                b.Property(o => o.InternalNote).HasMaxLength(1000);
                 b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
                 b.Property(o => o.CancelReason).HasMaxLength(500);
                 b.Property(o => o.Version).IsConcurrencyToken();

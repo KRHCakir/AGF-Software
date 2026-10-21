@@ -1126,5 +1126,9 @@
   "articles_error_too_long": "Too long.",
   "articles_error_gross_below_net": "Gross kg cannot be less than net kg.",
   "articles_error_system_required": "Choose the code system for this code.",
-  "articles_error_wrong_length": "The number of digits does not match the code system (HS 6, CN 8, TARIC 10)."
+  "articles_error_wrong_length": "The number of digits does not match the code system (HS 6, CN 8, TARIC 10).",
+  "internal_note_label": "Internal note",
+  "internal_note_badge": "internal",
+  "internal_note_placeholder": "E.g. customer picks up tomorrow",
+  "internal_note_hint": "Belongs to this document and is saved with it. Visible in internal workplaces only; never on customer invoices, delivery notes, e-mails or exports. Not carried over to the next document."
 }

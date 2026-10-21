@@ -1126,5 +1126,9 @@
   "articles_error_too_long": "Te lang.",
   "articles_error_gross_below_net": "Bruto kg kan niet kleiner zijn dan netto kg.",
   "articles_error_system_required": "Kies het codestelsel bij deze code.",
-  "articles_error_wrong_length": "Aantal cijfers past niet bij het codestelsel (HS 6, GN/CN 8, TARIC 10)."
+  "articles_error_wrong_length": "Aantal cijfers past niet bij het codestelsel (HS 6, GN/CN 8, TARIC 10).",
+  "internal_note_label": "Interne opmerking",
+  "internal_note_badge": "intern",
+  "internal_note_placeholder": "Bijv. Klant komt morgen langs",
+  "internal_note_hint": "Hoort bij dit document en wordt ermee opgeslagen. Alleen zichtbaar in interne werkplekken; niet op klantfacturen, leverbonnen, mails of exports. Niet overgenomen naar een volgend document."
 }

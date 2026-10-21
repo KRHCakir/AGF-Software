@@ -13,6 +13,12 @@ describe('purchase invoice store guards', () => {
         assert.equal(parseDraft('{'), null);
         assert.equal(parseDraft(JSON.stringify({ ...draft, lines: [{ key: 'x' }] })), null);
         assert.equal(parseDraft(JSON.stringify({ ...draft, touched: { paymentTermsDays: 'yes', currency: false, dueDate: false } })), null);
+        // Een concept van vóór de interne opmerking blijft bruikbaar (leeg veld); een verkeerd type niet.
+        const { internalNote: _legacy, ...legacyHeader } = draft.header;
+        void _legacy;
+        assert.deepEqual(parseDraft(JSON.stringify({ ...draft, header: legacyHeader })), draft);
+        assert.equal(parseDraft(JSON.stringify({ ...draft, header: { ...draft.header, internalNote: 5 } })), null);
+        assert.equal(parseDraft(JSON.stringify({ ...draft, header: { ...draft.header, internalNote: 'Klant komt morgen langs' } }))?.header.internalNote, 'Klant komt morgen langs');
     });
 
     test('a pending save is only restored when the frozen payload carries its own requestId', () => {

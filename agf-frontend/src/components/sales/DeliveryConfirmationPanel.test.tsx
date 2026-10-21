@@ -37,7 +37,7 @@ const allocation = (deliveryId: number | null = null): StockReservation => ({
 const orderWith = (version: number, warehouseDelivered = false, dtDelivered = false): SalesOrder => {
     const delivered = (warehouseDelivered ? 10 : 0) + (dtDelivered ? 10 : 0);
     return {
-        id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE klant', status: 'Open', customerReference: null,
+        id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE klant', status: 'Open', customerReference: null, internalNote: null,
         requestedDeliveryDate: '2026-10-26T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
         cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: true, delivered: delivered === 20,
         lines: [{

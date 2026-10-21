@@ -28,7 +28,7 @@ const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [
 
 const saved = (over: Partial<PurchaseInvoice> = {}): PurchaseInvoice => ({
     id: 90, requestId: 'r', vendorId: 7, vendorName: 'The Greenery', invoiceNumber: 'GR-1', invoiceDate: '2026-10-21T00:00:00Z', paymentTermsDays: 30, dueDate: '2026-11-20T00:00:00Z',
-    currency: 'EUR', status: 'Draft', subTotal: 1000, vatAmount: 210, totalAmount: 1210, createdAt: '2026-10-21T10:00:00Z', lines: [], ...over,
+    currency: 'EUR', status: 'Draft', subTotal: 1000, vatAmount: 210, totalAmount: 1210, createdAt: '2026-10-21T10:00:00Z', internalNote: null, lines: [], ...over,
 });
 
 let mounted: Mounted;
@@ -140,7 +140,9 @@ describe('PurchaseInvoiceForm', () => {
         await type(input('invoiceNumber'), 'GR-4');
         await type(input('lines[0].item'), 'Dozen'); await key(input('lines[0].item'), 'Tab');
         await type(input('lines[0].quantity'), '10'); await type(input('lines[0].unitPrice'), '1');
+        await type(input('internalNote'), 'Klant komt morgen langs');
         assert.equal(input('invoiceNumber').value, 'GR-4', 'draft kept after the error');
+        assert.equal(input('internalNote').value, 'Klant komt morgen langs', 'internal note kept after the error');
         // Verloren antwoord: de opdracht blijft bevroren met dezelfde requestId.
         const slow = deferred<Response>();
         nextPost = () => slow.promise;
@@ -150,6 +152,8 @@ describe('PurchaseInvoiceForm', () => {
         slow.reject(new TypeError('network down'));
         await mounted.waitFor(() => text().includes('supply_error_outcome_unknown'), 'pending notice after the lost answer');
         assert.equal(input('invoiceNumber').value, 'GR-4', 'still the same document, not a new one');
+        assert.equal(input('internalNote').value, 'Klant komt morgen langs', 'internal note survives the frozen command');
+        assert.equal(JSON.parse(posted[0].body).internalNote, 'Klant komt morgen langs', 'internal note is part of the frozen payload');
         assert.equal(mounted.container.querySelector('fieldset')!.disabled, true, 'form locked while pending');
         nextPost = async () => json(200, saved({ invoiceNumber: 'GR-4' }));
         await act(async () => { mounted.button('supply_retry_same')!.click(); });
@@ -170,10 +174,12 @@ describe('PurchaseInvoiceForm', () => {
         await chooseVendor('#7'); await type(input('invoiceNumber'), 'GR-5');
         await type(input('lines[0].item'), 'Dozen'); await key(input('lines[0].item'), 'Tab');
         await type(input('lines[0].quantity'), '1'); await type(input('lines[0].unitPrice'), '1');
+        await type(input('internalNote'), ' Klant komt morgen langs ');
         await key(input('invoiceNumber'), 's', { code: 'KeyS', ctrlKey: true });
         await mounted.waitFor(() => posted.length === 1, 'saved');
         const body = JSON.parse(posted[0].body);
         assert.equal(body.remarks, 'Vrijdag');
+        assert.equal(body.internalNote, 'Klant komt morgen langs', 'internal note saved with the document, no separate confirmation');
         assert.equal(body.paymentTermsDays, 30);
         assert.equal(body.currency, 'EUR');
         await mounted.waitFor(() => text().includes('purchase_saved_title'), 'success');

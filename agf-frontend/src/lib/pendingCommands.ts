@@ -270,6 +270,7 @@ function isCreateOrderPayload(value: unknown, requestId: string): value is Creat
         && value.requestId === requestId
         && isPositiveInt(value.customerId)
         && isNullableText(value.customerReference)
+        && (value.internalNote === undefined || isNullableText(value.internalNote)) // bevroren opdrachten van vóór de interne opmerking
         && isTimestamp(value.requestedDeliveryDate)
         && isText(value.actorReference)
         && Array.isArray(value.lines)

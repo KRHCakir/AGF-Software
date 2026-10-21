@@ -102,7 +102,12 @@ describe('lines, amounts and payload', () => {
         assert.equal(result.value.paymentTermsDays, 30);
         assert.equal(result.value.dueDate, '2026-11-20');
         assert.equal(result.value.remarks, 'Vrijdag');
+        assert.equal(result.value.internalNote, null, 'no internal note by default');
         assert.equal(result.value.grossWeightKg, 320.5);
+        const noted = buildPurchaseInvoicePayload({ ...d, header: { ...d.header, internalNote: '  Klant komt morgen langs ' } }, settings);
+        if (noted.ok) assert.equal(noted.value.internalNote, 'Klant komt morgen langs', 'internal note trimmed and sent with the document');
+        const tooLong = buildPurchaseInvoicePayload({ ...d, header: { ...d.header, internalNote: 'x'.repeat(1001) } }, settings);
+        if (!tooLong.ok) assert.deepEqual(groupErrors(tooLong.errors).internalNote, ['too_large']);
         assert.equal('containerNumber' in result.value, false, 'disabled fields are not sent');
         assert.deepEqual(result.value.lines, [{ productVariantId: 4, description: null, quantity: 80, unit: 'box', unitPrice: 12.5, discountPercentage: 0, vatPercentage: 21 }]);
     });

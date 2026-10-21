@@ -13,6 +13,8 @@ namespace AgfAdmin.DTOs
         public DateTime? DueDate { get; set; }
         public string Currency { get; set; }
         public List<CreatePurchaseInvoiceLineDto> Lines { get; set; } = new();
+        // Interne opmerking bij dit document (altijd beschikbaar, nooit extern zichtbaar; telt mee in de replayvergelijking).
+        public string InternalNote { get; set; }
         // Optionele velden; alleen de door het bedrijf ingeschakelde velden worden overgenomen.
         public DateTime? ReceivedDate { get; set; }
         public string PaymentReference { get; set; }
@@ -56,6 +58,7 @@ namespace AgfAdmin.DTOs
         public decimal VatAmount { get; set; }
         public decimal TotalAmount { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string InternalNote { get; set; }
         public DateTime? ReceivedDate { get; set; }
         public string PaymentReference { get; set; }
         public string Remarks { get; set; }

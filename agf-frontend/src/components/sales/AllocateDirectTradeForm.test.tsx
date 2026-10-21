@@ -18,7 +18,7 @@ const line: SalesOrderLine = {
     reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false, openQuantity: 40, fulfilled: false, version: 0, reservations: [],
 };
 const order: SalesOrder = {
-    id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE DT klant', status: 'Open', customerReference: null,
+    id: 4, requestId: 'o-4', customerId: 6, customerName: 'SMOKE DT klant', status: 'Open', customerReference: null, internalNote: null,
     requestedDeliveryDate: '2026-10-26T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-20T08:00:00.000Z', version: 0,
     cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, delivered: false, lines: [line],
 };

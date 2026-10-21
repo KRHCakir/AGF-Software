@@ -440,6 +440,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<DateTime?>("InvoiceDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -1443,6 +1447,10 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("CustomerReference")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uuid");
