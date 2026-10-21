@@ -38,7 +38,7 @@ const release = (orderId: number, lineId: number, reservationId: number, request
 
 const create = (requestId = 'c-1'): PendingCommand => ({
     kind: 'create-order', key: CREATE_ORDER_KEY, requestId, attempts: 2, lastError: 'HTTP 502', frozenAt: '2026-10-19T08:00:00.000Z',
-    payload: { requestId, customerId: 1, customerReference: null, requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', lines: [{ productVariantId: 2, quantity: 10, unit: 'box' }] },
+    payload: { requestId, customerId: 1, customerReference: null, requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', lines: [{ productVariantId: 2, quantity: 10, unit: 'box', palletCount: null, packagesPerPallet: null }] },
     display: { customerName: 'Local Market Stalls' },
 });
 

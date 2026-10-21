@@ -14,6 +14,7 @@ import { PACKAGE_UNITS } from '../../types/availability';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
+import QuantityInput from '../shared/QuantityInput';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
@@ -23,7 +24,7 @@ import { PendingNotice } from './PendingCommandsBanner';
 import { usePendingCommand, usePendingCommands } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 
-const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '' });
+const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', requestedDeliveryDate: '', lines: [emptyLine()] });
 
 // Een onafgerond commando wordt als (vergrendeld) concept getoond; verstuurd wordt altijd de bevroren payload zelf.
@@ -31,7 +32,10 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     customerId: String(command.payload.customerId),
     customerReference: command.payload.customerReference ?? '',
     requestedDeliveryDate: isoToDateInput(command.payload.requestedDeliveryDate) ?? '',
-    lines: command.payload.lines.map((line) => ({ key: newRequestId(), productVariantId: String(line.productVariantId), quantity: String(line.quantity), unit: line.unit })),
+    lines: command.payload.lines.map((line) => ({
+        key: newRequestId(), productVariantId: String(line.productVariantId), quantity: String(line.quantity), unit: line.unit,
+        mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : String(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : String(line.packagesPerPallet),
+    })),
 });
 
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
@@ -98,6 +102,9 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         return labels;
     }, [products]);
 
+    // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
+    const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
+
     const edited = () => {
         setError(null);
         setErrors({});
@@ -109,7 +116,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         edited();
     };
 
-    const updateLine = (key: string, field: 'productVariantId' | 'quantity' | 'unit', value: string) => {
+    const updateLine = (key: string, field: 'productVariantId' | 'quantity' | 'unit' | 'mode' | 'palletCount' | 'packagesPerPallet', value: string) => {
         if (locked) return;
         setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, [field]: value } : line)) }));
         edited();
@@ -340,11 +347,10 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>
-                                        <td className="w-32 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.quantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
-                                            <input {...fieldProps(`${prefix}.quantity`, e(`${prefix}.quantity`))} inputMode="decimal" value={line.quantity}
-                                                disabled={locked} onChange={(event) => updateLine(line.key, 'quantity', event.target.value)} className={inputClass} />
-                                            <FieldError id={`${prefix}.quantity`} messages={e(`${prefix}.quantity`)} />
+                                        <td className="w-72 px-2 py-1.5">
+                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e}
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
+                                                onChange={(field, value) => updateLine(line.key, field, value)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>

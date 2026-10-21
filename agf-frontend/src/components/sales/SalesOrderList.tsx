@@ -92,6 +92,7 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                             <li key={line.id} className="flex flex-wrap items-center gap-1">
                                                 <span className="truncate">{line.productName} · {line.productVariantName}</span>
                                                 <span className="font-mono">{formatQuantity(line.reservedQuantity + line.dispatchedQuantity, locale)}/{formatQuantity(line.quantity, locale)}</span>
+                                                {line.palletCount !== null && line.packagesPerPallet !== null && <span className="text-gray-600">({t('pallet_breakdown', { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) })})</span>}
                                                 {line.dispatchedQuantity > 0 && <span className="text-emerald-900">({t('sales_list_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale) })})</span>}
                                                 <UnitBadge unit={line.unit} />
                                             </li>

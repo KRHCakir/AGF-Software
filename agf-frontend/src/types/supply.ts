@@ -10,6 +10,9 @@ export interface CreateSupplyCommitmentLineRequest {
     expectedUnit: PackageUnit;
     expectedNetWeightKg: number | null;
     lotNumber: string | null;
+    // Optioneel, beide of geen: expectedQuantity = palletCount × packagesPerPallet (de server controleert dit).
+    palletCount: number | null;
+    packagesPerPallet: number | null;
 }
 
 export interface CreateSupplyCommitmentRequest {
@@ -35,6 +38,10 @@ export interface SupplyCommitmentLine {
     // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
     weightMethod: WeightMethod;
     defaultNetKgPerPackage: number | null;
+    // Oorspronkelijke palletinvoer (null bij gewone invoer) en de standaard van de variant als invoerhulp.
+    palletCount: number | null;
+    packagesPerPallet: number | null;
+    defaultPackagesPerPallet: number | null;
 }
 
 export interface SupplyCommitment {
@@ -71,7 +78,10 @@ function isLine(value: unknown): value is SupplyCommitmentLine {
         && isNullableUnit(value.expectedUnit)
         && isNullableNumber(value.expectedNetWeightKg)
         && isWeightMethod(value.weightMethod)
-        && isNullableNumber(value.defaultNetKgPerPackage);
+        && isNullableNumber(value.defaultNetKgPerPackage)
+        && isNullableNumber(value.palletCount)
+        && isNullableNumber(value.packagesPerPallet)
+        && isNullableNumber(value.defaultPackagesPerPallet);
 }
 
 export function isSupplyCommitment(value: unknown): value is SupplyCommitment {

@@ -27,7 +27,7 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
         requestedDeliveryDate: '2026-10-26T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
         cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: shipped === 20, delivered: false,
         lines: [{
-            id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 20, unit: 'box',
+            id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 20, unit: 'box', palletCount: null, packagesPerPallet: null,
             reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, dispatchedQuantity: shipped, dispatchedNetWeightKg: shipped === 0 ? 0 : 81,
             directTradeShippedQuantity: shipped, deliveredQuantity: 0, delivered: false, openQuantity: 20 - shipped, fulfilled: shipped === 20, version: 3, reservations,
         }],

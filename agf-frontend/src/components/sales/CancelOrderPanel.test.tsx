@@ -23,7 +23,7 @@ const order: SalesOrder = {
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version: 2,
     cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, delivered: false,
     lines: [{
-        id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box',
+        id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box', palletCount: null, packagesPerPallet: null,
         reservedQuantity: 10, reservedNetWeightKg: 40, allocatedQuantity: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false, openQuantity: 10, fulfilled: false, version: 3,
         reservations: [reservation(11, 'Active', true), reservation(12, 'Released'), reservation(13, 'Active')],
     }],

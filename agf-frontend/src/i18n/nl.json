@@ -912,5 +912,15 @@
   "products_weight_default_kg": "Standaard netto kg per verpakking",
   "products_weight_save": "Opslaan",
   "products_weight_saved": "Opgeslagen",
-  "products_weight_hint": "Geldt voor nieuwe ontvangsten; bestaande inhoudsregels houden hun eigen methode en kg per verpakking."
+  "products_weight_hint": "Geldt voor nieuwe ontvangsten; bestaande inhoudsregels houden hun eigen methode en kg per verpakking.",
+  "quantity_mode": "Invoer",
+  "quantity_mode_packages": "Verpakkingen",
+  "quantity_mode_pallets": "Pallet",
+  "pallet_count": "Aantal pallets",
+  "packages_per_pallet": "Verpakkingen per pallet",
+  "pallet_calculation": "{pallets} pallets × {perPallet} {unit} = {total} {unit}",
+  "pallet_calculation_pending": "Vul aantal pallets en verpakkingen per pallet in.",
+  "pallet_breakdown": "{pallets} pallets van {perPallet}",
+  "pallet_input_hint": "Alleen voor pallets met dezelfde inhoud; het totaal in verpakkingen telt voor vraag en voorraad. Er worden geen fysieke pallets aangemaakt.",
+  "products_packages_per_pallet": "Standaard verpakkingen per pallet"
 }

@@ -1,7 +1,7 @@
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, QualityStatus } from './availability';
 import { hasConsistentDeliveryState } from '../lib/deliveryState';
-import { isArrayOf, isNullableString, isNumber, isObject, isString } from './guards';
+import { isArrayOf, isNullableString, isNumber, isObject, isString, isNullableNumber } from './guards';
 import { isQualityStatus } from './inspection';
 
 // Exact het contract van /api/sales-orders en /api/stock-reservations (backend: AgfAdmin/DTOs/SalesOrderDtos.cs).
@@ -15,6 +15,9 @@ export interface CreateSalesOrderLineRequest {
     productVariantId: number;
     quantity: number;
     unit: PackageUnit;
+    // Optioneel, beide of geen: quantity = palletCount × packagesPerPallet; quantity blijft de bron voor alle controles.
+    palletCount: number | null;
+    packagesPerPallet: number | null;
 }
 
 export interface CreateSalesOrderRequest {
@@ -238,6 +241,9 @@ export interface SalesOrderLine {
     productVariantName: string | null;
     quantity: number;
     unit: PackageUnit;
+    // Oorspronkelijke palletinvoer ("9 pallets van 120 dozen"); null bij gewone invoer.
+    palletCount: number | null;
+    packagesPerPallet: number | null;
     // Gereserveerd = Active Physical (magazijnvoorraad).
     reservedQuantity: number;
     reservedNetWeightKg: number;
@@ -364,6 +370,8 @@ function isSalesOrderLine(value: unknown): value is SalesOrderLine {
         && isNullableString(value.productVariantName)
         && isNumber(value.quantity)
         && isUnit(value.unit)
+        && isNullableNumber(value.palletCount)
+        && isNullableNumber(value.packagesPerPallet)
         && isNumber(value.reservedQuantity)
         && isNumber(value.reservedNetWeightKg)
         && isNumber(value.allocatedQuantity)

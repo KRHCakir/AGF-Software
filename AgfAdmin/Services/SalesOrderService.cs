@@ -123,15 +123,18 @@ namespace AgfAdmin.Services
                     {
                         ValidationErrors.Add(errors, $"{key}.productVariantId", "A product variant is required.");
                     }
-                    if (line.Quantity == null || !SupplyRules.IsPositiveDecimal18_3(line.Quantity.Value))
+                    var palletInput = line.PalletCount != null || line.PackagesPerPallet != null;
+                    if (line.Quantity == null ? !palletInput : !SupplyRules.IsPositiveDecimal18_3(line.Quantity.Value))
                     {
-                        ValidationErrors.Add(errors, $"{key}.quantity", "Quantity is required, must be positive and may have at most 3 decimals.");
+                        ValidationErrors.Add(errors, $"{key}.quantity", "Quantity is required (or pallet count × packages per pallet), must be positive and may have at most 3 decimals.");
                     }
                     if (!SupplyRules.IsPackageUnit(line.Unit))
                     {
                         ValidationErrors.Add(errors, $"{key}.unit", $"Unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}.");
                     }
-                    if (errors.Count > before)
+                    // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet, of moet daar exact aan gelijk zijn.
+                    var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.Quantity, key, "quantity", errors, ValidationErrors.Add);
+                    if (errors.Count > before || total == null)
                     {
                         continue;
                     }
@@ -141,7 +144,7 @@ namespace AgfAdmin.Services
                         ValidationErrors.Add(errors, key, "The same product variant and unit occur more than once.");
                         continue;
                     }
-                    lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = line.Quantity!.Value, Unit = line.Unit });
+                    lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet });
                 }
             }
 
@@ -182,6 +185,8 @@ namespace AgfAdmin.Services
                 && existingLines.Zip(candidateLines).All(pair =>
                     pair.First.ProductVariantId == pair.Second.ProductVariantId
                     && pair.First.Quantity == pair.Second.Quantity
+                    && pair.First.PalletCount == pair.Second.PalletCount
+                    && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
             return same
@@ -646,6 +651,8 @@ namespace AgfAdmin.Services
                     ProductVariantName = line.ProductVariant?.Name,
                     Quantity = line.Quantity,
                     Unit = line.Unit,
+                    PalletCount = line.PalletCount,
+                    PackagesPerPallet = line.PackagesPerPallet,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
                     AllocatedQuantity = allocatedQuantity,

@@ -63,6 +63,20 @@ public class ProductsControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task Packaging_Settings_Store_The_Default_Packages_Per_Pallet_And_Reject_Invalid_Values()
+    {
+        var id = await SeedVariantAsync();
+        await using var db = _factory.CreateContext();
+        var controller = new ProductsController(db);
+        Assert.IsType<OkObjectResult>(await controller.UpdatePackagingSettings(id, new UpdatePackagingSettingsDto { DefaultPackagesPerPallet = 80m }));
+        Assert.IsType<BadRequestObjectResult>(await controller.UpdatePackagingSettings(id, new UpdatePackagingSettingsDto { DefaultPackagesPerPallet = 0m }));
+        Assert.IsType<NotFoundResult>(await controller.UpdatePackagingSettings(999, new UpdatePackagingSettingsDto { DefaultPackagesPerPallet = 80m }));
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(80m, (await verify.ProductVariants.SingleAsync(v => v.Id == id)).DefaultPackagesPerPallet);
+    }
+
+    [Fact]
     public async Task Unknown_Variant_Gives_NotFound()
     {
         await using var db = _factory.CreateContext();

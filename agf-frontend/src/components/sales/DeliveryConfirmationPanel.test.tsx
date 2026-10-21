@@ -41,7 +41,7 @@ const orderWith = (version: number, warehouseDelivered = false, dtDelivered = fa
         requestedDeliveryDate: '2026-10-26T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
         cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: true, delivered: delivered === 20,
         lines: [{
-            id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 20, unit: 'box',
+            id: 7, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', quantity: 20, unit: 'box', palletCount: null, packagesPerPallet: null,
             reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, dispatchedQuantity: 20, dispatchedNetWeightKg: 80.5,
             directTradeShippedQuantity: 10, deliveredQuantity: delivered, delivered: delivered === 20, openQuantity: 0, fulfilled: true, version: 3,
             reservations: [physical(warehouseDelivered ? 1 : null), allocation(dtDelivered ? 2 : null)],

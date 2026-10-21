@@ -30,6 +30,58 @@ public class SalesOrderServiceTests : IDisposable
         }
     };
 
+    // ---- Palletinvoer op orderregels: Quantity blijft de bron voor vraag, reservering en verzending ----
+
+    private CreateSalesOrderDto PalletOrder(decimal? quantity = null, decimal? palletCount = 9m, decimal? packagesPerPallet = 120m, Guid? requestId = null)
+    {
+        var request = Request(requestId);
+        request.Lines = new List<CreateSalesOrderLineDto> { new() { ProductVariantId = _seed.AvocadoId, Quantity = quantity, PalletCount = palletCount, PackagesPerPallet = packagesPerPallet, Unit = "box" } };
+        return request;
+    }
+
+    [Fact]
+    public async Task Pallet_Input_On_An_Order_Line_Computes_The_Total_And_Is_Shown_On_The_Line()
+    {
+        await SeedAsync();
+        var result = await CreateAsync(PalletOrder());
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal(1080m, line.Quantity);
+        Assert.Equal(1080m, line.OpenQuantity);
+        Assert.Equal(9m, line.PalletCount);
+        Assert.Equal(120m, line.PackagesPerPallet);
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(quantity: 1080m))).Status);
+    }
+
+    [Theory]
+    [InlineData("total-mismatch", "lines[0].quantity")]
+    [InlineData("pallets-only", "lines[0].packagesPerPallet")]
+    [InlineData("per-pallet-only", "lines[0].palletCount")]
+    public async Task Pallet_Input_On_An_Order_Is_Validated(string invalidCase, string expectedErrorKey)
+    {
+        await SeedAsync();
+        var request = invalidCase switch
+        {
+            "total-mismatch" => PalletOrder(quantity: 1000m),
+            "pallets-only" => PalletOrder(packagesPerPallet: null),
+            _ => PalletOrder(palletCount: null)
+        };
+        var result = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains(expectedErrorKey, result.Errors.Keys);
+        Assert.Equal(0, await OrderCountAsync());
+    }
+
+    [Fact]
+    public async Task Order_Retry_With_Other_Pallet_Split_Conflicts()
+    {
+        await SeedAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletOrder(requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletOrder(palletCount: 12m, packagesPerPallet: 90m, requestId: requestId))).Status);
+    }
+
     private async Task<ServiceResult<SalesOrderDto>> CreateAsync(CreateSalesOrderDto request)
     {
         await using var db = _factory.CreateContext();

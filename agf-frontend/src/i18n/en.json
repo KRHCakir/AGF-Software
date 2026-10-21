@@ -912,5 +912,15 @@
   "products_weight_default_kg": "Default net kg per package",
   "products_weight_save": "Save",
   "products_weight_saved": "Saved",
-  "products_weight_hint": "Applies to new receipts; existing content lines keep their own method and kg per package."
+  "products_weight_hint": "Applies to new receipts; existing content lines keep their own method and kg per package.",
+  "quantity_mode": "Entry",
+  "quantity_mode_packages": "Packages",
+  "quantity_mode_pallets": "Pallet",
+  "pallet_count": "Number of pallets",
+  "packages_per_pallet": "Packages per pallet",
+  "pallet_calculation": "{pallets} pallets × {perPallet} {unit} = {total} {unit}",
+  "pallet_calculation_pending": "Enter the number of pallets and packages per pallet.",
+  "pallet_breakdown": "{pallets} pallets of {perPallet}",
+  "pallet_input_hint": "Only for pallets with the same content; the total in packages counts for demand and stock. No physical pallets are created.",
+  "products_packages_per_pallet": "Default packages per pallet"
 }

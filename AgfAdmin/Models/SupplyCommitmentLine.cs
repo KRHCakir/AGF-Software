@@ -15,6 +15,10 @@ namespace AgfAdmin.Models
         public decimal ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }            // box, colli, tray, piece of dozen; optioneel tijdens de overgang
         public decimal? ExpectedNetWeightKg { get; set; }   // werkelijk opgegeven netto kg; nooit afgeleid
+        // Oorspronkelijke palletinvoer (optioneel, beide of geen): ExpectedQuantity = PalletCount × PackagesPerPallet.
+        // ExpectedQuantity blijft de bron voor alle controles; dit is alleen de herkenbare weergave "9 pallets van 120".
+        public decimal? PalletCount { get; set; }
+        public decimal? PackagesPerPallet { get; set; }
         public string LotNumber { get; set; } // optioneel
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

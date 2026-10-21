@@ -73,6 +73,24 @@ namespace AgfAdmin.Controllers
             return Ok(new { variant.Id, variant.WeightMethod, variant.DefaultNetKgPerPackage });
         }
 
+        // PUT: api/Products/variants/5/packaging-settings — standaard verpakkingen per pallet (alleen invoerhulp).
+        [HttpPut("variants/{id}/packaging-settings")]
+        public async Task<IActionResult> UpdatePackagingSettings(int id, [FromBody] UpdatePackagingSettingsDto dto)
+        {
+            if (dto?.DefaultPackagesPerPallet != null && !Services.SupplyRules.IsPositiveDecimal18_3(dto.DefaultPackagesPerPallet.Value))
+            {
+                return BadRequest(new { Message = "Invalid packaging settings.", Errors = new Dictionary<string, string[]> { ["defaultPackagesPerPallet"] = new[] { "Default packages per pallet must be positive and may have at most 3 decimals." } } });
+            }
+            var variant = await _context.ProductVariants.FindAsync(id);
+            if (variant == null)
+            {
+                return NotFound();
+            }
+            variant.DefaultPackagesPerPallet = dto?.DefaultPackagesPerPallet;
+            await _context.SaveChangesAsync();
+            return Ok(new { variant.Id, variant.DefaultPackagesPerPallet });
+        }
+
         // PUT: api/Products/variants/5/shortcut
         [HttpPut("variants/{id}/shortcut")]
         public async Task<IActionResult> UpdateShortcut(int id, [FromBody] UpdateShortcutDto dto)

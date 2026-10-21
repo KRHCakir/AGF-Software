@@ -223,9 +223,10 @@ namespace AgfAdmin.Services
 
             var errorCount = errors.Count;
 
-            if (line.ExpectedQuantity == null || !SupplyRules.IsPositiveDecimal18_3(line.ExpectedQuantity.Value))
+            var palletInput = line.PalletCount != null || line.PackagesPerPallet != null;
+            if (line.ExpectedQuantity == null ? !palletInput : !SupplyRules.IsPositiveDecimal18_3(line.ExpectedQuantity.Value))
             {
-                AddError(errors, $"{key}.expectedQuantity", "Expected quantity is required, must be positive and may have at most 3 decimals.");
+                AddError(errors, $"{key}.expectedQuantity", "Expected quantity is required (or pallet count × packages per pallet), must be positive and may have at most 3 decimals.");
             }
 
             if (!SupplyRules.IsPackageUnit(line.ExpectedUnit))
@@ -240,7 +241,10 @@ namespace AgfAdmin.Services
 
             var lotNumber = ValidateText(line.LotNumber, required: false, MaxLotNumberLength, $"{key}.lotNumber", errors);
 
-            if (errors.Count > errorCount)
+            // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet, of moet daar exact aan gelijk zijn.
+            var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.ExpectedQuantity, key, "expectedQuantity", errors, AddError);
+
+            if (errors.Count > errorCount || total == null)
             {
                 return null;
             }
@@ -248,7 +252,9 @@ namespace AgfAdmin.Services
             return new SupplyCommitmentLine
             {
                 ProductVariantId = line.ProductVariantId,
-                ExpectedQuantity = line.ExpectedQuantity!.Value,
+                ExpectedQuantity = total.Value,
+                PalletCount = line.PalletCount,
+                PackagesPerPallet = line.PackagesPerPallet,
                 ExpectedUnit = line.ExpectedUnit,
                 ExpectedNetWeightKg = line.ExpectedNetWeightKg,
                 LotNumber = lotNumber
@@ -342,6 +348,8 @@ namespace AgfAdmin.Services
                 && pair.First.ExpectedQuantity == pair.Second.ExpectedQuantity
                 && string.Equals(pair.First.ExpectedUnit, pair.Second.ExpectedUnit, StringComparison.Ordinal)
                 && pair.First.ExpectedNetWeightKg == pair.Second.ExpectedNetWeightKg
+                && pair.First.PalletCount == pair.Second.PalletCount
+                && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                 && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal));
         }
 
@@ -387,6 +395,9 @@ namespace AgfAdmin.Services
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
                     WeightMethod = l.ProductVariant?.WeightMethod ?? WeightRules.Weighed,
                     DefaultNetKgPerPackage = l.ProductVariant?.DefaultNetKgPerPackage,
+                    PalletCount = l.PalletCount,
+                    PackagesPerPallet = l.PackagesPerPallet,
+                    DefaultPackagesPerPallet = l.ProductVariant?.DefaultPackagesPerPallet,
                     DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
                     DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
                         ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null

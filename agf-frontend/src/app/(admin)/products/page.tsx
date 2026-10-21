@@ -102,7 +102,8 @@ export default function ProductsPage() {
                                     </td>
                                     <td className="px-4 py-3">
                                       <WeightSettings variantId={v.id} weightMethod={isWeightMethod(v.weightMethod) ? v.weightMethod : 'Weighed'}
-                                        defaultNetKgPerPackage={typeof v.defaultNetKgPerPackage === 'number' ? v.defaultNetKgPerPackage : null} onSaved={loadProducts} />
+                                        defaultNetKgPerPackage={typeof v.defaultNetKgPerPackage === 'number' ? v.defaultNetKgPerPackage : null}
+                                        defaultPackagesPerPallet={typeof v.defaultPackagesPerPallet === 'number' ? v.defaultPackagesPerPallet : null} onSaved={loadProducts} />
                                     </td>
                                   </tr>
                                 ))

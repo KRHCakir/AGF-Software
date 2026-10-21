@@ -32,6 +32,9 @@ namespace AgfAdmin.Models
         // Standaard netto kg per verpakking (etiket); alleen een invoerhulp, per inhoudsregel aanpasbaar.
         public decimal? DefaultNetKgPerPackage { get; set; }
 
+        // Standaard verpakkingen per pallet; alleen een invoerhulp (vooraf ingevuld, aanpasbaar). Nooit een universele conversie.
+        public decimal? DefaultPackagesPerPallet { get; set; }
+
         // Beschikbaarheidseenheid voor nieuwe voorraadflows: "Kilogram" of "Package".
         // Optioneel tijdens de overgang; nooit afgeleid uit maat of verpakking.
         public string AvailabilityUnit { get; set; }

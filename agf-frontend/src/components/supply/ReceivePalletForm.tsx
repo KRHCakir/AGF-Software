@@ -543,7 +543,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                     )}
                                                 </td>
                                                 <td className="px-2 py-1.5 align-top">{line.lotNumber ?? '–'}</td>
-                                                <td className="px-2 py-1.5 text-right align-top">{formatQuantity(line.expectedQuantity, locale)}</td>
+                                                <td className="px-2 py-1.5 text-right align-top">
+                                                    {formatQuantity(line.expectedQuantity, locale)}
+                                                    {line.palletCount !== null && line.packagesPerPallet !== null && <span className="block text-xs text-gray-600">{t('pallet_breakdown', { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) })}</span>}
+                                                </td>
                                                 <td className="px-2 py-1.5 align-top"><UnitBadge unit={line.expectedUnit} /></td>
                                                 <td className="px-2 py-1.5 text-right align-top">
                                                     {line.expectedNetWeightKg === null ? '–' : formatKg(line.expectedNetWeightKg, locale)}

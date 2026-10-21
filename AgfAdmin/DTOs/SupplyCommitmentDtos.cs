@@ -19,6 +19,9 @@ namespace AgfAdmin.DTOs
         public string ExpectedUnit { get; set; }
         public decimal? ExpectedNetWeightKg { get; set; }
         public string LotNumber { get; set; }
+        // Optioneel, beide of geen: ExpectedQuantity mag dan weg (server berekent) of moet exact PalletCount × PackagesPerPallet zijn.
+        public decimal? PalletCount { get; set; }
+        public decimal? PackagesPerPallet { get; set; }
     }
 
     public sealed class SupplyCommitmentFilter
@@ -60,6 +63,10 @@ namespace AgfAdmin.DTOs
         // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
         public string WeightMethod { get; set; }
         public decimal? DefaultNetKgPerPackage { get; set; }
+        // Oorspronkelijke palletinvoer van de regel (null bij gewone invoer) en de standaard van de variant als invoerhulp.
+        public decimal? PalletCount { get; set; }
+        public decimal? PackagesPerPallet { get; set; }
+        public decimal? DefaultPackagesPerPallet { get; set; }
         // Alleen bij route DirectTrade: som van Active toewijzingen aan verkooporders en wat daarvan nog toewijsbaar is.
         // Null bij route Warehouse: magazijnaanvoer heeft geen toewijsbare verwachte capaciteit (die wordt pas voorraad na ontvangst en keuring).
         public decimal? DirectTradeAllocatedQuantity { get; set; }

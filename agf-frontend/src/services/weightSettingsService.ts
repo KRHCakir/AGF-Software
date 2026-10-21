@@ -6,6 +6,11 @@ export interface UpdateWeightSettingsRequest {
     defaultNetKgPerPackage: number | null;
 }
 
+// PUT /api/products/variants/{id}/packaging-settings: standaard verpakkingen per pallet (alleen invoerhulp).
+export async function updatePackagingSettings(variantId: number, defaultPackagesPerPallet: number | null, signal?: AbortSignal): Promise<void> {
+    await putJson(`/products/variants/${variantId}/packaging-settings`, { defaultPackagesPerPallet }, signal);
+}
+
 // PUT /api/products/variants/{id}/weight-settings: alleen de instellingen van de variant; raakt geen bestaande inhoudsregels.
 export async function updateWeightSettings(variantId: number, request: UpdateWeightSettingsRequest, signal?: AbortSignal): Promise<void> {
     await putJson(`/products/variants/${variantId}/weight-settings`, request, signal);
