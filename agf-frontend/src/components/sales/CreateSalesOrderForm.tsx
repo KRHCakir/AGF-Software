@@ -85,6 +85,8 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
+    // Verpakkingseenheid uit de artikelstamgegevens: vult alleen een nog lege eenheid voor; een gekozen eenheid blijft staan.
+    const variantUnits = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.packagingUnit] as const))), [products]);
 
     const edited = () => {
         setError(null);
@@ -303,7 +305,11 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <ProductVariantPicker id={`${prefix}.productVariantId`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                                 value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
                                                 describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
-                                                onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
+                                                onChange={(variantId) => {
+                                                    updateLine(line.key, 'productVariantId', variantId);
+                                                    const unit = variantUnits.get(Number(variantId));
+                                                    if (line.unit === '' && unit) updateLine(line.key, 'unit', unit);
+                                                }} />
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>

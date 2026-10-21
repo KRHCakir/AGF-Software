@@ -390,7 +390,9 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                             inputRef={(element) => { if (element) itemInputs.current.set(line.key, element); else itemInputs.current.delete(line.key); }}
                                             onChange={(variantId) => {
                                                 const variant = products.flatMap((product) => product.variants.map((candidate) => ({ product, variant: candidate }))).find((pair) => String(pair.variant.id) === variantId);
-                                                updateLine(line.key, { productVariantId: variantId, description: variant ? `${variant.product.name} · ${variant.variant.name}` : '' });
+                                                // Artikelstandaard: de verpakkingseenheid vult alleen een nog lege eenheid voor; handmatige keuze blijft staan.
+                                                const unit = line.unit === '' && variant?.variant.packagingUnit ? { unit: variant.variant.packagingUnit } : {};
+                                                updateLine(line.key, { productVariantId: variantId, description: variant ? `${variant.product.name} · ${variant.variant.name}` : '', ...unit });
                                             }}
                                             onFreeText={(text) => { if (line.productVariantId === '' && text !== line.description) updateLine(line.key, { description: text }); }} />
                                         <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`)} />

@@ -1,4 +1,7 @@
+import { PACKAGE_UNITS, PackageUnit } from './availability';
 import { JsonObject, isArrayOf, isNumber, isObject, isOptionalNullableString, isString } from './guards';
+
+const isPackageUnit = (value: unknown): value is PackageUnit => typeof value === 'string' && (PACKAGE_UNITS as readonly string[]).includes(value);
 
 // Alleen de velden die de werkplek gebruikt uit de bestaande endpoints
 // GET /api/incominginvoices/vendors, GET /api/customers en GET /api/products?includeVariants=true.
@@ -50,6 +53,8 @@ export interface VariantOption {
     shortcutCode: string | null;
     // Standaard verpakkingen per pallet (invoerhulp bij "Pallet"-invoer; aanpasbaar per regel).
     defaultPackagesPerPallet: number | null;
+    // Verpakkingseenheid uit de artikelstamgegevens: vult een lege eenheid op een nieuwe regel voor; nooit een overschrijving.
+    packagingUnit: PackageUnit | null;
 }
 
 export interface ProductOption {
@@ -70,6 +75,7 @@ function isVariant(value: unknown): value is Named {
         && isOptionalNullableString(value.packaging)
         && isOptionalNullableString(value.sizeCategory)
         && isOptionalNullableString(value.shortcutCode)
+        && isOptionalNullableString(value.packagingUnit)
         && (value.defaultPackagesPerPallet === undefined || value.defaultPackagesPerPallet === null || isNumber(value.defaultPackagesPerPallet));
 }
 
@@ -107,6 +113,7 @@ export function toVariantOption(value: Named): VariantOption {
         sizeCategory: optionalString(value.sizeCategory),
         shortcutCode: optionalString(value.shortcutCode),
         defaultPackagesPerPallet: typeof value.defaultPackagesPerPallet === 'number' ? value.defaultPackagesPerPallet : null,
+        packagingUnit: isPackageUnit(value.packagingUnit) ? value.packagingUnit : null,
     };
 }
 

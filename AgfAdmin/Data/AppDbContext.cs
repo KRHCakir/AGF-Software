@@ -162,11 +162,20 @@ namespace AgfAdmin.Data
                 b.Property(v => v.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
                 b.Property(v => v.DefaultNetKgPerPackage).HasPrecision(18, 3);
                 b.Property(v => v.DefaultPackagesPerPallet).HasPrecision(18, 3);
+                // Artikelwerkplek: optionele stamgegevens (alle NULL = niet vastgelegd).
+                b.Property(v => v.Brand).HasMaxLength(100);
+                b.Property(v => v.PackagingUnit).HasMaxLength(32);
+                b.Property(v => v.DefaultGrossKgPerPackage).HasPrecision(18, 3);
+                b.Property(v => v.GoodsCode).HasMaxLength(10);
+                b.Property(v => v.GoodsCodeSystem).HasMaxLength(8);
+                b.Property(v => v.TradeClass).HasMaxLength(50);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_ProductVariants_GoodsCodeSystem_Allowed", "\"GoodsCodeSystem\" IS NULL OR \"GoodsCodeSystem\" IN ('HS', 'CN', 'TARIC')");
                 });
             });
 

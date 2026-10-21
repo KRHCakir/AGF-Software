@@ -1130,6 +1130,14 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("Brand")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("DefaultGrossKgPerPackage")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal?>("DefaultNetKgPerPackage")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -1140,6 +1148,14 @@ namespace AgfAdmin.Migrations
 
                     b.Property<decimal>("DefaultPrice")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("GoodsCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("GoodsCodeSystem")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<string>("Name")
                         .HasColumnType("text");
@@ -1153,6 +1169,10 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Packaging")
                         .HasColumnType("text");
 
+                    b.Property<string>("PackagingUnit")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
 
@@ -1164,6 +1184,10 @@ namespace AgfAdmin.Migrations
 
                     b.Property<string>("SizeCategory")
                         .HasColumnType("text");
+
+                    b.Property<string>("TradeClass")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("WeightMethod")
                         .IsRequired()
@@ -1178,9 +1202,13 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("ProductVariants", t =>
                         {
+                            t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
+
                             t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_ProductVariants_GoodsCodeSystem_Allowed", "\"GoodsCodeSystem\" IS NULL OR \"GoodsCodeSystem\" IN ('HS', 'CN', 'TARIC')");
 
                             t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
                         });

@@ -19,6 +19,9 @@ builder.Services.AddScoped<IEmailIngestionService, EmailIngestionService>();
 builder.Services.AddScoped<IAIExtractorService, MockAIExtractorService>();
 builder.Services.AddScoped<ISalesParserService, SimpleSalesParserService>();
 builder.Services.AddScoped<PurchaseInvoiceService>();
+builder.Services.AddScoped<ArticleService>();
+// Lokale referentielijst van goederencodes: bij het opstarten gelezen uit Data/Reference/goods-codes.json.
+builder.Services.AddSingleton(_ => GoodsCodeCatalog.Load(Path.Combine(builder.Environment.ContentRootPath, GoodsCodeCatalog.DefaultRelativePath)));
 builder.Services.AddScoped<IDevelopmentDataSeeder, DevelopmentDataSeeder>();
 
 // Beschikbaarheidsdomein
