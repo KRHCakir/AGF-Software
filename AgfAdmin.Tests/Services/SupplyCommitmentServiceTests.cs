@@ -65,6 +65,87 @@ public class SupplyCommitmentServiceTests : IDisposable
         }
     };
 
+    // ---- Palletinvoer: pallets × verpakkingen per pallet; het totaal blijft de bron ----
+
+    private static CreateSupplyCommitmentDto PalletRequest(Seed seed, decimal? quantity = null, decimal? palletCount = 9m, decimal? packagesPerPallet = 120m, Guid? requestId = null)
+    {
+        var request = WarehouseRequest(seed, requestId);
+        request.Lines = new List<CreateSupplyCommitmentLineDto>
+        {
+            new() { ProductVariantId = seed.VariantSize6Id, ExpectedQuantity = quantity, PalletCount = palletCount, PackagesPerPallet = packagesPerPallet, ExpectedUnit = "box", LotNumber = "LOT-PAL" }
+        };
+        return request;
+    }
+
+    [Fact]
+    public async Task Pallet_Input_Computes_The_Total_And_Keeps_The_Ratio_On_The_Line()
+    {
+        var seed = await SeedAsync();
+        var result = await CreateAsync(PalletRequest(seed));
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal(1080m, line.ExpectedQuantity);
+        Assert.Equal(9m, line.PalletCount);
+        Assert.Equal(120m, line.PackagesPerPallet);
+
+        await using var verify = _factory.CreateContext();
+        var stored = await verify.SupplyCommitmentLines.SingleAsync(l => l.LotNumber == "LOT-PAL");
+        Assert.Equal(1080m, stored.ExpectedQuantity);
+        Assert.Equal((9m, 120m), (stored.PalletCount, stored.PackagesPerPallet));
+    }
+
+    [Fact]
+    public async Task Pallet_Input_With_An_Explicit_Matching_Total_Succeeds_And_Plain_Lines_Keep_No_Ratio()
+    {
+        var seed = await SeedAsync();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletRequest(seed, quantity: 1080m))).Status);
+        var plain = await CreateAsync(WarehouseRequest(seed));
+        Assert.All(plain.Value.Lines, l => Assert.Null(l.PalletCount));
+    }
+
+    [Theory]
+    [InlineData("total-mismatch", "lines[0].expectedQuantity")]
+    [InlineData("pallets-only", "lines[0].packagesPerPallet")]
+    [InlineData("per-pallet-only", "lines[0].palletCount")]
+    [InlineData("pallets-zero", "lines[0].palletCount")]
+    [InlineData("per-pallet-four-decimals", "lines[0].packagesPerPallet")]
+    public async Task Pallet_Input_Is_Validated_And_Nothing_Is_Stored(string invalidCase, string expectedErrorKey)
+    {
+        var seed = await SeedAsync();
+        var request = invalidCase switch
+        {
+            "total-mismatch" => PalletRequest(seed, quantity: 1000m),
+            "pallets-only" => PalletRequest(seed, packagesPerPallet: null),
+            "per-pallet-only" => PalletRequest(seed, palletCount: null),
+            "pallets-zero" => PalletRequest(seed, palletCount: 0m),
+            _ => PalletRequest(seed, packagesPerPallet: 120.0001m)
+        };
+        AssertValidation(await CreateAsync(request), expectedErrorKey);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.SupplyCommitments.CountAsync());
+    }
+
+    // Regressie (review #41): grote maar afzonderlijk geldige waarden geven een validatiefout, geen overflow.
+    [Fact]
+    public async Task Pallet_Input_Beyond_Decimal_Range_Is_A_Validation_Error_Not_An_Overflow()
+    {
+        var seed = await SeedAsync();
+        AssertValidation(await CreateAsync(PalletRequest(seed, palletCount: 999_999_999_999_999m, packagesPerPallet: 999_999_999_999_999m)), "lines[0].expectedQuantity");
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.SupplyCommitments.CountAsync());
+    }
+
+    [Fact]
+    public async Task Retry_With_Same_Total_But_Other_Pallet_Split_Conflicts()
+    {
+        var seed = await SeedAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletRequest(seed, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletRequest(seed, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletRequest(seed, palletCount: 12m, packagesPerPallet: 90m, requestId: requestId))).Status);
+    }
+
     private async Task<ServiceResult<SupplyCommitmentDto>> CreateAsync(CreateSupplyCommitmentDto request)
     {
         await using var db = _factory.CreateContext();

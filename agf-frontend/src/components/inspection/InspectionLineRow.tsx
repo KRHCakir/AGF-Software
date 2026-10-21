@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatKg, formatQuantity } from '../../lib/availability';
+import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import {
     MAX_REASON_LENGTH,
     actionLabelKey,
@@ -13,6 +13,7 @@ import {
 } from '../../lib/qualityTransitions';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
+import { lastInspection } from '../../lib/inspectionList';
 import { InspectionPallet, changeQualityStatus, historyFor } from '../../services/inspectionService';
 import { QualityStatus } from '../../types/availability';
 import { ChangeQualityStatusRequest, PalletDetailLine } from '../../types/inspection';
@@ -21,6 +22,7 @@ import { UnitBadge } from '../availability/QuantityCell';
 import FieldError, { inputClass } from '../supply/FieldError';
 import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { WeightBadge } from '../shared/WeightBadge';
 import LineHistory from './LineHistory';
 import TechnicalDetails from '../supply/TechnicalDetails';
 
@@ -45,6 +47,8 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
     const inFlight = useRef(false);
 
     const commitment = context.commitments[line.supplyCommitmentId];
+    // De laatste keuringsbeslissing uit de audit: wie, wanneer. Zichtbaar zonder de historie open te klappen.
+    const inspected = lastInspection(historyFor(context, line));
     const actions = readOnly ? [] : allowedQualityTransitions(line.qualityStatus);
     const unknown = error !== null && outcomeUnknown(error);
     const conflict = error !== null && error.kind === 'http' && (error.status === 409 || error.status === 404);
@@ -137,6 +141,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
             <td className="px-3 py-2 text-right">
                 {formatKg(line.onHandNetWeightKg, locale)}
                 {line.dispatchedNetWeightKg > 0 && <span className="block text-xs text-gray-500">{t('inspection_received', { quantity: formatKg(line.netWeightKg, locale) })}</span>}
+                <span className="mt-1 block"><WeightBadge method={line.weightMethod} kgPerPackage={line.netKgPerPackage} unit={line.unit} /></span>
             </td>
             <td className="px-3 py-2 text-sm text-gray-800">
                 {commitment?.vendorName ?? t('availability_unknown')}
@@ -145,6 +150,11 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
             <td className="px-3 py-2">
                 <QualityBadge status={line.qualityStatus} />
                 {line.qualityReason && <span className="mt-1 block text-xs italic text-gray-700">“{line.qualityReason}”</span>}
+                {inspected && (
+                    <span className="mt-1 block text-xs text-gray-800" data-testid="inspected-by">
+                        {t('inspection_inspected_by', { actor: inspected.actor ?? t('inspection_actor_not_given'), time: formatDateTime(inspected.occurredAt, locale) })}
+                    </span>
+                )}
                 <span className="mt-1 block text-xs text-gray-600">
                     {countsAsAvailableNow(line.qualityStatus) ? t('inspection_counts_now') : t('inspection_not_counts_now')}
                 </span>

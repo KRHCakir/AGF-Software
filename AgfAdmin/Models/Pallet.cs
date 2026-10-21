@@ -6,7 +6,11 @@ namespace AgfAdmin.Models
     {
         public int Id { get; set; }
 
-        public string Reference { get; set; }      // verplicht, uniek, scanbaar
+        // Idempotentiesleutel van het aanmaakcommando; uniek, NULL bij pallets van vóór deze kolom. Met een RequestId geeft een
+        // identieke herhaling dezelfde pallet terug, ook als het palletnummer door de server is gegenereerd.
+        public Guid? RequestId { get; set; }
+
+        public string Reference { get; set; }      // verplicht, uniek, scanbaar; eigen nummer of servergegenereerd P-000123
         public string Sscc { get; set; }           // optioneel, uniek indien aanwezig; alleen een echte gescande/ingevoerde GS1-SSCC
         public string PalletType { get; set; }     // optioneel
 

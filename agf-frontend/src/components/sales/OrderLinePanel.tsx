@@ -166,6 +166,9 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 <h3 id={`line-${line.id}`} className="font-semibold text-gray-900">{line.productName} · {line.productVariantName}</h3>
                 <UnitBadge unit={line.unit} />
                 <span className="text-gray-800">{t('sales_line_demand', { quantity: formatQuantity(line.quantity, locale) })}</span>
+                {line.palletCount !== null && line.packagesPerPallet !== null && (
+                    <span className="text-gray-700" data-testid="pallet-breakdown">({t('pallet_breakdown', { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) })})</span>
+                )}
                 <span className="text-gray-800">
                     {t('sales_line_reserved', { quantity: formatQuantity(line.reservedQuantity, locale), kg: formatKg(line.reservedNetWeightKg, locale) })}
                 </span>

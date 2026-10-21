@@ -14,7 +14,7 @@ const order = (id: number, customerName: string): SalesOrder => ({
     id, requestId: `o-${id}`, customerId: id, customerName, status: 'Open', customerReference: null,
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version: 1,
     cancelledAt: null, cancelReason: null, cancelledBy: null, fulfilled: false, delivered: false,
-    lines: [{ id: id * 10, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box', reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false,
+    lines: [{ id: id * 10, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 20, unit: 'box', palletCount: null, packagesPerPallet: null, reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false,
         dispatchedQuantity: 0, dispatchedNetWeightKg: 0, openQuantity: 20, fulfilled: false, version: 1, reservations: [] }],
 });
 const A = order(13, 'Klant A');

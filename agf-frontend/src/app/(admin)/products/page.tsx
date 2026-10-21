@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { ProductService, Product } from '../../../services/productService';
 import ShortcutManager from '../../../components/ShortcutManager';
+import WeightSettings from '../../../components/products/WeightSettings';
+import { isWeightMethod } from '../../../lib/weight';
 import { useTranslation } from '../../../i18n/LanguageContext'; // Importeer de vertaler
 
 export default function ProductsPage() {
@@ -75,11 +77,12 @@ export default function ProductsPage() {
                                 <th className="px-4 py-2">{t('origin')} / {t('size')}</th>
                                 <th className="px-4 py-2">{t('shortcut')}</th>
                                 <th className="px-4 py-2">{t('season_info')}</th>
+                                <th className="px-4 py-2">{t('products_weight')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                               {p.variants.length === 0 ? (
-                                <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400 italic">{t('no_variants')}</td></tr>
+                                <tr><td colSpan={5} className="px-4 py-4 text-center text-gray-400 italic">{t('no_variants')}</td></tr>
                               ) : (
                                 p.variants.map((v) => (
                                   <tr key={v.id} className="hover:bg-gray-50">
@@ -96,6 +99,11 @@ export default function ProductsPage() {
                                       {v.season && <div><span className="font-semibold text-gray-700">{t('season_label')}</span> {v.season}</div>}
                                       {v.notes && <div><span className="font-semibold text-gray-700">{t('info_label')}</span> <span className="italic">{v.notes}</span></div>}
                                       {!v.season && !v.notes && <span className="text-gray-300">{t('no_extra_info')}</span>}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <WeightSettings variantId={v.id} weightMethod={isWeightMethod(v.weightMethod) ? v.weightMethod : 'Weighed'}
+                                        defaultNetKgPerPackage={typeof v.defaultNetKgPerPackage === 'number' ? v.defaultNetKgPerPackage : null}
+                                        defaultPackagesPerPallet={typeof v.defaultPackagesPerPallet === 'number' ? v.defaultPackagesPerPallet : null} onSaved={loadProducts} />
                                     </td>
                                   </tr>
                                 ))

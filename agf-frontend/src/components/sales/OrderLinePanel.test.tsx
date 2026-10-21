@@ -15,7 +15,7 @@ import { HydratedGate, PendingCommandsProvider } from './PendingCommandsContext'
 const STORAGE_KEY = 'agf_sales_pending_commands';
 
 const line: SalesOrderLine = {
-    id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 10, unit: 'box',
+    id: 7, productVariantId: 2, productName: 'Avocado', productVariantName: 'Green', quantity: 10, unit: 'box', palletCount: null, packagesPerPallet: null,
     reservedQuantity: 0, reservedNetWeightKg: 0, allocatedQuantity: 0, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, directTradeShippedQuantity: 0, deliveredQuantity: 0, delivered: false, openQuantity: 10, fulfilled: false, version: 0, reservations: [],
 };
 const order: SalesOrder = {
@@ -25,7 +25,7 @@ const order: SalesOrder = {
 };
 const stockRow = {
     palletContentLineId: 2, palletId: 2, palletReference: 'SMOKE-PAL-002', warehouseLocation: null, lotNumber: 'LOT-SALES-1', unit: 'box',
-    quantity: 40, netWeightKg: 160, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, onHandQuantity: 40, onHandNetWeightKg: 160, reservedQuantity: 15, reservedNetWeightKg: 60, allocatedQuantity: 0, availableQuantity: 25, availableNetWeightKg: 100,
+    quantity: 40, netWeightKg: 160, weightMethod: 'Weighed', netKgPerPackage: null, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, onHandQuantity: 40, onHandNetWeightKg: 160, reservedQuantity: 15, reservedNetWeightKg: 60, allocatedQuantity: 0, availableQuantity: 25, availableNetWeightKg: 100,
     qualityStatus: 'Approved', contentLineVersion: 6,
 };
 const reservationResponse = (requestId: string) => ({

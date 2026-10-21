@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
+import { unitLabelKey } from '../../lib/units';
+import { PackageUnit } from '../../types/availability';
 import { formatDateOnly } from '../../lib/calendarDate';
 import { isActiveConfirmation } from '../../lib/deliveryState';
 import { RetractDeliveryCommand, blockedBy, retractDeliveryKey, withAttempt } from '../../lib/pendingCommands';
@@ -51,7 +53,7 @@ export default function RetractDeliveryPanel({ order, shipment, confirmation, ac
     const locked = submitting || pending !== null || conflict || blockedByOther;
     const alreadyRetracted = !isActiveConfirmation(confirmation);
     const idPrefix = `retract-${shipment.kind === 'Warehouse' ? 'w' : 'dt'}-${shipment.id}`;
-    const totals = Object.entries(shipment.lines.reduce<Record<string, number>>((sum, line) => ({ ...sum, [line.unit]: (sum[line.unit] ?? 0) + line.quantity }), {}));
+    const totals = Object.entries(shipment.lines.reduce<Partial<Record<PackageUnit, number>>>((sum, line) => ({ ...sum, [line.unit]: (sum[line.unit] ?? 0) + line.quantity }), {})) as [PackageUnit, number][];
 
     const submit = async () => {
         if (inFlight.current || blockedByOther) return;
@@ -158,7 +160,7 @@ export default function RetractDeliveryPanel({ order, shipment, confirmation, ac
                 <ul className="mt-1 list-disc pl-5">
                     <li>{t('sales_retract_effect_kept')}</li>
                     <li>{t('sales_retract_effect_status')}</li>
-                    <li>{t('sales_retract_effect_delivered', { quantities: totals.map(([unit, quantity]) => `${formatQuantity(quantity, locale)} ${unit}`).join(' · ') })}</li>
+                    <li>{t('sales_retract_effect_delivered', { quantities: totals.map(([unit, quantity]) => `${formatQuantity(quantity, locale)} ${t(unitLabelKey(unit))}`).join(' · ') })}</li>
                     <li>{t('sales_retract_effect_no_stock')}</li>
                     <li>{t('sales_retract_effect_next')}</li>
                 </ul>

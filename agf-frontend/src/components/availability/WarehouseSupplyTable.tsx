@@ -5,6 +5,7 @@ import { WarehouseRow, breakdownTotal } from '../../lib/availability';
 import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import QualityBadge from './QualityBadge';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
+import { WeightBasisBadge } from '../shared/WeightBadge';
 import WarningBadges from './WarningBadges';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
@@ -62,7 +63,7 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
                         {rows.map((row) => (
                             <tr key={row.key} className="hover:bg-blue-50/40">
                                 {nameCell(row)}
-                                <td className={td}><UnitBadge unit={row.supply.unit} /></td>
+                                <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
                                 <td className={td}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
                                 <td className={td}><QuantityCell value={row.supply.reserved} /></td>
                                 <td className={`${td} bg-emerald-50/60`}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
@@ -114,7 +115,7 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
                     {rows.map((row) => (
                         <tr key={row.key} className="hover:bg-blue-50/40">
                             {nameCell(row)}
-                            <td className={td}><UnitBadge unit={row.supply.unit} /></td>
+                            <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
                             <td className={`${td} bg-green-50/60 ${marked('available')}`}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>
                             <td className={td}><QuantityCell value={row.supply.reserved} /></td>
                             <td className={`${td} bg-emerald-50/60`}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>

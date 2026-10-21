@@ -32,7 +32,7 @@ import type { BuildResult, OrderDraft } from './salesOrderRules.ts';
 // Draait met de ingebouwde testrunner van Node (type stripping): `npm test`.
 
 const line = (productVariantId: string, quantity: string, unit: 'box' | 'colli' | '' = 'box') =>
-    ({ key: `${productVariantId}-${unit}-${quantity}`, productVariantId, quantity, unit });
+    ({ key: `${productVariantId}-${unit}-${quantity}`, productVariantId, quantity, unit, mode: 'packages' as const, palletCount: '', packagesPerPallet: '' });
 
 const validDraft = (): OrderDraft => ({
     customerId: '7',
@@ -53,10 +53,21 @@ describe('buildOrderPayload', () => {
         assert.equal(result.value.actorReference, 'office-1');
         assert.equal(result.value.requestedDeliveryDate, new Date(2026, 9, 23).toISOString());
         assert.deepEqual(result.value.lines, [
-            { productVariantId: 1, quantity: 30, unit: 'box' },
-            { productVariantId: 1, quantity: 5, unit: 'colli' },
-            { productVariantId: 3, quantity: 12.5, unit: 'box' },
+            { productVariantId: 1, quantity: 30, unit: 'box', palletCount: null, packagesPerPallet: null },
+            { productVariantId: 1, quantity: 5, unit: 'colli', palletCount: null, packagesPerPallet: null },
+            { productVariantId: 3, quantity: 12.5, unit: 'box', palletCount: null, packagesPerPallet: null },
         ]);
+    });
+
+    test('a line entered per pallet sends the computed total and keeps the ratio; missing pallet fields are reported', () => {
+        const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '9', packagesPerPallet: '120' };
+        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] }, 'office-1');
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.deepEqual(result.value.lines, [{ productVariantId: 1, quantity: 1080, unit: 'box', palletCount: 9, packagesPerPallet: 120 }]);
+
+        const missing = buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, packagesPerPallet: '' }] }, 'office-1');
+        assert.deepEqual(codes(missing), { 'lines[0].packagesPerPallet': ['empty'] });
     });
 
     test('a blank reference becomes null', () => {

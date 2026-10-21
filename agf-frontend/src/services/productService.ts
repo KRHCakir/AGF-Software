@@ -61,4 +61,8 @@ export interface ProductVariant {
     sizeCategory?: string;
     defaultPrice: number;
     shortcutCode?: string;
+    // Gewichtsmethode en standaard kg per verpakking (PUT /products/variants/{id}/weight-settings).
+    weightMethod?: string;
+    defaultNetKgPerPackage?: number | null;
+    defaultPackagesPerPallet?: number | null;
 }

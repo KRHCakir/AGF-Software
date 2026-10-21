@@ -2,6 +2,7 @@ import type { PackageUnit } from '../types/availability';
 import type { CreateSalesOrderRequest } from '../types/salesOrder';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
+import { resolvePalletInput, type QuantityInputMode } from './palletInput.ts';
 
 // Pure regels van de verkoopwerkplek, los van React en i18n, zodat ze met node:test te toetsen zijn.
 // Ze spiegelen de backendregels (SalesOrderService, StockReservationService); de server blijft altijd leidend.
@@ -37,6 +38,10 @@ export interface OrderLineDraft {
     productVariantId: string;
     quantity: string;
     unit: PackageUnit | '';
+    // Invoer per pallet: 'pallets' rekent quantity uit palletCount × packagesPerPallet; 'packages' is de gewone invoer.
+    mode: QuantityInputMode;
+    palletCount: string;
+    packagesPerPallet: string;
 }
 
 export interface OrderDraft {
@@ -92,8 +97,9 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
         const prefix = `lines[${index}]`;
         const before = errors.length;
         if (!/^[1-9]\d*$/.test(line.productVariantId)) errors.push({ field: `${prefix}.productVariantId`, code: 'required' });
-        const quantity = parsePositiveDecimal(line.quantity);
-        if (!quantity.ok) errors.push({ field: `${prefix}.quantity`, code: quantity.error });
+        // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet; de server controleert dezelfde rekensom.
+        const amounts = resolvePalletInput({ mode: line.mode, quantity: line.quantity, palletCount: line.palletCount, packagesPerPallet: line.packagesPerPallet });
+        if (!amounts.ok) for (const error of amounts.errors) errors.push({ field: `${prefix}.${error.field}`, code: error.code as RuleCode });
         if (line.unit === '') errors.push({ field: `${prefix}.unit`, code: 'required' });
         // Eén regel per variant + eenheid, net als de databank-index: anders worden reserveringen dubbelzinnig.
         if (errors.length === before) {
@@ -103,8 +109,10 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
         }
         return {
             productVariantId: Number(line.productVariantId),
-            quantity: quantity.ok ? quantity.value : 0,
+            quantity: amounts.ok ? amounts.value.quantity : 0,
             unit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
+            palletCount: amounts.ok ? amounts.value.palletCount : null,
+            packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
         };
     });
 

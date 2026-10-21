@@ -65,7 +65,7 @@ describe('DemoAssistant', () => {
         assert.equal(currentUrl(), '/supply');
         assert.ok(mounted.hasText('demo_step_supply_body'));
         await click(mounted.button('demo_next')!);
-        assert.equal(currentUrl(), '/inspection');
+        assert.equal(currentUrl(), '/inspection?search=DEMO');
         await click(mounted.button('demo_next')!);
         await click(mounted.button('demo_next')!);
         assert.equal(currentUrl(), '/sales-orders');

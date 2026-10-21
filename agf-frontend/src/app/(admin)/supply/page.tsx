@@ -83,7 +83,7 @@ export default function SupplyPage() {
                     <p className="text-sm text-gray-600">{t('supply_subtitle')}</p>
                 </div>
                 <div className="w-64">
-                    <label htmlFor="actorReference-page" className="text-xs font-medium text-gray-700">{t('supply_actor')} *</label>
+                    <label htmlFor="actorReference-page" className="text-xs font-medium text-gray-700">{t('supply_actor')}</label>
                     <input id="actorReference-page" value={actor} maxLength={100} onChange={(event) => setActor(event.target.value)}
                         placeholder={t('supply_actor_placeholder')} className={inputClass} aria-describedby="actorReference-hint" />
                     <span id="actorReference-hint" className="block text-xs text-gray-500">{t('supply_actor_hint')}</span>

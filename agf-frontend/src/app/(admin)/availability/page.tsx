@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../compone
 import WarehouseSupplyTable, { AvailabilityView, DETAILED_ONLY_FOCUS } from '../../../components/availability/WarehouseSupplyTable';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { DirectTradeRow, UnitFilter, WarehouseRow, directTradeRows, formatTime, warehouseRows } from '../../../lib/availability';
+import { unitLabelKey } from '../../../lib/units';
 import { parseAvailabilityParams } from '../../../lib/availabilityLinks';
 import { getAvailabilityOverview, toAvailabilityError } from '../../../services/availabilityService';
 import { AvailabilityOverview, PACKAGE_UNITS } from '../../../types/availability';
@@ -156,7 +157,7 @@ function AvailabilityWorkspace() {
                             })()}
                         </span>
                     )}
-                    {unit !== undefined && <span className="rounded border border-amber-300 bg-white px-2 py-0.5 font-mono">{unit}</span>}
+                    {unit !== undefined && <span className="rounded border border-amber-300 bg-white px-2 py-0.5">{t(unitLabelKey(unit))}</span>}
                     {focus !== null && <span className="rounded border border-amber-400 bg-white px-2 py-0.5">{t('availability_link_focus', { column: t(`availability_focus_${focus}`) })}</span>}
                     {linkFilters.invalid.length > 0 && <span>{t('availability_link_invalid', { fields: linkFilters.invalid.join(', ') })}</span>}
                     <Link href="/availability" className="ml-auto font-medium text-blue-800 underline underline-offset-2">{t('availability_link_show_all')}</Link>
@@ -175,7 +176,7 @@ function AvailabilityWorkspace() {
                     <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value as UnitFilter)}
                         className="mt-1 rounded border border-gray-300 px-2 py-1 text-sm font-normal text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="all">{t('availability_unit_all')}</option>
-                        {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                        {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
                         <option value="unknown">{t('availability_unit_unknown')}</option>
                     </select>
                 </label>
