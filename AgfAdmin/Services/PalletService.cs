@@ -47,7 +47,7 @@ namespace AgfAdmin.Services
             var ownReference = candidate.Reference != null;
 
             // Idempotentie: eerst op RequestId (werkt ook zonder eigen nummer), anders op de unieke, scanbare referentie.
-            var existing = await FindExistingAsync(candidate, cancellationToken);
+            var existing = await FindExistingAsync(candidate, ownReference, cancellationToken);
             if (existing != null)
             {
                 return ResultForPalletRetry(existing, candidate, ownReference);
@@ -72,7 +72,9 @@ namespace AgfAdmin.Services
                 if (!ownReference)
                 {
                     await _db.SaveChangesAsync(cancellationToken);
-                    candidate.Reference = GeneratedReference(candidate.Id);
+                    // Het herkenbare nummer uit het Id; als iemand dat nummer al als eigen nummer gebruikt, een vrij nummer met
+                    // achtervoegsel. Nooit een bestaande pallet overnemen.
+                    candidate.Reference = await FreeGeneratedReferenceAsync(candidate.Id, cancellationToken);
                 }
 
                 _db.PalletAuditEvents.Add(new PalletAuditEvent
@@ -106,7 +108,7 @@ namespace AgfAdmin.Services
                 // Gelijktijdige retry of race op RequestId/referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
                 await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
-                var concurrent = await FindExistingAsync(candidate, cancellationToken);
+                var concurrent = await FindExistingAsync(candidate, ownReference, cancellationToken);
                 if (concurrent != null)
                 {
                     return ResultForPalletRetry(concurrent, candidate, ownReference);
@@ -115,9 +117,10 @@ namespace AgfAdmin.Services
                 {
                     return ServiceResult<PalletDto>.Conflict($"SSCC {candidate.Sscc} is already registered on another pallet.");
                 }
-                if (!ownReference && await _db.Pallets.AnyAsync(p => p.Reference == candidate.Reference, cancellationToken))
+                if (!ownReference)
                 {
-                    return ServiceResult<PalletDto>.Conflict($"Generated pallet number {candidate.Reference} is already in use as an own pallet number; please retry.");
+                    // Race op het zojuist gekozen gegenereerde nummer: geen bestaande pallet teruggeven, de client herhaalt.
+                    return ServiceResult<PalletDto>.Conflict($"Generated pallet number {candidate.Reference} was taken concurrently; please retry.");
                 }
                 throw;
             }
@@ -128,7 +131,24 @@ namespace AgfAdmin.Services
 
         public static string GeneratedReference(int palletId) => $"P-{palletId:D6}";
 
-        private async Task<Pallet> FindExistingAsync(Pallet candidate, CancellationToken cancellationToken)
+        // P-000123, of bij een botsing met een eigen nummer P-000123-A, -B, … (eerste vrije); daarna geeft de unieke index uitsluitsel.
+        private async Task<string> FreeGeneratedReferenceAsync(int palletId, CancellationToken cancellationToken)
+        {
+            var reference = GeneratedReference(palletId);
+            for (var suffix = 'A'; suffix <= 'Z'; suffix++)
+            {
+                if (!await _db.Pallets.AnyAsync(p => p.Reference == reference, cancellationToken))
+                {
+                    return reference;
+                }
+                reference = $"{GeneratedReference(palletId)}-{suffix}";
+            }
+            return reference;
+        }
+
+        // Idempotentie: op RequestId, en alleen bij een eigen nummer ook op de referentie. Een gegenereerd nummer wordt
+        // nooit gebruikt om een bestaande pallet te vinden: dat zou een andere pallet als herhaling kunnen teruggeven.
+        private async Task<Pallet> FindExistingAsync(Pallet candidate, bool ownReference, CancellationToken cancellationToken)
         {
             if (candidate.RequestId != null)
             {
@@ -138,9 +158,9 @@ namespace AgfAdmin.Services
                     return byRequest;
                 }
             }
-            return candidate.Reference == null
-                ? null
-                : await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken);
+            return ownReference
+                ? await PalletQuery().SingleOrDefaultAsync(p => p.Reference == candidate.Reference, cancellationToken)
+                : null;
         }
 
         private static Pallet BuildPallet(CreatePalletDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
