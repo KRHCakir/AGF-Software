@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { availabilityHref } from '../../lib/availabilityLinks';
-import { countsAsAvailableNow, isInspectable } from '../../lib/qualityTransitions';
+import { visibleLines } from '../../lib/inspectionList';
+import { countsAsAvailableNow } from '../../lib/qualityTransitions';
 import { AvailableNow, InspectionPallet } from '../../services/inspectionService';
 import { QualityStatus } from '../../types/availability';
 import { PalletDetailLine } from '../../types/inspection';
@@ -18,8 +19,6 @@ export interface InspectionNotice {
     unit: string;
     availableNow: AvailableNow | null;
 }
-
-const ORDER: Record<QualityStatus, number> = { Quarantine: 0, Blocked: 1, Approved: 2, Rejected: 3 };
 
 // Context per pallet; elke actie hoort bij één regel. Alleen Warehouse-regels die nog te beoordelen zijn.
 export default function PalletGroup({ context, actor, statusFilter, search, readOnly, notice, error, reloadToken, onSucceeded, onReload }: {
@@ -36,11 +35,8 @@ export default function PalletGroup({ context, actor, statusFilter, search, read
 }) {
     const { t, locale } = useTranslation();
     const { pallet } = context;
-    const term = search.trim().toLowerCase();
-    const lines = pallet.contentLines
-        .filter((line) => line.route === 'Warehouse' && isInspectable(line.qualityStatus) && statusFilter[line.qualityStatus])
-        .filter((line) => term === '' || `${pallet.reference} ${line.productName ?? ''} ${line.productVariantName ?? ''} ${line.lotNumber}`.toLowerCase().includes(term))
-        .sort((a, b) => ORDER[a.qualityStatus] - ORDER[b.qualityStatus] || a.id - b.id);
+    // Dezelfde regelfilter als de pagina gebruikt om pallets te verbergen en te pagineren.
+    const lines = visibleLines(pallet, statusFilter, search);
 
     return (
         <section aria-labelledby={`pallet-${pallet.id}`} className="rounded-md border border-gray-300 bg-white">

@@ -7,27 +7,29 @@ export type DemoRoute = (typeof DEMO_ROUTES)[number];
 
 export interface TourStep {
     id: 'supply' | 'inspection' | 'availability' | 'sales';
-    href: DemoRoute;
+    // Een vaste route, eventueel met de toegestane zoekterm (Keuring toont dan de DEMO-pallets, niet de oude rooktestpallets).
+    href: string;
     titleKey: string;
     bodyKey: string;
 }
 
 export const TOUR_STEPS: readonly TourStep[] = [
     { id: 'supply', href: '/supply', titleKey: 'demo_step_supply_title', bodyKey: 'demo_step_supply_body' },
-    { id: 'inspection', href: '/inspection', titleKey: 'demo_step_inspection_title', bodyKey: 'demo_step_inspection_body' },
+    { id: 'inspection', href: '/inspection?search=DEMO', titleKey: 'demo_step_inspection_title', bodyKey: 'demo_step_inspection_body' },
     { id: 'availability', href: '/availability', titleKey: 'demo_step_availability_title', bodyKey: 'demo_step_availability_body' },
     { id: 'sales', href: '/sales-orders', titleKey: 'demo_step_sales_title', bodyKey: 'demo_step_sales_body' },
 ];
 
 export function tourStepIndexFor(pathname: string): number {
-    return TOUR_STEPS.findIndex((step) => step.href === pathname);
+    return TOUR_STEPS.findIndex((step) => step.href.split('?')[0] === pathname);
 }
 
 const ORDER_LINK = /^\/sales-orders\?orderId=[1-9]\d{0,9}$/;
+const INSPECTION_SEARCH_LINK = /^\/inspection\?search=[A-Za-z0-9-]{1,40}$/;
 
-// Alleen een vaste route of een link naar één verkooporder; nooit externe URL's, scripts of andere paden.
+// Alleen een vaste route, een keuringszoekterm of een link naar één verkooporder; nooit externe URL's, scripts of andere paden.
 export function isAllowedDemoHref(href: string): boolean {
-    return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href);
+    return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href);
 }
 
 export function orderHref(id: number): string {

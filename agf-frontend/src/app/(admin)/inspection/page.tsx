@@ -6,9 +6,9 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import PalletGroup, { InspectionNotice } from '../../../components/inspection/PalletGroup';
 import { inputClass } from '../../../components/supply/FieldError';
-import { useActorReference } from '../../../components/supply/useActorReference';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { formatTime } from '../../../lib/availability';
+import { filterPallets, paginate } from '../../../lib/inspectionList';
 import { isInspectable } from '../../../lib/qualityTransitions';
 import { toApiError } from '../../../services/apiClient';
 import { InspectionPallet, getAvailableNow, isReceivedInWarehouse, loadInspectionQueue, loadPalletContext } from '../../../services/inspectionService';
@@ -28,6 +28,9 @@ export default function InspectionPage() {
 
 const FILTERABLE: QualityStatus[] = ['Quarantine', 'Blocked', 'Approved'];
 
+// Vaste demokeuzes voor wie beoordeelt; "Anders" laat een naam typen. Geen authenticatie.
+const DEMO_INSPECTORS = ['Jan', 'Steve'] as const;
+
 function parsePalletId(value: string | null): number | null | 'invalid' {
     if (value === null) return null;
     return /^[1-9][0-9]{0,9}$/.test(value) ? Number(value) : 'invalid';
@@ -37,15 +40,24 @@ function InspectionWorkspace() {
     const { t, locale } = useTranslation();
     const searchParams = useSearchParams();
     const palletParam = useMemo(() => parsePalletId(searchParams.get('palletId')), [searchParams]);
-    const [actor, setActor] = useActorReference();
+    // Wie beoordeelt: bewust niet vooraf gekozen en niet uit de browseropslag; geen beveiligde accountidentiteit.
+    const [actorChoice, setActorChoice] = useState<'' | (typeof DEMO_INSPECTORS)[number] | 'other'>('');
+    const [actorOther, setActorOther] = useState('');
+    const actor = actorChoice === 'other' ? actorOther : actorChoice;
     const [state, setState] = useState<LoadState<InspectionPallet[]>>({ status: 'loading' });
     const [loadedAt, setLoadedAt] = useState<string | null>(null);
     const [reloadToken, setReloadToken] = useState(0);
     const [palletTokens, setPalletTokens] = useState<Record<number, number>>({});
     const [notices, setNotices] = useState<Record<number, InspectionNotice>>({});
     const [groupErrors, setGroupErrors] = useState<Record<number, string>>({});
-    const [search, setSearch] = useState('');
+    // Zoekterm mag uit de link komen (?search=DEMO, bijvoorbeeld vanuit de rondleiding).
+    const searchParam = searchParams.get('search');
+    const [search, setSearch] = useState(() => searchParam ?? '');
     const [statusFilter, setStatusFilter] = useState<Record<QualityStatus, boolean>>({ Quarantine: true, Blocked: true, Approved: true, Rejected: false });
+    const [page, setPage] = useState(1);
+    useEffect(() => { if (searchParam !== null) setSearch(searchParam); }, [searchParam]);
+    // Gewijzigde filters: terug naar pagina 1. Een te hoge pagina na een actie wordt door paginate() zelf teruggezet.
+    useEffect(() => { setPage(1); }, [search, statusFilter]);
 
     // Met ?palletId= laden we die pallet rechtstreeks (met alleen zijn eigen audit- en aanvoercontext), nooit eerst de wachtrij.
     useEffect(() => {
@@ -128,10 +140,18 @@ function InspectionWorkspace() {
                     <p className="text-sm text-gray-600">{t('inspection_subtitle')}</p>
                 </div>
                 <div className="flex items-end gap-4">
-                    <div className="w-64">
-                        <label htmlFor="inspection-actor" className="text-xs font-medium text-gray-700">{t('supply_actor')} *</label>
-                        <input id="inspection-actor" value={actor} maxLength={100} onChange={(event) => setActor(event.target.value)}
-                            placeholder={t('supply_actor_placeholder')} className={inputClass} aria-describedby="inspection-actor-hint" />
+                    <div className="w-72">
+                        <label htmlFor="inspection-actor" className="text-xs font-medium text-gray-700">{t('inspection_actor_label')} *</label>
+                        <select id="inspection-actor" value={actorChoice} onChange={(event) => setActorChoice(event.target.value as typeof actorChoice)}
+                            className={inputClass} aria-describedby="inspection-actor-hint">
+                            <option value="">{t('inspection_actor_choose')}</option>
+                            {DEMO_INSPECTORS.map((name) => <option key={name} value={name}>{name}</option>)}
+                            <option value="other">{t('inspection_actor_other')}</option>
+                        </select>
+                        {actorChoice === 'other' && (
+                            <input id="inspection-actor-other" aria-label={t('inspection_actor_other')} value={actorOther} maxLength={100} onChange={(event) => setActorOther(event.target.value)}
+                                placeholder={t('supply_actor_placeholder')} className={inputClass} />
+                        )}
                         <span id="inspection-actor-hint" className="block text-xs text-gray-500">{t('inspection_actor_hint')}</span>
                     </div>
                     <div className="flex items-center gap-3 text-sm text-gray-600">
@@ -199,7 +219,28 @@ function InspectionWorkspace() {
                         </div>
                     );
                 }
-                return state.data.map((context) => {
+                // Eerst zoeken en kwaliteitsfilters, dan pagineren; pallets zonder passende regels verdwijnen volledig.
+                const visible = single ? state.data : filterPallets(state.data, statusFilter, search);
+                if (!single && visible.length === 0) {
+                    return (
+                        <p role="status" className="rounded-md border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-800">
+                            {search.trim() === '' ? t('inspection_no_pallets_in_filter') : t('inspection_no_pallets_found', { query: search.trim() })}
+                        </p>
+                    );
+                }
+                const paged = single ? paginate(visible, 1, visible.length || 1) : paginate(visible, page);
+                const pager = !single && (
+                    <nav aria-label={t('inspection_pagination_label')} className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-800">
+                        <span>{t('inspection_pagination', { page: String(paged.page), pages: String(paged.pageCount), count: String(paged.total) })}</span>
+                        <span className="flex gap-2">
+                            <button type="button" onClick={() => setPage(paged.page - 1)} disabled={paged.page <= 1}
+                                className="rounded border border-gray-300 bg-white px-3 py-1 font-medium hover:bg-gray-100 disabled:opacity-50">{t('inspection_previous')}</button>
+                            <button type="button" onClick={() => setPage(paged.page + 1)} disabled={paged.page >= paged.pageCount}
+                                className="rounded border border-gray-300 bg-white px-3 py-1 font-medium hover:bg-gray-100 disabled:opacity-50">{t('inspection_next')}</button>
+                        </span>
+                    </nav>
+                );
+                return (<>{pager}{paged.items.map((context) => {
                     const inWarehouse = isReceivedInWarehouse(context.pallet);
                     const inspectableLines = context.pallet.contentLines.filter((line) => line.route === 'Warehouse' && isInspectable(line.qualityStatus));
                     const readOnly = !inWarehouse || inspectableLines.length === 0;
@@ -229,7 +270,7 @@ function InspectionWorkspace() {
                             />
                         </div>
                     );
-                });
+                })}{paged.items.length > 3 && pager}</>);
             })()}
         </div>
     );
