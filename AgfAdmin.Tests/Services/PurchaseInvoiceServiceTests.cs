@@ -367,6 +367,41 @@ public class PurchaseInvoiceServiceTests : IDisposable
         Assert.Equal(1, await InvoiceCountAsync());
     }
 
+    // ---- Interne opmerking: bij dit document, altijd beschikbaar, telt mee in de replay ----
+
+    [Fact]
+    public async Task Internal_Note_Is_Stored_With_The_Document_And_Counts_In_The_Replay_Comparison()
+    {
+        await SeedAsync();
+        await UpdateSettingsAsync(new UpdatePurchaseInvoiceSettingsDto { OptionalFields = new List<string>() }); // geen bedrijfsinstelling nodig
+        var requestId = Guid.NewGuid();
+        var original = Request(requestId);
+        original.InternalNote = "  Klant komt morgen langs  ";
+        var first = await CreateAsync(original);
+        Assert.Equal(ServiceResultStatus.Created, first.Status);
+        Assert.Equal("Klant komt morgen langs", first.Value.InternalNote);
+
+        var same = Request(requestId);
+        same.InternalNote = "Klant komt morgen langs";
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(same)).Status);
+
+        var other = Request(requestId);
+        other.InternalNote = "Klant komt overmorgen langs";
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(other)).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(Request(requestId))).Status); // zonder opmerking: andere opdracht
+        Assert.Equal(1, await InvoiceCountAsync());
+
+        // Een volgend document begint leeg: de opmerking wordt nergens als standaard overgenomen.
+        var next = await CreateAsync(Request());
+        Assert.Null(next.Value.InternalNote);
+
+        var tooLong = Request();
+        tooLong.InternalNote = new string('x', 1001);
+        var rejected = await CreateAsync(tooLong);
+        Assert.Equal(ServiceResultStatus.Validation, rejected.Status);
+        Assert.Contains("internalNote", rejected.Errors.Keys);
+    }
+
     // ---- Bereik van de geldkolommen (decimal(18,2)): validatiefout, geen serverfout ----
 
     [Theory]

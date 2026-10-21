@@ -88,7 +88,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
         setErrors({});
         setServerError(null);
     };
-    const updateHeader = (field: 'invoiceNumber', value: string) => update({ ...draft, header: { ...draft.header, [field]: value } });
+    const updateHeader = (field: 'invoiceNumber' | 'internalNote', value: string) => update({ ...draft, header: { ...draft.header, [field]: value } });
     const updateExtra = (field: PurchaseOptionalField, value: string) => update({ ...draft, header: { ...draft.header, extra: { ...draft.header.extra, [field]: value } } });
     const updateLine = (key: string, patch: Partial<LineDraft>) => update({ ...draft, lines: draft.lines.map((line) => (line.key === key ? { ...line, ...patch } : line)) });
 
@@ -442,12 +442,21 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 <span className="text-xs text-gray-600">{t('purchase_grid_hint')}</span>
             </div>
 
-            {/* Live totalen */}
+            {/* Interne opmerking (na de regels, zodat de toetsenbordroute naar regel 1 gelijk blijft) en live totalen */}
+            <div className="flex flex-wrap items-start gap-3">
+                <div className="min-w-[16rem] flex-1">
+                    <label htmlFor="internalNote-input" className="text-xs font-medium text-gray-700">{t('internal_note_label')}</label>
+                    <input {...fieldProps('internalNote', e('internalNote'))} value={draft.header.internalNote} maxLength={1000} disabled={locked} placeholder={t('internal_note_placeholder')}
+                        onChange={(event) => updateHeader('internalNote', event.target.value)} className={inputClass} />
+                    <span className="block text-xs text-gray-500">{t('internal_note_hint')}</span>
+                    <FieldError id="internalNote" messages={e('internalNote')} />
+                </div>
             <dl className="ml-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm" data-testid="purchase-totals">
                 <dt className="text-gray-600">{t('purchase_total_net')}</dt><dd className="text-right font-mono" data-testid="total-net">{money(totals.net)}</dd>
                 <dt className="text-gray-600">{t('purchase_total_vat')}</dt><dd className="text-right font-mono" data-testid="total-vat">{money(totals.vat)}</dd>
                 <dt className="font-semibold text-gray-900">{t('purchase_total_gross', { currency: draft.header.currency })}</dt><dd className="text-right font-mono font-semibold" data-testid="total-gross">{money(totals.gross)}</dd>
             </dl>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
                 <button type="submit" className={primaryButtonClass} disabled={locked && !unknown}>{submitting ? t('supply_saving') : t('purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>

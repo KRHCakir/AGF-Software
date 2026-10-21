@@ -24,6 +24,8 @@ export interface CreateSalesOrderRequest {
     requestId: string;
     customerId: number;
     customerReference: string | null;
+    // Interne opmerking bij deze order: alleen intern zichtbaar, telt mee in de replayvergelijking.
+    internalNote: string | null;
     requestedDeliveryDate: string;
     actorReference: string;
     lines: CreateSalesOrderLineRequest[];
@@ -271,6 +273,8 @@ export interface SalesOrder {
     customerName: string | null;
     status: string;
     customerReference: string | null;
+    // Interne opmerking (alleen interne werkplekken); ontbreekt in oudere antwoorden en is dan null.
+    internalNote: string | null;
     requestedDeliveryDate: string;
     actorReference: string;
     createdAt: string;
@@ -394,6 +398,7 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && isNullableString(value.customerName)
         && isString(value.status)
         && isNullableString(value.customerReference)
+        && (value.internalNote === undefined || isNullableString(value.internalNote))
         && isString(value.requestedDeliveryDate)
         && isString(value.actorReference)
         && isString(value.createdAt)

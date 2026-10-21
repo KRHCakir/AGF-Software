@@ -56,6 +56,8 @@ export interface CreatePurchaseInvoiceRequest extends OptionalFieldValues {
     paymentTermsDays: number;
     dueDate: string;
     currency: string;
+    // Interne opmerking bij dit document: alleen intern zichtbaar, telt mee in de replayvergelijking, nooit overgenomen.
+    internalNote: string | null;
     lines: CreatePurchaseInvoiceLineRequest[];
 }
 
@@ -87,6 +89,7 @@ export interface PurchaseInvoice extends OptionalFieldValues {
     vatAmount: number;
     totalAmount: number;
     createdAt: string;
+    internalNote: string | null;
     lines: PurchaseInvoiceLine[];
 }
 
@@ -115,7 +118,7 @@ export function isPurchaseInvoice(value: unknown): value is PurchaseInvoice {
         && isNullableString(value.vendorName) && isNullableString(value.invoiceNumber) && isNullableString(value.invoiceDate)
         && isNullableNumber(value.paymentTermsDays) && isNullableString(value.dueDate) && isNullableString(value.currency)
         && isString(value.status) && isNumber(value.subTotal) && isNumber(value.vatAmount) && isNumber(value.totalAmount)
-        && isString(value.createdAt) && isArrayOf(value.lines, isLine);
+        && isString(value.createdAt) && isNullableString(value.internalNote) && isArrayOf(value.lines, isLine);
 }
 
 export function isPurchaseInvoiceList(value: unknown): value is PurchaseInvoice[] {

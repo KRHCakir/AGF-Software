@@ -25,8 +25,12 @@ export interface HeaderDraft {
     paymentTermsDays: string;
     dueDate: string;     // YYYY-MM-DD
     currency: string;
+    // Interne opmerking bij dit document; blijft in het concept en de bevroren opdracht, nooit overgenomen naar een volgend document.
+    internalNote: string;
     extra: Partial<Record<PurchaseOptionalField, string>>;
 }
+
+export const MAX_INTERNAL_NOTE_LENGTH = 1000;
 
 // Welke voorgestelde velden de gebruiker zelf heeft aangepast: die blijven staan bij leverancierswissel en verversing.
 export interface Touched {
@@ -57,7 +61,7 @@ export function emptyLine(defaultVat: number): LineDraft {
 export function emptyDraft(today: string, settings: PurchaseInvoiceSettings): InvoiceDraft {
     const terms = settings.defaultPaymentTermsDays;
     return {
-        header: { vendorId: '', invoiceNumber: '', invoiceDate: today, paymentTermsDays: String(terms), dueDate: addDays(today, terms) ?? '', currency: settings.defaultCurrency, extra: {} },
+        header: { vendorId: '', invoiceNumber: '', invoiceDate: today, paymentTermsDays: String(terms), dueDate: addDays(today, terms) ?? '', currency: settings.defaultCurrency, internalNote: '', extra: {} },
         lines: [emptyLine(settings.defaultVatPercentage)],
         touched: { paymentTermsDays: false, currency: false, dueDate: false },
     };
@@ -194,6 +198,8 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     else if (addDays(header.invoiceDate, 0) !== null && header.dueDate < header.invoiceDate) errors.push({ field: 'dueDate', code: 'before_invoice_date' });
     const currency = header.currency.trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) errors.push({ field: 'currency', code: currency === '' ? 'required' : 'invalid' });
+    const internalNote = header.internalNote.trim();
+    if (internalNote.length > MAX_INTERNAL_NOTE_LENGTH) errors.push({ field: 'internalNote', code: 'too_large' });
 
     const extra: OptionalFieldValues = {};
     for (const field of settings.optionalFields) {
@@ -258,7 +264,7 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     if (errors.length > 0) return { ok: false, errors };
     return {
         ok: true,
-        value: { vendorId: Number(header.vendorId), invoiceNumber, invoiceDate: header.invoiceDate, paymentTermsDays: terms, dueDate: header.dueDate, currency, lines, ...extra },
+        value: { vendorId: Number(header.vendorId), invoiceNumber, invoiceDate: header.invoiceDate, paymentTermsDays: terms, dueDate: header.dueDate, currency, internalNote: internalNote === '' ? null : internalNote, lines, ...extra },
     };
 }
 

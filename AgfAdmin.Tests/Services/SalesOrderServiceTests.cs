@@ -259,18 +259,21 @@ public class SalesOrderServiceTests : IDisposable
     [InlineData("same-instant-other-offset")]
     [InlineData("sub-microsecond-ticks")]
     [InlineData("quantity-trailing-zero")]
+    [InlineData("note-padded")]
     public async Task Equivalent_Retry_Returns_Same_Order_Without_New_Rows(string variant)
     {
         await SeedAsync();
         var requestId = Guid.NewGuid();
         var first = Request(requestId);
         first.RequestedDeliveryDate = variant == "sub-microsecond-ticks" ? Delivery.AddTicks(5) : Delivery;
+        if (variant == "note-padded") first.InternalNote = "Klant komt morgen langs";
         var created = await CreateAsync(first);
 
         var retry = Request(requestId);
         switch (variant)
         {
             case "reference-padded": retry.CustomerReference = "  PO-1  "; break;
+            case "note-padded": retry.InternalNote = "  Klant komt morgen langs "; break;
             case "actor-padded": retry.ActorReference = " office-1"; break;
             case "same-instant-other-offset": retry.RequestedDeliveryDate = Delivery.ToOffset(TimeSpan.Zero); break;
             case "sub-microsecond-ticks": retry.RequestedDeliveryDate = Delivery.AddTicks(7); break;
@@ -310,6 +313,7 @@ public class SalesOrderServiceTests : IDisposable
     [InlineData("variant")]
     [InlineData("extra-line")]
     [InlineData("line-order")]
+    [InlineData("internal-note")]
     public async Task Reused_RequestId_With_Different_Payload_Is_Conflict(string change)
     {
         await SeedAsync();
@@ -319,6 +323,7 @@ public class SalesOrderServiceTests : IDisposable
         switch (change)
         {
             case "customer": retry.CustomerId = _seed.OtherCustomerId; break;
+            case "internal-note": retry.InternalNote = "Klant komt morgen langs"; break;
             case "reference": retry.CustomerReference = "PO-2"; break;
             case "reference-removed": retry.CustomerReference = null; break;
             case "delivery-day": retry.RequestedDeliveryDate = Delivery.AddDays(1); break;

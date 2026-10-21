@@ -25,7 +25,7 @@ namespace AgfAdmin.Services
                 .ToList();
             var snapshot = new Snapshot(
                 request.VendorId, Text(request.InvoiceNumber), Day(request.InvoiceDate), request.PaymentTermsDays, Day(request.DueDate),
-                Text(request.Currency)?.ToUpperInvariant(), lines,
+                Text(request.Currency)?.ToUpperInvariant(), lines, Text(request.InternalNote),
                 Day(request.ReceivedDate), Text(request.PaymentReference), Text(request.Remarks), Number(request.GrossWeightKg), Number(request.NetWeightKg),
                 Text(request.ContainerNumber), Text(request.Transporter), Text(request.DriverName), Text(request.LicensePlate), Text(request.Incoterms),
                 Number(request.CustomsValue), Text(request.OriginCountry), Text(request.ReceiptReference));
@@ -43,7 +43,7 @@ namespace AgfAdmin.Services
         private static decimal? Number(decimal? value) => value == null ? null : value.Value / 1.000000000000000000000000000m;
 
         private sealed record Snapshot(
-            int? VendorId, string InvoiceNumber, string InvoiceDate, int? PaymentTermsDays, string DueDate, string Currency, List<LineSnapshot> Lines,
+            int? VendorId, string InvoiceNumber, string InvoiceDate, int? PaymentTermsDays, string DueDate, string Currency, List<LineSnapshot> Lines, string InternalNote,
             string ReceivedDate, string PaymentReference, string Remarks, decimal? GrossWeightKg, decimal? NetWeightKg, string ContainerNumber,
             string Transporter, string DriverName, string LicensePlate, string Incoterms, decimal? CustomsValue, string OriginCountry, string ReceiptReference);
 

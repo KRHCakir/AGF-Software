@@ -33,7 +33,7 @@ const dispatchNine = (reservationIds: number[], corrected: boolean) => ({
 });
 
 const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: StockReservation[]): SalesOrder => ({
-    id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status, customerReference: null,
+    id: 4, requestId: 'o-4', customerId: 1, customerName: 'Local Market Stalls', status, customerReference: null, internalNote: status === 'Open' ? 'Klant komt morgen langs' : null,
     requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', createdAt: '2026-10-19T09:00:00.000Z', version,
     cancelledAt: status === 'Cancelled' ? '2026-10-19T12:00:00.000Z' : null,
     cancelReason: status === 'Cancelled' ? 'Klant heeft afgezegd' : null,
@@ -81,6 +81,20 @@ describe('SalesOrderDetail cancellation decisions', () => {
     });
 
     afterEach(async () => { await mounted.unmount(); });
+
+    test('an internal note is shown on the internal detail with an "internal" badge, and only when present', async () => {
+        current = orderWith('Open', 3, []);
+        await mounted.render(element(current));
+        const note = mounted.container.querySelector('[data-testid="internal-note"]');
+        assert.ok(note, 'internal note block rendered');
+        assert.ok(note.textContent?.includes('Klant komt morgen langs'));
+        assert.ok(note.textContent?.includes('internal_note_badge'));
+        await mounted.unmount();
+        mounted = new Mounted();
+        current = { ...orderWith('Open', 3, []), internalNote: null };
+        await mounted.render(element(current));
+        assert.equal(mounted.container.querySelector('[data-testid="internal-note"]'), null, 'no block without a note');
+    });
 
     test('a committed but unacknowledged cancellation stays visible on the Cancelled order; the identical replay resolves it', async () => {
         // De server heeft het commando verwerkt (order is Cancelled, versie 3), maar het antwoord ging verloren; het commando staat nog in de opslag.

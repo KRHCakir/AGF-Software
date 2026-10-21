@@ -40,6 +40,9 @@ export function parseDraft(raw: string | null): InvoiceDraft | null {
         if (!isString(h.vendorId) || !isString(h.invoiceNumber) || !isString(h.invoiceDate) || !isString(h.paymentTermsDays) || !isString(h.dueDate) || !isString(h.currency) || !isRecord(h.extra)) return null;
         if (!value.lines.every(isLineDraft) || typeof t.paymentTermsDays !== 'boolean' || typeof t.currency !== 'boolean' || typeof t.dueDate !== 'boolean') return null;
         if (!Object.values(h.extra).every(isString)) return null;
+        // Concepten van vóór de interne opmerking hebben het veld niet: dan leeg, nooit het hele concept weggooien.
+        if (h.internalNote === undefined) h.internalNote = '';
+        else if (!isString(h.internalNote)) return null;
         return value as unknown as InvoiceDraft;
     } catch {
         return null;
