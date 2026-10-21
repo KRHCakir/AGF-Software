@@ -402,6 +402,70 @@ public class PurchaseInvoiceServiceTests : IDisposable
         Assert.Contains("internalNote", rejected.Errors.Keys);
     }
 
+    // Letterlijke RequestPayload zoals #43 (feat/purchase-invoice-entry, vóór de interne opmerking) hem voor Request() opsloeg,
+    // gegenereerd met PurchaseInvoiceCommand.Canonical van die branch; alleen de database-id's zijn ingevuld. Geen "internalNote".
+    private string Payload43() =>
+        ("{\"vendorId\":VENDOR,\"invoiceNumber\":\"GR-2026-001\",\"invoiceDate\":\"2026-10-21\",\"paymentTermsDays\":null,\"dueDate\":null,\"currency\":null," +
+        "\"lines\":[{\"productVariantId\":VARIANT,\"description\":null,\"quantity\":80,\"unit\":\"box\",\"unitPrice\":12.5,\"discountPercentage\":null,\"vatPercentage\":null}," +
+        "{\"productVariantId\":null,\"description\":\"Transport\",\"quantity\":1,\"unit\":null,\"unitPrice\":150,\"discountPercentage\":null,\"vatPercentage\":21}," +
+        "{\"productVariantId\":null,\"description\":\"Pallets statiegeld\",\"quantity\":3,\"unit\":null,\"unitPrice\":10,\"discountPercentage\":10,\"vatPercentage\":0}]," +
+        "\"receivedDate\":null,\"paymentReference\":null,\"remarks\":null,\"grossWeightKg\":null,\"netWeightKg\":null,\"containerNumber\":null,\"transporter\":null," +
+        "\"driverName\":null,\"licensePlate\":null,\"incoterms\":null,\"customsValue\":null,\"originCountry\":null,\"receiptReference\":null}")
+            .Replace("VENDOR", _vendorId.ToString()).Replace("VARIANT", _variantId.ToString());
+
+    [Fact]
+    public async Task A_Command_Stored_Before_The_Internal_Note_Still_Replays_Missing_Equals_Null()
+    {
+        await SeedAsync();
+        var requestId = Guid.NewGuid();
+        var first = await CreateAsync(Request(requestId));
+        Assert.Equal(ServiceResultStatus.Created, first.Status);
+        await using (var db = _factory.CreateContext())
+        {
+            // Dezelfde factuur zoals #43 haar opsloeg: de opdracht zonder de later toegevoegde sleutel.
+            await db.IncomingInvoices.Where(i => i.Id == first.Value.Id).ExecuteUpdateAsync(s => s.SetProperty(i => i.RequestPayload, Payload43()));
+            var stored = await db.IncomingInvoices.Where(i => i.Id == first.Value.Id).Select(i => i.RequestPayload).SingleAsync();
+            Assert.DoesNotContain("internalNote", stored);
+            Assert.Equal(Payload43(), stored);
+        }
+
+        var identical = await CreateAsync(Request(requestId)); // geen interne opmerking: gelijk aan "ontbrekend"
+        Assert.Equal(ServiceResultStatus.Ok, identical.Status);
+        Assert.Equal(first.Value.Id, identical.Value.Id);
+
+        var blankNote = Request(requestId);
+        blankNote.InternalNote = "   "; // leeg = niet ingevuld = null
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(blankNote)).Status);
+
+        var addedNote = Request(requestId);
+        addedNote.InternalNote = "Klant komt morgen langs";
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(addedNote)).Status);
+
+        var otherQuantity = Request(requestId); // de verruiming geldt alleen voor het nieuwe veld
+        otherQuantity.Lines[0].Quantity = 81m;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(otherQuantity)).Status);
+
+        Assert.Equal(1, await InvoiceCountAsync());
+    }
+
+    [Fact]
+    public void Structural_Comparison_Treats_Only_Later_Added_Fields_As_Optional()
+    {
+        var request = new CreatePurchaseInvoiceDto { VendorId = 1, InvoiceNumber = "GR-1", InvoiceDate = new DateTime(2026, 10, 21, 0, 0, 0, DateTimeKind.Utc), Lines = new() { new() { Description = "A", Quantity = 1m, UnitPrice = 1m } } };
+        var current = PurchaseInvoiceCommand.Canonical(request);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(current)!.AsObject();
+        Assert.True(PurchaseInvoiceCommand.Same(current, request));
+        node.Remove("internalNote");
+        Assert.True(PurchaseInvoiceCommand.Same(node.ToJsonString(), request), "missing internalNote equals null");
+        node.Remove("remarks");
+        Assert.False(PurchaseInvoiceCommand.Same(node.ToJsonString(), request), "a missing field that always existed is a different command");
+        Assert.False(PurchaseInvoiceCommand.Same("not json", request));
+        Assert.False(PurchaseInvoiceCommand.Same("[]", request));
+        var extra = System.Text.Json.Nodes.JsonNode.Parse(current)!.AsObject();
+        extra["unexpected"] = "x";
+        Assert.False(PurchaseInvoiceCommand.Same(extra.ToJsonString(), request), "an extra key is a different command");
+    }
+
     // ---- Bereik van de geldkolommen (decimal(18,2)): validatiefout, geen serverfout ----
 
     [Theory]

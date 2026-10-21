@@ -1,11 +1,12 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using AgfAdmin.DTOs;
 
 namespace AgfAdmin.Services
 {
     // Genormaliseerde weergave van de oorspronkelijke invoeropdracht (POST api/purchase-invoices). Wordt bij het aanmaken op de
-    // factuur bewaard (IncomingInvoice.RequestPayload) en bij een herhaling met dezelfde RequestId tekstueel vergeleken.
+    // factuur bewaard (IncomingInvoice.RequestPayload) en bij een herhaling met dezelfde RequestId structureel vergeleken.
     // Zo blijft een exacte retry een retry, ook als leveranciers- of bedrijfsstandaarden (termijn, valuta, btw, ingeschakelde
     // optionele velden) intussen zijn gewijzigd, en geeft elke inhoudelijke afwijking, ook in optionele kopvelden, een conflict.
     // Normalisatie: tekst getrimd (leeg = null), valuta in hoofdletters, datums als kalenderdag, decimalen zonder slepende
@@ -32,8 +33,41 @@ namespace AgfAdmin.Services
             return JsonSerializer.Serialize(snapshot, Options);
         }
 
-        public static bool Same(string stored, CreatePurchaseInvoiceDto request) =>
-            stored != null && string.Equals(stored, Canonical(request), StringComparison.Ordinal);
+        // Velden die pas na de eerste vastlegging (#43) aan de opdracht zijn toegevoegd. Een opgeslagen opdracht van vóór zo'n
+        // veld heeft de sleutel niet; "ontbrekend" telt dan als null (niet ingevuld), zodat een identieke retry 200 blijft en een
+        // nu wél ingevulde waarde een conflict geeft. Nieuwe velden hier toevoegen, nooit bestaande verwijderen.
+        private static readonly string[] FieldsAddedLater = { "internalNote" };
+
+        // Structurele vergelijking (volgorde van sleutels doet er niet toe); verder exact: elke andere ontbrekende of extra sleutel,
+        // en elke andere waarde, is een andere opdracht.
+        public static bool Same(string stored, CreatePurchaseInvoiceDto request)
+        {
+            if (stored == null)
+            {
+                return false;
+            }
+            JsonObject storedObject;
+            try
+            {
+                storedObject = JsonNode.Parse(stored) as JsonObject;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+            if (storedObject == null)
+            {
+                return false;
+            }
+            foreach (var field in FieldsAddedLater)
+            {
+                if (!storedObject.ContainsKey(field))
+                {
+                    storedObject[field] = null;
+                }
+            }
+            return JsonNode.DeepEquals(storedObject, JsonNode.Parse(Canonical(request)));
+        }
 
         private static string Text(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
