@@ -14,7 +14,7 @@ const orders = [
 
 describe('tour', () => {
     test('visits Aanvoer, Keuring, Beschikbaarheid and Verkoop in that order, only on allowed routes', () => {
-        assert.deepEqual(TOUR_STEPS.map((step) => step.href), ['/supply', '/inspection', '/availability', '/sales-orders']);
+        assert.deepEqual(TOUR_STEPS.map((step) => step.href), ['/supply', '/inspection?search=DEMO', '/availability', '/sales-orders']);
         for (const step of TOUR_STEPS) assert.ok(isAllowedDemoHref(step.href), step.href);
     });
 
@@ -29,7 +29,8 @@ describe('allowed navigation', () => {
     test('accepts only the fixed routes and a numeric order link', () => {
         assert.deepEqual([...DEMO_ROUTES], ['/supply', '/inspection', '/availability', '/sales-orders']);
         assert.ok(isAllowedDemoHref('/sales-orders?orderId=13'));
-        for (const href of ['https://evil.example', '//evil.example', 'javascript:alert(1)', '/orders', '/sales-orders?orderId=1;x', '/sales-orders?orderId=0', '/supply/../orders', '/sales-orders?orderId=13&x=1']) {
+        assert.ok(isAllowedDemoHref('/inspection?search=DEMO-REP'));
+        for (const href of ['https://evil.example', '//evil.example', 'javascript:alert(1)', '/orders', '/sales-orders?orderId=1;x', '/sales-orders?orderId=0', '/supply/../orders', '/sales-orders?orderId=13&x=1', '/inspection?search=', '/inspection?search=a b', '/inspection?search=x&y=1']) {
             assert.equal(isAllowedDemoHref(href), false, href);
         }
     });
