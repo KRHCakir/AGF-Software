@@ -165,6 +165,9 @@ namespace AgfAdmin.DTOs
         // Historische ontvangst.
         public decimal Quantity { get; set; }
         public decimal NetWeightKg { get; set; }
+        // Weighed of Calculated; bij Calculated moet een reservering exact aantal × NetKgPerPackage kg zijn.
+        public string WeightMethod { get; set; }
+        public decimal? NetKgPerPackage { get; set; }
         // Voorraad = ontvangst - afgeboekt; beschikbaar = voorraad - Active gereserveerd.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }

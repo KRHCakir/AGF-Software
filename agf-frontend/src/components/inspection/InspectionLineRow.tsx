@@ -21,6 +21,7 @@ import { UnitBadge } from '../availability/QuantityCell';
 import FieldError, { inputClass } from '../supply/FieldError';
 import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { WeightBadge } from '../shared/WeightBadge';
 import LineHistory from './LineHistory';
 import TechnicalDetails from '../supply/TechnicalDetails';
 
@@ -137,6 +138,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
             <td className="px-3 py-2 text-right">
                 {formatKg(line.onHandNetWeightKg, locale)}
                 {line.dispatchedNetWeightKg > 0 && <span className="block text-xs text-gray-500">{t('inspection_received', { quantity: formatKg(line.netWeightKg, locale) })}</span>}
+                <span className="mt-1 block"><WeightBadge method={line.weightMethod} kgPerPackage={line.netKgPerPackage} unit={line.unit} /></span>
             </td>
             <td className="px-3 py-2 text-sm text-gray-800">
                 {commitment?.vendorName ?? t('availability_unknown')}

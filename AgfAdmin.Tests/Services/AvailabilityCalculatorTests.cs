@@ -76,6 +76,29 @@ public class AvailabilityCalculatorTests
         _ => breakdown.Rejected
     };
 
+    // ---- Gewichtsbasis: gewogen, berekend of gemengd ----
+
+    [Fact]
+    public void WeightBasis_Reflects_Weighed_Calculated_Or_Mixed_Content_With_Stock()
+    {
+        var source = Source(1, 100m);
+        var weighed = Content(source, 10m, 40m);
+        var calculated = Content(source, 20m, 80m) with { WeightMethod = WeightRules.Calculated, NetKgPerPackage = 4m };
+        var depletedCalculated = Content(source, 5m, 20m) with { WeightMethod = WeightRules.Calculated, NetKgPerPackage = 4m, DispatchedQuantity = 5m, DispatchedNetWeightKg = 20m };
+
+        Assert.Equal("weighed", WarehouseEntry(Overview(new[] { source }, new[] { weighed })).WeightBasis);
+        Assert.Equal("calculated", WarehouseEntry(Overview(new[] { source }, new[] { calculated })).WeightBasis);
+        Assert.Equal("mixed", WarehouseEntry(Overview(new[] { source }, new[] { weighed, calculated })).WeightBasis);
+        // Uitgeputte inhoud bepaalt de basis niet meer; zonder voorraad op pallets is de basis onbekend (null).
+        Assert.Equal("weighed", WarehouseEntry(Overview(new[] { source }, new[] { weighed, depletedCalculated })).WeightBasis);
+        Assert.Null(WarehouseEntry(Overview(new[] { source }, new[] { depletedCalculated })).WeightBasis);
+
+        var drillDown = AvailabilityCalculator.BuildDrillDown(new[] { source }, new[] { calculated }, new AvailabilityQuery { ProductVariantId = Variant });
+        var line = Assert.Single(drillDown.ContentLines);
+        Assert.Equal(WeightRules.Calculated, line.WeightMethod);
+        Assert.Equal(4m, line.NetKgPerPackage);
+    }
+
     // ---- Beschikbaar en kwaliteit ----
 
     [Fact]

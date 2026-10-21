@@ -45,7 +45,10 @@ namespace AgfAdmin.Services
         decimal DispatchedQuantity = 0m,
         decimal DispatchedNetWeightKg = 0m,
         // Teruggeboekt uit een gecorrigeerde verzending: telt niet als registratie tegen de bronregel (al geteld bij de oorspronkelijke regel).
-        bool FromCorrection = false)
+        bool FromCorrection = false,
+        // Weighed of Calculated; bij Calculated is NetWeightKg = Quantity × NetKgPerPackage.
+        string WeightMethod = WeightRules.Weighed,
+        decimal? NetKgPerPackage = null)
     {
         public string Origin => FromCorrection ? "DispatchCorrection" : "Receipt";
         public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity);
@@ -78,6 +81,10 @@ namespace AgfAdmin.Services
             public decimal OnHoldQuantity { get; set; }
             public decimal OnHoldNetWeightKg { get; set; }
             public List<AvailabilityWarningDto> Warnings { get; } = new();
+            // Herkomst van de kg op pallets met voorraad: gewogen, berekend of beide.
+            public bool HasWeighed { get; set; }
+            public bool HasCalculated { get; set; }
+            public string WeightBasis => HasWeighed && HasCalculated ? "mixed" : HasWeighed ? "weighed" : HasCalculated ? "calculated" : null;
 
             public QualityBreakdownDto For(string category) => category switch
             {
@@ -133,6 +140,10 @@ namespace AgfAdmin.Services
 
                 // Kwaliteitsemmers tellen de voorraad (ontvangst minus afgeboekt); verzonden goederen zijn geen voorraad meer.
                 Add(group.For(category), content.QualityStatus, content.OnHandQuantity, content.OnHandNetWeightKg);
+                if (content.OnHandQuantity > 0m)
+                {
+                    if (content.WeightMethod == WeightRules.Calculated) group.HasCalculated = true; else group.HasWeighed = true;
+                }
                 AddReservations(group, content, category);
             }
 
@@ -241,6 +252,8 @@ namespace AgfAdmin.Services
                     DispatchedNetWeightKg = c.Fact.DispatchedNetWeightKg,
                     OnHandQuantity = c.Fact.OnHandQuantity,
                     OnHandNetWeightKg = c.Fact.OnHandNetWeightKg,
+                    WeightMethod = c.Fact.WeightMethod,
+                    NetKgPerPackage = c.Fact.NetKgPerPackage,
                     Depleted = c.Fact.Depleted,
                     Origin = c.Fact.Origin,
                     QualityStatus = c.Fact.QualityStatus,
@@ -400,7 +413,8 @@ namespace AgfAdmin.Services
             InTransit = group.InTransit,
             ExpectedOnPallets = group.ExpectedOnPallets,
             ExpectedUnregistered = new ExpectedUnregisteredDto { Quantity = group.Unregistered },
-            Warnings = group.Warnings
+            Warnings = group.Warnings,
+            WeightBasis = group.WeightBasis
         };
 
         private static DirectTradeSupplyDto ToDirectTradeSupply(Group group) => new()

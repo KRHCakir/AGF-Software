@@ -50,6 +50,41 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         return result.Value;
     }
 
+    private async Task<int> CalculatedApprovedLineAsync(decimal quantity = 10m, decimal kgPerPackage = 4m)
+    {
+        await using var db = _factory.CreateContext();
+        var source = await db.SupplyCommitmentLines.SingleAsync(l => l.SupplyCommitment.Route == "Warehouse" && l.ExpectedUnit == "box");
+        var line = new PalletContentLine
+        {
+            RequestId = Guid.NewGuid(), PalletId = _seed.SecondWarehousePalletId, SupplyCommitmentLineId = source.Id, LotNumber = "LOT-CALC",
+            Quantity = quantity, Unit = "box", NetWeightKg = WeightRules.CalculatedTotal(quantity, kgPerPackage),
+            WeightMethod = WeightRules.Calculated, NetKgPerPackage = kgPerPackage, QualityStatus = "Approved"
+        };
+        db.PalletContentLines.Add(line);
+        await db.SaveChangesAsync();
+        return line.Id;
+    }
+
+    [Fact]
+    public async Task Restored_Content_Keeps_The_Calculated_Weight_Method_Of_The_Original()
+    {
+        await ArrangeAsync();
+        var lineId = await CalculatedApprovedLineAsync();
+        var reservation = await ReservedAsync(lineId, 5m, 20m);
+        var dispatch = await DispatchedAsync(reservation);
+
+        var result = await CorrectAsync(dispatch.Id, Correct(await OrderAsync(), dispatch));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+
+        var state = await StateAsync(lineId);
+        var restored = Assert.Single(state.Restored);
+        Assert.Equal(WeightRules.Calculated, restored.WeightMethod);
+        Assert.Equal(4m, restored.NetKgPerPackage);
+        Assert.Equal(20m, restored.NetWeightKg);
+        Assert.Equal(5m, restored.Quantity);
+        Assert.Equal(WeightRules.Calculated, state.Original.WeightMethod);
+    }
+
     private async Task<SalesOrderDto> OrderAsync()
     {
         await using var db = _factory.CreateContext();

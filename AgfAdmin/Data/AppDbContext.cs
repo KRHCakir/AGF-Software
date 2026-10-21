@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AgfAdmin.Models;
+using AgfAdmin.Services;
 
 namespace AgfAdmin.Data
 {
@@ -128,6 +129,13 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<ProductVariant>(b =>
             {
                 b.Property(v => v.AvailabilityUnit).HasMaxLength(32);
+                b.Property(v => v.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
+                b.Property(v => v.DefaultNetKgPerPackage).HasPrecision(18, 3);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+                    t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
+                });
             });
 
             modelBuilder.Entity<SupplyCommitment>(b =>
@@ -407,6 +415,8 @@ namespace AgfAdmin.Data
                 b.Property(c => c.Quantity).HasPrecision(18, 3);
                 b.Property(c => c.Unit).IsRequired().HasMaxLength(32);
                 b.Property(c => c.NetWeightKg).HasPrecision(18, 3);
+                b.Property(c => c.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
+                b.Property(c => c.NetKgPerPackage).HasPrecision(18, 3);
                 b.Property(c => c.QualityStatus).IsRequired().HasMaxLength(32);
                 b.Property(c => c.QualityReason).HasMaxLength(500);
 
@@ -420,6 +430,12 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
                         "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
+                    // Gewogen: geen kg per verpakking. Berekend: kg per verpakking > 0 en het totaal is exact aantal × kg per
+                    // verpakking (afgerond op 3 decimalen, dus verschil < 0,001). Een etiketgewicht kan zo nooit als gewogen doorgaan.
+                    t.HasCheckConstraint("CK_PalletContentLines_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+                    t.HasCheckConstraint("CK_PalletContentLines_Weight_Consistent",
+                        "(\"WeightMethod\" = 'Weighed' AND \"NetKgPerPackage\" IS NULL) OR (\"WeightMethod\" = 'Calculated' AND \"NetKgPerPackage\" IS NOT NULL " +
+                        "AND CAST(\"NetKgPerPackage\" AS NUMERIC) > 0 AND abs(CAST(\"NetWeightKg\" AS NUMERIC) - CAST(\"Quantity\" AS NUMERIC) * CAST(\"NetKgPerPackage\" AS NUMERIC)) < 0.001)");
                     // Afgeboekt ligt tussen 0 en de ontvangst; de ontvangst zelf wordt nooit gewijzigd.
                     t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds",
                         "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) " +

@@ -42,6 +42,37 @@ namespace AgfAdmin.Controllers
             return product;
         }
 
+        // PUT: api/Products/variants/5/weight-settings — gewichtsmethode en standaard kg per verpakking van een variant.
+        // Verandert nooit bestaande inhoudsregels: die houden hun eigen methode en kg per verpakking.
+        [HttpPut("variants/{id}/weight-settings")]
+        public async Task<IActionResult> UpdateWeightSettings(int id, [FromBody] UpdateWeightSettingsDto dto)
+        {
+            var errors = new Dictionary<string, string[]>();
+            var method = dto?.WeightMethod?.Trim();
+            if (method == null || !Services.WeightRules.IsWeightMethod(method))
+            {
+                errors["weightMethod"] = new[] { $"Weight method must be one of: {string.Join(", ", Services.WeightRules.Methods)}." };
+            }
+            if (dto?.DefaultNetKgPerPackage != null && !Services.SupplyRules.IsPositiveDecimal18_3(dto.DefaultNetKgPerPackage.Value))
+            {
+                errors["defaultNetKgPerPackage"] = new[] { "Default net kg per package must be positive and may have at most 3 decimals." };
+            }
+            if (errors.Count > 0)
+            {
+                return BadRequest(new { Message = "Invalid weight settings.", Errors = errors });
+            }
+
+            var variant = await _context.ProductVariants.FindAsync(id);
+            if (variant == null)
+            {
+                return NotFound();
+            }
+            variant.WeightMethod = method;
+            variant.DefaultNetKgPerPackage = dto.DefaultNetKgPerPackage;
+            await _context.SaveChangesAsync();
+            return Ok(new { variant.Id, variant.WeightMethod, variant.DefaultNetKgPerPackage });
+        }
+
         // PUT: api/Products/variants/5/shortcut
         [HttpPut("variants/{id}/shortcut")]
         public async Task<IActionResult> UpdateShortcut(int id, [FromBody] UpdateShortcutDto dto)

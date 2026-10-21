@@ -1,3 +1,5 @@
+using AgfAdmin.Services;
+
 namespace AgfAdmin.Models
 {
     // Kleinste fysieke en traceerbare eenheid: precies één bronregel en één partij.
@@ -18,7 +20,12 @@ namespace AgfAdmin.Models
         public string LotNumber { get; set; }      // verplicht, niet leeg
         public decimal Quantity { get; set; }      // > 0
         public string Unit { get; set; }           // verplicht, niet leeg: box, colli, tray, piece of dozen
-        public decimal NetWeightKg { get; set; }   // > 0, werkelijk netto kg; nooit afgeleid
+        public decimal NetWeightKg { get; set; }   // > 0, totaal netto kg; gewogen (Weighed) of aantal × kg per verpakking (Calculated)
+
+        // Hoe NetWeightKg tot stand kwam: "Weighed" (werkelijk gewogen) of "Calculated" (Quantity × NetKgPerPackage, etiket).
+        // Bestaande regels zijn Weighed. De database bewaakt dat een berekend totaal exact bij aantal en kg per verpakking past.
+        public string WeightMethod { get; set; } = WeightRules.Weighed;
+        public decimal? NetKgPerPackage { get; set; } // alleen bij Calculated, > 0
 
         // Lopende afboeking door verzendingen (som van Dispatch-mutaties; alleen stijgend, nooit boven de ontvangst).
         // Quantity/NetWeightKg blijven de historische ontvangst; voorraad = ontvangst - afgeboekt.

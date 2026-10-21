@@ -25,7 +25,7 @@ const order: SalesOrder = {
 };
 const stockRow = {
     palletContentLineId: 2, palletId: 2, palletReference: 'SMOKE-PAL-002', warehouseLocation: null, lotNumber: 'LOT-SALES-1', unit: 'box',
-    quantity: 40, netWeightKg: 160, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, onHandQuantity: 40, onHandNetWeightKg: 160, reservedQuantity: 15, reservedNetWeightKg: 60, allocatedQuantity: 0, availableQuantity: 25, availableNetWeightKg: 100,
+    quantity: 40, netWeightKg: 160, weightMethod: 'Weighed', netKgPerPackage: null, dispatchedQuantity: 0, dispatchedNetWeightKg: 0, onHandQuantity: 40, onHandNetWeightKg: 160, reservedQuantity: 15, reservedNetWeightKg: 60, allocatedQuantity: 0, availableQuantity: 25, availableNetWeightKg: 100,
     qualityStatus: 'Approved', contentLineVersion: 6,
 };
 const reservationResponse = (requestId: string) => ({

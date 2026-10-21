@@ -1,3 +1,4 @@
+import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit } from './availability';
 import { isNumber, isNullableString, isObject, isString } from './guards';
 
@@ -24,6 +25,9 @@ export interface AddPalletContentLineRequest {
     lotNumber: string;
     quantity: number;
     unit: PackageUnit;
+    // Weighed: netWeightKg is gewogen. Calculated: netKgPerPackage verplicht en netWeightKg = quantity × netKgPerPackage.
+    weightMethod: WeightMethod;
+    netKgPerPackage: number | null;
     netWeightKg: number;
     actorReference: string | null;
     reason: string | null;
@@ -46,6 +50,8 @@ export interface PalletContentLineSummary {
     quantity: number;
     unit: PackageUnit;
     netWeightKg: number;
+    weightMethod: WeightMethod;
+    netKgPerPackage: number | null;
     qualityStatus: string;
 }
 
@@ -68,5 +74,7 @@ export function isPalletContentLineSummary(value: unknown): value is PalletConte
         && isNumber(value.quantity)
         && isString(value.unit) && (PACKAGE_UNITS as readonly string[]).includes(value.unit)
         && isNumber(value.netWeightKg)
+        && isWeightMethod(value.weightMethod)
+        && (value.netKgPerPackage === null || isNumber(value.netKgPerPackage))
         && isString(value.qualityStatus);
 }

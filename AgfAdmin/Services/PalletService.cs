@@ -379,9 +379,46 @@ namespace AgfAdmin.Services
                 AddError(errors, "unit", $"Unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}.");
             }
 
-            if (request.NetWeightKg == null || !SupplyRules.IsPositiveDecimal18_3(request.NetWeightKg.Value))
+            // Gewichtsmethode: Weighed (standaard, ook voor oudere clients) of Calculated. Nooit stilzwijgend omrekenen.
+            var weightMethod = string.IsNullOrWhiteSpace(request.WeightMethod) ? WeightRules.Weighed : request.WeightMethod.Trim();
+            decimal? netKgPerPackage = null;
+            decimal? netWeightKg = null;
+            if (!WeightRules.IsWeightMethod(weightMethod))
             {
-                AddError(errors, "netWeightKg", "Actual net weight is required, must be positive and may have at most 3 decimals.");
+                AddError(errors, "weightMethod", $"Weight method must be one of: {string.Join(", ", WeightRules.Methods)}.");
+            }
+            else if (weightMethod == WeightRules.Calculated)
+            {
+                if (request.NetKgPerPackage == null || !SupplyRules.IsPositiveDecimal18_3(request.NetKgPerPackage.Value))
+                {
+                    AddError(errors, "netKgPerPackage", "Net kg per package (label) is required for a calculated weight, must be positive and may have at most 3 decimals.");
+                }
+                else if (request.Quantity != null && SupplyRules.IsPositiveDecimal18_3(request.Quantity.Value))
+                {
+                    netKgPerPackage = request.NetKgPerPackage.Value;
+                    var total = WeightRules.CalculatedTotal(request.Quantity.Value, netKgPerPackage.Value);
+                    if (request.NetWeightKg != null && request.NetWeightKg.Value != total)
+                    {
+                        AddError(errors, "netWeightKg", $"For a calculated weight the total must be quantity × kg per package = {total} kg, or be omitted.");
+                    }
+                    else if (!SupplyRules.IsPositiveDecimal18_3(total))
+                    {
+                        AddError(errors, "netWeightKg", "The calculated total net weight is out of range.");
+                    }
+                    netWeightKg = total;
+                }
+            }
+            else
+            {
+                if (request.NetKgPerPackage != null)
+                {
+                    AddError(errors, "netKgPerPackage", "Net kg per package only applies to a calculated weight; a weighed line has no package weight.");
+                }
+                if (request.NetWeightKg == null || !SupplyRules.IsPositiveDecimal18_3(request.NetWeightKg.Value))
+                {
+                    AddError(errors, "netWeightKg", "Actual net weight is required, must be positive and may have at most 3 decimals.");
+                }
+                netWeightKg = request.NetWeightKg;
             }
 
             // Medewerker is optioneel bij ontvangst (zie BuildPallet); keuring en statuswijzigingen blijven hem eisen.
@@ -401,7 +438,9 @@ namespace AgfAdmin.Services
                 LotNumber = lotNumber,
                 Quantity = request.Quantity!.Value,
                 Unit = request.Unit,
-                NetWeightKg = request.NetWeightKg!.Value,
+                NetWeightKg = netWeightKg!.Value,
+                WeightMethod = weightMethod,
+                NetKgPerPackage = netKgPerPackage,
                 QualityStatus = PalletRules.QualityQuarantine,
                 CreatedAt = DateTime.UtcNow
             };
@@ -448,7 +487,9 @@ namespace AgfAdmin.Services
                 && string.Equals(existing.LotNumber, candidate.LotNumber, StringComparison.Ordinal)
                 && existing.Quantity == candidate.Quantity
                 && string.Equals(existing.Unit, candidate.Unit, StringComparison.Ordinal)
-                && existing.NetWeightKg == candidate.NetWeightKg;
+                && existing.NetWeightKg == candidate.NetWeightKg
+                && string.Equals(existing.WeightMethod, candidate.WeightMethod, StringComparison.Ordinal)
+                && existing.NetKgPerPackage == candidate.NetKgPerPackage;
 
             return same
                 ? ServiceResult<PalletContentLineDto>.Ok(ToDto(existing))
@@ -1023,6 +1064,8 @@ namespace AgfAdmin.Services
             Quantity = line.Quantity,
             Unit = line.Unit,
             NetWeightKg = line.NetWeightKg,
+            WeightMethod = line.WeightMethod,
+            NetKgPerPackage = line.NetKgPerPackage,
             DispatchedQuantity = line.DispatchedQuantity,
             DispatchedNetWeightKg = line.DispatchedNetWeightKg,
             OnHandQuantity = ReservationRules.OnHandQuantity(line.Quantity, line.DispatchedQuantity),

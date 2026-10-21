@@ -198,6 +198,17 @@ namespace AgfAdmin.Services
                 return $"Unit {command.Unit} must exactly match the content unit {content.Unit} and the order line unit {line.Unit}; units are never converted.";
             }
 
+            // Berekend gewicht: een reservering volgt exact dezelfde verhouding (aantal × kg per verpakking); er wordt nooit
+            // een ander kg-getal als gewogen geaccepteerd. Gewogen inhoud houdt de expliciete kg-invoer.
+            if (content.WeightMethod == WeightRules.Calculated && content.NetKgPerPackage != null)
+            {
+                var expectedKg = WeightRules.CalculatedTotal(command.Quantity, content.NetKgPerPackage.Value);
+                if (command.NetWeightKg != expectedKg)
+                {
+                    return $"This content line has a calculated weight of {content.NetKgPerPackage} kg per {content.Unit}: {command.Quantity} {content.Unit} is {expectedKg} kg, not {command.NetWeightKg} kg.";
+                }
+            }
+
             // Voorraad = ontvangst - afgeboekt; verbruikte reserveringen zitten in afgeboekt en tellen niet dubbel.
             var remainingQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity) - reservedOnContent.Quantity;
             var remainingKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg) - reservedOnContent.NetWeightKg;

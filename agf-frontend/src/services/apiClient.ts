@@ -58,7 +58,7 @@ function readErrorBody(body: unknown): { message: string | null; fieldErrors: Re
     return { message, fieldErrors };
 }
 
-async function request(method: 'GET' | 'POST', path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
+async function request(method: 'GET' | 'POST' | 'PUT', path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
     let baseUrl: string;
     try {
         baseUrl = getApiBaseUrl();
@@ -72,10 +72,10 @@ async function request(method: 'GET' | 'POST', path: string, body: unknown, sign
             method,
             signal,
             cache: 'no-store',
-            headers: method === 'POST'
-                ? { Accept: 'application/json', 'Content-Type': 'application/json' }
-                : { Accept: 'application/json' },
-            body: method === 'POST' ? JSON.stringify(body) : undefined,
+            headers: method === 'GET'
+                ? { Accept: 'application/json' }
+                : { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: method === 'GET' ? undefined : JSON.stringify(body),
         });
     } catch (error) {
         if (signal?.aborted) {
@@ -109,4 +109,8 @@ export async function getJson(path: string, signal?: AbortSignal): Promise<unkno
 
 export function postJson(path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
     return request('POST', path, body, signal);
+}
+
+export function putJson(path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
+    return request('PUT', path, body, signal);
 }

@@ -57,6 +57,9 @@ namespace AgfAdmin.DTOs
         public string ExpectedUnit { get; set; }
         // Opgegeven verwacht gewicht van de hele bronregel; nooit afgeleid en nooit het gewicht van een deeltoewijzing.
         public decimal? ExpectedNetWeightKg { get; set; }
+        // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
+        public string WeightMethod { get; set; }
+        public decimal? DefaultNetKgPerPackage { get; set; }
         // Alleen bij route DirectTrade: som van Active toewijzingen aan verkooporders en wat daarvan nog toewijsbaar is.
         // Null bij route Warehouse: magazijnaanvoer heeft geen toewijsbare verwachte capaciteit (die wordt pas voorraad na ontvangst en keuring).
         public decimal? DirectTradeAllocatedQuantity { get; set; }

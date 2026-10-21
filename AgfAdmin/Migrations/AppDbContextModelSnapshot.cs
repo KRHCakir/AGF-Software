@@ -919,6 +919,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal?>("NetKgPerPackage")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal>("NetWeightKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -957,6 +961,13 @@ namespace AgfAdmin.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
 
+                    b.Property<string>("WeightMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Weighed");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OriginCorrectionLineId")
@@ -982,6 +993,10 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_PalletContentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_Weight_Consistent", "(\"WeightMethod\" = 'Weighed' AND \"NetKgPerPackage\" IS NULL) OR (\"WeightMethod\" = 'Calculated' AND \"NetKgPerPackage\" IS NOT NULL AND CAST(\"NetKgPerPackage\" AS NUMERIC) > 0 AND abs(CAST(\"NetWeightKg\" AS NUMERIC) - CAST(\"Quantity\" AS NUMERIC) * CAST(\"NetKgPerPackage\" AS NUMERIC)) < 0.001)");
                         });
                 });
 
@@ -1016,6 +1031,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<decimal?>("DefaultNetKgPerPackage")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal>("DefaultPrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -1043,11 +1062,23 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("SizeCategory")
                         .HasColumnType("text");
 
+                    b.Property<string>("WeightMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Weighed");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ProductId");
 
-                    b.ToTable("ProductVariants");
+                    b.ToTable("ProductVariants", t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>

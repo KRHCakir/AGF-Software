@@ -149,6 +149,9 @@ namespace AgfAdmin.Services
                     Quantity = dispatchLine.Quantity,
                     Unit = dispatchLine.Unit,
                     NetWeightKg = dispatchLine.NetWeightKg,
+                    // Zelfde gewichtsmethode als de oorspronkelijke inhoud: een berekend gewicht blijft berekend (zelfde kg per verpakking).
+                    WeightMethod = original.WeightMethod,
+                    NetKgPerPackage = original.NetKgPerPackage,
                     QualityStatus = PalletRules.QualityQuarantine,
                     QualityReason = $"Restored by dispatch correction of dispatch {dispatch.Id}",
                     OriginCorrectionLine = correctionLine,

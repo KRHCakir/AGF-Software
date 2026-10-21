@@ -24,6 +24,41 @@ public class StockReservationServiceTests : IDisposable
         (_orderId, _boxLine, _colliLine) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity, colliQuantity);
     }
 
+    // Goedgekeurde inhoudsregel met berekend gewicht (10 box × 4 kg) op de tweede magazijnpallet, rechtstreeks opgeslagen.
+    private async Task<int> CalculatedApprovedLineAsync(decimal quantity = 10m, decimal kgPerPackage = 4m)
+    {
+        await using var db = _factory.CreateContext();
+        var source = await db.SupplyCommitmentLines.SingleAsync(l => l.SupplyCommitment.Route == "Warehouse" && l.ExpectedUnit == "box");
+        var line = new PalletContentLine
+        {
+            RequestId = Guid.NewGuid(), PalletId = _seed.SecondWarehousePalletId, SupplyCommitmentLineId = source.Id, LotNumber = "LOT-CALC",
+            Quantity = quantity, Unit = "box", NetWeightKg = WeightRules.CalculatedTotal(quantity, kgPerPackage),
+            WeightMethod = WeightRules.Calculated, NetKgPerPackage = kgPerPackage, QualityStatus = "Approved"
+        };
+        db.PalletContentLines.Add(line);
+        await db.SaveChangesAsync();
+        return line.Id;
+    }
+
+    [Fact]
+    public async Task Calculated_Line_Accepts_Only_Quantity_Times_Package_Weight()
+    {
+        await ArrangeAsync();
+        var lineId = await CalculatedApprovedLineAsync();
+
+        var wrong = await ReserveAsync(Reserve(lineId, 5m, 21m));
+        Assert.Equal(ServiceResultStatus.Conflict, wrong.Status);
+        Assert.Contains("calculated", wrong.Message, StringComparison.OrdinalIgnoreCase);
+
+        var right = await ReserveAsync(Reserve(lineId, 5m, 20m));
+        Assert.Equal(ServiceResultStatus.Created, right.Status);
+        Assert.Equal(20m, right.Value.NetWeightKg);
+
+        // Volledige rest: 5 box = 20 kg, consistent met de regel "geen gestrande rest".
+        Assert.Equal(ServiceResultStatus.Created, (await ReserveAsync(Reserve(lineId, 5m, 20m))).Status);
+        Assert.Equal((2, 10m, 40m, 2), await StateAsync(lineId));
+    }
+
     private static CreateStockReservationDto Reserve(int contentLineId, decimal quantity, decimal kg, string unit = "box", Guid? requestId = null, string reason = null) => new()
     {
         RequestId = requestId ?? Guid.NewGuid(),

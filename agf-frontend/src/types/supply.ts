@@ -1,3 +1,4 @@
+import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from './availability';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
 
@@ -31,6 +32,9 @@ export interface SupplyCommitmentLine {
     expectedQuantity: number;
     expectedUnit: PackageUnit | null;
     expectedNetWeightKg: number | null;
+    // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
+    weightMethod: WeightMethod;
+    defaultNetKgPerPackage: number | null;
 }
 
 export interface SupplyCommitment {
@@ -65,7 +69,9 @@ function isLine(value: unknown): value is SupplyCommitmentLine {
         && isNullableString(value.lotNumber)
         && isNumber(value.expectedQuantity)
         && isNullableUnit(value.expectedUnit)
-        && isNullableNumber(value.expectedNetWeightKg);
+        && isNullableNumber(value.expectedNetWeightKg)
+        && isWeightMethod(value.weightMethod)
+        && isNullableNumber(value.defaultNetKgPerPackage);
 }
 
 export function isSupplyCommitment(value: unknown): value is SupplyCommitment {

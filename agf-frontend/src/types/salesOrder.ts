@@ -1,3 +1,4 @@
+import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, QualityStatus } from './availability';
 import { hasConsistentDeliveryState } from '../lib/deliveryState';
 import { isArrayOf, isNullableString, isNumber, isObject, isString } from './guards';
@@ -290,6 +291,9 @@ export interface ReservableStockLine {
     // Historische ontvangst; voorraad = ontvangst - afgeboekt; beschikbaar = voorraad - Active gereserveerd.
     quantity: number;
     netWeightKg: number;
+    // Calculated: een reservering moet exact quantity × netKgPerPackage kg zijn; de UI leidt de kg dan af.
+    weightMethod: WeightMethod;
+    netKgPerPackage: number | null;
     dispatchedQuantity: number;
     dispatchedNetWeightKg: number;
     onHandQuantity: number;
@@ -490,6 +494,8 @@ export function isReservableStockLine(value: unknown): value is ReservableStockL
         && isUnit(value.unit)
         && isNumber(value.quantity)
         && isNumber(value.netWeightKg)
+        && isWeightMethod(value.weightMethod)
+        && (value.netKgPerPackage === null || isNumber(value.netKgPerPackage))
         && isNumber(value.dispatchedQuantity)
         && isNumber(value.dispatchedNetWeightKg)
         && isNumber(value.onHandQuantity)

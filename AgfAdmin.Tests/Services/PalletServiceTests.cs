@@ -338,6 +338,97 @@ public class PalletServiceTests : IDisposable
         AssertValidation(result, "actorReference");
     }
 
+    // ---- Gewichtsmethode: gewogen of berekend uit verpakkingsgewicht ----
+
+    private static AddPalletContentLineDto CalculatedRequest(int sourceLineId, decimal quantity = 40m, decimal kgPerPackage = 4m, decimal? total = null)
+    {
+        var request = ContentRequest(sourceLineId);
+        request.Quantity = quantity;
+        request.WeightMethod = "Calculated";
+        request.NetKgPerPackage = kgPerPackage;
+        request.NetWeightKg = total;
+        return request;
+    }
+
+    [Fact]
+    public async Task Calculated_ContentLine_Computes_Total_From_Package_Weight_And_Stores_Method()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+
+        var result = await AddContentAsync(palletId, CalculatedRequest(seed.WarehouseLine, 80m, 4.125m));
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal("Calculated", result.Value.WeightMethod);
+        Assert.Equal(4.125m, result.Value.NetKgPerPackage);
+        Assert.Equal(330m, result.Value.NetWeightKg);
+
+        await using var verify = _factory.CreateContext();
+        var line = await verify.PalletContentLines.SingleAsync();
+        Assert.Equal("Calculated", line.WeightMethod);
+        Assert.Equal(330m, line.NetWeightKg);
+    }
+
+    [Fact]
+    public async Task Weighed_Is_The_Default_For_Clients_Without_A_Weight_Method()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var result = await AddContentAsync(palletId, ContentRequest(seed.WarehouseLine));
+        Assert.Equal("Weighed", result.Value.WeightMethod);
+        Assert.Null(result.Value.NetKgPerPackage);
+    }
+
+    [Theory]
+    [InlineData("total-mismatch", "netWeightKg")]
+    [InlineData("package-weight-missing", "netKgPerPackage")]
+    [InlineData("package-weight-four-decimals", "netKgPerPackage")]
+    [InlineData("weighed-with-package-weight", "netKgPerPackage")]
+    [InlineData("unknown-method", "weightMethod")]
+    public async Task Weight_Method_Input_Is_Validated_And_Nothing_Is_Stored(string invalidCase, string expectedErrorKey)
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var request = CalculatedRequest(seed.WarehouseLine);
+        switch (invalidCase)
+        {
+            case "total-mismatch": request.NetWeightKg = 150m; break;
+            case "package-weight-missing": request.NetKgPerPackage = null; break;
+            case "package-weight-four-decimals": request.NetKgPerPackage = 4.0001m; break;
+            case "weighed-with-package-weight": request.WeightMethod = "Weighed"; request.NetWeightKg = 160m; break;
+            case "unknown-method": request.WeightMethod = "Estimated"; break;
+        }
+
+        AssertValidation(await AddContentAsync(palletId, request), expectedErrorKey);
+        Assert.Equal((1, 0, 1), await CountsAsync());
+    }
+
+    [Fact]
+    public async Task Calculated_Total_Given_Explicitly_Must_Match_Exactly_And_Then_Succeeds()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var result = await AddContentAsync(palletId, CalculatedRequest(seed.WarehouseLine, 40m, 4m, 160m));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal(160m, result.Value.NetWeightKg);
+    }
+
+    [Fact]
+    public async Task Retry_With_Same_Total_But_Other_Weight_Method_Conflicts()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var requestId = Guid.NewGuid();
+        var weighed = ContentRequest(seed.WarehouseLine, requestId);
+        weighed.NetWeightKg = 160m;
+        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, weighed)).Status);
+
+        var calculated = CalculatedRequest(seed.WarehouseLine, 40m, 4m);
+        calculated.RequestId = requestId;
+        Assert.Equal(ServiceResultStatus.Conflict, (await AddContentAsync(palletId, calculated)).Status);
+        Assert.Equal((1, 1, 2), await CountsAsync());
+    }
+
     [Fact]
     public async Task Exact_Pallet_Retry_Returns_Same_Pallet_Without_New_Event()
     {

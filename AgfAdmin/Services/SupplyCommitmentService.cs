@@ -385,6 +385,8 @@ namespace AgfAdmin.Services
                     ExpectedQuantity = l.ExpectedQuantity,
                     ExpectedUnit = l.ExpectedUnit,
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
+                    WeightMethod = l.ProductVariant?.WeightMethod ?? WeightRules.Weighed,
+                    DefaultNetKgPerPackage = l.ProductVariant?.DefaultNetKgPerPackage,
                     DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
                     DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
                         ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null

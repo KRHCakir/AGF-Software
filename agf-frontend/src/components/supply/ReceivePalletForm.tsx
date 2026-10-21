@@ -7,6 +7,7 @@ import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { newRequestId } from '../../lib/requestId';
+import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getAvailabilityVariant } from '../../services/availabilityService';
@@ -32,8 +33,20 @@ import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './Succes
 interface ContentDraft {
     lot: string;
     quantity: string;
+    // Gewogen: netKg is het gewogen totaal. Berekend: kgPerPackage (etiket) × aantal; netKg blijft dan leeg.
+    method: WeightMethod;
+    kgPerPackage: string;
     netKg: string;
 }
+
+// Startwaarden uit de variant: methode en standaard kg per verpakking, per regel aanpasbaar.
+const draftFor = (line: SupplyCommitmentLine): ContentDraft => ({
+    lot: line.lotNumber ?? '',
+    quantity: '',
+    method: line.weightMethod,
+    kgPerPackage: line.defaultNetKgPerPackage === null ? '' : String(line.defaultNetKgPerPackage),
+    netKg: '',
+});
 
 interface SourceEntry {
     commitment: SupplyCommitment;
@@ -69,7 +82,7 @@ const PALLET_FIELD_KEYS: Record<string, string> = {
     actorReference: 'actorReference',
 };
 
-const LINE_FIELD_KEYS = ['lotNumber', 'quantity', 'netWeightKg', 'unit', 'supplyCommitmentLineId'];
+const LINE_FIELD_KEYS = ['lotNumber', 'quantity', 'netWeightKg', 'netKgPerPackage', 'weightMethod', 'unit', 'supplyCommitmentLineId'];
 
 // Pallet ontvangen in het eigen magazijn: altijd Received + Warehouse, inhoud start altijd in Quarantine.
 // Bronnen zijn uitsluitend geplande Warehouse-aanvoerregels met een bekende eenheid.
@@ -136,7 +149,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         if (sources.status !== 'ready' || preselected === null) return;
         const receivable = preselected.lines.filter((line) => line.expectedUnit !== null);
         setSelected(receivable.map((line) => line.id));
-        setDrafts(Object.fromEntries(receivable.map((line) => [line.id, { lot: line.lotNumber ?? '', quantity: '', netKg: '' }])));
+        setDrafts(Object.fromEntries(receivable.map((line) => [line.id, draftFor(line)])));
         onPreselectedConsumed();
     }, [sources.status, preselected, onPreselectedConsumed]);
 
@@ -181,13 +194,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         if (!palletEditable || entry.line.expectedUnit === null) return;
         const id = entry.line.id;
         setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
-        setDrafts((current) => (current[id] ? current : { ...current, [id]: { lot: entry.line.lotNumber ?? '', quantity: '', netKg: '' } }));
+        setDrafts((current) => (current[id] ? current : { ...current, [id]: draftFor(entry.line) }));
         setFrozen(null);
         clearFailure();
     };
 
     // Alleen een regel die nog niet is opgeslagen mag wijzigen; die krijgt bij versturen een nieuwe requestId.
-    const editLine = (id: number, field: keyof ContentDraft, value: string) => {
+    const editLine = (id: number, field: keyof ContentDraft, value: string | WeightMethod) => {
         if (!lineEditable(id)) return;
         setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
         setFrozen((current) => {
@@ -218,8 +231,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             else if (lot.length > 100) addError(found, `line.${id}.lotNumber`, t('supply_error_too_long', { max: '100' }));
             const quantity = parsePositiveDecimal(draft.quantity);
             if (!quantity.ok) addError(found, `line.${id}.quantity`, t(decimalErrorKey(quantity.error)));
-            const netKg = parsePositiveDecimal(draft.netKg);
-            if (!netKg.ok) addError(found, `line.${id}.netWeightKg`, t(decimalErrorKey(netKg.error)));
+            if (draft.method === 'Calculated') {
+                const perPackage = parsePositiveDecimal(draft.kgPerPackage);
+                if (!perPackage.ok) addError(found, `line.${id}.netKgPerPackage`, t(decimalErrorKey(perPackage.error)));
+            } else {
+                const netKg = parsePositiveDecimal(draft.netKg);
+                if (!netKg.ok) addError(found, `line.${id}.netWeightKg`, t(decimalErrorKey(netKg.error)));
+            }
         }
         return found;
     };
@@ -232,7 +250,11 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         }
         const draft = drafts[id];
         const quantity = parsePositiveDecimal(draft.quantity);
-        const netKg = parsePositiveDecimal(draft.netKg);
+        const perPackage = parsePositiveDecimal(draft.kgPerPackage);
+        // Berekend: het totaal volgt uit aantal × kg per verpakking (zelfde afronding als de server); nooit als gewogen gestuurd.
+        const netKg = draft.method === 'Calculated'
+            ? (quantity.ok && perPackage.ok ? { ok: true as const, value: calculatedTotalKg(quantity.value, perPackage.value) } : { ok: false as const })
+            : parsePositiveDecimal(draft.netKg);
         const requestId = newRequestId();
         return {
             requestId,
@@ -242,6 +264,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 lotNumber: draft.lot.trim(),
                 quantity: quantity.ok ? quantity.value : 0,
                 unit: unit as PackageUnit,
+                weightMethod: draft.method,
+                netKgPerPackage: draft.method === 'Calculated' && perPackage.ok ? perPackage.value : null,
                 netWeightKg: netKg.ok ? netKg.value : 0,
                 actorReference,
                 reason: null,
@@ -588,7 +612,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         ? t('supply_open_unknown')
                                         : t('supply_open_quantity', { quantity: formatQuantity(open, locale) })}
                             </p>
-                            <div className="grid grid-cols-6 gap-3">
+                            <div className="grid grid-cols-7 gap-3">
                                 <div className="col-span-2">
                                     <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
                                     <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} value={draft.lot} maxLength={100} disabled={!editable}
@@ -607,12 +631,47 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <span className="block text-xs text-gray-500">{t('supply_unit_from_source')}</span>
                                     <FieldError id={key('unit')} messages={e(key('unit'))} />
                                 </div>
-                                <div>
-                                    <label htmlFor={`${key('netWeightKg')}-input`} className="text-xs font-medium text-gray-700">{t('supply_actual_net_kg')} *</label>
-                                    <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} value={draft.netKg} inputMode="decimal" disabled={!editable}
-                                        onChange={(event) => editLine(id, 'netKg', event.target.value)} className={inputClass} />
-                                    <span className="block text-xs text-gray-500">{t('supply_actual_net_kg_hint')}</span>
-                                    <FieldError id={key('netWeightKg')} messages={e(key('netWeightKg'))} />
+                                <div className="col-span-2">
+                                    <fieldset>
+                                        <legend className="text-xs font-medium text-gray-700">{t('supply_weight_method')} *</legend>
+                                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-800">
+                                            {WEIGHT_METHODS.map((method) => (
+                                                <label key={method} className="flex items-center gap-1">
+                                                    <input type="radio" name={key('weightMethod')} value={method} checked={draft.method === method} disabled={!editable}
+                                                        onChange={() => editLine(id, 'method', method)} />
+                                                    {t(method === 'Weighed' ? 'supply_weight_method_weighed' : 'supply_weight_method_calculated')}
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <FieldError id={key('weightMethod')} messages={e(key('weightMethod'))} />
+                                    </fieldset>
+                                    {draft.method === 'Calculated' ? (
+                                        <div className="mt-1">
+                                            <label htmlFor={`${key('netKgPerPackage')}-input`} className="text-xs font-medium text-gray-700">{t('supply_kg_per_package')} *</label>
+                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable}
+                                                onChange={(event) => editLine(id, 'kgPerPackage', event.target.value)} className={inputClass} />
+                                            <span className="block text-xs text-gray-500">{t('supply_kg_per_package_hint')}</span>
+                                            <span className="block text-xs font-medium text-amber-900" data-testid={`calculated-total-${id}`}>
+                                                {(() => {
+                                                    const quantity = parsePositiveDecimal(draft.quantity);
+                                                    const perPackage = parsePositiveDecimal(draft.kgPerPackage);
+                                                    return quantity.ok && perPackage.ok
+                                                        ? t('supply_calculated_total', { quantity: formatQuantity(quantity.value, locale), kg: formatKg(perPackage.value, locale), total: formatKg(calculatedTotalKg(quantity.value, perPackage.value), locale) })
+                                                        : t('supply_calculated_total_pending');
+                                                })()}
+                                            </span>
+                                            <FieldError id={key('netKgPerPackage')} messages={e(key('netKgPerPackage'))} />
+                                            <FieldError id={key('netWeightKg')} messages={e(key('netWeightKg'))} />
+                                        </div>
+                                    ) : (
+                                        <div className="mt-1">
+                                            <label htmlFor={`${key('netWeightKg')}-input`} className="text-xs font-medium text-gray-700">{t('supply_actual_net_kg')} *</label>
+                                            <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} value={draft.netKg} inputMode="decimal" disabled={!editable}
+                                                onChange={(event) => editLine(id, 'netKg', event.target.value)} className={inputClass} />
+                                            <span className="block text-xs text-gray-500">{t('supply_actual_net_kg_hint')}</span>
+                                            <FieldError id={key('netWeightKg')} messages={e(key('netWeightKg'))} />
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <span className="text-xs font-medium text-gray-700">{t('supply_quality')}</span>

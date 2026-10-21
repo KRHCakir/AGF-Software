@@ -1,3 +1,4 @@
+import { isWeightBasis, isWeightMethod, type WeightBasis, type WeightMethod } from '../lib/weight';
 // Types die exact overeenkomen met de alleen-lezen Availability API (backend: AgfAdmin/DTOs/AvailabilityDtos.cs).
 // Getallen zijn decimals uit de backend; de frontend rekent er niet mee, behalve optellen voor weergave.
 
@@ -58,6 +59,8 @@ export interface AvailabilityBasis {
 
 export interface WarehouseSupply {
     unit: PackageUnit | null;
+    // Herkomst van de kg op pallets: gewogen, berekend uit verpakkingsgewicht, of gemengd; null zonder inhoud.
+    weightBasis: WeightBasis | null;
     availableBeforeReservations: AvailabilityQuantity;
     reserved: Reserved;
     // Gereserveerd op inhoud die niet meer Approved is; wordt nooit nogmaals afgetrokken.
@@ -137,6 +140,8 @@ export interface ContentLineAvailability {
     dispatchedNetWeightKg: number;
     onHandQuantity: number;
     onHandNetWeightKg: number;
+    weightMethod: WeightMethod;
+    netKgPerPackage: number | null;
     // Voorraad én kg zijn 0; zegt niets over de fysieke pallet.
     depleted: boolean;
     // Receipt (fysieke ontvangst) of DispatchCorrection (teruggeboekt; telt niet als registratie tegen de bron).
@@ -228,6 +233,7 @@ function isBasis(value: unknown): value is AvailabilityBasis {
 function isWarehouseSupply(value: unknown): value is WarehouseSupply {
     return isObject(value)
         && isNullableUnit(value.unit)
+        && (value.weightBasis === null || isWeightBasis(value.weightBasis))
         && isQuantity(value.availableBeforeReservations)
         && isObject(value.reserved)
         && isNumber(value.reserved.quantity)
@@ -293,6 +299,8 @@ function isSourceLine(value: unknown): value is SourceLineAvailability {
 
 function isContentLine(value: unknown): value is ContentLineAvailability {
     return isObject(value)
+        && isWeightMethod(value.weightMethod)
+        && (value.netKgPerPackage === null || isNumber(value.netKgPerPackage))
         && isNumber(value.palletContentLineId)
         && isNumber(value.palletId)
         && typeof value.palletReference === 'string'

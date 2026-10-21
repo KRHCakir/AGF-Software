@@ -15,6 +15,7 @@ import { getAvailabilityVariant, toAvailabilityError } from '../../services/avai
 import { AvailabilityDrillDown, ContentLineAvailability, PackageUnit, SupplyRoute } from '../../types/availability';
 import QualityBadge from './QualityBadge';
 import { UnitBadge } from './QuantityCell';
+import { WeightBadge } from '../shared/WeightBadge';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from './StateViews';
 import WarningBadges from './WarningBadges';
 
@@ -101,6 +102,7 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
             <td className={`${td} text-right`}>
                 {formatKg(line.onHandNetWeightKg, locale)}
                 {line.dispatchedNetWeightKg > 0 && <span className="block text-xs text-gray-500">{t('availability_received_of', { quantity: formatKg(line.netWeightKg, locale) })}</span>}
+                <span className="mt-1 block"><WeightBadge method={line.weightMethod} kgPerPackage={line.netKgPerPackage} unit={line.unit} /></span>
             </td>
             <td className={`${td} text-right`}>
                 {formatQuantity(line.reservedQuantity, locale)}

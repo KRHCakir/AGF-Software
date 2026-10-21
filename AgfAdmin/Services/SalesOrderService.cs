@@ -527,7 +527,7 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Unit,
-                    c.Quantity, c.NetWeightKg, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
+                    c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
                 })
                 .ToListAsync(cancellationToken);
 
@@ -548,6 +548,8 @@ namespace AgfAdmin.Services
                         Unit = c.Unit,
                         Quantity = c.Quantity,
                         NetWeightKg = c.NetWeightKg,
+                        WeightMethod = c.WeightMethod,
+                        NetKgPerPackage = c.NetKgPerPackage,
                         DispatchedQuantity = c.DispatchedQuantity,
                         DispatchedNetWeightKg = c.DispatchedNetWeightKg,
                         OnHandQuantity = onHandQuantity,

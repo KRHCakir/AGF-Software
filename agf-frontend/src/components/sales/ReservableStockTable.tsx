@@ -8,6 +8,7 @@ import { getReservableStock } from '../../services/salesOrderService';
 import { ReservableStockLine, SalesOrderLine } from '../../types/salesOrder';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
+import { WeightBadge } from '../shared/WeightBadge';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 
@@ -85,6 +86,7 @@ export default function ReservableStockTable({ orderId, line, token, selectedId,
                                 <td className={`${td} text-right font-semibold`}>
                                     {formatKg(stock.availableNetWeightKg, locale)}
                                     <span className="block text-xs font-normal text-gray-500">{t('sales_of_total', { total: formatKg(stock.netWeightKg, locale) })}</span>
+                                    <span className="mt-1 block font-normal"><WeightBadge method={stock.weightMethod} kgPerPackage={stock.netKgPerPackage} unit={stock.unit} /></span>
                                 </td>
                                 <td className={td}><QualityBadge status={stock.qualityStatus} /></td>
                                 <td className={td}>

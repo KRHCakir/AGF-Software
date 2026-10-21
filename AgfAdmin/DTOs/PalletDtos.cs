@@ -27,6 +27,10 @@ namespace AgfAdmin.DTOs
         public string LotNumber { get; set; }
         public decimal? Quantity { get; set; }
         public string Unit { get; set; }
+        // Weighed (standaard, ook voor oudere clients): NetWeightKg verplicht, gewogen. Calculated: NetKgPerPackage verplicht;
+        // NetWeightKg mag weg (server berekent) of moet exact aantal × kg per verpakking zijn.
+        public string WeightMethod { get; set; }
+        public decimal? NetKgPerPackage { get; set; }
         public decimal? NetWeightKg { get; set; }
         public string ActorReference { get; set; }
         public string Reason { get; set; }
@@ -73,6 +77,9 @@ namespace AgfAdmin.DTOs
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
         public decimal NetWeightKg { get; set; }
+        // Weighed of Calculated; bij Calculated is NetWeightKg = Quantity × NetKgPerPackage (etiket), nooit gewogen.
+        public string WeightMethod { get; set; }
+        public decimal? NetKgPerPackage { get; set; }
         // Afgeboekt door verzendingen en de huidige voorraad; uitgeput als voorraad en kg allebei 0 zijn.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }

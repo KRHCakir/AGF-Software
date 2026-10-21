@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using System.ComponentModel.DataAnnotations.Schema;
 
+using AgfAdmin.Services;
+
 namespace AgfAdmin.Models
 {
     public class ProductVariant
@@ -22,6 +24,13 @@ namespace AgfAdmin.Models
         public decimal DefaultPrice { get; set; }
 
         public string? ShortcutCode { get; set; }
+
+        // Gewichtsmethode van deze variant/verpakking: "Weighed" (altijd werkelijk wegen) of "Calculated" (aantal ×
+        // netto kg per verpakking volgens etiket). Bestaande varianten zijn Weighed. Een maat alleen bepaalt dit nooit.
+        public string WeightMethod { get; set; } = WeightRules.Weighed;
+
+        // Standaard netto kg per verpakking (etiket); alleen een invoerhulp, per inhoudsregel aanpasbaar.
+        public decimal? DefaultNetKgPerPackage { get; set; }
 
         // Beschikbaarheidseenheid voor nieuwe voorraadflows: "Kilogram" of "Package".
         // Optioneel tijdens de overgang; nooit afgeleid uit maat of verpakking.
