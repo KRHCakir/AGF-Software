@@ -76,14 +76,14 @@ export default function GoodsCodeLookup({ system, onSystemChange, onPick, onManu
         <div className="rounded border border-gray-200 bg-gray-50 p-2 text-sm" data-testid="goods-code-lookup">
             <div className="flex flex-wrap gap-2">
                 <label htmlFor="goodsCodeLookupSystem-input" className="sr-only">{t('articles_field_goods_system')}</label>
-                <select id="goodsCodeLookupSystem-input" value={system} disabled={disabled} className={`${inputClass} mt-0 w-auto`}
+                <select id="goodsCodeLookupSystem-input" value={system} disabled={disabled} className={`${inputClass} mt-0 max-w-xs`}
                     onChange={(event) => onSystemChange(isGoodsCodeSystem(event.target.value) ? event.target.value : '')}>
                     <option value="">{t('articles_goods_choose_system_option')}</option>
                     {GOODS_CODE_SYSTEMS.map((option) => <option key={option} value={option}>{t(`articles_goods_system_${option}`)}</option>)}
                 </select>
                 <label htmlFor="goodsCodeQuery-input" className="sr-only">{t('articles_goods_search')}</label>
                 <input id="goodsCodeQuery-input" value={query} disabled={disabled} placeholder={t('articles_goods_query_placeholder')} onKeyDown={onKeyDown}
-                    onChange={(event) => setQuery(event.target.value)} className={`${inputClass} mt-0 flex-1`} />
+                    onChange={(event) => setQuery(event.target.value)} className={`${inputClass} mt-0 min-w-48 flex-1`} />
                 <button type="button" className={secondaryButtonClass} disabled={disabled || system === ''} onClick={() => void search()}>{t('articles_goods_search')}</button>
             </div>
             {system === '' && <p className="mt-1 text-xs text-gray-700">{t('articles_goods_choose_system')}</p>}
