@@ -6,7 +6,7 @@ import RelationForm from '../../../components/relations/RelationForm';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
-import { filterRelations, relationRole } from '../../../lib/relationRules';
+import { relationRole } from '../../../lib/relationRules';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../../lib/shortcuts';
 import { toApiError } from '../../../services/apiClient';
 import { getRelation, getRelationReference, listRelations } from '../../../services/relationService';
@@ -56,8 +56,9 @@ export default function RelationsPage() {
         return () => controller.abort();
     }, [role, debounced, includeInactive, page, reloadToken]);
 
-    // De server filtert; lokaal nog eens filteren houdt het type-ahead direct terwijl de debounce loopt (exacte zoekcode bovenaan).
-    const shown = useMemo(() => (list.status === 'ready' ? filterRelations(list.data.items, query) : []), [list, query]);
+    // De server bepaalt de definitieve resultaten en volgorde (ook tweede contactpersonen, telefoons en e-mails van alle contacten);
+    // de werkplek filtert niet opnieuw, zodat zij nooit een treffer van de server weer weghaalt.
+    const shown = useMemo(() => (list.status === 'ready' ? list.data.items : []), [list]);
     const total = list.status === 'ready' ? list.data.total : 0;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

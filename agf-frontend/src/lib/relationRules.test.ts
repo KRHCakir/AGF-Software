@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Relation, RelationListItem } from '../types/relation';
-import { buildRelationPayload, draftFromRelation, emptyAddressDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, filterRelations, groupRelationErrors, normalizeVat, relationRole } from './relationRules.ts';
+import { buildRelationPayload, draftFromRelation, emptyAddressDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, normalizeVat, relationRole } from './relationRules.ts';
 
 // Relatieregels: alleen de naam verplicht, leeg = niet vastgelegd, zoekcode zonder spaties, land voor nieuwe/gewijzigde adressen,
 // één standaard per doel en één primair contact, GGN's van 13 cijfers, btw alleen op schrijfwijze.
@@ -106,12 +106,7 @@ describe('relation payload', () => {
 
 describe('relation list', () => {
     const item = (over: Partial<RelationListItem>): RelationListItem => ({ id: 1, searchCode: null, name: 'A', tradeName: null, customerId: null, vendorId: null, isActive: true, city: null, countryCode: null, email: null, phone: null, primaryContactName: null, vatNumber: null, version: 0, ...over });
-    test('role is derived from the present roles and the local filter puts an exact search code first', () => {
+    test('role is derived from the present roles', () => {
         assert.deepEqual([relationRole(item({})), relationRole(item({ customerId: 1 })), relationRole(item({ vendorId: 2 })), relationRole(item({ customerId: 1, vendorId: 2 }))], ['none', 'customer', 'vendor', 'both']);
-        const items = [item({ id: 1, name: 'Fruitimport Zuid', searchCode: 'FRUITZ', city: 'Venlo' }), item({ id: 2, name: 'Groenten Noord', primaryContactName: 'Piet Fruit' }), item({ id: 3, name: 'Fruit', searchCode: 'FR' })];
-        assert.deepEqual(filterRelations(items, 'fruit').map((i) => i.id), [3, 1, 2], 'exact code first, then by name');
-        assert.deepEqual(filterRelations(items, 'venlo zuid').map((i) => i.id), [1]);
-        assert.deepEqual(filterRelations(items, '#2').map((i) => i.id), [2]);
-        assert.equal(filterRelations(items, '').length, 3);
     });
 });

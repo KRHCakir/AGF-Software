@@ -545,4 +545,69 @@ public class RelationServiceTests : IDisposable
         var page = await new RelationService(db).ListAsync(null, null, false, 2, 2);
         Assert.Equal((3, 2, 1), (page.Total, page.Page, page.Items.Count));
     }
+
+    // ---- Review #47 ----
+
+    [Fact]
+    public async Task Two_Concurrent_Additions_Of_The_Same_Role_End_With_One_Role_And_No_Unhandled_Exception()
+    {
+        var created = (await CreateAsync(Minimal("Groenten Noord"))).Value;
+        int otherVendorId = 0;
+        ServiceResult<RelationDto> result;
+        await using (var db = _factory.CreateContextBeforeGuard(async () =>
+        {
+            // De andere gebruiker heeft ook "nog geen leveranciersrol" gelezen en slaat als eerste op.
+            await using var other = _factory.CreateContext();
+            var first = await new RelationService(other).AddRoleAsync(created.Id, "vendor");
+            Assert.Equal(ServiceResultStatus.Created, first.Status);
+            otherVendorId = first.Value.Vendor!.VendorId;
+        }))
+        {
+            result = await new RelationService(db).AddRoleAsync(created.Id, "vendor");
+        }
+        Assert.Equal(ServiceResultStatus.Ok, result.Status);
+        Assert.Equal(otherVendorId, result.Value.Vendor!.VendorId);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(1, await verify.Vendors.CountAsync(v => v.RelationId == created.Id));
+        Assert.Equal(1, await verify.Relations.CountAsync());
+    }
+
+    [Fact]
+    public async Task An_Exact_Create_Retry_Returns_The_Same_Relation_Even_When_Its_Search_Code_Was_Reused_Later()
+    {
+        var request = Minimal("Veritas Fruit");
+        request.SearchCode = "VER";
+        var created = (await CreateAsync(request)).Value;
+        var rename = From((await GetAsync(created.Id)).Value);
+        rename.SearchCode = "VERITA";
+        Assert.Equal(ServiceResultStatus.Ok, (await UpdateAsync(created.Id, rename)).Status);
+        var other = Minimal("Verkoop Zuid");
+        other.SearchCode = "ver";
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(other)).Status);
+
+        var retry = await CreateAsync(request); // exact dezelfde opdracht, zelfde requestId
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal((created.Id, "VERITA"), (retry.Value.Id, retry.Value.SearchCode));
+        request.Name = "Veritas Fruit B.V."; // afwijkende herhaling blijft een conflict
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(request)).Status);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(2, await verify.Relations.CountAsync());
+    }
+
+    [Fact]
+    public async Task Search_Finds_A_Relation_By_Any_Contact_Name_Phone_Or_Email_Not_Only_The_Primary_Contact()
+    {
+        var request = Minimal("Fruithandel Oost");
+        request.Contacts = new()
+        {
+            new() { Name = "Jan de Vries", IsPrimary = true, Channels = new() { new() { Kind = "Phone", Value = "06-11111111" } } },
+            new() { Name = "Pieter Bakker", Channels = new() { new() { Kind = "Phone", Value = "077-2223344" }, new() { Kind = "Email", Value = "pieter@oost.example" } } },
+        };
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(request)).Status);
+        foreach (var term in new[] { "pieter", "077-222", "pieter@oost", "06-1111" })
+        {
+            var item = Assert.Single((await ListAsync(query: term)).Items);
+            Assert.Equal(("Fruithandel Oost", "Jan de Vries"), (item.Name, item.PrimaryContactName));
+        }
+    }
 }

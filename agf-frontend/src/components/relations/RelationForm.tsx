@@ -184,7 +184,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             const saved = await addRelationRole(current.id, role);
             setCurrent(saved);
             setNotice(t('relations_role_added', { name: saved.name }));
-            setDraft(draftFromRelation(saved));
+            // Het concept blijft staan: alleen de nieuwe rol en haar standaarden van de server komen erbij. Onopgeslagen wijzigingen
+            // (naam, adressen, contacten, …) gaan pas met Opslaan mee, op de versie die de server nu teruggeeft.
+            setDraft((draftNow) => role === 'customer'
+                ? { ...draftNow, customerRole: true, customerPaymentTermsDays: String(saved.customer?.paymentTermsDays ?? 30) }
+                : { ...draftNow, vendorRole: true, vendorPaymentTermsDays: String(saved.vendor?.paymentTermsDays ?? 30), vendorCurrency: saved.vendor?.defaultCurrency ?? 'EUR' });
             setOpen((current) => ({ ...current, defaults: true }));
             onSaved(saved, false);
         } catch (caught) {

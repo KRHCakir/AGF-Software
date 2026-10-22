@@ -177,4 +177,35 @@ describe('RelationForm', () => {
         assert.ok(text().includes('#3') && text().includes('#9'), 'both role numbers shown');
         await mounted.waitFor(() => text().includes('relations_role_added'), 'notice');
     });
+
+    test('adding a second role keeps unsaved name, address and contact changes; Save then sends them on the returned version', async () => {
+        const stored = saved({
+            version: 3,
+            addresses: [{ id: 11, purpose: 'Main', label: null, line1: 'Marktweg 1', line2: null, postalCode: null, city: 'Venlo', region: null, countryCode: 'NL', isDefault: true, isActive: true }],
+            contacts: [{ id: 21, name: 'Jan', department: null, jobTitle: null, isPrimary: true, isActive: true, note: null, channels: [] }],
+        });
+        respond = (call) => (call.url.endsWith('/roles/vendor')
+            ? json(201, { ...stored, vendor: { vendorId: 9, paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] } })
+            : call.method === 'PUT' ? json(200, { ...stored, version: 4 }) : json(404, {}));
+        await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Fruitimport Zuid (nieuw)');
+        await type(input('addresses.' + mounted.container.querySelector('[data-testid^="address-"]')!.getAttribute('data-testid')!.replace('address-', '') + '.city'), 'Tegelen');
+        const contactKey = mounted.container.querySelector('[data-testid^="contact-"]')!.getAttribute('data-testid')!.replace('contact-', '');
+        await type(input(`contacts.${contactKey}.name`), 'Pieter');
+        if (!mounted.container.querySelector('#relation-defaults')) await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="relation-defaults"]')!);
+        await click(mounted.button('+ relations_add_role_vendor')!);
+        await mounted.waitFor(() => input('vendorRole').checked, 'vendor role shown');
+        assert.equal(input('name').value, 'Fruitimport Zuid (nieuw)', 'unsaved name kept');
+        assert.equal(input(`contacts.${contactKey}.name`).value, 'Pieter', 'unsaved contact kept');
+        assert.ok(mounted.container.querySelector<HTMLInputElement>('input[value="Tegelen"]'), 'unsaved address kept');
+        assert.deepEqual([input('vendorPaymentTermsDays').value, input('vendorCurrency').value], ['45', 'USD'], 'role defaults from the server');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        const body = calls.find((call) => call.method === 'PUT')!.body!;
+        assert.equal(body.name, 'Fruitimport Zuid (nieuw)');
+        assert.equal((body.addresses as { city: string }[])[0].city, 'Tegelen');
+        assert.equal((body.contacts as { name: string }[])[0].name, 'Pieter');
+        assert.deepEqual(body.vendor, { paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] });
+        assert.equal(body.expectedVersion, 3);
+    });
 });

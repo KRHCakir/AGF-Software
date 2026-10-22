@@ -50,11 +50,12 @@ namespace AgfAdmin.Services
                     || (r.Email != null && r.Email.ToLower().Contains(term))
                     || (r.Phone != null && r.Phone.Contains(term))
                     || r.Addresses.Any(a => a.City != null && a.City.ToLower().Contains(term))
-                    || r.Contacts.Any(c => c.Name.ToLower().Contains(term)));
+                    || r.Contacts.Any(c => c.Name.ToLower().Contains(term) || c.Channels.Any(ch => ch.Value.ToLower().Contains(term))));
             }
             var total = await relations.CountAsync(cancellationToken);
+            // De server bepaalt de definitieve resultaten en hun volgorde: een exacte zoekcode eerst, daarna op naam. De werkplek filtert niet opnieuw.
             var pageItems = await relations
-                .OrderBy(r => r.Name).ThenBy(r => r.Id)
+                .OrderByDescending(r => term != "" && r.SearchCodeKey == term).ThenBy(r => r.Name).ThenBy(r => r.Id)
                 .Skip((page - 1) * pageSize).Take(pageSize)
                 .Select(r => new
                 {
@@ -113,7 +114,9 @@ namespace AgfAdmin.Services
             var existing = request?.RequestId is { } requestId && requestId != Guid.Empty
                 ? await Query(tracking: false).SingleOrDefaultAsync(r => r.RequestId == requestId, cancellationToken)
                 : null;
-            var command = await NormalizeAsync(request, null, errors, cancellationToken, existing?.Id);
+            // Bij een bekende requestId telt alleen de vergelijking met de oorspronkelijke opdracht: de actuele beschikbaarheid van de
+            // zoekcode (inmiddels door een andere relatie gebruikt) mag een ongewijzigde herhaling nooit laten stuklopen.
+            var command = await NormalizeAsync(request, null, errors, cancellationToken, existing?.Id, checkSearchCodeAvailability: existing == null);
             if (existing != null)
             {
                 if (errors.Count > 0)
@@ -229,7 +232,23 @@ namespace AgfAdmin.Services
             if (created)
             {
                 SyncMirror(relation);
-                await _db.SaveChangesAsync(cancellationToken);
+                try
+                {
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
+                {
+                    // Gelijktijdige toevoeging van dezelfde rol: de unieke index (één rol per soort per relatie) hield de tweede
+                    // tegen. Het eindresultaat is wat de gebruiker wilde; antwoord met de bestaande rol (200), nooit een 500.
+                    _db.ChangeTracker.Clear();
+                    var reloaded = await Query(tracking: false).SingleAsync(r => r.Id == id, cancellationToken);
+                    var exists = string.Equals(role, RoleCustomer, StringComparison.OrdinalIgnoreCase) ? reloaded.Customer != null : reloaded.Vendor != null;
+                    if (!exists)
+                    {
+                        throw;
+                    }
+                    return ServiceResult<RelationDto>.Ok(await ToDtoAsync(reloaded, cancellationToken));
+                }
             }
             _db.ChangeTracker.Clear();
             var dto = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == id, cancellationToken), cancellationToken);
@@ -363,7 +382,7 @@ namespace AgfAdmin.Services
             string RegistrationNumber, string RegistrationCountry, string RegistrationType, string LegalForm, string InternalNote, bool IsActive,
             CustomerRoleCommand Customer, VendorRoleCommand Vendor, List<AddressCommand> Addresses, List<ContactCommand> Contacts);
 
-        private async Task<RelationCommand> NormalizeAsync(SaveRelationDto request, Relation existing, Dictionary<string, List<string>> errors, CancellationToken cancellationToken, int? selfId = null)
+        private async Task<RelationCommand> NormalizeAsync(SaveRelationDto request, Relation existing, Dictionary<string, List<string>> errors, CancellationToken cancellationToken, int? selfId = null, bool checkSearchCodeAvailability = true)
         {
             selfId ??= existing?.Id;
             if (request == null)
@@ -379,7 +398,7 @@ namespace AgfAdmin.Services
                 {
                     ValidationErrors.Add(errors, "searchCode", "A search code consists of letters, digits, '.', '-' or '_' (max 32), without spaces.");
                 }
-                else
+                else if (checkSearchCodeAvailability)
                 {
                     var key = RelationRules.SearchCodeKey(searchCode);
                     var taken = await _db.Relations.AsNoTracking().Where(r => r.SearchCodeKey == key && (selfId == null || r.Id != selfId)).Select(r => new { r.Id, r.Name }).FirstOrDefaultAsync(cancellationToken);

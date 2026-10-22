@@ -1,4 +1,4 @@
-import type { AddressPurpose, ChannelKind, ContactChannel, Relation, RelationAddress, RelationContact, RelationListItem, SaveRelationRequest, VendorGgn } from '../types/relation';
+import type { AddressPurpose, ChannelKind, ContactChannel, Relation, RelationAddress, RelationContact, SaveRelationRequest, VendorGgn } from '../types/relation';
 import { resolveGgn } from './ggn.ts';
 
 // Pure regels van de relatiewerkplek (node:test), spiegel van RelationService/RelationRules: alleen de bedrijfsnaam is verplicht,
@@ -249,19 +249,4 @@ export function relationRole(item: { customerId: number | null; vendorId: number
     if (item.customerId !== null) return 'customer';
     if (item.vendorId !== null) return 'vendor';
     return 'none';
-}
-
-function normalize(value: string): string {
-    return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-}
-
-// Lokale filter op een al geladen pagina (de server filtert ook): zoekcode exact bovenaan; elke term in code, naam, handelsnaam, plaats, contact, btw.
-export function filterRelations(items: readonly RelationListItem[], query: string): RelationListItem[] {
-    const term = normalize(query);
-    if (term === '') return [...items];
-    const words = term.split(/\s+/).filter((word) => word !== '');
-    const exact = (item: RelationListItem) => item.searchCode !== null && normalize(item.searchCode) === term;
-    return items
-        .filter((item) => exact(item) || words.every((word) => normalize([item.searchCode ?? '', item.name, item.tradeName ?? '', item.city ?? '', item.primaryContactName ?? '', item.vatNumber ?? '', item.email ?? '', `#${item.id}`].join(' ')).includes(word)))
-        .sort((a, b) => Number(exact(b)) - Number(exact(a)) || a.name.localeCompare(b.name));
 }
