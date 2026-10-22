@@ -53,6 +53,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
 }) {
     const { t } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
+    // De laatst opgeslagen kaart (rollen, versie, gebruik): na opslaan of een rol toevoegen leidend, ook als de ouder niet opnieuw rendert.
+    const [current, setCurrent] = useState<Relation | null>(relation);
     const [pending, setPendingState] = useState<PendingCreate | null>(() => (relation === null ? readPending() : null));
     const [draft, setDraft] = useState<RelationDraft>(() => (relation !== null ? draftFromRelation(relation) : pending?.draft ?? emptyRelationDraft()));
     const [errors, setErrors] = useState<FieldErrors>({});
@@ -88,12 +90,15 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const e = (key: string) => errors[key];
     const toggle = (section: string) => setOpen((current) => ({ ...current, [section]: !current[section] }));
 
+    // Elke groep met een fout gaat open (een fout mag nooit verborgen blijven); het eerste foutveld krijgt focus.
+    const sectionOf = (field: string): string | null =>
+        field.startsWith('addresses') ? 'addresses' : field.startsWith('contacts') ? 'contacts' : field.startsWith('ggns') || field.includes('PaymentTerms') || field === 'vendorCurrency' ? 'defaults'
+            : field === 'internalNote' ? 'note' : ['website', 'vatNumber', 'registrationNumber', 'registrationCountry', 'registrationType', 'legalForm', 'preferredLanguage'].includes(field) ? 'company' : null;
     const focusFirstError = (fields: string[]) => {
         const first = fields[0];
         if (!first) return;
-        const section = first.startsWith('addresses') ? 'addresses' : first.startsWith('contacts') ? 'contacts' : first.startsWith('ggns') || first.includes('PaymentTerms') || first === 'vendorCurrency' ? 'defaults'
-            : first === 'internalNote' ? 'note' : ['website', 'vatNumber', 'registrationNumber', 'registrationCountry', 'registrationType', 'legalForm', 'preferredLanguage'].includes(first) ? 'company' : null;
-        if (section) setOpen((current) => ({ ...current, [section]: true }));
+        const sections = fields.map(sectionOf).filter((section): section is string => section !== null);
+        if (sections.length > 0) setOpen((current) => ({ ...current, ...Object.fromEntries(sections.map((section) => [section, true])) }));
         setTimeout(() => document.getElementById(`${first}-input`)?.focus(), 0);
     };
 
@@ -115,6 +120,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 return;
             }
             setPending(null);
+            setCurrent(result.relation);
             setNotice(t(result.outcome === 'replayed' ? 'relations_saved_before' : 'relations_created', { name: result.relation.name }));
             setDraft(draftFromRelation(result.relation));
             onSaved(result.relation, true);
@@ -137,7 +143,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const submit = async (acknowledgeSimilarNames = false) => {
         if (inFlight.current) return;
         if (pending !== null) { await send(pending); return; }
-        const built = buildRelationPayload(draft, relation === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: relation.version });
+        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: current.version });
         if (!built.ok) {
             const grouped = groupRelationErrors(built.errors);
             setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
@@ -146,7 +152,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
         }
         setErrors({});
         setSimilar(null);
-        if (relation === null) {
+        if (current === null) {
             const command: PendingCreate = { requestId: built.value.requestId!, payload: built.value, draft, lastError: null };
             setPending(command);
             await send(command);
@@ -156,7 +162,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
         setSubmitting(true);
         setServerError(null);
         try {
-            const saved = await updateRelation(relation.id, built.value);
+            const saved = await updateRelation(current.id, built.value);
+            setCurrent(saved);
             setNotice(t('relations_saved', { name: saved.name }));
             setDraft(draftFromRelation(saved));
             onSaved(saved, false);
@@ -170,11 +177,12 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
 
     // Tweede rol toevoegen aan een bestaande relatie: één klik, nooit een tweede onderneming.
     const addRole = async (role: 'customer' | 'vendor') => {
-        if (relation === null || inFlight.current) return;
+        if (current === null || inFlight.current) return;
         inFlight.current = true;
         setSubmitting(true);
         try {
-            const saved = await addRelationRole(relation.id, role);
+            const saved = await addRelationRole(current.id, role);
+            setCurrent(saved);
             setNotice(t('relations_role_added', { name: saved.name }));
             setDraft(draftFromRelation(saved));
             setOpen((current) => ({ ...current, defaults: true }));
@@ -255,12 +263,12 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     );
 
     const roleLabel = draft.customerRole && draft.vendorRole ? t('relations_role_both') : draft.customerRole ? t('relations_role_customer') : draft.vendorRole ? t('relations_role_vendor') : t('relations_role_none');
-    const usage = relation?.usage;
+    const usage = current?.usage;
 
     return (
         <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} onKeyDown={stopEnter} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="relation-form">
             <div className="flex flex-wrap items-start justify-between gap-2">
-                <h2 className="text-lg font-semibold text-gray-900">{relation === null ? t('relations_new') : t('relations_edit', { id: String(relation.id) })}</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{current === null ? t('relations_new') : t('relations_edit', { id: String(current.id) })}</h2>
                 <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${draft.isActive ? 'bg-green-100 text-green-900' : 'bg-gray-200 text-gray-800'}`}>{draft.isActive ? t('relations_active') : t('relations_inactive')}</span>
                     <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900">{roleLabel}</span>
@@ -302,12 +310,12 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 {textField('tradeName', 'relations_field_trade_name')}
                 <div className="col-span-2 flex flex-wrap items-end gap-3 md:col-span-2">
                     <label className="flex items-center gap-1 text-sm text-gray-900">
-                        <input type="checkbox" id="customerRole-input" checked={draft.customerRole} disabled={locked || relation?.customer != null}
+                        <input type="checkbox" id="customerRole-input" checked={draft.customerRole} disabled={locked || current?.customer != null}
                             onChange={(event) => { update({ customerRole: event.target.checked }); setOpen((current) => ({ ...current, defaults: true })); }} />
                         {t('relations_role_customer')}
                     </label>
                     <label className="flex items-center gap-1 text-sm text-gray-900">
-                        <input type="checkbox" id="vendorRole-input" checked={draft.vendorRole} disabled={locked || relation?.vendor != null}
+                        <input type="checkbox" id="vendorRole-input" checked={draft.vendorRole} disabled={locked || current?.vendor != null}
                             onChange={(event) => { update({ vendorRole: event.target.checked }); setOpen((current) => ({ ...current, defaults: true })); }} />
                         {t('relations_role_vendor')}
                     </label>
@@ -315,7 +323,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                         <input type="checkbox" id="isActive-input" checked={draft.isActive} disabled={locked} onChange={(event) => update({ isActive: event.target.checked })} />
                         {t('relations_active')}
                     </label>
-                    {relation !== null && !draft.isActive && <span className="text-xs text-gray-600">{t('relations_inactive_hint')}</span>}
+                    {current !== null && !draft.isActive && <span className="text-xs text-gray-600">{t('relations_inactive_hint')}</span>}
                 </div>
                 {textField('email', 'relations_field_email', { maxLength: 200 })}
                 {textField('phone', 'relations_field_phone', { maxLength: 40 })}
@@ -338,7 +346,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                         <div>
                             {textField('vatNumber', 'relations_field_vat', { mono: true, maxLength: 32, hintKey: 'relations_hint_vat' })}
                             <span className="mt-1 inline-flex rounded border border-gray-300 bg-gray-50 px-1.5 text-xs text-gray-700" data-testid="vat-status">
-                                {t(`relations_vat_status_${relation?.vatVerificationStatus ?? (draft.vatNumber.trim() === '' ? 'NotApplicable' : 'NotChecked')}`)}
+                                {t(`relations_vat_status_${current?.vatVerificationStatus ?? (draft.vatNumber.trim() === '' ? 'NotApplicable' : 'NotChecked')}`)}
                             </span>
                         </div>
                         {textField('legalForm', 'relations_field_legal_form', { list: 'relation-legal-forms', maxLength: 64 })}
@@ -436,11 +444,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                             const ck = `contacts.${contact.key}.channels.${channel.key}`;
                                             return (
                                                 <div key={channel.key} className="flex flex-wrap items-start gap-2">
-                                                    <select aria-label={t('relations_channel_kind')} value={channel.kind} disabled={locked} className={`${inputClass} w-28`} onChange={(event) => editChannel(contact.key, channel.key, { kind: event.target.value as ChannelKind })}>
+                                                    <select aria-label={t('relations_channel_kind')} value={channel.kind} disabled={locked} className={`${inputClass} max-w-32`} onChange={(event) => editChannel(contact.key, channel.key, { kind: event.target.value as ChannelKind })}>
                                                         <option value="Phone">{t('relations_channel_phone')}</option>
                                                         <option value="Email">{t('relations_channel_email')}</option>
                                                     </select>
-                                                    <input aria-label={t('relations_channel_label')} placeholder={t('relations_channel_label')} value={channel.label} disabled={locked} maxLength={50} className={`${inputClass} w-32`} onChange={(event) => editChannel(contact.key, channel.key, { label: event.target.value })} />
+                                                    <input aria-label={t('relations_channel_label')} placeholder={t('relations_channel_label')} value={channel.label} disabled={locked} maxLength={50} className={`${inputClass} max-w-40`} onChange={(event) => editChannel(contact.key, channel.key, { label: event.target.value })} />
                                                     <div className="min-w-48 flex-1">
                                                         <input {...fieldProps(ck, e(ck))} aria-label={channel.kind === 'Phone' ? t('relations_channel_phone') : t('relations_channel_email')} inputMode={channel.kind === 'Phone' ? 'tel' : 'email'} value={channel.value} disabled={locked} maxLength={200} className={inputClass}
                                                             onChange={(event) => editChannel(contact.key, channel.key, { value: event.target.value })} />
@@ -471,21 +479,21 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 {open.defaults && (
                     <div id="relation-defaults" className="space-y-3 border-t border-gray-200 p-3">
                         {!draft.customerRole && !draft.vendorRole && <p className="text-xs text-gray-600">{t('relations_defaults_no_role')}</p>}
-                        {relation !== null && (!relation.customer || !relation.vendor) && (
+                        {current !== null && (!current.customer || !current.vendor) && (
                             <div className="flex flex-wrap gap-2">
-                                {!relation.customer && <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => void addRole('customer')}>+ {t('relations_add_role_customer')}</button>}
-                                {!relation.vendor && <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => void addRole('vendor')}>+ {t('relations_add_role_vendor')}</button>}
+                                {!current.customer && <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => void addRole('customer')}>+ {t('relations_add_role_customer')}</button>}
+                                {!current.vendor && <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => void addRole('vendor')}>+ {t('relations_add_role_vendor')}</button>}
                             </div>
                         )}
                         {draft.customerRole && (
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                                <p className="col-span-2 text-sm font-medium text-gray-900 md:col-span-4">{t('relations_defaults_sales')}{relation?.customer ? ` · #${relation.customer.customerId}` : ''}</p>
+                                <p className="col-span-2 text-sm font-medium text-gray-900 md:col-span-4">{t('relations_defaults_sales')}{current?.customer ? ` · #${current.customer.customerId}` : ''}</p>
                                 {textField('customerPaymentTermsDays', 'relations_field_payment_terms', { maxLength: 3, hintKey: 'relations_hint_customer_terms' })}
                             </div>
                         )}
                         {draft.vendorRole && (
                             <div className="space-y-2">
-                                <p className="text-sm font-medium text-gray-900">{t('relations_defaults_purchase')}{relation?.vendor ? ` · #${relation.vendor.vendorId}` : ''}</p>
+                                <p className="text-sm font-medium text-gray-900">{t('relations_defaults_purchase')}{current?.vendor ? ` · #${current.vendor.vendorId}` : ''}</p>
                                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                                     {textField('vendorPaymentTermsDays', 'relations_field_payment_terms', { maxLength: 3, hintKey: 'relations_hint_vendor_terms' })}
                                     {textField('vendorCurrency', 'relations_field_currency', { list: 'relation-currencies', maxLength: 3, upper: true, hintKey: 'relations_hint_currency' })}
@@ -498,7 +506,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                         return (
                                             <div key={ggn.key} className="flex flex-wrap items-start gap-2" data-testid={`ggn-${ggn.key}`}>
                                                 <div>
-                                                    <input {...fieldProps(k('ggn'), e(k('ggn')))} aria-label={t('relations_ggn_number')} placeholder={t('relations_ggn_number')} inputMode="numeric" value={ggn.ggn} disabled={locked} maxLength={20} className={`${inputClass} w-44 font-mono`}
+                                                    <input {...fieldProps(k('ggn'), e(k('ggn')))} aria-label={t('relations_ggn_number')} placeholder={t('relations_ggn_number')} inputMode="numeric" value={ggn.ggn} disabled={locked} maxLength={20} className={`${inputClass} max-w-44 font-mono`}
                                                         onChange={(event) => editGgn(ggn.key, { ggn: event.target.value })} />
                                                     <FieldError id={k('ggn')} messages={e(k('ggn'))} />
                                                 </div>
