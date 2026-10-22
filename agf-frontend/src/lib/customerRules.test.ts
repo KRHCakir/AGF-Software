@@ -27,7 +27,7 @@ describe('customer rules', () => {
         assert.equal(isSimilarCustomerName('Jansen', 'Groentehal Jansen'), true);
         assert.equal(isSimilarCustomerName('AB', 'Groentehal AB'), false, 'two characters never count as contained');
         assert.equal(isSimilarCustomerName('Fruitpaleis', 'Groentehal Jansen'), false);
-        const options = [{ id: 1, name: 'Groentehal Jansen' }, { id: 2, name: 'DEMO Klant B (donderdag-demo)' }];
+        const options = [{ id: 1, name: 'Groentehal Jansen', searchCode: null, isActive: true }, { id: 2, name: 'DEMO Klant B (donderdag-demo)', searchCode: null, isActive: true }];
         assert.deepEqual(similarCustomers('demo klant b', options).map((o) => o.id), [2]);
         assert.deepEqual(similarCustomers('', options), []);
     });

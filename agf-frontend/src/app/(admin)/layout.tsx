@@ -30,6 +30,7 @@ function AdminLayoutContent({
                     <NavLink href="/inspection" label={t('inspection')} />
                     <NavLink href="/availability" label={t('availability')} />
                     <NavLink href="/articles" label={t('articles')} />
+                    <NavLink href="/relations" label={t('relations')} />
                     <NavLink href="/reports" label={t('reports')} />
                     <NavLink href="/help" label={t('help')} />
                 </nav>

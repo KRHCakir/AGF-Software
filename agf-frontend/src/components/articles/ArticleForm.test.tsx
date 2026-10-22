@@ -13,7 +13,7 @@ const reference: ArticleReference = { productNames: ['Avocado', 'Mango'], packag
 const hass: Article = {
     id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru', brand: null,
     sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box', season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: null,
-    defaultPackagesPerPallet: 120, goodsCode: null, goodsCodeSystem: null, tradeClass: null, defaultGgn: null, defaultPrice: 12.5,
+    defaultPackagesPerPallet: 120, goodsCode: null, goodsCodeSystem: null, tradeClass: null, defaultPrice: 12.5,
 };
 
 interface Call { method: string; url: string; body: unknown }
@@ -52,7 +52,7 @@ describe('ArticleForm', () => {
         assert.equal(calls[0].method, 'POST');
         assert.deepEqual(calls[0].body, {
             productName: 'Tomaat', variantName: null, shortcutCode: 'tom', origin: null, brand: null, sizeCategory: null, packaging: null, packagingUnit: null, season: null, notes: null,
-            weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: null, defaultGgn: null,
+            weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: null,
         });
         await mounted.waitFor(() => saved !== null, 'onSaved called');
         assert.ok(text().includes('articles_created'));
@@ -121,24 +121,10 @@ describe('ArticleForm', () => {
         await mounted.waitFor(() => text().includes('articles_saved'), 'saved notice');
     });
 
-    test('the default GGN is a separate optional field: 13 digits with leading zeros are sent as text, anything else is refused inline', async () => {
-        respond = (call) => (call.method === 'PUT' ? json(200, { ...hass, defaultGgn: '0049929123456' }) : json(404, {}));
+    test('the article form carries no GGN field: GGNs are supplier data, chosen per lot on receipt', async () => {
         await mounted.render(<ArticleForm article={hass} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="article-trade"]')!.click(); });
-        assert.ok(text().includes('articles_hint_ggn'), 'states "as given; certification not verified"');
-        assert.equal(mounted.container.querySelector('input[type="checkbox"][id*="ggn" i], input[type="file"]'), null, 'no yes/no switch and no file upload');
-        await type(input('defaultGgn'), '404992912345');
-        await save();
-        assert.equal(calls.length, 0, 'nothing sent');
-        assert.ok(text().includes('articles_error_ggn_13_digits'));
-        assert.equal(input('defaultGgn').value, '404992912345', 'input kept');
-        await type(input('defaultGgn'), '0049 929 123456');
-        await save();
-        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'updated');
-        const body = calls.find((call) => call.method === 'PUT')!.body as Record<string, unknown>;
-        assert.equal(body.defaultGgn, '0049929123456', 'text with leading zero, spaces removed');
-        assert.equal(body.goodsCode, null, 'GGN is independent of the goods code');
-        await mounted.waitFor(() => text().includes('articles_saved'), 'saved notice');
-        assert.equal(input('defaultGgn').value, '0049929123456');
+        assert.equal(mounted.container.querySelector('[id="defaultGgn-input"]'), null);
+        assert.ok(text().includes('articles_ggn_moved'));
     });
 });

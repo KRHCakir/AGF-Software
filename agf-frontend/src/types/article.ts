@@ -32,8 +32,6 @@ export interface Article {
     goodsCode: string | null;
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
-    // Standaard-GGN (13 cijfers als tekst); voorstel bij ontvangst. Zoals opgegeven; certificeringsstatus niet gecontroleerd.
-    defaultGgn: string | null;
     defaultPrice: number;
 }
 
@@ -55,7 +53,6 @@ export interface SaveArticleRequest {
     goodsCode: string | null;
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
-    defaultGgn: string | null;
 }
 
 export interface ArticleReference {
@@ -105,7 +102,7 @@ export function isArticle(value: unknown): value is Article {
         && isNullableString(value.season) && isNullableString(value.notes) && isWeightMethod(value.weightMethod)
         && isNullableNumber(value.defaultNetKgPerPackage) && isNullableNumber(value.defaultGrossKgPerPackage) && isNullableNumber(value.defaultPackagesPerPallet)
         && isNullableString(value.goodsCode) && (value.goodsCodeSystem === null || isGoodsCodeSystem(value.goodsCodeSystem))
-        && isNullableString(value.tradeClass) && isNullableString(value.defaultGgn) && isNumber(value.defaultPrice);
+        && isNullableString(value.tradeClass) && isNumber(value.defaultPrice);
 }
 
 export function isArticleList(value: unknown): value is Article[] {

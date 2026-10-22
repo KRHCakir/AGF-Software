@@ -18,8 +18,8 @@ const settings: PurchaseInvoiceSettings = {
     defaultVatPercentage: 21, defaultPaymentTermsDays: 30, defaultCurrency: 'EUR',
 };
 const vendors: PurchaseVendor[] = [
-    { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR' },
-    { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD' },
+    { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true },
+    { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD', searchCode: null, isActive: true },
 ];
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [
     { id: 1, name: 'Hass', origin: 'Peru', packaging: '4kg Box', sizeCategory: null, shortcutCode: 'avohassper22', defaultPackagesPerPallet: null, packagingUnit: 'box' },

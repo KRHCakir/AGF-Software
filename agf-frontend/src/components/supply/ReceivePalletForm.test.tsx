@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, json, setValue } from '../../test/reactHarness.ts';
 import type { SupplyCommitment } from '../../types/supply';
-import ReceivePalletForm, { ggnStateKey } from './ReceivePalletForm';
+import ReceivePalletForm, { ggnStateKey, proposedGgn } from './ReceivePalletForm';
 
 // Palletontvangst: de standaard-GGN van het artikel is een voorstel op de inhoudsregel. De gebruiker kan het per regel
 // overnemen, aanpassen of bewust leegmaken; de daadwerkelijk gekozen waarde gaat in de payload van die regel (null = leeg).
@@ -12,10 +12,10 @@ import ReceivePalletForm, { ggnStateKey } from './ReceivePalletForm';
 
 const commitment: SupplyCommitment = {
     id: 41, requestId: 'r-41', vendorId: 1, vendorName: 'Supplier B', customerId: null, customerName: null, route: 'Warehouse', status: 'Expected',
-    origin: 'Peru', destination: null, expectedAt: '2026-10-23T06:00:00.000Z',
+    origin: 'Peru', destination: null, expectedAt: '2026-10-23T06:00:00.000Z', vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno' }],
     lines: [
-        { id: 501, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', lotNumber: 'LOT-A', expectedQuantity: 40, expectedUnit: 'box', expectedNetWeightKg: 160, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null, defaultGgn: '0049929123456' },
-        { id: 502, productVariantId: 3, productName: 'Mango', productVariantName: 'Kent', lotNumber: null, expectedQuantity: 20, expectedUnit: 'box', expectedNetWeightKg: null, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null, defaultGgn: null },
+        { id: 501, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', lotNumber: 'LOT-A', expectedQuantity: 40, expectedUnit: 'box', expectedNetWeightKg: 160, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null },
+        { id: 502, productVariantId: 3, productName: 'Mango', productVariantName: 'Kent', lotNumber: null, expectedQuantity: 20, expectedUnit: 'box', expectedNetWeightKg: null, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null },
     ],
 };
 
@@ -50,29 +50,38 @@ describe('ReceivePalletForm GGN', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('ggnStateKey names the relation to the article default', () => {
-        assert.equal(ggnStateKey('0049929123456', '0049929123456'), 'supply_ggn_from_article');
-        assert.equal(ggnStateKey(' 0049 929 123456 ', '0049929123456'), 'supply_ggn_from_article');
-        assert.equal(ggnStateKey('0049929000002', '0049929123456'), 'supply_ggn_adjusted');
-        assert.equal(ggnStateKey('', '0049929123456'), 'supply_ggn_cleared');
-        assert.equal(ggnStateKey('', null), 'supply_ggn_none_in_article');
-        assert.equal(ggnStateKey('0049929000002', null), null);
+    test('a supplier GGN is proposed only when exactly one applies; with several the user has to choose', () => {
+        const one = [{ ggn: '0049929123456', producerName: null }];
+        const two = [{ ggn: '0049929123456', producerName: 'A' }, { ggn: '0049929000002', producerName: 'B' }];
+        assert.equal(proposedGgn(one), '0049929123456');
+        assert.equal(proposedGgn(two), null);
+        assert.equal(proposedGgn([]), null);
+        assert.equal(ggnStateKey('0049929123456', one), 'supply_ggn_from_vendor');
+        assert.equal(ggnStateKey(' 0049 929 123456 ', one), 'supply_ggn_from_vendor');
+        assert.equal(ggnStateKey('0049929000009', one), 'supply_ggn_adjusted');
+        assert.equal(ggnStateKey('', one), 'supply_ggn_cleared');
+        assert.equal(ggnStateKey('', two), 'supply_ggn_choose');
+        assert.equal(ggnStateKey('0049929000002', two), 'supply_ggn_chosen');
+        assert.equal(ggnStateKey('0049929000009', two), 'supply_ggn_adjusted');
+        assert.equal(ggnStateKey('', []), 'supply_ggn_none_in_vendor');
+        assert.equal(ggnStateKey('0049929000002', []), null);
     });
 
-    test('the article default is proposed per line, can be adjusted or deliberately cleared, and the chosen value is what is sent', async () => {
+    test('the single supplier GGN is proposed per line, can be adjusted or deliberately cleared, and the chosen value is what is sent', async () => {
         await mounted.render(<ReceivePalletForm actor="wh-1" preselected={null} onPreselectedConsumed={() => {}} />);
         await mounted.waitFor(() => mounted.container.querySelector('#source-501') !== null, 'sources loaded');
         await selectSource(501);
         await selectSource(502);
 
-        assert.equal(input('line.501.ggn').value, '0049929123456', 'proposal taken over from the article (leading zero kept)');
-        assert.ok(state(501).includes('supply_ggn_from_article'));
+        assert.equal(input('line.501.ggn').value, '0049929123456', 'the single supplier GGN is proposed (leading zero kept)');
+        assert.ok(state(501).includes('supply_ggn_from_vendor'));
         assert.ok(state(501).includes('supply_ggn_hint'), 'as given; certification not verified');
-        assert.equal(input('line.502.ggn').value, '', 'no default on the article = empty');
-        assert.ok(state(502).includes('supply_ggn_none_in_article'));
+        assert.equal(input('line.502.ggn').value, '0049929123456', 'same supplier, same single proposal on every line');
+        await type(input('line.502.ggn'), '');
+        assert.ok(state(502).includes('supply_ggn_cleared'));
 
         await type(input('line.501.ggn'), '0049929000002');
-        assert.ok(state(501).includes('supply_ggn_adjusted'), 'adjusted against the article default');
+        assert.ok(state(501).includes('supply_ggn_adjusted'), 'adjusted against the supplier GGN');
         await type(input('line.501.ggn'), '');
         assert.ok(state(501).includes('supply_ggn_cleared'), 'deliberately cleared');
 
@@ -97,5 +106,22 @@ describe('ReceivePalletForm GGN', () => {
         assert.deepEqual(lines.map((line) => [line.supplyCommitmentLineId, line.ggn]), [[501, null], [502, '4049929000003']]);
         await mounted.waitFor(() => text().includes('supply_receive_success'), 'success panel');
         assert.ok(text().includes('4049929000003'), 'chosen GGN shown on the saved line');
+    });
+
+    test('with several supplier GGNs nothing is proposed and the user chooses from the list or types another', async () => {
+        const two = { ...commitment, vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno' }, { ggn: '0049929000002', producerName: 'Finca Dos' }] };
+        globalThis.fetch = (async (inputUrl: RequestInfo | URL) => (String(inputUrl).includes('/supply-commitments') ? json(200, [two]) : json(500, {}))) as typeof fetch;
+        await mounted.render(<ReceivePalletForm actor="wh-1" preselected={null} onPreselectedConsumed={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('#source-501') !== null, 'sources loaded');
+        await selectSource(501);
+        assert.equal(input('line.501.ggn').value, '', 'nothing proposed with two candidates');
+        assert.ok(state(501).includes('supply_ggn_choose'));
+        const choice = mounted.container.querySelector<HTMLSelectElement>('[data-testid="ggn-choice-501"]')!;
+        assert.equal(choice.options.length, 3);
+        await act(async () => { const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!; setter.call(choice, '0049929000002'); choice.dispatchEvent(new window.Event('change', { bubbles: true })); });
+        assert.equal(input('line.501.ggn').value, '0049929000002');
+        assert.ok(state(501).includes('supply_ggn_chosen'));
+        await type(input('line.501.ggn'), '0049929000009');
+        assert.ok(state(501).includes('supply_ggn_adjusted'));
     });
 });

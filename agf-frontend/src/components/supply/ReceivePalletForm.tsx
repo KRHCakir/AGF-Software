@@ -22,7 +22,7 @@ import {
     PalletContentLineSummary,
     PalletSummary,
 } from '../../types/pallet';
-import { SupplyCommitment, SupplyCommitmentLine } from '../../types/supply';
+import { SupplyCommitment, SupplyCommitmentLine, VendorGgnOption } from '../../types/supply';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
@@ -40,26 +40,33 @@ interface ContentDraft {
     method: WeightMethod;
     kgPerPackage: string;
     netKg: string;
-    // GGN van deze partij: start met het voorstel uit het artikel, per regel aanpasbaar of bewust leeg te maken.
+    // GGN van deze partij: alleen bij precies één actieve leveranciers-GGN vooraf ingevuld; bij meer kiest de gebruiker; altijd aanpasbaar of leeg.
     ggn: string;
 }
 
-// Startwaarden uit de variant: methode, standaard kg per verpakking en standaard-GGN, per regel aanpasbaar.
-const draftFor = (line: SupplyCommitmentLine): ContentDraft => ({
+// Startwaarden uit de variant (methode, standaard kg per verpakking) en de leverancier (GGN), per regel aanpasbaar.
+const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOption[]): ContentDraft => ({
     lot: line.lotNumber ?? '',
     quantity: '',
     method: line.weightMethod,
     kgPerPackage: line.defaultNetKgPerPackage === null ? '' : String(line.defaultNetKgPerPackage),
     netKg: '',
-    ggn: line.defaultGgn ?? '',
+    ggn: proposedGgn(vendorGgns) ?? '',
 });
 
-// Herkenbare toelichting bij de GGN-invoer ten opzichte van de artikelstandaard (voorstel, aangepast, leeggemaakt).
-export function ggnStateKey(draftGgn: string, defaultGgn: string | null): 'supply_ggn_from_article' | 'supply_ggn_adjusted' | 'supply_ggn_cleared' | 'supply_ggn_none_in_article' | null {
+// Voorstel alleen als er precies één toepasselijk nummer is; bij meerdere nummers kiest de gebruiker zelf.
+export function proposedGgn(vendorGgns: readonly VendorGgnOption[]): string | null {
+    return vendorGgns.length === 1 ? vendorGgns[0].ggn : null;
+}
+
+// Herkenbare toelichting bij de GGN-invoer ten opzichte van de leveranciers-GGN's (voorstel, gekozen, aangepast, leeggemaakt, kiezen).
+export type GgnStateKey = 'supply_ggn_from_vendor' | 'supply_ggn_chosen' | 'supply_ggn_adjusted' | 'supply_ggn_cleared' | 'supply_ggn_choose' | 'supply_ggn_none_in_vendor';
+export function ggnStateKey(draftGgn: string, vendorGgns: readonly VendorGgnOption[]): GgnStateKey | null {
     const normalized = normalizeGgn(draftGgn);
-    if (defaultGgn === null) return normalized === '' ? 'supply_ggn_none_in_article' : null;
-    if (normalized === '') return 'supply_ggn_cleared';
-    return normalized === defaultGgn ? 'supply_ggn_from_article' : 'supply_ggn_adjusted';
+    if (vendorGgns.length === 0) return normalized === '' ? 'supply_ggn_none_in_vendor' : null;
+    if (normalized === '') return vendorGgns.length === 1 ? 'supply_ggn_cleared' : 'supply_ggn_choose';
+    if (vendorGgns.length === 1) return normalized === vendorGgns[0].ggn ? 'supply_ggn_from_vendor' : 'supply_ggn_adjusted';
+    return vendorGgns.some((option) => option.ggn === normalized) ? 'supply_ggn_chosen' : 'supply_ggn_adjusted';
 }
 
 interface SourceEntry {
@@ -163,7 +170,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         if (sources.status !== 'ready' || preselected === null) return;
         const receivable = preselected.lines.filter((line) => line.expectedUnit !== null);
         setSelected(receivable.map((line) => line.id));
-        setDrafts(Object.fromEntries(receivable.map((line) => [line.id, draftFor(line)])));
+        setDrafts(Object.fromEntries(receivable.map((line) => [line.id, draftFor(line, preselected.vendorGgns)])));
         onPreselectedConsumed();
     }, [sources.status, preselected, onPreselectedConsumed]);
 
@@ -208,7 +215,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         if (!palletEditable || entry.line.expectedUnit === null) return;
         const id = entry.line.id;
         setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
-        setDrafts((current) => (current[id] ? current : { ...current, [id]: draftFor(entry.line) }));
+        setDrafts((current) => (current[id] ? current : { ...current, [id]: draftFor(entry.line, entry.commitment.vendorGgns) }));
         setFrozen(null);
         clearFailure();
     };
@@ -698,13 +705,22 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <div className="mt-1.5"><QualityBadge status="Quarantine" /></div>
                                     <span className="block text-xs text-gray-500">{t('supply_quality_start_hint')}</span>
                                 </div>
-                                {/* GGN: voorstel uit het artikel, hier per partij aanpasbaar of bewust leeg te maken; de gekozen waarde wordt op de ontvangst vastgelegd. */}
+                                {/* GGN: leveranciers-GGN's als invoerhulp (precies één = voorstel, meer = kiezen), per partij aanpasbaar of bewust leeg; de gekozen waarde staat op de ontvangst. */}
                                 <div className="col-span-3">
                                     <label htmlFor={`${key('ggn')}-input`} className="text-xs font-medium text-gray-700">{t('supply_ggn')}</label>
-                                    <input {...fieldProps(key('ggn'), e(key('ggn')))} value={draft.ggn} inputMode="numeric" maxLength={20} disabled={!editable}
-                                        onChange={(event) => editLine(id, 'ggn', event.target.value)} className={`${inputClass} font-mono`} />
+                                    <div className="flex flex-wrap gap-2">
+                                        <input {...fieldProps(key('ggn'), e(key('ggn')))} value={draft.ggn} inputMode="numeric" maxLength={20} disabled={!editable}
+                                            onChange={(event) => editLine(id, 'ggn', event.target.value)} className={`${inputClass} min-w-48 flex-1 font-mono`} />
+                                        {entry.commitment.vendorGgns.length > 1 && (
+                                            <select aria-label={t('supply_ggn_choose_label')} disabled={!editable} value={entry.commitment.vendorGgns.some((option) => option.ggn === normalizeGgn(draft.ggn)) ? normalizeGgn(draft.ggn) : ''}
+                                                onChange={(event) => editLine(id, 'ggn', event.target.value)} className={`${inputClass} w-auto`} data-testid={`ggn-choice-${id}`}>
+                                                <option value="">{t('supply_ggn_choose_option')}</option>
+                                                {entry.commitment.vendorGgns.map((option) => <option key={option.ggn} value={option.ggn}>{option.ggn}{option.producerName ? ` · ${option.producerName}` : ''}</option>)}
+                                            </select>
+                                        )}
+                                    </div>
                                     <span className="block text-xs text-gray-500" data-testid={`ggn-state-${id}`}>
-                                        {(() => { const state = ggnStateKey(draft.ggn, entry.line.defaultGgn); return state === null ? '' : t(state, { ggn: entry.line.defaultGgn ?? '' }); })()}
+                                        {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
                                         {' '}{t('supply_ggn_hint')}
                                     </span>
                                     <FieldError id={key('ggn')} messages={e(key('ggn'))} />

@@ -81,8 +81,10 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     const filteredCustomers = useMemo(() => {
         const term = customerFilter.trim().toLowerCase();
-        return term === '' ? customers : customers.filter((customer) => customer.name.toLowerCase().includes(term));
-    }, [customers, customerFilter]);
+        // Inactieve relaties zijn niet kiesbaar voor een nieuwe order (de server weigert ze ook); een al gekozen klant blijft staan.
+        const selectable = customers.filter((customer) => customer.isActive || String(customer.id) === draft.customerId);
+        return term === '' ? selectable : selectable.filter((customer) => customer.name.toLowerCase().includes(term) || (customer.searchCode !== null && customer.searchCode.toLowerCase().includes(term)));
+    }, [customers, customerFilter, draft.customerId]);
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
@@ -168,7 +170,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
     };
 
     const onCustomerSaved = (customer: CreatedCustomer, replayed: boolean) => {
-        setCreatedCustomers((current) => (current.some((c) => c.id === customer.id) ? current : [...current, { id: customer.id, name: customer.name }]));
+        setCreatedCustomers((current) => (current.some((c) => c.id === customer.id) ? current : [...current, { id: customer.id, name: customer.name, searchCode: null, isActive: true }]));
         // Alleen de klantkeuze verandert; regels, datum en referentie van het concept blijven staan.
         setDraft((current) => ({ ...current, customerId: String(customer.id) }));
         setCustomerFilter('');

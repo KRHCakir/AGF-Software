@@ -24,9 +24,10 @@ export default function VendorPicker({ id, vendors, value, onChange, disabled = 
     const search = useCallback((query: string): LookupMatch<PurchaseVendor>[] => {
         const term = query.trim();
         const exactNumber = /^#?(\d{1,10})$/.exec(term);
-        return searchVendors(vendors, query).map((vendor) => ({
+        // Inactieve relaties zijn niet kiesbaar voor een nieuwe factuur (de server weigert ze ook); een al gekozen waarde blijft zichtbaar.
+        return searchVendors(vendors.filter((vendor) => vendor.isActive), query).map((vendor) => ({
             key: String(vendor.id), item: vendor, description: describeVendor(vendor),
-            exact: exactNumber !== null && vendor.id === Number(exactNumber[1]),
+            exact: (exactNumber !== null && vendor.id === Number(exactNumber[1])) || (vendor.searchCode !== null && vendor.searchCode.toLowerCase() === term.toLowerCase()),
             badge: vendor.paymentTermsDays > 0 ? `${vendor.paymentTermsDays} d` : null,
         }));
     }, [vendors]);
