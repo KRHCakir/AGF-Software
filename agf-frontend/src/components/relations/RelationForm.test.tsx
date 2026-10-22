@@ -208,4 +208,46 @@ describe('RelationForm', () => {
         assert.deepEqual(body.vendor, { paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] });
         assert.equal(body.expectedVersion, 3);
     });
+
+    test('when a colleague changed the card before the role was added, Save keeps the base version of the draft and gets a conflict instead of overwriting', async () => {
+        const stored = saved({ version: 3 });
+        // Collega heeft intussen de handelsnaam gewijzigd (versie 4); daarna voegt deze gebruiker de leveranciersrol toe.
+        const newest = saved({ version: 4, tradeName: 'Door collega', vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } });
+        respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, newest)
+            : call.method === 'PUT' ? json(409, { message: 'Relation 7 was changed by someone else (version 4, expected 3); reload and apply your change again.' }) : json(404, {}));
+        await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Mijn wijziging');
+        if (!mounted.container.querySelector('#relation-defaults')) await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="relation-defaults"]')!);
+        await click(mounted.button('+ relations_add_role_vendor')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-stale"]'), 'stale warning shown');
+        assert.equal(input('name').value, 'Mijn wijziging', 'draft kept');
+        assert.equal(input('tradeName').value, '', 'colleague change not silently mixed into the draft');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'save attempted');
+        assert.equal(calls.find((call) => call.method === 'PUT')!.body!.expectedVersion, 3, 'expected version is the one the draft is based on, not the newest card');
+        await mounted.waitFor(() => text().includes('supply_error_http_409'), 'conflict reported');
+        assert.equal(input('name').value, 'Mijn wijziging', 'draft still kept after the conflict');
+        // Bewust herladen: nieuwste kaart, verder op versie 4.
+        respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 5, tradeName: 'Door collega', vendor: newest.vendor })) : json(404, {}));
+        await click(mounted.button('relations_stale_reload')!);
+        assert.deepEqual([input('name').value, input('tradeName').value], ['Fruitimport Zuid', 'Door collega']);
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.filter((call) => call.method === 'PUT').length === 2, 'saved again');
+        assert.equal(calls.filter((call) => call.method === 'PUT')[1].body!.expectedVersion, 4);
+    });
+
+    test('without a colleague change the role addition keeps the base version and Save succeeds without a warning', async () => {
+        const stored = saved({ version: 3 });
+        respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 3, vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } }))
+            : call.method === 'PUT' ? json(200, saved({ version: 4 })) : json(404, {}));
+        await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Mijn wijziging');
+        if (!mounted.container.querySelector('#relation-defaults')) await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="relation-defaults"]')!);
+        await click(mounted.button('+ relations_add_role_vendor')!);
+        await mounted.waitFor(() => input('vendorRole').checked, 'role shown');
+        assert.equal(mounted.container.querySelector('[data-testid="relation-stale"]'), null);
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        assert.equal(calls.find((call) => call.method === 'PUT')!.body!.expectedVersion, 3);
+    });
 });

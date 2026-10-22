@@ -610,4 +610,33 @@ public class RelationServiceTests : IDisposable
             Assert.Equal(("Fruithandel Oost", "Jan de Vries"), (item.Name, item.PrimaryContactName));
         }
     }
+
+    // De werkplek leidt "intussen door iemand anders gewijzigd" af uit een versieverschil na rol toevoegen; dat werkt alleen als een
+    // roltoevoeging zelf de relatieversie niet verhoogt. Een opslag op de oude basisversie na een wijziging van een collega is 409.
+    [Fact]
+    public async Task Adding_A_Role_Does_Not_Bump_The_Version_And_A_Save_On_The_Draft_Base_Version_After_A_Colleague_Change_Is_A_Conflict()
+    {
+        var created = (await CreateAsync(Minimal("Groenten Noord"))).Value;
+        await using (var db = _factory.CreateContext())
+        {
+            var added = await new RelationService(db).AddRoleAsync(created.Id, "vendor");
+            Assert.Equal(created.Version, added.Value.Version);
+        }
+        var colleague = From((await GetAsync(created.Id)).Value);
+        colleague.TradeName = "Door collega";
+        Assert.Equal(ServiceResultStatus.Ok, (await UpdateAsync(created.Id, colleague)).Status);
+        await using (var db = _factory.CreateContext())
+        {
+            var addedAgain = await new RelationService(db).AddRoleAsync(created.Id, "customer");
+            Assert.Equal(created.Version + 1, addedAgain.Value.Version); // nieuwere kaart door de collega, niet door de rol
+        }
+        var mine = From(created); // concept op de oude basisversie
+        mine.Name = "Mijn wijziging";
+        var result = await UpdateAsync(created.Id, mine);
+        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
+        var stored = (await GetAsync(created.Id)).Value;
+        Assert.Equal(("Groenten Noord", "Door collega"), (stored.Name, stored.TradeName));
+        Assert.NotNull(stored.Customer);
+        Assert.NotNull(stored.Vendor);
+    }
 }

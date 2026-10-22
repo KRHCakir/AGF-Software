@@ -1293,5 +1293,8 @@
   "supply_ggn_choose": "De leverancier heeft {count} GGN's: kies er een, vul een andere in of laat leeg.",
   "supply_ggn_none_in_vendor": "Geen GGN bij de leverancier; leeg = niet vastgelegd.",
   "supply_ggn_choose_label": "Leveranciers-GGN kiezen",
-  "supply_ggn_choose_option": "Kies GGN…"
+  "supply_ggn_choose_option": "Kies GGN…",
+  "relations_stale_title": "Deze relatie is intussen door iemand anders gewijzigd.",
+  "relations_stale_hint": "Je onopgeslagen invoer staat er nog, maar is gebaseerd op een oudere versie. Opslaan geeft daarom een conflictmelding in plaats van de andere wijziging te overschrijven. Laad de nieuwste kaart om verder te gaan (je onopgeslagen invoer vervalt dan).",
+  "relations_stale_reload": "Nieuwste kaart laden"
 }

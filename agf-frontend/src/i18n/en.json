@@ -1293,5 +1293,8 @@
   "supply_ggn_choose": "The supplier has {count} GGNs: choose one, enter another or leave empty.",
   "supply_ggn_none_in_vendor": "No GGN on the supplier; empty = not recorded.",
   "supply_ggn_choose_label": "Choose supplier GGN",
-  "supply_ggn_choose_option": "Choose GGN…"
+  "supply_ggn_choose_option": "Choose GGN…",
+  "relations_stale_title": "This relation was changed by someone else in the meantime.",
+  "relations_stale_hint": "Your unsaved input is still here, but it is based on an older version. Saving therefore reports a conflict instead of overwriting the other change. Load the latest card to continue (your unsaved input is then discarded).",
+  "relations_stale_reload": "Load latest card"
 }

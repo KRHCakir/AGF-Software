@@ -55,6 +55,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     // De laatst opgeslagen kaart (rollen, versie, gebruik): na opslaan of een rol toevoegen leidend, ook als de ouder niet opnieuw rendert.
     const [current, setCurrent] = useState<Relation | null>(relation);
+    // De versie waarop het concept is gebaseerd. Alleen opslaan of bewust herladen zet haar verder; een tussendoor ontvangen nieuwere
+    // kaart (bijv. na "rol toevoegen") nooit, anders zou Opslaan wijzigingen van een collega zonder conflictmelding overschrijven.
+    const [baseVersion, setBaseVersion] = useState<number | null>(relation?.version ?? null);
+    // Na een roltoevoeging bleek de kaart intussen door iemand anders gewijzigd: het concept is verouderd.
+    const [stale, setStale] = useState(false);
     const [pending, setPendingState] = useState<PendingCreate | null>(() => (relation === null ? readPending() : null));
     const [draft, setDraft] = useState<RelationDraft>(() => (relation !== null ? draftFromRelation(relation) : pending?.draft ?? emptyRelationDraft()));
     const [errors, setErrors] = useState<FieldErrors>({});
@@ -121,6 +126,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             }
             setPending(null);
             setCurrent(result.relation);
+            setBaseVersion(result.relation.version);
             setNotice(t(result.outcome === 'replayed' ? 'relations_saved_before' : 'relations_created', { name: result.relation.name }));
             setDraft(draftFromRelation(result.relation));
             onSaved(result.relation, true);
@@ -143,7 +149,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const submit = async (acknowledgeSimilarNames = false) => {
         if (inFlight.current) return;
         if (pending !== null) { await send(pending); return; }
-        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: current.version });
+        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: baseVersion ?? current.version });
         if (!built.ok) {
             const grouped = groupRelationErrors(built.errors);
             setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
@@ -164,6 +170,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
         try {
             const saved = await updateRelation(current.id, built.value);
             setCurrent(saved);
+            setBaseVersion(saved.version);
+            setStale(false);
             setNotice(t('relations_saved', { name: saved.name }));
             setDraft(draftFromRelation(saved));
             onSaved(saved, false);
@@ -184,6 +192,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             const saved = await addRelationRole(current.id, role);
             setCurrent(saved);
             setNotice(t('relations_role_added', { name: saved.name }));
+            // Een rol toevoegen verhoogt de relatieversie niet; een andere versie betekent dus een wijziging door iemand anders.
+            if (baseVersion !== null && saved.version !== baseVersion) setStale(true);
             // Het concept blijft staan: alleen de nieuwe rol en haar standaarden van de server komen erbij. Onopgeslagen wijzigingen
             // (naam, adressen, contacten, …) gaan pas met Opslaan mee, op de versie die de server nu teruggeeft.
             setDraft((draftNow) => role === 'customer'
@@ -280,6 +290,16 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 </div>
             </div>
             {notice && <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">{notice}</p>}
+            {stale && current !== null && (
+                <div role="alert" className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="relation-stale">
+                    <p className="font-medium">{t('relations_stale_title')}</p>
+                    <p className="mt-1 text-xs">{t('relations_stale_hint')}</p>
+                    <button type="button" className={`${secondaryButtonClass} mt-2 border-amber-400`} disabled={submitting}
+                        onClick={() => { setDraft(draftFromRelation(current)); setBaseVersion(current.version); setStale(false); setErrors({}); setServerError(null); }}>
+                        {t('relations_stale_reload')}
+                    </button>
+                </div>
+            )}
             {pending !== null && (
                 <div role="alert" className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                     <p className="font-medium">{t('relations_pending_title', { name: pending.payload.name })}</p>
