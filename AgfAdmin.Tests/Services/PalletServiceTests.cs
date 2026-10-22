@@ -105,6 +105,91 @@ public class PalletServiceTests : IDisposable
         Reason = "Counted on arrival"
     };
 
+    // ---- GGN op de inhoudsregel: zoals bij ontvangst gekozen, historisch, los van latere artikelwijzigingen ----
+
+    [Fact]
+    public async Task Content_Line_Stores_The_Ggn_As_Given_And_A_Replay_Needs_The_Same_Ggn()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var requestId = Guid.NewGuid();
+        var request = ContentRequest(seed.WarehouseLine, requestId);
+        request.Ggn = " 0049 929 123456 ";
+
+        var created = await AddContentAsync(palletId, request);
+        Assert.Equal(ServiceResultStatus.Created, created.Status);
+        Assert.Equal("0049929123456", created.Value.Ggn);
+
+        var replay = await AddContentAsync(palletId, request);
+        Assert.Equal(ServiceResultStatus.Ok, replay.Status);
+        Assert.Equal(created.Value.Id, replay.Value.Id);
+
+        var changed = ContentRequest(seed.WarehouseLine, requestId);
+        changed.Ggn = "0049929123457";
+        Assert.Equal(ServiceResultStatus.Conflict, (await AddContentAsync(palletId, changed)).Status);
+
+        var cleared = ContentRequest(seed.WarehouseLine);
+        cleared.Ggn = "   ";
+        var withoutGgn = await AddContentAsync(palletId, cleared);
+        Assert.Equal(ServiceResultStatus.Created, withoutGgn.Status);
+        Assert.Null(withoutGgn.Value.Ggn);
+
+        await using var db = _factory.CreateContext();
+        Assert.Equal(new string[] { "0049929123456", null }, await db.PalletContentLines.OrderBy(c => c.Id).Select(c => c.Ggn).ToListAsync());
+        var audit = await db.PalletAuditEvents.Where(e => e.EventType == PalletService.ContentLineAddedEvent).OrderBy(e => e.Id).FirstAsync();
+        Assert.Contains("0049929123456", audit.NewValue);
+    }
+
+    [Theory]
+    [InlineData("123")]
+    [InlineData("00499291234567")]
+    [InlineData("0049929A23456")]
+    public async Task Invalid_Ggn_On_A_Content_Line_Is_Rejected_And_Nothing_Is_Stored(string ggn)
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var request = ContentRequest(seed.WarehouseLine);
+        request.Ggn = ggn;
+        AssertValidation(await AddContentAsync(palletId, request), "ggn");
+        await using var db = _factory.CreateContext();
+        Assert.Equal(0, await db.PalletContentLines.CountAsync());
+    }
+
+    [Fact]
+    public async Task Article_Default_Ggn_Is_Only_A_Proposal_And_Later_Changes_Never_Touch_Existing_Content_Lines()
+    {
+        var seed = await SeedAsync();
+        int variantId;
+        await using (var db = _factory.CreateContext())
+        {
+            var variant = await db.ProductVariants.SingleAsync();
+            variant.DefaultGgn = "4049929000001";
+            await db.SaveChangesAsync();
+            variantId = variant.Id;
+        }
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
+        var adjusted = ContentRequest(seed.WarehouseLine);
+        adjusted.Ggn = "4049929000002";               // de gebruiker heeft het voorstel aangepast
+        var cleared = ContentRequest(seed.WarehouseLine);
+        cleared.Ggn = null;                            // of bewust leeggemaakt
+        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, adjusted)).Status);
+        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, cleared)).Status);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var updated = await new ArticleService(db).UpdateAsync(variantId, new SaveArticleDto
+            {
+                ProductName = "Avocado", VariantName = "Hass 6", Origin = "Peru", Packaging = "4kg Box", DefaultGgn = "4049929000003"
+            });
+            Assert.Equal(ServiceResultStatus.Ok, updated.Status);
+            Assert.Equal("4049929000003", updated.Value.DefaultGgn);
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(new[] { "4049929000002", null }, await verify.PalletContentLines.OrderBy(c => c.Id).Select(c => c.Ggn).ToListAsync());
+        Assert.Equal("4049929000003", (await verify.ProductVariants.SingleAsync()).DefaultGgn);
+    }
+
     private async Task<ServiceResult<PalletDto>> CreatePalletAsync(CreatePalletDto request)
     {
         await using var db = _factory.CreateContext();

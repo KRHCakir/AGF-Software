@@ -25,6 +25,8 @@ export interface PalletDetailLine {
     // Weighed (gewogen) of Calculated (quantity × netKgPerPackage, etiket).
     weightMethod: WeightMethod;
     netKgPerPackage: number | null;
+    // GGN zoals bij ontvangst vastgelegd (null = niet vastgelegd); zoals opgegeven, certificeringsstatus niet gecontroleerd.
+    ggn: string | null;
     dispatchedQuantity: number;
     dispatchedNetWeightKg: number;
     onHandQuantity: number;
@@ -98,6 +100,7 @@ export function isPalletDetailLine(value: unknown): value is PalletDetailLine {
         && isNumber(value.netWeightKg)
         && isWeightMethod(value.weightMethod)
         && isNullableNumber(value.netKgPerPackage)
+        && isNullableString(value.ggn)
         && isNumber(value.dispatchedQuantity)
         && isNumber(value.dispatchedNetWeightKg)
         && isNumber(value.onHandQuantity)

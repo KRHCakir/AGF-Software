@@ -25,8 +25,20 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Reference() => Ok(await _service.ReferenceAsync(HttpContext?.RequestAborted ?? default));
 
         // Lokale referentielijst (herkomst en versie in het antwoord); nooit een volledige catalogus, nooit een automatische keuze.
+        // Het antwoord bevat uitsluitend codes van het gekozen stelsel (HS 6, CN 8, TARIC 10); zonder stelsel geldt CN/GN.
         [HttpGet("goods-codes")]
-        public IActionResult GoodsCodes([FromQuery] string query) => Ok(_goodsCodes.Result(query));
+        public IActionResult GoodsCodes([FromQuery] string query, [FromQuery] string system)
+        {
+            var chosen = string.IsNullOrWhiteSpace(system) ? ArticleRules.SystemCn : system.Trim().ToUpperInvariant();
+            if (!ArticleRules.IsGoodsCodeSystem(chosen))
+            {
+                return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+                {
+                    ["system"] = new[] { $"Code system must be one of: {string.Join(", ", ArticleRules.GoodsCodeSystems)}." }
+                }));
+            }
+            return Ok(_goodsCodes.Result(query, chosen));
+        }
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));

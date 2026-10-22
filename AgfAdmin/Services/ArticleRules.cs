@@ -40,6 +40,16 @@ namespace AgfAdmin.Services
         public static bool IsGoodsCodeFor(string system, string normalized) =>
             normalized != null && normalized.Length == GoodsCodeLength(system) && normalized.All(char.IsDigit);
 
+        // GLOBALG.A.P.-nummer (GGN): 13 cijfers, als tekst bewaard (voorloopnullen blijven). Los van HS/GN/TARIC. Alleen de
+        // schrijfwijze wordt gecontroleerd; een ingevuld nummer bewijst geen geldige certificering ("zoals opgegeven").
+        public const int GgnLength = 13;
+
+        // Alleen spaties als scheidingsteken; alle andere tekens blijven staan zodat de validatie ze weigert.
+        public static string NormalizeGgn(string raw) =>
+            string.IsNullOrWhiteSpace(raw) ? null : new string(raw.Trim().Where(c => c != ' ').ToArray());
+
+        public static bool IsGgn(string normalized) => normalized != null && normalized.Length == GgnLength && IsDigitsOnly(normalized);
+
         // Handelsklasse volgens de EU-handelsnormen voor groenten en fruit (Extra, I, II) als suggestie; vrije tekst blijft
         // mogelijk. "Industrie" is een handelsbestemming, geen klasse, en staat daarom niet in de lijst.
         public static readonly IReadOnlyList<string> TradeClassSuggestions = new[] { "Extra", "I", "II" };

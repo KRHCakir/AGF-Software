@@ -42,6 +42,8 @@ export interface SupplyCommitmentLine {
     palletCount: number | null;
     packagesPerPallet: number | null;
     defaultPackagesPerPallet: number | null;
+    // Standaard-GGN van het artikel: voorstel voor de inhoudsregel bij ontvangst; per regel aanpasbaar of leeg te maken.
+    defaultGgn: string | null;
 }
 
 export interface SupplyCommitment {
@@ -81,7 +83,8 @@ function isLine(value: unknown): value is SupplyCommitmentLine {
         && isNullableNumber(value.defaultNetKgPerPackage)
         && isNullableNumber(value.palletCount)
         && isNullableNumber(value.packagesPerPallet)
-        && isNullableNumber(value.defaultPackagesPerPallet);
+        && isNullableNumber(value.defaultPackagesPerPallet)
+        && isNullableString(value.defaultGgn);
 }
 
 export function isSupplyCommitment(value: unknown): value is SupplyCommitment {

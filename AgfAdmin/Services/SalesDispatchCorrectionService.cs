@@ -152,6 +152,8 @@ namespace AgfAdmin.Services
                     // Zelfde gewichtsmethode als de oorspronkelijke inhoud: een berekend gewicht blijft berekend (zelfde kg per verpakking).
                     WeightMethod = original.WeightMethod,
                     NetKgPerPackage = original.NetKgPerPackage,
+                    // Zelfde partij, dus dezelfde GGN als de oorspronkelijke inhoud (nooit opnieuw uit het artikel afgeleid).
+                    Ggn = original.Ggn,
                     QualityStatus = PalletRules.QualityQuarantine,
                     QualityReason = $"Restored by dispatch correction of dispatch {dispatch.Id}",
                     OriginCorrectionLine = correctionLine,

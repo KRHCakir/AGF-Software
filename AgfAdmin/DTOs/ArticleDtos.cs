@@ -24,6 +24,8 @@ namespace AgfAdmin.DTOs
         public string GoodsCode { get; set; }
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
+        // Standaard-GGN (GLOBALG.A.P.-nummer, 13 cijfers als tekst): invoerhulp bij ontvangst, zoals opgegeven; certificeringsstatus niet gecontroleerd.
+        public string DefaultGgn { get; set; }
         public decimal DefaultPrice { get; set; }
     }
 
@@ -47,6 +49,7 @@ namespace AgfAdmin.DTOs
         public string GoodsCode { get; set; }
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
+        public string DefaultGgn { get; set; }
     }
 
     // Keuzelijsten en bestaande productsoorten voor het formulier.
@@ -63,6 +66,8 @@ namespace AgfAdmin.DTOs
     // volledig en de gebruiker kiest en bevestigt zelf.
     public sealed class GoodsCodeSearchDto
     {
+        // Het gezochte codestelsel (HS, CN of TARIC); Matches en TotalEntries gelden uitsluitend voor dit stelsel.
+        public string System { get; set; }
         public GoodsCodeSourceDto Source { get; set; }
         public bool Complete { get; set; }
         public int TotalEntries { get; set; }
@@ -88,5 +93,7 @@ namespace AgfAdmin.DTOs
         public string HsCode { get; set; }
         public string DescriptionNl { get; set; }
         public string DescriptionEn { get; set; }
+        // Alleen bij HS: de GN-codes uit de lijst die tot deze post zijn samengevoegd (leeg als de post geen GN-codes in de lijst heeft).
+        public List<string> MergedCodes { get; set; }
     }
 }

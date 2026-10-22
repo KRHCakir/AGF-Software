@@ -38,7 +38,7 @@ const orderWith = (version: number, reservations: StockReservation[]): SalesOrde
 };
 
 const dispatchResponse = { id: 9, requestId: 'd-lost', salesOrderId: 4, reference: 'VRB-9', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', delivery: null, deliveryHistory: [], correction: null,
-    lines: [{ id: 1, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 1 }] };
+    lines: [{ id: 1, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', ggn: null, productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 1 }] };
 
 const frozen: PendingCommand = {
     kind: 'dispatch', key: dispatchKey(4), orderId: 4, requestId: 'd-lost', attempts: 1, lastError: 'network down', frozenAt: '2026-10-19T12:59:00.000Z',

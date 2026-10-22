@@ -32,6 +32,8 @@ export interface Article {
     goodsCode: string | null;
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
+    // Standaard-GGN (13 cijfers als tekst); voorstel bij ontvangst. Zoals opgegeven; certificeringsstatus niet gecontroleerd.
+    defaultGgn: string | null;
     defaultPrice: number;
 }
 
@@ -53,6 +55,7 @@ export interface SaveArticleRequest {
     goodsCode: string | null;
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
+    defaultGgn: string | null;
 }
 
 export interface ArticleReference {
@@ -80,9 +83,13 @@ export interface GoodsCodeMatch {
     hsCode: string | null;
     descriptionNl: string | null;
     descriptionEn: string | null;
+    // Alleen bij HS: de GN-codes uit de lijst die tot deze post zijn samengevoegd.
+    mergedCodes: string[] | null;
 }
 
 export interface GoodsCodeSearch {
+    // Het gezochte stelsel; matches en totalEntries gelden alleen voor dit stelsel.
+    system: string;
     source: GoodsCodeSource;
     complete: boolean;
     totalEntries: number;
@@ -98,7 +105,7 @@ export function isArticle(value: unknown): value is Article {
         && isNullableString(value.season) && isNullableString(value.notes) && isWeightMethod(value.weightMethod)
         && isNullableNumber(value.defaultNetKgPerPackage) && isNullableNumber(value.defaultGrossKgPerPackage) && isNullableNumber(value.defaultPackagesPerPallet)
         && isNullableString(value.goodsCode) && (value.goodsCodeSystem === null || isGoodsCodeSystem(value.goodsCodeSystem))
-        && isNullableString(value.tradeClass) && isNumber(value.defaultPrice);
+        && isNullableString(value.tradeClass) && isNullableString(value.defaultGgn) && isNumber(value.defaultPrice);
 }
 
 export function isArticleList(value: unknown): value is Article[] {
@@ -116,9 +123,10 @@ function isGoodsCodeSource(value: unknown): value is GoodsCodeSource {
 }
 
 function isGoodsCodeMatch(value: unknown): value is GoodsCodeMatch {
-    return isObject(value) && isString(value.code) && isString(value.system) && isNullableString(value.hsCode) && isNullableString(value.descriptionNl) && isNullableString(value.descriptionEn);
+    return isObject(value) && isString(value.code) && isString(value.system) && isNullableString(value.hsCode) && isNullableString(value.descriptionNl) && isNullableString(value.descriptionEn)
+        && (value.mergedCodes === null || isArrayOf(value.mergedCodes, isString));
 }
 
 export function isGoodsCodeSearch(value: unknown): value is GoodsCodeSearch {
-    return isObject(value) && isGoodsCodeSource(value.source) && typeof value.complete === 'boolean' && isNumber(value.totalEntries) && isArrayOf(value.matches, isGoodsCodeMatch);
+    return isObject(value) && isString(value.system) && isGoodsCodeSource(value.source) && typeof value.complete === 'boolean' && isNumber(value.totalEntries) && isArrayOf(value.matches, isGoodsCodeMatch);
 }

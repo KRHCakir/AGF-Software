@@ -1017,6 +1017,10 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("numeric(18,3)")
                         .HasDefaultValue(0m);
 
+                    b.Property<string>("Ggn")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
                     b.Property<string>("LotNumber")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1087,6 +1091,8 @@ namespace AgfAdmin.Migrations
                         {
                             t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds", "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) >= 0 AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) <= CAST(\"NetWeightKg\" AS NUMERIC)");
 
+                            t.HasCheckConstraint("CK_PalletContentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
+
                             t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
 
                             t.HasCheckConstraint("CK_PalletContentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
@@ -1137,6 +1143,10 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Brand")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DefaultGgn")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
 
                     b.Property<decimal?>("DefaultGrossKgPerPackage")
                         .HasPrecision(18, 3)
@@ -1206,6 +1216,8 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("ProductVariants", t =>
                         {
+                            t.HasCheckConstraint("CK_ProductVariants_DefaultGgn_Length", "\"DefaultGgn\" IS NULL OR length(\"DefaultGgn\") = 13");
+
                             t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");

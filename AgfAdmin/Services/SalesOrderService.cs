@@ -535,7 +535,7 @@ namespace AgfAdmin.Services
                     && c.SupplyCommitmentLine.SupplyCommitment.Route == SupplyRules.RouteWarehouse)
                 .Select(c => new
                 {
-                    c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Unit,
+                    c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Ggn, c.Unit,
                     c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
                 })
                 .ToListAsync(cancellationToken);
@@ -554,6 +554,7 @@ namespace AgfAdmin.Services
                         PalletReference = c.PalletReference,
                         WarehouseLocation = c.WarehouseLocation,
                         LotNumber = c.LotNumber,
+                        Ggn = c.Ggn,
                         Unit = c.Unit,
                         Quantity = c.Quantity,
                         NetWeightKg = c.NetWeightKg,

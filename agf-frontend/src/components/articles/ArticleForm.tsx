@@ -25,7 +25,7 @@ import GoodsCodeLookup from './GoodsCodeLookup';
 const codeKey = (code: string) => `articles_error_${code}`;
 
 function hasTradeValues(draft: ArticleDraft): boolean {
-    return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.tradeClass !== '' || draft.season !== '' || draft.notes !== '';
+    return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.tradeClass !== '' || draft.season !== '' || draft.notes !== '' || draft.defaultGgn !== '';
 }
 
 export default function ArticleForm({ article, reference, onSaved, onClose }: {
@@ -63,7 +63,7 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
         if (!built.ok) {
             const grouped = groupArticleErrors(built.errors);
             setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
-            if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'tradeClass', 'season', 'notes'].includes(field))) setTradeOpen(true);
+            if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'tradeClass', 'season', 'notes', 'defaultGgn'].includes(field))) setTradeOpen(true);
             const first = Object.keys(grouped)[0];
             setTimeout(() => document.getElementById(`${first}-input`)?.focus(), 0);
             return;
@@ -80,7 +80,7 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
             const apiError = toApiError(caught);
             setServerError(apiError);
             setErrors(apiError.fieldErrors);
-            if (Object.keys(apiError.fieldErrors).some((field) => ['goodsCode', 'goodsCodeSystem', 'tradeClass'].includes(field))) setTradeOpen(true);
+            if (Object.keys(apiError.fieldErrors).some((field) => ['goodsCode', 'goodsCodeSystem', 'tradeClass', 'defaultGgn'].includes(field))) setTradeOpen(true);
         } finally {
             inFlight.current = false;
             setSubmitting(false);
@@ -100,10 +100,16 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
         return () => document.removeEventListener('keydown', listener, true);
     }, []);
 
+    // De referentielijst zoekt binnen het gekozen stelsel en levert alleen codes van dat stelsel; overnemen verandert het stelsel dus nooit.
     const pickGoodsCode = (code: string, system: GoodsCodeSystem) => {
-        update({ goodsCode: formatGoodsCode(code), goodsCodeSystem: system });
+        if (system !== draft.goodsCodeSystem) return;
+        update({ goodsCode: formatGoodsCode(code) });
         setLookupOpen(false);
         setNotice(t('articles_goods_picked', { code: formatGoodsCode(code), system }));
+        setTimeout(() => document.getElementById('goodsCode-input')?.focus(), 0);
+    };
+    const enterGoodsCodeManually = () => {
+        setLookupOpen(false);
         setTimeout(() => document.getElementById('goodsCode-input')?.focus(), 0);
     };
 
@@ -216,7 +222,19 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
                             <FieldError id="tradeClass" messages={e('tradeClass')} />
                         </div>
                         {textField('season', 'articles_field_season')}
-                        {lookupOpen && <div className="col-span-2 md:col-span-4"><GoodsCodeLookup onPick={pickGoodsCode} disabled={submitting} /></div>}
+                        {lookupOpen && (
+                            <div className="col-span-2 md:col-span-4">
+                                <GoodsCodeLookup system={draft.goodsCodeSystem} onSystemChange={(system) => update({ goodsCodeSystem: system })} onPick={pickGoodsCode} onManual={enterGoodsCodeManually} disabled={submitting} />
+                            </div>
+                        )}
+                        {/* GGN staat los van HS/GN/TARIC: alleen het nummer zoals opgegeven, geen certificeringsstatus, geen bestand. */}
+                        <div className="col-span-2">
+                            <label htmlFor="defaultGgn-input" className="text-xs font-medium text-gray-700">{t('articles_field_ggn')}</label>
+                            <input {...fieldProps('defaultGgn', e('defaultGgn'))} inputMode="numeric" value={draft.defaultGgn} maxLength={20} disabled={submitting}
+                                onChange={(event) => update({ defaultGgn: event.target.value })} className={`${inputClass} font-mono`} />
+                            <span className="block text-xs text-gray-500">{t('articles_hint_ggn')}</span>
+                            <FieldError id="defaultGgn" messages={e('defaultGgn')} />
+                        </div>
                         <div className="col-span-2 md:col-span-4">
                             <label htmlFor="notes-input" className="text-xs font-medium text-gray-700">{t('articles_field_notes')}</label>
                             <textarea {...fieldProps('notes', e('notes'))} rows={2} value={draft.notes} maxLength={500} disabled={submitting} onChange={(event) => update({ notes: event.target.value })} className={inputClass} />
@@ -236,6 +254,7 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
                     <li>{t('articles_used_by_purchase')}</li>
                     <li>{t('articles_used_by_sales')}</li>
                     <li>{t('articles_used_by_supply')}</li>
+                    <li>{t('articles_used_by_receipt')}</li>
                     <li>{t('articles_used_by_none')}</li>
                 </ul>
             </details>

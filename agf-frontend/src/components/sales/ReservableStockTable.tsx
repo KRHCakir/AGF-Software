@@ -7,6 +7,7 @@ import { toApiError } from '../../services/apiClient';
 import { getReservableStock } from '../../services/salesOrderService';
 import { ReservableStockLine, SalesOrderLine } from '../../types/salesOrder';
 import QualityBadge from '../availability/QualityBadge';
+import GgnBadge from '../shared/GgnBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { WeightBadge } from '../shared/WeightBadge';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
@@ -75,7 +76,7 @@ export default function ReservableStockTable({ orderId, line, token, selectedId,
                         return (
                             <tr key={stock.palletContentLineId} className={selected ? 'bg-blue-50' : undefined} aria-selected={selected}>
                                 <td className={`${td} font-mono`}>{stock.palletReference}</td>
-                                <td className={td}>{stock.lotNumber}</td>
+                                <td className={td}>{stock.lotNumber}{stock.ggn && <span className="mt-0.5 block"><GgnBadge ggn={stock.ggn} /></span>}</td>
                                 <td className={td}>{line.productName} · {line.productVariantName}</td>
                                 <td className={`${td} font-mono text-xs`}>{stock.warehouseLocation ?? t('supply_no_bin')}</td>
                                 <td className={`${td} text-right font-semibold`}>

@@ -142,6 +142,8 @@ export interface ContentLineAvailability {
     onHandNetWeightKg: number;
     weightMethod: WeightMethod;
     netKgPerPackage: number | null;
+    // GGN van de partij zoals bij ontvangst vastgelegd (null = niet vastgelegd).
+    ggn: string | null;
     // Voorraad én kg zijn 0; zegt niets over de fysieke pallet.
     depleted: boolean;
     // Receipt (fysieke ontvangst) of DispatchCorrection (teruggeboekt; telt niet als registratie tegen de bron).
@@ -301,6 +303,7 @@ function isContentLine(value: unknown): value is ContentLineAvailability {
     return isObject(value)
         && isWeightMethod(value.weightMethod)
         && (value.netKgPerPackage === null || isNumber(value.netKgPerPackage))
+        && isNullableString(value.ggn)
         && isNumber(value.palletContentLineId)
         && isNumber(value.palletId)
         && typeof value.palletReference === 'string'

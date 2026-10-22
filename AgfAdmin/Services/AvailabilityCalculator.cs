@@ -48,7 +48,9 @@ namespace AgfAdmin.Services
         bool FromCorrection = false,
         // Weighed of Calculated; bij Calculated is NetWeightKg = Quantity × NetKgPerPackage.
         string WeightMethod = WeightRules.Weighed,
-        decimal? NetKgPerPackage = null)
+        decimal? NetKgPerPackage = null,
+        // GGN van de partij zoals bij ontvangst vastgelegd (null = niet vastgelegd).
+        string Ggn = null)
     {
         public string Origin => FromCorrection ? "DispatchCorrection" : "Receipt";
         public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity);
@@ -254,6 +256,7 @@ namespace AgfAdmin.Services
                     OnHandNetWeightKg = c.Fact.OnHandNetWeightKg,
                     WeightMethod = c.Fact.WeightMethod,
                     NetKgPerPackage = c.Fact.NetKgPerPackage,
+                    Ggn = c.Fact.Ggn,
                     Depleted = c.Fact.Depleted,
                     Origin = c.Fact.Origin,
                     QualityStatus = c.Fact.QualityStatus,

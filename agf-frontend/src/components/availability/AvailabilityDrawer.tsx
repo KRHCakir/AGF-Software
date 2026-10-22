@@ -14,6 +14,7 @@ import {
 import { getAvailabilityVariant, toAvailabilityError } from '../../services/availabilityService';
 import { AvailabilityDrillDown, ContentLineAvailability, PackageUnit, SupplyRoute } from '../../types/availability';
 import QualityBadge from './QualityBadge';
+import GgnBadge from '../shared/GgnBadge';
 import { UnitBadge } from './QuantityCell';
 import { WeightBadge } from '../shared/WeightBadge';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from './StateViews';
@@ -82,6 +83,7 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
             </td>
             <td className={td}>
                 {line.lotNumber}
+                {line.ggn && <span className="ml-1"><GgnBadge ggn={line.ggn} /></span>}
                 {line.origin === 'DispatchCorrection' && (
                     <span className="ml-1 inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{t('sales_origin_correction')}</span>
                 )}

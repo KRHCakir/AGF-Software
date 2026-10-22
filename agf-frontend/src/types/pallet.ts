@@ -29,6 +29,8 @@ export interface AddPalletContentLineRequest {
     weightMethod: WeightMethod;
     netKgPerPackage: number | null;
     netWeightKg: number;
+    // GGN van deze partij (13 cijfers als tekst) zoals op de regel gekozen: voorstel uit het artikel, aangepast of leeggemaakt (null).
+    ggn: string | null;
     actorReference: string | null;
     reason: string | null;
 }
@@ -52,6 +54,7 @@ export interface PalletContentLineSummary {
     netWeightKg: number;
     weightMethod: WeightMethod;
     netKgPerPackage: number | null;
+    ggn: string | null;
     qualityStatus: string;
 }
 
@@ -76,5 +79,6 @@ export function isPalletContentLineSummary(value: unknown): value is PalletConte
         && isNumber(value.netWeightKg)
         && isWeightMethod(value.weightMethod)
         && (value.netKgPerPackage === null || isNumber(value.netKgPerPackage))
+        && isNullableString(value.ggn)
         && isString(value.qualityStatus);
 }

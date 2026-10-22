@@ -169,6 +169,8 @@ namespace AgfAdmin.DTOs
         // Weighed of Calculated (aantal × NetKgPerPackage, etiket; nooit gewogen).
         public string WeightMethod { get; set; }
         public decimal? NetKgPerPackage { get; set; }
+        // GGN zoals bij ontvangst vastgelegd (null = niet vastgelegd); zoals opgegeven, certificeringsstatus niet gecontroleerd.
+        public string Ggn { get; set; }
         // Afgeleid: voorraad én kg zijn allebei 0. Zegt niets over de fysieke pallet.
         public bool Depleted { get; set; }
         // Receipt of DispatchCorrection; correctie-inhoud telt niet als registratie tegen de bronregel.

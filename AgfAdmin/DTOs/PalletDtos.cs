@@ -32,6 +32,9 @@ namespace AgfAdmin.DTOs
         public string WeightMethod { get; set; }
         public decimal? NetKgPerPackage { get; set; }
         public decimal? NetWeightKg { get; set; }
+        // GGN van de partij (optioneel, 13 cijfers als tekst): het voorstel uit het artikel is al door de client overgenomen of
+        // bewust aangepast/leeggemaakt; de server bewaart wat hier staat.
+        public string Ggn { get; set; }
         public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
@@ -80,6 +83,8 @@ namespace AgfAdmin.DTOs
         // Weighed of Calculated; bij Calculated is NetWeightKg = Quantity × NetKgPerPackage (etiket), nooit gewogen.
         public string WeightMethod { get; set; }
         public decimal? NetKgPerPackage { get; set; }
+        // GGN zoals bij ontvangst vastgelegd (null = niet vastgelegd); zoals opgegeven, certificeringsstatus niet gecontroleerd.
+        public string Ggn { get; set; }
         // Afgeboekt door verzendingen en de huidige voorraad; uitgeput als voorraad en kg allebei 0 zijn.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }

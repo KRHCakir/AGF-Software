@@ -27,6 +27,11 @@ namespace AgfAdmin.Models
         public string WeightMethod { get; set; } = WeightRules.Weighed;
         public decimal? NetKgPerPackage { get; set; } // alleen bij Calculated, > 0
 
+        // GGN van deze partij zoals bij ontvangst gekozen (voorstel uit het artikel, per regel aangepast of leeggemaakt); 13 cijfers
+        // als tekst, null = niet vastgelegd. Historisch: een latere artikelwijziging verandert dit nooit. Zoals opgegeven;
+        // certificeringsstatus niet gecontroleerd.
+        public string Ggn { get; set; }
+
         // Lopende afboeking door verzendingen (som van Dispatch-mutaties; alleen stijgend, nooit boven de ontvangst).
         // Quantity/NetWeightKg blijven de historische ontvangst; voorraad = ontvangst - afgeboekt.
         public decimal DispatchedQuantity { get; set; }

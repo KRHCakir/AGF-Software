@@ -11,6 +11,7 @@ import { toApiError } from '../../services/apiClient';
 import { listSalesDispatches } from '../../services/salesOrderService';
 import { SalesDispatch } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
+import GgnBadge from '../shared/GgnBadge';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 
@@ -106,6 +107,7 @@ export default function DispatchList({ orderId, token, onDispatches, canCorrect,
                             <li key={line.id} className="flex flex-wrap items-center gap-2">
                                 <span className="font-mono">{line.palletReference ?? t('availability_unknown')}</span>
                                 <span>{line.lotNumber ?? t('availability_unknown')}</span>
+                                <GgnBadge ggn={line.ggn} />
                                 <span className="text-gray-700">{line.productName} · {line.productVariantName}</span>
                                 <span className="ml-auto font-medium">{formatQuantity(line.quantity, locale)}</span>
                                 <UnitBadge unit={line.unit} />

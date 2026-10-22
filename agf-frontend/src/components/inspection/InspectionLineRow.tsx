@@ -18,6 +18,7 @@ import { InspectionPallet, changeQualityStatus, historyFor } from '../../service
 import { QualityStatus } from '../../types/availability';
 import { ChangeQualityStatusRequest, PalletDetailLine } from '../../types/inspection';
 import QualityBadge from '../availability/QualityBadge';
+import GgnBadge from '../shared/GgnBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import FieldError, { inputClass } from '../supply/FieldError';
 import { outcomeUnknown } from '../supply/messages';
@@ -128,6 +129,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
             <td className="px-3 py-2">
                 <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                 <span className="block text-xs text-gray-600">{t('supply_lot')} {line.lotNumber}</span>
+                {line.ggn && <span className="mt-0.5 block"><GgnBadge ggn={line.ggn} /></span>}
                 {line.origin === 'DispatchCorrection' && (
                     <span className="mt-1 inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{t('sales_origin_correction')}</span>
                 )}
