@@ -57,18 +57,35 @@ namespace AgfAdmin.Services
                 }
             }
 
+            // Sinds de relatiewerkplek: de klant is een rol van een nieuwe relatie (geen samenvoeging met bestaande relaties; gelijkende
+            // namen zijn hierboven al gemeld). De platte velden gaan naar de relatie en worden teruggespiegeld op de klantrol.
+            var relation = new Relation { Name = command.Name, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
             var customer = new Customer
             {
                 RequestId = command.RequestId,
-                Name = command.Name,
-                ContactPerson = command.ContactPerson,
-                Email = command.Email,
-                Phone = command.Phone,
-                ShippingAddress = command.ShippingAddress,
+                Relation = relation,
                 PaymentTermsDays = DefaultPaymentTermsDays,
                 CreatedAt = DateTime.UtcNow,
             };
-            _db.Customers.Add(customer);
+            relation.Customer = customer;
+            if (command.ShippingAddress != null)
+            {
+                relation.Addresses.Add(new RelationAddress { Relation = relation, Purpose = AddressPurpose.Delivery, Line1 = command.ShippingAddress, IsDefault = true });
+            }
+            if (command.ContactPerson != null)
+            {
+                var contact = new RelationContact { Relation = relation, Name = command.ContactPerson, IsPrimary = true };
+                if (command.Email != null) contact.Channels.Add(new RelationContactChannel { RelationContact = contact, Kind = ContactChannelKind.Email, Value = command.Email });
+                if (command.Phone != null) contact.Channels.Add(new RelationContactChannel { RelationContact = contact, Kind = ContactChannelKind.Phone, Value = command.Phone, SortOrder = 1 });
+                relation.Contacts.Add(contact);
+            }
+            else
+            {
+                relation.Email = command.Email;
+                relation.Phone = command.Phone;
+            }
+            RelationService.SyncMirror(relation);
+            _db.Relations.Add(relation);
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);

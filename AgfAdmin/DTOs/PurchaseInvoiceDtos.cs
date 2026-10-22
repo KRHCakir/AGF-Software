@@ -96,6 +96,9 @@ namespace AgfAdmin.DTOs
         public string VatNumber { get; set; }
         public int PaymentTermsDays { get; set; }
         public string DefaultCurrency { get; set; }
+        // Zoekcode en actief-vlag van de relatie: zoeken op code; inactieve leveranciers staan niet in de keuzelijst voor nieuwe facturen.
+        public string SearchCode { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
     // Bedrijfsinstellingen voor de invoer: welke optionele velden in gebruik zijn en welke voorstellen gelden.

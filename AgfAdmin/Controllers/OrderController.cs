@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using AgfAdmin.Data;
 using AgfAdmin.Models;
 using AgfAdmin.DTOs;
+using AgfAdmin.Services;
 using System.Threading.Tasks;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -15,9 +16,11 @@ namespace AgfAdmin.Controllers
     public class OrderController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public OrderController(AppDbContext context)
+        private readonly RelationService _relations;
+        public OrderController(AppDbContext context, RelationService relations)
         {
             _context = context;
+            _relations = relations;
         }
 
         [HttpPost]
@@ -35,15 +38,8 @@ namespace AgfAdmin.Controllers
             // 2. Geen ID? Dan is het een NIEUWE klant! Auto-aanmaken:
             else if (!string.IsNullOrWhiteSpace(dto.CustomerName))
             {
-                var newCustomer = new Customer 
-                { 
-                    Name = dto.CustomerName.Trim(),
-                    PaymentTermsDays = 14, // Standaard betaaltermijn
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.Customers.Add(newCustomer);
-                await _context.SaveChangesAsync(); // Sla direct op om een ID te genereren
-                
+                // Sinds de relatiewerkplek: ook deze snelle aanmaak loopt via de relatie (geen samenvoeging op naam).
+                var newCustomer = await _relations.CreateLegacyCustomerAsync(new CreateCustomerDto { Name = dto.CustomerName, PaymentTermsDays = 14 }, HttpContext?.RequestAborted ?? default);
                 finalCustomerId = newCustomer.Id; // Pak het kersverse ID
             }
             else

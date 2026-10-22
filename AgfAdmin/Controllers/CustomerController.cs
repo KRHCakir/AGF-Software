@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using AgfAdmin.Data;
 using AgfAdmin.Models;
 using AgfAdmin.DTOs;
+using AgfAdmin.Services;
 using System.Threading.Tasks;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -16,31 +17,21 @@ namespace AgfAdmin.Controllers
     public class CustomerController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public CustomerController(AppDbContext context)
+        private readonly RelationService _relations;
+        public CustomerController(AppDbContext context, RelationService relations)
         {
             _context = context;
+            _relations = relations;
         }
 
+        // Legacy route: de platte velden gaan sinds de relatiewerkplek via RelationService (relatie + klantrol), nooit rechtstreeks.
         [HttpPost]
         public async Task<IActionResult> CreateCustomer([FromBody] CreateCustomerDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
                 return BadRequest("Customer name is required");
 
-            var customer = new Customer
-            {
-                Name = dto.Name.Trim(),
-                VATNumber = dto.VATNumber,
-                BillingAddress = dto.BillingAddress,
-                ShippingAddress = dto.ShippingAddress,
-                ContactPerson = dto.ContactPerson,
-                Email = dto.Email,
-                Phone = dto.Phone,
-                PaymentTermsDays = dto.PaymentTermsDays
-            };
-
-            _context.Customers.Add(customer);
-            await _context.SaveChangesAsync();
+            var customer = await _relations.CreateLegacyCustomerAsync(dto, HttpContext?.RequestAborted ?? default);
 
             return Ok(new CustomerDto
             {
@@ -105,22 +96,14 @@ namespace AgfAdmin.Controllers
             return Ok(customer);
         }
 
+        // Legacy route: wijzigingen gaan naar de relatie (enige bron) en worden teruggespiegeld.
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCustomer(int id, [FromBody] CreateCustomerDto dto)
         {
-            var customer = await _context.Customers.FindAsync(id);
+            if (string.IsNullOrWhiteSpace(dto.Name))
+                return BadRequest("Customer name is required");
+            var customer = await _relations.UpdateLegacyCustomerAsync(id, dto, HttpContext?.RequestAborted ?? default);
             if (customer == null) return NotFound();
-
-            customer.Name = dto.Name.Trim();
-            customer.VATNumber = dto.VATNumber;
-            customer.BillingAddress = dto.BillingAddress;
-            customer.ShippingAddress = dto.ShippingAddress;
-            customer.ContactPerson = dto.ContactPerson;
-            customer.Email = dto.Email;
-            customer.Phone = dto.Phone;
-            customer.PaymentTermsDays = dto.PaymentTermsDays;
-
-            await _context.SaveChangesAsync();
 
             return Ok(new CustomerDto
             {
@@ -144,12 +127,20 @@ namespace AgfAdmin.Controllers
             if (customer == null)
                 return NotFound();
 
-            // Check if customer has orders
-            var hasOrders = await _context.Orders.AnyAsync(o => o.CustomerId == id);
-            if (hasOrders)
-                return BadRequest("Cannot delete customer with existing orders");
+            // Inactiveren in plaats van verwijderen zodra documenten naar de klantrol verwijzen; historie blijft leesbaar.
+            var referenced = await _context.Orders.AnyAsync(o => o.CustomerId == id)
+                || await _context.SalesOrders.AnyAsync(o => o.CustomerId == id)
+                || await _context.SupplyCommitments.AnyAsync(c => c.CustomerId == id)
+                || await _context.Invoices.AnyAsync(i => i.CustomerId == id);
+            if (referenced)
+                return Conflict(new { message = "Cannot delete a customer that documents refer to; mark the relation inactive instead." });
 
+            var relation = await _context.Relations.Include(r => r.Vendor).SingleAsync(r => r.Id == customer.RelationId);
             _context.Customers.Remove(customer);
+            if (relation.Vendor == null)
+            {
+                _context.Relations.Remove(relation); // zonder andere rol blijft er geen onderneming over
+            }
             await _context.SaveChangesAsync();
             return NoContent();
         }

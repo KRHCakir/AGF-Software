@@ -169,9 +169,9 @@ public class DirectTradeShipmentServiceTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            (await db.Customers.FindAsync(_seed.CustomerId))!.Name = "Customer T (hernoemd)";
+            await SalesTestData.RenameRelationAsync(db, (await db.Customers.FindAsync(_seed.CustomerId))!.RelationId, "Customer T (hernoemd)");
             var commitment = await db.SupplyCommitments.Include(c => c.Vendor).SingleAsync(c => c.Id == _seed.DirectTradeCommitmentId);
-            commitment.Vendor.Name = "Supplier B (hernoemd)";
+            await SalesTestData.RenameRelationAsync(db, commitment.Vendor.RelationId, "Supplier B (hernoemd)");
             commitment.Origin = "Chili";
             commitment.Destination = "Duitsland";
             (await db.SupplyCommitmentLines.FindAsync(_seed.DirectTradeSourceLine))!.LotNumber = "LOT-GEWIJZIGD";

@@ -65,11 +65,17 @@ namespace AgfAdmin.Data
         public DbSet<DirectTradeShipmentCorrectionLine> DirectTradeShipmentCorrectionLines { get; set; }
         public DbSet<ShipmentDeliveryConfirmation> ShipmentDeliveryConfirmations { get; set; }
         public DbSet<ShipmentDeliveryRetraction> ShipmentDeliveryRetractions { get; set; }
+        public DbSet<Relation> Relations { get; set; }
+        public DbSet<RelationAddress> RelationAddresses { get; set; }
+        public DbSet<RelationContact> RelationContacts { get; set; }
+        public DbSet<RelationContactChannel> RelationContactChannels { get; set; }
+        public DbSet<VendorGgn> VendorGgns { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
+            EnsureRelations();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
@@ -77,9 +83,37 @@ namespace AgfAdmin.Data
 
         public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
+            EnsureRelations();
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        // Veilige overgang: een nieuwe klant- of leveranciersrol zonder relatie (oudere schrijvers, seeds, tests) krijgt bij het
+        // opslaan een eigen relatie uit zijn platte velden. Zo bestaat er nooit een rol zonder onderneming en wordt niets samengevoegd.
+        // Wijzigingen aan de spiegelkolommen buiten RelationService om weigert de TraceabilityGuard (regel 15).
+        private void EnsureRelations()
+        {
+            foreach (var entry in ChangeTracker.Entries<Customer>().Where(e => e.State == EntityState.Added && e.Entity.Relation == null && e.Entity.RelationId == 0).ToList())
+            {
+                var c = entry.Entity;
+                var relation = new Relation { Name = c.Name?.Trim() ?? "", VatNumber = Services.RelationRules.NormalizeVat(c.VATNumber), CreatedAt = c.CreatedAt, UpdatedAt = c.CreatedAt };
+                Services.RelationService.ApplyLegacyFlatFields(relation, c.BillingAddress, c.ShippingAddress, c.ContactPerson, c.Email, c.Phone);
+                c.Relation = relation;
+                relation.Customer = c;
+                Services.RelationService.SyncMirror(relation);
+                Relations.Add(relation);
+            }
+            foreach (var entry in ChangeTracker.Entries<Vendor>().Where(e => e.State == EntityState.Added && e.Entity.Relation == null && e.Entity.RelationId == 0).ToList())
+            {
+                var v = entry.Entity;
+                var relation = new Relation { Name = v.Name?.Trim() ?? "", VatNumber = Services.RelationRules.NormalizeVat(v.VATNumber), Email = string.IsNullOrWhiteSpace(v.Email) ? null : v.Email.Trim(), CreatedAt = v.CreatedAt, UpdatedAt = v.CreatedAt };
+                Services.RelationService.ApplyLegacyFlatFields(relation, v.BillingAddress, null, null, v.Email, null);
+                v.Relation = relation;
+                relation.Vendor = v;
+                Services.RelationService.SyncMirror(relation);
+                Relations.Add(relation);
+            }
         }
 
         // Elke gewijzigde pallet of inhoudsregel krijgt versie +1. De oorspronkelijke versie blijft het
@@ -114,6 +148,12 @@ namespace AgfAdmin.Data
             foreach (var entry in ChangeTracker.Entries<SupplyCommitmentLine>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<Relation>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(r => r.Version).CurrentValue = entry.Property(r => r.Version).OriginalValue + 1;
+                entry.Entity.UpdatedAt = DateTime.UtcNow;
             }
         }
 
@@ -356,6 +396,87 @@ namespace AgfAdmin.Data
             {
                 // Eén klant per client-requestId; oudere klanten zonder requestId blijven buiten de index.
                 entity.HasIndex(c => c.RequestId).IsUnique().HasFilter("\"RequestId\" IS NOT NULL");
+                // Hooguit één klantrol per relatie; de rol verdwijnt nooit stilzwijgend met de relatie (Restrict).
+                entity.HasIndex(c => c.RelationId).IsUnique();
+                entity.HasOne(c => c.Relation).WithOne(r => r.Customer).HasForeignKey<Customer>(c => c.RelationId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<Vendor>(entity =>
+            {
+                entity.HasIndex(v => v.RelationId).IsUnique();
+                entity.HasOne(v => v.Relation).WithOne(r => r.Vendor).HasForeignKey<Vendor>(v => v.RelationId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Relaties: één wijzigbare bron voor gedeelde bedrijfsgegevens; rollen blijven eigen tabellen met bestaande ID's.
+            modelBuilder.Entity<Relation>(b =>
+            {
+                b.Property(r => r.SearchCode).HasMaxLength(32);
+                b.Property(r => r.SearchCodeKey).HasMaxLength(32);
+                b.HasIndex(r => r.SearchCodeKey).IsUnique().HasFilter("\"SearchCodeKey\" IS NOT NULL");
+                b.HasIndex(r => r.RequestId).IsUnique().HasFilter("\"RequestId\" IS NOT NULL");
+                b.Property(r => r.Name).IsRequired().HasMaxLength(200);
+                b.Property(r => r.TradeName).HasMaxLength(200);
+                b.Property(r => r.PreferredLanguage).HasMaxLength(8);
+                b.Property(r => r.Website).HasMaxLength(200);
+                b.Property(r => r.Email).HasMaxLength(200);
+                b.Property(r => r.Phone).HasMaxLength(40);
+                b.Property(r => r.VatNumber).HasMaxLength(32);
+                b.Property(r => r.VatVerificationStatus).IsRequired().HasMaxLength(16).HasDefaultValue(VatVerification.NotChecked);
+                b.Property(r => r.VatVerifiedNumber).HasMaxLength(32);
+                b.Property(r => r.RegistrationNumber).HasMaxLength(64);
+                b.Property(r => r.RegistrationCountry).HasMaxLength(2);
+                b.Property(r => r.RegistrationType).HasMaxLength(32);
+                b.Property(r => r.LegalForm).HasMaxLength(64);
+                b.Property(r => r.InternalNote).HasMaxLength(1000);
+                b.Property(r => r.Version).IsConcurrencyToken();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_Relations_Name_NotBlank", "length(trim(\"Name\")) > 0");
+                    t.HasCheckConstraint("CK_Relations_VatVerificationStatus_Allowed", "\"VatVerificationStatus\" IN ('NotChecked', 'Valid', 'Invalid', 'Unavailable', 'NotApplicable')");
+                });
+            });
+
+            modelBuilder.Entity<RelationAddress>(b =>
+            {
+                b.Property(a => a.Purpose).IsRequired().HasMaxLength(16);
+                b.Property(a => a.Label).HasMaxLength(100);
+                b.Property(a => a.Line1).HasMaxLength(300);
+                b.Property(a => a.Line2).HasMaxLength(200);
+                b.Property(a => a.PostalCode).HasMaxLength(20);
+                b.Property(a => a.City).HasMaxLength(100);
+                b.Property(a => a.Region).HasMaxLength(100);
+                b.Property(a => a.CountryCode).HasMaxLength(2);
+                b.HasOne(a => a.Relation).WithMany(r => r.Addresses).HasForeignKey(a => a.RelationId).OnDelete(DeleteBehavior.Cascade);
+                b.HasIndex(a => new { a.RelationId, a.Purpose });
+                b.ToTable(t => t.HasCheckConstraint("CK_RelationAddresses_Purpose_Allowed", "\"Purpose\" IN ('Main', 'Billing', 'Delivery')"));
+            });
+
+            modelBuilder.Entity<RelationContact>(b =>
+            {
+                b.Property(c => c.Name).IsRequired().HasMaxLength(100);
+                b.Property(c => c.Department).HasMaxLength(50);
+                b.Property(c => c.JobTitle).HasMaxLength(100);
+                b.Property(c => c.Note).HasMaxLength(500);
+                b.HasOne(c => c.Relation).WithMany(r => r.Contacts).HasForeignKey(c => c.RelationId).OnDelete(DeleteBehavior.Cascade);
+                b.ToTable(t => t.HasCheckConstraint("CK_RelationContacts_Name_NotBlank", "length(trim(\"Name\")) > 0"));
+            });
+
+            modelBuilder.Entity<RelationContactChannel>(b =>
+            {
+                b.Property(c => c.Kind).IsRequired().HasMaxLength(8);
+                b.Property(c => c.Label).HasMaxLength(50);
+                b.Property(c => c.Value).IsRequired().HasMaxLength(200);
+                b.HasOne(c => c.RelationContact).WithMany(c => c.Channels).HasForeignKey(c => c.RelationContactId).OnDelete(DeleteBehavior.Cascade);
+                b.ToTable(t => t.HasCheckConstraint("CK_RelationContactChannels_Kind_Allowed", "\"Kind\" IN ('Phone', 'Email')"));
+            });
+
+            modelBuilder.Entity<VendorGgn>(b =>
+            {
+                b.Property(g => g.Ggn).IsRequired().HasMaxLength(13);
+                b.Property(g => g.ProducerName).HasMaxLength(200);
+                b.HasOne(g => g.Vendor).WithMany(v => v.Ggns).HasForeignKey(g => g.VendorId).OnDelete(DeleteBehavior.Cascade);
+                b.HasIndex(g => new { g.VendorId, g.Ggn }).IsUnique();
+                b.ToTable(t => t.HasCheckConstraint("CK_VendorGgns_Ggn_Length", "length(\"Ggn\") = 13"));
             });
 
             modelBuilder.Entity<SalesOrder>(b =>

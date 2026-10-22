@@ -18,7 +18,7 @@ public class CustomersControllerTests : IDisposable
     private async Task<IActionResult> Call(Func<CustomersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new CustomersController(db, new CustomerService(db)));
+        return await action(new CustomersController(db, new CustomerService(db), new RelationService(db)));
     }
 
     private static CreateOperationalCustomerDto Request(Guid requestId, string name = "DEMO Klant C", bool acknowledge = false) =>
@@ -57,8 +57,8 @@ public class CustomersControllerTests : IDisposable
         Assert.Equal("DEMO Klant C", Assert.Single(similar).Name);
 
         Assert.Equal(201, Assert.IsType<ObjectResult>(await Call(c => c.CreateCustomer(Request(Guid.NewGuid(), name: "demo klant c", acknowledge: true)))).StatusCode);
-        // GET blijft de volledige klantenlijst (entiteiten) op naam geven.
+        // GET blijft de volledige klantenlijst op naam geven (sinds de relatiewerkplek met zoekcode en actief-vlag erbij).
         var list = Assert.IsType<OkObjectResult>(await Call(c => c.GetCustomers()));
-        Assert.Equal(2, Assert.IsAssignableFrom<IEnumerable<Customer>>(list.Value).Count());
+        Assert.Equal(2, Assert.IsAssignableFrom<System.Collections.IEnumerable>(list.Value).Cast<object>().Count());
     }
 }

@@ -180,41 +180,26 @@ public class ArticleServiceTests : IDisposable
         Assert.Equal(stored, (await db.ProductVariants.SingleAsync()).GoodsCode);
     }
 
-    // GGN staat los van HS/GN/TARIC: optioneel, als tekst (voorloopnullen blijven), precies 13 cijfers; leeg = niet vastgelegd.
-    [Theory]
-    [InlineData(null, null)]
-    [InlineData("", null)]
-    [InlineData("   ", null)]
-    [InlineData("4049929123456", "4049929123456")]
-    [InlineData("0000000012345", "0000000012345")]
-    [InlineData(" 4049 929 123456 ", "4049929123456")]
-    public async Task Default_Ggn_Is_Optional_Text_That_Keeps_Its_Leading_Zeros(string input, string stored)
+    // GGN is geen artikelstandaard meer: het veld zit niet in de artikelinvoer, een oude kolomwaarde blijft bewaard en wordt via de
+    // relatiewerkplek gerapporteerd voor handmatige toewijzing aan een leverancier (geen automatische verplaatsing: geen betrouwbare koppeling).
+    [Fact]
+    public async Task Article_Input_Has_No_Ggn_And_A_Legacy_Default_Stays_In_The_Column_Until_Assigned_By_Hand()
     {
+        Assert.DoesNotContain(typeof(ArticleDto).GetProperties(), p => p.Name.Contains("Ggn") || p.Name.Contains("Certif"));
+        Assert.DoesNotContain(typeof(SaveArticleDto).GetProperties(), p => p.Name.Contains("Ggn"));
+        var created = (await CreateAsync(Hass())).Value;
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.ProductVariants.SingleAsync()).DefaultGgn = "0049929123456"; // waarde van vóór de verplaatsing
+            await db.SaveChangesAsync();
+        }
         var request = Hass();
-        request.DefaultGgn = input;
-        var created = await CreateAsync(request);
-        Assert.Equal(ServiceResultStatus.Created, created.Status);
-        Assert.Equal(stored, created.Value.DefaultGgn);
-        await using var db = _factory.CreateContext();
-        Assert.Equal(stored, (await db.ProductVariants.SingleAsync()).DefaultGgn);
-        // Het artikel kent geen certificeringsstatus: alleen het nummer zoals opgegeven.
-        Assert.DoesNotContain(typeof(ArticleDto).GetProperties(), p => p.Name.Contains("Certif") || p.Name.Contains("Ggn") && p.Name != "DefaultGgn");
-    }
-
-    [Theory]
-    [InlineData("404992912345")]    // 12 cijfers
-    [InlineData("40499291234567")]  // 14 cijfers
-    [InlineData("4049929A23456")]   // letter
-    [InlineData("4049929-123456")]  // ander scheidingsteken dan spatie
-    public async Task Invalid_Default_Ggn_Is_Rejected_And_Nothing_Is_Stored(string input)
-    {
-        var request = Hass();
-        request.DefaultGgn = input;
-        var result = await CreateAsync(request);
-        Assert.Equal(ServiceResultStatus.Validation, result.Status);
-        Assert.Equal(new[] { "defaultGgn" }, result.Errors.Keys);
-        Assert.Contains("13 digits", result.Errors["defaultGgn"][0]);
-        Assert.Empty(await ListAsync());
+        request.TradeClass = "II";
+        Assert.Equal(ServiceResultStatus.Ok, (await UpdateAsync(created.Id, request)).Status);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal("0049929123456", (await verify.ProductVariants.SingleAsync()).DefaultGgn);
+        var legacy = Assert.Single((await new RelationService(verify).ReferenceAsync()).LegacyArticleGgns);
+        Assert.Equal((created.Id, "0049929123456"), (legacy.ProductVariantId, legacy.Ggn));
     }
 
     [Fact]

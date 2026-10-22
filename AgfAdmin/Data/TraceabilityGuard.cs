@@ -157,6 +157,7 @@ namespace AgfAdmin.Data
             }
 
             await CheckContentLineGgnAsync(db, async, cancellationToken);
+            await CheckRelationMirrorsAsync(db, async, cancellationToken);
             await CheckSourceLinksAsync(db, async, cancellationToken);
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
             await CheckDirectTradeAllocationsAsync(db, async, cancellationToken);
@@ -168,6 +169,71 @@ namespace AgfAdmin.Data
             await CheckDeliveryConfirmationsAsync(db, async, cancellationToken);
             await CheckCorrectionLedgerAsync(db, async, cancellationToken);
         }
+
+        // ---- Regel 15: de gedeelde kolommen op Customer/Vendor zijn een spiegel van de relatie ----
+        //
+        // Naam, btw-nummer, adressen en contactgegevens hebben één wijzigbare bron (Relation). Een gewijzigde spiegelkolom op een
+        // bestaande rol moet overeenkomen met wat RelationService.SyncMirror uit de (gevolgde of opgeslagen) relatie afleidt; anders
+        // probeert een schrijver de centrale gegevens te omzeilen. Rolspecifieke velden (betaaltermijn, valuta) blijven vrij.
+        private static readonly string[] CustomerMirror = { nameof(Customer.Name), nameof(Customer.VATNumber), nameof(Customer.BillingAddress), nameof(Customer.ShippingAddress), nameof(Customer.ContactPerson), nameof(Customer.Email), nameof(Customer.Phone) };
+        private static readonly string[] VendorMirror = { nameof(Vendor.Name), nameof(Vendor.VATNumber), nameof(Vendor.BillingAddress), nameof(Vendor.Email) };
+
+        private static async Task CheckRelationMirrorsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var customers = db.ChangeTracker.Entries<Customer>().Where(e => e.State == EntityState.Modified && CustomerMirror.Any(p => e.Property(p).IsModified)).ToList();
+            var vendors = db.ChangeTracker.Entries<Vendor>().Where(e => e.State == EntityState.Modified && VendorMirror.Any(p => e.Property(p).IsModified)).ToList();
+            if (customers.Count == 0 && vendors.Count == 0)
+            {
+                return;
+            }
+            foreach (var entry in customers)
+            {
+                var relation = await RelationForMirrorAsync(db, entry.Entity.RelationId, async, cancellationToken);
+                var expected = new Customer();
+                var probe = Shallow(relation);
+                probe.Customer = expected;
+                Services.RelationService.SyncMirror(probe);
+                var c = entry.Entity;
+                if (!Same(c.Name, expected.Name) || !Same(c.VATNumber, expected.VATNumber) || !Same(c.BillingAddress, expected.BillingAddress) || !Same(c.ShippingAddress, expected.ShippingAddress)
+                    || !Same(c.ContactPerson, expected.ContactPerson) || !Same(c.Email, expected.Email) || !Same(c.Phone, expected.Phone))
+                {
+                    throw new TraceabilityViolationException($"Customer {c.Id} mirrors relation {c.RelationId}: name, VAT number, addresses and contact details can only change through the relation.");
+                }
+            }
+            foreach (var entry in vendors)
+            {
+                var relation = await RelationForMirrorAsync(db, entry.Entity.RelationId, async, cancellationToken);
+                var expected = new Vendor();
+                var probe = Shallow(relation);
+                probe.Vendor = expected;
+                Services.RelationService.SyncMirror(probe);
+                var v = entry.Entity;
+                if (!Same(v.Name, expected.Name) || !Same(v.VATNumber, expected.VATNumber) || !Same(v.BillingAddress, expected.BillingAddress) || !Same(v.Email, expected.Email))
+                {
+                    throw new TraceabilityViolationException($"Vendor {v.Id} mirrors relation {v.RelationId}: name, VAT number, address and e-mail can only change through the relation.");
+                }
+            }
+        }
+
+        // De relatie zoals zij in deze save wordt opgeslagen: gevolgd (met haar gevolgde adressen/contacten) of anders uit de database.
+        private static async Task<Relation> RelationForMirrorAsync(AppDbContext db, int relationId, bool async, CancellationToken cancellationToken)
+        {
+            var tracked = db.ChangeTracker.Entries<Relation>().FirstOrDefault(e => e.State is not (EntityState.Deleted or EntityState.Detached) && e.Property(r => r.Id).CurrentValue == relationId)?.Entity;
+            if (tracked != null)
+            {
+                return tracked;
+            }
+            var stored = await FirstOrDefaultAsync(db.Relations.AsNoTracking().Include(r => r.Addresses).Include(r => r.Contacts).ThenInclude(c => c.Channels).Where(r => r.Id == relationId), async, cancellationToken);
+            return stored ?? throw new TraceabilityViolationException($"Relation {relationId} does not exist.");
+        }
+
+        private static Relation Shallow(Relation source) => new()
+        {
+            Id = source.Id, Name = source.Name, VatNumber = source.VatNumber, Email = source.Email, Phone = source.Phone,
+            Addresses = source.Addresses.ToList(), Contacts = source.Contacts.ToList()
+        };
+
+        private static bool Same(string a, string b) => string.Equals(string.IsNullOrWhiteSpace(a) ? null : a, string.IsNullOrWhiteSpace(b) ? null : b, StringComparison.Ordinal);
 
         // ---- Regel 2 (vervolg): de partij-GGN van een bestaande inhoudsregel is historisch ----
         //

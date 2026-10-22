@@ -297,14 +297,27 @@ namespace AgfAdmin.Services
 
         private async Task<string> FindMissingReferenceAsync(SupplyCommitment candidate, CancellationToken cancellationToken)
         {
-            if (!await _db.Vendors.AnyAsync(v => v.Id == candidate.VendorId, cancellationToken))
+            var vendorState = await _db.Vendors.AsNoTracking().Where(v => v.Id == candidate.VendorId).Select(v => new { v.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
+            if (vendorState == null)
             {
                 return $"Vendor {candidate.VendorId} does not exist.";
             }
-
-            if (candidate.CustomerId != null && !await _db.Customers.AnyAsync(c => c.Id == candidate.CustomerId, cancellationToken))
+            if (!vendorState.IsActive)
             {
-                return $"Customer {candidate.CustomerId} does not exist.";
+                return $"Vendor {candidate.VendorId} belongs to an inactive relation; reactivate the relation first or choose another vendor.";
+            }
+
+            if (candidate.CustomerId != null)
+            {
+                var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
+                if (customerState == null)
+                {
+                    return $"Customer {candidate.CustomerId} does not exist.";
+                }
+                if (!customerState.IsActive)
+                {
+                    return $"Customer {candidate.CustomerId} belongs to an inactive relation; reactivate the relation first or choose another customer.";
+                }
             }
 
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
@@ -359,7 +372,7 @@ namespace AgfAdmin.Services
         private IQueryable<SupplyCommitment> Query() =>
             _db.SupplyCommitments
                 .AsNoTracking()
-                .Include(c => c.Vendor)
+                .Include(c => c.Vendor).ThenInclude(v => v.Ggns)
                 .Include(c => c.Customer)
                 .Include(c => c.Lines)
                     .ThenInclude(l => l.ProductVariant)
@@ -373,6 +386,9 @@ namespace AgfAdmin.Services
             RequestId = commitment.RequestId,
             VendorId = commitment.VendorId,
             VendorName = commitment.Vendor?.Name,
+            // Actieve GGN's van de leverancier: voorstel bij ontvangst alleen als er precies één is; bij meer kiest de gebruiker.
+            VendorGgns = (commitment.Vendor?.Ggns ?? new List<VendorGgn>()).Where(g => g.IsActive).OrderBy(g => g.SortOrder).ThenBy(g => g.Id)
+                .Select(g => new VendorGgnOptionDto { Ggn = g.Ggn, ProducerName = g.ProducerName }).ToList(),
             CustomerId = commitment.CustomerId,
             CustomerName = commitment.Customer?.Name,
             Route = commitment.Route,
@@ -398,7 +414,6 @@ namespace AgfAdmin.Services
                     PalletCount = l.PalletCount,
                     PackagesPerPallet = l.PackagesPerPallet,
                     DefaultPackagesPerPallet = l.ProductVariant?.DefaultPackagesPerPallet,
-                    DefaultGgn = l.ProductVariant?.DefaultGgn,
                     DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
                     DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
                         ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null

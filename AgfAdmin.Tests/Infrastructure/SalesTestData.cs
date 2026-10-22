@@ -1,5 +1,6 @@
 using AgfAdmin.Data;
 using AgfAdmin.Models;
+using AgfAdmin.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Tests.Infrastructure;
@@ -232,6 +233,14 @@ public static class SalesTestData
         db.PalletContentLines.Add(restored);
         db.StockMovements.Add(movement);
         return (correction, restored, movement);
+    }
+
+    // Stamgegevens wijzigen zoals de relatiewerkplek dat doet: via de relatie (enige bron), met de spiegel op de rol.
+    public static async Task RenameRelationAsync(AppDbContext db, int relationId, string name)
+    {
+        var relation = await db.Relations.Include(r => r.Customer).Include(r => r.Vendor).Include(r => r.Addresses).Include(r => r.Contacts).ThenInclude(c => c.Channels).SingleAsync(r => r.Id == relationId);
+        relation.Name = name;
+        RelationService.SyncMirror(relation);
     }
 
     public static async Task<(int CorrectionId, int RestoredContentLineId, int CorrectionLineId)> CorrectAsync(SqliteAppDbContextFactory factory, int dispatchId)
