@@ -170,6 +170,8 @@ namespace AgfAdmin.DTOs
         public string PalletReference { get; set; }
         public string WarehouseLocation { get; set; }
         public string LotNumber { get; set; }
+        // GGN van de partij zoals bij ontvangst vastgelegd (null = niet vastgelegd); zoals opgegeven, niet gecontroleerd.
+        public string Ggn { get; set; }
         public string Unit { get; set; }
         // Historische ontvangst.
         public decimal Quantity { get; set; }
@@ -273,6 +275,8 @@ namespace AgfAdmin.DTOs
         public int PalletId { get; set; }
         public string PalletReference { get; set; }
         public string LotNumber { get; set; }
+        // GGN van de verzonden partij (uit de inhoudsregel; null = niet vastgelegd).
+        public string Ggn { get; set; }
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
         public decimal Quantity { get; set; }

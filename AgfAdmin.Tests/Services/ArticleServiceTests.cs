@@ -180,6 +180,43 @@ public class ArticleServiceTests : IDisposable
         Assert.Equal(stored, (await db.ProductVariants.SingleAsync()).GoodsCode);
     }
 
+    // GGN staat los van HS/GN/TARIC: optioneel, als tekst (voorloopnullen blijven), precies 13 cijfers; leeg = niet vastgelegd.
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData("4049929123456", "4049929123456")]
+    [InlineData("0000000012345", "0000000012345")]
+    [InlineData(" 4049 929 123456 ", "4049929123456")]
+    public async Task Default_Ggn_Is_Optional_Text_That_Keeps_Its_Leading_Zeros(string input, string stored)
+    {
+        var request = Hass();
+        request.DefaultGgn = input;
+        var created = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Created, created.Status);
+        Assert.Equal(stored, created.Value.DefaultGgn);
+        await using var db = _factory.CreateContext();
+        Assert.Equal(stored, (await db.ProductVariants.SingleAsync()).DefaultGgn);
+        // Het artikel kent geen certificeringsstatus: alleen het nummer zoals opgegeven.
+        Assert.DoesNotContain(typeof(ArticleDto).GetProperties(), p => p.Name.Contains("Certif") || p.Name.Contains("Ggn") && p.Name != "DefaultGgn");
+    }
+
+    [Theory]
+    [InlineData("404992912345")]    // 12 cijfers
+    [InlineData("40499291234567")]  // 14 cijfers
+    [InlineData("4049929A23456")]   // letter
+    [InlineData("4049929-123456")]  // ander scheidingsteken dan spatie
+    public async Task Invalid_Default_Ggn_Is_Rejected_And_Nothing_Is_Stored(string input)
+    {
+        var request = Hass();
+        request.DefaultGgn = input;
+        var result = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Equal(new[] { "defaultGgn" }, result.Errors.Keys);
+        Assert.Contains("13 digits", result.Errors["defaultGgn"][0]);
+        Assert.Empty(await ListAsync());
+    }
+
     [Fact]
     public async Task Trade_Class_Is_Master_Data_And_Never_An_Inspection_Status()
     {
@@ -264,14 +301,26 @@ public class ArticleServiceTests : IDisposable
 
 public class GoodsCodeCatalogTests
 {
-    private static GoodsCodeCatalog Catalog() => new(
-        new GoodsCodeSourceDto { System = "CN", Name = "GN 2026", Version = "2026", ValidFrom = "2026-01-01" },
-        new List<GoodsCodeMatchDto>
+    // GN-lijst met twee tomatencodes onder één HS-post (samenvoegen), een HS-post mét omschrijving (070200) en een zonder
+    // (080440, 080450: omschrijving dan uit de onderliggende GN-codes). TARIC-regels alleen als de test ze expliciet opgeeft.
+    private static GoodsCodeCatalog Catalog(bool withTaric = false)
+    {
+        var entries = new List<GoodsCodeMatchDto>
         {
             new() { Code = "0804 40 00", DescriptionNl = "Avocado's, vers of gedroogd", DescriptionEn = "Avocados, fresh or dried" },
             new() { Code = "08045000", DescriptionNl = "Guaves, manga's en manggistans", DescriptionEn = "Guavas, mangoes and mangosteens" },
-            new() { Code = "07020000", DescriptionNl = "Tomaten, vers of gekoeld", DescriptionEn = "Tomatoes, fresh or chilled" },
-        });
+            new() { Code = "07020010", DescriptionNl = "Tomaten, vers of gekoeld: cherrytomaten", DescriptionEn = "Tomatoes, fresh or chilled: cherry tomatoes" },
+            new() { Code = "07020099", DescriptionNl = "Tomaten, vers of gekoeld: andere", DescriptionEn = "Tomatoes, fresh or chilled: other" },
+        };
+        if (withTaric)
+        {
+            entries.Add(new GoodsCodeMatchDto { Code = "0804 40 00 10", System = "TARIC", DescriptionNl = "Avocado's (TARIC-testreferentie)", DescriptionEn = "Avocados (TARIC test reference)" });
+        }
+        return new GoodsCodeCatalog(
+            new GoodsCodeSourceDto { System = "CN", Name = "GN 2026", Version = "2026", ValidFrom = "2026-01-01" },
+            entries,
+            new List<GoodsCodeMatchDto> { new() { Code = "070200", DescriptionNl = "Tomaten, vers of gekoeld", DescriptionEn = "Tomatoes, fresh or chilled" } });
+    }
 
     [Fact]
     public void Searches_By_Code_Prefix_Or_By_Words_In_Either_Language_And_Never_Claims_Completeness()
@@ -280,14 +329,71 @@ public class GoodsCodeCatalogTests
         Assert.Equal(new[] { "08044000", "08045000" }, catalog.Search("0804").Select(m => m.Code));
         Assert.Equal(new[] { "08044000" }, catalog.Search("0804 40").Select(m => m.Code));
         Assert.Equal(new[] { "08045000" }, catalog.Search("mango").Select(m => m.Code));
-        Assert.Equal(new[] { "07020000" }, catalog.Search("Tomaten vers").Select(m => m.Code));
+        Assert.Equal(new[] { "07020010", "07020099" }, catalog.Search("Tomaten vers").Select(m => m.Code));
         Assert.Empty(catalog.Search("   "));
         var result = catalog.Result("avocado");
         Assert.False(result.Complete);
-        Assert.Equal(3, result.TotalEntries);
+        Assert.Equal("CN", result.System);
+        Assert.Equal(4, result.TotalEntries);
         Assert.Equal("CN", result.Matches.Single().System);
         Assert.Equal("080440", result.Matches.Single().HsCode);
+        Assert.Null(result.Matches.Single().MergedCodes);
         Assert.Equal("GN 2026", result.Source.Name);
+    }
+
+    // Dezelfde zoekterm onder HS, GN en TARIC geeft uitsluitend codes van dat stelsel, met de juiste lengte.
+    [Fact]
+    public void The_Same_Term_Gives_Only_Codes_Of_The_Chosen_System_With_The_Right_Length()
+    {
+        var catalog = Catalog();
+        var hs = catalog.Result("avocado", "HS");
+        var cn = catalog.Result("avocado", "CN");
+        var taric = catalog.Result("avocado", "TARIC");
+        Assert.Equal(("HS", "080440", 6), (hs.System, hs.Matches.Single().Code, hs.Matches.Single().Code.Length));
+        Assert.Equal("HS", hs.Matches.Single().System);
+        Assert.Equal(new[] { "08044000" }, hs.Matches.Single().MergedCodes);
+        Assert.Equal(("CN", "08044000", 8), (cn.System, cn.Matches.Single().Code, cn.Matches.Single().Code.Length));
+        Assert.Equal(("TARIC", 0, 0), (taric.System, taric.Matches.Count, taric.TotalEntries));
+        Assert.Equal(3, hs.TotalEntries);   // 070200, 080440, 080450
+        Assert.Equal(4, cn.TotalEntries);
+        Assert.All(catalog.EntriesFor("HS"), h => Assert.True(ArticleRules.IsGoodsCodeFor("HS", h.Code)));
+        Assert.All(catalog.EntriesFor("CN"), c => Assert.True(ArticleRules.IsGoodsCodeFor("CN", c.Code)));
+        Assert.Empty(catalog.Search("0804", "XX"));
+        Assert.Empty(catalog.Search("0804", null));
+    }
+
+    [Fact]
+    public void Hs_Merges_Duplicate_Sub_Codes_Into_One_Heading_With_A_Heading_Level_Description()
+    {
+        var catalog = Catalog();
+        var tomatoes = Assert.Single(catalog.Search("tomaten", "HS"));
+        Assert.Equal("070200", tomatoes.Code);
+        Assert.Equal("Tomaten, vers of gekoeld", tomatoes.DescriptionNl);
+        Assert.Equal("Tomatoes, fresh or chilled", tomatoes.DescriptionEn);
+        Assert.Equal(new[] { "07020010", "07020099" }, tomatoes.MergedCodes);
+        // Een term die alleen in een GN-omschrijving voorkomt vindt onder HS de post waar die code onder valt.
+        Assert.Equal("070200", Assert.Single(catalog.Search("cherrytomaten", "HS")).Code);
+        // Zonder HS-omschrijving in de lijst: de omschrijving van de onderliggende GN-code(s), nooit verzonnen.
+        var mango = Assert.Single(catalog.Search("mango", "HS"));
+        Assert.Equal(("080450", "Guaves, manga's en manggistans"), (mango.Code, mango.DescriptionNl));
+        // Een langere (GN-)code onder HS vindt de bovenliggende post; een HS-prefix werkt ook.
+        Assert.Equal("080440", Assert.Single(catalog.Search("08044000", "HS")).Code);
+        Assert.Equal(new[] { "080440", "080450" }, catalog.Search("0804", "HS").Select(m => m.Code));
+    }
+
+    [Fact]
+    public void Taric_Shows_Only_Explicit_Ten_Digit_References_And_Never_Appends_Zeros()
+    {
+        Assert.Empty(Catalog().Search("0804", "TARIC"));
+        Assert.Empty(Catalog().Search("avocado", "TARIC"));
+        var withTaric = Catalog(withTaric: true);
+        var reference = Assert.Single(withTaric.Search("avocado", "TARIC"));
+        Assert.Equal(("0804400010", "TARIC", "080440"), (reference.Code, reference.System, reference.HsCode));
+        Assert.Equal(1, withTaric.Result("0804", "TARIC").TotalEntries);
+        // De TARIC-regel lekt niet naar GN of HS als eigen code; onder HS telt zij mee als onderliggende code van 080440.
+        Assert.DoesNotContain(withTaric.EntriesFor("CN"), e => e.Code.Length != 8);
+        Assert.Equal(new[] { "08044000", "0804400010" }, Assert.Single(withTaric.Search("avocado", "HS")).MergedCodes);
+        Assert.DoesNotContain(withTaric.EntriesFor("TARIC"), e => e.Code.EndsWith("0000", StringComparison.Ordinal) && e.Code == "0804400000");
     }
 
     [Fact]
@@ -306,5 +412,14 @@ public class GoodsCodeCatalogTests
         Assert.False(string.IsNullOrWhiteSpace(catalog.Source.Name));
         Assert.False(string.IsNullOrWhiteSpace(catalog.Source.LookupUrl));
         Assert.All(catalog.Entries, e => Assert.True(ArticleRules.IsGoodsCodeFor(e.System, e.Code), $"{e.Code} is not a valid {e.System} code"));
+        // Geen onderbouwde TARIC-referenties in de meegeleverde lijst: het antwoord onder TARIC is eerlijk leeg.
+        Assert.Empty(catalog.EntriesFor("TARIC"));
+        // Elke GN-code valt onder een HS-post met een omschrijving op postniveau; avocado: HS 080440, GN 08044000.
+        var headings = catalog.EntriesFor("HS");
+        Assert.All(catalog.Entries, e => Assert.Contains(headings, h => h.Code == e.HsCode && !string.IsNullOrWhiteSpace(h.DescriptionNl) && !string.IsNullOrWhiteSpace(h.DescriptionEn)));
+        Assert.All(headings, h => Assert.Equal(6, h.Code.Length));
+        Assert.Equal(new[] { "08044000" }, Assert.Single(catalog.Search("avocado", "HS")).MergedCodes);
+        Assert.Equal("Avocado's, vers of gedroogd", Assert.Single(catalog.Search("avocado", "HS")).DescriptionNl);
+        Assert.Equal(3, Assert.Single(catalog.Search("tomaten", "HS")).MergedCodes.Count);
     }
 }

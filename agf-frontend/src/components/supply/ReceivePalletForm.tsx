@@ -7,6 +7,7 @@ import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability
 import { unitLabelKey } from '../../lib/units';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { parsePositiveDecimal } from '../../lib/decimal';
+import { normalizeGgn, resolveGgn } from '../../lib/ggn';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
@@ -25,6 +26,7 @@ import { SupplyCommitment, SupplyCommitmentLine } from '../../types/supply';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
+import GgnBadge from '../shared/GgnBadge';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
@@ -38,16 +40,27 @@ interface ContentDraft {
     method: WeightMethod;
     kgPerPackage: string;
     netKg: string;
+    // GGN van deze partij: start met het voorstel uit het artikel, per regel aanpasbaar of bewust leeg te maken.
+    ggn: string;
 }
 
-// Startwaarden uit de variant: methode en standaard kg per verpakking, per regel aanpasbaar.
+// Startwaarden uit de variant: methode, standaard kg per verpakking en standaard-GGN, per regel aanpasbaar.
 const draftFor = (line: SupplyCommitmentLine): ContentDraft => ({
     lot: line.lotNumber ?? '',
     quantity: '',
     method: line.weightMethod,
     kgPerPackage: line.defaultNetKgPerPackage === null ? '' : String(line.defaultNetKgPerPackage),
     netKg: '',
+    ggn: line.defaultGgn ?? '',
 });
+
+// Herkenbare toelichting bij de GGN-invoer ten opzichte van de artikelstandaard (voorstel, aangepast, leeggemaakt).
+export function ggnStateKey(draftGgn: string, defaultGgn: string | null): 'supply_ggn_from_article' | 'supply_ggn_adjusted' | 'supply_ggn_cleared' | 'supply_ggn_none_in_article' | null {
+    const normalized = normalizeGgn(draftGgn);
+    if (defaultGgn === null) return normalized === '' ? 'supply_ggn_none_in_article' : null;
+    if (normalized === '') return 'supply_ggn_cleared';
+    return normalized === defaultGgn ? 'supply_ggn_from_article' : 'supply_ggn_adjusted';
+}
 
 interface SourceEntry {
     commitment: SupplyCommitment;
@@ -83,7 +96,7 @@ const PALLET_FIELD_KEYS: Record<string, string> = {
     actorReference: 'actorReference',
 };
 
-const LINE_FIELD_KEYS = ['lotNumber', 'quantity', 'netWeightKg', 'netKgPerPackage', 'weightMethod', 'unit', 'supplyCommitmentLineId'];
+const LINE_FIELD_KEYS = ['lotNumber', 'quantity', 'netWeightKg', 'netKgPerPackage', 'weightMethod', 'unit', 'supplyCommitmentLineId', 'ggn'];
 
 // Pallet ontvangen in het eigen magazijn: altijd Received + Warehouse, inhoud start altijd in Quarantine.
 // Bronnen zijn uitsluitend geplande Warehouse-aanvoerregels met een bekende eenheid.
@@ -239,6 +252,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 const netKg = parsePositiveDecimal(draft.netKg);
                 if (!netKg.ok) addError(found, `line.${id}.netWeightKg`, t(decimalErrorKey(netKg.error)));
             }
+            if (!resolveGgn(draft.ggn).ok) addError(found, `line.${id}.ggn`, t('supply_error_ggn'));
         }
         return found;
     };
@@ -257,6 +271,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             ? (quantity.ok && perPackage.ok ? { ok: true as const, value: calculatedTotalKg(quantity.value, perPackage.value) } : { ok: false as const })
             : parsePositiveDecimal(draft.netKg);
         const requestId = newRequestId();
+        // GGN zoals op de regel gekozen (voorstel overgenomen, aangepast of leeggemaakt); de server bewaart precies dit.
+        const ggn = resolveGgn(draft.ggn);
         return {
             requestId,
             payload: {
@@ -268,6 +284,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 weightMethod: draft.method,
                 netKgPerPackage: draft.method === 'Calculated' && perPackage.ok ? perPackage.value : null,
                 netWeightKg: netKg.ok ? netKg.value : 0,
+                ggn: ggn.ok ? ggn.value : null,
                 actorReference,
                 reason: null,
             },
@@ -440,6 +457,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                 <span>· {formatQuantity(line.payload.quantity, locale)}</span>
                                 <UnitBadge unit={line.payload.unit} />
                                 <span>· {formatKg(line.payload.netWeightKg, locale)}</span>
+                                <GgnBadge ggn={line.result?.ggn ?? line.payload.ggn} />
                                 <QualityBadge status={line.result?.qualityStatus ?? 'Quarantine'} />
                             </li>
                         );
@@ -679,6 +697,17 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <span className="text-xs font-medium text-gray-700">{t('supply_quality')}</span>
                                     <div className="mt-1.5"><QualityBadge status="Quarantine" /></div>
                                     <span className="block text-xs text-gray-500">{t('supply_quality_start_hint')}</span>
+                                </div>
+                                {/* GGN: voorstel uit het artikel, hier per partij aanpasbaar of bewust leeg te maken; de gekozen waarde wordt op de ontvangst vastgelegd. */}
+                                <div className="col-span-3">
+                                    <label htmlFor={`${key('ggn')}-input`} className="text-xs font-medium text-gray-700">{t('supply_ggn')}</label>
+                                    <input {...fieldProps(key('ggn'), e(key('ggn')))} value={draft.ggn} inputMode="numeric" maxLength={20} disabled={!editable}
+                                        onChange={(event) => editLine(id, 'ggn', event.target.value)} className={`${inputClass} font-mono`} />
+                                    <span className="block text-xs text-gray-500" data-testid={`ggn-state-${id}`}>
+                                        {(() => { const state = ggnStateKey(draft.ggn, entry.line.defaultGgn); return state === null ? '' : t(state, { ggn: entry.line.defaultGgn ?? '' }); })()}
+                                        {' '}{t('supply_ggn_hint')}
+                                    </span>
+                                    <FieldError id={key('ggn')} messages={e(key('ggn'))} />
                                 </div>
                             </div>
                             <FieldError id={key('supplyCommitmentLineId')} messages={e(key('supplyCommitmentLineId'))} />

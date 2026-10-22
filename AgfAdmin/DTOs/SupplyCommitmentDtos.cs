@@ -67,6 +67,8 @@ namespace AgfAdmin.DTOs
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
         public decimal? DefaultPackagesPerPallet { get; set; }
+        // Standaard-GGN van het artikel: voorstel voor de inhoudsregel bij ontvangst, per regel aanpasbaar of leeg te maken.
+        public string DefaultGgn { get; set; }
         // Alleen bij route DirectTrade: som van Active toewijzingen aan verkooporders en wat daarvan nog toewijsbaar is.
         // Null bij route Warehouse: magazijnaanvoer heeft geen toewijsbare verwachte capaciteit (die wordt pas voorraad na ontvangst en keuring).
         public decimal? DirectTradeAllocatedQuantity { get; set; }

@@ -50,7 +50,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         return result.Value;
     }
 
-    private async Task<int> CalculatedApprovedLineAsync(decimal quantity = 10m, decimal kgPerPackage = 4m)
+    private async Task<int> CalculatedApprovedLineAsync(decimal quantity = 10m, decimal kgPerPackage = 4m, string ggn = null)
     {
         await using var db = _factory.CreateContext();
         var source = await db.SupplyCommitmentLines.SingleAsync(l => l.SupplyCommitment.Route == "Warehouse" && l.ExpectedUnit == "box");
@@ -58,7 +58,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         {
             RequestId = Guid.NewGuid(), PalletId = _seed.SecondWarehousePalletId, SupplyCommitmentLineId = source.Id, LotNumber = "LOT-CALC",
             Quantity = quantity, Unit = "box", NetWeightKg = WeightRules.CalculatedTotal(quantity, kgPerPackage),
-            WeightMethod = WeightRules.Calculated, NetKgPerPackage = kgPerPackage, QualityStatus = "Approved"
+            WeightMethod = WeightRules.Calculated, NetKgPerPackage = kgPerPackage, QualityStatus = "Approved", Ggn = ggn
         };
         db.PalletContentLines.Add(line);
         await db.SaveChangesAsync();
@@ -108,6 +108,30 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         Assert.Equal(20m, restored.NetWeightKg);
         Assert.Equal(5m, restored.Quantity);
         Assert.Equal(WeightRules.Calculated, state.Original.WeightMethod);
+    }
+
+    // De teruggeboekte inhoud is dezelfde partij: GGN komt van de oorspronkelijke inhoudsregel, nooit (opnieuw) uit het artikel.
+    [Fact]
+    public async Task Restored_Content_Keeps_The_Ggn_Of_The_Original_Content_Line()
+    {
+        await ArrangeAsync();
+        var lineId = await CalculatedApprovedLineAsync(ggn: "0049929123456");
+        await using (var db = _factory.CreateContext())
+        {
+            var variant = await db.ProductVariants.SingleAsync(v => v.Id == db.PalletContentLines.Single(c => c.Id == lineId).SupplyCommitmentLine.ProductVariantId);
+            variant.DefaultGgn = "4049929999999"; // afwijkende artikelstandaard mag geen rol spelen
+            await db.SaveChangesAsync();
+        }
+        var reservation = await ReservedAsync(lineId, 5m, 20m);
+        var dispatch = await DispatchedAsync(reservation);
+        Assert.Equal("0049929123456", dispatch.Lines.Single().Ggn);
+
+        var result = await CorrectAsync(dispatch.Id, Correct(await OrderAsync(), dispatch));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+
+        var state = await StateAsync(lineId);
+        Assert.Equal("0049929123456", Assert.Single(state.Restored).Ggn);
+        Assert.Equal("0049929123456", state.Original.Ggn);
     }
 
     private async Task<SalesOrderDto> OrderAsync()

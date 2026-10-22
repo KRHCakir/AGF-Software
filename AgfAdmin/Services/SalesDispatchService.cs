@@ -433,6 +433,7 @@ namespace AgfAdmin.Services
                 PalletId = l.PalletContentLine?.PalletId ?? 0,
                 PalletReference = l.PalletContentLine?.Pallet?.Reference,
                 LotNumber = l.PalletContentLine?.LotNumber,
+                Ggn = l.PalletContentLine?.Ggn,
                 ProductName = l.SalesOrderLine?.ProductVariant?.Product?.Name,
                 ProductVariantName = l.SalesOrderLine?.ProductVariant?.Name,
                 Quantity = l.Quantity,

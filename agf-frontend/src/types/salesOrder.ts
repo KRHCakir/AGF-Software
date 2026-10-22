@@ -111,6 +111,8 @@ export interface SalesDispatchLine {
     palletId: number;
     palletReference: string | null;
     lotNumber: string | null;
+    // GGN van de verzonden partij (uit de inhoudsregel; null = niet vastgelegd).
+    ggn: string | null;
     productName: string | null;
     productVariantName: string | null;
     quantity: number;
@@ -297,6 +299,8 @@ export interface ReservableStockLine {
     palletReference: string;
     warehouseLocation: string | null;
     lotNumber: string;
+    // GGN van de partij zoals bij ontvangst vastgelegd (null = niet vastgelegd).
+    ggn: string | null;
     unit: PackageUnit;
     // Historische ontvangst; voorraad = ontvangst - afgeboekt; beschikbaar = voorraad - Active gereserveerd.
     quantity: number;
@@ -420,6 +424,7 @@ function isSalesDispatchLine(value: unknown): value is SalesDispatchLine {
         && isNumber(value.palletId)
         && isNullableString(value.palletReference)
         && isNullableString(value.lotNumber)
+        && isNullableString(value.ggn)
         && isNullableString(value.productName)
         && isNullableString(value.productVariantName)
         && isNumber(value.quantity)
@@ -504,6 +509,7 @@ export function isReservableStockLine(value: unknown): value is ReservableStockL
         && isString(value.palletReference)
         && isNullableString(value.warehouseLocation)
         && isString(value.lotNumber)
+        && isNullableString(value.ggn)
         && isUnit(value.unit)
         && isNumber(value.quantity)
         && isNumber(value.netWeightKg)

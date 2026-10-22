@@ -3,6 +3,7 @@ import { PACKAGE_UNITS } from '../types/availability';
 import type { Article, GoodsCodeSystem, SaveArticleRequest } from '../types/article';
 import { GOODS_CODE_SYSTEMS, isGoodsCodeSystem } from '../types/article';
 import { parsePositiveDecimal } from './decimal.ts';
+import { resolveGgn } from './ggn.ts';
 import type { WeightMethod } from './weight.ts';
 import { isWeightMethod } from './weight.ts';
 
@@ -28,9 +29,11 @@ export interface ArticleDraft {
     goodsCode: string;
     goodsCodeSystem: GoodsCodeSystem | '';
     tradeClass: string;
+    // Standaard-GGN (optioneel): 13 cijfers als tekst; leeg = niet vastgelegd.
+    defaultGgn: string;
 }
 
-export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length';
+export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length' | 'ggn_13_digits';
 export interface ArticleRuleError { field: string; code: ArticleRuleCode }
 export type ArticleBuildResult = { ok: true; value: SaveArticleRequest } | { ok: false; errors: ArticleRuleError[] };
 
@@ -45,7 +48,7 @@ export const GOODS_CODE_LENGTH: Readonly<Record<GoodsCodeSystem, number>> = { HS
 export function emptyArticleDraft(): ArticleDraft {
     return {
         productName: '', variantName: '', shortcutCode: '', origin: '', brand: '', sizeCategory: '', packaging: '', packagingUnit: '', season: '', notes: '',
-        weightMethod: 'Weighed', defaultNetKgPerPackage: '', defaultGrossKgPerPackage: '', defaultPackagesPerPallet: '', goodsCode: '', goodsCodeSystem: '', tradeClass: '',
+        weightMethod: 'Weighed', defaultNetKgPerPackage: '', defaultGrossKgPerPackage: '', defaultPackagesPerPallet: '', goodsCode: '', goodsCodeSystem: '', tradeClass: '', defaultGgn: '',
     };
 }
 
@@ -57,7 +60,7 @@ export function draftFromArticle(article: Article): ArticleDraft {
         brand: article.brand ?? '', sizeCategory: article.sizeCategory ?? '', packaging: article.packaging ?? '', packagingUnit: article.packagingUnit ?? '',
         season: article.season ?? '', notes: article.notes ?? '', weightMethod: article.weightMethod,
         defaultNetKgPerPackage: num(article.defaultNetKgPerPackage), defaultGrossKgPerPackage: num(article.defaultGrossKgPerPackage), defaultPackagesPerPallet: num(article.defaultPackagesPerPallet),
-        goodsCode: article.goodsCode ?? '', goodsCodeSystem: article.goodsCodeSystem ?? '', tradeClass: article.tradeClass ?? '',
+        goodsCode: article.goodsCode ?? '', goodsCodeSystem: article.goodsCodeSystem ?? '', tradeClass: article.tradeClass ?? '', defaultGgn: article.defaultGgn ?? '',
     };
 }
 
@@ -128,6 +131,10 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     }
     const tradeClass = text(draft.tradeClass, MAX_TRADE_CLASS_LENGTH, 'tradeClass', errors);
 
+    // Standaard-GGN: los van de goederencode; leeg = niet vastgelegd, anders precies 13 cijfers (voorloopnullen blijven).
+    const ggn = resolveGgn(draft.defaultGgn);
+    if (!ggn.ok) errors.push({ field: 'defaultGgn', code: 'ggn_13_digits' });
+
     if (errors.length > 0) return { ok: false, errors };
     return {
         ok: true,
@@ -135,6 +142,7 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
             productName, variantName, shortcutCode, origin, brand, sizeCategory, packaging, packagingUnit, season, notes, weightMethod,
             defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross, defaultPackagesPerPallet: perPallet,
             goodsCode: goodsCode === null ? null : goodsCode, goodsCodeSystem: goodsCode === null ? null : goodsCodeSystem, tradeClass,
+            defaultGgn: ggn.ok ? ggn.value : null,
         },
     };
 }

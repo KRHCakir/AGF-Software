@@ -170,6 +170,7 @@ namespace AgfAdmin.Data
                 b.Property(v => v.GoodsCode).HasMaxLength(10);
                 b.Property(v => v.GoodsCodeSystem).HasMaxLength(8);
                 b.Property(v => v.TradeClass).HasMaxLength(50);
+                b.Property(v => v.DefaultGgn).HasMaxLength(13);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
@@ -177,6 +178,8 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_GoodsCodeSystem_Allowed", "\"GoodsCodeSystem\" IS NULL OR \"GoodsCodeSystem\" IN ('HS', 'CN', 'TARIC')");
+                    // GGN: precies 13 tekens; dat het cijfers zijn bewaakt de service (één regel voor SQLite en PostgreSQL).
+                    t.HasCheckConstraint("CK_ProductVariants_DefaultGgn_Length", "\"DefaultGgn\" IS NULL OR length(\"DefaultGgn\") = 13");
                 });
             });
 
@@ -475,6 +478,7 @@ namespace AgfAdmin.Data
                 b.Property(c => c.NetWeightKg).HasPrecision(18, 3);
                 b.Property(c => c.WeightMethod).IsRequired().HasMaxLength(16).HasDefaultValue(WeightRules.Weighed);
                 b.Property(c => c.NetKgPerPackage).HasPrecision(18, 3);
+                b.Property(c => c.Ggn).HasMaxLength(13);
                 b.Property(c => c.QualityStatus).IsRequired().HasMaxLength(32);
                 b.Property(c => c.QualityReason).HasMaxLength(500);
 
@@ -486,6 +490,7 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
+                    t.HasCheckConstraint("CK_PalletContentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
                     t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
                         "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
                     // Gewogen: geen kg per verpakking. Berekend: kg per verpakking > 0 en bij fysieke ontvangst is het totaal exact

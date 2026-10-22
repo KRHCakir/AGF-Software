@@ -29,7 +29,7 @@ const dispatchNine = (reservationIds: number[], corrected: boolean) => ({
         id: 3, requestId: 'c-3', salesDispatchId: 9, salesOrderId: 4, reason: 'Verkeerd gescand', actorReference: 'office-1', goodsNeverLeftWarehouseConfirmed: true, correctedAt: '2026-10-19T14:00:00.000Z',
         lines: reservationIds.map((rid, index) => ({ id: 50 + index, salesDispatchLineId: 20 + index, stockReservationId: rid, restoredPalletContentLineId: 70 + index, palletId: 2, palletReference: `PAL-${rid}`, lotNumber: `LOT-${rid}`, quantity: 5, unit: 'box', netWeightKg: 20, restoredQualityStatus: 'Quarantine', stockMovementId: 80 + index })),
     } : null,
-    lines: reservationIds.map((rid, index) => ({ id: 20 + index, stockReservationId: rid, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: `PAL-${rid}`, lotNumber: `LOT-${rid}`, productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 30 + index })),
+    lines: reservationIds.map((rid, index) => ({ id: 20 + index, stockReservationId: rid, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: `PAL-${rid}`, lotNumber: `LOT-${rid}`, ggn: null, productName: 'Avocado', productVariantName: 'Green', quantity: 5, unit: 'box', netWeightKg: 20, stockMovementId: 30 + index })),
 });
 
 const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: StockReservation[]): SalesOrder => ({

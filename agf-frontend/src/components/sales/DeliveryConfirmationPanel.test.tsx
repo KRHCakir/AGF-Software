@@ -57,7 +57,7 @@ const deliveryResponse = (kind: 'Warehouse' | 'DirectTrade', requestId: string, 
 
 const dispatch = (delivery: unknown = null) => ({
     id: 5, requestId: 'd-5', salesOrderId: 4, reference: 'VRB-5', actorReference: 'office-1', dispatchedAt: '2026-10-19T13:00:00.000Z', delivery, deliveryHistory: delivery === null ? [] : [delivery], correction: null,
-    lines: [{ id: 20, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', productName: 'Avocado', productVariantName: 'Hass', quantity: 10, unit: 'box', netWeightKg: 40, stockMovementId: 30 }],
+    lines: [{ id: 20, stockReservationId: 11, salesOrderLineId: 7, palletContentLineId: 2, palletId: 2, palletReference: 'PAL-11', lotNumber: 'LOT-11', ggn: null, productName: 'Avocado', productVariantName: 'Hass', quantity: 10, unit: 'box', netWeightKg: 40, stockMovementId: 30 }],
 });
 
 const shipment = (delivery: unknown = null) => ({

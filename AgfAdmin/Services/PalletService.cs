@@ -336,6 +336,7 @@ namespace AgfAdmin.Services
                     candidate.Quantity,
                     candidate.Unit,
                     candidate.NetWeightKg,
+                    candidate.Ggn,
                     candidate.QualityStatus
                 }),
                 Reason = reason,
@@ -441,6 +442,13 @@ namespace AgfAdmin.Services
                 netWeightKg = request.NetWeightKg;
             }
 
+            // GGN: optioneel, 13 cijfers als tekst; de schrijfwijze wordt gecontroleerd, de certificering niet.
+            var ggn = ArticleRules.NormalizeGgn(request.Ggn);
+            if (ggn != null && !ArticleRules.IsGgn(ggn))
+            {
+                AddError(errors, "ggn", $"A GGN consists of exactly {ArticleRules.GgnLength} digits (leading zeros included); spaces are allowed as separators.");
+            }
+
             // Medewerker is optioneel bij ontvangst (zie BuildPallet); keuring en statuswijzigingen blijven hem eisen.
             actor = OptionalActor(request.ActorReference, errors);
             reason = OptionalReason(request.Reason, errors);
@@ -461,6 +469,7 @@ namespace AgfAdmin.Services
                 NetWeightKg = netWeightKg!.Value,
                 WeightMethod = weightMethod,
                 NetKgPerPackage = netKgPerPackage,
+                Ggn = ggn,
                 QualityStatus = PalletRules.QualityQuarantine,
                 CreatedAt = DateTime.UtcNow
             };
@@ -509,7 +518,8 @@ namespace AgfAdmin.Services
                 && string.Equals(existing.Unit, candidate.Unit, StringComparison.Ordinal)
                 && existing.NetWeightKg == candidate.NetWeightKg
                 && string.Equals(existing.WeightMethod, candidate.WeightMethod, StringComparison.Ordinal)
-                && existing.NetKgPerPackage == candidate.NetKgPerPackage;
+                && existing.NetKgPerPackage == candidate.NetKgPerPackage
+                && string.Equals(existing.Ggn, candidate.Ggn, StringComparison.Ordinal);
 
             return same
                 ? ServiceResult<PalletContentLineDto>.Ok(ToDto(existing))
@@ -1086,6 +1096,7 @@ namespace AgfAdmin.Services
             NetWeightKg = line.NetWeightKg,
             WeightMethod = line.WeightMethod,
             NetKgPerPackage = line.NetKgPerPackage,
+            Ggn = line.Ggn,
             DispatchedQuantity = line.DispatchedQuantity,
             DispatchedNetWeightKg = line.DispatchedNetWeightKg,
             OnHandQuantity = ReservationRules.OnHandQuantity(line.Quantity, line.DispatchedQuantity),

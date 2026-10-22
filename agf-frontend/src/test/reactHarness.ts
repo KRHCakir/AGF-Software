@@ -91,4 +91,11 @@ export function setValue(input: HTMLInputElement | HTMLTextAreaElement, value: s
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
 }
 
+// Een <select> heeft zijn eigen value-setter; daarna een change-event zoals een gebruiker die geeft.
+export function setSelectValue(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')!.set!;
+    setter.call(select, value);
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+}
+
 export const storedCommands = () => parseStoredCommands(window.sessionStorage.getItem(STORAGE_KEY));

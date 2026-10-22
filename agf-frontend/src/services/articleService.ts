@@ -1,5 +1,5 @@
 import { ApiError, getJson, postJson, putJson } from './apiClient';
-import { Article, ArticleReference, GoodsCodeSearch, SaveArticleRequest, isArticle, isArticleList, isArticleReference, isGoodsCodeSearch } from '../types/article';
+import { Article, ArticleReference, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, isArticle, isArticleList, isArticleReference, isGoodsCodeSearch } from '../types/article';
 
 // Artikelwerkplek via api/articles: beheer van productsoorten en artikelen (ProductVariants). Raakt nooit documenten of voorraad.
 
@@ -28,8 +28,9 @@ export async function updateArticle(id: number, request: SaveArticleRequest, sig
 }
 
 // Lokale referentielijst: herkomst en versie komen mee; nooit volledig, de gebruiker kiest en bevestigt zelf.
-export async function searchGoodsCodes(query: string, signal?: AbortSignal): Promise<GoodsCodeSearch> {
-    const json = await getJson(`/articles/goods-codes?query=${encodeURIComponent(query)}`, signal);
+// Het gekozen stelsel gaat mee en het antwoord bevat uitsluitend codes van dat stelsel (HS 6, GN/CN 8, TARIC 10).
+export async function searchGoodsCodes(query: string, system: GoodsCodeSystem, signal?: AbortSignal): Promise<GoodsCodeSearch> {
+    const json = await getJson(`/articles/goods-codes?query=${encodeURIComponent(query)}&system=${encodeURIComponent(system)}`, signal);
     if (!isGoodsCodeSearch(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de goederencodes.');
     return json;
 }
