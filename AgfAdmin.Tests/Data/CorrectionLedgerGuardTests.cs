@@ -16,12 +16,21 @@ public class CorrectionLedgerGuardTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private async Task ArrangeAsync()
+    private const string Ggn = "0049929123456";
+    private const string OtherGgn = "0049929000002";
+
+    private async Task ArrangeAsync(string ggn = null)
     {
         _seed = await SalesTestData.SeedAsync(_factory);
         (_, _boxLine, _) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity: 100m);
         await using (var db = _factory.CreateContext())
         {
+            if (ggn != null)
+            {
+                // Partij-GGN zoals bij ontvangst vastgelegd (vóór reserveren en verzenden). Rechtstreeks in de database: de guard weigert
+                // juist het achteraf zetten op een bestaande regel, en het seed-schema kent de kolom niet als parameter.
+                await db.Database.ExecuteSqlRawAsync("UPDATE \"PalletContentLines\" SET \"Ggn\" = {0} WHERE \"Id\" = {1}", ggn, _seed.ApprovedBox);
+            }
             var reservation = new StockReservation
             {
                 RequestId = Guid.NewGuid(), SalesOrderLineId = _boxLine, PalletContentLineId = _seed.ApprovedBox,
@@ -195,6 +204,111 @@ public class CorrectionLedgerGuardTests : IDisposable
             db.StockMovements.Add(new StockMovement { Type = "Correction", Quantity = 1m, Unit = "box", SupplyCommitmentLineId = await SalesTestData.SupplyLineOfAsync(db, _seed.ApprovedBox), PalletContentLineId = _seed.ApprovedBox, Reason = "telling" });
             await SaveAsync(db, async);
         }
+    }
+
+    // ---- Partij-GGN: historisch op de inhoudsregel, exact gekopieerd door correctie-inhoud, artikelstandaard blijft vrij ----
+
+    private async Task<(string Status, decimal DispatchedQuantity, string OriginalGgn, int Restored, int Movements, decimal LineQuantity, decimal LineKg)> HistoryAsync()
+    {
+        await using var db = _factory.CreateContext();
+        var line = await db.SalesDispatchLines.SingleAsync(l => l.StockReservationId == _reservationId);
+        var original = await db.PalletContentLines.AsNoTracking().SingleAsync(c => c.Id == _seed.ApprovedBox);
+        return ((await db.StockReservations.FindAsync(_reservationId))!.Status, original.DispatchedQuantity, original.Ggn,
+            await db.PalletContentLines.CountAsync(c => c.OriginCorrectionLineId != null), await db.StockMovements.CountAsync(), line.Quantity, line.NetWeightKg);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public async Task A_Complete_Correction_Copies_The_Stored_Ggn_Of_The_Original_Including_Null_And_Keeps_It_Fixed(bool withGgn, bool async)
+    {
+        await ArrangeAsync(withGgn ? Ggn : null);
+        await using (var db = _factory.CreateContext())
+        {
+            await SalesTestData.CorrectInContextAsync(db, _dispatchId);
+            await SaveAsync(db, async);
+        }
+        int restoredId;
+        await using (var verify = _factory.CreateContext())
+        {
+            var restored = await verify.PalletContentLines.SingleAsync(c => c.OriginCorrectionLineId != null);
+            Assert.Equal(withGgn ? Ggn : null, restored.Ggn);
+            restoredId = restored.Id;
+        }
+        // Ook de teruggeboekte regel houdt haar GGN daarna vast (wijzigen, wissen of alsnog zetten).
+        await AssertViolationAsync(async, async db => { (await db.PalletContentLines.FindAsync(restoredId))!.Ggn = withGgn ? null : Ggn; }, "GGN");
+        await AssertViolationAsync(async, async db => { (await db.PalletContentLines.FindAsync(restoredId))!.Ggn = OtherGgn; }, "GGN");
+        await using var check = _factory.CreateContext();
+        Assert.Equal(withGgn ? Ggn : null, (await check.PalletContentLines.FindAsync(restoredId))!.Ggn);
+    }
+
+    [Theory]
+    [InlineData("other", false)]
+    [InlineData("other", true)]
+    [InlineData("cleared", false)]
+    [InlineData("cleared", true)]
+    [InlineData("from-null", false)]
+    [InlineData("from-null", true)]
+    public async Task Restored_Content_With_A_Different_Ggn_Than_The_Stored_Original_Is_Rejected_And_History_Stays(string scenario, bool async)
+    {
+        await ArrangeAsync(scenario == "from-null" ? null : Ggn);
+        var before = await HistoryAsync();
+        await AssertViolationAsync(async, async db =>
+        {
+            var (_, restored, _) = await SalesTestData.CorrectInContextAsync(db, _dispatchId);
+            // "Bij vergissing" uit het artikel afgeleid, gewist of gezet: nooit de opgeslagen partij-GGN.
+            restored.Ggn = scenario == "cleared" ? null : OtherGgn;
+        }, "GGN");
+        Assert.Equal(before, await HistoryAsync());
+        Assert.Equal(("Consumed", 10m, 0, 10m, 40m), (before.Status, before.DispatchedQuantity, before.Restored, before.LineQuantity, before.LineKg));
+    }
+
+    [Theory]
+    [InlineData("dispatch", false)]
+    [InlineData("dispatch", true)]
+    [InlineData("correction", false)]
+    [InlineData("correction", true)]
+    public async Task Ggn_Of_Existing_Content_Cannot_Change_Together_With_A_Dispatch_Or_Correction(string when, bool async)
+    {
+        await ArrangeAsync(Ggn);
+        var before = await HistoryAsync();
+        if (when == "dispatch")
+        {
+            int secondReservation;
+            await using (var db = _factory.CreateContext())
+            {
+                var reservation = new StockReservation
+                {
+                    RequestId = Guid.NewGuid(), SalesOrderLineId = _boxLine, PalletContentLineId = _seed.ApprovedBox,
+                    SupplyCommitmentLineId = await SalesTestData.SupplyLineOfAsync(db, _seed.ApprovedBox),
+                    Quantity = 5m, Unit = "box", NetWeightKg = 20m, Source = "Physical", Status = "Active"
+                };
+                db.StockReservations.Add(reservation);
+                await db.SaveChangesAsync();
+                secondReservation = reservation.Id;
+            }
+            await AssertViolationAsync(async, async db =>
+            {
+                var dispatch = await SalesTestData.ConsumeInContextAsync(db, secondReservation);
+                dispatch.Lines.Single().PalletContentLine.Ggn = OtherGgn;
+            }, "GGN");
+            await using var verify = _factory.CreateContext();
+            Assert.Equal("Active", (await verify.StockReservations.FindAsync(secondReservation))!.Status);
+            Assert.Equal(1, await verify.SalesDispatches.CountAsync());
+        }
+        else
+        {
+            await AssertViolationAsync(async, async db =>
+            {
+                await SalesTestData.CorrectInContextAsync(db, _dispatchId);
+                (await db.PalletContentLines.FindAsync(_seed.ApprovedBox))!.Ggn = null;
+            }, "GGN");
+        }
+        // Historische verzendgegevens en de opgeslagen GGN blijven gelijk.
+        Assert.Equal(before, await HistoryAsync());
+        Assert.Equal((Ggn, 10m, "Consumed"), (before.OriginalGgn, before.DispatchedQuantity, before.Status));
     }
 
     [Fact]

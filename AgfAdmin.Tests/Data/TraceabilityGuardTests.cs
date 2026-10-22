@@ -32,7 +32,7 @@ public class TraceabilityGuardTests : IDisposable
         return new Graph(orderLine.Id, lineA.Id, lineB.Id, pallet.Id, content.Id);
     }
 
-    private static PalletContentLine NewContentLine(Pallet pallet, SupplyCommitmentLine source) => new()
+    private static PalletContentLine NewContentLine(Pallet pallet, SupplyCommitmentLine source, string ggn = null) => new()
     {
         RequestId = Guid.NewGuid(),
         Pallet = pallet,
@@ -41,7 +41,8 @@ public class TraceabilityGuardTests : IDisposable
         Quantity = 4m,
         Unit = "box",
         NetWeightKg = 16m,
-        QualityStatus = "Quarantine"
+        QualityStatus = "Quarantine",
+        Ggn = ggn
     };
 
     private static StockMovement Movement(int sourceLineId, int? contentLineId) => new()
@@ -277,6 +278,86 @@ public class TraceabilityGuardTests : IDisposable
 
         await using var verify = _factory.CreateContext();
         Assert.Equal(graph.SourceLineA, (await verify.PalletContentLines.SingleAsync()).SupplyCommitmentLineId);
+    }
+
+    // ---- Regel 2 (vervolg): de partij-GGN van een bestaande inhoudsregel is historisch ----
+
+    private const string Ggn = "0049929123456";
+    private const string OtherGgn = "0049929000002";
+
+    private async Task<int> AddContentLineWithGgnAsync(Graph graph, string ggn)
+    {
+        await using var db = _factory.CreateContext();
+        var pallet = await db.Pallets.SingleAsync(p => p.Id == graph.PalletId);
+        var sourceB = await db.SupplyCommitmentLines.SingleAsync(l => l.Id == graph.SourceLineB);
+        var content = NewContentLine(pallet, sourceB, ggn);
+        db.PalletContentLines.Add(content);
+        await db.SaveChangesAsync();
+        return content.Id;
+    }
+
+    [Theory]
+    [InlineData("change", false)]
+    [InlineData("change", true)]
+    [InlineData("clear", false)]
+    [InlineData("clear", true)]
+    [InlineData("set", false)]
+    [InlineData("set", true)]
+    [InlineData("disconnected", false)]
+    [InlineData("disconnected", true)]
+    public async Task ContentLine_Ggn_Cannot_Be_Changed_Cleared_Or_Set_Afterwards(string change, bool async)
+    {
+        var graph = await SeedAsync();
+        var withGgn = await AddContentLineWithGgnAsync(graph, Ggn);
+
+        await using (var db = _factory.CreateContext())
+        {
+            switch (change)
+            {
+                case "change": (await db.PalletContentLines.FindAsync(withGgn))!.Ggn = OtherGgn; break;
+                case "clear": (await db.PalletContentLines.FindAsync(withGgn))!.Ggn = null; break;
+                case "set": (await db.PalletContentLines.FindAsync(graph.ContentLineOnA))!.Ggn = Ggn; break;
+                default:
+                    // Losgekoppelde Update (OriginalValues = CurrentValues): de vergelijking gaat tegen de opgeslagen waarde.
+                    db.PalletContentLines.Update(new PalletContentLine
+                    {
+                        Id = withGgn, RequestId = Guid.NewGuid(), PalletId = graph.PalletId, SupplyCommitmentLineId = graph.SourceLineB,
+                        LotNumber = "LOT-1", Quantity = 4m, Unit = "box", NetWeightKg = 16m, QualityStatus = "Quarantine", Ggn = OtherGgn
+                    });
+                    break;
+            }
+            var exception = await Assert.ThrowsAsync<TraceabilityViolationException>(() => SaveAsync(db, async));
+            Assert.Contains("GGN", exception.Message);
+        }
+
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(Ggn, (await verify.PalletContentLines.SingleAsync(c => c.Id == withGgn)).Ggn);
+        Assert.Null((await verify.PalletContentLines.SingleAsync(c => c.Id == graph.ContentLineOnA)).Ggn);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ContentLine_Ggn_Is_Fixed_But_Other_Fields_And_The_Article_Default_Stay_Editable(bool async)
+    {
+        var graph = await SeedAsync();
+        var withGgn = await AddContentLineWithGgnAsync(graph, Ggn);
+
+        await using (var db = _factory.CreateContext())
+        {
+            // Zelfde waarde opnieuw toekennen is geen wijziging; keuring en artikelstandaard mogen in dezelfde save mee.
+            var content = await db.PalletContentLines.FindAsync(withGgn);
+            content!.Ggn = Ggn;
+            content.QualityStatus = "Approved";
+            content.QualityReason = "Inspected";
+            (await db.ProductVariants.SingleAsync()).DefaultGgn = OtherGgn;
+            await SaveAsync(db, async);
+        }
+
+        await using var verify = _factory.CreateContext();
+        var stored = await verify.PalletContentLines.SingleAsync(c => c.Id == withGgn);
+        Assert.Equal((Ggn, "Approved", "Inspected"), (stored.Ggn, stored.QualityStatus, stored.QualityReason));
+        Assert.Equal(OtherGgn, (await verify.ProductVariants.SingleAsync()).DefaultGgn);
     }
 
     [Fact]

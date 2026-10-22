@@ -21,7 +21,9 @@ namespace AgfAdmin.Data
 
     // Draait vóór elke SaveChanges/SaveChangesAsync, zodat geen enkele writer de regels kan vergeten:
     // 1. een StockMovement/StockReservation met PalletContentLineId heeft dezelfde SupplyCommitmentLineId als die regel;
-    // 2. de bronregel van een bestaande PalletContentLine ligt vast;
+    // 2. de bronregel van een bestaande PalletContentLine ligt vast, en ook haar partij-GGN: een opgeslagen GGN wordt nooit stilzwijgend
+    //    gewijzigd, gezet of gewist (vergeleken met de opgeslagen waarde, ook bij een losgekoppelde Update en ook in dezelfde save als een
+    //    verzending of correctie); artikelstandaarden (ProductVariant.DefaultGgn) blijven gewoon wijzigbaar;
     // 3. PalletAuditEvents zijn append-only;
     // 4. inhoud met een DirectTrade-bron staat nooit op een pallet met LocationContext Warehouse;
     // 5. een nieuwe Active verkoopreservering (SalesOrderLineId) staat op Approved inhoud van een Received + Warehouse-pallet,
@@ -154,6 +156,7 @@ namespace AgfAdmin.Data
                 }
             }
 
+            await CheckContentLineGgnAsync(db, async, cancellationToken);
             await CheckSourceLinksAsync(db, async, cancellationToken);
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
             await CheckDirectTradeAllocationsAsync(db, async, cancellationToken);
@@ -164,6 +167,33 @@ namespace AgfAdmin.Data
             await CheckDirectTradeShipmentCorrectionsAsync(db, async, cancellationToken);
             await CheckDeliveryConfirmationsAsync(db, async, cancellationToken);
             await CheckCorrectionLedgerAsync(db, async, cancellationToken);
+        }
+
+        // ---- Regel 2 (vervolg): de partij-GGN van een bestaande inhoudsregel is historisch ----
+        //
+        // Vergeleken met de opgeslagen waarde, niet met OriginalValues: zo wordt ook een losgekoppelde Update (OriginalValues =
+        // CurrentValues) herkend. Geldt voor elke wijziging, dus ook wissen (naar null) en alsnog zetten (vanaf null), en ongeacht wat er
+        // verder in dezelfde save gebeurt (verzending, correctie, keuring). Nieuwe regels zijn vrij; correctie-inhoud valt onder regel 9.
+        private static async Task CheckContentLineGgnAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var modified = db.ChangeTracker.Entries<PalletContentLine>()
+                .Where(e => e.State == EntityState.Modified && e.Property(c => c.Ggn).IsModified)
+                .ToList();
+            if (modified.Count == 0)
+            {
+                return;
+            }
+            var ids = modified.Select(e => e.Entity.Id).ToList();
+            var stored = (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => ids.Contains(c.Id)).Select(c => new { c.Id, c.Ggn }), async, cancellationToken))
+                .ToDictionary(c => c.Id, c => c.Ggn);
+            foreach (var entry in modified)
+            {
+                var before = stored.GetValueOrDefault(entry.Entity.Id);
+                if (!string.Equals(before, entry.Entity.Ggn, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"The GGN of pallet content line {entry.Entity.Id} is historical and cannot be changed, set or cleared (stored: {before ?? "none"}, attempted: {entry.Entity.Ggn ?? "none"}).");
+                }
+            }
         }
 
         // ---- Regel 9: verzendcorrecties in beide richtingen ----
@@ -218,6 +248,8 @@ namespace AgfAdmin.Data
             }
             var originalContentIds = dispatchLines.Values.Select(l => l.PalletContentLineId).Distinct().ToList();
             var originals = (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => originalContentIds.Contains(c.Id)), async, cancellationToken)).ToDictionary(c => c.Id);
+            // De opgeslagen partij-GGN van de oorspronkelijke inhoud (nooit wat er in dezelfde save van gemaakt is; dat weigert regel 2 al).
+            var storedGgns = originals.ToDictionary(o => o.Key, o => o.Value.Ggn);
             foreach (var entry in db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State is not (EntityState.Added or EntityState.Deleted or EntityState.Detached) && originalContentIds.Contains(e.Entity.Id)))
             {
                 originals[entry.Entity.Id] = entry.Entity;
@@ -271,6 +303,12 @@ namespace AgfAdmin.Data
                     || !string.Equals(restored.LotNumber, original.LotNumber, StringComparison.Ordinal))
                 {
                     throw new TraceabilityViolationException($"Restored content for reservation {reservation.Id} must be Quarantine on the original pallet, same lot and source line, with exactly the dispatched quantity and net weight and nothing dispatched.");
+                }
+                // Dezelfde partij, dus exact de opgeslagen GGN van de oorspronkelijke inhoud, inclusief null (nooit uit het artikel afgeleid).
+                var originalGgn = storedGgns.GetValueOrDefault(original.Id, original.Ggn);
+                if (!string.Equals(restored.Ggn, originalGgn, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"Restored content for reservation {reservation.Id} must copy the stored GGN of the original content line exactly ({originalGgn ?? "none"}), not {restored.Ggn ?? "none"}.");
                 }
 
                 var movement = compensations.FirstOrDefault(m => ReferenceEquals(m.SalesDispatchCorrectionLine, correctionLine)

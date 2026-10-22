@@ -224,7 +224,8 @@ public static class SalesTestData
         var restored = new PalletContentLine
         {
             RequestId = Guid.NewGuid(), PalletId = original.PalletId, SupplyCommitmentLineId = original.SupplyCommitmentLineId, LotNumber = original.LotNumber,
-            Quantity = dispatchLine.Quantity, Unit = dispatchLine.Unit, NetWeightKg = dispatchLine.NetWeightKg, QualityStatus = "Quarantine", OriginCorrectionLine = correctionLine, CreatedAt = now
+            Quantity = dispatchLine.Quantity, Unit = dispatchLine.Unit, NetWeightKg = dispatchLine.NetWeightKg, QualityStatus = "Quarantine", OriginCorrectionLine = correctionLine, CreatedAt = now,
+            Ggn = original.Ggn // zelfde partij: de opgeslagen GGN van de oorspronkelijke inhoud, ook als die null is
         };
         var movement = new StockMovement { Type = "Correction", Quantity = dispatchLine.Quantity, Unit = dispatchLine.Unit, NetWeightKg = dispatchLine.NetWeightKg, SupplyCommitmentLineId = original.SupplyCommitmentLineId, PalletContentLine = restored, StockReservation = reservation, SalesDispatchCorrectionLine = correctionLine, CreatedAt = now };
         db.SalesDispatchCorrections.Add(correction);
