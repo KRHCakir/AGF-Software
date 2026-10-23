@@ -12,7 +12,7 @@ import { HydratedGate, PendingCommandsProvider } from './PendingCommandsContext'
 // zijn een definitieve afwijzing waarna "Toch aanmaken" een nieuwe opdracht is; netwerkfouten houden de identieke opdracht
 // vast (ook na sluiten en opnieuw opbouwen); na ontkoppelen wordt niets in een ander concept gekozen.
 
-const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls' }, { id: 2, name: 'DEMO Klant B' }];
+const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls', searchCode: null, isActive: true }, { id: 2, name: 'DEMO Klant B', searchCode: null, isActive: true }];
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: 'Peru', packaging: '4kg Box', sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: null }] }];
 const created = { id: 7, name: 'Groentehal Jansen', contactPerson: 'Piet', email: null, phone: '06-1', shippingAddress: null, vatNumber: null, billingAddress: null, paymentTermsDays: 14, createdAt: '2026-10-19T14:00:00.000Z' };
 

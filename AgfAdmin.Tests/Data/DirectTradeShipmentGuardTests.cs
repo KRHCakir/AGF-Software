@@ -483,7 +483,7 @@ public class DirectTradeShipmentGuardTests : IDisposable
         {
             (await db.SupplyCommitmentLines.FindAsync(_seed.DirectTradeSourceLine))!.LotNumber = "LOT-GEWIJZIGD";
             var commitment = await db.SupplyCommitments.Include(c => c.Vendor).SingleAsync(c => c.Id == _seed.DirectTradeCommitmentId);
-            commitment.Vendor.Name = "Supplier B (hernoemd)";
+            await SalesTestData.RenameRelationAsync(db, commitment.Vendor.RelationId, "Supplier B (hernoemd)");
             commitment.Origin = "Chili";
             await SaveAsync(db, async);
         }

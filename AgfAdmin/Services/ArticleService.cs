@@ -104,7 +104,7 @@ namespace AgfAdmin.Services
         private sealed record Values(
             string ProductName, string VariantName, string ShortcutCode, string Origin, string Brand, string SizeCategory, string Packaging,
             string PackagingUnit, string Season, string Notes, string WeightMethod, decimal? NetKg, decimal? GrossKg, decimal? PackagesPerPallet,
-            string GoodsCode, string GoodsCodeSystem, string TradeClass, string DefaultGgn);
+            string GoodsCode, string GoodsCodeSystem, string TradeClass);
 
         private async Task<Values> ValidateAsync(SaveArticleDto request, int? selfId, Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
         {
@@ -201,15 +201,10 @@ namespace AgfAdmin.Services
             }
             var tradeClass = ValidationErrors.OptionalText(request.TradeClass, ArticleRules.MaxTradeClassLength, "tradeClass", errors);
 
-            // Standaard-GGN: optioneel, als tekst (voorloopnullen blijven), precies 13 cijfers; alleen de schrijfwijze wordt gecontroleerd.
-            var ggn = ArticleRules.NormalizeGgn(request.DefaultGgn);
-            if (ggn != null && !ArticleRules.IsGgn(ggn))
-            {
-                ValidationErrors.Add(errors, "defaultGgn", $"A GGN consists of exactly {ArticleRules.GgnLength} digits (leading zeros included); spaces are allowed as separators.");
-            }
-
+            // GGN is geen artikelstandaard meer (leveranciers beheren hun GGN's in de relatiewerkplek). Een oude waarde in
+            // ProductVariant.DefaultGgn blijft staan en wordt via api/relations/reference gerapporteerd voor handmatige toewijzing.
             return new Values(productName, variantName, shortcut, origin, brand, size, packaging, packagingUnit, season, notes, method,
-                request.DefaultNetKgPerPackage, request.DefaultGrossKgPerPackage, request.DefaultPackagesPerPallet, goodsCode, system, tradeClass, ggn);
+                request.DefaultNetKgPerPackage, request.DefaultGrossKgPerPackage, request.DefaultPackagesPerPallet, goodsCode, system, tradeClass);
         }
 
         private static void Apply(ProductVariant variant, Values values)
@@ -230,7 +225,6 @@ namespace AgfAdmin.Services
             variant.GoodsCode = values.GoodsCode;
             variant.GoodsCodeSystem = values.GoodsCodeSystem;
             variant.TradeClass = values.TradeClass;
-            variant.DefaultGgn = values.DefaultGgn;
         }
 
         // Zelfde opbouw als describeVariant in de frontend (lib/productSearch.ts): soort · ras · verpakking · herkomst · maat.
@@ -260,7 +254,6 @@ namespace AgfAdmin.Services
             GoodsCode = Blank(v.GoodsCode),
             GoodsCodeSystem = Blank(v.GoodsCodeSystem),
             TradeClass = Blank(v.TradeClass),
-            DefaultGgn = Blank(v.DefaultGgn),
             DefaultPrice = v.DefaultPrice
         };
 

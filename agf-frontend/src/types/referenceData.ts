@@ -14,6 +14,9 @@ export interface VendorOption {
 export interface CustomerOption {
     id: number;
     name: string;
+    // Zoekcode en actief-vlag van de relatie (Relaties); inactieve klanten zijn niet kiesbaar voor een nieuwe order.
+    searchCode: string | null;
+    isActive: boolean;
 }
 
 // Klant aanmaken vanuit Verkoop (POST /api/customers). Lege optionele velden gaan als null mee.

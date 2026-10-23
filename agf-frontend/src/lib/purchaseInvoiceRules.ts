@@ -141,11 +141,13 @@ export function searchVendors(vendors: readonly PurchaseVendor[], query: string)
         const exact = vendors.filter((vendor) => vendor.id === Number(number[1]));
         if (exact.length > 0 || term.startsWith('#')) return exact;
     }
-    return vendors.filter((vendor) => normalize(`${vendor.name} ${vendor.vatNumber ?? ''}`).includes(term));
+    const exactCode = vendors.filter((vendor) => vendor.searchCode !== null && normalize(vendor.searchCode) === term);
+    const rest = vendors.filter((vendor) => !exactCode.includes(vendor) && normalize(`${vendor.searchCode ?? ''} ${vendor.name} ${vendor.vatNumber ?? ''}`).includes(term));
+    return [...exactCode, ...rest];
 }
 
 export function describeVendor(vendor: PurchaseVendor): string {
-    return [vendor.name, vendor.vatNumber, `#${vendor.id}`].filter((part): part is string => typeof part === 'string' && part !== '').join(' · ');
+    return [vendor.searchCode, vendor.name, vendor.vatNumber, `#${vendor.id}`].filter((part): part is string => typeof part === 'string' && part !== '').join(' · ');
 }
 
 // Niet-negatief bedrag of percentage met hooguit `maxDecimals` decimalen (0 toegestaan).

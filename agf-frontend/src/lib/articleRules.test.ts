@@ -9,7 +9,7 @@ import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCo
 const article = (over: Partial<Article> = {}): Article => ({
     id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru',
     brand: null, sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box', season: null, notes: null, weightMethod: 'Calculated',
-    defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I', defaultGgn: '0049929123456', defaultPrice: 12.5, ...over,
+    defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I', defaultPrice: 12.5, ...over,
 });
 
 describe('article payload', () => {
@@ -22,7 +22,6 @@ describe('article payload', () => {
         assert.equal(result.value.shortcutCode, null);
         assert.equal(result.value.goodsCode, null);
         assert.equal(result.value.goodsCodeSystem, null);
-        assert.equal(result.value.defaultGgn, null, 'empty GGN = not recorded');
         assert.equal(result.value.defaultGrossKgPerPackage, null);
         assert.equal(result.value.weightMethod, 'Weighed');
         const missing = buildArticlePayload(emptyArticleDraft());
@@ -68,18 +67,6 @@ describe('article payload', () => {
         if (!bad.ok) assert.deepEqual(groupArticleErrors(bad.errors), { shortcutCode: ['invalid'], defaultGrossKgPerPackage: ['gross_below_net'], defaultPackagesPerPallet: ['not_positive'] });
     });
 
-    test('the default GGN is optional text of exactly 13 digits, independent of the goods code, and keeps leading zeros', () => {
-        const ok = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Avocado', defaultGgn: ' 0049 929 123456 ' });
-        assert.equal(ok.ok, true);
-        if (ok.ok) assert.deepEqual([ok.value.defaultGgn, ok.value.goodsCode, ok.value.goodsCodeSystem], ['0049929123456', null, null], 'GGN without any goods code');
-        for (const bad of ['404992912345', '40499291234567', '4049929A23456', '4049929-123456']) {
-            const result = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Avocado', defaultGgn: bad });
-            assert.equal(result.ok, false, `${JSON.stringify(bad)} must be refused`);
-            if (!result.ok) assert.deepEqual(groupArticleErrors(result.errors), { defaultGgn: ['ggn_13_digits'] });
-        }
-        assert.equal(draftFromArticle(article({ defaultGgn: null })).defaultGgn, '');
-    });
-
     test('an article round-trips into a draft and back without losing optional values', () => {
         const draft = draftFromArticle(article());
         assert.equal(draft.goodsCode, '08044000');
@@ -88,7 +75,7 @@ describe('article payload', () => {
         assert.equal(rebuilt.ok, true);
         if (rebuilt.ok) assert.deepEqual(rebuilt.value, {
             productName: 'Avocado', variantName: 'Hass', shortcutCode: 'avohassper22', origin: 'Peru', brand: null, sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box',
-            season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I', defaultGgn: '0049929123456',
+            season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I',
         });
     });
 });

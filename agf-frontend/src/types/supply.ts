@@ -42,8 +42,12 @@ export interface SupplyCommitmentLine {
     palletCount: number | null;
     packagesPerPallet: number | null;
     defaultPackagesPerPallet: number | null;
-    // Standaard-GGN van het artikel: voorstel voor de inhoudsregel bij ontvangst; per regel aanpasbaar of leeg te maken.
-    defaultGgn: string | null;
+}
+
+// Actieve GGN's van de leverancier (met producentnaam): invoerhulp bij ontvangst; precies één = voorstel, meer = kiezen.
+export interface VendorGgnOption {
+    ggn: string;
+    producerName: string | null;
 }
 
 export interface SupplyCommitment {
@@ -58,6 +62,7 @@ export interface SupplyCommitment {
     origin: string;
     destination: string | null;
     expectedAt: string | null;
+    vendorGgns: VendorGgnOption[];
     lines: SupplyCommitmentLine[];
 }
 
@@ -83,8 +88,7 @@ function isLine(value: unknown): value is SupplyCommitmentLine {
         && isNullableNumber(value.defaultNetKgPerPackage)
         && isNullableNumber(value.palletCount)
         && isNullableNumber(value.packagesPerPallet)
-        && isNullableNumber(value.defaultPackagesPerPallet)
-        && isNullableString(value.defaultGgn);
+        && isNullableNumber(value.defaultPackagesPerPallet);
 }
 
 export function isSupplyCommitment(value: unknown): value is SupplyCommitment {
@@ -100,6 +104,7 @@ export function isSupplyCommitment(value: unknown): value is SupplyCommitment {
         && isString(value.origin)
         && isNullableString(value.destination)
         && isNullableString(value.expectedAt)
+        && isArrayOf(value.vendorGgns, (item): item is VendorGgnOption => isObject(item) && isString(item.ggn) && isNullableString(item.producerName))
         && isArrayOf(value.lines, isLine);
 }
 

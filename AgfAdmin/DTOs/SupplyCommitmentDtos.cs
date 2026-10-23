@@ -46,7 +46,15 @@ namespace AgfAdmin.DTOs
         public string Destination { get; set; }
         public DateTime? ExpectedAt { get; set; }
         public DateTime CreatedAt { get; set; }
+        // Actieve GGN's van de leverancier (met producentnaam): invoerhulp bij ontvangst; de gekozen waarde staat op de inhoudsregel.
+        public List<VendorGgnOptionDto> VendorGgns { get; set; } = new();
         public List<SupplyCommitmentLineDto> Lines { get; set; } = new();
+    }
+
+    public sealed class VendorGgnOptionDto
+    {
+        public string Ggn { get; set; }
+        public string ProducerName { get; set; }
     }
 
     public sealed class SupplyCommitmentLineDto
@@ -67,8 +75,6 @@ namespace AgfAdmin.DTOs
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
         public decimal? DefaultPackagesPerPallet { get; set; }
-        // Standaard-GGN van het artikel: voorstel voor de inhoudsregel bij ontvangst, per regel aanpasbaar of leeg te maken.
-        public string DefaultGgn { get; set; }
         // Alleen bij route DirectTrade: som van Active toewijzingen aan verkooporders en wat daarvan nog toewijsbaar is.
         // Null bij route Warehouse: magazijnaanvoer heeft geen toewijsbare verwachte capaciteit (die wordt pas voorraad na ontvangst en keuring).
         public decimal? DirectTradeAllocatedQuantity { get; set; }

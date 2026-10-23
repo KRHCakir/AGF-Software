@@ -15,12 +15,21 @@ namespace AgfAdmin.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ICustomerService _customers;
-        public CustomersController(AppDbContext context, ICustomerService customers) { _context = context; _customers = customers; }
+        private readonly RelationService _relations;
+        public CustomersController(AppDbContext context, ICustomerService customers, RelationService relations) { _context = context; _customers = customers; _relations = relations; }
 
+        // Klantenlijst voor pickers: dezelfde velden als voorheen plus zoekcode en actief-vlag van de relatie. Inactieve klanten
+        // blijven in de lijst (bestaande concepten en historie), de schermen tonen ze apart en de server weigert nieuwe documenten.
         [HttpGet]
         public async Task<IActionResult> GetCustomers()
         {
-            var customers = await _context.Customers.OrderBy(c => c.Name).ToListAsync();
+            var customers = await _context.Customers.AsNoTracking().OrderBy(c => c.Name)
+                .Select(c => new
+                {
+                    c.Id, c.RelationId, c.Name, c.VATNumber, c.BillingAddress, c.ShippingAddress, c.ContactPerson, c.Email, c.Phone, c.PaymentTermsDays, c.CreatedAt, c.RequestId,
+                    SearchCode = c.Relation.SearchCode, IsActive = c.Relation.IsActive
+                })
+                .ToListAsync();
             return Ok(customers);
         }
 
@@ -30,21 +39,25 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> CreateCustomer([FromBody] CreateOperationalCustomerDto request) =>
             this.ToActionResult(await _customers.CreateAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Legacy route (zelfde velden als voorheen): de wijziging gaat naar de relatie en wordt teruggespiegeld op de klantrol.
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCustomer(int id, [FromBody] Customer updatedCustomer)
         {
-            var customer = await _context.Customers.FindAsync(id);
-            if (customer == null) return NotFound();
-
-            customer.Name = updatedCustomer.Name;
-            customer.BillingAddress = updatedCustomer.BillingAddress;
-            customer.VATNumber = updatedCustomer.VATNumber;
-            customer.PaymentTermsDays = updatedCustomer.PaymentTermsDays;
-            customer.Email = updatedCustomer.Email;
-            customer.Phone = updatedCustomer.Phone;
-
-            await _context.SaveChangesAsync();
-            return Ok(customer);
+            if (updatedCustomer == null || string.IsNullOrWhiteSpace(updatedCustomer.Name)) return BadRequest("Customer name is required");
+            var current = await _context.Customers.AsNoTracking().SingleOrDefaultAsync(c => c.Id == id);
+            if (current == null) return NotFound();
+            var customer = await _relations.UpdateLegacyCustomerAsync(id, new CreateCustomerDto
+            {
+                Name = updatedCustomer.Name,
+                VATNumber = updatedCustomer.VATNumber,
+                BillingAddress = updatedCustomer.BillingAddress,
+                ShippingAddress = current.ShippingAddress,
+                ContactPerson = current.ContactPerson,
+                Email = updatedCustomer.Email,
+                Phone = updatedCustomer.Phone,
+                PaymentTermsDays = updatedCustomer.PaymentTermsDays
+            }, HttpContext?.RequestAborted ?? default);
+            return customer == null ? NotFound() : Ok(customer);
         }
     }
 }

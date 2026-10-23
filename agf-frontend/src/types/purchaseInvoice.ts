@@ -19,6 +19,9 @@ export interface PurchaseVendor {
     vatNumber: string | null;
     paymentTermsDays: number;
     defaultCurrency: string | null;
+    // Zoekcode en actief-vlag van de relatie: zoeken op code; inactieve leveranciers niet kiesbaar voor nieuwe facturen.
+    searchCode: string | null;
+    isActive: boolean;
 }
 
 export interface PurchaseInvoiceSettings {
@@ -95,7 +98,7 @@ export interface PurchaseInvoice extends OptionalFieldValues {
 
 export function isPurchaseVendor(value: unknown): value is PurchaseVendor {
     return isObject(value) && isNumber(value.id) && isString(value.name) && isNullableString(value.vatNumber)
-        && isNumber(value.paymentTermsDays) && isNullableString(value.defaultCurrency);
+        && isNumber(value.paymentTermsDays) && isNullableString(value.defaultCurrency) && isNullableString(value.searchCode) && typeof value.isActive === 'boolean';
 }
 
 export function isPurchaseVendorList(value: unknown): value is PurchaseVendor[] {

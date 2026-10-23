@@ -40,7 +40,8 @@ namespace AgfAdmin.Services
             // Seed Incoming Invoices if empty
             if (!await db.IncomingInvoices.AnyAsync(cancellationToken))
             {
-                var vendor = new Vendor { Name = "Example Supplier", Email = "invoices@example.com", VATNumber = "NL88223344B01" };
+                var vendor = new Vendor { Name = "Example Supplier", Email = "invoices@example.com", VATNumber = "NL88223344B01",
+                    Relation = new Relation { Name = "Example Supplier", Email = "invoices@example.com", VatNumber = "NL88223344B01" } };
                 db.Vendors.Add(vendor);
                 await db.SaveChangesAsync(cancellationToken);
 
@@ -78,13 +79,15 @@ namespace AgfAdmin.Services
             // Seed Customers if empty
             if (!await db.Customers.AnyAsync(cancellationToken))
             {
-                db.Customers.Add(new Customer
+                var relation = new Relation
                 {
                     Name = "Local Market Stalls",
-                    ContactPerson = "Jan de Vries",
-                    Email = "jan@market.nl",
-                    BillingAddress = "Markt 1, Amsterdam"
-                });
+                    Addresses = { new RelationAddress { Purpose = AddressPurpose.Billing, Line1 = "Markt 1", City = "Amsterdam", CountryCode = "NL", IsDefault = true } },
+                    Contacts = { new RelationContact { Name = "Jan de Vries", IsPrimary = true, Channels = { new RelationContactChannel { Kind = ContactChannelKind.Email, Value = "jan@market.nl" } } } },
+                    Customer = new Customer { PaymentTermsDays = 30 }
+                };
+                RelationService.SyncMirror(relation);
+                db.Relations.Add(relation);
                 await db.SaveChangesAsync(cancellationToken);
             }
 

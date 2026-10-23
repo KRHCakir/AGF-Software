@@ -93,7 +93,7 @@ namespace AgfAdmin.Services
 
         public async Task<IReadOnlyList<PurchaseVendorDto>> VendorsAsync(CancellationToken cancellationToken = default) =>
             await _db.Vendors.AsNoTracking().OrderBy(v => v.Name)
-                .Select(v => new PurchaseVendorDto { Id = v.Id, Name = v.Name, VatNumber = v.VATNumber, PaymentTermsDays = v.PaymentTermsDays, DefaultCurrency = v.DefaultCurrency })
+                .Select(v => new PurchaseVendorDto { Id = v.Id, Name = v.Name, VatNumber = v.VATNumber, PaymentTermsDays = v.PaymentTermsDays, DefaultCurrency = v.DefaultCurrency, SearchCode = v.Relation.SearchCode, IsActive = v.Relation.IsActive })
                 .ToListAsync(cancellationToken);
 
         // ---- Aanmaken ----
@@ -131,10 +131,14 @@ namespace AgfAdmin.Services
             }
             else
             {
-                vendor = await _db.Vendors.AsNoTracking().SingleOrDefaultAsync(v => v.Id == request.VendorId, cancellationToken);
+                vendor = await _db.Vendors.AsNoTracking().Include(v => v.Relation).SingleOrDefaultAsync(v => v.Id == request.VendorId, cancellationToken);
                 if (vendor == null)
                 {
                     ValidationErrors.Add(errors, "vendorId", $"Supplier {request.VendorId} does not exist.");
+                }
+                else if (vendor.Relation is { IsActive: false })
+                {
+                    ValidationErrors.Add(errors, "vendorId", $"Supplier {request.VendorId} belongs to an inactive relation; reactivate the relation first or choose another supplier.");
                 }
             }
 

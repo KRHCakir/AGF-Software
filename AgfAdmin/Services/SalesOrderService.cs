@@ -42,9 +42,15 @@ namespace AgfAdmin.Services
                 return ResultForRetry(existing, candidate);
             }
 
-            if (!await _db.Customers.AnyAsync(c => c.Id == candidate.CustomerId, cancellationToken))
+            var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
+            if (customerState == null)
             {
                 return ServiceResult<SalesOrderDto>.NotFound($"Customer {candidate.CustomerId} does not exist.");
+            }
+            if (!customerState.IsActive)
+            {
+                // Inactieve relatie: historie blijft leesbaar, maar een nieuwe order wordt expliciet geweigerd (nooit stilzwijgend).
+                return ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {candidate.CustomerId} belongs to an inactive relation; reactivate the relation first or choose another customer." } });
             }
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
             var known = await _db.ProductVariants.Where(v => variantIds.Contains(v.Id)).Select(v => v.Id).ToListAsync(cancellationToken);

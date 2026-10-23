@@ -12,9 +12,9 @@ const settings: PurchaseInvoiceSettings = {
     optionalFields: ['remarks', 'receivedDate', 'grossWeightKg'],
     defaultVatPercentage: 21, defaultPaymentTermsDays: 30, defaultCurrency: 'EUR',
 };
-const greenery: PurchaseVendor = { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR' };
-const importer: PurchaseVendor = { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'usd' };
-const vendorWithoutCurrency: PurchaseVendor = { id: 3, name: 'Boer Jansen', vatNumber: null, paymentTermsDays: 7, defaultCurrency: null };
+const greenery: PurchaseVendor = { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true };
+const importer: PurchaseVendor = { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'usd', searchCode: null, isActive: true };
+const vendorWithoutCurrency: PurchaseVendor = { id: 3, name: 'Boer Jansen', vatNumber: null, paymentTermsDays: 7, defaultCurrency: null, searchCode: null, isActive: true };
 
 const draft = (): InvoiceDraft => emptyDraft('2026-10-21', settings);
 

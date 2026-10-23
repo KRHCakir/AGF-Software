@@ -47,8 +47,8 @@ namespace AgfAdmin.Models
         public string? GoodsCodeSystem { get; set; }
         // Handelsklasse (EU-handelsnorm: Extra, I, II; vrije tekst). Geen keuringsstatus: "Klasse I" is niet "Goedgekeurd".
         public string? TradeClass { get; set; }
-        // Standaard-GGN (GLOBALG.A.P.-nummer, 13 cijfers als tekst). Invoerhulp: bij ontvangst als voorstel op de inhoudsregel,
-        // daar per regel aanpasbaar of leeg te maken. Zoals opgegeven; de certificeringsstatus wordt niet gecontroleerd.
+        // Oude standaard-GGN (vóór de verplaatsing naar leveranciers-GGN's in de relatiewerkplek). Niet meer in de artikelinvoer en
+        // nergens meer voorgesteld; de kolom blijft bewaard en wordt gerapporteerd tot de waarden handmatig aan een leverancier zijn toegewezen.
         public string? DefaultGgn { get; set; }
 
         // Beschikbaarheidseenheid voor nieuwe voorraadflows: "Kilogram" of "Package".

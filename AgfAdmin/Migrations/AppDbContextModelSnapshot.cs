@@ -111,6 +111,9 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<int>("RelationId")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("RequestId")
                         .HasColumnType("uuid");
 
@@ -121,6 +124,9 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RelationId")
+                        .IsUnique();
 
                     b.HasIndex("RequestId")
                         .IsUnique()
@@ -1230,6 +1236,270 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Relation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LegalForm")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PreferredLanguage")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("RegistrationCountry")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("RegistrationNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RegistrationType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestPayload")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SearchCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SearchCodeKey")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TradeName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VatNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("VatVerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("NotChecked");
+
+                    b.Property<DateTime?>("VatVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VatVerifiedNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique()
+                        .HasFilter("\"RequestId\" IS NOT NULL");
+
+                    b.HasIndex("SearchCodeKey")
+                        .IsUnique()
+                        .HasFilter("\"SearchCodeKey\" IS NOT NULL");
+
+                    b.ToTable("Relations", t =>
+                        {
+                            t.HasCheckConstraint("CK_Relations_Name_NotBlank", "length(trim(\"Name\")) > 0");
+
+                            t.HasCheckConstraint("CK_Relations_VatVerificationStatus_Allowed", "\"VatVerificationStatus\" IN ('NotChecked', 'Valid', 'Invalid', 'Unavailable', 'NotApplicable')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationAddress", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("City")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Line1")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Line2")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("RelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationId", "Purpose");
+
+                    b.ToTable("RelationAddresses", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationAddresses_Purpose_Allowed", "\"Purpose\" IN ('Main', 'Billing', 'Delivery')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Department")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobTitle")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("RelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationId");
+
+                    b.ToTable("RelationContacts", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationContacts_Name_NotBlank", "length(trim(\"Name\")) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationContactChannel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("RelationContactId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationContactId");
+
+                    b.ToTable("RelationContactChannels", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationContactChannels_Kind_Allowed", "\"Kind\" IN ('Phone', 'Email')");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>
                 {
                     b.Property<int>("Id")
@@ -2145,6 +2415,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("PaymentTermsDays")
                         .HasColumnType("integer");
 
+                    b.Property<int>("RelationId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2153,7 +2426,47 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RelationId")
+                        .IsUnique();
+
                     b.ToTable("Vendors");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.VendorGgn", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Ggn")
+                        .IsRequired()
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ProducerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VendorId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VendorId", "Ggn")
+                        .IsUnique();
+
+                    b.ToTable("VendorGgns", t =>
+                        {
+                            t.HasCheckConstraint("CK_VendorGgns_Ggn_Length", "length(\"Ggn\") = 13");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.WasteLog", b =>
@@ -2192,6 +2505,17 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("ProductVariantId");
 
                     b.ToTable("WasteLogs");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.Customer", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithOne("Customer")
+                        .HasForeignKey("AgfAdmin.Models.Customer", "RelationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Relation");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipment", b =>
@@ -2490,6 +2814,39 @@ namespace AgfAdmin.Migrations
                         .IsRequired();
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationAddress", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany("Addresses")
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany("Contacts")
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationContactChannel", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.RelationContact", "RelationContact")
+                        .WithMany("Channels")
+                        .HasForeignKey("RelationContactId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RelationContact");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>
@@ -2796,6 +3153,28 @@ namespace AgfAdmin.Migrations
                     b.Navigation("SupplyCommitment");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithOne("Vendor")
+                        .HasForeignKey("AgfAdmin.Models.Vendor", "RelationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.VendorGgn", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Vendor", "Vendor")
+                        .WithMany("Ggns")
+                        .HasForeignKey("VendorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Vendor");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.WasteLog", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Inventory", "Inventory")
@@ -2873,6 +3252,22 @@ namespace AgfAdmin.Migrations
                     b.Navigation("OrderLines");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Relation", b =>
+                {
+                    b.Navigation("Addresses");
+
+                    b.Navigation("Contacts");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Vendor");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>
+                {
+                    b.Navigation("Channels");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>
                 {
                     b.Navigation("DeliveryConfirmations");
@@ -2923,6 +3318,8 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>
                 {
+                    b.Navigation("Ggns");
+
                     b.Navigation("IncomingInvoices");
                 });
 #pragma warning restore 612, 618

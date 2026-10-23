@@ -24,7 +24,8 @@ public class InternalNoteTests : IDisposable
         var carriers = typeof(IncomingInvoice).Assembly.GetTypes()
             .Where(t => t.Namespace == typeof(IncomingInvoice).Namespace && t.GetProperty("InternalNote", BindingFlags.Public | BindingFlags.Instance) != null)
             .Select(t => t.Name).OrderBy(n => n).ToArray();
-        Assert.Equal(new[] { "IncomingInvoice", "SalesOrder" }, carriers);
+        // Relation: interne opmerking op de relatiekaart (alleen intern zichtbaar, nooit op documenten of naar klanten/leveranciers).
+        Assert.Equal(new[] { "IncomingInvoice", "Relation", "SalesOrder" }, carriers);
     }
 
     [Fact]

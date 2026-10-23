@@ -156,16 +156,16 @@ public class PalletServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Article_Default_Ggn_Is_Only_A_Proposal_And_Later_Changes_Never_Touch_Existing_Content_Lines()
+    public async Task Supplier_Ggn_Is_Only_A_Proposal_And_Later_Supplier_Changes_Never_Touch_Existing_Content_Lines()
     {
         var seed = await SeedAsync();
-        int variantId;
+        int vendorId;
         await using (var db = _factory.CreateContext())
         {
-            var variant = await db.ProductVariants.SingleAsync();
-            variant.DefaultGgn = "4049929000001";
+            var vendor = await db.Vendors.SingleAsync();
+            vendor.Ggns.Add(new VendorGgn { Vendor = vendor, Ggn = "4049929000001", ProducerName = "Finca Uno" });
             await db.SaveChangesAsync();
-            variantId = variant.Id;
+            vendorId = vendor.Id;
         }
         var palletId = await CreatedPalletIdAsync(PalletRequest());
         var adjusted = ContentRequest(seed.WarehouseLine);
@@ -177,17 +177,15 @@ public class PalletServiceTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            var updated = await new ArticleService(db).UpdateAsync(variantId, new SaveArticleDto
-            {
-                ProductName = "Avocado", VariantName = "Hass 6", Origin = "Peru", Packaging = "4kg Box", DefaultGgn = "4049929000003"
-            });
-            Assert.Equal(ServiceResultStatus.Ok, updated.Status);
-            Assert.Equal("4049929000003", updated.Value.DefaultGgn);
+            var ggn = await db.VendorGgns.SingleAsync(g => g.VendorId == vendorId);
+            ggn.Ggn = "4049929000003"; // leverancier vertegenwoordigt voortaan een andere producent
+            db.VendorGgns.Add(new VendorGgn { VendorId = vendorId, Ggn = "4049929000004", SortOrder = 1 });
+            await db.SaveChangesAsync();
         }
 
         await using var verify = _factory.CreateContext();
         Assert.Equal(new[] { "4049929000002", null }, await verify.PalletContentLines.OrderBy(c => c.Id).Select(c => c.Ggn).ToListAsync());
-        Assert.Equal("4049929000003", (await verify.ProductVariants.SingleAsync()).DefaultGgn);
+        Assert.Equal(2, await verify.VendorGgns.CountAsync(g => g.VendorId == vendorId));
     }
 
     private async Task<ServiceResult<PalletDto>> CreatePalletAsync(CreatePalletDto request)

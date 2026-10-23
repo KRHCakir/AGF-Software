@@ -24,8 +24,6 @@ namespace AgfAdmin.DTOs
         public string GoodsCode { get; set; }
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
-        // Standaard-GGN (GLOBALG.A.P.-nummer, 13 cijfers als tekst): invoerhulp bij ontvangst, zoals opgegeven; certificeringsstatus niet gecontroleerd.
-        public string DefaultGgn { get; set; }
         public decimal DefaultPrice { get; set; }
     }
 
@@ -49,7 +47,6 @@ namespace AgfAdmin.DTOs
         public string GoodsCode { get; set; }
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
-        public string DefaultGgn { get; set; }
     }
 
     // Keuzelijsten en bestaande productsoorten voor het formulier.
