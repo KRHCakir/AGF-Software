@@ -1,0 +1,47 @@
+name: DeepSeek PR Review
+
+on:
+  # Manual-only pilot: adding this file will not automatically run the review.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to review"
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: deepseek-review-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    name: dsh-github-review
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    steps:
+      - name: Review pull request with DeepSeek
+        uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e
+        with:
+          task: review
+          pr: ${{ inputs.pr_number }}
+          owner-repo: ${{ github.repository }}
+          model: deepseek-v4-pro
+          engine: model
+          deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
+          github-token: ${{ github.token }}
+          check-name: dsh-github-review
+          blocking: "true"
+          fail-on: error
+          post-comments: "true"
+          post-check: "true"
+          dsh-version: "0.2.1-rc.2"
+          plugin-version: "0.7.16"
