@@ -13,16 +13,35 @@ concurrency:
   group: deepseek-review-${{ inputs.pr_number }}
   cancel-in-progress: false
 
+# Waarom geen `uses: PerryLink/dsh-github@...` meer?
+# De composite action installeert alleen de dsh-github plugin in het profiel, maar
+# NIET de basis-plugins (@deepseek-ai/dsh-base en @deepseek-ai/dsh-headless). Daardoor
+# blijft dsh hangen op "pending (waiting for services: tools, fs, ...)" en komt er
+# nooit een review. De eigen compat-test van dsh-github installeert die basis wel.
+# Deze workflow doet dezelfde stappen als de action, plus die ontbrekende basis.
+
+env:
+  DSH_VERSION: 0.2.1-rc.2        # versie waartegen dsh-github 0.7.x geverifieerd is
+  PLUGIN_VERSION: 0.7.25         # hoort bij action-commit hieronder
+  ACTION_SHA: 8b21cfe99478a10bd69e0a1717711663e27e3e7e  # dsh-github v0.7.25
+  MODEL: deepseek-flash
+
 jobs:
   review:
     name: dsh-github-review
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: write
       checks: write
     steps:
+      - name: Set dsh paths
+        shell: bash
+        run: |
+          echo "DSH_HOME=$RUNNER_TEMP/dsh-home" >> "$GITHUB_ENV"
+          echo "OUT_DIR=$RUNNER_TEMP/dsh-github" >> "$GITHUB_ENV"
+
       - name: Validate review input
         shell: bash
         env:
@@ -45,73 +64,102 @@ jobs:
           fi
           echo "DEEPSEEK_API_KEY is available (value hidden)."
 
-      # Commit 8b21cfe = release v0.7.25 van dsh-github.
-      #
-      # Het env-blok hieronder is NODIG: de scripts in deze action lezen hun
-      # instellingen uit INPUT_* variabelen, en die komen in een composite action
-      # niet vanzelf door naar de interne stappen. Houd env en with gelijk.
-      #
-      # Wijzigingen t.o.v. de vorige versie:
-      #  - plugin-version 0.7.25 (was 0.7.16) -> past nu bij de gepinde action-commit
-      #  - dsh-version weggehaald (was release-candidate 0.2.1-rc.2) -> standaard 'latest'
-      #  - model deepseek-flash (standaard van de action; was deepseek-v4-pro).
-      #    Werkt het? Dan kun je een ander model proberen; zet het dan in BEIDE plekken.
-      - name: Review pull request with DeepSeek
-        uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e # v0.7.25
+      - name: Check out dsh-github scripts (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: PerryLink/dsh-github
+          ref: ${{ env.ACTION_SHA }}
+          path: .dsh-github-action
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dsh with base + headless + dsh-github
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global --no-audit --no-fund "@deepseek-ai/dsh@${DSH_VERSION}"
+          mkdir -p "$DSH_HOME/profiles/headless" "$OUT_DIR"
+          cat > "$DSH_HOME/profiles/headless/pnpm-workspace.yaml" <<'YAML'
+          packages:
+            - .
+          nodeLinker: hoisted
+          minimumReleaseAge: 0
+          autoInstallPeers: false
+          allowBuilds:
+            '@deepseek-ai/dsh-subprocess-local': true
+            koffi: true
+            node-pty: true
+            protobufjs: true
+            '@google/genai': true
+          YAML
+          dsh plugin --profile headless add \
+            "@deepseek-ai/dsh-base@${DSH_VERSION}" \
+            "@deepseek-ai/dsh-headless@${DSH_VERSION}" \
+            "@perrylink/dsh-github@${PLUGIN_VERSION}"
+          echo "--- mounted plugins ---"
+          dsh --profile headless --dump-config | grep -E "name: '?@(deepseek-ai/dsh-(base|headless)|perrylink/dsh-github)" || true
+
+      - name: Generate overlay and task
+        shell: bash
         env:
           INPUT_TASK: review
           INPUT_PR: ${{ inputs.pr_number }}
           INPUT_OWNER_REPO: ${{ github.repository }}
-          INPUT_MODEL: deepseek-flash
+          INPUT_MODEL: ${{ env.MODEL }}
           INPUT_ENGINE: model
           INPUT_CHECK_NAME: dsh-github-review
           INPUT_BLOCKING: "true"
           INPUT_FAIL_ON: error
-          INPUT_LABEL_FILTERS: ""
-          INPUT_PATH_FILTERS: ""
           INPUT_MAX_DIFF_CHARS: "8000"
           INPUT_POST_COMMENTS: "true"
           INPUT_POST_CHECK: "true"
           INPUT_REQUEST_TIMEOUT_MS: "30000"
-          INPUT_OUTPUT_DIR: ${{ runner.temp }}/dsh-github
-          INPUT_TASK_PROMPT: ""
-        with:
-          task: review
-          pr: ${{ inputs.pr_number }}
-          owner-repo: ${{ github.repository }}
-          model: deepseek-flash
-          engine: model
-          deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
-          github-token: ${{ github.token }}
-          check-name: dsh-github-review
-          blocking: "true"
-          fail-on: error
-          post-comments: "true"
-          post-check: "true"
-          plugin-version: "0.7.25"
+          INPUT_OUTPUT_DIR: ${{ env.OUT_DIR }}
+        run: node .dsh-github-action/scripts/action-patch.mjs
+
+      - name: Run dsh headless review
+        shell: bash
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DSH_GITHUB_TOKEN: ${{ github.token }}
+          DSH_GITHUB_CI_DRIVER: "1"
+          DSH_GITHUB_CI_OUTPUT_DIR: ${{ env.OUT_DIR }}
+          DSH_TELEMETRY_DISABLED: "1"
+        run: |
+          set +e
+          timeout 600 dsh --profile headless --patch "$OUT_DIR/dsh-github-ci.cordis.yml" "$(cat "$OUT_DIR/task.txt")" \
+            > "$OUT_DIR/dsh-github-stdout.log" 2> "$OUT_DIR/dsh-github-stderr.log"
+          echo "$?" > "$OUT_DIR/dsh-github-exit.txt"
+          cat "$OUT_DIR/dsh-github-stdout.log"
+
+      - name: Publish outputs and enforce the gate
+        shell: bash
+        env:
+          INPUT_OUTPUT_DIR: ${{ env.OUT_DIR }}
+          INPUT_BLOCKING: "true"
+        run: node .dsh-github-action/scripts/action-post.mjs
 
       - name: Show redacted dsh logs
         if: always()
         shell: bash
         env:
-          DSH_OUT_DIR: ${{ runner.temp }}/dsh-github
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DSH_GITHUB_TOKEN: ${{ github.token }}
         run: |
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
-
-          const dir = process.env.DSH_OUT_DIR;
-          if (!fs.existsSync(dir)) {
-            console.log(`Output directory ${dir} does not exist.`);
-            process.exit(0);
-          }
-
+          const dir = process.env.OUT_DIR;
+          if (!fs.existsSync(dir)) { console.log(`Output directory ${dir} does not exist.`); process.exit(0); }
           console.log('Files in output directory:');
           for (const f of fs.readdirSync(dir)) console.log('  - ' + f);
-
-          // Toon exit-code, stdout en stderr van dsh, met secrets weggepoetst
           for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.log') || n.endsWith('exit.txt'))) {
             let output = fs.readFileSync(path.join(dir, f), 'utf8');
             for (const secret of [process.env.DEEPSEEK_API_KEY, process.env.DSH_GITHUB_TOKEN]) {
