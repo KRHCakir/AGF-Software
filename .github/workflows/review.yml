@@ -102,9 +102,10 @@ jobs:
           dsh plugin --profile headless add \
             "@deepseek-ai/dsh-base@${DSH_VERSION}" \
             "@deepseek-ai/dsh-headless@${DSH_VERSION}" \
+            "@deepseek-ai/dsh-credentials@${DSH_VERSION}" \
             "@perrylink/dsh-github@${PLUGIN_VERSION}"
           echo "--- mounted plugins ---"
-          dsh --profile headless --dump-config | grep -E "name: '?@(deepseek-ai/dsh-(base|headless)|perrylink/dsh-github)" || true
+          dsh --profile headless --dump-config | grep -E "name: '?@(deepseek-ai/dsh-(base|headless|credentials)|perrylink/dsh-github)" || true
 
       - name: Generate overlay and task
         shell: bash
@@ -138,6 +139,9 @@ jobs:
             > "$OUT_DIR/dsh-github-stdout.log" 2> "$OUT_DIR/dsh-github-stderr.log"
           echo "$?" > "$OUT_DIR/dsh-github-exit.txt"
           cat "$OUT_DIR/dsh-github-stdout.log"
+          if grep -q "dsh-github (@perrylink/dsh-github): pending" "$OUT_DIR/dsh-github-stderr.log"; then
+            echo "::error::dsh-github plugin did not activate ($(grep -o 'waiting for service[^)]*' "$OUT_DIR/dsh-github-stderr.log" | head -1)) - the ci_run tool was unavailable."
+          fi
 
       - name: Publish outputs and enforce the gate
         shell: bash
