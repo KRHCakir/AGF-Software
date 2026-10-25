@@ -39,6 +39,17 @@ jobs:
           fi
           echo "Validated target PR #$PR_NUMBER"
 
+      - name: Verify DeepSeek API key is available
+        shell: bash
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
+            echo "::error::DEEPSEEK_API_KEY is empty or unavailable to this workflow."
+            exit 1
+          fi
+          echo "DEEPSEEK_API_KEY is available (value hidden)."
+
       - name: Review pull request with DeepSeek
         uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e
         # The composite action's action-patch.mjs reads INPUT_* variables.
@@ -76,3 +87,33 @@ jobs:
           post-check: "true"
           dsh-version: "0.2.1-rc.2"
           plugin-version: "0.7.16"
+
+      - name: Show redacted dsh error log
+        if: always()
+        shell: bash
+        env:
+          DSH_STDERR_PATH: ${{ runner.temp }}/dsh-github/dsh-github-stderr.log
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DSH_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const path = process.env.DSH_STDERR_PATH;
+          if (!fs.existsSync(path)) {
+            console.log('No dsh stderr log was created.');
+            process.exit(0);
+          }
+
+          let output = fs.readFileSync(path, 'utf8');
+          for (const secret of [
+            process.env.DEEPSEEK_API_KEY,
+            process.env.DSH_GITHUB_TOKEN,
+          ]) {
+            if (secret) output = output.split(secret).join('[REDACTED]');
+          }
+
+          const lines = output.trimEnd().split('\n');
+          console.log('Showing the last 120 lines of dsh stderr (secrets redacted):');
+          console.log(lines.slice(-120).join('\n') || '(stderr log is empty)');
+          NODE
