@@ -1,18 +1,13 @@
 name: DeepSeek PR Review
 
 on:
-  # Manual-only pilot: adding this file will not automatically run the review.
+  # Handmatig starten: Actions -> DeepSeek PR Review -> Run workflow -> PR-nummer invullen
   workflow_dispatch:
     inputs:
       pr_number:
         description: "Pull request number to review"
         required: true
         type: number
-
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
 
 concurrency:
   group: deepseek-review-${{ inputs.pr_number }}
@@ -50,33 +45,18 @@ jobs:
           fi
           echo "DEEPSEEK_API_KEY is available (value hidden)."
 
+      # Commit 8b21cfe = release v0.7.25 van dsh-github.
+      # FIX 1: het handmatige INPUT_* env-blok is weg; `with:` geeft de inputs zelf door.
+      # FIX 2: plugin-version komt nu overeen met de gepinde commit (was 0.7.16).
+      # FIX 3: dsh-version (release candidate) en model weggelaten -> de action gebruikt
+      #        zijn eigen geteste standaardwaarden. Werkt de review? Zet dan eventueel
+      #        `model:` terug met de exacte modelnaam uit je DeepSeek-dashboard.
       - name: Review pull request with DeepSeek
-        uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e
-        # The composite action's action-patch.mjs reads INPUT_* variables.
-        # Composite-action inputs are not automatically exported to nested run
-        # steps, so explicitly forward the values it consumes.
-        env:
-          INPUT_TASK: review
-          INPUT_PR: ${{ inputs.pr_number }}
-          INPUT_OWNER_REPO: ${{ github.repository }}
-          INPUT_MODEL: deepseek-v4-pro
-          INPUT_ENGINE: model
-          INPUT_CHECK_NAME: dsh-github-review
-          INPUT_BLOCKING: "true"
-          INPUT_FAIL_ON: error
-          INPUT_LABEL_FILTERS: ""
-          INPUT_PATH_FILTERS: ""
-          INPUT_MAX_DIFF_CHARS: "8000"
-          INPUT_POST_COMMENTS: "true"
-          INPUT_POST_CHECK: "true"
-          INPUT_REQUEST_TIMEOUT_MS: "30000"
-          INPUT_OUTPUT_DIR: ${{ runner.temp }}/dsh-github
-          INPUT_TASK_PROMPT: ""
+        uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e # v0.7.25
         with:
           task: review
           pr: ${{ inputs.pr_number }}
           owner-repo: ${{ github.repository }}
-          model: deepseek-v4-pro
           engine: model
           deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
           github-token: ${{ github.token }}
@@ -85,35 +65,37 @@ jobs:
           fail-on: error
           post-comments: "true"
           post-check: "true"
-          dsh-version: "0.2.1-rc.2"
-          plugin-version: "0.7.16"
+          plugin-version: "0.7.25"
 
       - name: Show redacted dsh error log
         if: always()
         shell: bash
         env:
-          DSH_STDERR_PATH: ${{ runner.temp }}/dsh-github/dsh-github-stderr.log
+          DSH_OUT_DIR: ${{ runner.temp }}/dsh-github
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DSH_GITHUB_TOKEN: ${{ github.token }}
         run: |
           node <<'NODE'
           const fs = require('node:fs');
+          const path = require('node:path');
 
-          const path = process.env.DSH_STDERR_PATH;
-          if (!fs.existsSync(path)) {
-            console.log('No dsh stderr log was created.');
+          const dir = process.env.DSH_OUT_DIR;
+          if (!fs.existsSync(dir)) {
+            console.log(`Output directory ${dir} does not exist.`);
             process.exit(0);
           }
 
-          let output = fs.readFileSync(path, 'utf8');
-          for (const secret of [
-            process.env.DEEPSEEK_API_KEY,
-            process.env.DSH_GITHUB_TOKEN,
-          ]) {
-            if (secret) output = output.split(secret).join('[REDACTED]');
-          }
+          console.log('Files in output directory:');
+          for (const f of fs.readdirSync(dir)) console.log('  - ' + f);
 
-          const lines = output.trimEnd().split('\n');
-          console.log('Showing the last 120 lines of dsh stderr (secrets redacted):');
-          console.log(lines.slice(-120).join('\n') || '(stderr log is empty)');
+          // Toon alle .log-bestanden (niet alleen stderr), met secrets weggepoetst
+          for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.log'))) {
+            let output = fs.readFileSync(path.join(dir, f), 'utf8');
+            for (const secret of [process.env.DEEPSEEK_API_KEY, process.env.DSH_GITHUB_TOKEN]) {
+              if (secret) output = output.split(secret).join('[REDACTED]');
+            }
+            const lines = output.trimEnd().split('\n');
+            console.log(`\n===== ${f} (last 120 lines, secrets redacted) =====`);
+            console.log(lines.slice(-120).join('\n') || '(empty)');
+          }
           NODE
