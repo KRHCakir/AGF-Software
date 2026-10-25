@@ -46,17 +46,40 @@ jobs:
           echo "DEEPSEEK_API_KEY is available (value hidden)."
 
       # Commit 8b21cfe = release v0.7.25 van dsh-github.
-      # FIX 1: het handmatige INPUT_* env-blok is weg; `with:` geeft de inputs zelf door.
-      # FIX 2: plugin-version komt nu overeen met de gepinde commit (was 0.7.16).
-      # FIX 3: dsh-version (release candidate) en model weggelaten -> de action gebruikt
-      #        zijn eigen geteste standaardwaarden. Werkt de review? Zet dan eventueel
-      #        `model:` terug met de exacte modelnaam uit je DeepSeek-dashboard.
+      #
+      # Het env-blok hieronder is NODIG: de scripts in deze action lezen hun
+      # instellingen uit INPUT_* variabelen, en die komen in een composite action
+      # niet vanzelf door naar de interne stappen. Houd env en with gelijk.
+      #
+      # Wijzigingen t.o.v. de vorige versie:
+      #  - plugin-version 0.7.25 (was 0.7.16) -> past nu bij de gepinde action-commit
+      #  - dsh-version weggehaald (was release-candidate 0.2.1-rc.2) -> standaard 'latest'
+      #  - model deepseek-flash (standaard van de action; was deepseek-v4-pro).
+      #    Werkt het? Dan kun je een ander model proberen; zet het dan in BEIDE plekken.
       - name: Review pull request with DeepSeek
         uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e # v0.7.25
+        env:
+          INPUT_TASK: review
+          INPUT_PR: ${{ inputs.pr_number }}
+          INPUT_OWNER_REPO: ${{ github.repository }}
+          INPUT_MODEL: deepseek-flash
+          INPUT_ENGINE: model
+          INPUT_CHECK_NAME: dsh-github-review
+          INPUT_BLOCKING: "true"
+          INPUT_FAIL_ON: error
+          INPUT_LABEL_FILTERS: ""
+          INPUT_PATH_FILTERS: ""
+          INPUT_MAX_DIFF_CHARS: "8000"
+          INPUT_POST_COMMENTS: "true"
+          INPUT_POST_CHECK: "true"
+          INPUT_REQUEST_TIMEOUT_MS: "30000"
+          INPUT_OUTPUT_DIR: ${{ runner.temp }}/dsh-github
+          INPUT_TASK_PROMPT: ""
         with:
           task: review
           pr: ${{ inputs.pr_number }}
           owner-repo: ${{ github.repository }}
+          model: deepseek-flash
           engine: model
           deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
           github-token: ${{ github.token }}
@@ -67,7 +90,7 @@ jobs:
           post-check: "true"
           plugin-version: "0.7.25"
 
-      - name: Show redacted dsh error log
+      - name: Show redacted dsh logs
         if: always()
         shell: bash
         env:
@@ -88,8 +111,8 @@ jobs:
           console.log('Files in output directory:');
           for (const f of fs.readdirSync(dir)) console.log('  - ' + f);
 
-          // Toon alle .log-bestanden (niet alleen stderr), met secrets weggepoetst
-          for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.log'))) {
+          // Toon exit-code, stdout en stderr van dsh, met secrets weggepoetst
+          for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.log') || n.endsWith('exit.txt'))) {
             let output = fs.readFileSync(path.join(dir, f), 'utf8');
             for (const secret of [process.env.DEEPSEEK_API_KEY, process.env.DSH_GITHUB_TOKEN]) {
               if (secret) output = output.split(secret).join('[REDACTED]');
