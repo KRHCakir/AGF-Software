@@ -1,7 +1,18 @@
-name: DeepSeek PR Review
+name: AI PR Review
+
+# Reviewt elke pull request eerst met DeepSeek en daarna (als die goedkeurt) met Qwen.
+# Elk model zet één comment op de PR en werkt die bij bij nieuwe commits.
+# Rood = een model vraagt om wijzigingen. Groen = beide keuren goed.
+#
+# Instellingen (Settings -> Secrets and variables -> Actions):
+#   Secrets:   DEEPSEEK_API_KEY (verplicht), QWEN_API_KEY (optioneel; zonder wordt Qwen overgeslagen)
+#   Variables: DEEPSEEK_MODEL (standaard deepseek-v4-pro)
+#              QWEN_MODEL     (standaard qwen-plus)
+#              QWEN_BASE_URL  (standaard https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
 
 on:
-  # Handmatig starten: Actions -> DeepSeek PR Review -> Run workflow -> PR-nummer invullen
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -10,167 +21,93 @@ on:
         type: number
 
 concurrency:
-  group: deepseek-review-${{ inputs.pr_number }}
-  cancel-in-progress: false
+  group: ai-review-${{ inputs.pr_number || github.event.pull_request.number }}
+  cancel-in-progress: true
 
-# Waarom geen `uses: PerryLink/dsh-github@...` meer?
-# De composite action installeert alleen de dsh-github plugin in het profiel, maar
-# NIET de basis-plugins (@deepseek-ai/dsh-base en @deepseek-ai/dsh-headless). Daardoor
-# blijft dsh hangen op "pending (waiting for services: tools, fs, ...)" en komt er
-# nooit een review. De eigen compat-test van dsh-github installeert die basis wel.
-# Deze workflow doet dezelfde stappen als de action, plus die ontbrekende basis.
+permissions:
+  contents: read
+  pull-requests: write
 
 env:
-  DSH_VERSION: 0.2.1-rc.2        # versie waartegen dsh-github 0.7.x geverifieerd is
-  PLUGIN_VERSION: 0.7.25         # hoort bij action-commit hieronder
-  ACTION_SHA: 8b21cfe99478a10bd69e0a1717711663e27e3e7e  # dsh-github v0.7.25
-  MODEL: deepseek-flash
+  PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
 
 jobs:
-  review:
-    name: dsh-github-review
+  deepseek:
+    name: DeepSeek review
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      pull-requests: write
-      checks: write
+    timeout-minutes: 10
     steps:
-      - name: Set dsh paths
-        shell: bash
-        run: |
-          echo "DSH_HOME=$RUNNER_TEMP/dsh-home" >> "$GITHUB_ENV"
-          echo "OUT_DIR=$RUNNER_TEMP/dsh-github" >> "$GITHUB_ENV"
-
-      - name: Validate review input
-        shell: bash
-        env:
-          PR_NUMBER: ${{ inputs.pr_number }}
-        run: |
-          if [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::Pull request number must be a positive integer."
-            exit 1
-          fi
-          echo "Validated target PR #$PR_NUMBER"
-
-      - name: Verify DeepSeek API key is available
-        shell: bash
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: |
-          if [[ -z "${DEEPSEEK_API_KEY:-}" ]]; then
-            echo "::error::DEEPSEEK_API_KEY is empty or unavailable to this workflow."
-            exit 1
-          fi
-          echo "DEEPSEEK_API_KEY is available (value hidden)."
-
-      - name: Check out dsh-github scripts (pinned)
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          repository: PerryLink/dsh-github
-          ref: ${{ env.ACTION_SHA }}
-          path: .dsh-github-action
+          sparse-checkout: .github/scripts
           persist-credentials: false
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install dsh with base + headless + dsh-github
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm install --global --no-audit --no-fund "@deepseek-ai/dsh@${DSH_VERSION}"
-          mkdir -p "$DSH_HOME/profiles/headless" "$OUT_DIR"
-          cat > "$DSH_HOME/profiles/headless/pnpm-workspace.yaml" <<'YAML'
-          packages:
-            - .
-          nodeLinker: hoisted
-          minimumReleaseAge: 0
-          autoInstallPeers: false
-          allowBuilds:
-            '@deepseek-ai/dsh-subprocess-local': true
-            koffi: true
-            node-pty: true
-            protobufjs: true
-            '@google/genai': true
-          YAML
-          dsh plugin --profile headless add \
-            "@deepseek-ai/dsh-base@${DSH_VERSION}" \
-            "@deepseek-ai/dsh-headless@${DSH_VERSION}" \
-            "@deepseek-ai/dsh-credentials@${DSH_VERSION}" \
-            "@perrylink/dsh-github@${PLUGIN_VERSION}"
-          echo "--- mounted plugins ---"
-          dsh --profile headless --dump-config | grep -E "name: '?@(deepseek-ai/dsh-(base|headless|credentials)|perrylink/dsh-github)" || true
-
-      - name: Generate overlay and task
-        shell: bash
+      - name: Review with DeepSeek
         env:
-          INPUT_TASK: review
-          INPUT_PR: ${{ inputs.pr_number }}
-          INPUT_OWNER_REPO: ${{ github.repository }}
-          INPUT_MODEL: ${{ env.MODEL }}
-          INPUT_ENGINE: model
-          INPUT_CHECK_NAME: dsh-github-review
-          INPUT_BLOCKING: "true"
-          INPUT_FAIL_ON: error
-          INPUT_MAX_DIFF_CHARS: "8000"
-          INPUT_POST_COMMENTS: "true"
-          INPUT_POST_CHECK: "true"
-          INPUT_REQUEST_TIMEOUT_MS: "30000"
-          INPUT_OUTPUT_DIR: ${{ env.OUT_DIR }}
-        run: node .dsh-github-action/scripts/action-patch.mjs
+          GITHUB_TOKEN: ${{ github.token }}
+          AI_NAME: DeepSeek
+          AI_BASE_URL: https://api.deepseek.com
+          AI_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-pro' }}
+          AI_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          REVIEW_OUTPUT: deepseek-review.json
+        run: node .github/scripts/ai-review.mjs
 
-      - name: Run dsh headless review
-        shell: bash
+      - name: Save review result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepseek-review
+          path: deepseek-review.json
+          if-no-files-found: ignore
+
+  qwen:
+    name: Qwen review
+    needs: deepseek
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check for Qwen key
+        id: key
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          DSH_GITHUB_TOKEN: ${{ github.token }}
-          DSH_GITHUB_CI_DRIVER: "1"
-          DSH_GITHUB_CI_OUTPUT_DIR: ${{ env.OUT_DIR }}
-          DSH_TELEMETRY_DISABLED: "1"
+          QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
         run: |
-          set +e
-          timeout 600 dsh --profile headless --patch "$OUT_DIR/dsh-github-ci.cordis.yml" "$(cat "$OUT_DIR/task.txt")" \
-            > "$OUT_DIR/dsh-github-stdout.log" 2> "$OUT_DIR/dsh-github-stderr.log"
-          echo "$?" > "$OUT_DIR/dsh-github-exit.txt"
-          cat "$OUT_DIR/dsh-github-stdout.log"
-          if grep -q "dsh-github (@perrylink/dsh-github): pending" "$OUT_DIR/dsh-github-stderr.log"; then
-            echo "::error::dsh-github plugin did not activate ($(grep -o 'waiting for service[^)]*' "$OUT_DIR/dsh-github-stderr.log" | head -1)) - the ci_run tool was unavailable."
+          if [ -n "$QWEN_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "QWEN_API_KEY is not set - skipping the Qwen review."
           fi
 
-      - name: Publish outputs and enforce the gate
-        shell: bash
-        env:
-          INPUT_OUTPUT_DIR: ${{ env.OUT_DIR }}
-          INPUT_BLOCKING: "true"
-        run: node .dsh-github-action/scripts/action-post.mjs
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
 
-      - name: Show redacted dsh logs
-        if: always()
-        shell: bash
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version: 22
+
+      - name: Review with Qwen
+        if: steps.key.outputs.present == 'true'
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          DSH_GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          node <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const dir = process.env.OUT_DIR;
-          if (!fs.existsSync(dir)) { console.log(`Output directory ${dir} does not exist.`); process.exit(0); }
-          console.log('Files in output directory:');
-          for (const f of fs.readdirSync(dir)) console.log('  - ' + f);
-          for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.log') || n.endsWith('exit.txt'))) {
-            let output = fs.readFileSync(path.join(dir, f), 'utf8');
-            for (const secret of [process.env.DEEPSEEK_API_KEY, process.env.DSH_GITHUB_TOKEN]) {
-              if (secret) output = output.split(secret).join('[REDACTED]');
-            }
-            const lines = output.trimEnd().split('\n');
-            console.log(`\n===== ${f} (last 120 lines, secrets redacted) =====`);
-            console.log(lines.slice(-120).join('\n') || '(empty)');
-          }
-          NODE
+          GITHUB_TOKEN: ${{ github.token }}
+          AI_NAME: Qwen
+          AI_BASE_URL: ${{ vars.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' }}
+          AI_MODEL: ${{ vars.QWEN_MODEL || 'qwen-plus' }}
+          AI_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          REVIEW_OUTPUT: qwen-review.json
+        run: node .github/scripts/ai-review.mjs
+
+      - name: Save review result
+        if: always() && steps.key.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-review
+          path: qwen-review.json
+          if-no-files-found: ignore
