@@ -28,8 +28,39 @@ jobs:
       pull-requests: write
       checks: write
     steps:
+      - name: Validate review input
+        shell: bash
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          if [[ ! "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Pull request number must be a positive integer."
+            exit 1
+          fi
+          echo "Validated target PR #$PR_NUMBER"
+
       - name: Review pull request with DeepSeek
         uses: PerryLink/dsh-github@8b21cfe99478a10bd69e0a1717711663e27e3e7e
+        # The composite action's action-patch.mjs reads INPUT_* variables.
+        # Composite-action inputs are not automatically exported to nested run
+        # steps, so explicitly forward the values it consumes.
+        env:
+          INPUT_TASK: review
+          INPUT_PR: ${{ inputs.pr_number }}
+          INPUT_OWNER_REPO: ${{ github.repository }}
+          INPUT_MODEL: deepseek-v4-pro
+          INPUT_ENGINE: model
+          INPUT_CHECK_NAME: dsh-github-review
+          INPUT_BLOCKING: "true"
+          INPUT_FAIL_ON: error
+          INPUT_LABEL_FILTERS: ""
+          INPUT_PATH_FILTERS: ""
+          INPUT_MAX_DIFF_CHARS: "8000"
+          INPUT_POST_COMMENTS: "true"
+          INPUT_POST_CHECK: "true"
+          INPUT_REQUEST_TIMEOUT_MS: "30000"
+          INPUT_OUTPUT_DIR: ${{ runner.temp }}/dsh-github
+          INPUT_TASK_PROMPT: ""
         with:
           task: review
           pr: ${{ inputs.pr_number }}
