@@ -210,28 +210,6 @@ function validateReviewResult(result) {
   }
 }
 
-async function askModel(system, user) {
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-  })
-  const text = await res.text()
-  if (!res.ok) throw new Error(`${aiName} API failed: ${res.status} ${text.slice(0, 500)}`)
-  const content = JSON.parse(text).choices?.[0]?.message?.content ?? ''
-  // Sommige modellen zetten JSON toch in een ```json blok
-  const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')
-  return JSON.parse(cleaned)
-}
-
 const SYSTEM = `You are a strict, senior code reviewer for a production business application
 (.NET 9 backend, Next.js frontend). Review ONLY the pull request diff you are given.
 Focus on: correctness and bugs, security (auth, injection, secrets, data exposure),
@@ -247,6 +225,13 @@ Respond with ONLY a JSON object of this exact shape:
       "title": "short title", "detail": "what is wrong and how to fix it" }
   ]
 }
+Severity rules (be calibrated, not maximal):
+- blocker: will break production, lose or corrupt data, or is a real security hole.
+- major: a concrete bug that will realistically happen in normal use of THIS code.
+- minor: hardening, robustness for unlikely edge cases, hypothetical "what if" scenarios.
+- nit: style, naming, wording.
+Theoretical improvements (extra timeouts, extra validation, supporting other providers)
+are minor unless you can name a realistic scenario in which the current code actually fails.
 Use "request_changes" only when there is at least one blocker or major finding.
 Write summary and findings in Dutch.`
 
