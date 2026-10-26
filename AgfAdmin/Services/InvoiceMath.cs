@@ -29,5 +29,8 @@ namespace AgfAdmin.Services
             }
             return (net, vat, net + vat);
         }
+
+        // Gemiddeld bedrag over een reeks bedragen, op 2 decimalen.
+        public static decimal AverageAmount(IReadOnlyCollection<decimal> amounts) => Round2(amounts.Sum() / amounts.Count);
     }
 }
