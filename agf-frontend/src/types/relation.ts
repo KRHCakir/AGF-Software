@@ -80,11 +80,14 @@ export interface VendorGgn {
 }
 
 // Afspraken die klant- en leveranciersrol gemeen hebben (betalingsconditie, betaalwijze/mandaat, leverings- en handelsvoorwaarden).
-// paymentTermsDays is een alleen-lezen spiegel van de dagen van de conditie.
+// paymentTermsDays is een alleen-lezen spiegel van de dagen van de conditie; einde maand en korting komen ook uit de conditie.
 export interface RoleTerms {
     paymentConditionId: number | null;
     paymentCondition: PaymentConditionSummary | null;
     paymentTermsDays: number;
+    paymentTermsEndOfMonth: boolean;
+    discountPercent: number | null;
+    discountDays: number | null;
     paymentMethod: string | null;
     mandateReference: string | null;
     mandateSignedOn: string | null;
@@ -188,9 +191,13 @@ export interface Relation {
     warnings: RelationWarning[];
 }
 
-// Rolafspraken zoals ze worden opgeslagen: paymentConditionId wint; null voor betaalwijze/valuta = ongewijzigd laten.
+// Rolafspraken zoals ze worden opgeslagen: vrije termijn (paymentTermsDays null = standaard uit de bedrijfsinstellingen; de server zoekt
+// of maakt de passende betalingsconditie); null voor betaalwijze/valuta = ongewijzigd laten.
 export interface SaveRoleTerms {
-    paymentConditionId: number | null;
+    paymentTermsDays: number | null;
+    paymentTermsEndOfMonth: boolean;
+    discountPercent: number | null;
+    discountDays: number | null;
     paymentMethod: string | null;
     mandateReference: string | null;
     mandateSignedOn: string | null;
@@ -299,6 +306,8 @@ export interface RelationReference {
     globalGapPortalUrl: string;
     paymentMethods: string[];
     paymentConditionBases: string[];
+    // Standaard betalingstermijn (dagen) als het veld leeg blijft.
+    defaultPaymentTermsDays: number;
     deliveryTermKinds: string[];
     incoterms: string[];
     tradeConditions: string[];
@@ -333,6 +342,7 @@ function isGgn(value: unknown): value is VendorGgn {
 
 function isRoleTerms(value: Record<string, unknown>): boolean {
     return isNullableNumber(value.paymentConditionId) && (value.paymentCondition === null || isPaymentConditionSummary(value.paymentCondition)) && isNumber(value.paymentTermsDays)
+        && typeof value.paymentTermsEndOfMonth === 'boolean' && isNullableNumber(value.discountPercent) && isNullableNumber(value.discountDays)
         && isNullableString(value.paymentMethod) && isNullableString(value.mandateReference) && isNullableString(value.mandateSignedOn) && isNullableString(value.deliveryTermKind)
         && isNullableString(value.incoterm) && isNullableString(value.incotermPlace) && isNullableString(value.deliveryTermText) && isNullableString(value.tradeConditions)
         && isNullableString(value.tradeConditionsText);
@@ -393,7 +403,7 @@ export function isRelationReference(value: unknown): value is RelationReference 
     return isObject(value) && isArrayOf(value.languages, isString) && isArrayOf(value.addressPurposes, isString) && isArrayOf(value.departmentSuggestions, isString)
         && isArrayOf(value.registrationTypeSuggestions, isString) && isArrayOf(value.legalFormSuggestions, isString) && isArrayOf(value.currencies, isString)
         && isArrayOf(value.vatVerificationStatuses, isString) && isString(value.globalGapDatabaseUrl) && isString(value.globalGapPortalUrl)
-        && isArrayOf(value.paymentMethods, isString) && isArrayOf(value.paymentConditionBases, isString) && isArrayOf(value.deliveryTermKinds, isString)
+        && isArrayOf(value.paymentMethods, isString) && isArrayOf(value.paymentConditionBases, isString) && isNumber(value.defaultPaymentTermsDays) && isArrayOf(value.deliveryTermKinds, isString)
         && isArrayOf(value.incoterms, isString) && isArrayOf(value.tradeConditions, isString) && isArrayOf(value.creditInsurers, isString)
         && isArrayOf(value.legacyArticleGgns, (item): item is LegacyArticleGgn => isObject(item) && isNumber(item.productVariantId) && isString(item.description) && isString(item.ggn));
 }

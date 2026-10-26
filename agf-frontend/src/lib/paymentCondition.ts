@@ -12,7 +12,8 @@ export const MAX_CONDITION_DESCRIPTION_LENGTH = 200;
 export const MIN_CONDITION_DAYS = 0;
 export const MAX_CONDITION_DAYS = 365;
 export const MAX_DISCOUNT_PERCENT = 99.99;
-const CODE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,15}$/;
+// '%' voor automatisch aangemaakte kortingscodes ("30D-2%8").
+const CODE = /^[A-Za-z0-9][A-Za-z0-9._%-]{0,15}$/;
 
 export const isPaymentConditionBasis = (value: unknown): value is PaymentConditionBasis =>
     typeof value === 'string' && (PAYMENT_CONDITION_BASES as readonly string[]).includes(value);
@@ -120,4 +121,71 @@ export function validateConditionDraft(draft: PaymentConditionDraft): { ok: true
     }
     if (errors.length > 0) return { ok: false, errors };
     return { ok: true, value: { code, descriptionNl, descriptionEn, days: days!, basis: draft.basis, discountPercent, discountDays, sortOrder, isActive: draft.isActive } };
+}
+
+// ---- vrije termijn op een rol (relatieformulier), spiegel van PaymentConditionRules.ValidateTerms ----
+//   - dagen leeg = standaard uit de bedrijfsinstellingen (placeholder), anders een geheel getal 0..365;
+//   - einde maand aan = basis EndOfMonth;
+//   - korting optioneel: percentage (> 0, max 99,99, hooguit 2 decimalen, komma of punt) en kortingsdagen (0..effectieve termijn)
+//     beide of geen van beide; de fout staat bij het lege veld. Geen korting = beide leeg, nooit automatisch.
+
+export interface FreeTermsInput {
+    paymentTermsDays: string;
+    paymentTermsEndOfMonth: boolean;
+    discountPercent: string;
+    discountDays: string;
+}
+
+export interface FreeTermsValues {
+    paymentTermsDays: number | null;
+    paymentTermsEndOfMonth: boolean;
+    discountPercent: number | null;
+    discountDays: number | null;
+}
+
+export type FreeTermsRuleCode = 'terms_days' | 'discount_percent' | 'discount_days' | 'discount_percent_required' | 'discount_days_required';
+export interface FreeTermsRuleError { field: 'paymentTermsDays' | 'discountPercent' | 'discountDays'; code: FreeTermsRuleCode }
+
+const termDays = (value: string): number | null => (/^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : null);
+
+export function validateFreeTerms(input: FreeTermsInput, defaultDays: number): { values: FreeTermsValues; effectiveDays: number | null; errors: FreeTermsRuleError[] } {
+    const errors: FreeTermsRuleError[] = [];
+    const daysText = input.paymentTermsDays.trim();
+    let paymentTermsDays: number | null = null;
+    if (daysText !== '') {
+        paymentTermsDays = termDays(daysText);
+        if (paymentTermsDays === null || paymentTermsDays < MIN_CONDITION_DAYS || paymentTermsDays > MAX_CONDITION_DAYS) {
+            errors.push({ field: 'paymentTermsDays', code: 'terms_days' });
+            paymentTermsDays = null;
+        }
+    }
+    const effectiveDays = daysText === '' ? defaultDays : paymentTermsDays;
+    const percentText = input.discountPercent.trim();
+    const discountDaysText = input.discountDays.trim();
+    let discountPercent: number | null = null;
+    let discountDays: number | null = null;
+    if (percentText !== '') {
+        discountPercent = percent(percentText);
+        if (discountPercent === null || discountPercent <= 0 || discountPercent > MAX_DISCOUNT_PERCENT) { errors.push({ field: 'discountPercent', code: 'discount_percent' }); discountPercent = null; }
+    } else if (discountDaysText !== '') {
+        errors.push({ field: 'discountPercent', code: 'discount_percent_required' });
+    }
+    if (discountDaysText !== '') {
+        discountDays = termDays(discountDaysText);
+        if (discountDays === null || (effectiveDays !== null && discountDays > effectiveDays)) { errors.push({ field: 'discountDays', code: 'discount_days' }); discountDays = null; }
+    } else if (percentText !== '') {
+        errors.push({ field: 'discountDays', code: 'discount_days_required' });
+    }
+    return { values: { paymentTermsDays, paymentTermsEndOfMonth: input.paymentTermsEndOfMonth, discountPercent, discountDays }, effectiveDays, errors };
+}
+
+// Voorbeeldregel "factuur vandaag vervalt op …" (live bij elke toetsaanslag): null zolang de dagen ongeldig zijn; korting alleen als
+// beide kortingsvelden geldig zijn ingevuld.
+export function freeTermsPreview(invoiceDate: string, input: FreeTermsInput, defaultDays: number): { due: string; discountPercent: number | null; discountDate: string | null } | null {
+    const { values, effectiveDays, errors } = validateFreeTerms(input, defaultDays);
+    if (effectiveDays === null || errors.some((e) => e.field === 'paymentTermsDays')) return null;
+    const due = conditionDueDate(invoiceDate, effectiveDays, input.paymentTermsEndOfMonth ? 'EndOfMonth' : 'InvoiceDate');
+    if (due === null) return null;
+    const discountOk = !errors.some((e) => e.field !== 'paymentTermsDays') && values.discountPercent !== null && values.discountDays !== null;
+    return { due, discountPercent: discountOk ? values.discountPercent : null, discountDate: discountOk ? conditionDiscountDate(invoiceDate, values) : null };
 }

@@ -150,7 +150,9 @@ const amountText = (value: number | null) => (value === null ? '' : String(value
 // Rolafspraken van de server als invoer (ook na "rol toevoegen": de standaarden van de server komen in het concept).
 export function termsDraftFromRole(role: RoleTerms, currency: string | null): RoleTermsDraft {
     return {
-        paymentConditionId: role.paymentConditionId === null ? '' : String(role.paymentConditionId), paymentMethod: role.paymentMethod ?? 'BankTransfer',
+        // Een bestaande rol toont haar huidige termijn (ook als die gelijk is aan de standaard); korting alleen als de conditie die heeft.
+        paymentTermsDays: String(role.paymentTermsDays), paymentTermsEndOfMonth: role.paymentTermsEndOfMonth, discountPercent: role.discountPercent === null ? '' : String(role.discountPercent),
+        discountDays: role.discountDays === null ? '' : String(role.discountDays), paymentMethod: role.paymentMethod ?? 'BankTransfer',
         mandateReference: text(role.mandateReference), mandateSignedOn: text(role.mandateSignedOn), currency: currency ?? 'EUR', deliveryTermKind: text(role.deliveryTermKind),
         incoterm: text(role.incoterm), incotermPlace: text(role.incotermPlace), deliveryTermText: text(role.deliveryTermText), tradeConditions: text(role.tradeConditions),
         tradeConditionsText: text(role.tradeConditionsText),
@@ -239,7 +241,8 @@ export function bankAccountsNeedActor(accounts: readonly BankAccountDraft[]): bo
 
 function saveTerms(values: ReturnType<typeof normalizeTerms>): SaveRoleTerms {
     return {
-        paymentConditionId: values.paymentConditionId, paymentMethod: values.paymentMethod, mandateReference: values.mandateReference, mandateSignedOn: values.mandateSignedOn,
+        paymentTermsDays: values.paymentTermsDays, paymentTermsEndOfMonth: values.paymentTermsEndOfMonth, discountPercent: values.discountPercent, discountDays: values.discountDays,
+        paymentMethod: values.paymentMethod, mandateReference: values.mandateReference, mandateSignedOn: values.mandateSignedOn,
         deliveryTermKind: values.deliveryTermKind, incoterm: values.incoterm, incotermPlace: values.incotermPlace, deliveryTermText: values.deliveryTermText,
         tradeConditions: values.tradeConditions, tradeConditionsText: values.tradeConditionsText,
     };
@@ -262,7 +265,7 @@ function addressUnchanged(draft: AddressDraft): boolean {
     return s !== null && s.countryCode === null && text(s.line1) === draft.line1.trim() && text(s.line2) === draft.line2.trim() && text(s.postalCode) === draft.postalCode.trim() && text(s.city) === draft.city.trim() && text(s.region) === draft.region.trim();
 }
 
-export function buildRelationPayload(draft: RelationDraft, options: { requestId?: string; expectedVersion?: number; acknowledgeSimilarNames?: boolean; stored?: Relation | null; today?: string } = {}): RelationBuildResult {
+export function buildRelationPayload(draft: RelationDraft, options: { requestId?: string; expectedVersion?: number; acknowledgeSimilarNames?: boolean; stored?: Relation | null; today?: string; defaultPaymentTermsDays?: number } = {}): RelationBuildResult {
     const stored = options.stored ?? null;
     const today = options.today ?? todayInAmsterdam();
     const errors: RelationRuleError[] = [];
@@ -289,14 +292,14 @@ export function buildRelationPayload(draft: RelationDraft, options: { requestId?
 
     let customer: SaveRelationRequest['customer'] = null;
     if (draft.customerRole) {
-        const termsValues = normalizeTerms(draft.customerTerms, 'customer', today, errors);
+        const termsValues = normalizeTerms(draft.customerTerms, 'customer', today, errors, options.defaultPaymentTermsDays);
         const currency = currencyOf(draft.customerTerms.currency, 'customer.currency', errors);
         const credit = normalizeCredit(draft.credit, 'customer', errors);
         customer = { ...saveTerms(termsValues), currency, ...credit };
     }
     let vendor: SaveRelationRequest['vendor'] = null;
     if (draft.vendorRole) {
-        const termsValues = normalizeTerms(draft.vendorTerms, 'vendor', today, errors);
+        const termsValues = normalizeTerms(draft.vendorTerms, 'vendor', today, errors, options.defaultPaymentTermsDays);
         const currency = currencyOf(draft.vendorTerms.currency, 'vendor.defaultCurrency', errors);
         const seen = new Set<string>();
         const ggns: VendorGgn[] = [];

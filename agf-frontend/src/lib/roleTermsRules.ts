@@ -1,4 +1,5 @@
 // Rolafspraken van klant en leverancier, spiegel van AgfAdmin/Services/RoleTermsRules.cs (node:test):
+//   - betalingstermijn vrij: dagen (leeg = standaard), einde maand, optionele korting (validateFreeTerms in paymentCondition.ts);
 //   - betaalwijze leeg -> BankTransfer; DirectDebit vraagt mandaatkenmerk (max 35) en ondertekeningsdatum (niet in de toekomst);
 //     bij elke andere betaalwijze worden de mandaatvelden leeggemaakt;
 //   - leveringsconditie: geen | Incoterm (Incoterms 2020 + plaats verplicht) | Franco / AfKwekerij (toelichting optioneel) |
@@ -6,6 +7,9 @@
 //   - handelsvoorwaarden: geen | Own | Frugiventa | Cofreurop | Other (+ omschrijving verplicht);
 //   - krediet (alleen klant, EUR): limiet leeg of >= 0 met hooguit 2 decimalen; verzekerd -> verzekeraar (Other + naam) en
 //     verzekerde limiet verplicht; niet verzekerd -> alle verzekeringsvelden leeg. Verlopen verzekering = waarschuwing, geen fout.
+
+import { validateFreeTerms } from './paymentCondition.ts';
+import type { FreeTermsRuleCode } from './paymentCondition.ts';
 
 export const PAYMENT_METHODS = ['BankTransfer', 'DirectDebit', 'Cash', 'Offset'] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -24,16 +28,22 @@ export const MAX_TRADE_CONDITIONS_TEXT_LENGTH = 200;
 export const MAX_INSURER_TEXT_LENGTH = 100;
 export const MAX_INSURER_REFERENCE_LENGTH = 64;
 export const INSURANCE_EXPIRY_WARNING_DAYS = 30;
+// Terugval als de referentie (bedrijfsinstelling) geen standaardtermijn meegeeft; gelijk aan PurchaseInvoiceRules.DefaultPaymentTermsDays.
+export const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 export type TermsRuleCode = 'required' | 'too_long' | 'invalid' | 'currency' | 'mandate_required' | 'mandate_date_required' | 'mandate_future' | 'incoterm' | 'incoterm_place'
-    | 'delivery_text' | 'trade_text' | 'amount' | 'insurer' | 'insurer_text' | 'insured_limit';
+    | 'delivery_text' | 'trade_text' | 'amount' | 'insurer' | 'insurer_text' | 'insured_limit' | FreeTermsRuleCode;
 export interface TermsRuleError { field: string; code: TermsRuleCode }
 // Foutenlijst van de aanroeper (ook een bredere lijst, zoals die van de relatieregels).
 export interface TermsErrorSink { push(error: TermsRuleError): number; readonly length: number }
 
 // Invoer zoals het formulier haar bijhoudt (tekst); '' = niet gekozen.
 export interface RoleTermsDraft {
-    paymentConditionId: string;
+    // Vrije betalingstermijn: '' = standaard uit de bedrijfsinstellingen.
+    paymentTermsDays: string;
+    paymentTermsEndOfMonth: boolean;
+    discountPercent: string;
+    discountDays: string;
     paymentMethod: string;
     mandateReference: string;
     mandateSignedOn: string;
@@ -57,7 +67,10 @@ export interface CreditDraft {
 }
 
 export interface RoleTermsValues {
-    paymentConditionId: number | null;
+    paymentTermsDays: number | null;
+    paymentTermsEndOfMonth: boolean;
+    discountPercent: number | null;
+    discountDays: number | null;
     paymentMethod: PaymentMethod;
     mandateReference: string | null;
     mandateSignedOn: string | null;
@@ -80,7 +93,7 @@ export interface CreditValues {
 }
 
 export function emptyTermsDraft(currency = 'EUR'): RoleTermsDraft {
-    return { paymentConditionId: '', paymentMethod: 'BankTransfer', mandateReference: '', mandateSignedOn: '', currency, deliveryTermKind: '', incoterm: '', incotermPlace: '', deliveryTermText: '', tradeConditions: '', tradeConditionsText: '' };
+    return { paymentTermsDays: '', paymentTermsEndOfMonth: false, discountPercent: '', discountDays: '', paymentMethod: 'BankTransfer', mandateReference: '', mandateSignedOn: '', currency, deliveryTermKind: '', incoterm: '', incotermPlace: '', deliveryTermText: '', tradeConditions: '', tradeConditionsText: '' };
 }
 
 export function emptyCreditDraft(): CreditDraft {
@@ -104,7 +117,11 @@ export function parseAmount(value: string): number | null | undefined {
     return match ? Number(match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`) : undefined;
 }
 
-export function normalizeTerms(draft: RoleTermsDraft, prefix: string, today: string, errors: TermsErrorSink): RoleTermsValues {
+// defaultTermsDays: standaard betalingstermijn (bedrijfsinstelling) voor een leeg dagenveld; nodig voor de grens van de kortingsdagen.
+export function normalizeTerms(draft: RoleTermsDraft, prefix: string, today: string, errors: TermsErrorSink, defaultTermsDays = DEFAULT_PAYMENT_TERMS_DAYS): RoleTermsValues {
+    // Oudere concepten (sessionStorage van vóór de vrije termijn) missen de velden: dan leeg.
+    const free = validateFreeTerms({ paymentTermsDays: draft.paymentTermsDays ?? '', paymentTermsEndOfMonth: draft.paymentTermsEndOfMonth ?? false, discountPercent: draft.discountPercent ?? '', discountDays: draft.discountDays ?? '' }, defaultTermsDays);
+    for (const error of free.errors) errors.push({ field: `${prefix}.${error.field}`, code: error.code });
     const methodText = blank(draft.paymentMethod) ?? 'BankTransfer';
     if (!oneOf(PAYMENT_METHODS, methodText)) errors.push({ field: `${prefix}.paymentMethod`, code: 'invalid' });
     const paymentMethod = (oneOf(PAYMENT_METHODS, methodText) ? methodText : 'BankTransfer') as PaymentMethod;
@@ -155,9 +172,8 @@ export function normalizeTerms(draft: RoleTermsDraft, prefix: string, today: str
         }
     }
 
-    const conditionId = blank(draft.paymentConditionId);
     return {
-        paymentConditionId: conditionId !== null && /^\d+$/.test(conditionId) ? Number(conditionId) : null,
+        ...free.values,
         paymentMethod, mandateReference, mandateSignedOn, deliveryTermKind, incoterm, incotermPlace, deliveryTermText, tradeConditions, tradeConditionsText,
     };
 }
