@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
     addDays, buildPurchaseInvoicePayload, changeDueDate, changeInvoiceDate, changePaymentTerms, describeVendor, draftTotals, dueDateDeviation,
-    emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor,
+    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor,
 } from './purchaseInvoiceRules.ts';
 import type { InvoiceDraft } from './purchaseInvoiceRules.ts';
 import type { PurchaseInvoiceSettings, PurchaseVendor } from '../types/purchaseInvoice';
@@ -12,11 +12,40 @@ const settings: PurchaseInvoiceSettings = {
     optionalFields: ['remarks', 'receivedDate', 'grossWeightKg'],
     defaultVatPercentage: 21, defaultPaymentTermsDays: 30, defaultCurrency: 'EUR',
 };
-const greenery: PurchaseVendor = { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true };
-const importer: PurchaseVendor = { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'usd', searchCode: null, isActive: true };
-const vendorWithoutCurrency: PurchaseVendor = { id: 3, name: 'Boer Jansen', vatNumber: null, paymentTermsDays: 7, defaultCurrency: null, searchCode: null, isActive: true };
+// Conditie en bankstatus van de leveranciersrol (zelfde standaard als de server: 30D, factuurdatum, bevestigde standaardrekening).
+const vendorFinance = { paymentConditionId: 1, paymentConditionCode: '30D', paymentConditionBasis: 'InvoiceDate' as const, hasDefaultBankAccount: true, defaultBankAccountUnconfirmed: false };
+const greenery: PurchaseVendor = { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true, ...vendorFinance };
+const importer: PurchaseVendor = { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'usd', searchCode: null, isActive: true, ...vendorFinance };
+const vendorWithoutCurrency: PurchaseVendor = { id: 3, name: 'Boer Jansen', vatNumber: null, paymentTermsDays: 7, defaultCurrency: null, searchCode: null, isActive: true, ...vendorFinance };
 
 const draft = (): InvoiceDraft => emptyDraft('2026-10-21', settings);
+
+describe('due date by the vendor payment condition', () => {
+    const endOfMonth: PurchaseVendor = { ...greenery, id: 8, paymentConditionId: 4, paymentConditionCode: 'EOM30', paymentConditionBasis: 'EndOfMonth' };
+
+    test('end of month: the due date counts from the last day of the invoice month while the terms equal the condition days', () => {
+        let d = selectVendor(draft(), endOfMonth, settings);
+        assert.deepEqual([d.header.paymentTermsDays, dueDateBasis(d), d.header.dueDate], ['30', 'EndOfMonth', '2026-11-30']);
+        d = changeInvoiceDate(d, '2028-02-15');
+        assert.equal(d.header.dueDate, '2028-03-30');
+        // Afwijkende termijn op dit document: vanaf de factuurdatum (zelfde regel als de server).
+        d = changePaymentTerms(d, '14');
+        assert.deepEqual([dueDateBasis(d), d.header.dueDate], ['InvoiceDate', '2028-02-29']);
+        d = changePaymentTerms(d, '30');
+        assert.equal(d.header.dueDate, '2028-03-30');
+        // Handmatige vervaldatum: afwijking ten opzichte van einde maand + termijn.
+        d = changeDueDate(d, '2028-04-01');
+        assert.equal(dueDateDeviation(d), 2);
+    });
+
+    test('invoice-date conditions and drafts stored before this change keep invoice date + terms', () => {
+        const d = selectVendor(draft(), greenery, settings);
+        assert.deepEqual([dueDateBasis(d), d.header.dueDate], ['InvoiceDate', '2026-11-20']);
+        const old = { ...changeInvoiceDate(draft(), '2026-10-01') };
+        delete old.vendorTerms;
+        assert.equal(changeInvoiceDate(old, '2026-10-21').header.dueDate, '2026-11-20');
+    });
+});
 
 describe('vendor defaults and document deviations', () => {
     test('a new draft proposes today, the company terms and currency, and a due date from the terms', () => {

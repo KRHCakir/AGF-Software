@@ -1,5 +1,5 @@
 import { ApiError, getJson, postJson, putJson } from './apiClient';
-import { Relation, RelationList, RelationReference, RelationRoleFilter, SaveRelationRequest, SimilarRelation, isRelation, isRelationList, isRelationReference, isSimilarRelationList } from '../types/relation';
+import { ConfirmBankAccountRequest, CreditExposure, Relation, RelationList, RelationReference, RelationRoleFilter, RelationSettings, SaveRelationRequest, SimilarRelation, isCreditExposure, isRelation, isRelationList, isRelationReference, isRelationSettings, isSimilarRelationList } from '../types/relation';
 
 // Relatiewerkplek (api/relations). POST is idempotent op requestId: 201 nieuw, 200 identieke herhaling; een 409 met code
 // "similar-names" is een gewone uitkomst (gelijkende relaties), elke andere fout wordt als ApiError doorgegeven.
@@ -59,5 +59,32 @@ export async function updateRelation(id: number, request: SaveRelationRequest, s
 export async function addRelationRole(id: number, role: 'customer' | 'vendor', signal?: AbortSignal): Promise<Relation> {
     const { json } = await postJson(`/relations/${id}/roles/${role}`, {}, signal);
     if (!isRelation(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het toevoegen van de rol.');
+    return json;
+}
+
+// Bankrekening bevestigen (met naam, op de verwachte versie). Al bevestigd = 200 zonder wijziging; 409 = kaart intussen gewijzigd.
+export async function confirmBankAccount(id: number, bankAccountId: number, request: ConfirmBankAccountRequest, signal?: AbortSignal): Promise<Relation> {
+    const { json } = await postJson(`/relations/${id}/bank-accounts/${bankAccountId}/confirm`, request, signal);
+    if (!isRelation(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het bevestigen van de bankrekening.');
+    return json;
+}
+
+// Bedrijfsinstelling: adres van de GLOBALG.A.P. Supply Chain Portal (handmatige GGN-controle).
+export async function getRelationSettings(signal?: AbortSignal): Promise<RelationSettings> {
+    const json = await getJson('/relations/settings', signal);
+    if (!isRelationSettings(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de instellingen.');
+    return json;
+}
+
+export async function updateRelationSettings(settings: RelationSettings, signal?: AbortSignal): Promise<RelationSettings> {
+    const { json } = await putJson('/relations/settings', settings, signal);
+    if (!isRelationSettings(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het opslaan van de instellingen.');
+    return json;
+}
+
+// Kredietpositie van een klant (openstaand, limiet, verzekering); orders zonder prijs worden alleen geteld.
+export async function getCustomerCredit(customerId: number, signal?: AbortSignal): Promise<CreditExposure> {
+    const json = await getJson(`/customers/${customerId}/credit`, signal);
+    if (!isCreditExposure(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de kredietpositie.');
     return json;
 }

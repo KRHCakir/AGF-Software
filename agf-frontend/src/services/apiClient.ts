@@ -58,7 +58,7 @@ function readErrorBody(body: unknown): { message: string | null; fieldErrors: Re
     return { message, fieldErrors };
 }
 
-async function request(method: 'GET' | 'POST' | 'PUT', path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
+async function request(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
     let baseUrl: string;
     try {
         baseUrl = getApiBaseUrl();
@@ -72,10 +72,10 @@ async function request(method: 'GET' | 'POST' | 'PUT', path: string, body: unkno
             method,
             signal,
             cache: 'no-store',
-            headers: method === 'GET'
+            headers: method === 'GET' || method === 'DELETE'
                 ? { Accept: 'application/json' }
                 : { Accept: 'application/json', 'Content-Type': 'application/json' },
-            body: method === 'GET' ? undefined : JSON.stringify(body),
+            body: method === 'GET' || method === 'DELETE' ? undefined : JSON.stringify(body),
         });
     } catch (error) {
         if (signal?.aborted) {
@@ -93,6 +93,11 @@ async function request(method: 'GET' | 'POST' | 'PUT', path: string, body: unkno
         }
         const { message, fieldErrors } = readErrorBody(errorBody);
         throw new ApiError('http', message ?? `HTTP ${response.status}`, response.status, fieldErrors, errorBody);
+    }
+
+    // 204 No Content (verwijderen): geen lichaam.
+    if (response.status === 204) {
+        return { status: 204, json: null };
     }
 
     try {
@@ -113,4 +118,8 @@ export function postJson(path: string, body: unknown, signal?: AbortSignal): Pro
 
 export function putJson(path: string, body: unknown, signal?: AbortSignal): Promise<JsonResponse> {
     return request('PUT', path, body, signal);
+}
+
+export function deleteJson(path: string, signal?: AbortSignal): Promise<JsonResponse> {
+    return request('DELETE', path, undefined, signal);
 }

@@ -1,5 +1,6 @@
 import { PACKAGE_UNITS, PackageUnit } from './availability';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
+import { PaymentConditionBasis, isPaymentConditionBasis } from '../lib/paymentCondition';
 
 // Contract van api/purchase-invoices (backend: AgfAdmin/DTOs/PurchaseInvoiceDtos.cs).
 
@@ -22,6 +23,12 @@ export interface PurchaseVendor {
     // Zoekcode en actief-vlag van de relatie: zoeken op code; inactieve leveranciers niet kiesbaar voor nieuwe facturen.
     searchCode: string | null;
     isActive: boolean;
+    // Betalingsconditie van de leveranciersrol (basis bepaalt de voorgestelde vervaldatum) en de status van de standaardrekening.
+    paymentConditionId: number | null;
+    paymentConditionCode: string | null;
+    paymentConditionBasis: PaymentConditionBasis;
+    hasDefaultBankAccount: boolean;
+    defaultBankAccountUnconfirmed: boolean;
 }
 
 export interface PurchaseInvoiceSettings {
@@ -98,7 +105,9 @@ export interface PurchaseInvoice extends OptionalFieldValues {
 
 export function isPurchaseVendor(value: unknown): value is PurchaseVendor {
     return isObject(value) && isNumber(value.id) && isString(value.name) && isNullableString(value.vatNumber)
-        && isNumber(value.paymentTermsDays) && isNullableString(value.defaultCurrency) && isNullableString(value.searchCode) && typeof value.isActive === 'boolean';
+        && isNumber(value.paymentTermsDays) && isNullableString(value.defaultCurrency) && isNullableString(value.searchCode) && typeof value.isActive === 'boolean'
+        && isNullableNumber(value.paymentConditionId) && isNullableString(value.paymentConditionCode) && isPaymentConditionBasis(value.paymentConditionBasis)
+        && typeof value.hasDefaultBankAccount === 'boolean' && typeof value.defaultBankAccountUnconfirmed === 'boolean';
 }
 
 export function isPurchaseVendorList(value: unknown): value is PurchaseVendor[] {

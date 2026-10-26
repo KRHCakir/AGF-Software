@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, deferred, json, setValue } from '../../test/reactHarness.ts';
-import type { Relation, RelationReference } from '../../types/relation';
+import type { CustomerRole, Relation, RelationReference, RoleTerms, VendorRole } from '../../types/relation';
 import RelationForm from './RelationForm';
 
 // Relatiekaart door de echte componentlevenscyclus: aanmaken met alleen een naam (Ctrl+S), Enter slaat niets op, inline fouten met
@@ -13,12 +13,22 @@ import RelationForm from './RelationForm';
 const reference: RelationReference = {
     languages: ['nl', 'en'], addressPurposes: ['Main', 'Billing', 'Delivery'], departmentSuggestions: ['verkoop', 'inkoop'], registrationTypeSuggestions: ['KvK'], legalFormSuggestions: ['BV'],
     currencies: ['EUR', 'USD'], vatVerificationStatuses: ['NotChecked'], globalGapDatabaseUrl: 'https://database.globalgap.org/', legacyArticleGgns: [],
+    globalGapPortalUrl: 'https://portal.example/certificates', paymentMethods: ['BankTransfer', 'DirectDebit', 'Cash', 'Offset'], paymentConditionBases: ['InvoiceDate', 'EndOfMonth'],
+    deliveryTermKinds: ['Incoterm', 'Franco', 'AfKwekerij', 'Other'], incoterms: ['EXW', 'FCA', 'DAP'], tradeConditions: ['Own', 'Frugiventa', 'Cofreurop', 'Other'], creditInsurers: ['Atradius', 'AllianzTrade', 'Coface', 'Other'],
 };
+const terms = (over: Partial<RoleTerms> = {}): RoleTerms => ({
+    paymentConditionId: 1, paymentCondition: null, paymentTermsDays: 30, paymentMethod: 'BankTransfer', mandateReference: null, mandateSignedOn: null, deliveryTermKind: null, incoterm: null,
+    incotermPlace: null, deliveryTermText: null, tradeConditions: null, tradeConditionsText: null, ...over,
+});
+const customerRole = (over: Partial<CustomerRole> = {}): CustomerRole => ({
+    ...terms(), customerId: 3, currency: 'EUR', creditLimit: null, isInsured: false, insurer: null, insurerText: null, insuredLimit: null, insurerReference: null, insuredUntil: null, ...over,
+});
+const vendorRole = (over: Partial<VendorRole> = {}): VendorRole => ({ ...terms(), vendorId: 9, defaultCurrency: 'EUR', ggns: [], ...over });
 const saved = (over: Partial<Relation> = {}): Relation => ({
     id: 7, requestId: 'r-1', searchCode: 'FRUITZ', name: 'Fruitimport Zuid', tradeName: null, preferredLanguage: null, website: null, email: null, phone: null, vatNumber: null, vatVerificationStatus: 'NotApplicable',
     vatVerifiedNumber: null, vatVerifiedAt: null, registrationNumber: null, registrationCountry: null, registrationType: null, legalForm: null, internalNote: null, isActive: true,
-    createdAt: '2026-10-22T08:00:00Z', updatedAt: '2026-10-22T08:00:00Z', version: 0, customer: { customerId: 3, paymentTermsDays: 30 }, vendor: null, addresses: [], contacts: [],
-    usage: { salesOrders: 0, legacyOrders: 0, directTradeCommitments: 0, purchaseInvoices: 0, supplyCommitments: 0, defaultsInUse: [] }, ...over,
+    createdAt: '2026-10-22T08:00:00Z', updatedAt: '2026-10-22T08:00:00Z', version: 0, customer: customerRole(), vendor: null, addresses: [], contacts: [],
+    usage: { salesOrders: 0, legacyOrders: 0, directTradeCommitments: 0, purchaseInvoices: 0, supplyCommitments: 0, defaultsInUse: [] }, bankAccounts: [], bankAccountEvents: [], warnings: [], ...over,
 });
 
 interface Call { method: string; url: string; body: Record<string, unknown> | null }
@@ -159,7 +169,7 @@ describe('RelationForm', () => {
     });
 
     test('editing sends a PUT with the expected version; the second role is added with one click and keeps the customer id', async () => {
-        respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 1, tradeName: 'FZ' })) : call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 1, tradeName: 'FZ', vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } })) : json(404, {}));
+        respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 1, tradeName: 'FZ' })) : call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 1, tradeName: 'FZ', vendor: vendorRole() })) : json(404, {}));
         await mounted.render(<RelationForm relation={saved()} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         assert.equal(input('searchCode').value, 'FRUITZ');
         assert.ok(input('customerRole').checked && input('customerRole').disabled, 'an existing role is never removed here');
@@ -168,7 +178,8 @@ describe('RelationForm', () => {
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'updated');
         const put = calls.find((call) => call.method === 'PUT')!;
         assert.ok(put.url.endsWith('/relations/7'));
-        assert.deepEqual([put.body!.expectedVersion, put.body!.tradeName, put.body!.customer], [0, 'FZ', { paymentTermsDays: 30 }]);
+        const customer = put.body!.customer as { paymentConditionId: number; paymentMethod: string; currency: string; isInsured: boolean };
+        assert.deepEqual([put.body!.expectedVersion, put.body!.tradeName, customer.paymentConditionId, customer.paymentMethod, customer.currency, customer.isInsured], [0, 'FZ', 1, 'BankTransfer', 'EUR', false]);
         await mounted.waitFor(() => text().includes('relations_saved'), 'saved');
         if (!mounted.container.querySelector('#relation-defaults')) await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="relation-defaults"]')!);
         await click(mounted.button('+ relations_add_role_vendor')!);
@@ -185,7 +196,7 @@ describe('RelationForm', () => {
             contacts: [{ id: 21, name: 'Jan', department: null, jobTitle: null, isPrimary: true, isActive: true, note: null, channels: [] }],
         });
         respond = (call) => (call.url.endsWith('/roles/vendor')
-            ? json(201, { ...stored, vendor: { vendorId: 9, paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] } })
+            ? json(201, { ...stored, vendor: vendorRole({ paymentConditionId: 4, paymentTermsDays: 45, defaultCurrency: 'USD' }) })
             : call.method === 'PUT' ? json(200, { ...stored, version: 4 }) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await type(input('name'), 'Fruitimport Zuid (nieuw)');
@@ -198,21 +209,21 @@ describe('RelationForm', () => {
         assert.equal(input('name').value, 'Fruitimport Zuid (nieuw)', 'unsaved name kept');
         assert.equal(input(`contacts.${contactKey}.name`).value, 'Pieter', 'unsaved contact kept');
         assert.ok(mounted.container.querySelector<HTMLInputElement>('input[value="Tegelen"]'), 'unsaved address kept');
-        assert.deepEqual([input('vendorPaymentTermsDays').value, input('vendorCurrency').value], ['45', 'USD'], 'role defaults from the server');
         await press('s', { ctrlKey: true });
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
         const body = calls.find((call) => call.method === 'PUT')!.body!;
         assert.equal(body.name, 'Fruitimport Zuid (nieuw)');
         assert.equal((body.addresses as { city: string }[])[0].city, 'Tegelen');
         assert.equal((body.contacts as { name: string }[])[0].name, 'Pieter');
-        assert.deepEqual(body.vendor, { paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] });
+        const vendor = body.vendor as { paymentConditionId: number; defaultCurrency: string; ggns: unknown[] };
+        assert.deepEqual([vendor.paymentConditionId, vendor.defaultCurrency, vendor.ggns], [4, 'USD', []], 'role defaults from the server');
         assert.equal(body.expectedVersion, 3);
     });
 
     test('when a colleague changed the card before the role was added, Save keeps the base version of the draft and gets a conflict instead of overwriting', async () => {
         const stored = saved({ version: 3 });
         // Collega heeft intussen de handelsnaam gewijzigd (versie 4); daarna voegt deze gebruiker de leveranciersrol toe.
-        const newest = saved({ version: 4, tradeName: 'Door collega', vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } });
+        const newest = saved({ version: 4, tradeName: 'Door collega', vendor: vendorRole() });
         respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, newest)
             : call.method === 'PUT' ? json(409, { message: 'Relation 7 was changed by someone else (version 4, expected 3); reload and apply your change again.' }) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
@@ -238,7 +249,7 @@ describe('RelationForm', () => {
 
     test('without a colleague change the role addition keeps the base version and Save succeeds without a warning', async () => {
         const stored = saved({ version: 3 });
-        respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 3, vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } }))
+        respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 3, vendor: vendorRole() }))
             : call.method === 'PUT' ? json(200, saved({ version: 4 })) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await type(input('name'), 'Mijn wijziging');

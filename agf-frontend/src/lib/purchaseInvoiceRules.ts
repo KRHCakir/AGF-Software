@@ -1,6 +1,7 @@
 import type { PackageUnit } from '../types/availability';
 import type { CreatePurchaseInvoiceLineRequest, CreatePurchaseInvoiceRequest, OptionalFieldValues, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../types/purchaseInvoice';
 import { parsePositiveDecimal } from './decimal.ts';
+import { PaymentConditionBasis, conditionDueDate } from './paymentCondition.ts';
 import { fitsAmount, lineNet, lineVat, totals } from './invoiceMath.ts';
 
 // Pure regels van de inkoopfactuurwerkplek, los van React en i18n (node:test). Spiegelt PurchaseInvoiceService:
@@ -39,10 +40,17 @@ export interface Touched {
     dueDate: boolean;
 }
 
+// Betalingsconditie van de gekozen leverancier (dagen + basis). Ontbreekt in oudere bewaarde concepten: dan factuurdatum + dagen.
+export interface VendorTerms {
+    days: number;
+    basis: PaymentConditionBasis;
+}
+
 export interface InvoiceDraft {
     header: HeaderDraft;
     lines: LineDraft[];
     touched: Touched;
+    vendorTerms?: VendorTerms | null;
 }
 
 export type RuleCode = 'required' | 'empty' | 'invalid' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines';
@@ -82,19 +90,31 @@ export function daysBetween(from: string, to: string): number | null {
     return Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 }
 
+// Zelfde regel als de server: de basis van de leveranciersconditie (bijv. einde maand) geldt alleen zolang de termijn gelijk is
+// aan de dagen van die conditie; een afwijkende termijn telt vanaf de factuurdatum.
+export function dueDateBasis(draft: InvoiceDraft): PaymentConditionBasis {
+    const terms = draft.vendorTerms;
+    return terms != null && /^\d+$/.test(draft.header.paymentTermsDays) && Number(draft.header.paymentTermsDays) === terms.days ? terms.basis : 'InvoiceDate';
+}
+
+function expectedDueDate(draft: InvoiceDraft): string | null {
+    if (!/^\d+$/.test(draft.header.paymentTermsDays)) return null;
+    return conditionDueDate(draft.header.invoiceDate, Number(draft.header.paymentTermsDays), dueDateBasis(draft));
+}
+
 function recomputeDueDate(draft: InvoiceDraft): InvoiceDraft {
     if (draft.touched.dueDate) return draft;
-    const terms = Number(draft.header.paymentTermsDays);
-    const due = /^\d+$/.test(draft.header.paymentTermsDays) ? addDays(draft.header.invoiceDate, terms) : null;
+    const due = expectedDueDate(draft);
     return { ...draft, header: { ...draft.header, dueDate: due ?? draft.header.dueDate } };
 }
 
 // Leverancier gekozen of gewisseld: alleen niet-aangepaste voorstellen volgen de leverancier (of het bedrijf).
 export function selectVendor(draft: InvoiceDraft, vendor: PurchaseVendor | null, settings: PurchaseInvoiceSettings): InvoiceDraft {
     const header = { ...draft.header, vendorId: vendor === null ? '' : String(vendor.id) };
+    const vendorTerms: VendorTerms | null = vendor === null ? null : { days: vendor.paymentTermsDays, basis: vendor.paymentConditionBasis };
     if (!draft.touched.paymentTermsDays) header.paymentTermsDays = String(vendor?.paymentTermsDays ?? settings.defaultPaymentTermsDays);
     if (!draft.touched.currency) header.currency = (vendor?.defaultCurrency ?? '').trim() === '' ? settings.defaultCurrency : vendor!.defaultCurrency!.trim().toUpperCase();
-    return recomputeDueDate({ ...draft, header });
+    return recomputeDueDate({ ...draft, header, vendorTerms });
 }
 
 export function changePaymentTerms(draft: InvoiceDraft, value: string): InvoiceDraft {
@@ -121,8 +141,8 @@ export function followPaymentTerms(draft: InvoiceDraft): InvoiceDraft {
 // Zichtbaar houden hoe een handmatige vervaldatum zich verhoudt tot de termijn: het verschil in dagen ten opzichte van
 // factuurdatum + termijn (null als de datum gewoon de termijn volgt of niet te berekenen is).
 export function dueDateDeviation(draft: InvoiceDraft): number | null {
-    if (!draft.touched.dueDate || !/^\d+$/.test(draft.header.paymentTermsDays)) return null;
-    const expected = addDays(draft.header.invoiceDate, Number(draft.header.paymentTermsDays));
+    if (!draft.touched.dueDate) return null;
+    const expected = expectedDueDate(draft);
     if (expected === null) return null;
     const diff = daysBetween(expected, draft.header.dueDate);
     return diff === null || diff === 0 ? null : diff;

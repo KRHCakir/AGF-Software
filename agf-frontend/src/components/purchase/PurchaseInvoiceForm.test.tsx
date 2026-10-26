@@ -17,9 +17,11 @@ const settings: PurchaseInvoiceSettings = {
     optionalFields: ['remarks', 'receivedDate'],
     defaultVatPercentage: 21, defaultPaymentTermsDays: 30, defaultCurrency: 'EUR',
 };
+// Conditie en bankstatus van de leveranciersrol (zelfde standaard als de server: 30D, factuurdatum, bevestigde standaardrekening).
+const vendorFinance = { paymentConditionId: 1, paymentConditionCode: '30D', paymentConditionBasis: 'InvoiceDate' as const, hasDefaultBankAccount: true, defaultBankAccountUnconfirmed: false };
 const vendors: PurchaseVendor[] = [
-    { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true },
-    { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD', searchCode: null, isActive: true },
+    { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true, ...vendorFinance },
+    { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD', searchCode: null, isActive: true, ...vendorFinance },
 ];
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [
     { id: 1, name: 'Hass', origin: 'Peru', packaging: '4kg Box', sizeCategory: null, shortcutCode: 'avohassper22', defaultPackagesPerPallet: null, packagingUnit: 'box' },

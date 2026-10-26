@@ -2,7 +2,7 @@
 
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, buildRelationPayload, draftFromRelation, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors } from '../../lib/relationRules';
+import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, buildRelationPayload, creditDraftFromRole, draftFromRelation, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
 import { newRequestId } from '../../lib/requestId';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -149,10 +149,12 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const submit = async (acknowledgeSimilarNames = false) => {
         if (inFlight.current) return;
         if (pending !== null) { await send(pending); return; }
-        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: baseVersion ?? current.version });
+        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: baseVersion ?? current.version, stored: current });
         if (!built.ok) {
             const grouped = groupRelationErrors(built.errors);
-            setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
+            const messages: FieldErrors = {};
+            for (const error of built.errors) (messages[error.field] ??= []).push(t(codeKey(error.code), error.params));
+            setErrors(messages);
             focusFirstError(Object.keys(grouped));
             return;
         }
@@ -197,8 +199,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             // Het concept blijft staan: alleen de nieuwe rol en haar standaarden van de server komen erbij. Onopgeslagen wijzigingen
             // (naam, adressen, contacten, …) gaan pas met Opslaan mee, op de versie die de server nu teruggeeft.
             setDraft((draftNow) => role === 'customer'
-                ? { ...draftNow, customerRole: true, customerPaymentTermsDays: String(saved.customer?.paymentTermsDays ?? 30) }
-                : { ...draftNow, vendorRole: true, vendorPaymentTermsDays: String(saved.vendor?.paymentTermsDays ?? 30), vendorCurrency: saved.vendor?.defaultCurrency ?? 'EUR' });
+                ? { ...draftNow, customerRole: true, ...(saved.customer ? { customerTerms: termsDraftFromRole(saved.customer, saved.customer.currency), credit: creditDraftFromRole(saved.customer) } : {}) }
+                : { ...draftNow, vendorRole: true, ...(saved.vendor ? { vendorTerms: termsDraftFromRole(saved.vendor, saved.vendor.defaultCurrency) } : {}) });
             setOpen((current) => ({ ...current, defaults: true }));
             onSaved(saved, false);
         } catch (caught) {
@@ -512,17 +514,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                         {draft.customerRole && (
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                                 <p className="col-span-2 text-sm font-medium text-gray-900 md:col-span-4">{t('relations_defaults_sales')}{current?.customer ? ` · #${current.customer.customerId}` : ''}</p>
-                                {textField('customerPaymentTermsDays', 'relations_field_payment_terms', { maxLength: 3, hintKey: 'relations_hint_customer_terms' })}
                             </div>
                         )}
                         {draft.vendorRole && (
                             <div className="space-y-2">
                                 <p className="text-sm font-medium text-gray-900">{t('relations_defaults_purchase')}{current?.vendor ? ` · #${current.vendor.vendorId}` : ''}</p>
-                                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                                    {textField('vendorPaymentTermsDays', 'relations_field_payment_terms', { maxLength: 3, hintKey: 'relations_hint_vendor_terms' })}
-                                    {textField('vendorCurrency', 'relations_field_currency', { list: 'relation-currencies', maxLength: 3, upper: true, hintKey: 'relations_hint_currency' })}
-                                    <datalist id="relation-currencies">{reference.currencies.map((option) => <option key={option} value={option} />)}</datalist>
-                                </div>
                                 <div className="space-y-1">
                                     <p className="text-xs font-medium text-gray-700">{t('relations_ggn_title')}</p>
                                     {draft.ggns.map((ggn) => {
