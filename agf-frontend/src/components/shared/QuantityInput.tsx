@@ -2,7 +2,7 @@
 
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
-import { parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { QuantityInputMode, palletTotal } from '../../lib/palletInput';
 import { unitLabelKey } from '../../lib/units';
 import type { PackageUnit } from '../../types/availability';
@@ -36,7 +36,7 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
         onChange('mode', mode);
         // Standaard van de variant als invoerhulp; blijft aanpasbaar en wordt per regel bewaard.
         if (mode === 'pallets' && line.packagesPerPallet === '' && defaultPackagesPerPallet !== null) {
-            onChange('packagesPerPallet', String(defaultPackagesPerPallet));
+            onChange('packagesPerPallet', formatDecimalInput(defaultPackagesPerPallet));
         }
     };
 

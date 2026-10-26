@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { AllocateDirectTradeCommand, allocateKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { MAX_REASON_LENGTH, expectedAfterRequested, fullAllocationRemainder, normalizeActor, normalizeReason, remainingAfter, validateAllocationInput } from '../../lib/salesOrderRules';
@@ -37,7 +37,7 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
 }) {
     const { t, locale } = useTranslation();
     const [pending, setPending, clearPending] = usePendingCommand<AllocateDirectTradeCommand>(allocateKey(order.id, line.id));
-    const [quantity, setQuantity] = useState(() => (pending === null ? '' : String(pending.payload.quantity)));
+    const [quantity, setQuantity] = useState(() => (pending === null ? '' : formatDecimalInput(pending.payload.quantity)));
     const [reason, setReason] = useState(() => pending?.payload.reason ?? '');
     const [acknowledged, setAcknowledged] = useState(() => pending !== null);
     const [submitting, setSubmitting] = useState(false);
@@ -69,7 +69,7 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
 
     const copyFullRemainder = () => {
         if (locked || fullRemainder <= 0) return;
-        setQuantity(String(fullRemainder));
+        setQuantity(formatDecimalInput(fullRemainder));
         setError(null);
         setFieldErrors({});
     };

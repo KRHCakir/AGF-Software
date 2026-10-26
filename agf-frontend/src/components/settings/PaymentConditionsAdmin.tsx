@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
+import { formatDecimalInput } from '../../lib/decimal';
 import { PAYMENT_CONDITION_BASES, PaymentConditionBasis, PaymentConditionDraft, conditionDueDate, emptyConditionDraft, validateConditionDraft } from '../../lib/paymentCondition';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -24,7 +25,7 @@ interface Pending { requestId: string; payload: SavePaymentConditionRequest }
 
 const draftFrom = (condition: PaymentCondition): PaymentConditionDraft => ({
     code: condition.code, descriptionNl: condition.descriptionNl, descriptionEn: condition.descriptionEn, days: String(condition.days), basis: condition.basis,
-    discountPercent: condition.discountPercent === null ? '' : String(condition.discountPercent), discountDays: condition.discountDays === null ? '' : String(condition.discountDays),
+    discountPercent: condition.discountPercent === null ? '' : formatDecimalInput(condition.discountPercent, 2), discountDays: condition.discountDays === null ? '' : String(condition.discountDays),
     sortOrder: String(condition.sortOrder), isActive: condition.isActive,
 });
 

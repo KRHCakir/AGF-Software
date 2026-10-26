@@ -7,7 +7,7 @@ import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability
 import { formatDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { unitLabelKey } from '../../lib/units';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
-import { parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
@@ -50,7 +50,7 @@ const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOpti
     lot: line.lotNumber ?? '',
     quantity: '',
     method: line.weightMethod,
-    kgPerPackage: line.defaultNetKgPerPackage === null ? '' : String(line.defaultNetKgPerPackage),
+    kgPerPackage: line.defaultNetKgPerPackage === null ? '' : formatDecimalInput(line.defaultNetKgPerPackage),
     netKg: '',
     ggn: proposedGgn(vendorGgns) ?? '',
 });
