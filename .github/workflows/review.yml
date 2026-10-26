@@ -9,6 +9,15 @@ name: AI PR Review
 #   Variables: DEEPSEEK_MODEL (standaard deepseek-v4-pro)
 #              QWEN_MODEL     (standaard qwen-plus)
 #              QWEN_BASE_URL  (standaard https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
+#              AI_FIX_MAX_ROUNDS (standaard 3) - hoe vaak Claude zelf mag fixen per PR
+#              NOTIFY_USER    (standaard: eigenaar van de repo) - wie de "klaar"-melding krijgt
+#
+# Automatische fix-loop (job "Claude fix"):
+#   Vraagt DeepSeek of Qwen om wijzigingen, dan leest Claude de bevindingen, past de code aan
+#   en pusht een commit met "[ai-fix]". Die push start deze workflow opnieuw, tot alles groen is
+#   of het maximum aantal rondes is bereikt. Nodig: de Claude GitHub App op deze repo en het
+#   secret ANTHROPIC_API_KEY.
+#   Pauzeren voor één PR: zet het label "no-ai-fix" op die PR.
 
 on:
   pull_request:
@@ -22,7 +31,8 @@ on:
 
 concurrency:
   group: ai-review-${{ inputs.pr_number || github.event.pull_request.number }}
-  cancel-in-progress: true
+  # false: een nieuwe run wacht tot de vorige klaar is, zodat Claude's push niet zijn eigen job afbreekt
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -70,6 +80,8 @@ jobs:
     needs: deepseek
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      ran: ${{ steps.key.outputs.present }}
     steps:
       - name: Check for Qwen key
         id: key
@@ -111,3 +123,143 @@ jobs:
           name: qwen-review
           path: qwen-review.json
           if-no-files-found: ignore
+
+  # Vraagt een reviewer om wijzigingen? Dan laat Claude het oplossen en pusht hij een commit.
+  autofix:
+    name: Claude fix
+    needs: [deepseek, qwen]
+    if: >-
+      always()
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && !contains(github.event.pull_request.labels.*.name, 'no-ai-fix')
+      && (needs.deepseek.result == 'failure' || needs.qwen.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - name: Download review results
+        uses: actions/download-artifact@v4
+        with:
+          path: reviews
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Collect findings and check the round limit
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          MAX_ROUNDS: ${{ vars.AI_FIX_MAX_ROUNDS || '3' }}
+          NOTIFY: ${{ vars.NOTIFY_USER || github.repository_owner }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs')
+          const files = fs.existsSync('reviews') ? fs.readdirSync('reviews').filter((f) => f.endsWith('.json')) : []
+          const asking = files
+            .map((f) => JSON.parse(fs.readFileSync('reviews/' + f, 'utf8')))
+            .filter((r) => r.verdict === 'request_changes')
+          let text = ''
+          for (const r of asking) {
+            text += `## ${r.reviewer} (${r.model}): ${r.summary}\n`
+            for (const f of r.findings) {
+              text += `- [${f.severity}] ${f.path}${f.line ? ':' + f.line : ''} - ${f.title}: ${f.detail}\n`
+            }
+            text += '\n'
+          }
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/findings.md', text)
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_findings=${asking.length > 0}\n`)
+          NODE
+
+          if ! grep -q . "$RUNNER_TEMP/findings.md"; then
+            echo "::warning::Review job failed without a request_changes verdict (crash or API error) - not starting Claude."
+            exit 0
+          fi
+
+          rounds=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
+            --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
+          echo "AI fix rounds so far: $rounds / $MAX_ROUNDS"
+          if [ "$rounds" -ge "$MAX_ROUNDS" ]; then
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft al $rounds keer geprobeerd de review-opmerkingen op te lossen, maar DeepSeek/Qwen zijn nog niet tevreden. Kijk jij even mee? (De automatische fix-loop stopt hier.)"
+            exit 0
+          fi
+          echo "run_claude=true" >> "$GITHUB_OUTPUT"
+          echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
+          {
+            echo 'findings<<__FINDINGS_EOF__'
+            cat "$RUNNER_TEMP/findings.md"
+            echo '__FINDINGS_EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.plan.outputs.run_claude == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Let Claude fix the review findings
+        if: steps.plan.outputs.run_claude == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Geen github_token meegeven: dan pusht Claude als de Claude GitHub App,
+          # en alleen dan start de review-workflow opnieuw op zijn commit.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Gebruik je een Claude-abonnement i.p.v. een API-key? Vervang de regel hierboven door:
+          # claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: "claude[bot]"
+          claude_args: >-
+            --max-turns 40
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(node --check:*),Bash(dotnet build:*),Bash(dotnet test:*),Bash(npm ci:*),Bash(npm run lint:*),Bash(npm test:*)"
+          prompt: |
+            Je werkt in de repository ${{ github.repository }}, op de branch `${{ github.event.pull_request.head.ref }}`
+            van pull request #${{ env.PR_NUMBER }}. Dit is automatische fix-ronde ${{ steps.plan.outputs.round }}.
+
+            Een AI-reviewer heeft om wijzigingen gevraagd. Dit zijn de bevindingen:
+
+            ${{ steps.plan.outputs.findings }}
+
+            Opdracht:
+            1. Los de blocker- en major-bevindingen op. Minor/nit alleen als het klein en veilig is.
+            2. Verander niets wat niet met deze bevindingen te maken heeft.
+            3. Klopt een bevinding aantoonbaar niet? Pas dan niets aan voor dat punt en leg het uit
+               in de commit-message.
+            4. Controleer je werk waar mogelijk: `node --check` voor .mjs-bestanden, `dotnet build` /
+               `dotnet test` voor C#, `npm run lint` / `npm test` in agf-frontend voor de frontend.
+            5. Maak precies één commit met een message die begint met `fix: ` en eindigt met ` [ai-fix]`,
+               en push die naar `${{ github.event.pull_request.head.ref }}`. Push nooit naar main.
+
+  # Alles goedgekeurd? Dan krijg jij een melding (GitHub stuurt die via e-mail / de GitHub-app).
+  notify:
+    name: Ready to test
+    needs: [deepseek, qwen]
+    if: github.event_name == 'pull_request' && needs.deepseek.result == 'success' && needs.qwen.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post "ready to test" comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NOTIFY: ${{ vars.NOTIFY_USER || github.repository_owner }}
+          QWEN_RAN: ${{ needs.qwen.outputs.ran }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          reviewers="DeepSeek"
+          if [ "$QWEN_RAN" = "true" ]; then reviewers="DeepSeek en Qwen"; fi
+          rounds=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
+            --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "✅ @$NOTIFY PR #$PR_NUMBER is klaar om te testen!
+
+          - Goedgekeurd door: **$reviewers**
+          - Automatische fix-rondes door Claude: **$rounds**
+          - Commit: \`${HEAD_SHA:0:7}\`
+
+          Test het op deze branch en merge als alles werkt. (Kijk ook even of de Quality-checks groen zijn.)"
