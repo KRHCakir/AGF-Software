@@ -123,7 +123,7 @@ export default function RelationBankAccountsSection({ accounts, onChange, actorR
                                 <FieldError id={k('accountHolder')} messages={e(k('accountHolder'))} />
                             </div>
                             <div>
-                                <label htmlFor={`${k('currency')}-input`} className="text-xs font-medium text-gray-700">{t('relations_field_currency')}</label>
+                                <label htmlFor={`${k('currency')}-input`} className="text-xs font-medium text-gray-700">{t('relations_bank_currency')}</label>
                                 <input {...fieldProps(k('currency'), e(k('currency')))} value={account.currency} maxLength={3} list="relation-currencies" disabled={locked} className={`${inputClass} font-mono uppercase`} onChange={(event) => edit(account.key, { currency: event.target.value })} />
                                 <FieldError id={k('currency')} messages={e(k('currency'))} />
                             </div>

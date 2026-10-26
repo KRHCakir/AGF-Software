@@ -315,6 +315,7 @@ describe('RelationForm', () => {
         assert.ok(mounted.container.querySelector('[data-testid="credit-over-limit"]'));
         assert.ok(text().includes('relations_credit_unpriced'), 'unpriced orders counted, not estimated');
         assert.ok(mounted.container.querySelector('[data-testid="credit-insurance-gap"]'), 'live gap from the input');
+        assert.equal(mounted.container.querySelector('label[for="customer.currency-input"]')?.textContent, 'relations_field_currency_sales', 'customer currency is not labelled as purchasing');
         await choose(select('customer.insurer'), 'Other');
         await type(input('customer.creditLimit'), '1.234,5');
         await press('s', { ctrlKey: true });
@@ -334,6 +335,7 @@ describe('RelationForm', () => {
         await openSection('bank');
         assert.ok(text().includes('relations_bank_status_Confirmed'));
         const savedRow = mounted.container.querySelector('[data-testid="bank-account-41"]')!;
+        assert.equal(savedRow.querySelector('label[for$=".currency-input"]')?.textContent, 'relations_bank_currency', 'account currency is not labelled as purchasing');
         assert.equal(Array.from(savedRow.querySelectorAll('button')).some((b) => b.textContent === 'relations_remove'), false, 'no delete for a saved account');
         await click(mounted.button('+ relations_bank_add')!);
         const key = Array.from(mounted.container.querySelectorAll('[data-testid^="bank-account-"]')).map((el) => el.getAttribute('data-testid')!.replace('bank-account-', '')).find((k) => k !== '41')!;

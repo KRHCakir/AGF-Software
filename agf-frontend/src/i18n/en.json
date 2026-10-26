@@ -1250,6 +1250,8 @@
   "relations_add_role_customer": "Add customer role",
   "relations_add_role_vendor": "Add supplier role",
   "relations_field_currency": "Currency (purchasing)",
+  "relations_field_currency_sales": "Currency (sales)",
+  "relations_bank_currency": "Account currency",
   "relations_ggn_title": "GLOBALG.A.P. numbers (GGN) of this supplier",
   "relations_ggn_number": "GGN (13 digits)",
   "relations_ggn_producer": "Producer name (optional)",

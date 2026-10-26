@@ -1250,6 +1250,8 @@
   "relations_add_role_customer": "Klantrol toevoegen",
   "relations_add_role_vendor": "Leveranciersrol toevoegen",
   "relations_field_currency": "Valuta (inkoop)",
+  "relations_field_currency_sales": "Valuta (verkoop)",
+  "relations_bank_currency": "Valuta rekening",
   "relations_ggn_title": "GLOBALG.A.P.-nummers (GGN) van deze leverancier",
   "relations_ggn_number": "GGN (13 cijfers)",
   "relations_ggn_producer": "Producentnaam (optioneel)",

@@ -73,7 +73,7 @@ export default function RelationTermsSection({ prefix, terms, onChange, conditio
                 </select>
                 <FieldError id={k('paymentMethod')} messages={e('paymentMethod')} />
             </div>
-            {input('currency', 'relations_field_currency', { maxLength: 3, mono: true, list: 'relation-currencies', errorField: currencyField })}
+            {input('currency', prefix === 'customer' ? 'relations_field_currency_sales' : 'relations_field_currency', { maxLength: 3, mono: true, list: 'relation-currencies', errorField: currencyField })}
             {terms.paymentMethod === 'DirectDebit' && (
                 <>
                     {input('mandateReference', 'relations_terms_mandate_reference', { maxLength: 35, required: true, span: 'sm:col-span-1' })}
