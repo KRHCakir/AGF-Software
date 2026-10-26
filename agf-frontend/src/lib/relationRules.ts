@@ -417,3 +417,14 @@ export function relationRole(item: { customerId: number | null; vendorId: number
     if (item.vendorId !== null) return 'vendor';
     return 'none';
 }
+
+// Bedrijfsinstelling: absolute https-URL (zelfde regel als RelationRules.IsHttpsUrl), hooguit 500 tekens.
+export const MAX_PORTAL_URL_LENGTH = 500;
+export function isHttpsUrl(value: string): boolean {
+    try {
+        const url = new URL(value.trim());
+        return url.protocol === 'https:' && url.hostname !== '' && value.trim().length <= MAX_PORTAL_URL_LENGTH;
+    } catch {
+        return false;
+    }
+}
