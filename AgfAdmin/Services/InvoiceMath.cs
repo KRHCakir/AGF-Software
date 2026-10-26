@@ -30,7 +30,12 @@ namespace AgfAdmin.Services
             return (net, vat, net + vat);
         }
 
-        // Gemiddeld bedrag over een reeks bedragen, op 2 decimalen.
-        public static decimal AverageAmount(IReadOnlyCollection<decimal> amounts) => Round2(amounts.Sum() / amounts.Count);
+        // Gemiddeld bedrag over een reeks bedragen, op 2 decimalen. Een lege reeks heeft geen gemiddelde.
+        public static decimal AverageAmount(IReadOnlyCollection<decimal> amounts)
+        {
+            if (amounts.Count == 0)
+                throw new ArgumentException("Kan geen gemiddelde berekenen over een lege reeks bedragen.", nameof(amounts));
+            return Round2(amounts.Sum() / amounts.Count);
+        }
     }
 }
