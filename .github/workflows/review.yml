@@ -16,7 +16,7 @@ name: AI PR Review
 #   Vraagt DeepSeek of Qwen om wijzigingen, dan leest Claude de bevindingen, past de code aan
 #   en pusht een commit met "[ai-fix]". Die push start deze workflow opnieuw, tot alles groen is
 #   of het maximum aantal rondes is bereikt. Nodig: de Claude GitHub App op deze repo en het
-#   secret ANTHROPIC_API_KEY.
+#   secret CLAUDE_CODE_OAUTH_TOKEN (Claude-abonnement, via `claude setup-token`).
 #   Pauzeren voor één PR: zet het label "no-ai-fix" op die PR.
 
 on:
@@ -209,9 +209,10 @@ jobs:
         with:
           # Geen github_token meegeven: dan pusht Claude als de Claude GitHub App,
           # en alleen dan start de review-workflow opnieuw op zijn commit.
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Gebruik je een Claude-abonnement i.p.v. een API-key? Vervang de regel hierboven door:
-          # claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Draait op je Claude-abonnement (token via `claude setup-token`), dus geen API-kosten.
+          # Liever een API-key? Vervang de regel hieronder door:
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: "claude[bot]"
           claude_args: >-
             --max-turns 40
