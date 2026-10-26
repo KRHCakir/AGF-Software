@@ -296,6 +296,13 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                         describedBy={e('vendorId') ? 'vendorId' : undefined} inputRef={(element) => { vendorInput.current = element; }}
                         onChange={(chosen) => update(selectVendor(draft, chosen, settings))} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
+                    {/* Betalen naar een niet-bevestigde rekening is het risico: duidelijk tonen, niet blokkeren (de factuur zelf mag erin). */}
+                    {vendor?.defaultBankAccountUnconfirmed && (
+                        <p role="alert" className="mt-1 rounded border-2 border-red-400 bg-red-50 px-2 py-1 text-xs font-medium text-red-950" data-testid="purchase-bank-unconfirmed">
+                            ⚠ {t('purchase_bank_unconfirmed')}
+                        </p>
+                    )}
+                    {vendor !== null && vendor.paymentConditionBasis === 'EndOfMonth' && <span className="block text-xs text-gray-600">{t('purchase_condition_end_of_month', { code: vendor.paymentConditionCode ?? '' })}</span>}
                 </div>
                 <div>
                     <label htmlFor="invoiceNumber-input" className="text-xs font-medium text-gray-700">{t('invoice_number')} *</label>

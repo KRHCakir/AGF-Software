@@ -197,6 +197,8 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     const e = (key: string) => errors[key];
 
+    const euro = (value: number) => new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { style: 'currency', currency: 'EUR' }).format(value);
+
     if (result !== null) {
         const order = result.value;
         return (
@@ -214,6 +216,17 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                     {t('sales_delivery_on', { date: formatCalendarDate(order.requestedDeliveryDate, locale) })}
                     {order.customerReference && <> · {t('sales_reference_short')} {order.customerReference}</>}
                 </p>
+                {/* Kredietlimiet overschreden: waarschuwing met limiet, openstaand en verschil; de order is gewoon vastgelegd. */}
+                {order.creditWarning && (
+                    <div role="alert" className="mt-2 rounded border border-amber-400 bg-amber-50 px-3 py-2 text-amber-950" data-testid="sales-credit-warning">
+                        <p className="font-medium">⚠ {t('sales_credit_warning_title')}</p>
+                        <p className="mt-1">{t('sales_credit_warning_amounts', { limit: euro(order.creditWarning.creditLimit), outstanding: euro(order.creditWarning.outstanding), difference: euro(order.creditWarning.difference) })}</p>
+                        {!order.creditWarning.isComplete && order.creditWarning.unpricedSalesOrdersCount > 0 && (
+                            <p className="mt-1 text-xs">{t(order.creditWarning.unpricedSalesOrdersCount === 1 ? 'relations_credit_unpriced_one' : 'relations_credit_unpriced', { count: String(order.creditWarning.unpricedSalesOrdersCount) })}</p>
+                        )}
+                        <p className="mt-1 text-xs">{t('sales_credit_warning_hint')}</p>
+                    </div>
+                )}
                 <ul className="mt-2 list-disc pl-5">
                     {order.lines.map((line) => (
                         <li key={line.id}>{line.productName} · {line.productVariantName}: {formatQuantity(line.quantity, locale)} <UnitBadge unit={line.unit} /></li>

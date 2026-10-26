@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
+import { formatDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { unitLabelKey } from '../../lib/units';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { parsePositiveDecimal } from '../../lib/decimal';
@@ -67,6 +68,17 @@ export function ggnStateKey(draftGgn: string, vendorGgns: readonly VendorGgnOpti
     if (normalized === '') return vendorGgns.length === 1 ? 'supply_ggn_cleared' : 'supply_ggn_choose';
     if (vendorGgns.length === 1) return normalized === vendorGgns[0].ggn ? 'supply_ggn_from_vendor' : 'supply_ggn_adjusted';
     return vendorGgns.some((option) => option.ggn === normalized) ? 'supply_ggn_chosen' : 'supply_ggn_adjusted';
+}
+
+// Certificaatwaarschuwing voor de gekozen leveranciers-GGN (nooit blokkerend): certificaat verlopen (geldig tot vóór vandaag) of
+// nooit gecontroleerd. Een zelf ingetypte GGN die niet bij de leverancier staat, krijgt geen waarschuwing (daar is niets over bekend).
+export type GgnCertificateWarning = 'supply_ggn_certificate_expired' | 'supply_ggn_never_checked';
+export function ggnCertificateWarning(draftGgn: string, vendorGgns: readonly VendorGgnOption[], today: string): GgnCertificateWarning | null {
+    const option = vendorGgns.find((candidate) => candidate.ggn === normalizeGgn(draftGgn));
+    if (option === undefined) return null;
+    if (option.certificateValidUntil !== null && option.certificateValidUntil < today) return 'supply_ggn_certificate_expired';
+    if (option.checkedOn === null) return 'supply_ggn_never_checked';
+    return null;
 }
 
 interface SourceEntry {
@@ -723,6 +735,15 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
                                         {' '}{t('supply_ggn_hint')}
                                     </span>
+                                    {(() => {
+                                        const warning = ggnCertificateWarning(draft.ggn, entry.commitment.vendorGgns, todayInAmsterdam());
+                                        const option = entry.commitment.vendorGgns.find((candidate) => candidate.ggn === normalizeGgn(draft.ggn));
+                                        return warning === null ? null : (
+                                            <p role="status" className="mt-1 rounded border border-amber-400 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-950" data-testid={`ggn-certificate-warning-${id}`}>
+                                                ⚠ {t(warning, { ggn: option?.ggn ?? '', date: option?.certificateValidUntil ? formatDateOnly(option.certificateValidUntil, locale) : '' })}
+                                            </p>
+                                        );
+                                    })()}
                                     <FieldError id={key('ggn')} messages={e(key('ggn'))} />
                                 </div>
                             </div>

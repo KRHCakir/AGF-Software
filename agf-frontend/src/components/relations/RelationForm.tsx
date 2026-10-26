@@ -2,11 +2,14 @@
 
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, buildRelationPayload, creditDraftFromRole, draftFromRelation, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
+import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, bankAccountsNeedActor, buildRelationPayload, creditDraftFromRole, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
+import { todayInAmsterdam } from '../../lib/calendarDate';
 import { newRequestId } from '../../lib/requestId';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
-import { addRelationRole, createRelation, updateRelation } from '../../services/relationService';
+import { listPaymentConditions } from '../../services/paymentConditionService';
+import { addRelationRole, confirmBankAccount, createRelation, updateRelation } from '../../services/relationService';
+import type { PaymentConditionSummary } from '../../types/paymentCondition';
 import type { AddressPurpose, ChannelKind, Relation, RelationReference, SaveRelationRequest, SimilarRelation } from '../../types/relation';
 import { ADDRESS_PURPOSES } from '../../types/relation';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -14,12 +17,19 @@ import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import CustomerCreditSection from './CustomerCreditSection';
+import GgnPortalButton from './GgnPortalButton';
+import RelationBankAccountsSection from './RelationBankAccountsSection';
+import RelationTermsSection from './RelationTermsSection';
+import RelationWarnings from './RelationWarnings';
 
 // Relatiekaart: altijd zichtbaar zijn zoekcode, bedrijfsnaam, rollen, actief en de belangrijkste contactgegevens; de rest staat
 // compact gegroepeerd (bedrijfsgegevens, adressen, contactpersonen, inkoop-/verkoopdefaults, interne opmerking). Alleen de naam
 // is verplicht. Opslaan via ⌘S/Ctrl+S of de knop; Enter in een veld slaat niets op. Inline validatie met behoud van invoer.
 // Aanmaken bevriest payload en requestId: bij een onbekende uitkomst wordt exact dezelfde opdracht herhaald (ook na verversen),
 // zodat nooit twee relaties voor één invoer ontstaan. Gelijkende namen zijn een definitieve 409: "toch aanmaken" is een nieuwe opdracht.
+// Rolafspraken, krediet en bankrekeningen staan in eigen secties (RelationTermsSection, CustomerCreditSection,
+// RelationBankAccountsSection); waarschuwingen van de server (onbevestigde standaardrekening, e-mail, verzekering) staan bovenaan.
 
 const PENDING_KEY = 'agf_relation_pending_create';
 
@@ -75,8 +85,18 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             contacts: d.contacts.length > 0,
             defaults: d.customerRole || d.vendorRole,
             note: d.internalNote !== '',
+            bank: d.bankAccounts.length > 0,
         };
     });
+    // Actieve betalingscondities voor de keuzelijsten; een inactieve huidige conditie komt uit de rol zelf.
+    const [conditions, setConditions] = useState<PaymentConditionSummary[]>([]);
+    const [confirming, setConfirming] = useState<number | null>(null);
+    const [creditRefresh, setCreditRefresh] = useState(0);
+    useEffect(() => {
+        const controller = new AbortController();
+        listPaymentConditions(false, controller.signal).then(setConditions).catch(() => { /* zonder lijst blijft de huidige conditie kiesbaar */ });
+        return () => controller.abort();
+    }, []);
     const inFlight = useRef(false);
     const firstInput = useRef<HTMLInputElement | null>(null);
     useEffect(() => { firstInput.current?.focus(); }, []);
@@ -97,7 +117,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
 
     // Elke groep met een fout gaat open (een fout mag nooit verborgen blijven); het eerste foutveld krijgt focus.
     const sectionOf = (field: string): string | null =>
-        field.startsWith('addresses') ? 'addresses' : field.startsWith('contacts') ? 'contacts' : field.startsWith('ggns') || field.includes('PaymentTerms') || field === 'vendorCurrency' ? 'defaults'
+        field.startsWith('addresses') ? 'addresses' : field.startsWith('contacts') ? 'contacts' : field.startsWith('ggns') || field.startsWith('customer.') || field.startsWith('vendor.') ? 'defaults'
+            : field.startsWith('bankAccounts') || field === 'actorReference' ? 'bank'
             : field === 'internalNote' ? 'note' : ['website', 'vatNumber', 'registrationNumber', 'registrationCountry', 'registrationType', 'legalForm', 'preferredLanguage'].includes(field) ? 'company' : null;
     const focusFirstError = (fields: string[]) => {
         const first = fields[0];
@@ -176,6 +197,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             setStale(false);
             setNotice(t('relations_saved', { name: saved.name }));
             setDraft(draftFromRelation(saved));
+            setCreditRefresh((n) => n + 1);
             onSaved(saved, false);
         } catch (caught) {
             applyServerError(toApiError(caught));
@@ -210,6 +232,66 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             setSubmitting(false);
         }
     };
+
+    // Bankrekening bevestigen (met "Wie", op de versie van het concept). De server verhoogt de versie; omdat zij de verwachte versie
+    // controleert, is er intussen niets anders gewijzigd en gaat het concept verder op de nieuwe versie. Alleen status en audit
+    // komen uit het antwoord; onopgeslagen invoer in het concept blijft staan.
+    const confirm = async (bankAccountId: number) => {
+        if (current === null || inFlight.current) return;
+        const actor = draft.actorReference.trim();
+        if (actor === '') { setErrors({ actorReference: [t('relations_error_actor_required')] }); focusFirstError(['actorReference']); return; }
+        inFlight.current = true;
+        setConfirming(bankAccountId);
+        setServerError(null);
+        try {
+            const saved = await confirmBankAccount(current.id, bankAccountId, { expectedVersion: baseVersion ?? current.version, actorReference: actor });
+            setCurrent(saved);
+            setBaseVersion(saved.version);
+            setDraft((draftNow) => ({
+                ...draftNow,
+                bankAccounts: draftNow.bankAccounts.map((a) => {
+                    const stored = saved.bankAccounts.find((b) => b.id === a.id);
+                    return stored ? { ...a, stored } : a;
+                }),
+            }));
+            setNotice(t('relations_bank_confirmed', { name: actor }));
+            onSaved(saved, false);
+        } catch (caught) {
+            applyServerError(toApiError(caught));
+        } finally {
+            inFlight.current = false;
+            setConfirming(null);
+        }
+    };
+
+    // Tikfoutsuggestie overnemen (uit het antwoord op opslaan): "email" of "contacts[i].channels[j].value".
+    const applySuggestion = (field: string, suggestion: string) => {
+        if (field === 'email') { update({ email: suggestion }); return; }
+        const match = /^contacts\[(\d+)\]\.channels\[(\d+)\]\.value$/.exec(field);
+        if (!match) return;
+        const [ci, chi] = [Number(match[1]), Number(match[2])];
+        update({ contacts: draft.contacts.map((c, i) => (i !== ci ? c : { ...c, channels: c.channels.map((ch, j) => (j === chi ? { ...ch, value: suggestion } : ch)) })) });
+        setOpen((currentOpen) => ({ ...currentOpen, contacts: true }));
+    };
+    const warningFieldLabel = (field: string | null) => {
+        if (field === null) return '';
+        if (field === 'email') return t('relations_field_email');
+        const match = /^contacts\[(\d+)\]/.exec(field);
+        return match ? `${draft.contacts[Number(match[1])]?.name ?? ''} · ${t('relations_channel_email')}` : field;
+    };
+    // Live tikfouthint bij een nieuw of gewijzigd adres (geen fout; één klik neemt de suggestie over).
+    const typoHint = (value: string, stored: string | null | undefined, apply: (suggestion: string) => void, testId: string) => {
+        const suggestion = emailSuggestion(value, stored);
+        if (suggestion === null) return null;
+        return (
+            <span className="mt-1 flex flex-wrap items-center gap-1 text-xs text-amber-900" data-testid={testId}>
+                {t('relations_email_typo_hint', { suggestion })}
+                <button type="button" className="font-medium text-blue-800 underline underline-offset-2" disabled={locked} onClick={() => apply(suggestion)}>{t('relations_email_apply', { suggestion })}</button>
+            </span>
+        );
+    };
+    const storedChannel = (channelId: number | null) => (channelId === null ? undefined : current?.contacts.flatMap((c) => c.channels).find((ch) => ch.id === channelId)?.value);
+    const today = todayInAmsterdam();
 
     // ⌘S/Ctrl+S slaat op; Enter in een invoerveld slaat niets op (geen ongewenste submit vanuit een lookup of lijst).
     const handler = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
@@ -311,6 +393,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 </div>
             )}
             {serverError && pending === null && <ErrorNotice error={serverError} />}
+            {current !== null && <RelationWarnings warnings={current.warnings} onApplySuggestion={applySuggestion} fieldLabel={warningFieldLabel} />}
             {similar !== null && (
                 <div role="alert" className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                     <p className="font-medium">{t('relations_similar_title')}</p>
@@ -351,7 +434,10 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                     </label>
                     {current !== null && !draft.isActive && <span className="text-xs text-gray-600">{t('relations_inactive_hint')}</span>}
                 </div>
-                {textField('email', 'relations_field_email', { maxLength: 200 })}
+                <div>
+                    {textField('email', 'relations_field_email', { maxLength: 200 })}
+                    {typoHint(draft.email, current?.email, (suggestion) => update({ email: suggestion }), 'email-typo-hint')}
+                </div>
                 {textField('phone', 'relations_field_phone', { maxLength: 40 })}
             </fieldset>
 
@@ -479,6 +565,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                                         <input {...fieldProps(ck, e(ck))} aria-label={channel.kind === 'Phone' ? t('relations_channel_phone') : t('relations_channel_email')} inputMode={channel.kind === 'Phone' ? 'tel' : 'email'} value={channel.value} disabled={locked} maxLength={200} className={inputClass}
                                                             onChange={(event) => editChannel(contact.key, channel.key, { value: event.target.value })} />
                                                         <FieldError id={ck} messages={e(ck)} />
+                                                        {channel.kind === 'Email' && typoHint(channel.value, storedChannel(channel.id), (suggestion) => editChannel(contact.key, channel.key, { value: suggestion }), `email-typo-hint-${channel.key}`)}
                                                     </div>
                                                     <button type="button" tabIndex={-1} className="mt-1 text-xs text-red-800 underline underline-offset-2" disabled={locked} onClick={() => removeChannel(contact.key, channel.key)}>{t('relations_remove')}</button>
                                                 </div>
@@ -511,29 +598,61 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                 {!current.vendor && <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => void addRole('vendor')}>+ {t('relations_add_role_vendor')}</button>}
                             </div>
                         )}
+                        <datalist id="relation-currencies">{reference.currencies.map((option) => <option key={option} value={option} />)}</datalist>
                         {draft.customerRole && (
-                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                                <p className="col-span-2 text-sm font-medium text-gray-900 md:col-span-4">{t('relations_defaults_sales')}{current?.customer ? ` · #${current.customer.customerId}` : ''}</p>
+                            <div className="space-y-2">
+                                <p className="text-sm font-medium text-gray-900">{t('relations_defaults_sales')}{current?.customer ? ` · #${current.customer.customerId}` : ''}</p>
+                                <RelationTermsSection prefix="customer" terms={draft.customerTerms} onChange={(patch) => update({ customerTerms: { ...draft.customerTerms, ...patch } })} conditions={conditions}
+                                    currentCondition={current?.customer?.paymentCondition ?? null} reference={reference} errors={errors} locked={locked} />
+                                <CustomerCreditSection customerId={current?.customer?.customerId ?? null} credit={draft.credit} onChange={(patch) => update({ credit: { ...draft.credit, ...patch } })}
+                                    reference={reference} errors={errors} locked={locked} refreshToken={creditRefresh} />
                             </div>
                         )}
                         {draft.vendorRole && (
                             <div className="space-y-2">
                                 <p className="text-sm font-medium text-gray-900">{t('relations_defaults_purchase')}{current?.vendor ? ` · #${current.vendor.vendorId}` : ''}</p>
-                                <div className="space-y-1">
+                                <RelationTermsSection prefix="vendor" terms={draft.vendorTerms} onChange={(patch) => update({ vendorTerms: { ...draft.vendorTerms, ...patch } })} conditions={conditions}
+                                    currentCondition={current?.vendor?.paymentCondition ?? null} reference={reference} errors={errors} locked={locked} />
+                                <div className="space-y-2">
                                     <p className="text-xs font-medium text-gray-700">{t('relations_ggn_title')}</p>
                                     {draft.ggns.map((ggn) => {
                                         const k = (field: string) => `ggns.${ggn.key}.${field}`;
                                         return (
-                                            <div key={ggn.key} className="flex flex-wrap items-start gap-2" data-testid={`ggn-${ggn.key}`}>
-                                                <div>
-                                                    <input {...fieldProps(k('ggn'), e(k('ggn')))} aria-label={t('relations_ggn_number')} placeholder={t('relations_ggn_number')} inputMode="numeric" value={ggn.ggn} disabled={locked} maxLength={20} className={`${inputClass} max-w-44 font-mono`}
-                                                        onChange={(event) => editGgn(ggn.key, { ggn: event.target.value })} />
-                                                    <FieldError id={k('ggn')} messages={e(k('ggn'))} />
+                                            <div key={ggn.key} className="space-y-1 rounded border border-gray-200 p-2" data-testid={`ggn-${ggn.key}`}>
+                                                <div className="flex flex-wrap items-start gap-2">
+                                                    <div>
+                                                        <input {...fieldProps(k('ggn'), e(k('ggn')))} aria-label={t('relations_ggn_number')} placeholder={t('relations_ggn_number')} inputMode="numeric" value={ggn.ggn} disabled={locked} maxLength={20} className={`${inputClass} max-w-44 font-mono`}
+                                                            onChange={(event) => editGgn(ggn.key, { ggn: event.target.value })} />
+                                                        <FieldError id={k('ggn')} messages={e(k('ggn'))} />
+                                                    </div>
+                                                    <input {...fieldProps(k('producerName'), e(k('producerName')))} aria-label={t('relations_ggn_producer')} placeholder={t('relations_ggn_producer')} value={ggn.producerName} disabled={locked} maxLength={200} className={`${inputClass} min-w-40 flex-1`}
+                                                        onChange={(event) => editGgn(ggn.key, { producerName: event.target.value })} />
+                                                    <label className="mt-2 flex items-center gap-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.isActive} disabled={locked} onChange={(event) => editGgn(ggn.key, { isActive: event.target.checked })} />{t('relations_active')}</label>
+                                                    <button type="button" tabIndex={-1} className="mt-2 text-xs text-red-800 underline underline-offset-2" disabled={locked} onClick={() => removeGgn(ggn.key)}>{t('relations_remove')}</button>
                                                 </div>
-                                                <input {...fieldProps(k('producerName'), e(k('producerName')))} aria-label={t('relations_ggn_producer')} placeholder={t('relations_ggn_producer')} value={ggn.producerName} disabled={locked} maxLength={200} className={`${inputClass} min-w-48 flex-1`}
-                                                    onChange={(event) => editGgn(ggn.key, { producerName: event.target.value })} />
-                                                <label className="mt-2 flex items-center gap-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.isActive} disabled={locked} onChange={(event) => editGgn(ggn.key, { isActive: event.target.checked })} />{t('relations_active')}</label>
-                                                <button type="button" tabIndex={-1} className="mt-2 text-xs text-red-800 underline underline-offset-2" disabled={locked} onClick={() => removeGgn(ggn.key)}>{t('relations_remove')}</button>
+                                                {/* Handmatige certificaatcontrole: wanneer en door wie, geldig tot, GGN-label. */}
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-5">
+                                                    <div>
+                                                        <label htmlFor={`${k('checkedOn')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_checked_on')}</label>
+                                                        <input {...fieldProps(k('checkedOn'), e(k('checkedOn')))} type="date" max={today} value={ggn.checkedOn} disabled={locked} className={inputClass} onChange={(event) => editGgn(ggn.key, { checkedOn: event.target.value })} />
+                                                        <FieldError id={k('checkedOn')} messages={e(k('checkedOn'))} />
+                                                    </div>
+                                                    <div>
+                                                        <label htmlFor={`${k('checkedBy')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_checked_by')}</label>
+                                                        <input {...fieldProps(k('checkedBy'), e(k('checkedBy')))} value={ggn.checkedBy} maxLength={100} disabled={locked} className={inputClass} onChange={(event) => editGgn(ggn.key, { checkedBy: event.target.value })} />
+                                                        <FieldError id={k('checkedBy')} messages={e(k('checkedBy'))} />
+                                                    </div>
+                                                    <div>
+                                                        <label htmlFor={`${k('certificateValidUntil')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_valid_until')}</label>
+                                                        <input {...fieldProps(k('certificateValidUntil'), e(k('certificateValidUntil')))} type="date" value={ggn.certificateValidUntil} disabled={locked} className={inputClass} onChange={(event) => editGgn(ggn.key, { certificateValidUntil: event.target.value })} />
+                                                        {ggn.certificateValidUntil !== '' && ggn.certificateValidUntil < today && <span className="block text-xs font-medium text-red-800">{t('relations_ggn_expired')}</span>}
+                                                    </div>
+                                                    <label className="flex items-end gap-1 pb-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.hasGgnLabel} disabled={locked} onChange={(event) => editGgn(ggn.key, { hasGgnLabel: event.target.checked })} />{t('relations_ggn_label')}</label>
+                                                    <div className="flex items-end pb-1">
+                                                        <GgnPortalButton ggn={ggn.ggn.replace(/ /g, '')} portalUrl={reference.globalGapPortalUrl} disabled={locked} />
+                                                    </div>
+                                                </div>
+                                                {ggn.checkedOn === '' && <p className="text-xs text-amber-800">{t('relations_ggn_never_checked')}</p>}
                                             </div>
                                         );
                                     })}
@@ -555,6 +674,21 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                 </ul>
                             </div>
                         )}
+                    </div>
+                )}
+            </section>
+
+            {/* Bankrekeningen */}
+            <section className="rounded-md border border-gray-200">
+                {sectionButton('bank', 'relations_section_bank', [
+                    t('relations_count', { count: String(draft.bankAccounts.length) }),
+                    current?.warnings.some((w) => w.code === 'default-bank-account-unconfirmed') ? t('relations_bank_status_Unconfirmed') : '',
+                ].filter(Boolean).join(' · '))}
+                {open.bank && (
+                    <div id="relation-bank" className="border-t border-gray-200 p-3">
+                        <RelationBankAccountsSection accounts={draft.bankAccounts} onChange={(bankAccounts) => update({ bankAccounts })} actorReference={draft.actorReference}
+                            onActorChange={(actorReference) => update({ actorReference })} actorRequired={bankAccountsNeedActor(draft.bankAccounts)} events={current?.bankAccountEvents ?? []}
+                            errors={errors} locked={locked} onConfirm={(id) => void confirm(id)} confirming={confirming} canConfirm={current !== null && !stale} />
                     </div>
                 )}
             </section>

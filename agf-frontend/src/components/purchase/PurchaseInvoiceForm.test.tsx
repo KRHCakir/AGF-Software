@@ -76,6 +76,19 @@ describe('PurchaseInvoiceForm', () => {
         assert.ok(text().includes('purchase_due_deviation'));
     });
 
+    test('a vendor whose default bank account is unconfirmed shows a clear warning (never blocking); end-of-month conditions propose the due date from the month end', async () => {
+        const risky = [...vendors, { ...vendors[0], id: 21, name: 'Nieuwe Kweker', paymentConditionId: 4, paymentConditionCode: 'EOM30', paymentConditionBasis: 'EndOfMonth' as const, defaultBankAccountUnconfirmed: true }];
+        await mounted.render(<PurchaseInvoiceForm vendors={risky} products={products} settings={settings} />);
+        await chooseVendor('green');
+        assert.equal(mounted.container.querySelector('[data-testid="purchase-bank-unconfirmed"]'), null);
+        await key(input('vendorId'), 'Backspace');
+        await chooseVendor('kweker');
+        assert.ok(mounted.container.querySelector('[data-testid="purchase-bank-unconfirmed"]'), 'warning shown');
+        assert.ok(text().includes('purchase_condition_end_of_month'));
+        await type(input('invoiceDate'), '2026-10-15');
+        assert.equal(input('dueDate').value, '2026-11-30', 'end of October + 30 days');
+    });
+
     test('three lines entered with the keyboard only: item, quantity, unit, price, discount, VAT, Enter adds the next line; totals live; no save on item choice', async () => {
         await mounted.render(<PurchaseInvoiceForm vendors={vendors} products={products} settings={settings} />);
         await chooseVendor('#7');

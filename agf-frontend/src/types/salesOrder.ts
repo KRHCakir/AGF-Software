@@ -290,6 +290,22 @@ export interface SalesOrder {
     // Afgeleid: elke regel volledig verzonden én bevestigd afgeleverd (per regel en eenheid).
     delivered: boolean;
     lines: SalesOrderLine[];
+    // Alleen in het antwoord op aanmaken (201 en herhaling): kredietlimiet overschreden. Blokkeert nooit; ontbreekt bij GET/lijst.
+    creditWarning?: SalesOrderCreditWarning | null;
+}
+
+export interface SalesOrderCreditWarning {
+    creditLimit: number;
+    outstanding: number;
+    difference: number;
+    isComplete: boolean;
+    unpricedSalesOrdersCount: number;
+    message: string;
+}
+
+function isCreditWarning(value: unknown): value is SalesOrderCreditWarning {
+    return isObject(value) && isNumber(value.creditLimit) && isNumber(value.outstanding) && isNumber(value.difference) && typeof value.isComplete === 'boolean'
+        && isNumber(value.unpricedSalesOrdersCount) && isString(value.message);
 }
 
 // Inhoudsregel die voor een orderregel te reserveren is: zelfde variant + eenheid, Approved, Received + Warehouse, route Warehouse.
@@ -403,6 +419,7 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && isString(value.status)
         && isNullableString(value.customerReference)
         && (value.internalNote === undefined || isNullableString(value.internalNote))
+        && (value.creditWarning === undefined || value.creditWarning === null || isCreditWarning(value.creditWarning))
         && isString(value.requestedDeliveryDate)
         && isString(value.actorReference)
         && isString(value.createdAt)
