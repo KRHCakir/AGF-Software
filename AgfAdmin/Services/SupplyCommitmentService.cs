@@ -388,7 +388,7 @@ namespace AgfAdmin.Services
             VendorName = commitment.Vendor?.Name,
             // Actieve GGN's van de leverancier: voorstel bij ontvangst alleen als er precies één is; bij meer kiest de gebruiker.
             VendorGgns = (commitment.Vendor?.Ggns ?? new List<VendorGgn>()).Where(g => g.IsActive).OrderBy(g => g.SortOrder).ThenBy(g => g.Id)
-                .Select(g => new VendorGgnOptionDto { Ggn = g.Ggn, ProducerName = g.ProducerName }).ToList(),
+                .Select(g => new VendorGgnOptionDto { Ggn = g.Ggn, ProducerName = g.ProducerName, CheckedOn = g.CheckedOn, CertificateValidUntil = g.CertificateValidUntil, HasGgnLabel = g.HasGgnLabel }).ToList(),
             CustomerId = commitment.CustomerId,
             CustomerName = commitment.Customer?.Name,
             Route = commitment.Route,

@@ -93,7 +93,13 @@ namespace AgfAdmin.Services
 
         public async Task<IReadOnlyList<PurchaseVendorDto>> VendorsAsync(CancellationToken cancellationToken = default) =>
             await _db.Vendors.AsNoTracking().OrderBy(v => v.Name)
-                .Select(v => new PurchaseVendorDto { Id = v.Id, Name = v.Name, VatNumber = v.VATNumber, PaymentTermsDays = v.PaymentTermsDays, DefaultCurrency = v.DefaultCurrency, SearchCode = v.Relation.SearchCode, IsActive = v.Relation.IsActive })
+                .Select(v => new PurchaseVendorDto
+                {
+                    Id = v.Id, Name = v.Name, VatNumber = v.VATNumber, PaymentTermsDays = v.PaymentTermsDays, DefaultCurrency = v.DefaultCurrency, SearchCode = v.Relation.SearchCode, IsActive = v.Relation.IsActive,
+                    PaymentConditionId = v.PaymentConditionId, PaymentConditionCode = v.PaymentCondition.Code, PaymentConditionBasis = v.PaymentCondition.Basis,
+                    HasDefaultBankAccount = v.Relation.BankAccounts.Any(a => a.IsDefault && a.IsActive),
+                    DefaultBankAccountUnconfirmed = v.Relation.BankAccounts.Any(a => a.IsDefault && a.IsActive && a.ConfirmationStatus != BankAccountConfirmation.Confirmed)
+                })
                 .ToListAsync(cancellationToken);
 
         // ---- Aanmaken ----
@@ -131,7 +137,7 @@ namespace AgfAdmin.Services
             }
             else
             {
-                vendor = await _db.Vendors.AsNoTracking().Include(v => v.Relation).SingleOrDefaultAsync(v => v.Id == request.VendorId, cancellationToken);
+                vendor = await _db.Vendors.AsNoTracking().Include(v => v.Relation).Include(v => v.PaymentCondition).SingleOrDefaultAsync(v => v.Id == request.VendorId, cancellationToken);
                 if (vendor == null)
                 {
                     ValidationErrors.Add(errors, "vendorId", $"Supplier {request.VendorId} does not exist.");
@@ -167,7 +173,10 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "currency", "Currency must be a three-letter code (for example EUR).");
             }
-            var dueDate = AsUtcDate(request.DueDate) ?? invoiceDate?.AddDays(terms);
+            // Vervaldatum zonder ingevulde datum: volgt de basis van de leveranciersconditie zolang de termijn die van de conditie is
+            // (leeg of gelijk aan haar dagen); een afwijkende termijn telt vanaf de factuurdatum. Bestaande facturen worden niet herrekend.
+            var basis = vendor?.PaymentCondition != null && terms == vendor.PaymentCondition.Days ? vendor.PaymentCondition.Basis : PaymentConditionBasis.InvoiceDate;
+            var dueDate = AsUtcDate(request.DueDate) ?? (invoiceDate == null ? null : PaymentConditionRules.DueDate(invoiceDate.Value, terms, basis));
             if (invoiceDate != null && dueDate < invoiceDate)
             {
                 ValidationErrors.Add(errors, "dueDate", "The due date cannot be before the invoice date.");

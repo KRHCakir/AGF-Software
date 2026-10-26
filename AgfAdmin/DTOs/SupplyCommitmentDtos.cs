@@ -55,6 +55,11 @@ namespace AgfAdmin.DTOs
     {
         public string Ggn { get; set; }
         public string ProducerName { get; set; }
+        // Laatste handmatige controle in de GLOBALG.A.P.-portal en geldigheid van het certificaat (zoals ingevoerd): de ontvangst
+        // waarschuwt bij een verlopen of nooit gecontroleerd certificaat. Nooit blokkerend.
+        public DateOnly? CheckedOn { get; set; }
+        public DateOnly? CertificateValidUntil { get; set; }
+        public bool HasGgnLabel { get; set; }
     }
 
     public sealed class SupplyCommitmentLineDto

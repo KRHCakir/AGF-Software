@@ -49,6 +49,8 @@ namespace AgfAdmin.DTOs
         public bool Fulfilled { get; set; }
         // Afgeleid: elke regel volledig verzonden én bevestigd afgeleverd (per regel en eenheid, nooit over eenheden heen opgeteld).
         public bool Delivered { get; set; }
+        // Alleen in het antwoord op aanmaken (ook bij een identieke herhaling): kredietlimiet overschreden. Nooit blokkerend.
+        public SalesOrderCreditWarningDto CreditWarning { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
     }
 

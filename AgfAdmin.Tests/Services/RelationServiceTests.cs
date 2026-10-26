@@ -484,7 +484,7 @@ public class RelationServiceTests : IDisposable
         badNumber.VatNumber = "12345";
         var bad = await UpdateAsync(current.Id, badNumber);
         Assert.Equal(ServiceResultStatus.Validation, bad.Status);
-        Assert.Contains("not a VIES verification", bad.Errors["vatNumber"][0]);
+        Assert.Contains("geen VIES-controle", bad.Errors["vatNumber"][0]);
     }
 
     [Fact]
