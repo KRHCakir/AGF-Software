@@ -4,6 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, deferred, json, setSelectValue, setValue } from '../../test/reactHarness.ts';
 import type { CustomerRole, Relation, RelationBankAccount, RelationReference, RoleTerms, VendorRole } from '../../types/relation';
+import { flowFields } from '../../lib/keyboardFlow.ts';
 import RelationForm from './RelationForm';
 
 // Relatiekaart door de echte componentlevenscyclus: aanmaken met alleen een naam (Ctrl+S), Enter slaat niets op, inline fouten met
@@ -326,6 +327,77 @@ describe('RelationForm', () => {
         const customer = calls.find((call) => call.method === 'PUT')!.body!.customer as Record<string, unknown>;
         assert.deepEqual([customer.paymentTermsDays, customer.paymentTermsEndOfMonth, customer.discountPercent, customer.discountDays, customer.paymentMethod, customer.mandateReference, customer.mandateSignedOn, customer.deliveryTermKind, customer.incoterm, customer.incotermPlace, customer.deliveryTermText],
             [45, true, null, null, 'DirectDebit', 'SEPA-77', '2026-01-15', 'Incoterm', 'FCA', 'Venlo', null]);
+    });
+
+    test('keyboard flow: Tab order is the visual order without hidden or disabled fields; Enter and arrows at the edges move between fields', async () => {
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        const form = mounted.container.querySelector('form')!;
+        const order = () => flowFields(form as unknown as { querySelectorAll(s: string): ArrayLike<HTMLInputElement> }).map((f) => f.id.replace(/-input$/, ''));
+        assert.deepEqual(order(), ['searchCode', 'name', 'tradeName', 'customerRole', 'vendorRole', 'isActive', 'email', 'phone'], 'collapsed sections have no fields');
+        await click(input('customerRole'));
+        assert.deepEqual(order().slice(8, 13), ['customer.paymentTermsDays', 'customer.paymentTermsEndOfMonth', 'customer.discountPercent', 'customer.discountDays', 'customer.paymentMethod']);
+        const keyIn = async (element: HTMLElement, k: string) => {
+            const event = new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+            await act(async () => { element.dispatchEvent(event); });
+            return event.defaultPrevented;
+        };
+        const active = () => (window.document.activeElement as HTMLElement).id.replace(/-input$/, '');
+        assert.equal(active(), 'searchCode');
+        // Leeg veld: pijl rechts gaat door; Enter ook en verstuurt niets.
+        assert.equal(await keyIn(input('searchCode'), 'ArrowRight'), true);
+        assert.equal(active(), 'name');
+        await type(input('name'), 'Fruit');
+        input('name').setSelectionRange(2, 2);
+        assert.equal(await keyIn(input('name'), 'ArrowRight'), false, 'mid-text: normal caret');
+        assert.equal(active(), 'name');
+        input('name').setSelectionRange(5, 5);
+        await keyIn(input('name'), 'ArrowRight');
+        assert.equal(active(), 'tradeName', 'at the end: next field');
+        await keyIn(input('tradeName'), 'ArrowLeft');
+        assert.deepEqual([active(), input('name').selectionStart], ['name', 5], 'back with the caret at the end');
+        input('name').setSelectionRange(0, 0);
+        await keyIn(input('name'), 'ArrowLeft');
+        assert.equal(active(), 'searchCode');
+        await keyIn(input('searchCode'), 'Enter');
+        assert.equal(active(), 'name');
+        // Een vinkje: Enter gaat door, pijlen niet.
+        input('customerRole').focus();
+        assert.equal(await keyIn(input('customerRole'), 'ArrowRight'), false);
+        await keyIn(input('customerRole'), 'Enter');
+        assert.equal(active(), 'vendorRole');
+        // Getalveld: inhoud geselecteerd bij focus (overtypen), Enter naar het vinkje "einde maand".
+        await type(input('customer.paymentTermsDays'), '30');
+        input('phone').focus();
+        await keyIn(input('phone'), 'Enter');
+        assert.equal(active(), 'customer.paymentTermsDays');
+        assert.deepEqual([input('customer.paymentTermsDays').selectionStart, input('customer.paymentTermsDays').selectionEnd], [0, 2], 'selected for overtyping');
+        await keyIn(input('customer.paymentTermsDays'), 'Enter');
+        assert.equal(active(), 'customer.paymentTermsEndOfMonth');
+        // Keuzelijst: pijlen blijven van de lijst.
+        select('customer.paymentMethod').focus();
+        assert.equal(await keyIn(select('customer.paymentMethod'), 'ArrowRight'), false);
+        assert.equal(posts().length, 0, 'Enter never submitted');
+    });
+
+    test('keyboard flow: Cmd+S saves on a Mac, Ctrl+S does not; a validation error focuses the first invalid field in visual order', async () => {
+        const original = window.navigator.userAgent;
+        Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' });
+        try {
+            respond = () => json(201, saved({ customer: null }));
+            await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+            await type(input('searchCode'), 'fout code');
+            await press('s', { metaKey: true });
+            assert.equal(posts().length, 0);
+            assert.equal(window.document.activeElement, input('searchCode'), 'search code comes before the missing name');
+            await type(input('searchCode'), 'FZ');
+            await type(input('name'), 'Fruitimport Zuid');
+            await press('s', { ctrlKey: true });
+            assert.equal(posts().length, 0, 'Ctrl+S is not the Mac shortcut');
+            await press('s', { metaKey: true });
+            await mounted.waitFor(() => posts().length === 1, 'saved with Cmd+S');
+        } finally {
+            Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: original });
+        }
     });
 
     test('credit: limit and insurance are edited inline; the exposure from the server shows outstanding, gap, expiry and the unpriced orders', async () => {

@@ -1,12 +1,13 @@
 'use client';
 
-import { KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, bankAccountsNeedActor, buildRelationPayload, creditDraftFromRole, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
 import { todayInAmsterdam } from '../../lib/calendarDate';
 import { emptyTermsDraft } from '../../lib/roleTermsRules';
 import { newRequestId } from '../../lib/requestId';
-import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
+import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
+import { useKeyboardFlow } from '../../lib/useKeyboardFlow';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { addRelationRole, confirmBankAccount, createRelation, updateRelation } from '../../services/relationService';
 import type { AddressPurpose, ChannelKind, Relation, RelationReference, SaveRelationRequest, SimilarRelation } from '../../types/relation';
@@ -24,7 +25,9 @@ import RelationWarnings from './RelationWarnings';
 
 // Relatiekaart: altijd zichtbaar zijn zoekcode, bedrijfsnaam, rollen, actief en de belangrijkste contactgegevens; de rest staat
 // compact gegroepeerd (bedrijfsgegevens, adressen, contactpersonen, inkoop-/verkoopdefaults, interne opmerking). Alleen de naam
-// is verplicht. Opslaan via ⌘S/Ctrl+S of de knop; Enter in een veld slaat niets op. Inline validatie met behoud van invoer.
+// is verplicht. Opslaan via ⌘S/Ctrl+S of de knop; Enter in een veld gaat naar het volgende veld en slaat niets op, pijl links/rechts
+// aan het begin/einde van een veld springt naar het vorige/volgende (useKeyboardFlow). Inline validatie met behoud van invoer; na een
+// fout krijgt het eerste ongeldige veld in visuele volgorde de focus.
 // Aanmaken bevriest payload en requestId: bij een onbekende uitkomst wordt exact dezelfde opdracht herhaald (ook na verversen),
 // zodat nooit twee relaties voor één invoer ontstaan. Gelijkende namen zijn een definitieve 409: "toch aanmaken" is een nieuwe opdracht.
 // Rolafspraken, krediet en bankrekeningen staan in eigen secties (RelationTermsSection, CustomerCreditSection,
@@ -95,7 +98,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const [creditRefresh, setCreditRefresh] = useState(0);
     const inFlight = useRef(false);
     const firstInput = useRef<HTMLInputElement | null>(null);
+    const formRef = useRef<HTMLFormElement | null>(null);
+    // Openen = focus in het eerste veld (zoekcode).
     useEffect(() => { firstInput.current?.focus(); }, []);
+    const submitRef = useRef<() => void>(() => {});
+    const { focusFirstInvalid } = useKeyboardFlow(formRef, { onSave: () => submitRef.current() });
 
     const setPending = (next: PendingCreate | null) => { setPendingState(next); writePending(next); };
     const locked = submitting || pending !== null;
@@ -111,7 +118,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const e = (key: string) => errors[key];
     const toggle = (section: string) => setOpen((current) => ({ ...current, [section]: !current[section] }));
 
-    // Elke groep met een fout gaat open (een fout mag nooit verborgen blijven); het eerste foutveld krijgt focus.
+    // Elke groep met een fout gaat open (een fout mag nooit verborgen blijven); het eerste ongeldige veld in visuele volgorde krijgt
+    // focus (aria-invalid), met het eerste foutveld uit de lijst als terugval (bijv. een fout zonder eigen invoerveld).
     const sectionOf = (field: string): string | null =>
         field.startsWith('addresses') ? 'addresses' : field.startsWith('contacts') ? 'contacts' : field.startsWith('ggns') || field.startsWith('customer.') || field.startsWith('vendor.') ? 'defaults'
             : field.startsWith('bankAccounts') || field === 'actorReference' ? 'bank'
@@ -121,7 +129,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
         if (!first) return;
         const sections = fields.map(sectionOf).filter((section): section is string => section !== null);
         if (sections.length > 0) setOpen((current) => ({ ...current, ...Object.fromEntries(sections.map((section) => [section, true])) }));
-        setTimeout(() => document.getElementById(`${first}-input`)?.focus(), 0);
+        focusFirstInvalid(`${first}-input`);
     };
 
     const applyServerError = (apiError: ApiError) => {
@@ -290,19 +298,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const storedChannel = (channelId: number | null) => (channelId === null ? undefined : current?.contacts.flatMap((c) => c.channels).find((ch) => ch.id === channelId)?.value);
     const today = todayInAmsterdam();
 
-    // ⌘S/Ctrl+S slaat op; Enter in een invoerveld slaat niets op (geen ongewenste submit vanuit een lookup of lijst).
-    const handler = useRef<(event: globalThis.KeyboardEvent) => void>(() => {});
-    handler.current = (event: globalThis.KeyboardEvent) => {
-        if (matchShortcut(event, isMac) === 'save') { event.preventDefault(); void submit(); }
-    };
-    useEffect(() => {
-        const listener = (event: globalThis.KeyboardEvent) => handler.current(event);
-        document.addEventListener('keydown', listener, true);
-        return () => document.removeEventListener('keydown', listener, true);
-    }, []);
-    const stopEnter = (event: KeyboardEvent<HTMLElement>) => {
-        if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault();
-    };
+    // ⌘S/Ctrl+S slaat op (useKeyboardFlow); Enter in een veld gaat naar het volgende en verstuurt nooit.
+    submitRef.current = () => { void submit(); };
 
     // ---- rijen ----
     const editAddress = (key: string, patch: Partial<AddressDraft>) => update({ addresses: draft.addresses.map((a) => (a.key === key ? { ...a, ...patch } : a)) });
@@ -361,7 +358,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const usage = current?.usage;
 
     return (
-        <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} onKeyDown={stopEnter} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="relation-form">
+        <form ref={formRef} noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="relation-form">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="text-lg font-semibold text-gray-900">{current === null ? t('relations_new') : t('relations_edit', { id: String(current.id) })}</h2>
                 <div className="flex flex-wrap items-center gap-2">
