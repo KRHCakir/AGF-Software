@@ -54,6 +54,7 @@ namespace AgfAdmin.Models
         public Vendor Vendor { get; set; }
         public ICollection<RelationAddress> Addresses { get; set; } = new List<RelationAddress>();
         public ICollection<RelationContact> Contacts { get; set; } = new List<RelationContact>();
+        public ICollection<RelationBankAccount> BankAccounts { get; set; } = new List<RelationBankAccount>();
     }
 
     public static class VatVerification
@@ -145,5 +146,129 @@ namespace AgfAdmin.Models
         public string ProducerName { get; set; } // optioneel
         public bool IsActive { get; set; } = true;
         public int SortOrder { get; set; }
+
+        // Handmatige controle in de GLOBALG.A.P. Supply Chain Portal (link in de bedrijfsinstellingen): wanneer, door wie, tot wanneer
+        // het certificaat geldig is en of de producent het GGN-label mag voeren. Zoals ingevoerd; de applicatie raadpleegt het portaal niet.
+        public DateOnly? CheckedOn { get; set; }
+        public string CheckedBy { get; set; }
+        public DateOnly? CertificateValidUntil { get; set; }
+        public bool HasGgnLabel { get; set; }
+    }
+
+    // Bankrekening van een relatie (crediteur of debiteur). Precies één van Iban (SEPA, genormaliseerd: hoofdletters zonder spaties)
+    // en OtherAccountNumber (niet-SEPA). Elke toevoeging of wijziging van IBAN, rekeninghouder of ander rekeningnummer zet de rekening op
+    // Unconfirmed en schrijft een auditregel; bevestigen is een aparte handeling met "wie". Nooit verwijderen: inactief zetten.
+    // Per relatie hooguit één actieve standaardrekening (gefilterde unieke index + regel).
+    public sealed class RelationBankAccount
+    {
+        public int Id { get; set; }
+        public int RelationId { get; set; }
+        public Relation Relation { get; set; }
+
+        public string Iban { get; set; }
+        public string OtherAccountNumber { get; set; }
+        public string Bic { get; set; }
+        public string AccountHolder { get; set; }
+        public string Currency { get; set; } = "EUR";
+        public bool IsDefault { get; set; }
+        public bool IsActive { get; set; } = true;
+        public int SortOrder { get; set; }
+
+        public string ConfirmationStatus { get; set; } = BankAccountConfirmation.Unconfirmed;
+        public DateTime? ConfirmedAt { get; set; }
+        public string ConfirmedBy { get; set; }
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public ICollection<RelationBankAccountEvent> Events { get; set; } = new List<RelationBankAccountEvent>();
+    }
+
+    public static class BankAccountConfirmation
+    {
+        public const string Unconfirmed = "Unconfirmed";
+        public const string Confirmed = "Confirmed";
+        public static readonly IReadOnlyList<string> All = new[] { Unconfirmed, Confirmed };
+    }
+
+    // Append-only audit van bankgegevens (TraceabilityGuard regel 3): wie (vrije tekst, er zijn geen gebruikersaccounts), wanneer,
+    // wat, met oude en nieuwe IBAN / rekeninghouder / ander rekeningnummer.
+    public sealed class RelationBankAccountEvent
+    {
+        public int Id { get; set; }
+        public int RelationBankAccountId { get; set; }
+        public RelationBankAccount BankAccount { get; set; }
+        public int RelationId { get; set; }
+        public Relation Relation { get; set; }
+
+        public string Kind { get; set; }
+        public string ActorReference { get; set; }
+        public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+
+        public string OldIban { get; set; }
+        public string NewIban { get; set; }
+        public string OldAccountHolder { get; set; }
+        public string NewAccountHolder { get; set; }
+        public string OldOtherAccountNumber { get; set; }
+        public string NewOtherAccountNumber { get; set; }
+    }
+
+    public static class BankAccountEventKind
+    {
+        public const string Added = "Added";
+        public const string Changed = "Changed";
+        public const string Confirmed = "Confirmed";
+        public const string Deactivated = "Deactivated";
+        public static readonly IReadOnlyList<string> All = new[] { Added, Changed, Confirmed, Deactivated };
+    }
+
+    // Rolafspraken die klant- en leveranciersrol delen (betaalwijze, levering, handelsvoorwaarden). Regels in RoleTermsRules.
+    public interface IRoleTerms
+    {
+        string PaymentMethod { get; set; }
+        string MandateReference { get; set; }
+        DateOnly? MandateSignedOn { get; set; }
+        string DeliveryTermKind { get; set; }
+        string Incoterm { get; set; }
+        string IncotermPlace { get; set; }
+        string DeliveryTermText { get; set; }
+        string TradeConditions { get; set; }
+        string TradeConditionsText { get; set; }
+    }
+
+    public static class PaymentMethods
+    {
+        public const string BankTransfer = "BankTransfer";
+        public const string DirectDebit = "DirectDebit";
+        public const string Cash = "Cash";
+        public const string Offset = "Offset";
+        public static readonly IReadOnlyList<string> All = new[] { BankTransfer, DirectDebit, Cash, Offset };
+    }
+
+    // Leveringsconditie: een Incoterm 2020 met plaats, of een eigen term (Franco, Af kwekerij, vrije tekst).
+    public static class DeliveryTermKinds
+    {
+        public const string Incoterm = "Incoterm";
+        public const string Franco = "Franco";
+        public const string AfKwekerij = "AfKwekerij";
+        public const string Other = "Other";
+        public static readonly IReadOnlyList<string> All = new[] { Incoterm, Franco, AfKwekerij, Other };
+    }
+
+    public static class TradeConditionKinds
+    {
+        public const string Own = "Own";
+        public const string Frugiventa = "Frugiventa";
+        public const string Cofreurop = "Cofreurop";
+        public const string Other = "Other";
+        public static readonly IReadOnlyList<string> All = new[] { Own, Frugiventa, Cofreurop, Other };
+    }
+
+    public static class CreditInsurers
+    {
+        public const string Atradius = "Atradius";
+        public const string AllianzTrade = "AllianzTrade";
+        public const string Coface = "Coface";
+        public const string Other = "Other";
+        public static readonly IReadOnlyList<string> All = new[] { Atradius, AllianzTrade, Coface, Other };
     }
 }

@@ -39,6 +39,13 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<string>("GlobalGapPortalUrl")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasDefaultValue("https://prod.osapiens.cloud/portal/webbundle/foodplus/field-service-os/supply-chain-portal?app-route-hash=%252Fcertificates");
+
                     b.Property<string>("Iban")
                         .HasColumnType("text");
 
@@ -99,11 +106,77 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("CreditLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("EUR");
+
+                    b.Property<string>("DeliveryTermKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DeliveryTermText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<string>("Incoterm")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("IncotermPlace")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("InsuredLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("InsuredUntil")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Insurer")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("InsurerReference")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("InsurerText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsInsured")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MandateReference")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<DateOnly?>("MandateSignedOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("Name")
                         .HasColumnType("text");
+
+                    b.Property<int>("PaymentConditionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("BankTransfer");
 
                     b.Property<int>("PaymentTermsDays")
                         .HasColumnType("integer");
@@ -120,10 +193,20 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("ShippingAddress")
                         .HasColumnType("text");
 
+                    b.Property<string>("TradeConditions")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TradeConditionsText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("VATNumber")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PaymentConditionId");
 
                     b.HasIndex("RelationId")
                         .IsUnique();
@@ -132,7 +215,20 @@ namespace AgfAdmin.Migrations
                         .IsUnique()
                         .HasFilter("\"RequestId\" IS NOT NULL");
 
-                    b.ToTable("Customers");
+                    b.ToTable("Customers", t =>
+                        {
+                            t.HasCheckConstraint("CK_Customers_CreditLimit_NotNegative", "\"CreditLimit\" IS NULL OR \"CreditLimit\" >= 0");
+
+                            t.HasCheckConstraint("CK_Customers_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
+
+                            t.HasCheckConstraint("CK_Customers_InsuredLimit_NotNegative", "\"InsuredLimit\" IS NULL OR \"InsuredLimit\" >= 0");
+
+                            t.HasCheckConstraint("CK_Customers_Insurer_Allowed", "\"Insurer\" IS NULL OR \"Insurer\" IN ('Atradius', 'AllianzTrade', 'Coface', 'Other')");
+
+                            t.HasCheckConstraint("CK_Customers_PaymentMethod_Allowed", "\"PaymentMethod\" IN ('BankTransfer', 'DirectDebit', 'Cash', 'Offset')");
+
+                            t.HasCheckConstraint("CK_Customers_TradeConditions_Allowed", "\"TradeConditions\" IS NULL OR \"TradeConditions\" IN ('Own', 'Frugiventa', 'Cofreurop', 'Other')");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.DirectTradeShipment", b =>
@@ -1115,6 +1211,90 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.PaymentCondition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("CodeKey")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Days")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DescriptionEn")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DescriptionNl")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("DiscountDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("DiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestPayload")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeKey")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
+                        .IsUnique()
+                        .HasFilter("\"RequestId\" IS NOT NULL");
+
+                    b.ToTable("PaymentConditions", t =>
+                        {
+                            t.HasCheckConstraint("CK_PaymentConditions_Basis_Allowed", "\"Basis\" IN ('InvoiceDate', 'EndOfMonth')");
+
+                            t.HasCheckConstraint("CK_PaymentConditions_Code_NotBlank", "length(trim(\"Code\")) > 0");
+
+                            t.HasCheckConstraint("CK_PaymentConditions_Discount_BothOrNeither", "(\"DiscountPercent\" IS NULL) = (\"DiscountDays\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -1412,6 +1592,147 @@ namespace AgfAdmin.Migrations
                     b.ToTable("RelationAddresses", t =>
                         {
                             t.HasCheckConstraint("CK_RelationAddresses_Purpose_Allowed", "\"Purpose\" IN ('Main', 'Billing', 'Delivery')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationBankAccount", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AccountHolder")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Bic")
+                        .HasMaxLength(11)
+                        .HasColumnType("character varying(11)");
+
+                    b.Property<string>("ConfirmationStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfirmedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Iban")
+                        .HasMaxLength(34)
+                        .HasColumnType("character varying(34)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("OtherAccountNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("RelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RelationBankAccounts_RelationId_ActiveDefault")
+                        .HasFilter("\"IsDefault\" AND \"IsActive\"");
+
+                    b.HasIndex("RelationId", "SortOrder");
+
+                    b.ToTable("RelationBankAccounts", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationBankAccounts_AccountHolder_NotBlank", "length(trim(\"AccountHolder\")) > 0");
+
+                            t.HasCheckConstraint("CK_RelationBankAccounts_ConfirmationStatus_Allowed", "\"ConfirmationStatus\" IN ('Unconfirmed', 'Confirmed')");
+
+                            t.HasCheckConstraint("CK_RelationBankAccounts_ExactlyOneNumber", "(\"Iban\" IS NULL) <> (\"OtherAccountNumber\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationBankAccountEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("NewAccountHolder")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("NewIban")
+                        .HasMaxLength(34)
+                        .HasColumnType("character varying(34)");
+
+                    b.Property<string>("NewOtherAccountNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OldAccountHolder")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OldIban")
+                        .HasMaxLength(34)
+                        .HasColumnType("character varying(34)");
+
+                    b.Property<string>("OldOtherAccountNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("RelationBankAccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RelationId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationBankAccountId");
+
+                    b.HasIndex("RelationId", "OccurredAt");
+
+                    b.ToTable("RelationBankAccountEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationBankAccountEvents_Actor_NotBlank", "length(trim(\"ActorReference\")) > 0");
+
+                            t.HasCheckConstraint("CK_RelationBankAccountEvents_Kind_Allowed", "\"Kind\" IN ('Added', 'Changed', 'Confirmed', 'Deactivated')");
                         });
                 });
 
@@ -2405,18 +2726,59 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("DefaultCurrency")
                         .HasColumnType("text");
 
+                    b.Property<string>("DeliveryTermKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DeliveryTermText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Email")
                         .HasColumnType("text");
+
+                    b.Property<string>("Incoterm")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("IncotermPlace")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MandateReference")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<DateOnly?>("MandateSignedOn")
+                        .HasColumnType("date");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("PaymentConditionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("BankTransfer");
 
                     b.Property<int>("PaymentTermsDays")
                         .HasColumnType("integer");
 
                     b.Property<int>("RelationId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TradeConditions")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TradeConditionsText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2426,10 +2788,19 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PaymentConditionId");
+
                     b.HasIndex("RelationId")
                         .IsUnique();
 
-                    b.ToTable("Vendors");
+                    b.ToTable("Vendors", t =>
+                        {
+                            t.HasCheckConstraint("CK_Vendors_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
+
+                            t.HasCheckConstraint("CK_Vendors_PaymentMethod_Allowed", "\"PaymentMethod\" IN ('BankTransfer', 'DirectDebit', 'Cash', 'Offset')");
+
+                            t.HasCheckConstraint("CK_Vendors_TradeConditions_Allowed", "\"TradeConditions\" IS NULL OR \"TradeConditions\" IN ('Own', 'Frugiventa', 'Cofreurop', 'Other')");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.VendorGgn", b =>
@@ -2440,10 +2811,23 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateOnly?>("CertificateValidUntil")
+                        .HasColumnType("date");
+
+                    b.Property<string>("CheckedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly?>("CheckedOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("Ggn")
                         .IsRequired()
                         .HasMaxLength(13)
                         .HasColumnType("character varying(13)");
+
+                    b.Property<bool>("HasGgnLabel")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -2509,11 +2893,19 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.Customer", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.PaymentCondition", "PaymentCondition")
+                        .WithMany()
+                        .HasForeignKey("PaymentConditionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AgfAdmin.Models.Relation", "Relation")
                         .WithOne("Customer")
                         .HasForeignKey("AgfAdmin.Models.Customer", "RelationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("PaymentCondition");
 
                     b.Navigation("Relation");
                 });
@@ -2823,6 +3215,36 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("RelationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationBankAccount", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany("BankAccounts")
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationBankAccountEvent", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.RelationBankAccount", "BankAccount")
+                        .WithMany("Events")
+                        .HasForeignKey("RelationBankAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany()
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BankAccount");
 
                     b.Navigation("Relation");
                 });
@@ -3155,11 +3577,19 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.PaymentCondition", "PaymentCondition")
+                        .WithMany()
+                        .HasForeignKey("PaymentConditionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AgfAdmin.Models.Relation", "Relation")
                         .WithOne("Vendor")
                         .HasForeignKey("AgfAdmin.Models.Vendor", "RelationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("PaymentCondition");
 
                     b.Navigation("Relation");
                 });
@@ -3256,11 +3686,18 @@ namespace AgfAdmin.Migrations
                 {
                     b.Navigation("Addresses");
 
+                    b.Navigation("BankAccounts");
+
                     b.Navigation("Contacts");
 
                     b.Navigation("Customer");
 
                     b.Navigation("Vendor");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationBankAccount", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>

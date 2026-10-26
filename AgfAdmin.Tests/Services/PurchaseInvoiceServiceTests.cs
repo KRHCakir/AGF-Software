@@ -96,7 +96,7 @@ public class PurchaseInvoiceServiceTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             var vendor = await db.Vendors.SingleAsync();
-            vendor.PaymentTermsDays = 14;
+            await PaymentConditionResolver.AssignDaysAsync(db, vendor, 14);
             vendor.DefaultCurrency = "GBP";
             await db.SaveChangesAsync();
         }
@@ -295,7 +295,7 @@ public class PurchaseInvoiceServiceTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             var vendor = await db.Vendors.SingleAsync();
-            vendor.PaymentTermsDays = 60;
+            await PaymentConditionResolver.AssignDaysAsync(db, vendor, 60);
             vendor.DefaultCurrency = "USD";
             await db.SaveChangesAsync();
         }
