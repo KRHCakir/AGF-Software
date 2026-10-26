@@ -59,6 +59,12 @@ namespace AgfAdmin.DTOs
         public VendorRoleDto Vendor { get; set; }       // null = geen leveranciersrol
         public List<RelationAddressDto> Addresses { get; set; } = new();
         public List<RelationContactDto> Contacts { get; set; } = new();
+        // Bankrekeningen (actief en inactief, op volgorde) en de laatste 50 auditregels van bankgegevens (nieuwste eerst).
+        public List<RelationBankAccountDto> BankAccounts { get; set; } = new();
+        public List<RelationBankAccountEventDto> BankAccountEvents { get; set; } = new();
+        // Niet-blokkerende signalen: blijvend (bijv. standaardrekening onbevestigd, verzekering verlopen) en, alleen in het antwoord
+        // op een opslag, eenmalig (e-mailtikfout, domein zonder mailserver).
+        public List<RelationWarningDto> Warnings { get; set; } = new();
         // Welke documenten naar de rollen verwijzen en welke defaults daar daadwerkelijk door gebruikt worden.
         public RelationUsageDto Usage { get; set; } = new();
     }
@@ -66,17 +72,61 @@ namespace AgfAdmin.DTOs
     public sealed class CustomerRoleDto
     {
         public int CustomerId { get; set; }
-        // Verkoopdefault: betaaltermijn in dagen (gebruikt door de legacy orderroute; de nieuwe verkooporder kent nog geen betaaltermijn).
+        // Betalingsconditie (verplicht) en de daarvan afgeleide termijn in dagen (spiegel; gebruikt door de legacy orderroute).
+        public int PaymentConditionId { get; set; }
+        public PaymentConditionSummaryDto PaymentCondition { get; set; }
         public int PaymentTermsDays { get; set; }
+        public string PaymentMethod { get; set; }
+        public string MandateReference { get; set; }
+        public DateOnly? MandateSignedOn { get; set; }
+        public string Currency { get; set; }
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
+        public string TradeConditions { get; set; }
+        public string TradeConditionsText { get; set; }
+        // Krediet (EUR).
+        public decimal? CreditLimit { get; set; }
+        public bool IsInsured { get; set; }
+        public string Insurer { get; set; }
+        public string InsurerText { get; set; }
+        public decimal? InsuredLimit { get; set; }
+        public string InsurerReference { get; set; }
+        public DateOnly? InsuredUntil { get; set; }
     }
 
     public sealed class VendorRoleDto
     {
         public int VendorId { get; set; }
         // Inkoopdefaults: voorgesteld op een nieuwe inkoopfactuur, per document aanpasbaar en daar vastgelegd.
+        public int PaymentConditionId { get; set; }
+        public PaymentConditionSummaryDto PaymentCondition { get; set; }
         public int PaymentTermsDays { get; set; }
         public string DefaultCurrency { get; set; }
+        public string PaymentMethod { get; set; }
+        public string MandateReference { get; set; }
+        public DateOnly? MandateSignedOn { get; set; }
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
+        public string TradeConditions { get; set; }
+        public string TradeConditionsText { get; set; }
         public List<VendorGgnDto> Ggns { get; set; } = new();
+    }
+
+    public sealed class PaymentConditionSummaryDto
+    {
+        public int Id { get; set; }
+        public string Code { get; set; }
+        public string DescriptionNl { get; set; }
+        public string DescriptionEn { get; set; }
+        public int Days { get; set; }
+        public string Basis { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public int? DiscountDays { get; set; }
+        public bool IsActive { get; set; }
     }
 
     public sealed class VendorGgnDto
@@ -85,6 +135,65 @@ namespace AgfAdmin.DTOs
         public string Ggn { get; set; }
         public string ProducerName { get; set; }
         public bool IsActive { get; set; } = true;
+        // Handmatige controle in de GLOBALG.A.P. Supply Chain Portal (zoals ingevoerd).
+        public DateOnly? CheckedOn { get; set; }
+        public string CheckedBy { get; set; }
+        public DateOnly? CertificateValidUntil { get; set; }
+        public bool HasGgnLabel { get; set; }
+    }
+
+    // Bankrekening. Invoer: id (bestaand) of null (nieuw); iban óf otherAccountNumber; bic, rekeninghouder, valuta, standaard, actief.
+    // Bevestigingsvelden zijn alleen uitvoer (bevestigen via POST .../bank-accounts/{bankId}/confirm).
+    public sealed class RelationBankAccountDto
+    {
+        public int? Id { get; set; }
+        public string Iban { get; set; }
+        public string OtherAccountNumber { get; set; }
+        public string Bic { get; set; }
+        public string AccountHolder { get; set; }
+        public string Currency { get; set; }
+        public bool IsDefault { get; set; }
+        public bool IsActive { get; set; } = true;
+        public string ConfirmationStatus { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
+        public string ConfirmedBy { get; set; }
+    }
+
+    public sealed class RelationBankAccountEventDto
+    {
+        public int Id { get; set; }
+        public int BankAccountId { get; set; }
+        public string Kind { get; set; }  // Added, Changed, Confirmed, Deactivated
+        public string ActorReference { get; set; }
+        public DateTime OccurredAt { get; set; }
+        public string OldIban { get; set; }
+        public string NewIban { get; set; }
+        public string OldAccountHolder { get; set; }
+        public string NewAccountHolder { get; set; }
+        public string OldOtherAccountNumber { get; set; }
+        public string NewOtherAccountNumber { get; set; }
+    }
+
+    // Niet-blokkerend signaal met vaste code (de frontend vertaalt op code), het veld waarop het slaat en eventueel een suggestie.
+    public sealed class RelationWarningDto
+    {
+        public string Code { get; set; }
+        public string Field { get; set; }
+        public string Message { get; set; }
+        public string Suggestion { get; set; }
+    }
+
+    // POST api/relations/{id}/bank-accounts/{bankId}/confirm
+    public sealed class ConfirmBankAccountDto
+    {
+        public int? ExpectedVersion { get; set; }
+        public string ActorReference { get; set; }
+    }
+
+    // GET/PUT api/relations/settings
+    public sealed class RelationSettingsDto
+    {
+        public string GlobalGapPortalUrl { get; set; }
     }
 
     public sealed class RelationAddressDto
@@ -154,21 +263,56 @@ namespace AgfAdmin.DTOs
         public string InternalNote { get; set; }
         public bool? IsActive { get; set; }
         public bool AcknowledgeSimilarNames { get; set; }
+        // Wie (vrije tekst, max 100): verplicht zodra bankgegevens wijzigen (toevoegen, IBAN/houder/nummer wijzigen, inactief zetten).
+        public string ActorReference { get; set; }
         public SaveCustomerRoleDto Customer { get; set; }
         public SaveVendorRoleDto Vendor { get; set; }
         public List<RelationAddressDto> Addresses { get; set; }
         public List<RelationContactDto> Contacts { get; set; }
+        // null = ongewijzigd laten; een lijst moet alle opgeslagen rekeningen bevatten (nooit verwijderen, inactief zetten).
+        public List<RelationBankAccountDto> BankAccounts { get; set; }
     }
 
+    // Rolvelden. paymentConditionId heeft voorrang; paymentTermsDays (legacy) wordt alleen gebruikt zonder paymentConditionId en
+    // alleen als het afwijkt van de huidige termijn (dan zoekt/maakt de server "{n}D"). Lege optionele velden = leeg (PUT vervangt de kaart);
+    // paymentMethod/currency leeg = huidige waarde (nieuw: BankTransfer / EUR).
     public sealed class SaveCustomerRoleDto
     {
+        public int? PaymentConditionId { get; set; }
         public int? PaymentTermsDays { get; set; }
+        public string PaymentMethod { get; set; }
+        public string MandateReference { get; set; }
+        public DateOnly? MandateSignedOn { get; set; }
+        public string Currency { get; set; }
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
+        public string TradeConditions { get; set; }
+        public string TradeConditionsText { get; set; }
+        public decimal? CreditLimit { get; set; }
+        public bool IsInsured { get; set; }
+        public string Insurer { get; set; }
+        public string InsurerText { get; set; }
+        public decimal? InsuredLimit { get; set; }
+        public string InsurerReference { get; set; }
+        public DateOnly? InsuredUntil { get; set; }
     }
 
     public sealed class SaveVendorRoleDto
     {
+        public int? PaymentConditionId { get; set; }
         public int? PaymentTermsDays { get; set; }
         public string DefaultCurrency { get; set; }
+        public string PaymentMethod { get; set; }
+        public string MandateReference { get; set; }
+        public DateOnly? MandateSignedOn { get; set; }
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
+        public string TradeConditions { get; set; }
+        public string TradeConditionsText { get; set; }
         public List<VendorGgnDto> Ggns { get; set; }
     }
 
@@ -183,6 +327,14 @@ namespace AgfAdmin.DTOs
         public List<string> Currencies { get; set; } = new();
         public List<string> VatVerificationStatuses { get; set; } = new();
         public string GlobalGapDatabaseUrl { get; set; }
+        // Bedrijfsinstelling: link naar de GLOBALG.A.P. Supply Chain Portal (handmatige GGN-controle).
+        public string GlobalGapPortalUrl { get; set; }
+        public List<string> PaymentMethods { get; set; } = new();
+        public List<string> PaymentConditionBases { get; set; } = new();
+        public List<string> DeliveryTermKinds { get; set; } = new();
+        public List<string> Incoterms { get; set; } = new();
+        public List<string> TradeConditions { get; set; } = new();
+        public List<string> CreditInsurers { get; set; } = new();
         // Artikelen met een oude standaard-GGN die nog handmatig aan een leverancier moet worden toegewezen.
         public List<LegacyArticleGgnDto> LegacyArticleGgns { get; set; } = new();
     }

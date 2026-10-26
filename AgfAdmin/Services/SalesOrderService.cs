@@ -39,7 +39,7 @@ namespace AgfAdmin.Services
             var existing = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return ResultForRetry(existing, candidate);
+                return await WithCreditWarningAsync(ResultForRetry(existing, candidate), cancellationToken);
             }
 
             var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
@@ -74,11 +74,22 @@ namespace AgfAdmin.Services
                 {
                     throw;
                 }
-                return ResultForRetry(concurrent, candidate);
+                return await WithCreditWarningAsync(ResultForRetry(concurrent, candidate), cancellationToken);
             }
 
             var created = await OrderQuery().SingleAsync(o => o.Id == candidate.Id, cancellationToken);
-            return ServiceResult<SalesOrderDto>.Created(ToDto(created));
+            return await WithCreditWarningAsync(ServiceResult<SalesOrderDto>.Created(ToDto(created)), cancellationToken);
+        }
+
+        // Kredietsignaal bij aanmaken: openstaand bedrag boven de kredietlimiet van de klant -> waarschuwing in het antwoord, nooit blokkeren.
+        private async Task<ServiceResult<SalesOrderDto>> WithCreditWarningAsync(ServiceResult<SalesOrderDto> result, CancellationToken cancellationToken)
+        {
+            if (result.Status is ServiceResultStatus.Created or ServiceResultStatus.Ok && result.Value != null)
+            {
+                var exposure = await new CreditExposureService(_db).GetExposureAsync(result.Value.CustomerId, _db.BusinessCalendar.Today(), cancellationToken);
+                result.Value.CreditWarning = CreditExposureService.WarningFor(exposure);
+            }
+            return result;
         }
 
         private static SalesOrder Build(CreateSalesOrderDto request, Dictionary<string, List<string>> errors)

@@ -280,8 +280,8 @@ public class RelationServiceTests : IDisposable
         }
         await using (var db = _factory.CreateContext())
         {
-            // Rolspecifieke velden blijven vrij.
-            (await db.Customers.SingleAsync()).PaymentTermsDays = 30;
+            // Rolspecifieke velden blijven vrij; de termijn gaat via de gedeelde resolver (spiegel van de betalingsconditie, regel 16).
+            await PaymentConditionResolver.AssignDaysAsync(db, await db.Customers.SingleAsync(), 30);
             await db.SaveChangesAsync();
         }
         await using var verify = _factory.CreateContext();
@@ -484,7 +484,7 @@ public class RelationServiceTests : IDisposable
         badNumber.VatNumber = "12345";
         var bad = await UpdateAsync(current.Id, badNumber);
         Assert.Equal(ServiceResultStatus.Validation, bad.Status);
-        Assert.Contains("not a VIES verification", bad.Errors["vatNumber"][0]);
+        Assert.Contains("geen VIES-controle", bad.Errors["vatNumber"][0]);
     }
 
     [Fact]

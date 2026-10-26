@@ -44,6 +44,9 @@ namespace AgfAdmin.Services
 
         // Officiële GLOBALG.A.P.-databank: certificaat zoeken gebeurt daar, nooit hier (geen scraping, geen status).
         public const string GlobalGapDatabaseUrl = "https://database.globalgap.org/";
+        // Standaardlink naar de GLOBALG.A.P. Supply Chain Portal (bedrijfsinstelling, wijzigbaar via api/relations/settings).
+        public const string DefaultGlobalGapPortalUrl = "https://prod.osapiens.cloud/portal/webbundle/foodplus/field-service-os/supply-chain-portal?app-route-hash=%252Fcertificates";
+        public const int MaxPortalUrlLength = 500;
 
         private static readonly Regex SearchCode = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$", RegexOptions.Compiled);
         private static readonly Regex CountryCode = new("^[A-Z]{2}$", RegexOptions.Compiled);
@@ -53,6 +56,10 @@ namespace AgfAdmin.Services
 
         public static string NormalizeCountry(string raw) => string.IsNullOrWhiteSpace(raw) ? null : raw.Trim().ToUpperInvariant();
         public static bool IsCountryCode(string normalized) => normalized != null && CountryCode.IsMatch(normalized);
+
+        // Absolute https-URL (bedrijfsinstelling met de portaallink).
+        public static bool IsHttpsUrl(string value) =>
+            Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host);
 
         public static bool IsLanguage(string value) => value != null && Languages.Contains(value, StringComparer.Ordinal);
 

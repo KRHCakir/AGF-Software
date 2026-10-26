@@ -17,9 +17,11 @@ const settings: PurchaseInvoiceSettings = {
     optionalFields: ['remarks', 'receivedDate'],
     defaultVatPercentage: 21, defaultPaymentTermsDays: 30, defaultCurrency: 'EUR',
 };
+// Conditie en bankstatus van de leveranciersrol (zelfde standaard als de server: 30D, factuurdatum, bevestigde standaardrekening).
+const vendorFinance = { paymentConditionId: 1, paymentConditionCode: '30D', paymentConditionBasis: 'InvoiceDate' as const, hasDefaultBankAccount: true, defaultBankAccountUnconfirmed: false };
 const vendors: PurchaseVendor[] = [
-    { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true },
-    { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD', searchCode: null, isActive: true },
+    { id: 7, name: 'The Greenery', vatNumber: 'NL001', paymentTermsDays: 30, defaultCurrency: 'EUR', searchCode: null, isActive: true, ...vendorFinance },
+    { id: 12, name: 'Südfrucht Import', vatNumber: null, paymentTermsDays: 14, defaultCurrency: 'USD', searchCode: null, isActive: true, ...vendorFinance },
 ];
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [
     { id: 1, name: 'Hass', origin: 'Peru', packaging: '4kg Box', sizeCategory: null, shortcutCode: 'avohassper22', defaultPackagesPerPallet: null, packagingUnit: 'box' },
@@ -72,6 +74,19 @@ describe('PurchaseInvoiceForm', () => {
         await type(input('paymentTermsDays'), '30');
         assert.equal(input('dueDate').value, '2026-12-15', 'manual due date is never reset silently');
         assert.ok(text().includes('purchase_due_deviation'));
+    });
+
+    test('a vendor whose default bank account is unconfirmed shows a clear warning (never blocking); end-of-month conditions propose the due date from the month end', async () => {
+        const risky = [...vendors, { ...vendors[0], id: 21, name: 'Nieuwe Kweker', paymentConditionId: 4, paymentConditionCode: 'EOM30', paymentConditionBasis: 'EndOfMonth' as const, defaultBankAccountUnconfirmed: true }];
+        await mounted.render(<PurchaseInvoiceForm vendors={risky} products={products} settings={settings} />);
+        await chooseVendor('green');
+        assert.equal(mounted.container.querySelector('[data-testid="purchase-bank-unconfirmed"]'), null);
+        await key(input('vendorId'), 'Backspace');
+        await chooseVendor('kweker');
+        assert.ok(mounted.container.querySelector('[data-testid="purchase-bank-unconfirmed"]'), 'warning shown');
+        assert.ok(text().includes('purchase_condition_end_of_month'));
+        await type(input('invoiceDate'), '2026-10-15');
+        assert.equal(input('dueDate').value, '2026-11-30', 'end of October + 30 days');
     });
 
     test('three lines entered with the keyboard only: item, quantity, unit, price, discount, VAT, Enter adds the next line; totals live; no save on item choice', async () => {

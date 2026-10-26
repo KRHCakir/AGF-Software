@@ -60,6 +60,13 @@ namespace AgfAdmin.Data
     //    bevestiging, kopieert soort/verzending/order, draagt verklaring en reden. Intrekking samen met bevestiging of correctie van dezelfde
     //    verzending in één save is verboden. Bevestigingen en intrekkingen zijn append-only. Een nieuwe DirectTrade-verzending heeft
     //    ShippedOn <= vandaag.
+    // 15. de gedeelde kolommen op Customer/Vendor zijn een spiegel van de relatie (zie CheckRelationMirrorsAsync).
+    // 16. PaymentTermsDays op een klant- of leveranciersrol is een spiegel van PaymentCondition.Days van haar (verplichte) conditie: een
+    //    nieuwe rol, een gewijzigde termijn of een andere conditie moet exact overeenkomen; een gewijzigd aantal dagen op een conditie
+    //    gaat in dezelfde save samen met alle rollen die haar gebruiken. Alleen RelationService en PaymentConditionResolver schrijven dit.
+    //    Bankrekeningen van relaties worden nooit verwijderd (inactief zetten); hun auditregels zijn append-only; een gewijzigde IBAN,
+    //    rekeninghouder of ander rekeningnummer staat op Unconfirmed met een Changed-auditregel in dezelfde save, en Unconfirmed ->
+    //    Confirmed gaat alleen samen met een Confirmed-auditregel.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -158,6 +165,8 @@ namespace AgfAdmin.Data
 
             await CheckContentLineGgnAsync(db, async, cancellationToken);
             await CheckRelationMirrorsAsync(db, async, cancellationToken);
+            await CheckPaymentTermsMirrorAsync(db, async, cancellationToken);
+            CheckBankAccounts(db);
             await CheckSourceLinksAsync(db, async, cancellationToken);
             await CheckNoDirectTradeInWarehouseAsync(db, async, cancellationToken);
             await CheckDirectTradeAllocationsAsync(db, async, cancellationToken);
@@ -211,6 +220,107 @@ namespace AgfAdmin.Data
                 if (!Same(v.Name, expected.Name) || !Same(v.VATNumber, expected.VATNumber) || !Same(v.BillingAddress, expected.BillingAddress) || !Same(v.Email, expected.Email))
                 {
                     throw new TraceabilityViolationException($"Vendor {v.Id} mirrors relation {v.RelationId}: name, VAT number, address and e-mail can only change through the relation.");
+                }
+            }
+        }
+
+        // ---- Regel 16: PaymentTermsDays is de spiegel van de betalingsconditie ----
+        private static async Task CheckPaymentTermsMirrorAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var roles = new List<(string Label, int Id, int Days, int ConditionId, PaymentCondition Condition)>();
+            foreach (var e in db.ChangeTracker.Entries<Customer>().Where(e => e.State == EntityState.Added
+                         || (e.State == EntityState.Modified && (e.Property(c => c.PaymentTermsDays).IsModified || e.Property(c => c.PaymentConditionId).IsModified))))
+            {
+                roles.Add(($"Customer {e.Entity.Id}", e.Entity.Id, e.Entity.PaymentTermsDays, e.Entity.PaymentConditionId, e.Entity.PaymentCondition));
+            }
+            foreach (var e in db.ChangeTracker.Entries<Vendor>().Where(e => e.State == EntityState.Added
+                         || (e.State == EntityState.Modified && (e.Property(v => v.PaymentTermsDays).IsModified || e.Property(v => v.PaymentConditionId).IsModified))))
+            {
+                roles.Add(($"Vendor {e.Entity.Id}", e.Entity.Id, e.Entity.PaymentTermsDays, e.Entity.PaymentConditionId, e.Entity.PaymentCondition));
+            }
+            var changedConditions = db.ChangeTracker.Entries<PaymentCondition>().Where(e => e.State == EntityState.Modified && e.Property(p => p.Days).IsModified).ToList();
+            if (roles.Count == 0 && changedConditions.Count == 0)
+            {
+                return;
+            }
+            foreach (var role in roles)
+            {
+                var condition = role.Condition
+                    ?? db.ChangeTracker.Entries<PaymentCondition>().FirstOrDefault(e => e.State != EntityState.Deleted && e.Entity.Id == role.ConditionId)?.Entity;
+                int? days = condition?.Days;
+                if (condition == null)
+                {
+                    var stored = await FirstOrDefaultAsync(db.PaymentConditions.AsNoTracking().Where(p => p.Id == role.ConditionId).Select(p => (int?)p.Days), async, cancellationToken);
+                    days = stored ?? throw new TraceabilityViolationException($"{role.Label} refers to payment condition {role.ConditionId}, which does not exist.");
+                }
+                if (days != role.Days)
+                {
+                    throw new TraceabilityViolationException($"{role.Label}: payment terms ({role.Days} days) mirror the payment condition ({days} days) and can only change through the relation or the payment condition.");
+                }
+            }
+            foreach (var entry in changedConditions)
+            {
+                var id = entry.Entity.Id;
+                var newDays = entry.Entity.Days;
+                var customerIds = await ToListAsync(db.Customers.AsNoTracking().Where(c => c.PaymentConditionId == id).Select(c => c.Id), async, cancellationToken);
+                var vendorIds = await ToListAsync(db.Vendors.AsNoTracking().Where(v => v.PaymentConditionId == id).Select(v => v.Id), async, cancellationToken);
+                foreach (var customerId in customerIds)
+                {
+                    var tracked = db.ChangeTracker.Entries<Customer>().FirstOrDefault(e => e.Entity.Id == customerId);
+                    var moved = tracked != null && tracked.Entity.PaymentConditionId != id && tracked.Entity.PaymentCondition?.Id != id && tracked.Entity.PaymentCondition != entry.Entity;
+                    if (!moved && (tracked == null || tracked.Entity.PaymentTermsDays != newDays))
+                    {
+                        throw new TraceabilityViolationException($"Payment condition {id} changes to {newDays} days; customer {customerId} must follow in the same save.");
+                    }
+                }
+                foreach (var vendorId in vendorIds)
+                {
+                    var tracked = db.ChangeTracker.Entries<Vendor>().FirstOrDefault(e => e.Entity.Id == vendorId);
+                    var moved = tracked != null && tracked.Entity.PaymentConditionId != id && tracked.Entity.PaymentCondition?.Id != id && tracked.Entity.PaymentCondition != entry.Entity;
+                    if (!moved && (tracked == null || tracked.Entity.PaymentTermsDays != newDays))
+                    {
+                        throw new TraceabilityViolationException($"Payment condition {id} changes to {newDays} days; vendor {vendorId} must follow in the same save.");
+                    }
+                }
+            }
+        }
+
+        // ---- Regel 16 (vervolg): bankrekeningen van relaties ----
+        private static void CheckBankAccounts(AppDbContext db)
+        {
+            if (db.ChangeTracker.Entries<RelationBankAccountEvent>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Bank account audit events are append-only and cannot be modified or deleted.");
+            }
+            if (db.ChangeTracker.Entries<RelationBankAccount>().Any(e => e.State == EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Bank accounts of a relation are never deleted; deactivate them instead.");
+            }
+            var newEvents = db.ChangeTracker.Entries<RelationBankAccountEvent>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            bool HasEvent(RelationBankAccount account, string kind) =>
+                newEvents.Any(ev => ev.Kind == kind && (ev.BankAccount == account || (account.Id != 0 && ev.RelationBankAccountId == account.Id)));
+            foreach (var entry in db.ChangeTracker.Entries<RelationBankAccount>().Where(e => e.State is EntityState.Added or EntityState.Modified))
+            {
+                var account = entry.Entity;
+                if (entry.State == EntityState.Added)
+                {
+                    if (account.ConfirmationStatus != BankAccountConfirmation.Unconfirmed || !HasEvent(account, BankAccountEventKind.Added))
+                    {
+                        throw new TraceabilityViolationException("A new bank account starts Unconfirmed with an Added audit event in the same save.");
+                    }
+                    continue;
+                }
+                var identityChanged = entry.Property(a => a.Iban).IsModified && entry.Property(a => a.Iban).OriginalValue != account.Iban
+                    || entry.Property(a => a.AccountHolder).IsModified && entry.Property(a => a.AccountHolder).OriginalValue != account.AccountHolder
+                    || entry.Property(a => a.OtherAccountNumber).IsModified && entry.Property(a => a.OtherAccountNumber).OriginalValue != account.OtherAccountNumber;
+                if (identityChanged && (account.ConfirmationStatus != BankAccountConfirmation.Unconfirmed || !HasEvent(account, BankAccountEventKind.Changed)))
+                {
+                    throw new TraceabilityViolationException($"Bank account {account.Id}: a changed IBAN, account holder or account number is Unconfirmed with a Changed audit event in the same save.");
+                }
+                var wasConfirmed = entry.Property(a => a.ConfirmationStatus).OriginalValue == BankAccountConfirmation.Confirmed;
+                if (!wasConfirmed && account.ConfirmationStatus == BankAccountConfirmation.Confirmed && !HasEvent(account, BankAccountEventKind.Confirmed))
+                {
+                    throw new TraceabilityViolationException($"Bank account {account.Id} can only be confirmed together with a Confirmed audit event.");
                 }
             }
         }

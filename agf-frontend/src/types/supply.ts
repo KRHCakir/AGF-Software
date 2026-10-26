@@ -48,6 +48,10 @@ export interface SupplyCommitmentLine {
 export interface VendorGgnOption {
     ggn: string;
     producerName: string | null;
+    // Handmatige certificaatcontrole op de leverancierskaart; de ontvangst waarschuwt bij verlopen of nooit gecontroleerd.
+    checkedOn: string | null;
+    certificateValidUntil: string | null;
+    hasGgnLabel: boolean;
 }
 
 export interface SupplyCommitment {
@@ -104,7 +108,8 @@ export function isSupplyCommitment(value: unknown): value is SupplyCommitment {
         && isString(value.origin)
         && isNullableString(value.destination)
         && isNullableString(value.expectedAt)
-        && isArrayOf(value.vendorGgns, (item): item is VendorGgnOption => isObject(item) && isString(item.ggn) && isNullableString(item.producerName))
+        && isArrayOf(value.vendorGgns, (item): item is VendorGgnOption => isObject(item) && isString(item.ggn) && isNullableString(item.producerName)
+            && isNullableString(item.checkedOn) && isNullableString(item.certificateValidUntil) && typeof item.hasGgnLabel === 'boolean')
         && isArrayOf(value.lines, isLine);
 }
 

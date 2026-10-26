@@ -70,12 +70,16 @@ namespace AgfAdmin.Data
         public DbSet<RelationContact> RelationContacts { get; set; }
         public DbSet<RelationContactChannel> RelationContactChannels { get; set; }
         public DbSet<VendorGgn> VendorGgns { get; set; }
+        public DbSet<PaymentCondition> PaymentConditions { get; set; }
+        public DbSet<RelationBankAccount> RelationBankAccounts { get; set; }
+        public DbSet<RelationBankAccountEvent> RelationBankAccountEvents { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             EnsureRelations();
+            EnsurePaymentConditionsAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
@@ -84,6 +88,7 @@ namespace AgfAdmin.Data
         public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             EnsureRelations();
+            await EnsurePaymentConditionsAsync(async: true, cancellationToken);
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -113,6 +118,21 @@ namespace AgfAdmin.Data
                 relation.Vendor = v;
                 Services.RelationService.SyncMirror(relation);
                 Relations.Add(relation);
+            }
+        }
+
+        // Veilige overgang voor betalingscondities: een nieuwe klant- of leveranciersrol zonder conditie (oudere schrijvers, seeds, tests,
+        // EnsureRelations) krijgt de conditie die bij haar PaymentTermsDays hoort via PaymentConditionResolver (bestaande "n dagen na
+        // factuurdatum" of een nieuwe "{n}D"). Een bestaande rol wordt hier nooit omgezet; regel 16 van de guard bewaakt de spiegel.
+        private async Task EnsurePaymentConditionsAsync(bool async, CancellationToken cancellationToken)
+        {
+            foreach (var entry in ChangeTracker.Entries<Customer>().Where(e => e.State == EntityState.Added && e.Entity.PaymentCondition == null && e.Entity.PaymentConditionId == 0).ToList())
+            {
+                PaymentConditionResolver.Assign(entry.Entity, async ? await PaymentConditionResolver.ForDaysAsync(this, entry.Entity.PaymentTermsDays, cancellationToken) : PaymentConditionResolver.ForDays(this, entry.Entity.PaymentTermsDays));
+            }
+            foreach (var entry in ChangeTracker.Entries<Vendor>().Where(e => e.State == EntityState.Added && e.Entity.PaymentCondition == null && e.Entity.PaymentConditionId == 0).ToList())
+            {
+                PaymentConditionResolver.Assign(entry.Entity, async ? await PaymentConditionResolver.ForDaysAsync(this, entry.Entity.PaymentTermsDays, cancellationToken) : PaymentConditionResolver.ForDays(this, entry.Entity.PaymentTermsDays));
             }
         }
 
@@ -150,11 +170,37 @@ namespace AgfAdmin.Data
                 entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
             }
 
+            foreach (var entry in ChangeTracker.Entries<PaymentCondition>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(p => p.Version).CurrentValue = entry.Property(p => p.Version).OriginalValue + 1;
+                entry.Entity.UpdatedAt = DateTime.UtcNow;
+            }
+
             foreach (var entry in ChangeTracker.Entries<Relation>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(r => r.Version).CurrentValue = entry.Property(r => r.Version).OriginalValue + 1;
                 entry.Entity.UpdatedAt = DateTime.UtcNow;
             }
+        }
+
+        // Gedeelde rolafspraken van klant en leverancier (zie IRoleTerms en RoleTermsRules).
+        private static void ConfigureRoleTerms<TRole>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TRole> entity) where TRole : class, IRoleTerms
+        {
+            entity.Property(r => r.PaymentMethod).IsRequired().HasMaxLength(16).HasDefaultValue(PaymentMethods.BankTransfer);
+            entity.Property(r => r.MandateReference).HasMaxLength(35);
+            entity.Property(r => r.DeliveryTermKind).HasMaxLength(16);
+            entity.Property(r => r.Incoterm).HasMaxLength(3);
+            entity.Property(r => r.IncotermPlace).HasMaxLength(100);
+            entity.Property(r => r.DeliveryTermText).HasMaxLength(200);
+            entity.Property(r => r.TradeConditions).HasMaxLength(16);
+            entity.Property(r => r.TradeConditionsText).HasMaxLength(200);
+        }
+
+        private static void AddRoleTermChecks(Microsoft.EntityFrameworkCore.Metadata.Builders.TableBuilder table, string name)
+        {
+            table.HasCheckConstraint($"CK_{name}_PaymentMethod_Allowed", "\"PaymentMethod\" IN ('BankTransfer', 'DirectDebit', 'Cash', 'Offset')");
+            table.HasCheckConstraint($"CK_{name}_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
+            table.HasCheckConstraint($"CK_{name}_TradeConditions_Allowed", "\"TradeConditions\" IS NULL OR \"TradeConditions\" IN ('Own', 'Frugiventa', 'Cofreurop', 'Other')");
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -195,6 +241,7 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PurchaseInvoiceDefaultVatPercentage).HasPrecision(18, 2).HasDefaultValue(PurchaseInvoiceRules.DefaultVatPercentage);
                 b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
                 b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
+                b.Property(c => c.GlobalGapPortalUrl).IsRequired().HasMaxLength(500).HasDefaultValue(RelationRules.DefaultGlobalGapPortalUrl);
             });
 
             modelBuilder.Entity<ProductVariant>(b =>
@@ -399,12 +446,93 @@ namespace AgfAdmin.Data
                 // Hooguit één klantrol per relatie; de rol verdwijnt nooit stilzwijgend met de relatie (Restrict).
                 entity.HasIndex(c => c.RelationId).IsUnique();
                 entity.HasOne(c => c.Relation).WithOne(r => r.Customer).HasForeignKey<Customer>(c => c.RelationId).OnDelete(DeleteBehavior.Restrict);
+                // Verplichte betalingsconditie; een conditie in gebruik is niet te verwijderen (Restrict), alleen inactief te zetten.
+                entity.HasOne(c => c.PaymentCondition).WithMany().HasForeignKey(c => c.PaymentConditionId).OnDelete(DeleteBehavior.Restrict);
+                ConfigureRoleTerms(entity);
+                entity.Property(c => c.Currency).IsRequired().HasMaxLength(3).HasDefaultValue("EUR");
+                entity.Property(c => c.CreditLimit).HasPrecision(18, 2);
+                entity.Property(c => c.InsuredLimit).HasPrecision(18, 2);
+                entity.Property(c => c.Insurer).HasMaxLength(16);
+                entity.Property(c => c.InsurerText).HasMaxLength(100);
+                entity.Property(c => c.InsurerReference).HasMaxLength(64);
+                entity.ToTable(t =>
+                {
+                    AddRoleTermChecks(t, "Customers");
+                    t.HasCheckConstraint("CK_Customers_Insurer_Allowed", "\"Insurer\" IS NULL OR \"Insurer\" IN ('Atradius', 'AllianzTrade', 'Coface', 'Other')");
+                    t.HasCheckConstraint("CK_Customers_CreditLimit_NotNegative", "\"CreditLimit\" IS NULL OR \"CreditLimit\" >= 0");
+                    t.HasCheckConstraint("CK_Customers_InsuredLimit_NotNegative", "\"InsuredLimit\" IS NULL OR \"InsuredLimit\" >= 0");
+                });
             });
 
             modelBuilder.Entity<Vendor>(entity =>
             {
                 entity.HasIndex(v => v.RelationId).IsUnique();
                 entity.HasOne(v => v.Relation).WithOne(r => r.Vendor).HasForeignKey<Vendor>(v => v.RelationId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(v => v.PaymentCondition).WithMany().HasForeignKey(v => v.PaymentConditionId).OnDelete(DeleteBehavior.Restrict);
+                ConfigureRoleTerms(entity);
+                entity.ToTable(t => AddRoleTermChecks(t, "Vendors"));
+            });
+
+            // Bankrekeningen: precies één van IBAN en ander rekeningnummer; hooguit één actieve standaard per relatie; nooit verwijderen
+            // (Restrict vanuit de auditregels; de guard weigert een delete).
+            modelBuilder.Entity<RelationBankAccount>(b =>
+            {
+                b.Property(a => a.Iban).HasMaxLength(34);
+                b.Property(a => a.OtherAccountNumber).HasMaxLength(64);
+                b.Property(a => a.Bic).HasMaxLength(11);
+                b.Property(a => a.AccountHolder).IsRequired().HasMaxLength(200);
+                b.Property(a => a.Currency).IsRequired().HasMaxLength(3);
+                b.Property(a => a.ConfirmationStatus).IsRequired().HasMaxLength(16);
+                b.Property(a => a.ConfirmedBy).HasMaxLength(100);
+                b.HasOne(a => a.Relation).WithMany(r => r.BankAccounts).HasForeignKey(a => a.RelationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(a => a.RelationId).IsUnique().HasFilter("\"IsDefault\" AND \"IsActive\"").HasDatabaseName("IX_RelationBankAccounts_RelationId_ActiveDefault");
+                b.HasIndex(a => new { a.RelationId, a.SortOrder });
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_RelationBankAccounts_ExactlyOneNumber", "(\"Iban\" IS NULL) <> (\"OtherAccountNumber\" IS NULL)");
+                    t.HasCheckConstraint("CK_RelationBankAccounts_ConfirmationStatus_Allowed", "\"ConfirmationStatus\" IN ('Unconfirmed', 'Confirmed')");
+                    t.HasCheckConstraint("CK_RelationBankAccounts_AccountHolder_NotBlank", "length(trim(\"AccountHolder\")) > 0");
+                });
+            });
+
+            modelBuilder.Entity<RelationBankAccountEvent>(b =>
+            {
+                b.Property(e => e.Kind).IsRequired().HasMaxLength(16);
+                b.Property(e => e.ActorReference).IsRequired().HasMaxLength(100);
+                b.Property(e => e.OldIban).HasMaxLength(34);
+                b.Property(e => e.NewIban).HasMaxLength(34);
+                b.Property(e => e.OldAccountHolder).HasMaxLength(200);
+                b.Property(e => e.NewAccountHolder).HasMaxLength(200);
+                b.Property(e => e.OldOtherAccountNumber).HasMaxLength(64);
+                b.Property(e => e.NewOtherAccountNumber).HasMaxLength(64);
+                b.HasOne(e => e.BankAccount).WithMany(a => a.Events).HasForeignKey(e => e.RelationBankAccountId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(e => e.Relation).WithMany().HasForeignKey(e => e.RelationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(e => new { e.RelationId, e.OccurredAt });
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_RelationBankAccountEvents_Kind_Allowed", "\"Kind\" IN ('Added', 'Changed', 'Confirmed', 'Deactivated')");
+                    t.HasCheckConstraint("CK_RelationBankAccountEvents_Actor_NotBlank", "length(trim(\"ActorReference\")) > 0");
+                });
+            });
+
+            // Betalingscondities: code hoofdletterongevoelig uniek via CodeKey; korting beide of geen van beide.
+            modelBuilder.Entity<PaymentCondition>(b =>
+            {
+                b.Property(p => p.Code).IsRequired().HasMaxLength(16);
+                b.Property(p => p.CodeKey).IsRequired().HasMaxLength(16);
+                b.HasIndex(p => p.CodeKey).IsUnique();
+                b.HasIndex(p => p.RequestId).IsUnique().HasFilter("\"RequestId\" IS NOT NULL");
+                b.Property(p => p.DescriptionNl).IsRequired().HasMaxLength(200);
+                b.Property(p => p.DescriptionEn).IsRequired().HasMaxLength(200);
+                b.Property(p => p.Basis).IsRequired().HasMaxLength(16);
+                b.Property(p => p.DiscountPercent).HasPrecision(5, 2);
+                b.Property(p => p.Version).IsConcurrencyToken();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_PaymentConditions_Basis_Allowed", "\"Basis\" IN ('InvoiceDate', 'EndOfMonth')");
+                    t.HasCheckConstraint("CK_PaymentConditions_Discount_BothOrNeither", "(\"DiscountPercent\" IS NULL) = (\"DiscountDays\" IS NULL)");
+                    t.HasCheckConstraint("CK_PaymentConditions_Code_NotBlank", "length(trim(\"Code\")) > 0");
+                });
             });
 
             // Relaties: één wijzigbare bron voor gedeelde bedrijfsgegevens; rollen blijven eigen tabellen met bestaande ID's.
@@ -474,6 +602,7 @@ namespace AgfAdmin.Data
             {
                 b.Property(g => g.Ggn).IsRequired().HasMaxLength(13);
                 b.Property(g => g.ProducerName).HasMaxLength(200);
+                b.Property(g => g.CheckedBy).HasMaxLength(100);
                 b.HasOne(g => g.Vendor).WithMany(v => v.Ggns).HasForeignKey(g => g.VendorId).OnDelete(DeleteBehavior.Cascade);
                 b.HasIndex(g => new { g.VendorId, g.Ggn }).IsUnique();
                 b.ToTable(t => t.HasCheckConstraint("CK_VendorGgns_Ggn_Length", "length(\"Ggn\") = 13"));

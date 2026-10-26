@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, json, setValue } from '../../test/reactHarness.ts';
 import type { SupplyCommitment } from '../../types/supply';
-import ReceivePalletForm, { ggnStateKey, proposedGgn } from './ReceivePalletForm';
+import ReceivePalletForm, { ggnCertificateWarning, ggnStateKey, proposedGgn } from './ReceivePalletForm';
 
 // Palletontvangst: de standaard-GGN van het artikel is een voorstel op de inhoudsregel. De gebruiker kan het per regel
 // overnemen, aanpassen of bewust leegmaken; de daadwerkelijk gekozen waarde gaat in de payload van die regel (null = leeg).
@@ -12,7 +12,7 @@ import ReceivePalletForm, { ggnStateKey, proposedGgn } from './ReceivePalletForm
 
 const commitment: SupplyCommitment = {
     id: 41, requestId: 'r-41', vendorId: 1, vendorName: 'Supplier B', customerId: null, customerName: null, route: 'Warehouse', status: 'Expected',
-    origin: 'Peru', destination: null, expectedAt: '2026-10-23T06:00:00.000Z', vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno' }],
+    origin: 'Peru', destination: null, expectedAt: '2026-10-23T06:00:00.000Z', vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno', checkedOn: '2026-10-01', certificateValidUntil: '2099-12-31', hasGgnLabel: true }],
     lines: [
         { id: 501, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', lotNumber: 'LOT-A', expectedQuantity: 40, expectedUnit: 'box', expectedNetWeightKg: 160, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null },
         { id: 502, productVariantId: 3, productName: 'Mango', productVariantName: 'Kent', lotNumber: null, expectedQuantity: 20, expectedUnit: 'box', expectedNetWeightKg: null, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null },
@@ -51,8 +51,9 @@ describe('ReceivePalletForm GGN', () => {
     afterEach(async () => { await mounted.unmount(); });
 
     test('a supplier GGN is proposed only when exactly one applies; with several the user has to choose', () => {
-        const one = [{ ggn: '0049929123456', producerName: null }];
-        const two = [{ ggn: '0049929123456', producerName: 'A' }, { ggn: '0049929000002', producerName: 'B' }];
+        const check = { checkedOn: '2026-10-01', certificateValidUntil: '2027-03-31', hasGgnLabel: true };
+        const one = [{ ggn: '0049929123456', producerName: null, ...check }];
+        const two = [{ ggn: '0049929123456', producerName: 'A', ...check }, { ggn: '0049929000002', producerName: 'B', ...check }];
         assert.equal(proposedGgn(one), '0049929123456');
         assert.equal(proposedGgn(two), null);
         assert.equal(proposedGgn([]), null);
@@ -65,6 +66,19 @@ describe('ReceivePalletForm GGN', () => {
         assert.equal(ggnStateKey('0049929000009', two), 'supply_ggn_adjusted');
         assert.equal(ggnStateKey('', []), 'supply_ggn_none_in_vendor');
         assert.equal(ggnStateKey('0049929000002', []), null);
+    });
+
+    test('a chosen supplier GGN warns (never blocks) when its certificate expired or it was never checked', () => {
+        const options = [
+            { ggn: '0049929123456', producerName: null, checkedOn: '2026-10-01', certificateValidUntil: '2026-10-25', hasGgnLabel: true },
+            { ggn: '0049929000002', producerName: null, checkedOn: null, certificateValidUntil: null, hasGgnLabel: false },
+            { ggn: '0049929000003', producerName: null, checkedOn: '2026-10-01', certificateValidUntil: '2026-10-26', hasGgnLabel: true },
+        ];
+        assert.equal(ggnCertificateWarning('0049 929 123456', options, '2026-10-26'), 'supply_ggn_certificate_expired');
+        assert.equal(ggnCertificateWarning('0049929000002', options, '2026-10-26'), 'supply_ggn_never_checked');
+        assert.equal(ggnCertificateWarning('0049929000003', options, '2026-10-26'), null, 'valid through today');
+        assert.equal(ggnCertificateWarning('0049929000009', options, '2026-10-26'), null, 'typed GGN outside the supplier list');
+        assert.equal(ggnCertificateWarning('', options, '2026-10-26'), null);
     });
 
     test('the single supplier GGN is proposed per line, can be adjusted or deliberately cleared, and the chosen value is what is sent', async () => {
@@ -109,7 +123,7 @@ describe('ReceivePalletForm GGN', () => {
     });
 
     test('with several supplier GGNs nothing is proposed and the user chooses from the list or types another', async () => {
-        const two = { ...commitment, vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno' }, { ggn: '0049929000002', producerName: 'Finca Dos' }] };
+        const two = { ...commitment, vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno', checkedOn: '2026-10-01', certificateValidUntil: '2099-12-31', hasGgnLabel: true }, { ggn: '0049929000002', producerName: 'Finca Dos', checkedOn: null, certificateValidUntil: null, hasGgnLabel: false }] };
         globalThis.fetch = (async (inputUrl: RequestInfo | URL) => (String(inputUrl).includes('/supply-commitments') ? json(200, [two]) : json(500, {}))) as typeof fetch;
         await mounted.render(<ReceivePalletForm actor="wh-1" preselected={null} onPreselectedConsumed={() => {}} />);
         await mounted.waitFor(() => mounted.container.querySelector('#source-501') !== null, 'sources loaded');

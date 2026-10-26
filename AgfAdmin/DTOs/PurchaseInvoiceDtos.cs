@@ -99,6 +99,14 @@ namespace AgfAdmin.DTOs
         // Zoekcode en actief-vlag van de relatie: zoeken op code; inactieve leveranciers staan niet in de keuzelijst voor nieuwe facturen.
         public string SearchCode { get; set; }
         public bool IsActive { get; set; } = true;
+        // Betalingsconditie van de leverancier: met de basis rekent de invoer de voorgestelde vervaldatum
+        // (InvoiceDate: factuurdatum + dagen; EndOfMonth: einde factuurmaand + dagen), zie PaymentConditionRules.
+        public int PaymentConditionId { get; set; }
+        public string PaymentConditionCode { get; set; }
+        public string PaymentConditionBasis { get; set; }
+        // Bankgegevens: de actieve standaardrekening is nog niet bevestigd (waarschuwen vóór betalen); geen standaardrekening = false.
+        public bool HasDefaultBankAccount { get; set; }
+        public bool DefaultBankAccountUnconfirmed { get; set; }
     }
 
     // Bedrijfsinstellingen voor de invoer: welke optionele velden in gebruik zijn en welke voorstellen gelden.

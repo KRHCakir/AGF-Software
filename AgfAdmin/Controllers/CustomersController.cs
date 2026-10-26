@@ -33,6 +33,14 @@ namespace AgfAdmin.Controllers
             return Ok(customers);
         }
 
+        // Openstaand krediet (EUR) tegenover kredietlimiet en verzekering; alleen signalering. 404 als de klant niet bestaat.
+        [HttpGet("{id:int}/credit")]
+        public async Task<IActionResult> GetCredit(int id)
+        {
+            var exposure = await new CreditExposureService(_context).GetExposureAsync(id, _context.BusinessCalendar.Today(), HttpContext?.RequestAborted ?? default);
+            return exposure == null ? NotFound(new { message = $"Customer {id} does not exist." }) : Ok(exposure);
+        }
+
         // Klant aanmaken vanuit Verkoop: gevalideerd en idempotent (requestId). 201 nieuw, 200 identieke herhaling,
         // 400 validatie, 409 gelijkende naam zonder bevestiging of afwijkende herhaling. GET en PUT zijn ongewijzigd.
         [HttpPost]

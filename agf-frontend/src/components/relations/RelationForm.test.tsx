@@ -2,8 +2,9 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, deferred, json, setValue } from '../../test/reactHarness.ts';
-import type { Relation, RelationReference } from '../../types/relation';
+import { Mounted, deferred, json, setSelectValue, setValue } from '../../test/reactHarness.ts';
+import type { PaymentCondition } from '../../types/paymentCondition';
+import type { CustomerRole, Relation, RelationBankAccount, RelationReference, RoleTerms, VendorRole } from '../../types/relation';
 import RelationForm from './RelationForm';
 
 // Relatiekaart door de echte componentlevenscyclus: aanmaken met alleen een naam (Ctrl+S), Enter slaat niets op, inline fouten met
@@ -13,12 +14,22 @@ import RelationForm from './RelationForm';
 const reference: RelationReference = {
     languages: ['nl', 'en'], addressPurposes: ['Main', 'Billing', 'Delivery'], departmentSuggestions: ['verkoop', 'inkoop'], registrationTypeSuggestions: ['KvK'], legalFormSuggestions: ['BV'],
     currencies: ['EUR', 'USD'], vatVerificationStatuses: ['NotChecked'], globalGapDatabaseUrl: 'https://database.globalgap.org/', legacyArticleGgns: [],
+    globalGapPortalUrl: 'https://portal.example/certificates', paymentMethods: ['BankTransfer', 'DirectDebit', 'Cash', 'Offset'], paymentConditionBases: ['InvoiceDate', 'EndOfMonth'],
+    deliveryTermKinds: ['Incoterm', 'Franco', 'AfKwekerij', 'Other'], incoterms: ['EXW', 'FCA', 'DAP'], tradeConditions: ['Own', 'Frugiventa', 'Cofreurop', 'Other'], creditInsurers: ['Atradius', 'AllianzTrade', 'Coface', 'Other'],
 };
+const terms = (over: Partial<RoleTerms> = {}): RoleTerms => ({
+    paymentConditionId: 1, paymentCondition: null, paymentTermsDays: 30, paymentMethod: 'BankTransfer', mandateReference: null, mandateSignedOn: null, deliveryTermKind: null, incoterm: null,
+    incotermPlace: null, deliveryTermText: null, tradeConditions: null, tradeConditionsText: null, ...over,
+});
+const customerRole = (over: Partial<CustomerRole> = {}): CustomerRole => ({
+    ...terms(), customerId: 3, currency: 'EUR', creditLimit: null, isInsured: false, insurer: null, insurerText: null, insuredLimit: null, insurerReference: null, insuredUntil: null, ...over,
+});
+const vendorRole = (over: Partial<VendorRole> = {}): VendorRole => ({ ...terms(), vendorId: 9, defaultCurrency: 'EUR', ggns: [], ...over });
 const saved = (over: Partial<Relation> = {}): Relation => ({
     id: 7, requestId: 'r-1', searchCode: 'FRUITZ', name: 'Fruitimport Zuid', tradeName: null, preferredLanguage: null, website: null, email: null, phone: null, vatNumber: null, vatVerificationStatus: 'NotApplicable',
     vatVerifiedNumber: null, vatVerifiedAt: null, registrationNumber: null, registrationCountry: null, registrationType: null, legalForm: null, internalNote: null, isActive: true,
-    createdAt: '2026-10-22T08:00:00Z', updatedAt: '2026-10-22T08:00:00Z', version: 0, customer: { customerId: 3, paymentTermsDays: 30 }, vendor: null, addresses: [], contacts: [],
-    usage: { salesOrders: 0, legacyOrders: 0, directTradeCommitments: 0, purchaseInvoices: 0, supplyCommitments: 0, defaultsInUse: [] }, ...over,
+    createdAt: '2026-10-22T08:00:00Z', updatedAt: '2026-10-22T08:00:00Z', version: 0, customer: customerRole(), vendor: null, addresses: [], contacts: [],
+    usage: { salesOrders: 0, legacyOrders: 0, directTradeCommitments: 0, purchaseInvoices: 0, supplyCommitments: 0, defaultsInUse: [] }, bankAccounts: [], bankAccountEvents: [], warnings: [], ...over,
 });
 
 interface Call { method: string; url: string; body: Record<string, unknown> | null }
@@ -26,7 +37,23 @@ let mounted: Mounted;
 let calls: Call[];
 let respond: (call: Call) => Response | Promise<Response>;
 
+const condition = (over: Partial<PaymentCondition>): PaymentCondition => ({
+    id: 1, code: '30D', descriptionNl: '30 dagen na factuurdatum', descriptionEn: '30 days after invoice date', days: 30, basis: 'InvoiceDate', discountPercent: null, discountDays: null, isActive: true,
+    sortOrder: 30, version: 0, customerCount: 1, vendorCount: 0, ...over,
+});
+const activeConditions = [condition({}), condition({ id: 2, code: 'EOM30', descriptionNl: '30 dagen einde maand', descriptionEn: '30 days end of month', basis: 'EndOfMonth' })];
+const bankAccount = (over: Partial<RelationBankAccount> = {}): RelationBankAccount => ({
+    id: 41, iban: 'NL91ABNA0417164300', otherAccountNumber: null, bic: 'ABNANL2A', accountHolder: 'Fruitimport Zuid', currency: 'EUR', isDefault: true, isActive: true,
+    confirmationStatus: 'Unconfirmed', confirmedAt: null, confirmedBy: null, ...over,
+});
+const credit = { customerId: 3, asOf: '2026-10-26', openInvoicesAmount: 1200, openInvoicesCount: 2, deliveredNotInvoicedAmount: 300, deliveredNotInvoicedCount: 1, openOrdersAmount: 0, openOrdersCount: 0,
+    totalOutstanding: 1500, unpricedSalesOrdersCount: 3, unpricedNote: '3 orders zonder prijs, niet meegeteld', isComplete: false, creditLimit: 1000, overLimitAmount: 500, isOverLimit: true,
+    isInsured: true, insurer: 'Atradius', insuredLimit: 750, insuredUntil: '2026-11-10', insuranceGap: 250, insuranceExpired: false, insuranceExpiresWithin30Days: true };
+
 const input = (id: string) => mounted.container.querySelector<HTMLInputElement>(`[id="${id}-input"]`)!;
+const select = (id: string) => mounted.container.querySelector<HTMLSelectElement>(`[id="${id}-input"]`)!;
+const choose = async (element: HTMLSelectElement, value: string) => { await act(async () => { setSelectValue(element, value); }); };
+const openSection = async (name: string) => { if (!mounted.container.querySelector(`#relation-${name}`)) await click(mounted.container.querySelector<HTMLButtonElement>(`button[aria-controls="relation-${name}"]`)!); };
 const type = async (element: HTMLInputElement | HTMLTextAreaElement, value: string) => { await act(async () => { setValue(element, value); }); };
 const text = () => mounted.container.textContent ?? '';
 const press = async (key: string, options: KeyboardEventInit = {}) => { await act(async () => { window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options })); }); };
@@ -159,7 +186,7 @@ describe('RelationForm', () => {
     });
 
     test('editing sends a PUT with the expected version; the second role is added with one click and keeps the customer id', async () => {
-        respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 1, tradeName: 'FZ' })) : call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 1, tradeName: 'FZ', vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } })) : json(404, {}));
+        respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 1, tradeName: 'FZ' })) : call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 1, tradeName: 'FZ', vendor: vendorRole() })) : json(404, {}));
         await mounted.render(<RelationForm relation={saved()} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         assert.equal(input('searchCode').value, 'FRUITZ');
         assert.ok(input('customerRole').checked && input('customerRole').disabled, 'an existing role is never removed here');
@@ -168,7 +195,8 @@ describe('RelationForm', () => {
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'updated');
         const put = calls.find((call) => call.method === 'PUT')!;
         assert.ok(put.url.endsWith('/relations/7'));
-        assert.deepEqual([put.body!.expectedVersion, put.body!.tradeName, put.body!.customer], [0, 'FZ', { paymentTermsDays: 30 }]);
+        const customer = put.body!.customer as { paymentConditionId: number; paymentMethod: string; currency: string; isInsured: boolean };
+        assert.deepEqual([put.body!.expectedVersion, put.body!.tradeName, customer.paymentConditionId, customer.paymentMethod, customer.currency, customer.isInsured], [0, 'FZ', 1, 'BankTransfer', 'EUR', false]);
         await mounted.waitFor(() => text().includes('relations_saved'), 'saved');
         if (!mounted.container.querySelector('#relation-defaults')) await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="relation-defaults"]')!);
         await click(mounted.button('+ relations_add_role_vendor')!);
@@ -185,7 +213,7 @@ describe('RelationForm', () => {
             contacts: [{ id: 21, name: 'Jan', department: null, jobTitle: null, isPrimary: true, isActive: true, note: null, channels: [] }],
         });
         respond = (call) => (call.url.endsWith('/roles/vendor')
-            ? json(201, { ...stored, vendor: { vendorId: 9, paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] } })
+            ? json(201, { ...stored, vendor: vendorRole({ paymentConditionId: 4, paymentTermsDays: 45, defaultCurrency: 'USD' }) })
             : call.method === 'PUT' ? json(200, { ...stored, version: 4 }) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await type(input('name'), 'Fruitimport Zuid (nieuw)');
@@ -198,21 +226,21 @@ describe('RelationForm', () => {
         assert.equal(input('name').value, 'Fruitimport Zuid (nieuw)', 'unsaved name kept');
         assert.equal(input(`contacts.${contactKey}.name`).value, 'Pieter', 'unsaved contact kept');
         assert.ok(mounted.container.querySelector<HTMLInputElement>('input[value="Tegelen"]'), 'unsaved address kept');
-        assert.deepEqual([input('vendorPaymentTermsDays').value, input('vendorCurrency').value], ['45', 'USD'], 'role defaults from the server');
         await press('s', { ctrlKey: true });
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
         const body = calls.find((call) => call.method === 'PUT')!.body!;
         assert.equal(body.name, 'Fruitimport Zuid (nieuw)');
         assert.equal((body.addresses as { city: string }[])[0].city, 'Tegelen');
         assert.equal((body.contacts as { name: string }[])[0].name, 'Pieter');
-        assert.deepEqual(body.vendor, { paymentTermsDays: 45, defaultCurrency: 'USD', ggns: [] });
+        const vendor = body.vendor as { paymentConditionId: number; defaultCurrency: string; ggns: unknown[] };
+        assert.deepEqual([vendor.paymentConditionId, vendor.defaultCurrency, vendor.ggns], [4, 'USD', []], 'role defaults from the server');
         assert.equal(body.expectedVersion, 3);
     });
 
     test('when a colleague changed the card before the role was added, Save keeps the base version of the draft and gets a conflict instead of overwriting', async () => {
         const stored = saved({ version: 3 });
         // Collega heeft intussen de handelsnaam gewijzigd (versie 4); daarna voegt deze gebruiker de leveranciersrol toe.
-        const newest = saved({ version: 4, tradeName: 'Door collega', vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } });
+        const newest = saved({ version: 4, tradeName: 'Door collega', vendor: vendorRole() });
         respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, newest)
             : call.method === 'PUT' ? json(409, { message: 'Relation 7 was changed by someone else (version 4, expected 3); reload and apply your change again.' }) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
@@ -238,7 +266,7 @@ describe('RelationForm', () => {
 
     test('without a colleague change the role addition keeps the base version and Save succeeds without a warning', async () => {
         const stored = saved({ version: 3 });
-        respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 3, vendor: { vendorId: 9, paymentTermsDays: 30, defaultCurrency: 'EUR', ggns: [] } }))
+        respond = (call) => (call.url.endsWith('/roles/vendor') ? json(201, saved({ version: 3, vendor: vendorRole() }))
             : call.method === 'PUT' ? json(200, saved({ version: 4 })) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await type(input('name'), 'Mijn wijziging');
@@ -249,5 +277,172 @@ describe('RelationForm', () => {
         await press('s', { ctrlKey: true });
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
         assert.equal(calls.find((call) => call.method === 'PUT')!.body!.expectedVersion, 3);
+    });
+
+    test('payment conditions: only active ones are offered plus the inactive current one; direct debit needs a mandate before anything is sent', async () => {
+        const inactive = { ...condition({ id: 7, code: '60D', descriptionNl: '60 dagen', descriptionEn: '60 days', days: 60, isActive: false }) };
+        respond = (call) => (call.url.includes('/payment-conditions') ? json(200, activeConditions) : call.url.includes('/credit') ? json(200, credit)
+            : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
+        await mounted.render(<RelationForm relation={saved({ customer: customerRole({ paymentConditionId: 7, paymentCondition: inactive, paymentTermsDays: 60 }) })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.waitFor(() => select('customer.paymentConditionId').options.length === 3, 'conditions loaded');
+        const options = Array.from(select('customer.paymentConditionId').options).map((o) => o.value);
+        assert.deepEqual(options, ['1', '2', '7'], 'active conditions plus the current inactive one, no default option');
+        assert.equal(select('customer.paymentConditionId').value, '7');
+        assert.ok(text().includes('relations_terms_condition_inactive'));
+        await choose(select('customer.paymentConditionId'), '2');
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="customer-terms-example"]'), 'due date example');
+        await choose(select('customer.paymentMethod'), 'DirectDebit');
+        await press('s', { ctrlKey: true });
+        assert.equal(calls.filter((call) => call.method === 'PUT').length, 0, 'nothing sent');
+        assert.ok(text().includes('relations_error_mandate_required') && text().includes('relations_error_mandate_date_required'));
+        await type(input('customer.mandateReference'), 'SEPA-77');
+        await type(input('customer.mandateSignedOn'), '2026-01-15');
+        await choose(select('customer.deliveryTermKind'), 'Incoterm');
+        await choose(select('customer.incoterm'), 'FCA');
+        await type(input('customer.incotermPlace'), 'Venlo');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        const customer = calls.find((call) => call.method === 'PUT')!.body!.customer as Record<string, unknown>;
+        assert.deepEqual([customer.paymentConditionId, customer.paymentMethod, customer.mandateReference, customer.mandateSignedOn, customer.deliveryTermKind, customer.incoterm, customer.incotermPlace, customer.deliveryTermText],
+            [2, 'DirectDebit', 'SEPA-77', '2026-01-15', 'Incoterm', 'FCA', 'Venlo', null]);
+    });
+
+    test('credit: limit and insurance are edited inline; the exposure from the server shows outstanding, gap, expiry and the unpriced orders', async () => {
+        respond = (call) => (call.url.includes('/customers/3/credit') ? json(200, credit) : call.url.includes('/payment-conditions') ? json(200, activeConditions)
+            : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
+        await mounted.render(<RelationForm relation={saved({ customer: customerRole({ creditLimit: 1000, isInsured: true, insurer: 'Atradius', insuredLimit: 750, insuredUntil: '2026-11-10' }) })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="credit-outstanding"]'), 'exposure loaded');
+        assert.ok(mounted.container.querySelector('[data-testid="credit-over-limit"]'));
+        assert.ok(text().includes('relations_credit_unpriced'), 'unpriced orders counted, not estimated');
+        assert.ok(mounted.container.querySelector('[data-testid="credit-insurance-gap"]'), 'live gap from the input');
+        assert.equal(mounted.container.querySelector('label[for="customer.currency-input"]')?.textContent, 'relations_field_currency_sales', 'customer currency is not labelled as purchasing');
+        await choose(select('customer.insurer'), 'Other');
+        await type(input('customer.creditLimit'), '1.234,5');
+        await press('s', { ctrlKey: true });
+        assert.ok(text().includes('relations_error_amount') && text().includes('relations_error_insurer_text'));
+        await type(input('customer.creditLimit'), '1500,50');
+        await type(input('customer.insurerText'), 'Kredietpartner');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        const customer = calls.find((call) => call.method === 'PUT')!.body!.customer as Record<string, unknown>;
+        assert.deepEqual([customer.creditLimit, customer.isInsured, customer.insurer, customer.insurerText, customer.insuredLimit, customer.insuredUntil], [1500.5, true, 'Other', 'Kredietpartner', 750, '2026-11-10']);
+    });
+
+    test('bank accounts: IBAN checked inline, "Who" required for a new account, the full list is sent and saved accounts cannot be deleted', async () => {
+        const stored = saved({ version: 2, bankAccounts: [bankAccount({ confirmationStatus: 'Confirmed', confirmedAt: '2026-10-20T08:00:00Z', confirmedBy: 'Anja' })] });
+        respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 3, bankAccounts: [bankAccount({ confirmationStatus: 'Confirmed' }), bankAccount({ id: 42, iban: 'DE89370400440532013000', isDefault: false })] })) : json(404, {}));
+        await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await openSection('bank');
+        assert.ok(text().includes('relations_bank_status_Confirmed'));
+        const savedRow = mounted.container.querySelector('[data-testid="bank-account-41"]')!;
+        assert.equal(savedRow.querySelector('label[for$=".currency-input"]')?.textContent, 'relations_bank_currency', 'account currency is not labelled as purchasing');
+        assert.equal(Array.from(savedRow.querySelectorAll('button')).some((b) => b.textContent === 'relations_remove'), false, 'no delete for a saved account');
+        await click(mounted.button('+ relations_bank_add')!);
+        const key = Array.from(mounted.container.querySelectorAll('[data-testid^="bank-account-"]')).map((el) => el.getAttribute('data-testid')!.replace('bank-account-', '')).find((k) => k !== '41')!;
+        await type(input(`bankAccounts.${key}.iban`), 'DE89 3704 0044 0532 0130 01');
+        await type(input(`bankAccounts.${key}.accountHolder`), 'Fruitimport Zuid');
+        await press('s', { ctrlKey: true });
+        assert.equal(calls.filter((call) => call.method === 'PUT').length, 0);
+        assert.ok(text().includes('relations_error_iban_checksum') && text().includes('relations_error_actor_required'));
+        await type(input(`bankAccounts.${key}.iban`), 'DE89 3704 0044 0532 0130 00');
+        assert.ok(text().includes('relations_bank_iban_ok'));
+        await type(input('actorReference'), 'Pieter');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        const body = calls.find((call) => call.method === 'PUT')!.body!;
+        assert.equal(body.actorReference, 'Pieter');
+        assert.deepEqual((body.bankAccounts as { id: number | null; iban: string; isDefault: boolean }[]).map((a) => [a.id, a.iban, a.isDefault]), [[41, 'NL91ABNA0417164300', true], [null, 'DE89370400440532013000', false]]);
+        await mounted.waitFor(() => input('actorReference').value === '', '"Who" is cleared after saving');
+    });
+
+    test('an unconfirmed default account is a prominent warning; confirming needs "Who" and sends the expected version', async () => {
+        const stored = saved({ version: 4, bankAccounts: [bankAccount()], warnings: [{ code: 'default-bank-account-unconfirmed', field: 'bankAccounts[0]', message: 'x', suggestion: null }] });
+        respond = (call) => (call.url.endsWith('/bank-accounts/41/confirm')
+            ? json(200, saved({ version: 5, bankAccounts: [bankAccount({ confirmationStatus: 'Confirmed', confirmedAt: '2026-10-26T09:00:00Z', confirmedBy: 'Anja' })], bankAccountEvents: [{ id: 1, bankAccountId: 41, kind: 'Confirmed', actorReference: 'Anja', occurredAt: '2026-10-26T09:00:00Z', oldIban: null, newIban: null, oldAccountHolder: null, newAccountHolder: null, oldOtherAccountNumber: null, newOtherAccountNumber: null }] }))
+            : call.method === 'PUT' ? json(200, saved({ version: 6 })) : json(404, {}));
+        await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        assert.ok(mounted.container.querySelector('[data-testid="warning-default-bank-account-unconfirmed"]'), 'prominent warning');
+        await openSection('bank');
+        const confirmButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="bank-confirm-41"]')!;
+        assert.ok(confirmButton.disabled, 'needs "Who" first');
+        await type(input('actorReference'), 'Anja');
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="bank-confirm-41"]')!);
+        await mounted.waitFor(() => calls.some((call) => call.url.endsWith('/confirm')), 'confirm posted');
+        assert.deepEqual(calls.find((call) => call.url.endsWith('/confirm'))!.body, { expectedVersion: 4, actorReference: 'Anja' });
+        await mounted.waitFor(() => text().includes('relations_bank_confirmed'), 'notice');
+        assert.equal(mounted.container.querySelector('[data-testid="warning-default-bank-account-unconfirmed"]'), null, 'warning gone');
+        assert.ok(mounted.container.querySelector('[data-testid="bank-account-events"]'), 'audit shown');
+        await type(input('tradeName'), 'FZ');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        assert.equal(calls.find((call) => call.method === 'PUT')!.body!.expectedVersion, 5, 'draft continues on the confirmed version');
+    });
+
+    test('an e-mail typo is a clickable suggestion, never an error; save warnings about the domain are shown by code', async () => {
+        respond = () => json(201, saved({ customer: null, email: 'inkoop@fz.example', warnings: [{ code: 'email-no-mail-server', field: 'email', message: 'Het domein heeft geen mailserver', suggestion: null }] }));
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Fruitimport Zuid');
+        await type(input('email'), 'inkoop@gmial.com');
+        const hint = mounted.container.querySelector('[data-testid="email-typo-hint"]')!;
+        assert.ok(hint.textContent!.includes('relations_email_typo_hint'));
+        await click(hint.querySelector('button')!);
+        assert.equal(input('email').value, 'inkoop@gmail.com');
+        assert.equal(mounted.container.querySelector('[data-testid="email-typo-hint"]'), null);
+        await type(input('email'), 'inkoop@fz');
+        await press('s', { ctrlKey: true });
+        assert.equal(posts().length, 0, 'strict shape for a new address');
+        assert.ok(text().includes('relations_error_invalid_email'));
+        await type(input('email'), 'inkoop@fz.example');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="warning-email-no-mail-server"]'), 'save warning shown');
+        assert.ok(text().includes('relations_warning_email_no_mail_server'));
+    });
+
+    test('VAT: a Greek number with GR is refused with the EL suggestion; the hint says shape only, no VIES', async () => {
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Hellas Fruit');
+        await openSection('company');
+        assert.ok(text().includes('relations_hint_vat'));
+        await type(input('vatNumber'), 'GR 123 456 789');
+        await press('s', { ctrlKey: true });
+        assert.equal(posts().length, 0);
+        assert.ok(text().includes('relations_error_vat_greece'));
+        await type(input('vatNumber'), 'NL123456789');
+        await press('s', { ctrlKey: true });
+        assert.ok(text().includes('relations_error_vat_country'));
+    });
+
+    test('GGN check: stores who and when, opens the portal (noopener) and copies the GGN, with a fallback when copying fails', async () => {
+        const opened: unknown[][] = [];
+        const originalOpen = window.open;
+        window.open = ((...args: unknown[]) => { opened.push(args); return null; }) as typeof window.open;
+        let copied = '';
+        Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => { copied = value; } } });
+        try {
+            const vendor = vendorRole({ ggns: [{ id: 5, ggn: '4049929000001', producerName: 'Finca Uno', isActive: true, checkedOn: null, checkedBy: null, certificateValidUntil: null, hasGgnLabel: false }] });
+            respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 1, vendor })) : json(404, {}));
+            await mounted.render(<RelationForm relation={saved({ customer: null, vendor })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+            assert.ok(text().includes('relations_ggn_never_checked'));
+            await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="ggn-check-4049929000001"]')!);
+            await mounted.waitFor(() => text().includes('relations_ggn_copied'), 'copied');
+            assert.deepEqual(opened, [['https://portal.example/certificates', '_blank', 'noopener,noreferrer']]);
+            assert.equal(copied, '4049929000001');
+            Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('denied'); } } });
+            await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="ggn-check-4049929000001"]')!);
+            await mounted.waitFor(() => text().includes('relations_ggn_copy_failed'), 'fallback');
+            const key = mounted.container.querySelector('[data-testid^="ggn-k"]')!.getAttribute('data-testid')!.replace('ggn-', '');
+            await type(input(`ggns.${key}.checkedOn`), '2026-10-26');
+            await press('s', { ctrlKey: true });
+            assert.ok(text().includes('relations_error_ggn_check_pair'), 'date without name');
+            await type(input(`ggns.${key}.checkedBy`), 'Anja');
+            await type(input(`ggns.${key}.certificateValidUntil`), '2027-03-31');
+            await press('s', { ctrlKey: true });
+            await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+            const ggns = (calls.find((call) => call.method === 'PUT')!.body!.vendor as { ggns: Record<string, unknown>[] }).ggns;
+            assert.deepEqual([ggns[0].checkedOn, ggns[0].checkedBy, ggns[0].certificateValidUntil], ['2026-10-26', 'Anja', '2027-03-31']);
+        } finally {
+            window.open = originalOpen;
+            Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined });
+        }
     });
 });

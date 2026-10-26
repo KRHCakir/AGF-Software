@@ -23,5 +23,8 @@ namespace AgfAdmin.Models
         public decimal PurchaseInvoiceDefaultVatPercentage { get; set; } = Services.PurchaseInvoiceRules.DefaultVatPercentage;
         public int PurchaseInvoiceDefaultPaymentTermsDays { get; set; } = Services.PurchaseInvoiceRules.DefaultPaymentTermsDays;
         public string PurchaseInvoiceDefaultCurrency { get; set; } = Services.PurchaseInvoiceRules.DefaultCurrency;
+
+        // Link naar de GLOBALG.A.P. Supply Chain Portal voor de handmatige GGN-controle (absolute https-URL; alleen een link).
+        public string GlobalGapPortalUrl { get; set; } = Services.RelationRules.DefaultGlobalGapPortalUrl;
     }
 }

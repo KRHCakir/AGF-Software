@@ -21,6 +21,14 @@ namespace AgfAdmin.Controllers
         [HttpGet("reference")]
         public async Task<IActionResult> Reference() => Ok(await _service.ReferenceAsync(HttpContext?.RequestAborted ?? default));
 
+        // Bedrijfsinstelling: link naar de GLOBALG.A.P. Supply Chain Portal (absolute https-URL).
+        [HttpGet("settings")]
+        public async Task<IActionResult> Settings() => Ok(await _service.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("settings")]
+        public async Task<IActionResult> UpdateSettings([FromBody] RelationSettingsDto request) =>
+            this.ToActionResult(await _service.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
 
@@ -36,6 +44,11 @@ namespace AgfAdmin.Controllers
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] SaveRelationDto request) =>
             this.ToActionResult(await _service.UpdateAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // Bankrekening bevestigen (wie + verwachte versie): Unconfirmed -> Confirmed met auditregel; 409 bij verouderde versie.
+        [HttpPost("{id:int}/bank-accounts/{bankAccountId:int}/confirm")]
+        public async Task<IActionResult> ConfirmBankAccount(int id, int bankAccountId, [FromBody] ConfirmBankAccountDto request) =>
+            this.ToActionResult(await _service.ConfirmBankAccountAsync(id, bankAccountId, request, HttpContext?.RequestAborted ?? default));
 
         // Tweede rol toevoegen zonder tweede onderneming: role = customer | vendor. 201 nieuw, 200 als de rol al bestond.
         [HttpPost("{id:int}/roles/{role}")]
