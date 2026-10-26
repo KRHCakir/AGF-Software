@@ -8,7 +8,7 @@ import { bankAccountsNeedActor, buildRelationPayload, draftFromRelation, emailSu
 
 const today = '2026-10-26';
 const terms = (over: Partial<RoleTerms> = {}): RoleTerms => ({
-    paymentConditionId: 2, paymentCondition: null, paymentTermsDays: 30, paymentMethod: 'BankTransfer', mandateReference: null, mandateSignedOn: null, deliveryTermKind: null, incoterm: null,
+    paymentConditionId: 2, paymentCondition: null, paymentTermsDays: 30, paymentTermsEndOfMonth: false, discountPercent: null, discountDays: null, paymentMethod: 'BankTransfer', mandateReference: null, mandateSignedOn: null, deliveryTermKind: null, incoterm: null,
     incotermPlace: null, deliveryTermText: null, tradeConditions: null, tradeConditionsText: null, ...over,
 });
 const customerRole = (over: Partial<CustomerRole> = {}): CustomerRole => ({
@@ -96,7 +96,7 @@ describe('relation payload', () => {
 
     test('vendor role carries its terms, currency and 13-digit GGNs without duplicates; customer role its terms, currency and credit', () => {
         const draft = emptyRelationDraft();
-        draft.name = 'X'; draft.vendorRole = true; draft.vendorTerms = { ...draft.vendorTerms, paymentConditionId: '6', currency: 'usd' }; draft.customerRole = true;
+        draft.name = 'X'; draft.vendorRole = true; draft.vendorTerms = { ...draft.vendorTerms, paymentTermsDays: '45', paymentTermsEndOfMonth: true, discountPercent: '2', discountDays: '', currency: 'usd' }; draft.customerRole = true;
         draft.customerTerms = { ...draft.customerTerms, currency: 'EURO', paymentMethod: 'DirectDebit' };
         const g1 = emptyGgnDraft(); g1.ggn = '4049 929 000001'; g1.producerName = 'Finca Uno';
         const g2 = emptyGgnDraft(); g2.ggn = '4049929000001';
@@ -106,14 +106,19 @@ describe('relation payload', () => {
         assert.equal(bad.ok, false);
         if (!bad.ok) assert.deepEqual(groupRelationErrors(bad.errors), {
             'customer.mandateReference': ['mandate_required'], 'customer.mandateSignedOn': ['mandate_date_required'], 'customer.currency': ['currency'],
-            [`ggns.${g2.key}.ggn`]: ['ggn_duplicate'], [`ggns.${g3.key}.ggn`]: ['ggn_13_digits'],
+            'vendor.discountDays': ['discount_days_required'], [`ggns.${g2.key}.ggn`]: ['ggn_duplicate'], [`ggns.${g3.key}.ggn`]: ['ggn_13_digits'],
         });
         draft.customerTerms = { ...draft.customerTerms, currency: 'eur', paymentMethod: 'BankTransfer' }; draft.credit = { ...draft.credit, creditLimit: '25000' }; draft.ggns = [g1];
+        draft.vendorTerms = { ...draft.vendorTerms, discountDays: '10' };
         const ok = buildRelationPayload(draft, { today });
         assert.equal(ok.ok, true);
         if (!ok.ok) return;
-        assert.deepEqual([ok.value.customer?.paymentConditionId, ok.value.customer?.currency, ok.value.customer?.creditLimit, ok.value.customer?.isInsured], [null, 'EUR', 25000, false]);
-        assert.deepEqual([ok.value.vendor?.paymentConditionId, ok.value.vendor?.defaultCurrency, ok.value.vendor?.paymentMethod], [6, 'USD', 'BankTransfer']);
+        // Lege termijn = null (server: standaard), geen korting; de leverancier 45 dagen na einde maand met 2% binnen 10 dagen.
+        assert.deepEqual([ok.value.customer?.paymentTermsDays, ok.value.customer?.paymentTermsEndOfMonth, ok.value.customer?.discountPercent, ok.value.customer?.discountDays, ok.value.customer?.currency, ok.value.customer?.creditLimit, ok.value.customer?.isInsured],
+            [null, false, null, null, 'EUR', 25000, false]);
+        assert.deepEqual([ok.value.vendor?.paymentTermsDays, ok.value.vendor?.paymentTermsEndOfMonth, ok.value.vendor?.discountPercent, ok.value.vendor?.discountDays, ok.value.vendor?.defaultCurrency, ok.value.vendor?.paymentMethod],
+            [45, true, 2, 10, 'USD', 'BankTransfer']);
+        assert.equal('paymentConditionId' in ok.value.vendor!, false, 'the form no longer sends a condition id');
         assert.deepEqual(ok.value.vendor?.ggns, [{ id: null, ggn: '4049929000001', producerName: 'Finca Uno', isActive: true, checkedOn: null, checkedBy: null, certificateValidUntil: null, hasGgnLabel: false }]);
     });
 
@@ -230,7 +235,7 @@ describe('relation payload', () => {
         assert.equal(result.ok, true);
         if (!result.ok) return;
         assert.equal(result.value.expectedVersion, 2);
-        assert.deepEqual([result.value.customer?.paymentConditionId, result.value.vendor?.paymentConditionId, result.value.vendor?.ggns[0].id, result.value.addresses[0].id, result.value.contacts[0].channels.map((c) => c.id)], [5, 6, 1, 11, [31, 32]]);
+        assert.deepEqual([result.value.customer?.paymentTermsDays, result.value.vendor?.paymentTermsDays, result.value.vendor?.ggns[0].id, result.value.addresses[0].id, result.value.contacts[0].channels.map((c) => c.id)], [21, 45, 1, 11, [31, 32]]);
         assert.deepEqual(result.value.vendor?.ggns[0], { id: 1, ggn: '4049929000001', producerName: 'Finca Uno', isActive: true, checkedOn: '2026-10-01', checkedBy: 'Anja', certificateValidUntil: '2027-03-31', hasGgnLabel: true });
         assert.deepEqual([result.value.bankAccounts.map((a) => a.id), result.value.actorReference], [[41], null]);
     });

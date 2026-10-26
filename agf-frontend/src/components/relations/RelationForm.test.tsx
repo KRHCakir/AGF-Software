@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, deferred, json, setSelectValue, setValue } from '../../test/reactHarness.ts';
-import type { PaymentCondition } from '../../types/paymentCondition';
 import type { CustomerRole, Relation, RelationBankAccount, RelationReference, RoleTerms, VendorRole } from '../../types/relation';
 import RelationForm from './RelationForm';
 
@@ -14,11 +13,11 @@ import RelationForm from './RelationForm';
 const reference: RelationReference = {
     languages: ['nl', 'en'], addressPurposes: ['Main', 'Billing', 'Delivery'], departmentSuggestions: ['verkoop', 'inkoop'], registrationTypeSuggestions: ['KvK'], legalFormSuggestions: ['BV'],
     currencies: ['EUR', 'USD'], vatVerificationStatuses: ['NotChecked'], globalGapDatabaseUrl: 'https://database.globalgap.org/', legacyArticleGgns: [],
-    globalGapPortalUrl: 'https://portal.example/certificates', paymentMethods: ['BankTransfer', 'DirectDebit', 'Cash', 'Offset'], paymentConditionBases: ['InvoiceDate', 'EndOfMonth'],
+    globalGapPortalUrl: 'https://portal.example/certificates', paymentMethods: ['BankTransfer', 'DirectDebit', 'Cash', 'Offset'], paymentConditionBases: ['InvoiceDate', 'EndOfMonth'], defaultPaymentTermsDays: 30,
     deliveryTermKinds: ['Incoterm', 'Franco', 'AfKwekerij', 'Other'], incoterms: ['EXW', 'FCA', 'DAP'], tradeConditions: ['Own', 'Frugiventa', 'Cofreurop', 'Other'], creditInsurers: ['Atradius', 'AllianzTrade', 'Coface', 'Other'],
 };
 const terms = (over: Partial<RoleTerms> = {}): RoleTerms => ({
-    paymentConditionId: 1, paymentCondition: null, paymentTermsDays: 30, paymentMethod: 'BankTransfer', mandateReference: null, mandateSignedOn: null, deliveryTermKind: null, incoterm: null,
+    paymentConditionId: 1, paymentCondition: null, paymentTermsDays: 30, paymentTermsEndOfMonth: false, discountPercent: null, discountDays: null, paymentMethod: 'BankTransfer', mandateReference: null, mandateSignedOn: null, deliveryTermKind: null, incoterm: null,
     incotermPlace: null, deliveryTermText: null, tradeConditions: null, tradeConditionsText: null, ...over,
 });
 const customerRole = (over: Partial<CustomerRole> = {}): CustomerRole => ({
@@ -37,11 +36,6 @@ let mounted: Mounted;
 let calls: Call[];
 let respond: (call: Call) => Response | Promise<Response>;
 
-const condition = (over: Partial<PaymentCondition>): PaymentCondition => ({
-    id: 1, code: '30D', descriptionNl: '30 dagen na factuurdatum', descriptionEn: '30 days after invoice date', days: 30, basis: 'InvoiceDate', discountPercent: null, discountDays: null, isActive: true,
-    sortOrder: 30, version: 0, customerCount: 1, vendorCount: 0, ...over,
-});
-const activeConditions = [condition({}), condition({ id: 2, code: 'EOM30', descriptionNl: '30 dagen einde maand', descriptionEn: '30 days end of month', basis: 'EndOfMonth' })];
 const bankAccount = (over: Partial<RelationBankAccount> = {}): RelationBankAccount => ({
     id: 41, iban: 'NL91ABNA0417164300', otherAccountNumber: null, bic: 'ABNANL2A', accountHolder: 'Fruitimport Zuid', currency: 'EUR', isDefault: true, isActive: true,
     confirmationStatus: 'Unconfirmed', confirmedAt: null, confirmedBy: null, ...over,
@@ -195,8 +189,10 @@ describe('RelationForm', () => {
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'updated');
         const put = calls.find((call) => call.method === 'PUT')!;
         assert.ok(put.url.endsWith('/relations/7'));
-        const customer = put.body!.customer as { paymentConditionId: number; paymentMethod: string; currency: string; isInsured: boolean };
-        assert.deepEqual([put.body!.expectedVersion, put.body!.tradeName, customer.paymentConditionId, customer.paymentMethod, customer.currency, customer.isInsured], [0, 'FZ', 1, 'BankTransfer', 'EUR', false]);
+        const customer = put.body!.customer as { paymentTermsDays: number; paymentTermsEndOfMonth: boolean; discountPercent: number | null; paymentMethod: string; currency: string; isInsured: boolean };
+        assert.deepEqual([put.body!.expectedVersion, put.body!.tradeName, customer.paymentTermsDays, customer.paymentTermsEndOfMonth, customer.discountPercent, customer.paymentMethod, customer.currency, customer.isInsured],
+            [0, 'FZ', 30, false, null, 'BankTransfer', 'EUR', false]);
+        assert.equal('paymentConditionId' in customer, false, 'no condition id from the form');
         await mounted.waitFor(() => text().includes('relations_saved'), 'saved');
         if (!mounted.container.querySelector('#relation-defaults')) await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="relation-defaults"]')!);
         await click(mounted.button('+ relations_add_role_vendor')!);
@@ -232,8 +228,8 @@ describe('RelationForm', () => {
         assert.equal(body.name, 'Fruitimport Zuid (nieuw)');
         assert.equal((body.addresses as { city: string }[])[0].city, 'Tegelen');
         assert.equal((body.contacts as { name: string }[])[0].name, 'Pieter');
-        const vendor = body.vendor as { paymentConditionId: number; defaultCurrency: string; ggns: unknown[] };
-        assert.deepEqual([vendor.paymentConditionId, vendor.defaultCurrency, vendor.ggns], [4, 'USD', []], 'role defaults from the server');
+        const vendor = body.vendor as { paymentTermsDays: number; defaultCurrency: string; ggns: unknown[] };
+        assert.deepEqual([vendor.paymentTermsDays, vendor.defaultCurrency, vendor.ggns], [45, 'USD', []], 'role defaults from the server');
         assert.equal(body.expectedVersion, 3);
     });
 
@@ -279,18 +275,43 @@ describe('RelationForm', () => {
         assert.equal(calls.find((call) => call.method === 'PUT')!.body!.expectedVersion, 3);
     });
 
-    test('payment conditions: only active ones are offered plus the inactive current one; direct debit needs a mandate before anything is sent', async () => {
-        const inactive = { ...condition({ id: 7, code: '60D', descriptionNl: '60 dagen', descriptionEn: '60 days', days: 60, isActive: false }) };
-        respond = (call) => (call.url.includes('/payment-conditions') ? json(200, activeConditions) : call.url.includes('/credit') ? json(200, credit)
-            : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
-        await mounted.render(<RelationForm relation={saved({ customer: customerRole({ paymentConditionId: 7, paymentCondition: inactive, paymentTermsDays: 60 }) })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
-        await mounted.waitFor(() => select('customer.paymentConditionId').options.length === 3, 'conditions loaded');
-        const options = Array.from(select('customer.paymentConditionId').options).map((o) => o.value);
-        assert.deepEqual(options, ['1', '2', '7'], 'active conditions plus the current inactive one, no default option');
-        assert.equal(select('customer.paymentConditionId').value, '7');
+    test('free payment term: days as a number field with the default as placeholder, end of month, optional discount and a live preview', async () => {
+        respond = (call) => (call.url.includes('/credit') ? json(200, credit) : call.method === 'POST' ? json(201, saved()) : json(404, {}));
+        await mounted.render(<RelationForm relation={null} reference={{ ...reference, defaultPaymentTermsDays: 21 }} onSaved={() => {}} onClose={() => {}} />);
+        assert.equal(calls.some((call) => call.url.includes('/payment-conditions')), false, 'no condition list needed');
+        await type(input('name'), 'Fruitimport Zuid');
+        await click(input('customerRole'));
+        const days = input('customer.paymentTermsDays');
+        assert.deepEqual([days.type, days.inputMode, days.value, days.placeholder, select('customer.paymentConditionId')], ['text', 'numeric', '', 'relations_terms_days_placeholder', null]);
+        assert.ok(mounted.container.querySelector('[data-testid="customer-terms-example"]'), 'preview with the default');
+        assert.equal(text().includes('relations_terms_discount_example'), false, 'no discount by default');
+        await type(days, '30');
+        await click(input('customer.paymentTermsEndOfMonth'));
+        await type(input('customer.discountPercent'), '2,5');
+        assert.equal(text().includes('relations_terms_discount_example'), false, 'discount shown only when both fields are filled');
+        await press('s', { ctrlKey: true });
+        assert.equal(posts().length, 0, 'half a discount is refused before sending');
+        assert.ok(text().includes('relations_error_discount_days_required'));
+        assert.equal(window.document.activeElement, input('customer.discountDays'), 'focus on the first invalid field');
+        await type(input('customer.discountDays'), '8');
+        assert.ok(text().includes('relations_terms_discount_example'), 'preview shows the discount now');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => posts().length === 1, 'posted');
+        const customer = posts()[0].body!.customer as Record<string, unknown>;
+        assert.deepEqual([customer.paymentTermsDays, customer.paymentTermsEndOfMonth, customer.discountPercent, customer.discountDays], [30, true, 2.5, 8]);
+    });
+
+    test('an existing role shows its own days, end of month and discount; an inactive condition is only mentioned while the term still matches it', async () => {
+        const inactive = { id: 7, code: '60EM-2%10', descriptionNl: '60', descriptionEn: '60', days: 60, basis: 'EndOfMonth' as const, discountPercent: 2, discountDays: 10, isActive: false };
+        respond = (call) => (call.url.includes('/credit') ? json(200, credit) : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
+        await mounted.render(<RelationForm relation={saved({ customer: customerRole({ paymentConditionId: 7, paymentCondition: inactive, paymentTermsDays: 60, paymentTermsEndOfMonth: true, discountPercent: 2, discountDays: 10 }) })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await openSection('defaults');
+        assert.deepEqual([input('customer.paymentTermsDays').value, input('customer.paymentTermsEndOfMonth').checked, input('customer.discountPercent').value, input('customer.discountDays').value], ['60', true, '2', '10']);
         assert.ok(text().includes('relations_terms_condition_inactive'));
-        await choose(select('customer.paymentConditionId'), '2');
-        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="customer-terms-example"]'), 'due date example');
+        await type(input('customer.paymentTermsDays'), '45');
+        assert.equal(text().includes('relations_terms_condition_inactive'), false, 'a changed term gets an active condition');
+        await type(input('customer.discountPercent'), '');
+        await type(input('customer.discountDays'), '');
         await choose(select('customer.paymentMethod'), 'DirectDebit');
         await press('s', { ctrlKey: true });
         assert.equal(calls.filter((call) => call.method === 'PUT').length, 0, 'nothing sent');
@@ -303,13 +324,12 @@ describe('RelationForm', () => {
         await press('s', { ctrlKey: true });
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
         const customer = calls.find((call) => call.method === 'PUT')!.body!.customer as Record<string, unknown>;
-        assert.deepEqual([customer.paymentConditionId, customer.paymentMethod, customer.mandateReference, customer.mandateSignedOn, customer.deliveryTermKind, customer.incoterm, customer.incotermPlace, customer.deliveryTermText],
-            [2, 'DirectDebit', 'SEPA-77', '2026-01-15', 'Incoterm', 'FCA', 'Venlo', null]);
+        assert.deepEqual([customer.paymentTermsDays, customer.paymentTermsEndOfMonth, customer.discountPercent, customer.discountDays, customer.paymentMethod, customer.mandateReference, customer.mandateSignedOn, customer.deliveryTermKind, customer.incoterm, customer.incotermPlace, customer.deliveryTermText],
+            [45, true, null, null, 'DirectDebit', 'SEPA-77', '2026-01-15', 'Incoterm', 'FCA', 'Venlo', null]);
     });
 
     test('credit: limit and insurance are edited inline; the exposure from the server shows outstanding, gap, expiry and the unpriced orders', async () => {
-        respond = (call) => (call.url.includes('/customers/3/credit') ? json(200, credit) : call.url.includes('/payment-conditions') ? json(200, activeConditions)
-            : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
+        respond = (call) => (call.url.includes('/customers/3/credit') ? json(200, credit) : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
         await mounted.render(<RelationForm relation={saved({ customer: customerRole({ creditLimit: 1000, isInsured: true, insurer: 'Atradius', insuredLimit: 750, insuredUntil: '2026-11-10' }) })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="credit-outstanding"]'), 'exposure loaded');
         assert.ok(mounted.container.querySelector('[data-testid="credit-over-limit"]'));

@@ -48,8 +48,20 @@ describe('role terms', () => {
         normalizeTerms({ ...emptyTermsDraft(), tradeConditions: 'Other' }, 'vendor', today, errors);
         assert.deepEqual(codes(errors), ['vendor.tradeConditionsText:trade_text']);
         const ok: TermsRuleError[] = [];
-        const values = normalizeTerms({ ...emptyTermsDraft(), tradeConditions: 'Frugiventa', tradeConditionsText: 'x', paymentConditionId: '4' }, 'vendor', today, ok);
-        assert.deepEqual([ok, values.tradeConditionsText, values.paymentConditionId], [[], null, 4]);
+        const values = normalizeTerms({ ...emptyTermsDraft(), tradeConditions: 'Frugiventa', tradeConditionsText: 'x', paymentTermsDays: ' 14 ' }, 'vendor', today, ok);
+        assert.deepEqual([ok, values.tradeConditionsText, values.paymentTermsDays], [[], null, 14]);
+    });
+
+    test('the free payment term is validated with the role prefix; discount days are checked against the default when days are empty', () => {
+        const errors: TermsRuleError[] = [];
+        normalizeTerms({ ...emptyTermsDraft(), paymentTermsDays: '30,5', discountPercent: '2' }, 'customer', today, errors);
+        assert.deepEqual(codes(errors), ['customer.paymentTermsDays:terms_days', 'customer.discountDays:discount_days_required']);
+        const tooLong: TermsRuleError[] = [];
+        normalizeTerms({ ...emptyTermsDraft(), discountPercent: '2', discountDays: '15' }, 'vendor', today, tooLong, 14);
+        assert.deepEqual(codes(tooLong), ['vendor.discountDays:discount_days']);
+        const ok: TermsRuleError[] = [];
+        const values = normalizeTerms({ ...emptyTermsDraft(), paymentTermsEndOfMonth: true }, 'vendor', today, ok, 14);
+        assert.deepEqual([ok, values.paymentTermsDays, values.paymentTermsEndOfMonth, values.discountPercent, values.discountDays], [[], null, true, null, null]);
     });
 });
 

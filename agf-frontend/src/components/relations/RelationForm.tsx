@@ -4,12 +4,11 @@ import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, bankAccountsNeedActor, buildRelationPayload, creditDraftFromRole, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
 import { todayInAmsterdam } from '../../lib/calendarDate';
+import { emptyTermsDraft } from '../../lib/roleTermsRules';
 import { newRequestId } from '../../lib/requestId';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
-import { listPaymentConditions } from '../../services/paymentConditionService';
 import { addRelationRole, confirmBankAccount, createRelation, updateRelation } from '../../services/relationService';
-import type { PaymentConditionSummary } from '../../types/paymentCondition';
 import type { AddressPurpose, ChannelKind, Relation, RelationReference, SaveRelationRequest, SimilarRelation } from '../../types/relation';
 import { ADDRESS_PURPOSES } from '../../types/relation';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -38,7 +37,11 @@ interface PendingCreate { requestId: string; payload: SaveRelationRequest; draft
 function readPending(): PendingCreate | null {
     try {
         const raw = window.sessionStorage.getItem(PENDING_KEY);
-        return raw ? (JSON.parse(raw) as PendingCreate) : null;
+        if (!raw) return null;
+        const pending = JSON.parse(raw) as PendingCreate;
+        // Een concept van vóór de vrije betalingstermijn mist die velden: aanvullen met leeg (de bevroren payload zelf blijft ongewijzigd).
+        const terms = (value: RelationDraft['customerTerms'] | undefined) => ({ ...emptyTermsDraft(), ...value });
+        return { ...pending, draft: { ...pending.draft, customerTerms: terms(pending.draft.customerTerms), vendorTerms: terms(pending.draft.vendorTerms) } };
     } catch {
         return null;
     }
@@ -88,15 +91,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             bank: d.bankAccounts.length > 0,
         };
     });
-    // Actieve betalingscondities voor de keuzelijsten; een inactieve huidige conditie komt uit de rol zelf.
-    const [conditions, setConditions] = useState<PaymentConditionSummary[]>([]);
     const [confirming, setConfirming] = useState<number | null>(null);
     const [creditRefresh, setCreditRefresh] = useState(0);
-    useEffect(() => {
-        const controller = new AbortController();
-        listPaymentConditions(false, controller.signal).then(setConditions).catch(() => { /* zonder lijst blijft de huidige conditie kiesbaar */ });
-        return () => controller.abort();
-    }, []);
     const inFlight = useRef(false);
     const firstInput = useRef<HTMLInputElement | null>(null);
     useEffect(() => { firstInput.current?.focus(); }, []);
@@ -170,7 +166,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const submit = async (acknowledgeSimilarNames = false) => {
         if (inFlight.current) return;
         if (pending !== null) { await send(pending); return; }
-        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames } : { expectedVersion: baseVersion ?? current.version, stored: current });
+        const defaults = { defaultPaymentTermsDays: reference.defaultPaymentTermsDays };
+        const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames, ...defaults } : { expectedVersion: baseVersion ?? current.version, stored: current, ...defaults });
         if (!built.ok) {
             const grouped = groupRelationErrors(built.errors);
             const messages: FieldErrors = {};
@@ -602,7 +599,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                         {draft.customerRole && (
                             <div className="space-y-2">
                                 <p className="text-sm font-medium text-gray-900">{t('relations_defaults_sales')}{current?.customer ? ` · #${current.customer.customerId}` : ''}</p>
-                                <RelationTermsSection prefix="customer" terms={draft.customerTerms} onChange={(patch) => update({ customerTerms: { ...draft.customerTerms, ...patch } })} conditions={conditions}
+                                <RelationTermsSection prefix="customer" terms={draft.customerTerms} onChange={(patch) => update({ customerTerms: { ...draft.customerTerms, ...patch } })}
                                     currentCondition={current?.customer?.paymentCondition ?? null} reference={reference} errors={errors} locked={locked} />
                                 <CustomerCreditSection customerId={current?.customer?.customerId ?? null} credit={draft.credit} onChange={(patch) => update({ credit: { ...draft.credit, ...patch } })}
                                     reference={reference} errors={errors} locked={locked} refreshToken={creditRefresh} />
@@ -611,7 +608,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                         {draft.vendorRole && (
                             <div className="space-y-2">
                                 <p className="text-sm font-medium text-gray-900">{t('relations_defaults_purchase')}{current?.vendor ? ` · #${current.vendor.vendorId}` : ''}</p>
-                                <RelationTermsSection prefix="vendor" terms={draft.vendorTerms} onChange={(patch) => update({ vendorTerms: { ...draft.vendorTerms, ...patch } })} conditions={conditions}
+                                <RelationTermsSection prefix="vendor" terms={draft.vendorTerms} onChange={(patch) => update({ vendorTerms: { ...draft.vendorTerms, ...patch } })}
                                     currentCondition={current?.vendor?.paymentCondition ?? null} reference={reference} errors={errors} locked={locked} />
                                 <div className="space-y-2">
                                     <p className="text-xs font-medium text-gray-700">{t('relations_ggn_title')}</p>
