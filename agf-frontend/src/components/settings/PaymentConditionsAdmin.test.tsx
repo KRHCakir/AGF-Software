@@ -48,6 +48,8 @@ describe('PaymentConditionsAdmin', () => {
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="payment-condition-row-3"]'), 'list');
         assert.ok(text().includes('30D') && text().includes('EOM30'));
         assert.ok(row(1).textContent!.includes('payment_conditions_usage'));
+        // Op 390px moet de omschrijving een eigen regel krijgen en de knoppen eronder laten vallen, niet tot een smalle kolom krimpen.
+        assert.ok(row(1).firstElementChild!.classList.contains('min-w-60'), 'description column keeps a minimum width so the buttons wrap on a phone');
         assert.equal(mounted.container.querySelector('[data-testid="payment-condition-row-2"]'), null);
         await click(mounted.container.querySelector<HTMLInputElement>('[data-testid="payment-conditions-include-inactive"]')!);
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="payment-condition-row-2"]'), 'inactive shown');
