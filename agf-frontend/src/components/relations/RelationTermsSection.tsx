@@ -63,7 +63,7 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
     return (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4" data-testid={`${prefix}-terms`}>
             <div className="sm:col-span-2" data-testid={`${prefix}-payment-terms`}>
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,9rem)_auto_minmax(0,6rem)_minmax(0,7rem)]">
+                <div className="grid grid-cols-2 items-end gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,9rem)_auto_minmax(0,6rem)_minmax(0,7rem)]">
                     {numberInput('paymentTermsDays', 'relations_terms_days', { placeholder: t('relations_terms_days_placeholder', { days: String(defaultDays) }) })}
                     <label className="flex items-center gap-1 pb-1.5 text-sm text-gray-900">
                         <input type="checkbox" id={`${k('paymentTermsEndOfMonth')}-input`} checked={terms.paymentTermsEndOfMonth} disabled={locked}
