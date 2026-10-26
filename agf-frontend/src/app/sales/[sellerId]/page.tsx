@@ -9,6 +9,7 @@ import { ProductService, Product } from '@/services/productService';
 import { InvoiceService } from '@/services/invoiceService';
 import { InventoryService, Shipment } from '@/services/inventoryService';
 import { CustomerService } from '@/services/customerService';
+import { formatMoney } from '@/lib/availability';
 import Select from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 
@@ -461,7 +462,7 @@ export default function FastSalesPage({ params }: { params: Promise<{ sellerId: 
                                                             />
                                                         </div>
                                                     </div>
-                                                    <div className="text-sm font-bold text-gray-500 mt-2">Total: €{((item.estimatedPrice || 0) * item.quantity).toFixed(2)}</div>
+                                                    <div className="text-sm font-bold text-gray-500 mt-2">Total: € {formatMoney((item.estimatedPrice || 0) * item.quantity, null, 'nl')}</div>
                                                 </div>
                                                 <button 
                                                     onClick={() => handleRemoveItem(idx)}
@@ -487,7 +488,7 @@ export default function FastSalesPage({ params }: { params: Promise<{ sellerId: 
                                 <div className="flex justify-between items-center mb-4 text-lg font-bold">
                                     <span>Total Estimated</span>
                                     <span>
-                                        € {cartItems.reduce((sum, item) => sum + ((item.estimatedPrice || 0) * item.quantity), 0).toFixed(2)}
+                                        € {formatMoney(cartItems.reduce((sum, item) => sum + ((item.estimatedPrice || 0) * item.quantity), 0), null, 'nl')}
                                     </span>
                                 </div>
                                 <button

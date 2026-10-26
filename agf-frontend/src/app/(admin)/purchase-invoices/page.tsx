@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { formatMoney } from '../../../lib/availability';
 import { formatCalendarDate } from '../../../lib/calendarDate';
 import { toApiError } from '../../../services/apiClient';
 import { listPurchaseInvoices } from '../../../services/purchaseInvoiceService';
@@ -27,7 +28,6 @@ export default function PurchaseInvoicesPage() {
         return () => controller.abort();
     }, [reloadToken]);
 
-    const money = (value: number) => new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
@@ -64,7 +64,7 @@ export default function PurchaseInvoicesPage() {
                                     <td className="px-3 py-2 font-mono">{invoice.invoiceNumber ?? '–'}</td>
                                     <td className="px-3 py-2">{invoice.vendorName ?? '–'}</td>
                                     <td className="px-3 py-2">{invoice.dueDate ? formatCalendarDate(invoice.dueDate, locale) : '–'}</td>
-                                    <td className="px-3 py-2 text-right font-mono">{money(invoice.totalAmount)} {invoice.currency ?? ''}</td>
+                                    <td className="px-3 py-2 text-right font-mono">{formatMoney(invoice.totalAmount, invoice.currency ?? null, locale)}</td>
                                     <td className="px-3 py-2">{invoice.status}</td>
                                 </tr>
                             ))}

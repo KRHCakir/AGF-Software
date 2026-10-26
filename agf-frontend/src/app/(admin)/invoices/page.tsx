@@ -4,6 +4,7 @@ import LegacyNotice from '../../../components/LegacyNotice';
 
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "../../../i18n/LanguageContext";
+import { formatMoney } from "../../../lib/availability";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5197";
 
@@ -21,7 +22,7 @@ interface InvoiceListItem {
 }
 
 export default function InvoicesPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [invoices, setInvoices] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -66,7 +67,7 @@ export default function InvoicesPage() {
                 <td className="px-6 py-4 font-mono font-bold text-blue-600">{i.invoiceNumber}</td>
                 <td className="px-6 py-4 font-semibold text-gray-800">{i.customerName}</td>
                 <td className="px-6 py-4 font-bold text-gray-900">
-                  € {i.totalAmount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                  € {formatMoney(i.totalAmount, null, locale)}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">{new Date(i.invoiceDate).toLocaleDateString()}</td>
                 <td className="px-6 py-4 text-sm text-gray-500">

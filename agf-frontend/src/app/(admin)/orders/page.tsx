@@ -4,10 +4,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { OrderService, OrderDto } from '../../../services/orderService';
 import Link from 'next/link';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { formatMoney } from '../../../lib/availability';
 import AddOrderModal from '../../../components/AddOrderModal';
 
 export default function OrdersPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [orders, setOrders] = useState<OrderDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -135,7 +136,7 @@ export default function OrdersPage() {
                   {order.lines.map(l => `${l.quantity}x ${l.productName}`).join(', ')}
                 </td>
                 <td className="px-6 py-4 font-bold text-blue-700">
-                  €{order.totalAmount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                  € {formatMoney(order.totalAmount, null, locale)}
                 </td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${order.status === 'Invoiced' ? 'bg-green-100 text-green-700' :

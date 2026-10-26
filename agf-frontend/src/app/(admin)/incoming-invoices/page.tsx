@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { IncomingInvoice } from '../../../types/incomingInvoice';
 import { IncomingInvoiceService } from '../../../services/incomingInvoiceService';
 import { useRouter } from 'next/navigation';
+import { formatMoney } from '../../../lib/availability';
 
 export default function IncomingInvoicesPage() {
     const [invoices, setInvoices] = useState<IncomingInvoice[]>([]);
@@ -85,7 +86,7 @@ export default function IncomingInvoicesPage() {
                                 <td className="border-r border-gray-300 px-1 truncate">{invoice.invoiceNumber}</td>
                                 <td className="border-r border-gray-300 px-1 truncate">{invoice.vendor?.name}</td>
                                 <td className="border-r border-gray-300 px-1 text-right">
-                                    {invoice.totalAmount.toFixed(2)}
+                                    {formatMoney(invoice.totalAmount, null, 'nl')}
                                 </td>
                                 <td className="border-r border-gray-300 px-1 text-center truncate">{invoice.status.substring(0, 8)}</td>
                                 <td className="border-r border-gray-300 px-1 text-right">{(invoice.reviewConfidence * 100).toFixed(0)}%</td>

@@ -99,6 +99,12 @@ export function formatQuantity(value: number, locale: string): string {
     return new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 3 }).format(value);
 }
 
+// Geldbedrag altijd met 2 decimalen (42.900,00), optioneel gevolgd door de valutacode zoals op de inkoopfactuur.
+export function formatMoney(value: number, currency: string | null, locale: string): string {
+    const amount = new Intl.NumberFormat(numberLocale(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    return currency ? `${amount} ${currency}` : amount;
+}
+
 export function formatKg(value: number, locale: string): string {
     return `${new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 3 }).format(value)} kg`;
 }
