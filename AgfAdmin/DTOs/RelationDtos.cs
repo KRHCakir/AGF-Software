@@ -76,6 +76,10 @@ namespace AgfAdmin.DTOs
         public int PaymentConditionId { get; set; }
         public PaymentConditionSummaryDto PaymentCondition { get; set; }
         public int PaymentTermsDays { get; set; }
+        // Vrije termijn voor het formulier (afgeleid van de conditie): einde maand en optionele korting.
+        public bool PaymentTermsEndOfMonth { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public int? DiscountDays { get; set; }
         public string PaymentMethod { get; set; }
         public string MandateReference { get; set; }
         public DateOnly? MandateSignedOn { get; set; }
@@ -103,6 +107,9 @@ namespace AgfAdmin.DTOs
         public int PaymentConditionId { get; set; }
         public PaymentConditionSummaryDto PaymentCondition { get; set; }
         public int PaymentTermsDays { get; set; }
+        public bool PaymentTermsEndOfMonth { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public int? DiscountDays { get; set; }
         public string DefaultCurrency { get; set; }
         public string PaymentMethod { get; set; }
         public string MandateReference { get; set; }
@@ -273,13 +280,21 @@ namespace AgfAdmin.DTOs
         public List<RelationBankAccountDto> BankAccounts { get; set; }
     }
 
-    // Rolvelden. paymentConditionId heeft voorrang; paymentTermsDays (legacy) wordt alleen gebruikt zonder paymentConditionId en
-    // alleen als het afwijkt van de huidige termijn (dan zoekt/maakt de server "{n}D"). Lege optionele velden = leeg (PUT vervangt de kaart);
-    // paymentMethod/currency leeg = huidige waarde (nieuw: BankTransfer / EUR).
+    // Rolvelden. Betalingstermijn op drie manieren:
+    //   - vrije termijn (het relatieformulier): paymentTermsEndOfMonth meegestuurd (true/false) maakt de rol "vrij"; dan geldt
+    //     paymentTermsDays leeg = standaard uit de bedrijfsinstellingen (CompanySettings.PurchaseInvoiceDefaultPaymentTermsDays),
+    //     anders 0..365, en discountPercent + discountDays beide of geen van beide. De server zoekt of maakt de passende conditie
+    //     (PaymentConditionResolver); komt de termijn overeen met de huidige conditie, dan blijft die staan. Niet samen met paymentConditionId.
+    //   - paymentConditionId (bestaande clients): gekozen conditie.
+    //   - alleen paymentTermsDays (legacy): alleen gebruikt als het afwijkt van de huidige termijn (dan "{n}D" na factuurdatum).
+    // Lege optionele velden = leeg (PUT vervangt de kaart); paymentMethod/currency leeg = huidige waarde (nieuw: BankTransfer / EUR).
     public sealed class SaveCustomerRoleDto
     {
         public int? PaymentConditionId { get; set; }
         public int? PaymentTermsDays { get; set; }
+        public bool? PaymentTermsEndOfMonth { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public int? DiscountDays { get; set; }
         public string PaymentMethod { get; set; }
         public string MandateReference { get; set; }
         public DateOnly? MandateSignedOn { get; set; }
@@ -303,6 +318,9 @@ namespace AgfAdmin.DTOs
     {
         public int? PaymentConditionId { get; set; }
         public int? PaymentTermsDays { get; set; }
+        public bool? PaymentTermsEndOfMonth { get; set; }
+        public decimal? DiscountPercent { get; set; }
+        public int? DiscountDays { get; set; }
         public string DefaultCurrency { get; set; }
         public string PaymentMethod { get; set; }
         public string MandateReference { get; set; }
@@ -331,6 +349,8 @@ namespace AgfAdmin.DTOs
         public string GlobalGapPortalUrl { get; set; }
         public List<string> PaymentMethods { get; set; } = new();
         public List<string> PaymentConditionBases { get; set; } = new();
+        // Standaard betalingstermijn als het veld leeg blijft (bedrijfsinstelling, dezelfde als bij inkoopfacturen).
+        public int DefaultPaymentTermsDays { get; set; }
         public List<string> DeliveryTermKinds { get; set; } = new();
         public List<string> Incoterms { get; set; } = new();
         public List<string> TradeConditions { get; set; } = new();

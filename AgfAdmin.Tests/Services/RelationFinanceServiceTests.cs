@@ -151,6 +151,123 @@ public class RelationFinanceServiceTests : IDisposable
         Assert.Equal(("7D-2", PaymentConditionBasis.InvoiceDate, 0), (seven.Code, seven.Basis, seven.Id));
     }
 
+    // ---------------- Vrije termijn (relatieformulier) ----------------
+
+    private static SaveCustomerRoleDto FreeCustomer(int? days, bool endOfMonth = false, decimal? percent = null, int? discountDays = null) =>
+        new() { PaymentTermsDays = days, PaymentTermsEndOfMonth = endOfMonth, DiscountPercent = percent, DiscountDays = discountDays };
+
+    private static SaveVendorRoleDto FreeVendor(int? days, bool endOfMonth = false, decimal? percent = null, int? discountDays = null) =>
+        new() { PaymentTermsDays = days, PaymentTermsEndOfMonth = endOfMonth, DiscountPercent = percent, DiscountDays = discountDays };
+
+    [Fact]
+    public async Task Free_Terms_Find_Or_Create_A_Condition_By_Days_Basis_And_Discount_And_Return_Them_On_The_Role()
+    {
+        // Twee bestaande actieve condities met dezelfde betekenis: de laagste sorteervolgorde wint (deterministisch).
+        var late = await ConditionAsync("NET30-B", 30);
+        var early = await ConditionAsync("NET30-A", 30);
+        await WithDbAsync(async db => { (await db.PaymentConditions.SingleAsync(p => p.Id == early.Id)).SortOrder = 1; return await db.SaveChangesAsync(); });
+
+        var created = await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Vrije termijn", Customer = FreeCustomer(30), Vendor = FreeVendor(45, endOfMonth: true, percent: 2m, discountDays: 8) });
+        Assert.Equal(ServiceResultStatus.Created, created.Status);
+        var customer = created.Value.Customer!;
+        Assert.Equal((early.Id, 30, false, (decimal?)null, (int?)null), (customer.PaymentConditionId, customer.PaymentTermsDays, customer.PaymentTermsEndOfMonth, customer.DiscountPercent, customer.DiscountDays));
+        var vendor = created.Value.Vendor!;
+        Assert.Equal(("45EM-2%8", 45, true, 2m, 8), (vendor.PaymentCondition.Code, vendor.PaymentTermsDays, vendor.PaymentTermsEndOfMonth, vendor.DiscountPercent!.Value, vendor.DiscountDays!.Value));
+        Assert.Equal(("45 dagen na einde maand, 2% korting bij betaling binnen 8 dagen", "45 days after end of month, 2% discount if paid within 8 days", true),
+            (vendor.PaymentCondition.DescriptionNl, vendor.PaymentCondition.DescriptionEn, vendor.PaymentCondition.IsActive));
+        Assert.NotEqual(late.Id, customer.PaymentConditionId);
+
+        // Een tweede relatie met dezelfde vrije termijn hergebruikt de net gemaakte conditie (geen tweede "45EM-2%8").
+        var second = (await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Tweede", AcknowledgeSimilarNames = true, Vendor = FreeVendor(45, endOfMonth: true, percent: 2.00m, discountDays: 8) })).Value;
+        Assert.Equal(vendor.PaymentConditionId, second.Vendor!.PaymentConditionId);
+        // Zelfde dagen, andere basis of korting = andere conditie.
+        var update = From(created.Value);
+        update.Customer = FreeCustomer(30, endOfMonth: true);
+        update.Customer.Currency = "EUR";
+        var updated = (await UpdateAsync(created.Value.Id, update)).Value;
+        Assert.Equal(("30EM", true), (updated.Customer!.PaymentCondition.Code, updated.Customer.PaymentTermsEndOfMonth));
+        Assert.Equal(4, await WithDbAsync(db => db.PaymentConditions.CountAsync()));
+        // Spiegel (regel 16) klopt voor alle rollen.
+        Assert.True(await WithDbAsync(db => db.Customers.AllAsync(c => c.PaymentTermsDays == c.PaymentCondition.Days)));
+        Assert.True(await WithDbAsync(db => db.Vendors.AllAsync(v => v.PaymentTermsDays == v.PaymentCondition.Days)));
+    }
+
+    [Fact]
+    public async Task Empty_Free_Days_Use_The_Company_Default_And_Never_A_Discount()
+    {
+        await WithDbAsync(async db => { db.CompanySettings.Add(new CompanySettings { PurchaseInvoiceDefaultPaymentTermsDays = 21 }); return await db.SaveChangesAsync(); });
+        Assert.Equal(21, (await WithDbAsync(db => new RelationService(db).ReferenceAsync())).DefaultPaymentTermsDays);
+        var created = (await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Standaard", Customer = FreeCustomer(null), Vendor = new SaveVendorRoleDto() })).Value;
+        Assert.Equal(("21D", 21, (decimal?)null), (created.Customer!.PaymentCondition.Code, created.Customer.PaymentTermsDays, created.Customer.DiscountPercent));
+        // Een nieuwe rol zonder termijn (oude client) en "rol toevoegen" krijgen dezelfde standaard.
+        Assert.Equal(21, created.Vendor!.PaymentTermsDays);
+        var onlyName = (await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Rol later" })).Value;
+        var withRole = (await WithDbAsync(db => new RelationService(db).AddRoleAsync(onlyName.Id, RelationService.RoleCustomer))).Value;
+        Assert.Equal((21, (decimal?)null), (withRole.Customer!.PaymentTermsDays, withRole.Customer.DiscountPercent));
+        // Kortingsdagen worden getoetst tegen de effectieve (standaard)termijn.
+        var tooLong = await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Te lang", Customer = FreeCustomer(null, percent: 2m, discountDays: 22) });
+        Assert.Contains("customer.discountDays", tooLong.Errors.Keys);
+        Assert.False(await WithDbAsync(db => db.PaymentConditions.AnyAsync(p => p.DiscountPercent != null)));
+    }
+
+    [Fact]
+    public async Task Free_Terms_Never_Attach_Or_Reactivate_An_Inactive_Condition_But_An_Unchanged_Card_Keeps_Its_Own()
+    {
+        var inactive = await ConditionAsync("30D", 30, active: false);
+        var created = (await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Inactief", Vendor = FreeVendor(30) })).Value;
+        Assert.Equal(("30D-2", true), (created.Vendor!.PaymentCondition.Code, created.Vendor.PaymentCondition.IsActive));
+        Assert.False(await WithDbAsync(db => db.PaymentConditions.Where(p => p.Id == inactive.Id).Select(p => p.IsActive).SingleAsync()));
+        // Legacy-schrijvers volgen dezelfde regel: de nieuwe actieve conditie, niet de inactieve.
+        Assert.Equal("30D-2", await WithDbAsync(async db => (await PaymentConditionResolver.ForDaysAsync(db, 30)).Code));
+
+        // Een rol die al op een inactieve conditie staat, houdt die bij een ongewijzigde termijn (geen stille wissel bij een andere wijziging).
+        var old = await ConditionAsync("OLD14EM", 14, PaymentConditionBasis.EndOfMonth);
+        var onOld = From(created);
+        onOld.Vendor!.PaymentConditionId = old.Id;
+        var stored = (await UpdateAsync(created.Id, onOld)).Value;
+        await WithDbAsync(async db => { (await db.PaymentConditions.SingleAsync(p => p.Id == old.Id)).IsActive = false; return await db.SaveChangesAsync(); });
+        stored = (await WithDbAsync(db => new RelationService(db).GetAsync(created.Id))).Value;
+        var unchanged = From(stored);
+        unchanged.Phone = "+31 77 123 45 67";
+        unchanged.Vendor = FreeVendor(14, endOfMonth: true);
+        unchanged.Vendor.Ggns = new List<VendorGgnDto>();
+        var kept = (await UpdateAsync(created.Id, unchanged)).Value;
+        Assert.Equal((old.Id, true), (kept.Vendor!.PaymentConditionId, kept.Vendor.PaymentTermsEndOfMonth));
+        Assert.Contains(kept.Warnings, w => w.Code == RelationService.WarningPaymentConditionInactive);
+        // Een gewijzigde termijn koppelt een actieve conditie.
+        var changed = From(kept);
+        changed.Vendor = FreeVendor(15, endOfMonth: true);
+        changed.Vendor.Ggns = new List<VendorGgnDto>();
+        Assert.Equal("15EM", (await UpdateAsync(created.Id, changed)).Value.Vendor!.PaymentCondition.Code);
+    }
+
+    [Fact]
+    public async Task Free_Terms_Validate_Days_And_Discount_Pairs_Refuse_A_Mixed_Request_And_Replay_Idempotently()
+    {
+        var bad = await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Fout", Customer = FreeCustomer(366, percent: 2m), Vendor = FreeVendor(30, discountDays: 8) });
+        Assert.Equal(ServiceResultStatus.Validation, bad.Status);
+        Assert.Equal(new[] { "customer.discountDays", "customer.paymentTermsDays", "vendor.discountPercent" }, bad.Errors.Keys.Order());
+        var mixed = await CreateAsync(new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Gemengd", Customer = new SaveCustomerRoleDto { PaymentConditionId = 1, PaymentTermsEndOfMonth = false } });
+        Assert.Contains("customer.paymentConditionId", mixed.Errors.Keys);
+        Assert.Equal(0, await WithDbAsync(db => db.PaymentConditions.CountAsync()));
+
+        // Replay: dezelfde opdracht geeft dezelfde relatie, een andere termijn onder dezelfde requestId is een conflict.
+        var request = new SaveRelationDto { RequestId = Guid.NewGuid(), Name = "Replay", Customer = FreeCustomer(null, endOfMonth: true, percent: 1.5m, discountDays: 10) };
+        var first = await CreateAsync(request);
+        var again = await CreateAsync(request);
+        Assert.Equal((ServiceResultStatus.Created, ServiceResultStatus.Ok, first.Value.Id), (first.Status, again.Status, again.Value.Id));
+        Assert.Equal("30EM-1.5%10", again.Value.Customer!.PaymentCondition.Code);
+        request.Customer!.DiscountDays = 9;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(request)).Status);
+        Assert.Equal(1, await WithDbAsync(db => db.PaymentConditions.CountAsync()));
+
+        // Verouderde versie blijft een 409, ook met een vrije termijn.
+        var stale = From(first.Value);
+        stale.Customer = FreeCustomer(14);
+        stale.ExpectedVersion = first.Value.Version + 5;
+        Assert.Equal(ServiceResultStatus.Conflict, (await UpdateAsync(first.Value.Id, stale)).Status);
+    }
+
     [Fact]
     public async Task Guard_Rule_16_Refuses_A_Days_Mirror_That_Differs_From_The_Condition()
     {

@@ -158,6 +158,52 @@ public class RelationFinanceRulesTests
         else Assert.Contains(errorKey, errors.Keys);
     }
 
+    // Vrije termijn op een rol (relatieformulier): dagen leeg (= standaard) of geheel 0..365, korting beide of geen van beide,
+    // kortingsdagen niet langer dan de effectieve termijn. Spiegel van validateFreeTerms in lib/paymentCondition.ts.
+    [Theory]
+    [InlineData(null, 30, null, null, null)]
+    [InlineData(0, 0, null, null, null)]
+    [InlineData(365, 365, null, null, null)]
+    [InlineData(-1, -1, null, null, "customer.paymentTermsDays")]
+    [InlineData(366, 366, null, null, "customer.paymentTermsDays")]
+    [InlineData(30, 30, 2.0, 8, null)]
+    [InlineData(null, 30, 2.5, 30, null)]
+    [InlineData(30, 30, 2.0, null, "customer.discountDays")]
+    [InlineData(30, 30, null, 8, "customer.discountPercent")]
+    [InlineData(30, 30, 0.0, 8, "customer.discountPercent")]
+    [InlineData(30, 30, 100.0, 8, "customer.discountPercent")]
+    [InlineData(30, 30, 2.555, 8, "customer.discountPercent")]
+    [InlineData(30, 30, 2.0, 31, "customer.discountDays")]
+    [InlineData(null, 14, 2.0, 15, "customer.discountDays")]
+    public void Free_Terms_Validation(int? days, int effectiveDays, double? discount, int? discountDays, string errorKey)
+    {
+        var errors = new Dictionary<string, List<string>>();
+        PaymentConditionRules.ValidateTerms(days, effectiveDays, discount == null ? null : (decimal)discount.Value, discountDays, "customer", errors);
+        if (errorKey == null) Assert.Empty(errors);
+        else Assert.Equal(new[] { errorKey }, errors.Keys);
+    }
+
+    [Fact]
+    public void Automatic_Codes_And_Descriptions_Name_Days_Basis_And_Discount()
+    {
+        var cases = new[]
+        {
+            (new PaymentConditionRules.Terms(30, PaymentConditionBasis.InvoiceDate, null, null), "30D", "30 dagen na factuurdatum", "30 days after invoice date"),
+            (new PaymentConditionRules.Terms(1, PaymentConditionBasis.EndOfMonth, null, null), "1EM", "1 dag na einde maand", "1 day after end of month"),
+            (new PaymentConditionRules.Terms(30, PaymentConditionBasis.InvoiceDate, 2.00m, 8), "30D-2%8", "30 dagen na factuurdatum, 2% korting bij betaling binnen 8 dagen", "30 days after invoice date, 2% discount if paid within 8 days"),
+            (new PaymentConditionRules.Terms(60, PaymentConditionBasis.EndOfMonth, 2.5m, 1), "60EM-2.5%1", "60 dagen na einde maand, 2,5% korting bij betaling binnen 1 dag", "60 days after end of month, 2.5% discount if paid within 1 day"),
+        };
+        foreach (var (terms, code, nl, en) in cases)
+        {
+            Assert.Equal((code, nl, en), (PaymentConditionRules.DefaultCode(terms), PaymentConditionRules.DefaultDescriptionNl(terms), PaymentConditionRules.DefaultDescriptionEn(terms)));
+            Assert.True(PaymentConditionRules.IsCode(code));
+        }
+        // Langste mogelijke code past binnen 16 tekens.
+        var longest = PaymentConditionRules.DefaultCode(new PaymentConditionRules.Terms(365, PaymentConditionBasis.EndOfMonth, 99.99m, 365));
+        Assert.Equal("365EM-99.99%365", longest);
+        Assert.True(PaymentConditionRules.IsCode(longest));
+    }
+
     private static readonly DateOnly Today = new(2026, 10, 20);
 
     private static (RoleTermsRules.Terms Terms, Dictionary<string, List<string>> Errors) Terms(RoleTermsRules.Terms raw)

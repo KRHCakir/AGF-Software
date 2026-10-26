@@ -16,8 +16,6 @@ namespace AgfAdmin.Services
         public const string SimilarNamesCode = "similar-names";
         public const string RoleCustomer = "customer";
         public const string RoleVendor = "vendor";
-        public const int DefaultCustomerPaymentTermsDays = 30;
-        public const int DefaultVendorPaymentTermsDays = 30;
         public const string DefaultVendorCurrency = "EUR";
         public const string DefaultCustomerCurrency = "EUR";
 
@@ -126,6 +124,7 @@ namespace AgfAdmin.Services
             GlobalGapPortalUrl = (await _db.CompanySettings.AsNoTracking().OrderBy(c => c.Id).Select(c => c.GlobalGapPortalUrl).FirstOrDefaultAsync(cancellationToken)) ?? RelationRules.DefaultGlobalGapPortalUrl,
             PaymentMethods = Models.PaymentMethods.All.ToList(),
             PaymentConditionBases = PaymentConditionBasis.All.ToList(),
+            DefaultPaymentTermsDays = await DefaultPaymentTermsDaysAsync(cancellationToken),
             DeliveryTermKinds = Models.DeliveryTermKinds.All.ToList(),
             Incoterms = RoleTermsRules.Incoterms2020.ToList(),
             TradeConditions = TradeConditionKinds.All.ToList(),
@@ -359,7 +358,7 @@ namespace AgfAdmin.Services
             {
                 if (relation.Customer == null)
                 {
-                    relation.Customer = new Customer { Relation = relation, PaymentTermsDays = DefaultCustomerPaymentTermsDays, CreatedAt = DateTime.UtcNow };
+                    relation.Customer = new Customer { Relation = relation, PaymentTermsDays = await DefaultPaymentTermsDaysAsync(cancellationToken), CreatedAt = DateTime.UtcNow };
                     created = true;
                 }
             }
@@ -367,7 +366,7 @@ namespace AgfAdmin.Services
             {
                 if (relation.Vendor == null)
                 {
-                    relation.Vendor = new Vendor { Relation = relation, PaymentTermsDays = DefaultVendorPaymentTermsDays, DefaultCurrency = DefaultVendorCurrency, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+                    relation.Vendor = new Vendor { Relation = relation, PaymentTermsDays = await DefaultPaymentTermsDaysAsync(cancellationToken), DefaultCurrency = DefaultVendorCurrency, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
                     created = true;
                 }
             }
@@ -526,9 +525,14 @@ namespace AgfAdmin.Services
         public sealed record ChannelCommand(int? Id, string Kind, string Label, string Value);
         public sealed record ContactCommand(int? Id, string Name, string Department, string JobTitle, bool IsPrimary, bool IsActive, string Note, List<ChannelCommand> Channels);
         public sealed record GgnCommand(int? Id, string Ggn, string ProducerName, bool IsActive, DateOnly? CheckedOn, string CheckedBy, DateOnly? CertificateValidUntil, bool HasGgnLabel);
-        // Betalingsconditie: PaymentConditionId (gekozen of ongewijzigd) of LegacyDays (kale termijn -> resolver bij opslaan).
-        public sealed record CustomerRoleCommand(int? PaymentConditionId, int? LegacyDays, RoleTermsRules.Terms Terms, string Currency, RoleTermsRules.Credit Credit);
-        public sealed record VendorRoleCommand(int? PaymentConditionId, int? LegacyDays, string DefaultCurrency, RoleTermsRules.Terms Terms, List<GgnCommand> Ggns);
+        // Betalingsconditie: PaymentConditionId (gekozen of ongewijzigd), LegacyDays (kale termijn -> resolver bij opslaan) of FreeTerms
+        // (vrije termijn uit het formulier -> resolver met basis en korting; Days null = standaard uit de bedrijfsinstellingen).
+        // FreeTerms ontbreekt in de canonieke payload als het null is, zodat replays van opdrachten van vóór dit veld blijven kloppen.
+        public sealed record FreeTermsCommand(int? Days, bool EndOfMonth, decimal? DiscountPercent, int? DiscountDays);
+        public sealed record CustomerRoleCommand(int? PaymentConditionId, int? LegacyDays, RoleTermsRules.Terms Terms, string Currency, RoleTermsRules.Credit Credit,
+            [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FreeTermsCommand FreeTerms = null);
+        public sealed record VendorRoleCommand(int? PaymentConditionId, int? LegacyDays, string DefaultCurrency, RoleTermsRules.Terms Terms, List<GgnCommand> Ggns,
+            [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FreeTermsCommand FreeTerms = null);
         public sealed record BankAccountCommand(int? Id, string Iban, string OtherAccountNumber, string Bic, string AccountHolder, string Currency, bool IsDefault, bool IsActive);
         public sealed record RelationCommand(
             string SearchCode, string Name, string TradeName, string PreferredLanguage, string Website, string Email, string Phone, string VatNumber,
@@ -604,12 +608,12 @@ namespace AgfAdmin.Services
             if (request.Customer != null)
             {
                 var c = request.Customer;
-                var (conditionId, legacyDays) = await NormalizeConditionAsync(c.PaymentConditionId, c.PaymentTermsDays, existing?.Customer?.PaymentConditionId, existing?.Customer?.PaymentTermsDays, DefaultCustomerPaymentTermsDays, "customer", errors, cancellationToken);
+                var condition = await NormalizeConditionAsync(new RequestedTerms(c.PaymentConditionId, c.PaymentTermsDays, c.PaymentTermsEndOfMonth, c.DiscountPercent, c.DiscountDays), existing?.Customer?.PaymentCondition, existing?.Customer?.PaymentConditionId, existing?.Customer?.PaymentTermsDays, "customer", errors, cancellationToken);
                 var terms = RoleTermsRules.NormalizeTerms(new RoleTermsRules.Terms(c.PaymentMethod ?? existing?.Customer?.PaymentMethod, c.MandateReference, c.MandateSignedOn, c.DeliveryTermKind, c.Incoterm, c.IncotermPlace, c.DeliveryTermText, c.TradeConditions, c.TradeConditionsText), "customer", today, errors);
                 var currency = (Blank(c.Currency) ?? existing?.Customer?.Currency ?? DefaultCustomerCurrency).ToUpperInvariant();
                 if (!RoleTermsRules.IsCurrency(currency)) ValidationErrors.Add(errors, "customer.currency", "Valuta is een ISO-code van drie letters (bijvoorbeeld EUR).");
                 var credit = RoleTermsRules.NormalizeCredit(new RoleTermsRules.Credit(c.CreditLimit, c.IsInsured, c.Insurer, c.InsurerText, c.InsuredLimit, c.InsurerReference, c.InsuredUntil), "customer", errors);
-                customer = new CustomerRoleCommand(conditionId, legacyDays, terms, currency, credit);
+                customer = new CustomerRoleCommand(condition.ConditionId, condition.LegacyDays, terms, currency, credit, condition.FreeTerms);
             }
             else if (existing?.Customer != null)
             {
@@ -621,7 +625,7 @@ namespace AgfAdmin.Services
             if (request.Vendor != null)
             {
                 var v = request.Vendor;
-                var (conditionId, legacyDays) = await NormalizeConditionAsync(v.PaymentConditionId, v.PaymentTermsDays, existing?.Vendor?.PaymentConditionId, existing?.Vendor?.PaymentTermsDays, DefaultVendorPaymentTermsDays, "vendor", errors, cancellationToken);
+                var condition = await NormalizeConditionAsync(new RequestedTerms(v.PaymentConditionId, v.PaymentTermsDays, v.PaymentTermsEndOfMonth, v.DiscountPercent, v.DiscountDays), existing?.Vendor?.PaymentCondition, existing?.Vendor?.PaymentConditionId, existing?.Vendor?.PaymentTermsDays, "vendor", errors, cancellationToken);
                 var currency = (Blank(v.DefaultCurrency) ?? existing?.Vendor?.DefaultCurrency ?? DefaultVendorCurrency).ToUpperInvariant();
                 if (currency.Length != 3 || !currency.All(char.IsLetter)) ValidationErrors.Add(errors, "vendor.defaultCurrency", "Currency must be a three-letter ISO code.");
                 var terms = RoleTermsRules.NormalizeTerms(new RoleTermsRules.Terms(v.PaymentMethod ?? existing?.Vendor?.PaymentMethod, v.MandateReference, v.MandateSignedOn, v.DeliveryTermKind, v.Incoterm, v.IncotermPlace, v.DeliveryTermText, v.TradeConditions, v.TradeConditionsText), "vendor", today, errors);
@@ -647,7 +651,7 @@ namespace AgfAdmin.Services
                     if (item.CheckedOn == null && checkedBy != null) ValidationErrors.Add(errors, $"vendor.ggns[{i}].checkedOn", "Vul in wanneer het certificaat is gecontroleerd.");
                     ggns.Add(new GgnCommand(item.Id, ggn, producer, item.IsActive, item.CheckedOn, checkedBy, item.CertificateValidUntil, item.HasGgnLabel));
                 }
-                vendor = new VendorRoleCommand(conditionId, legacyDays, currency, terms, ggns);
+                vendor = new VendorRoleCommand(condition.ConditionId, condition.LegacyDays, currency, terms, ggns, condition.FreeTerms);
             }
             else if (existing?.Vendor != null)
             {
@@ -673,12 +677,52 @@ namespace AgfAdmin.Services
         private static RoleTermsRules.Terms TermsOf(IRoleTerms r) =>
             new(r.PaymentMethod, r.MandateReference, r.MandateSignedOn, r.DeliveryTermKind, r.Incoterm, r.IncotermPlace, r.DeliveryTermText, r.TradeConditions, r.TradeConditionsText);
 
-        // Betalingsconditie van een rol: een gekozen id (moet bestaan; een inactieve conditie alleen als die al gekoppeld was), anders een
-        // legacy-termijn in dagen (alleen als die afwijkt van de huidige termijn, zodat een ongewijzigde kaart haar conditie houdt), anders
-        // de huidige conditie, en voor een nieuwe rol de standaardtermijn.
-        private async Task<(int? ConditionId, int? LegacyDays)> NormalizeConditionAsync(int? requestedId, int? requestedDays, int? currentId, int? currentDays, int defaultDays, string role, Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
+        // Standaard betalingstermijn als een vrije termijn leeg blijft of een nieuwe rol niets meekrijgt: de bedrijfsinstelling van de
+        // inkoopfacturen (er is geen aparte verkoopinstelling), zonder instellingenrij de standaard van PurchaseInvoiceRules.
+        private int? _defaultPaymentTermsDays;
+
+        private async Task<int> DefaultPaymentTermsDaysAsync(CancellationToken cancellationToken) =>
+            _defaultPaymentTermsDays ??= await _db.CompanySettings.AsNoTracking().OrderBy(c => c.Id).Select(c => (int?)c.PurchaseInvoiceDefaultPaymentTermsDays).FirstOrDefaultAsync(cancellationToken)
+                ?? PurchaseInvoiceRules.DefaultPaymentTermsDays;
+
+        private sealed record RequestedTerms(int? ConditionId, int? Days, bool? EndOfMonth, decimal? DiscountPercent, int? DiscountDays)
         {
-            if (requestedId != null)
+            // Vrije termijn zodra einde maand of een kortingsveld is meegestuurd (het relatieformulier stuurt einde maand altijd mee).
+            public bool IsFree => EndOfMonth != null || DiscountPercent != null || DiscountDays != null;
+        }
+
+        private sealed record RoleCondition(int? ConditionId, int? LegacyDays, FreeTermsCommand FreeTerms);
+
+        // Betalingsconditie van een rol:
+        //   - vrije termijn: gevalideerd (dagen leeg of 0..365, korting beide of geen van beide); gelijk aan de huidige conditie -> die
+        //     blijft (ook als zij inactief is: een ongewijzigde kaart verandert nooit stil van conditie), anders zoekt/maakt de resolver;
+        //   - een gekozen id (moet bestaan; een inactieve conditie alleen als die al gekoppeld was);
+        //   - een legacy-termijn in dagen (alleen als die afwijkt van de huidige termijn, zodat een ongewijzigde kaart haar conditie houdt);
+        //   - anders de huidige conditie, en voor een nieuwe rol de standaardtermijn.
+        private async Task<RoleCondition> NormalizeConditionAsync(RequestedTerms requested, PaymentCondition current, int? currentId, int? currentDays, string role, Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
+        {
+            if (requested.IsFree)
+            {
+                if (requested.ConditionId != null)
+                {
+                    ValidationErrors.Add(errors, $"{role}.paymentConditionId", "Stuur een vrije betalingstermijn of een paymentConditionId, niet allebei.");
+                    return new RoleCondition(null, null, null);
+                }
+                var effectiveDays = requested.Days ?? await DefaultPaymentTermsDaysAsync(cancellationToken);
+                var termErrors = new Dictionary<string, List<string>>();
+                PaymentConditionRules.ValidateTerms(requested.Days, effectiveDays, requested.DiscountPercent, requested.DiscountDays, role, termErrors);
+                if (termErrors.Count > 0)
+                {
+                    foreach (var (key, messages) in termErrors) foreach (var message in messages) ValidationErrors.Add(errors, key, message);
+                    return new RoleCondition(null, null, null);
+                }
+                var endOfMonth = requested.EndOfMonth ?? false;
+                var terms = new PaymentConditionRules.Terms(effectiveDays, endOfMonth ? PaymentConditionBasis.EndOfMonth : PaymentConditionBasis.InvoiceDate, requested.DiscountPercent, requested.DiscountDays);
+                return current != null && terms.Matches(current)
+                    ? new RoleCondition(current.Id, null, null)
+                    : new RoleCondition(null, null, new FreeTermsCommand(requested.Days, endOfMonth, requested.DiscountPercent, requested.DiscountDays));
+            }
+            if (requested.ConditionId is { } requestedId)
             {
                 var condition = await _db.PaymentConditions.AsNoTracking().Where(p => p.Id == requestedId).Select(p => new { p.Id, p.IsActive }).SingleOrDefaultAsync(cancellationToken);
                 if (condition == null)
@@ -689,32 +733,39 @@ namespace AgfAdmin.Services
                 {
                     ValidationErrors.Add(errors, $"{role}.paymentConditionId", "Deze betalingsconditie is inactief en kan niet opnieuw worden gekozen.");
                 }
-                return (requestedId, null);
+                return new RoleCondition(requestedId, null, null);
             }
-            if (requestedDays != null)
+            if (requested.Days is { } requestedDays)
             {
                 if (requestedDays < PaymentConditionRules.MinDays || requestedDays > PaymentConditionRules.MaxDays)
                 {
                     ValidationErrors.Add(errors, $"{role}.paymentTermsDays", "Payment terms must be between 0 and 365 days.");
-                    return (null, null);
+                    return new RoleCondition(null, null, null);
                 }
-                return currentId != null && currentDays == requestedDays ? (currentId, null) : (null, requestedDays);
+                return currentId != null && currentDays == requestedDays ? new RoleCondition(currentId, null, null) : new RoleCondition(null, requestedDays, null);
             }
-            return currentId != null ? (currentId, null) : (null, defaultDays);
+            return currentId != null ? new RoleCondition(currentId, null, null) : new RoleCondition(null, await DefaultPaymentTermsDaysAsync(cancellationToken), null);
         }
 
-        // Condities die bij het toepassen aan de rollen worden gekoppeld (een legacy-termijn wordt hier via de resolver opgezocht of aangemaakt).
+        // Condities die bij het toepassen aan de rollen worden gekoppeld (een legacy- of vrije termijn wordt hier via de resolver opgezocht of aangemaakt).
         private sealed record RoleConditions(PaymentCondition Customer, PaymentCondition Vendor);
 
         private async Task<RoleConditions> ResolveConditionsAsync(RelationCommand command, CancellationToken cancellationToken)
         {
-            async Task<PaymentCondition> Resolve(int? id, int? days) =>
-                id != null ? await _db.PaymentConditions.SingleAsync(p => p.Id == id, cancellationToken)
-                : days != null ? await PaymentConditionResolver.ForDaysAsync(_db, days.Value, cancellationToken)
-                : null;
+            async Task<PaymentCondition> Resolve(int? id, int? days, FreeTermsCommand free)
+            {
+                if (id != null) return await _db.PaymentConditions.SingleAsync(p => p.Id == id, cancellationToken);
+                if (free != null)
+                {
+                    var terms = new PaymentConditionRules.Terms(free.Days ?? await DefaultPaymentTermsDaysAsync(cancellationToken),
+                        free.EndOfMonth ? PaymentConditionBasis.EndOfMonth : PaymentConditionBasis.InvoiceDate, free.DiscountPercent, free.DiscountDays);
+                    return await PaymentConditionResolver.ForTermsAsync(_db, terms, cancellationToken);
+                }
+                return days != null ? await PaymentConditionResolver.ForDaysAsync(_db, days.Value, cancellationToken) : null;
+            }
             return new RoleConditions(
-                command.Customer == null ? null : await Resolve(command.Customer.PaymentConditionId, command.Customer.LegacyDays),
-                command.Vendor == null ? null : await Resolve(command.Vendor.PaymentConditionId, command.Vendor.LegacyDays));
+                command.Customer == null ? null : await Resolve(command.Customer.PaymentConditionId, command.Customer.LegacyDays, command.Customer.FreeTerms),
+                command.Vendor == null ? null : await Resolve(command.Vendor.PaymentConditionId, command.Vendor.LegacyDays, command.Vendor.FreeTerms));
         }
 
         // Nieuw of gewijzigd e-mailadres: strikte vorm (fout), bekende tikfout (waarschuwing met suggestie), domein voor de MX-controle.
@@ -1210,9 +1261,9 @@ namespace AgfAdmin.Services
                     warnings.Add(new RelationWarningDto { Code = WarningInsuranceGap, Field = "customer.insuredLimit", Message = $"De verzekerde limiet ligt EUR {CreditExposureService.Amount(gap)} onder de interne kredietlimiet." });
             }
             if (r.Customer?.PaymentCondition is { IsActive: false })
-                warnings.Add(new RelationWarningDto { Code = WarningPaymentConditionInactive, Field = "customer.paymentConditionId", Message = "De betalingsconditie van de klantrol is inactief; kies bij gelegenheid een actieve conditie." });
+                warnings.Add(new RelationWarningDto { Code = WarningPaymentConditionInactive, Field = "customer.paymentConditionId", Message = "De betalingsconditie van de klantrol is in de instellingen inactief gezet; activeer haar daar of wijzig de betalingstermijn." });
             if (r.Vendor?.PaymentCondition is { IsActive: false })
-                warnings.Add(new RelationWarningDto { Code = WarningPaymentConditionInactive, Field = "vendor.paymentConditionId", Message = "De betalingsconditie van de leveranciersrol is inactief; kies bij gelegenheid een actieve conditie." });
+                warnings.Add(new RelationWarningDto { Code = WarningPaymentConditionInactive, Field = "vendor.paymentConditionId", Message = "De betalingsconditie van de leveranciersrol is in de instellingen inactief gezet; activeer haar daar of wijzig de betalingstermijn." });
             return warnings;
         }
 
@@ -1274,7 +1325,8 @@ namespace AgfAdmin.Services
                 Customer = r.Customer == null ? null : new CustomerRoleDto
                 {
                     CustomerId = r.Customer.Id, PaymentConditionId = r.Customer.PaymentConditionId, PaymentCondition = ToSummary(r.Customer.PaymentCondition),
-                    PaymentTermsDays = r.Customer.PaymentTermsDays, PaymentMethod = r.Customer.PaymentMethod, MandateReference = r.Customer.MandateReference,
+                    PaymentTermsDays = r.Customer.PaymentTermsDays, PaymentTermsEndOfMonth = r.Customer.PaymentCondition?.Basis == PaymentConditionBasis.EndOfMonth,
+                    DiscountPercent = r.Customer.PaymentCondition?.DiscountPercent, DiscountDays = r.Customer.PaymentCondition?.DiscountDays, PaymentMethod = r.Customer.PaymentMethod, MandateReference = r.Customer.MandateReference,
                     MandateSignedOn = r.Customer.MandateSignedOn, Currency = r.Customer.Currency, DeliveryTermKind = r.Customer.DeliveryTermKind, Incoterm = r.Customer.Incoterm,
                     IncotermPlace = r.Customer.IncotermPlace, DeliveryTermText = r.Customer.DeliveryTermText, TradeConditions = r.Customer.TradeConditions,
                     TradeConditionsText = r.Customer.TradeConditionsText, CreditLimit = r.Customer.CreditLimit, IsInsured = r.Customer.IsInsured, Insurer = r.Customer.Insurer,
@@ -1283,7 +1335,8 @@ namespace AgfAdmin.Services
                 Vendor = r.Vendor == null ? null : new VendorRoleDto
                 {
                     VendorId = r.Vendor.Id, PaymentConditionId = r.Vendor.PaymentConditionId, PaymentCondition = ToSummary(r.Vendor.PaymentCondition),
-                    PaymentTermsDays = r.Vendor.PaymentTermsDays, DefaultCurrency = r.Vendor.DefaultCurrency, PaymentMethod = r.Vendor.PaymentMethod,
+                    PaymentTermsDays = r.Vendor.PaymentTermsDays, PaymentTermsEndOfMonth = r.Vendor.PaymentCondition?.Basis == PaymentConditionBasis.EndOfMonth,
+                    DiscountPercent = r.Vendor.PaymentCondition?.DiscountPercent, DiscountDays = r.Vendor.PaymentCondition?.DiscountDays, DefaultCurrency = r.Vendor.DefaultCurrency, PaymentMethod = r.Vendor.PaymentMethod,
                     MandateReference = r.Vendor.MandateReference, MandateSignedOn = r.Vendor.MandateSignedOn, DeliveryTermKind = r.Vendor.DeliveryTermKind, Incoterm = r.Vendor.Incoterm,
                     IncotermPlace = r.Vendor.IncotermPlace, DeliveryTermText = r.Vendor.DeliveryTermText, TradeConditions = r.Vendor.TradeConditions, TradeConditionsText = r.Vendor.TradeConditionsText,
                     Ggns = r.Vendor.Ggns.OrderBy(g => g.SortOrder).ThenBy(g => g.Id).Select(g => new VendorGgnDto

@@ -69,4 +69,22 @@ public class RelationFinanceControllerTests : IDisposable
         Assert.Equal("Confirmed", Assert.IsType<RelationDto>(ok.Value).BankAccounts[0].ConfirmationStatus);
         Assert.IsType<BadRequestObjectResult>(await Relations(r => r.UpdateSettings(new RelationSettingsDto { GlobalGapPortalUrl = "ftp://x" })));
     }
+
+    [Fact]
+    public async Task Free_Terms_Map_To_400_With_Field_Keys_And_201_With_Days_Basis_And_Discount()
+    {
+        var invalid = Assert.IsType<BadRequestObjectResult>(await Relations(r => r.Create(new SaveRelationDto
+        {
+            RequestId = Guid.NewGuid(), Name = "Vrij", Vendor = new SaveVendorRoleDto { PaymentTermsDays = 400, PaymentTermsEndOfMonth = false, DiscountPercent = 2m }
+        })));
+        var json = System.Text.Json.JsonSerializer.Serialize(invalid.Value);
+        Assert.Contains("vendor.paymentTermsDays", json);
+        Assert.Contains("vendor.discountDays", json);
+        var created = Assert.IsType<CreatedAtActionResult>(await Relations(r => r.Create(new SaveRelationDto
+        {
+            RequestId = Guid.NewGuid(), Name = "Vrij", Vendor = new SaveVendorRoleDto { PaymentTermsDays = 60, PaymentTermsEndOfMonth = true, DiscountPercent = 2m, DiscountDays = 10 }
+        })));
+        var vendor = Assert.IsType<RelationDto>(created.Value).Vendor!;
+        Assert.Equal((60, true, 2m, 10, "60EM-2%10"), (vendor.PaymentTermsDays, vendor.PaymentTermsEndOfMonth, vendor.DiscountPercent!.Value, vendor.DiscountDays!.Value, vendor.PaymentCondition.Code));
+    }
 }
