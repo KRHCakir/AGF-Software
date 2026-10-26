@@ -4,7 +4,7 @@ import { FieldErrors, addError, decimalErrorKey } from '../supply/messages';
 
 type Translate = (key: string, variables?: Record<string, string>) => string;
 
-const DECIMAL_CODES: readonly DecimalError[] = ['empty', 'invalid', 'not_positive', 'too_many_decimals', 'too_large'];
+const DECIMAL_CODES: readonly DecimalError[] = ['empty', 'invalid', 'separator', 'not_positive', 'negative', 'too_many_decimals', 'too_large'];
 
 const MAX_LENGTHS: Record<string, number> = {
     customerReference: MAX_CUSTOMER_REFERENCE_LENGTH,

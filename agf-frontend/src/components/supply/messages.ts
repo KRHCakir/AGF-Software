@@ -6,7 +6,9 @@ export function decimalErrorKey(error: DecimalError): string {
     switch (error) {
         case 'empty': return 'supply_error_required';
         case 'invalid': return 'supply_error_decimal_invalid';
-        case 'not_positive': return 'supply_error_decimal_not_positive';
+        case 'separator': return 'supply_error_decimal_separator';
+        case 'not_positive':
+        case 'negative': return 'supply_error_decimal_not_positive';
         case 'too_many_decimals': return 'supply_error_decimal_too_many';
         default: return 'supply_error_decimal_too_large';
     }

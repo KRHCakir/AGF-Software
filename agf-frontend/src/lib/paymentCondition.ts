@@ -4,6 +4,8 @@
 // (15-02-2028, 30 dagen -> 29-02-2028 + 30 = 30-03-2028). Kortingsdatum: altijd factuurdatum + kortingsdagen.
 // Kalenderdagen op YYYY-MM-DD in UTC, zodat zomertijd nooit een dag verschuift.
 
+import { parseLocaleDecimal } from './decimal.ts';
+
 export const PAYMENT_CONDITION_BASES = ['InvoiceDate', 'EndOfMonth'] as const;
 export type PaymentConditionBasis = (typeof PAYMENT_CONDITION_BASES)[number];
 
@@ -81,10 +83,10 @@ export function emptyConditionDraft(): PaymentConditionDraft {
 
 const integer = (value: string): number | null => (/^\d{1,4}$/.test(value.trim()) ? Number(value.trim()) : null);
 
-// Percentage met komma of punt, hooguit 2 decimalen (meer decimalen = ongeldig, nooit afronden).
+// Percentage in de notatie van de schermtaal, hooguit 2 decimalen (meer decimalen = ongeldig, nooit afronden).
 function percent(value: string): number | null {
-    const match = /^(\d{1,2})(?:[.,](\d{1,2}))?$/.exec(value.trim());
-    return match ? Number(match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`) : null;
+    const parsed = parseLocaleDecimal(value, undefined, { maxDecimals: 2, maxDigits: 2, allowZero: true });
+    return parsed.ok ? parsed.value : null;
 }
 
 export function validateConditionDraft(draft: PaymentConditionDraft): { ok: true; value: PaymentConditionValues } | { ok: false; errors: ConditionRuleError[] } {
@@ -126,7 +128,7 @@ export function validateConditionDraft(draft: PaymentConditionDraft): { ok: true
 // ---- vrije termijn op een rol (relatieformulier), spiegel van PaymentConditionRules.ValidateTerms ----
 //   - dagen leeg = standaard uit de bedrijfsinstellingen (placeholder), anders een geheel getal 0..365;
 //   - einde maand aan = basis EndOfMonth;
-//   - korting optioneel: percentage (> 0, max 99,99, hooguit 2 decimalen, komma of punt) en kortingsdagen (0..effectieve termijn)
+//   - korting optioneel: percentage (> 0, max 99,99, hooguit 2 decimalen, notatie van de schermtaal) en kortingsdagen (0..effectieve termijn)
 //     beide of geen van beide; de fout staat bij het lege veld. Geen korting = beide leeg, nooit automatisch.
 
 export interface FreeTermsInput {

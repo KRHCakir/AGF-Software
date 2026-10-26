@@ -42,8 +42,9 @@ describe('payment condition form', () => {
         assert.deepEqual(errors({ discountPercent: '2' }), ['discountPercent:discount_pair']);
         assert.deepEqual(errors({ discountPercent: '0', discountDays: '5' }), ['discountPercent:discount_percent']);
         assert.deepEqual(errors({ discountPercent: '1.234', discountDays: '5' }), ['discountPercent:discount_percent']);
+        assert.deepEqual(errors({ discountPercent: '2.5', discountDays: '5' }), ['discountPercent:discount_percent'], 'a dot is never a decimal separator in nl');
         assert.deepEqual(errors({ discountPercent: '100', discountDays: '5' }), ['discountPercent:discount_percent']);
-        assert.deepEqual(errors({ discountPercent: '99.99', discountDays: '31' }), ['discountDays:discount_days']);
+        assert.deepEqual(errors({ discountPercent: '99,99', discountDays: '31' }), ['discountDays:discount_days']);
         assert.deepEqual(errors({ code: '', descriptionNl: ' ' }), ['code:required', 'descriptionNl:required']);
     });
 });

@@ -125,7 +125,7 @@ describe('DirectTradeShipmentPanel through SalesOrderDetail', () => {
     test('lost response: after refresh the allocation is shipped, the frozen shipment stays replay-only and the identical replay gets 200', async () => {
         await openAndSelect(orderWith(3, [allocation(21, 'Active')]));
         await act(async () => {
-            setValue(field('dt-ship-4-kg-21'), '81.4');
+            setValue(field('dt-ship-4-kg-21'), '81,4');
             setValue(field('dt-ship-4-date'), '2026-10-19');
         });
         nextPost = async () => { throw new TypeError('network down'); };
@@ -156,7 +156,7 @@ describe('DirectTradeShipmentPanel through SalesOrderDetail', () => {
 
     test('a 409 keeps the panel, offers reload only and clears the command', async () => {
         await openAndSelect(orderWith(3, [allocation(21, 'Active')]));
-        await act(async () => { setValue(field('dt-ship-4-kg-21'), '81.4'); setValue(field('dt-ship-4-date'), '2026-10-19'); });
+        await act(async () => { setValue(field('dt-ship-4-kg-21'), '81,4'); setValue(field('dt-ship-4-date'), '2026-10-19'); });
         nextPost = async () => json(409, { message: 'Only whole allocations can be shipped.' });
         await submitShipment();
         await mounted.waitFor(() => (mounted.hasText('sales_conflict') ? true : null), 'conflict');
