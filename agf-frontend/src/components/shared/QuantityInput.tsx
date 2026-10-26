@@ -7,6 +7,7 @@ import { QuantityInputMode, palletTotal } from '../../lib/palletInput';
 import { unitLabelKey } from '../../lib/units';
 import type { PackageUnit } from '../../types/availability';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
+import NumberEcho from './NumberEcho';
 
 // Hoeveelheid per regel: gewone invoer in verpakkingen, of per pallet ("9 pallets × 120 box = 1.080 box").
 // Het totaal in verpakkingen blijft de bron; de verhouding wordt meegestuurd zodat de regel herkenbaar blijft.
@@ -55,6 +56,7 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
                     <label htmlFor={`${totalKey}-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
                     <input {...fieldProps(totalKey, errors(totalKey))} inputMode="decimal" value={line.quantity} disabled={locked}
                         onChange={(event) => onChange('quantity', event.target.value)} className={inputClass} />
+                    <NumberEcho value={line.quantity} unit={unit} testId={`${totalKey}-echo`} />
                     <FieldError id={totalKey} messages={errors(totalKey)} />
                 </>
             ) : (

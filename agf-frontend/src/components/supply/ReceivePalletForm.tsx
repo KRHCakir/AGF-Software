@@ -28,6 +28,7 @@ import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
 import GgnBadge from '../shared/GgnBadge';
+import NumberEcho from '../shared/NumberEcho';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
@@ -662,6 +663,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <label htmlFor={`${key('quantity')}-input`} className="text-xs font-medium text-gray-700">{t('supply_quantity')} *</label>
                                     <input {...fieldProps(key('quantity'), e(key('quantity')))} value={draft.quantity} inputMode="decimal" disabled={!editable}
                                         onChange={(event) => editLine(id, 'quantity', event.target.value)} className={inputClass} />
+                                    <NumberEcho value={draft.quantity} unit={entry.line.expectedUnit === null ? undefined : t(unitLabelKey(entry.line.expectedUnit)).toLowerCase()} testId={`${key('quantity')}-echo`} />
                                     <FieldError id={key('quantity')} messages={e(key('quantity'))} />
                                 </div>
                                 <div>
@@ -707,6 +709,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                             <label htmlFor={`${key('netWeightKg')}-input`} className="text-xs font-medium text-gray-700">{t('supply_actual_net_kg')} *</label>
                                             <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} value={draft.netKg} inputMode="decimal" disabled={!editable}
                                                 onChange={(event) => editLine(id, 'netKg', event.target.value)} className={inputClass} />
+                                            <NumberEcho value={draft.netKg} unit="kg" testId={`${key('netWeightKg')}-echo`} />
                                             <span className="block text-xs text-gray-500">{t('supply_actual_net_kg_hint')}</span>
                                             <FieldError id={key('netWeightKg')} messages={e(key('netWeightKg'))} />
                                         </div>
