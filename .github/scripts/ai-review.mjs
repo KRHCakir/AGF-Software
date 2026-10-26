@@ -36,7 +36,12 @@ const aiName = env('AI_NAME')
 const baseUrl = env('AI_BASE_URL').replace(/\/+$/, '')
 const model = env('AI_MODEL')
 const apiKey = env('AI_API_KEY')
-const maxDiffChars = Number(env('MAX_DIFF_CHARS', '60000'))
+const rawMaxDiffChars = env('MAX_DIFF_CHARS', '60000')
+const maxDiffChars = Number(rawMaxDiffChars)
+if (!Number.isSafeInteger(maxDiffChars) || maxDiffChars <= 0) {
+  console.error('::error::MAX_DIFF_CHARS must be a positive safe integer.')
+  process.exit(2)
+}
 const outputPath = env('REVIEW_OUTPUT', 'review-result.json')
 const githubApi = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/+$/, '')
 
@@ -125,8 +130,13 @@ function renderComment(result, truncated) {
 }
 
 async function upsertComment(body) {
-  const comments = await gh(`/repos/${repo}/issues/${pr}/comments?per_page=100`)
-  const existing = comments.find((c) => typeof c.body === 'string' && c.body.includes(marker))
+  let existing
+  for (let page = 1; ; page++) {
+    const comments = await gh(`/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`)
+    existing = comments.find((c) => typeof c.body === 'string' && c.body.includes(marker))
+    if (existing || comments.length < 100) break
+  }
+
   if (existing) {
     await gh(`/repos/${repo}/issues/comments/${existing.id}`, { method: 'PATCH', body: { body } })
   } else {
