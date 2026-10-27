@@ -76,4 +76,17 @@ describe('QuantityInput', () => {
         assert.deepEqual([input('palletCount')!.value, input('packagesPerPallet')!.value, input('loosePackages')!.value], ['', '120', '']);
         assert.equal(shown('l.quantity-kg'), null);
     });
+
+    test('per pallet emptied, then a retyped total: back to per pallet refills the default and still clears the old split', async () => {
+        await render({ defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 });
+        await press('l.per-pallet');
+        await type('palletCount', '3');
+        await type('loosePackages', '15');
+        await type('packagesPerPallet', '');
+        await press('l.plain-quantity');
+        await type('quantity', '400');
+        await press('l.per-pallet');
+        assert.deepEqual([input('palletCount')!.value, input('packagesPerPallet')!.value, input('loosePackages')!.value], ['', '120', '']);
+        assert.notEqual(shown('l.pallet-calculation'), '3 pallets × 120 colli + 15 losse colli = 375 colli');
+    });
 });
