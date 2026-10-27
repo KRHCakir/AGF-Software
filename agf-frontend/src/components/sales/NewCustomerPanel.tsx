@@ -209,7 +209,6 @@ export default function NewCustomerPanel({ customers, onCreated, onChooseExistin
             {pending === null && (
                 <div className="flex items-center gap-3">
                     <button type="button" className={primaryButtonClass} disabled={locked} onClick={() => void submit()}>{submitting ? t('sales_customer_saving') : t('sales_customer_save')}</button>
-                    <span className="text-xs text-gray-600">{t('sales_save_footer')}</span>
                 </div>
             )}
         </section>

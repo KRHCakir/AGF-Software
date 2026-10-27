@@ -173,14 +173,12 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
                     <label htmlFor="defaultGrossKgPerPackage-input" className="text-xs font-medium text-gray-700">{t('articles_field_gross_kg', { unit })}</label>
                     <input {...fieldProps('defaultGrossKgPerPackage', e('defaultGrossKgPerPackage'))} inputMode="decimal" value={draft.defaultGrossKgPerPackage} disabled={submitting}
                         onChange={(event) => update({ defaultGrossKgPerPackage: event.target.value })} className={inputClass} />
-                    <span className="block text-xs text-gray-500">{t('articles_hint_gross')}</span>
                     <FieldError id="defaultGrossKgPerPackage" messages={e('defaultGrossKgPerPackage')} />
                 </div>
                 <div>
                     <label htmlFor="defaultPackagesPerPallet-input" className="text-xs font-medium text-gray-700">{t('articles_field_cpp', { unit })}</label>
                     <input {...fieldProps('defaultPackagesPerPallet', e('defaultPackagesPerPallet'))} inputMode="decimal" value={draft.defaultPackagesPerPallet} disabled={submitting}
                         onChange={(event) => update({ defaultPackagesPerPallet: event.target.value })} className={inputClass} />
-                    <span className="block text-xs text-gray-500">{t('articles_hint_cpp')}</span>
                     <FieldError id="defaultPackagesPerPallet" messages={e('defaultPackagesPerPallet')} />
                 </div>
             </fieldset>
@@ -227,8 +225,6 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
                                 <GoodsCodeLookup system={draft.goodsCodeSystem} onSystemChange={(system) => update({ goodsCodeSystem: system })} onPick={pickGoodsCode} onManual={enterGoodsCodeManually} disabled={submitting} />
                             </div>
                         )}
-                        {/* GGN is geen artikelstandaard: leveranciers beheren hun GGN's in Relaties; bij ontvangst wordt per partij gekozen. */}
-                        <p className="col-span-2 text-xs text-gray-600 md:col-span-4">{t('articles_ggn_moved')}</p>
                         <div className="col-span-2 md:col-span-4">
                             <label htmlFor="notes-input" className="text-xs font-medium text-gray-700">{t('articles_field_notes')}</label>
                             <textarea {...fieldProps('notes', e('notes'))} rows={2} value={draft.notes} maxLength={500} disabled={submitting} onChange={(event) => update({ notes: event.target.value })} className={inputClass} />

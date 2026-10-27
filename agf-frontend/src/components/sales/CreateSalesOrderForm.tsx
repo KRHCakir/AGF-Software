@@ -259,7 +259,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
             {error && pending === null && <ErrorNotice error={error} />}
             <FieldError id="actorReference" messages={e('actorReference')} />
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="col-span-2">
                     <div className="flex items-center justify-between gap-2">
                         <label htmlFor="customerId-input" className="text-xs font-medium text-gray-700">{t('sales_customer')} *</label>
@@ -300,7 +300,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         onChange={(event) => updateHeader('customerReference', event.target.value)} className={inputClass} />
                     <FieldError id="customerReference" messages={e('customerReference')} />
                 </div>
-                <div className="col-span-4">
+                <div className="col-span-2 md:col-span-4">
                     <label htmlFor="internalNote-input" className="text-xs font-medium text-gray-700">{t('internal_note_label')}</label>
                     <input {...fieldProps('internalNote', e('internalNote'))} value={draft.internalNote} disabled={locked} maxLength={1000} placeholder={t('internal_note_placeholder')}
                         onChange={(event) => updateHeader('internalNote', event.target.value)} className={inputClass} />
@@ -374,7 +374,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                     <button type="submit" className={primaryButtonClass} disabled={locked}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
-                    <span className="text-xs text-gray-600">{t('sales_save_footer')}</span>
                 </div>
             )}
         </form>

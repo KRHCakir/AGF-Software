@@ -17,6 +17,7 @@ import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/sup
 import { UnitBadge } from '../availability/QuantityCell';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import QuantityInput from '../shared/QuantityInput';
+import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass, lineTableClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown, palletErrorKey } from './messages';
@@ -258,7 +259,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     {commitment.lines.map((line) => (
                         <li key={line.id}>
                             {line.productName} · {line.productVariantName}: {formatQuantity(line.expectedQuantity, locale)} <UnitBadge unit={line.expectedUnit} />
-                            {line.palletCount !== null && line.packagesPerPallet !== null && <> ({t('pallet_breakdown', { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) })})</>}
+                            {palletBreakdownLabel(line, line.expectedUnit, t, locale) !== null && <> ({palletBreakdownLabel(line, line.expectedUnit, t, locale)})</>}
                             {line.lotNumber && <> · {t('supply_lot')} {line.lotNumber}</>}
                             {line.expectedNetWeightKg !== null && <> · {t('supply_declared')} {formatKg(line.expectedNetWeightKg, locale)}</>}
                         </li>
@@ -292,7 +293,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 ) : undefined} />
             )}
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
                     <select {...fieldProps('vendorId', e('vendorId'))} value={header.vendorId} disabled={locked}
@@ -317,7 +318,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             </div>
 
             {isDirect && (
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <div>
                         <label htmlFor="customerId-input" className="text-xs font-medium text-violet-900">{t('supply_customer')} *</label>
                         <select {...fieldProps('customerId', e('customerId'))} value={header.customerId} disabled={locked}
@@ -412,7 +413,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <button type="submit" className={primaryButtonClass} disabled={locked}>
                     {submitting ? t('supply_saving') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
                 </button>
-                <span className="text-xs text-gray-600">{t('supply_plan_footer')}</span>
             </div>
         </form>
     );
