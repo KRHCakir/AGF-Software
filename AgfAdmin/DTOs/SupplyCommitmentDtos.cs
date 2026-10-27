@@ -9,6 +9,12 @@ namespace AgfAdmin.DTOs
         public string Origin { get; set; }
         public string Destination { get; set; }
         public DateTimeOffset? ExpectedAt { get; set; }
+        // Inkooporder (optioneel): referentie van de leverancier, besteldatum (weggelaten = vandaag), kanaal en notitie.
+        // Weggelaten velden tellen bij een herhaling niet mee, zodat eerder bevroren opdrachten zonder deze velden gelijk blijven.
+        public string SupplierReference { get; set; }
+        public DateOnly? OrderedOn { get; set; }
+        public string OrderChannel { get; set; }
+        public string Note { get; set; }
         public List<CreateSupplyCommitmentLineDto> Lines { get; set; }
     }
 
@@ -51,6 +57,12 @@ namespace AgfAdmin.DTOs
         public string Destination { get; set; }
         public DateTime? ExpectedAt { get; set; }
         public DateTime CreatedAt { get; set; }
+        // Eigen inkoopordernummer (IO-2026-0001) en de bestelgegevens.
+        public string OrderNumber { get; set; }
+        public string SupplierReference { get; set; }
+        public DateOnly OrderedOn { get; set; }
+        public string OrderChannel { get; set; }
+        public string Note { get; set; }
         // Actieve GGN's van de leverancier (met producentnaam): invoerhulp bij ontvangst; de gekozen waarde staat op de inhoudsregel.
         public List<VendorGgnOptionDto> VendorGgns { get; set; } = new();
         public List<SupplyCommitmentLineDto> Lines { get; set; } = new();
