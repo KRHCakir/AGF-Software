@@ -6,6 +6,7 @@ import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { CHANNEL_LABEL_KEYS, DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
 
 const section = sectionClass;
@@ -13,8 +14,9 @@ const h3 = 'mb-2 text-sm font-semibold text-gray-900';
 
 // Detail van een inkooporder: kop met eigen nummer, regels (besteld/ontvangen/afgekeurd), ontvangsten met keuring en
 // "Afkeuren", facturen, afkeuringen en geschiedenis. `invoices` is de plek voor het koppelen van factuurnummers.
-export default function PurchaseOrderDetail({ order, invoices }: {
+export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     order: Order;
+    onChanged: (order: Order) => void;
     invoices?: React.ReactNode;
 }) {
     const { t, locale } = useTranslation();
@@ -59,6 +61,8 @@ export default function PurchaseOrderDetail({ order, invoices }: {
                     ))}
                 </ul>
             </section>
+
+            <ReceiptsSection order={order} onChanged={onChanged} />
 
             <section className={section} aria-labelledby="po-invoices">
                 <h3 id="po-invoices" className={h3}>{t('po_invoices')}</h3>

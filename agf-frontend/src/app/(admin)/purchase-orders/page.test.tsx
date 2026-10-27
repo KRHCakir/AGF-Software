@@ -3,12 +3,13 @@ import '../../../test/nextNavigationStub.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { act } from 'react';
-import { Mounted, click, json, setSelectValue, setValue, stubFetch } from '../../../test/reactHarness.ts';
+import { Mounted, click, json, setSelectValue, setValue, stubFetch, type Posted } from '../../../test/reactHarness.ts';
 import { navigate } from '../../../test/nextNavigationStub.ts';
 import type { PurchaseOrderDetail, PurchaseOrderListItem } from '../../../types/purchaseOrder';
 import PurchaseOrdersPage from './page';
 
-// Inkoopopdrachten: standaard open orders, zoeken op factuurnummer gaat naar de server en klikken opent het detail.
+// Inkoopopdrachten: zoeken op factuurnummer gaat naar de server, klikken opent het detail, en "Afkeuren" stuurt de
+// gekozen hoeveelheid met reden, besluit en medewerker; daarna tonen detail en lijst de afgekeurde hoeveelheid.
 
 const item = (overrides: Partial<PurchaseOrderListItem> = {}): PurchaseOrderListItem => ({
     id: 7, orderNumber: 'IO-2026-0007', vendorId: 3, vendorName: "Nature's Pride", supplierReference: 'NP-88123', orderedOn: '2026-10-27',
@@ -33,6 +34,7 @@ const detail = (overrides: Partial<PurchaseOrderDetail> = {}): PurchaseOrderDeta
 });
 
 let mounted: Mounted;
+let posted: Posted[];
 let listUrls: string[];
 let current: PurchaseOrderDetail;
 let listItems: PurchaseOrderListItem[];
@@ -46,14 +48,22 @@ describe('Purchase orders page', () => {
         listUrls = [];
         current = detail();
         listItems = [item()];
-        stubFetch({
+        posted = stubFetch({
             onGet: (url) => {
                 if (/\/incominginvoices\/vendors$/.test(url)) return json(200, [{ id: 3, name: "Nature's Pride" }]);
                 if (/\/purchase-orders\?/.test(url)) { listUrls.push(url); return json(200, { items: listItems, total: listItems.length, page: 1, pageSize: 50 }); }
                 if (/\/purchase-orders\/7$/.test(url)) return json(200, current);
                 return json(404, { message: `unexpected GET ${url}` });
             },
-            nextPost: async () => json(500, { message: 'no writes expected' }),
+            nextPost: async () => {
+                current = detail({
+                    rejectedQuantity: 48, rejectedNetWeightKg: 192, invoiceIndicator: 'CreditNoteExpected',
+                    rejections: [{ id: 1, reason: 'Quality', explanation: null, decision: 'ReturnToSupplier', actorReference: 'Jan', rejectedAt: '2026-10-27T12:00:00Z',
+                        lines: [{ palletContentLineId: 40, palletReference: 'P-000009', lotNumber: 'LOT-1', quantity: 48, unit: 'box', netWeightKg: 192, splitOff: true }] }],
+                });
+                listItems = [item({ rejectedQuantity: 48, invoiceIndicator: 'CreditNoteExpected' })];
+                return json(201, current);
+            },
         });
         mounted = new Mounted();
     });
@@ -82,5 +92,39 @@ describe('Purchase orders page', () => {
         assert.ok(mounted.hasText('NP-88123'));
         assert.ok(mounted.hasText('po_history_ordered'));
         assert.ok(mounted.hasText('F-4711'));
+    });
+
+    test('opens the order and rejects part of a received line with reason, decision and actor', async () => {
+        navigate('/purchase-orders');
+        await mounted.render(<PurchaseOrdersPage />);
+        const openButton = await mounted.waitFor(() => mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_open_order'), 'open button');
+        await click(openButton);
+        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent === 'IO-2026-0007', 'detail');
+
+        await click(mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_reject_line')!);
+        assert.equal(input('reject-40-quantity').value, '221');
+        assert.equal(input('reject-40-kg').value, '884');
+        await act(async () => { setValue(input('reject-40-quantity'), '48'); });
+        await mounted.waitFor(() => input('reject-40-kg').value === '192', 'proportional kg');
+
+        // Zonder reden wordt er niets verstuurd.
+        await click(mounted.button('po_reject_save')!);
+        assert.equal(posted.length, 0);
+        assert.ok(mounted.hasText('supply_error_required'));
+
+        await act(async () => { setSelectValue(select('reject-40-reason'), 'Quality'); });
+        await click(mounted.button('po_reject_save')!);
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        assert.match(posted[0].url, /\/purchase-orders\/7\/rejections$/);
+        const body = JSON.parse(posted[0].body);
+        assert.equal(body.reason, 'Quality');
+        assert.equal(body.decision, 'ReturnToSupplier');
+        assert.equal(body.actorReference, 'Jan');
+        assert.deepEqual(body.lines, [{ palletContentLineId: 40, expectedContentLineVersion: 3, quantity: 48, netWeightKg: 192 }]);
+
+        await mounted.waitFor(() => mounted.hasText('po_rejected_of'), 'rejected summary');
+        assert.ok(mounted.hasText('po_invoice_credit_note_expected'));
+        assert.equal(mounted.container.querySelector('form[aria-label="po_reject_title"]'), null);
+        await mounted.waitFor(() => listUrls.length >= 2, 'list reloaded');
     });
 });

@@ -89,6 +89,12 @@ function PurchaseOrdersWorkspace() {
         requestAnimationFrame(() => detailRef.current?.scrollIntoView?.({ block: 'start' }));
     }, [router, pathname, searchParams]);
 
+    // Na afkeuren of een factuurnummer: het detail is het antwoord van de server; de lijst haalt de nieuwe status en factuurnummers op.
+    const changed = (order: Order) => {
+        setDetail({ status: 'ready', data: order });
+        setReloadToken((n) => n + 1);
+    };
+
     const total = list.status === 'ready' ? list.data.total : 0;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -143,7 +149,7 @@ function PurchaseOrdersWorkspace() {
             <div ref={detailRef}>
                 {detail?.status === 'loading' && <LoadingRows rows={4} label={t('po_loading')} />}
                 {detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-                {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} />}
+                {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} onChanged={changed} />}
             </div>
         </div>
     );

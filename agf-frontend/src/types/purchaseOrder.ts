@@ -160,6 +160,15 @@ export interface PurchaseOrderInvoiceMatch {
     vendorName: string | null;
 }
 
+export interface RejectRequest {
+    requestId: string;
+    reason: string;
+    explanation: string | null;
+    decision: string;
+    actorReference: string;
+    lines: { palletContentLineId: number; expectedContentLineVersion: number; quantity: number; netWeightKg: number }[];
+}
+
 function isListItem(value: unknown): value is PurchaseOrderListItem {
     return isObject(value) && isNumber(value.id) && isString(value.orderNumber) && isNumber(value.vendorId) && isNullableString(value.vendorName)
         && isNullableString(value.supplierReference) && isString(value.orderedOn) && isNullableString(value.expectedAt) && isString(value.status)
