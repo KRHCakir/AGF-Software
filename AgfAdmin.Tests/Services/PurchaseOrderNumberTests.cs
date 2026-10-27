@@ -101,4 +101,26 @@ public class PurchaseOrderNumberTests : IDisposable
         Assert.True(operations.IndexOf(backfill) < operations.FindIndex(o => o is Microsoft.EntityFrameworkCore.Migrations.Operations.AddCheckConstraintOperation { Name: "CK_SupplyCommitments_OrderSequence_Positive" }));
     }
 
+    // Factuurnummers: de context vult de sleutel (getrimd, kleine letters) bij elke schrijver, en de unieke index op order + soort
+    // + sleutel weigert hetzelfde nummer met andere hoofdletters, ook buiten de service om.
+    [Fact]
+    public async Task InvoiceNumberKey_IsFilledForEveryWriter_AndUniqueWithoutCase()
+    {
+        var vendorId = await SeedVendorAsync();
+        int orderId;
+        await using (var db = _factory.CreateContext())
+        {
+            var order = Commitment(vendorId, DateTime.UtcNow);
+            db.SupplyCommitments.Add(order);
+            await db.SaveChangesAsync();
+            orderId = order.Id;
+            db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef { RequestId = Guid.NewGuid(), SupplyCommitmentId = orderId, Kind = "Invoice", InvoiceNumber = " F-1 " });
+            db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef { RequestId = Guid.NewGuid(), SupplyCommitmentId = orderId, Kind = "CreditNote", InvoiceNumber = "f-1" });
+            await db.SaveChangesAsync();
+            Assert.Equal(new[] { "f-1", "f-1" }, await db.SupplyCommitmentInvoiceRefs.OrderBy(r => r.Id).Select(r => r.InvoiceNumberKey).ToListAsync());
+        }
+        await using var duplicate = _factory.CreateContext();
+        duplicate.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef { RequestId = Guid.NewGuid(), SupplyCommitmentId = orderId, Kind = "Invoice", InvoiceNumber = "F-1" });
+        await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
+    }
 }
