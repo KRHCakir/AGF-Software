@@ -31,7 +31,7 @@ export default function InvoiceOrderNotice({ invoiceNumber, vendorId }: { invoic
             {orders.map((match, index) => (
                 <span key={match.id}>
                     {index > 0 && ', '}
-                    <Link href={`/purchase-orders?id=${match.id}`} className="font-mono font-semibold underline">{match.orderNumber}</Link>
+                    <Link href={`/purchase-orders?id=${match.id}`} className="whitespace-nowrap font-mono font-semibold underline">{match.orderNumber}</Link>
                 </span>
             ))}
         </p>
