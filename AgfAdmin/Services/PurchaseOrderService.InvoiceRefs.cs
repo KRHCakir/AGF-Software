@@ -86,6 +86,11 @@ namespace AgfAdmin.Services
             {
                 AddError(errors, "amountExclVat", "The amount may have at most 2 decimals and must fit in 16 digits.");
             }
+            // Factuurdatum is optioneel, maar mag niet in de toekomst liggen.
+            if (request.InvoiceDate != null && request.InvoiceDate.Value > DateOnly.FromDateTime(DateTime.UtcNow))
+            {
+                AddError(errors, "invoiceDate", "The invoice date cannot be in the future.");
+            }
             var actor = string.IsNullOrWhiteSpace(request.ActorReference) ? null : request.ActorReference.Trim();
             if (actor != null && actor.Length > PurchaseOrderRules.MaxActorLength)
             {
