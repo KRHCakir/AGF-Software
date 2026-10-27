@@ -6,9 +6,12 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import PurchaseOrderDetail from '../../../components/purchase/PurchaseOrderDetail';
 import PurchaseOrderList from '../../../components/purchase/PurchaseOrderList';
+import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
+import { HydratedGate, PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { PURCHASE_COMMANDS_STORAGE_KEY, isPurchaseCommand } from '../../../lib/pendingCommands';
 import { ORDER_STATUS_LABEL_KEYS, PURCHASE_ORDER_STATUSES } from '../../../lib/purchaseOrderRules';
 import { supplyShortcutHref } from '../../../lib/supplyShortcut';
 import { toApiError } from '../../../services/apiClient';
@@ -26,7 +29,12 @@ export default function PurchaseOrdersPage() {
     const { t } = useTranslation();
     return (
         <Suspense fallback={<LoadingRows label={t('po_loading')} />}>
-            <PurchaseOrdersWorkspace />
+            {/* Onafgeronde afkeuringen en factuurnummers per tabblad bewaard; formulieren lezen ze pas na het teruglezen. */}
+            <PendingCommandsProvider storageKey={PURCHASE_COMMANDS_STORAGE_KEY}>
+                <HydratedGate fallback={<LoadingRows label={t('po_loading')} />}>
+                    <PurchaseOrdersWorkspace />
+                </HydratedGate>
+            </PendingCommandsProvider>
         </Suspense>
     );
 }
@@ -52,6 +60,7 @@ function PurchaseOrdersWorkspace() {
     const [detail, setDetail] = useState<LoadState<Order> | null>(null);
     const detailRef = useRef<HTMLDivElement | null>(null);
     const searchWidened = useRef(query.trim() !== '');
+    const { commands } = usePendingCommands();
 
     const changeQuery = (value: string) => {
         setQuery(value);
@@ -97,6 +106,12 @@ function PurchaseOrdersWorkspace() {
         requestAnimationFrame(() => detailRef.current?.scrollIntoView?.({ block: 'start' }));
     }, [router, pathname, searchParams]);
 
+    // Na afkeuren of een factuurnummer: het detail is het antwoord van de server; de lijst haalt de nieuwe status en factuurnummers op.
+    const changed = (order: Order) => {
+        setDetail({ status: 'ready', data: order });
+        setReloadToken((n) => n + 1);
+    };
+
     const total = list.status === 'ready' ? list.data.total : 0;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -109,6 +124,8 @@ function PurchaseOrdersWorkspace() {
                     <Link href={supplyShortcutHref('plan')} className={primaryButtonClass}>+ {t('po_new')}</Link>
                 </div>
             </div>
+
+            <PendingCommandsBanner commands={commands} onGoTo={(command) => { if (isPurchaseCommand(command)) open(command.orderId); }} />
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="sm:col-span-2">
@@ -151,7 +168,7 @@ function PurchaseOrdersWorkspace() {
             <div ref={detailRef}>
                 {detail?.status === 'loading' && <LoadingRows rows={4} label={t('po_loading')} />}
                 {detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-                {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} />}
+                {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} onChanged={changed} />}
             </div>
         </div>
     );
