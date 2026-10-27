@@ -26,6 +26,7 @@ function AdminLayoutContent({
                     <NavLink href="/dashboard" label={t('home')} />
                     <NavLink href="/sales-orders" label={t('sales')} />
                     <NavLink href="/purchase-invoices" label={t('purchase')} />
+                    <NavLink href="/purchase-orders" label={t('purchase_orders')} />
                     <NavLink href="/supply" label={t('supply')} />
                     <NavLink href="/inspection" label={t('inspection')} />
                     <NavLink href="/availability" label={t('availability')} />
