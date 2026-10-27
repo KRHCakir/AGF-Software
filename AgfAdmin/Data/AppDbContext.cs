@@ -206,7 +206,9 @@ namespace AgfAdmin.Data
         // Palletinvoer op aanvoer- en orderregels (spiegel van PackagingRules): alles leeg, of pallets en per pallet positief met
         // losse verpakkingen leeg of heel en >= 0, en het totaal exact pallets × per pallet + los (3 decimalen).
         private static string PalletInputCheck(string quantityColumn) =>
-            "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
+            quantityColumn is not ("Quantity" or "ExpectedQuantity")
+                ? throw new ArgumentOutOfRangeException(nameof(quantityColumn), quantityColumn, "Onbekende hoeveelheidskolom.")
+                : "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
             "AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 " +
             "AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) " +
             $"AND abs(CAST(\"{quantityColumn}\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)";
