@@ -256,4 +256,60 @@ public class PurchaseOrderRejectionTests : IDisposable
         Assert.Equal(PurchaseOrderRules.MaxQualityReasonLength, longest.Length);
         Assert.EndsWith("…", longest);
     }
+
+    [Fact]
+    public async Task Reject_ConcurrentPalletChange_IsConflict_NothingSaved()
+    {
+        var seed = await PurchaseOrderTestData.SeedAsync(_factory);
+        var order = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed));
+        var content = await PurchaseOrderTestData.ReceiveAsync(_factory, order.Id, 100m, 400m);
+
+        // Precies tijdens het opslaan wijzigt een andere schrijver de pallet (versie +1 via AppDbContext.IncrementVersions).
+        // De afkeuring raakt de pallet ook (Version IsModified, concurrency-token): zij verliest en slaat niets op.
+        await using var db = _factory.CreateContext(new ConcurrentSaveInterceptor(async () =>
+        {
+            await using var other = _factory.CreateContext();
+            var pallet = await other.Pallets.SingleAsync(p => p.ContentLines.Any(c => c.Id == content));
+            pallet.WarehouseLocation = "B-02";
+            await other.SaveChangesAsync();
+        }));
+        var result = await new PurchaseOrderService(db).RejectAsync(order.Id, new RejectPurchaseOrderDto
+        {
+            RequestId = Guid.NewGuid(), Reason = "Quality", Decision = "Dispose", ActorReference = "Jan",
+            Lines = new List<RejectPurchaseOrderLineDto> { new() { PalletContentLineId = content, ExpectedContentLineVersion = 0, Quantity = 10m } }
+        });
+
+        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(0, await verify.SupplyRejections.CountAsync());
+        Assert.Equal(0m, (await verify.PalletContentLines.SingleAsync(c => c.Id == content)).SplitOffQuantity);
+        Assert.Equal(1, (await verify.Pallets.SingleAsync(p => p.ContentLines.Any(c => c.Id == content))).Version);
+    }
+
+    [Fact]
+    public async Task Reject_Replay_WithLinesInOtherOrder_IsTheSameCommand()
+    {
+        var seed = await PurchaseOrderTestData.SeedAsync(_factory);
+        var order = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed));
+        var first = await PurchaseOrderTestData.ReceiveAsync(_factory, order.Id, 50m, 200m);
+        var second = await PurchaseOrderTestData.ReceiveAsync(_factory, order.Id, 50m, 200m, lot: "LOT-2");
+        var requestId = Guid.NewGuid();
+        RejectPurchaseOrderDto Request(params int[] contents) => new()
+        {
+            RequestId = requestId, Reason = "Quality", Decision = "ReturnToSupplier", ActorReference = "Jan",
+            Lines = contents.Select(c => new RejectPurchaseOrderLineDto { PalletContentLineId = c, ExpectedContentLineVersion = 0, Quantity = c == first ? 5m : 6m }).ToList()
+        };
+
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Created, (await new PurchaseOrderService(db).RejectAsync(order.Id, Request(second, first))).Status);
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Ok, (await new PurchaseOrderService(db).RejectAsync(order.Id, Request(first, second))).Status);
+        }
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(1, await verify.SupplyRejections.CountAsync());
+        Assert.Equal(2, await verify.SupplyRejectionLines.CountAsync());
+    }
 }
