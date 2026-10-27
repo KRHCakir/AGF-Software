@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { calculatedKg, kgPerPackage, lineWeightTotals, resolveLineWeight, weightPayload } from './lineWeight.ts';
+import { calculatedKg, kgPerPackage, lineKgRows, lineWeightTotals, resolveLineWeight, weightPayload } from './lineWeight.ts';
 
 const avocado = { defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 };
 
@@ -43,4 +43,12 @@ test('kg per package check and totals per unit without merging units', () => {
         { quantity: 221, unit: 'colli', netWeightKg: 2210, grossWeightKg: null },
         { quantity: 30, unit: 'box', netWeightKg: null, grossWeightKg: null },
     ]), { quantities: [{ unit: 'colli', quantity: 1781 }, { unit: 'box', quantity: 30 }], netKg: 17810, grossKg: 16068, linesWithoutNet: 1, linesWithoutGross: 2 });
+});
+
+test('form rows: the net kg for the per-colli check stays available while gross has an error', () => {
+    const line = { productVariantId: '2', unit: 'colli', mode: 'packages' as const, quantity: '221', palletCount: '', packagesPerPallet: '', netKg: '2.210', netKgEntered: true, grossKg: '2.000', grossKgEntered: true };
+    const { rows, totals } = lineKgRows([line], () => undefined);
+    assert.equal(rows[0].weight, null, 'gross below net makes the line invalid');
+    assert.equal(rows[0].netKg, 2210);
+    assert.deepEqual(totals.quantities, [{ unit: 'colli', quantity: 221 }]);
 });

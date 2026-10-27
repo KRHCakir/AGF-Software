@@ -105,7 +105,7 @@ export function LineKgCells({ prefix, index, line, row, netKey, grossKey, unit, 
                 <LineKgInput id={`${prefix}.${netKey}`} label={t('line_kg_net')} index={index} field="net" line={line} calculated={row.calculated.net}
                     perPackage={netDefault} locked={locked} messages={errors(`${prefix}.${netKey}`)} onChange={onChange} />
                 <LineKgHint variantId={line.productVariantId === '' ? null : Number(line.productVariantId)} hasDefault={netDefault !== null}
-                    netKg={row.weight?.netWeightKg ?? null} quantity={row.quantity} unit={unit} testId={`${prefix}.kg-hint`} />
+                    netKg={row.netKg} quantity={row.quantity} unit={unit} testId={`${prefix}.kg-hint`} />
             </td>
             <td className="w-40 px-2 py-1.5">
                 <LineKgInput id={`${prefix}.${grossKey}`} label={t('line_kg_gross')} index={index} field="gross" line={line} calculated={row.calculated.gross}
