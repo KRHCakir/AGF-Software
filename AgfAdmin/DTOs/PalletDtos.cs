@@ -94,6 +94,10 @@ namespace AgfAdmin.DTOs
         // Receipt (fysieke ontvangst) of DispatchCorrection (teruggeboekt uit een gecorrigeerde verzending; telt niet als registratie).
         public string Origin { get; set; }
         public int? OriginCorrectionLineId { get; set; }
+        // RejectionSplit: afgesplitst door een deelafkeuring (OriginRejectionLineId); Split-off = wat van deze regel is afgesplitst.
+        public int? OriginRejectionLineId { get; set; }
+        public decimal SplitOffQuantity { get; set; }
+        public decimal SplitOffNetWeightKg { get; set; }
         public string QualityStatus { get; set; }
         public string QualityReason { get; set; }
         public DateTime CreatedAt { get; set; }

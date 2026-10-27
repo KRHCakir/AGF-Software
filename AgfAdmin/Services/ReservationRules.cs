@@ -55,12 +55,11 @@ namespace AgfAdmin.Services
         public const int MaxDispatchReferenceLength = 100;
         public const int MaxDispatchLines = 200;
 
-        // Voorraad = ontvangst - afgeboekt; nooit negatief.
-        public static decimal OnHandQuantity(decimal receipt, decimal dispatched) => Math.Max(0m, receipt - dispatched);
-        public static bool IsDepleted(decimal quantity, decimal netWeightKg, decimal dispatchedQuantity, decimal dispatchedNetWeightKg) =>
-            receiptMinus(quantity, dispatchedQuantity) == 0m && receiptMinus(netWeightKg, dispatchedNetWeightKg) == 0m;
-
-        private static decimal receiptMinus(decimal receipt, decimal dispatched) => Math.Max(0m, receipt - dispatched);
+        // Voorraad = ontvangst - afgeboekt - afgesplitst (deelafkeuring, zie PurchaseOrderService); nooit negatief.
+        // Afgesplitst is een verplicht argument: elke lezer van voorraad moet de afsplitsing meenemen.
+        public static decimal OnHandQuantity(decimal receipt, decimal dispatched, decimal splitOff) => Math.Max(0m, receipt - dispatched - splitOff);
+        public static bool IsDepleted(decimal quantity, decimal netWeightKg, decimal dispatchedQuantity, decimal dispatchedNetWeightKg, decimal splitOffQuantity, decimal splitOffNetWeightKg) =>
+            OnHandQuantity(quantity, dispatchedQuantity, splitOffQuantity) == 0m && OnHandQuantity(netWeightKg, dispatchedNetWeightKg, splitOffNetWeightKg) == 0m;
 
         public static readonly IReadOnlyList<string> OrderStatuses = new[] { OrderStatusOpen, OrderStatusCancelled };
 

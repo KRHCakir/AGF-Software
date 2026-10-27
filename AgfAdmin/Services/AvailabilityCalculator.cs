@@ -50,12 +50,17 @@ namespace AgfAdmin.Services
         string WeightMethod = WeightRules.Weighed,
         decimal? NetKgPerPackage = null,
         // GGN van de partij zoals bij ontvangst vastgelegd (null = niet vastgelegd).
-        string Ggn = null)
+        string Ggn = null,
+        // Door een deelafkeuring afgesplitst naar een eigen (Rejected) regel; voorraad = ontvangst - afgeboekt - afgesplitst.
+        decimal SplitOffQuantity = 0m,
+        decimal SplitOffNetWeightKg = 0m,
+        // Zelf zo'n afgesplitste regel: telt net als correctie-inhoud niet als registratie tegen de bronregel.
+        bool FromRejectionSplit = false)
     {
-        public string Origin => FromCorrection ? "DispatchCorrection" : "Receipt";
-        public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity);
-        public decimal OnHandNetWeightKg => ReservationRules.OnHandQuantity(NetWeightKg, DispatchedNetWeightKg);
-        public bool Depleted => ReservationRules.IsDepleted(Quantity, NetWeightKg, DispatchedQuantity, DispatchedNetWeightKg);
+        public string Origin => FromCorrection ? "DispatchCorrection" : FromRejectionSplit ? "RejectionSplit" : "Receipt";
+        public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity, SplitOffQuantity);
+        public decimal OnHandNetWeightKg => ReservationRules.OnHandQuantity(NetWeightKg, DispatchedNetWeightKg, SplitOffNetWeightKg);
+        public bool Depleted => ReservationRules.IsDepleted(Quantity, NetWeightKg, DispatchedQuantity, DispatchedNetWeightKg, SplitOffQuantity, SplitOffNetWeightKg);
     }
 
     // Pure berekening in het geheugen (decimal, dus exact; geen decimal-SUM in SQL vanwege SQLite).
@@ -283,8 +288,8 @@ namespace AgfAdmin.Services
             var sourceUnits = sources.ToDictionary(s => s.SupplyCommitmentLineId, s => s.Unit);
             var registered = sources.ToDictionary(s => s.SupplyCommitmentLineId, _ => 0m);
 
-            // Correctie-inhoud is geen nieuwe ontvangst: de goederen zijn al bij de oorspronkelijke inhoudsregel geregistreerd.
-            foreach (var content in contents.Where(c => c.LogisticsStatus != PalletRules.StatusCancelled && !c.FromCorrection))
+            // Correctie- en afgesplitste inhoud is geen nieuwe ontvangst: de goederen zijn al bij de oorspronkelijke inhoudsregel geregistreerd.
+            foreach (var content in contents.Where(c => c.LogisticsStatus != PalletRules.StatusCancelled && !c.FromCorrection && !c.FromRejectionSplit))
             {
                 if (sourceUnits.TryGetValue(content.SupplyCommitmentLineId, out var unit)
                     && unit != null
