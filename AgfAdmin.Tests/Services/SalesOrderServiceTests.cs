@@ -32,11 +32,107 @@ public class SalesOrderServiceTests : IDisposable
 
     // ---- Palletinvoer op orderregels: Quantity blijft de bron voor vraag, reservering en verzending ----
 
-    private CreateSalesOrderDto PalletOrder(decimal? quantity = null, decimal? palletCount = 9m, decimal? packagesPerPallet = 120m, Guid? requestId = null)
+    private CreateSalesOrderDto PalletOrder(decimal? quantity = null, decimal? palletCount = 9m, decimal? packagesPerPallet = 120m, Guid? requestId = null, decimal? loosePackages = null)
     {
         var request = Request(requestId);
-        request.Lines = new List<CreateSalesOrderLineDto> { new() { ProductVariantId = _seed.AvocadoId, Quantity = quantity, PalletCount = palletCount, PackagesPerPallet = packagesPerPallet, Unit = "box" } };
+        request.Lines = new List<CreateSalesOrderLineDto> { new() { ProductVariantId = _seed.AvocadoId, Quantity = quantity, PalletCount = palletCount, PackagesPerPallet = packagesPerPallet, LoosePackages = loosePackages, Unit = "box" } };
         return request;
+    }
+
+    [Fact]
+    public async Task Pallet_Input_With_Loose_Packages_Adds_Them_To_The_Total_And_Keeps_Them_On_The_Line()
+    {
+        await SeedAsync();
+        var result = await CreateAsync(PalletOrder(palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal((375m, 3m, 120m, 15m), (line.Quantity, line.PalletCount, line.PackagesPerPallet, line.LoosePackages));
+        Assert.Equal(375m, line.OpenQuantity);
+        // Met een expliciet totaal moet dat exact pallets × per pallet + los zijn.
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(quantity: 375m, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m))).Status);
+        Assert.Equal(ServiceResultStatus.Validation, (await CreateAsync(PalletOrder(quantity: 360m, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m))).Status);
+        // Nul losse verpakkingen is toegestaan.
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(palletCount: 3m, packagesPerPallet: 120m, loosePackages: 0m))).Status);
+
+        await using var verify = _factory.CreateContext();
+        var stored = await verify.SalesOrderLines.SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((375m, 15m), (stored.Quantity, stored.LoosePackages));
+    }
+
+    [Theory]
+    [InlineData("fractional-pallets", "lines[0].palletCount")]
+    [InlineData("fractional-per-pallet", "lines[0].packagesPerPallet")]
+    [InlineData("fractional-loose", "lines[0].loosePackages")]
+    [InlineData("negative-loose", "lines[0].loosePackages")]
+    [InlineData("loose-without-pallets", "lines[0].loosePackages")]
+    public async Task New_Pallet_Input_Needs_Whole_Pallets_And_Whole_Loose_Packages(string invalidCase, string expectedErrorKey)
+    {
+        await SeedAsync();
+        var request = invalidCase switch
+        {
+            "fractional-pallets" => PalletOrder(palletCount: 3.5m, packagesPerPallet: 120m),
+            "fractional-per-pallet" => PalletOrder(palletCount: 3m, packagesPerPallet: 120.5m),
+            "fractional-loose" => PalletOrder(palletCount: 3m, packagesPerPallet: 120m, loosePackages: 2.5m),
+            "negative-loose" => PalletOrder(palletCount: 3m, packagesPerPallet: 120m, loosePackages: -1m),
+            _ => PalletOrder(quantity: 15m, palletCount: null, packagesPerPallet: null, loosePackages: 15m)
+        };
+        var result = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains(expectedErrorKey, result.Errors.Keys);
+        Assert.Equal(0, await OrderCountAsync());
+    }
+
+    // Bestaande regels van vóór de hele-pallet-regel ("3,5 pallets × 120 = 420") blijven leesbaar, en een herhaling van precies
+    // die opgeslagen opdracht wordt nog steeds herkend. Orderregels zijn na aanmaken niet wijzigbaar, dus er is geen bewerkpad.
+    [Fact]
+    public async Task Existing_Line_With_A_Fractional_Pallet_Count_Stays_Readable_And_Replays()
+    {
+        await SeedAsync();
+        var requestId = Guid.NewGuid();
+        int orderId;
+        await using (var db = _factory.CreateContext())
+        {
+            var order = new AgfAdmin.Models.SalesOrder
+            {
+                RequestId = requestId, CustomerId = _seed.CustomerId, Status = "Open", CustomerReference = "PO-1", ActorReference = "office-1",
+                RequestedDeliveryDate = UtcPrecision.ToStoredUtc(Delivery), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                Lines = new List<AgfAdmin.Models.SalesOrderLine> { new() { ProductVariantId = _seed.AvocadoId, Quantity = 420m, Unit = "box", PalletCount = 3.5m, PackagesPerPallet = 120m } }
+            };
+            db.SalesOrders.Add(order);
+            await db.SaveChangesAsync();
+            orderId = order.Id;
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var read = await new SalesOrderService(db).GetAsync(orderId);
+            var line = Assert.Single(read.Value.Lines);
+            Assert.Equal((420m, 3.5m, 120m, (decimal?)null), (line.Quantity, line.PalletCount, line.PackagesPerPallet, line.LoosePackages));
+        }
+
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletOrder(palletCount: 3.5m, packagesPerPallet: 120m, requestId: requestId))).Status);
+        // Dezelfde breuk als nieuwe opdracht wordt geweigerd.
+        var fresh = await CreateAsync(PalletOrder(palletCount: 3.5m, packagesPerPallet: 120m));
+        Assert.Equal(ServiceResultStatus.Validation, fresh.Status);
+        Assert.Contains("lines[0].palletCount", fresh.Errors.Keys);
+        Assert.Equal(1, await OrderCountAsync());
+    }
+
+    [Fact]
+    public async Task Order_Retry_Compares_Loose_Packages()
+    {
+        await SeedAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletOrder(palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m, requestId: requestId))).Status);
+        // Zelfde totaal (375), andere verdeling of gewone invoer: een andere opdracht.
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletOrder(palletCount: 3m, packagesPerPallet: 125m, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletOrder(quantity: 375m, palletCount: null, packagesPerPallet: null, requestId: requestId))).Status);
+        // Een opdracht zonder losse verpakkingen (zoals vóór dit veld) blijft gelijk aan een opgeslagen regel zonder losse verpakkingen.
+        var oldStyle = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(requestId: oldStyle))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletOrder(requestId: oldStyle))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletOrder(loosePackages: 0m, requestId: oldStyle))).Status);
     }
 
     [Fact]
@@ -90,6 +186,34 @@ public class SalesOrderServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletOrder(requestId: requestId))).Status);
         Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletOrder(requestId: requestId))).Status);
         Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletOrder(palletCount: 12m, packagesPerPallet: 90m, requestId: requestId))).Status);
+    }
+
+    // Databasecheck buiten de service om: totaal = pallets × per pallet + los; los alleen bij palletinvoer, heel en >= 0.
+    [Theory]
+    [InlineData("375", "3", "120", "15", true)]
+    [InlineData("360", "3", "120", "NULL", true)]
+    [InlineData("420", "3.5", "120", "NULL", true)]   // bestaande regel met een gebroken palletaantal blijft toegestaan
+    [InlineData("360", "3", "120", "0", true)]
+    [InlineData("375", "3", "120", "NULL", false)]
+    [InlineData("362.5", "3", "120", "2.5", false)]
+    [InlineData("355", "3", "120", "-5", false)]
+    [InlineData("15", "NULL", "NULL", "15", false)]
+    public async Task Database_Check_Accepts_Pallets_Times_Per_Pallet_Plus_Loose_Packages(string quantity, string palletCount, string perPallet, string loose, bool accepted)
+    {
+        await SeedAsync();
+        var order = await CreateAsync(Request());
+        await using var raw = _factory.CreateContext();
+        Task<int> Insert() => raw.Database.ExecuteSqlRawAsync(
+            "INSERT INTO \"SalesOrderLines\" (\"SalesOrderId\", \"ProductVariantId\", \"Quantity\", \"Unit\", \"PalletCount\", \"PackagesPerPallet\", \"LoosePackages\", \"CreatedAt\", \"Version\") " +
+            $"VALUES ({order.Value.Id}, {_seed.AvocadoId}, {quantity}, 'tray', {palletCount}, {perPallet}, {loose}, '2026-10-20 08:00:00', 0)");
+        if (accepted)
+        {
+            Assert.Equal(1, await Insert());
+        }
+        else
+        {
+            Assert.Contains("CK_SalesOrderLines_PalletInput_Consistent", (await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(Insert)).Message);
+        }
     }
 
     private async Task<ServiceResult<SalesOrderDto>> CreateAsync(CreateSalesOrderDto request)

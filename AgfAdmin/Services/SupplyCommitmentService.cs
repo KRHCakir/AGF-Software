@@ -40,6 +40,17 @@ namespace AgfAdmin.Services
                 return await ResultForRetryAsync(existing, candidate, cancellationToken);
             }
 
+            // Nieuwe invoer: hele pallets (na de replaycontrole, zodat een eerder opgeslagen opdracht nog steeds herkend wordt).
+            var lines = candidate.Lines.ToList();
+            for (var i = 0; i < lines.Count; i++)
+            {
+                PackagingRules.WholePalletErrors(lines[i].PalletCount, lines[i].PackagesPerPallet, $"lines[{i}]", errors, AddError);
+            }
+            if (errors.Count > 0)
+            {
+                return ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+            }
+
             var notFound = await FindMissingReferenceAsync(candidate, cancellationToken);
             if (notFound != null)
             {
@@ -241,8 +252,8 @@ namespace AgfAdmin.Services
 
             var lotNumber = ValidateText(line.LotNumber, required: false, MaxLotNumberLength, $"{key}.lotNumber", errors);
 
-            // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet, of moet daar exact aan gelijk zijn.
-            var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.ExpectedQuantity, key, "expectedQuantity", errors, AddError);
+            // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet + losse verpakkingen, of moet daar exact aan gelijk zijn.
+            var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.ExpectedQuantity, key, "expectedQuantity", errors, AddError);
 
             if (errors.Count > errorCount || total == null)
             {
@@ -255,6 +266,7 @@ namespace AgfAdmin.Services
                 ExpectedQuantity = total.Value,
                 PalletCount = line.PalletCount,
                 PackagesPerPallet = line.PackagesPerPallet,
+                LoosePackages = line.LoosePackages,
                 ExpectedUnit = line.ExpectedUnit,
                 ExpectedNetWeightKg = line.ExpectedNetWeightKg,
                 LotNumber = lotNumber
@@ -363,6 +375,7 @@ namespace AgfAdmin.Services
                 && pair.First.ExpectedNetWeightKg == pair.Second.ExpectedNetWeightKg
                 && pair.First.PalletCount == pair.Second.PalletCount
                 && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
+                && pair.First.LoosePackages == pair.Second.LoosePackages
                 && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal));
         }
 
@@ -411,8 +424,10 @@ namespace AgfAdmin.Services
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
                     WeightMethod = l.ProductVariant?.WeightMethod ?? WeightRules.Weighed,
                     DefaultNetKgPerPackage = l.ProductVariant?.DefaultNetKgPerPackage,
+                    DefaultGrossKgPerPackage = l.ProductVariant?.DefaultGrossKgPerPackage,
                     PalletCount = l.PalletCount,
                     PackagesPerPallet = l.PackagesPerPallet,
+                    LoosePackages = l.LoosePackages,
                     DefaultPackagesPerPallet = l.ProductVariant?.DefaultPackagesPerPallet,
                     DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
                     DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
