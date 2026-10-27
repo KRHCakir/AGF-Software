@@ -86,10 +86,6 @@ namespace AgfAdmin.Services
             {
                 AddError(errors, "amountExclVat", "The amount may have at most 2 decimals and must fit in 16 digits.");
             }
-            else if (request.AmountExclVat != null && request.AmountExclVat.Value < 0 && request.Kind == PurchaseOrderRules.KindInvoice)
-            {
-                AddError(errors, "amountExclVat", "The amount of an invoice may not be negative; only a credit note may be negative.");
-            }
             var actor = string.IsNullOrWhiteSpace(request.ActorReference) ? null : request.ActorReference.Trim();
             if (actor != null && actor.Length > PurchaseOrderRules.MaxActorLength)
             {
