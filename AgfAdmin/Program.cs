@@ -22,6 +22,7 @@ builder.Services.AddScoped<PurchaseInvoiceService>();
 builder.Services.AddScoped<ArticleService>();
 builder.Services.AddScoped<RelationService>();
 builder.Services.AddScoped<PaymentConditionService>();
+builder.Services.AddScoped<PurchaseOrderService>();
 builder.Services.AddSingleton<IEmailDomainChecker, DnsEmailDomainChecker>();
 // Lokale referentielijst van goederencodes: bij het opstarten gelezen uit Data/Reference/goods-codes.json.
 builder.Services.AddSingleton(_ => GoodsCodeCatalog.Load(Path.Combine(builder.Environment.ContentRootPath, GoodsCodeCatalog.DefaultRelativePath)));
