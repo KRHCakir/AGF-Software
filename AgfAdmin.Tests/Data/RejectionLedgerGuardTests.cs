@@ -187,4 +187,48 @@ public class RejectionLedgerGuardTests : IDisposable
         await Refused(async db => db.SupplyRejections.Remove(await db.SupplyRejections.SingleAsync()));
         await Refused(async db => (await db.SupplyCommitmentInvoiceRefs.SingleAsync()).InvoiceNumber = "F-10");
     }
+
+    [Fact]
+    public async Task SplitOff_NeverMoreThanOnHand_AndNeverBelowActiveReservations()
+    {
+        var seed = await SeedAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var content = await db.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+            var rejection = Rejection(seed.OrderId);
+            db.SupplyRejections.Add(rejection);
+            SplitOff(db, content, rejection, 101m, 404m); // meer dan de 100 op voorraad
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+
+        // 80 doos / 320 kg actief gereserveerd voor een verkooporder: 30 afsplitsen laat er maar 70 over.
+        await using (var db = _factory.CreateContext())
+        {
+            var content = await db.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+            var order = new SalesOrder { RequestId = Guid.NewGuid(), Customer = new Customer { Name = "Klant" }, Status = "Open", RequestedDeliveryDate = DateTime.UtcNow, ActorReference = "office" };
+            var line = new SalesOrderLine { SalesOrder = order, ProductVariantId = seed.VariantId, Quantity = 80m, Unit = "box" };
+            db.AddRange(order, line, new StockReservation
+            {
+                RequestId = Guid.NewGuid(), SalesOrderLine = line, PalletContentLineId = content.Id, SupplyCommitmentLineId = content.SupplyCommitmentLineId,
+                Quantity = 80m, Unit = "box", NetWeightKg = 320m, Source = "Physical", Status = "Active"
+            });
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var content = await db.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+            var rejection = Rejection(seed.OrderId);
+            db.SupplyRejections.Add(rejection);
+            SplitOff(db, content, rejection, 30m, 120m);
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var content = await db.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+            var rejection = Rejection(seed.OrderId);
+            db.SupplyRejections.Add(rejection);
+            SplitOff(db, content, rejection, 20m, 80m);
+            await db.SaveChangesAsync();
+        }
+    }
 }
