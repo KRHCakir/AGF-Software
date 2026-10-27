@@ -66,11 +66,14 @@ describe('Purchase orders page', () => {
         assert.ok(listUrls[0].includes('status=open'));
         assert.ok(mounted.hasText('F-4711'));
 
-        // Zoeken wacht kort (debounce) en laat de server zoeken; de lijst filtert niet zelf.
+        // De server zoekt (na een korte debounce); zoeken zet Open op Alle, leegmaken zet het terug.
         await act(async () => { setValue(input('po-search'), 'F-4711'); await new Promise((resolve) => setTimeout(resolve, 300)); });
-        await mounted.waitFor(() => listUrls.some((url) => url.includes('query=F-4711')), 'search request');
-        await act(async () => { setSelectValue(select('po-status'), 'all'); });
-        await mounted.waitFor(() => listUrls.some((url) => url.includes('status=all') && url.includes('query=F-4711')), 'status filter');
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('query=F-4711') && url.includes('status=all')), 'search request');
+        assert.equal(select('po-status').value, 'all');
+        await act(async () => { setValue(input('po-search'), ''); await new Promise((resolve) => setTimeout(resolve, 300)); });
+        assert.equal(select('po-status').value, 'open');
+        await act(async () => { setSelectValue(select('po-status'), 'Rejected'); });
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('status=Rejected')), 'status filter');
     });
 
     test('opens the order detail with its own number, invoices and history', async () => {
