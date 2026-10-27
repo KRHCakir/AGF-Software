@@ -22,11 +22,13 @@ import { usePendingCommand } from '../sales/PendingCommandsContext';
 // "Afkeuren" van één ontvangen regel: hoeveelheid en netto kg (standaard het hele afkeurbare deel), reden, besluit en
 // medewerker. Een onbekende uitkomst bevriest het verzoek in de opslag per tabblad (usePendingCommand): ook na weg- en
 // terugnavigeren alleen exact dezelfde herhaling, geen annuleren of weggooien. Een definitief antwoord ruimt het op.
-export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDone, onCancel }: {
+export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDone, onCancel, onFailed }: {
     orderId: number;
     orderNumber: string;
     receipt: PurchaseOrderReceiptLine;
     onDone: (order: PurchaseOrderDetail) => void;
+    // Definitieve fout: de ouder houdt het formulier open zodat de foutmelding zichtbaar blijft.
+    onFailed: () => void;
     onCancel: () => void;
 }) {
     const { t, locale } = useTranslation();
@@ -65,6 +67,8 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
         else if (parsedQuantity.value > receipt.rejectableQuantity) addError(found, 'lines[0].quantity', t('po_reject_too_many', { max: formatQuantity(receipt.rejectableQuantity, locale) }));
         const parsedKg = parsePositiveDecimal(kg);
         if (!parsedKg.ok) addError(found, 'lines[0].netWeightKg', t(decimalErrorKey(parsedKg.error)));
+        // Berekende regels hebben een vast, niet-bewerkbaar gewicht; de bovengrens geldt voor het zelf ingevoerde gewicht.
+        else if (!calculated && parsedKg.value > receipt.rejectableNetWeightKg + 0.0005) addError(found, 'lines[0].netWeightKg', t('po_reject_too_many', { max: formatKg(receipt.rejectableNetWeightKg, locale) }));
         if (reason === '') addError(found, 'reason', t('supply_error_required'));
         const trimmed = explanation.trim();
         if (reason === 'Other' && trimmed === '') addError(found, 'explanation', t('po_reject_explanation_required'));
@@ -107,6 +111,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
                 setPending(withAttempt(command, apiError.message) as RejectReceiptCommand);
             } else {
                 clearPending();
+                onFailed();
                 setError(apiError);
                 setErrors(apiError.fieldErrors);
             }

@@ -25,7 +25,7 @@ const order = { id: 7, orderNumber: 'IO-2026-0007', vendorName: null, orderedOn:
 
 const view = (onDone: (order: PurchaseOrderDetail) => void = () => {}) => (
     <PendingCommandsProvider storageKey={PURCHASE_COMMANDS_STORAGE_KEY}>
-        <HydratedGate><RejectReceiptForm orderId={7} orderNumber="IO-2026-0007" receipt={receipt} onDone={onDone} onCancel={() => {}} /></HydratedGate>
+        <HydratedGate><RejectReceiptForm orderId={7} orderNumber="IO-2026-0007" receipt={receipt} onDone={onDone} onCancel={() => {}} onFailed={() => {}} /></HydratedGate>
     </PendingCommandsProvider>
 );
 const stored = () => parseStoredCommands(window.sessionStorage.getItem(PURCHASE_COMMANDS_STORAGE_KEY));
