@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
-import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
+import { formatDateTime, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
-import { parsePositiveDecimal } from '../../lib/decimal';
+import { type LineWeightDraft, lineKgRows, resolveLineWeight, weightPayload } from '../../lib/lineWeight';
 import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -15,7 +15,10 @@ import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from '../../types/availabilit
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
+import KgTotals from '../shared/KgTotals';
+import { LineKgCells } from '../shared/LineKgInput';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
+import { lineKgLabel } from '../shared/lineKgLabel';
 import QuantityInput from '../shared/QuantityInput';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import ErrorNotice from './ErrorNotice';
@@ -29,13 +32,12 @@ export interface ReferenceData {
     products: ProductOption[];
 }
 
-interface LineDraft {
+interface LineDraft extends LineWeightDraft {
     key: string;
     productVariantId: string;
     lotNumber: string;
     quantity: string;
     unit: PackageUnit | '';
-    declaredKg: string;
     // Invoer per pallet: 'pallets' rekent de hoeveelheid uit palletCount × packagesPerPallet.
     mode: QuantityInputMode;
     palletCount: string;
@@ -58,7 +60,7 @@ interface PendingSubmission {
 }
 
 const MAX_LINES = 200;
-const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', declaredKg: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
+const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyHeader: HeaderDraft = { vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '' };
 
 // Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
@@ -83,7 +85,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [reference.products]);
-    // Netto en bruto kg per verpakking: alleen voor de rekenregel onder het aantal.
+    // Netto en bruto kg per verpakking van het artikel: berekende kg in de kg-velden van de regel.
     const variants = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [reference.products]);
 
     const edited = () => {
@@ -104,6 +106,16 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         setLines((current) => current.map((line) => (line.key === key ? { ...line, [field]: value } : line)));
         edited();
     };
+
+    // Kg-velden van een regel (tekst en "ingevuld"-vlag tegelijk).
+    const updateLineWeight = (key: string, patch: LineWeightDraft) => {
+        if (locked) return;
+        setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+        edited();
+    };
+
+    // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
+    const { rows: lineKg, totals } = lineKgRows(lines, (variantId) => variants.get(variantId));
 
     const addLine = () => {
         if (locked || lines.length >= MAX_LINES) return;
@@ -151,8 +163,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             const amounts = resolvePalletInput(line);
             if (!amounts.ok) for (const error of amounts.errors) addError(found, `${prefix}.${error.field === 'quantity' ? 'expectedQuantity' : error.field}`, t(palletErrorKey(error.field, error.code)));
             if (line.unit === '') addError(found, `${prefix}.expectedUnit`, t('supply_error_required_unit'));
-            const declared = line.declaredKg.trim() === '' ? null : parsePositiveDecimal(line.declaredKg);
-            if (declared !== null && !declared.ok) addError(found, `${prefix}.expectedNetWeightKg`, t(decimalErrorKey(declared.error)));
+            // Kg optioneel: berekend uit het artikel of ingevuld; bruto nooit onder netto (zelfde regels als LineWeightRules).
+            const weight = resolveLineWeight(line, amounts.ok ? amounts.value.quantity : null, variants.get(Number(line.productVariantId)));
+            if (!weight.ok) for (const error of weight.errors) addError(found, `${prefix}.${error.field === 'net' ? 'expectedNetWeightKg' : 'expectedGrossWeightKg'}`, error.code === 'gross_below_net' ? t('line_kg_gross_below_net') : t(decimalErrorKey(error.code)));
             const lot = line.lotNumber.trim();
             if (lot.length > 100) addError(found, `${prefix}.lotNumber`, t('supply_error_too_long', { max: '100' }));
             if (lot !== '' && line.productVariantId) {
@@ -164,11 +177,13 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 productVariantId: Number(line.productVariantId),
                 expectedQuantity: amounts.ok ? amounts.value.quantity : 0,
                 expectedUnit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
-                expectedNetWeightKg: declared !== null && declared.ok ? declared.value : null,
+                expectedNetWeightKg: null,
                 lotNumber: lot === '' ? null : lot,
                 palletCount: amounts.ok ? amounts.value.palletCount : null,
                 packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
                 ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
+                // Bruto kg en bron alleen als er kg is: een regel zonder kg blijft dezelfde opdracht als vóór deze velden.
+                ...(weight.ok ? weightPayload(weight.value, 'expectedNetWeightKg', 'expectedGrossWeightKg') : {}),
             };
         });
 
@@ -261,7 +276,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                             {line.productName} · {line.productVariantName}: {formatQuantity(line.expectedQuantity, locale)} <UnitBadge unit={line.expectedUnit} />
                             {palletBreakdownLabel(line, line.expectedUnit, t, locale) !== null && <> ({palletBreakdownLabel(line, line.expectedUnit, t, locale)})</>}
                             {line.lotNumber && <> · {t('supply_lot')} {line.lotNumber}</>}
-                            {line.expectedNetWeightKg !== null && <> · {t('supply_declared')} {formatKg(line.expectedNetWeightKg, locale)}</>}
+                            {lineKgLabel({ netWeightKg: line.expectedNetWeightKg, grossWeightKg: line.expectedGrossWeightKg, weightSource: line.weightSource }, t, locale) !== null
+                                && <> · {lineKgLabel({ netWeightKg: line.expectedNetWeightKg, grossWeightKg: line.expectedGrossWeightKg, weightSource: line.weightSource }, t, locale, true)}</>}
                         </li>
                     ))}
                 </ul>
@@ -348,14 +364,16 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_quantity')} *</th>
+                                <th scope="col" className="px-2 py-1.5">{t('line_kg_net')}</th>
+                                <th scope="col" className="px-2 py-1.5">{t('line_kg_gross')}</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_unit')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_declared_kg')}</th>
                                 <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {lines.map((line, index) => {
                                 const prefix = `lines[${index}]`;
+                                const unitText = line.unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(line.unit)).toLowerCase();
                                 return (
                                     <tr key={line.key} className="align-top">
                                         <td className="w-80 px-2 py-1.5">
@@ -375,9 +393,11 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                         </td>
                                         <td className="w-72 px-2 py-1.5">
                                             <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity"
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null} kgDefaults={variants.get(Number(line.productVariantId))}
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
                                         </td>
+                                        <LineKgCells prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="expectedNetWeightKg" grossKey="expectedGrossWeightKg" unit={unitText}
+                                            locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.expectedUnit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
                                             <select {...fieldProps(`${prefix}.expectedUnit`, e(`${prefix}.expectedUnit`))} value={line.unit} disabled={locked}
@@ -386,13 +406,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                                 {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
                                             </select>
                                             <FieldError id={`${prefix}.expectedUnit`} messages={e(`${prefix}.expectedUnit`)} />
-                                        </td>
-                                        <td className="w-40 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.expectedNetWeightKg-input`} className="sr-only">{t('supply_declared_kg')} {index + 1}</label>
-                                            <input {...fieldProps(`${prefix}.expectedNetWeightKg`, e(`${prefix}.expectedNetWeightKg`))} inputMode="decimal" value={line.declaredKg}
-                                                disabled={locked} onChange={(event) => updateLine(line.key, 'declaredKg', event.target.value)} className={inputClass} />
-                                            <span className="block text-xs text-gray-500">{t('supply_declared_kg_hint')}</span>
-                                            <FieldError id={`${prefix}.expectedNetWeightKg`} messages={e(`${prefix}.expectedNetWeightKg`)} />
                                         </td>
                                         <td className="px-2 py-1.5">
                                             <button type="button" onClick={() => removeLine(line.key)} disabled={locked || lines.length <= 1}
@@ -404,6 +417,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         </tbody>
                     </table>
                 </div>
+                <KgTotals totals={totals} lineCount={lines.length} testId="supply-kg-totals" />
                 <button type="button" onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
                     + {t('supply_add_line')}
                 </button>

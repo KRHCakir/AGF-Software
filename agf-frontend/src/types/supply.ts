@@ -1,5 +1,6 @@
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from './availability';
+import { isOptionalLineWeight, type WeightSource } from './salesOrder';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
 
 // Exact het contract van POST/GET /api/supply-commitments (backend: AgfAdmin/DTOs/SupplyCommitmentDtos.cs).
@@ -14,6 +15,9 @@ export interface CreateSupplyCommitmentLineRequest {
     palletCount: number | null;
     packagesPerPallet: number | null;
     loosePackages?: number;
+    // Verwachte bruto kg en de bron van de kg; alleen meegestuurd als er kg is.
+    expectedGrossWeightKg?: number;
+    weightSource?: WeightSource;
 }
 
 export interface CreateSupplyCommitmentRequest {
@@ -36,6 +40,8 @@ export interface SupplyCommitmentLine {
     expectedQuantity: number;
     expectedUnit: PackageUnit | null;
     expectedNetWeightKg: number | null;
+    expectedGrossWeightKg?: number | null;
+    weightSource?: WeightSource | null;
     // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
     weightMethod: WeightMethod;
     defaultNetKgPerPackage: number | null;
@@ -91,6 +97,7 @@ function isLine(value: unknown): value is SupplyCommitmentLine {
         && isNumber(value.expectedQuantity)
         && isNullableUnit(value.expectedUnit)
         && isNullableNumber(value.expectedNetWeightKg)
+        && isOptionalLineWeight(value, 'expectedNetWeightKg', 'expectedGrossWeightKg')
         && isWeightMethod(value.weightMethod)
         && isNullableNumber(value.defaultNetKgPerPackage)
         && isNullableNumber(value.palletCount)
