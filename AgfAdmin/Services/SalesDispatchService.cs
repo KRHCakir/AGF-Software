@@ -320,8 +320,8 @@ namespace AgfAdmin.Services
                 var content = group.Key;
                 var quantity = group.Sum(r => r.Quantity);
                 var kg = group.Sum(r => r.NetWeightKg ?? 0m);
-                var onHandQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity);
-                var onHandKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg);
+                var onHandQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity, content.SplitOffQuantity);
+                var onHandKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg, content.SplitOffNetWeightKg);
                 if (quantity > onHandQuantity || kg > onHandKg)
                 {
                     return $"Pallet content line {content.Id} has only {onHandQuantity} {content.Unit} and {onHandKg} kg on hand; the selected reservations need {quantity} and {kg} kg.";

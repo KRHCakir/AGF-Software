@@ -585,7 +585,7 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Ggn, c.Unit,
-                    c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
+                    c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
                 })
                 .ToListAsync(cancellationToken);
 
@@ -594,8 +594,8 @@ namespace AgfAdmin.Services
                 .Select(c =>
                 {
                     var (quantity, kg) = reserved.GetValueOrDefault(c.Id);
-                    var onHandQuantity = ReservationRules.OnHandQuantity(c.Quantity, c.DispatchedQuantity);
-                    var onHandKg = ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg);
+                    var onHandQuantity = ReservationRules.OnHandQuantity(c.Quantity, c.DispatchedQuantity, c.SplitOffQuantity);
+                    var onHandKg = ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg, c.SplitOffNetWeightKg);
                     return new ReservableStockLineDto
                     {
                         PalletContentLineId = c.Id,

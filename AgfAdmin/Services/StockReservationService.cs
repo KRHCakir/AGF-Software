@@ -199,8 +199,8 @@ namespace AgfAdmin.Services
             }
 
             // Voorraad = ontvangst - afgeboekt; verbruikte reserveringen zitten in afgeboekt en tellen niet dubbel.
-            var remainingQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity) - reservedOnContent.Quantity;
-            var remainingKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg) - reservedOnContent.NetWeightKg;
+            var remainingQuantity = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity, content.SplitOffQuantity) - reservedOnContent.Quantity;
+            var remainingKg = ReservationRules.OnHandQuantity(content.NetWeightKg, content.DispatchedNetWeightKg, content.SplitOffNetWeightKg) - reservedOnContent.NetWeightKg;
             if (command.Quantity > remainingQuantity || command.NetWeightKg > remainingKg)
             {
                 return $"Only {remainingQuantity} {content.Unit} and {remainingKg} kg of this content line are still unreserved.";

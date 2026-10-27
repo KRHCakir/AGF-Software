@@ -56,7 +56,7 @@ namespace AgfAdmin.Services
             {
                 return null;
             }
-            var onHand = contentLines.Sum(c => ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg));
+            var onHand = contentLines.Sum(c => ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg, c.SplitOffNetWeightKg));
             var totalKg = (tareKg ?? 0m) + onHand + addedNetWeightKg;
             return totalKg > grossKg.Value
                 ? $"Tare plus on-hand content net weight ({totalKg} kg) would exceed the measured gross weight ({grossKg} kg)."
