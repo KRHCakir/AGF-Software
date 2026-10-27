@@ -51,7 +51,7 @@ function PurchaseOrdersWorkspace() {
     const selectedId = parseId(searchParams.get('id'));
     const [query, setQuery] = useState(searchParams.get('query') ?? '');
     const [debounced, setDebounced] = useState(query.trim());
-    const [status, setStatus] = useState('open');
+    const [status, setStatus] = useState(query.trim() === '' ? 'open' : 'all');
     const [vendorId, setVendorId] = useState('');
     const [page, setPage] = useState(1);
     const [reloadToken, setReloadToken] = useState(0);
@@ -59,7 +59,7 @@ function PurchaseOrdersWorkspace() {
     const [vendors, setVendors] = useState<VendorOption[]>([]);
     const [detail, setDetail] = useState<LoadState<Order> | null>(null);
     const detailRef = useRef<HTMLDivElement | null>(null);
-    const searchWidened = useRef(false);
+    const searchWidened = useRef(query.trim() !== '');
     const { commands } = usePendingCommands();
 
     const changeQuery = (value: string) => {
