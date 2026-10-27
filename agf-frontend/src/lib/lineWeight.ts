@@ -120,6 +120,8 @@ export interface LineKgRow {
     defaults: PackageKgDefaults | undefined;
     calculated: CalculatedKg;
     weight: LineWeight | null;
+    // Netto kg alleen (ook als bruto een fout heeft): voor de controle "= 10,0 kg per colli".
+    netKg: number | null;
 }
 
 export function lineKgRows(lines: (LineWeightDraft & PalletInputDraft & { productVariantId: string; unit: string })[], defaultsFor: (variantId: number) => PackageKgDefaults | undefined): { rows: LineKgRow[]; totals: WeightTotals } {
@@ -128,7 +130,8 @@ export function lineKgRows(lines: (LineWeightDraft & PalletInputDraft & { produc
         const quantity = amounts.ok ? amounts.value.quantity : null;
         const defaults = defaultsFor(Number(line.productVariantId));
         const weight = resolveLineWeight(line, quantity, defaults);
-        return { quantity, defaults, calculated: calculatedKg(quantity, defaults), weight: weight.ok ? weight.value : null };
+        const net = resolveLineWeight({ netKg: line.netKg, netKgEntered: line.netKgEntered }, quantity, { defaultNetKgPerPackage: defaults?.defaultNetKgPerPackage });
+        return { quantity, defaults, calculated: calculatedKg(quantity, defaults), weight: weight.ok ? weight.value : null, netKg: net.ok ? net.value.netWeightKg : null };
     });
     const totals = lineWeightTotals(lines.map((line, index) => ({
         quantity: rows[index].quantity, unit: line.unit, netWeightKg: rows[index].weight?.netWeightKg ?? null, grossWeightKg: rows[index].weight?.grossWeightKg ?? null,
