@@ -23,21 +23,37 @@ namespace AgfAdmin.Services
             _db = db;
         }
 
+        // Pogingen bij een gelijktijdig toegekend ordernummer (unieke index op jaar + volgnummer); daarna een echte fout.
+        public const int MaxOrderNumberAttempts = 5;
+
         public async Task<ServiceResult<SupplyCommitmentDto>> CreateAsync(CreateSupplyCommitmentDto request, CancellationToken cancellationToken = default)
         {
+            for (var attempt = 1; ; attempt++)
+            {
+                var (result, numberTaken) = await TryCreateAsync(request, cancellationToken);
+                if (!numberTaken || attempt >= MaxOrderNumberAttempts)
+                {
+                    return result ?? throw new InvalidOperationException($"No free purchase order number after {attempt} attempts.");
+                }
+                _db.ChangeTracker.Clear();
+            }
+        }
+
+        private async Task<(ServiceResult<SupplyCommitmentDto> Result, bool NumberTaken)> TryCreateAsync(CreateSupplyCommitmentDto request, CancellationToken cancellationToken)
+        {
             var errors = new Dictionary<string, List<string>>();
-            var candidate = BuildCandidate(request, errors);
+            var candidate = BuildCandidate(request, _db.BusinessCalendar.Today(), errors);
             if (errors.Count > 0)
             {
-                return ServiceResult<SupplyCommitmentDto>.Validation(
-                    errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+                return (ServiceResult<SupplyCommitmentDto>.Validation(
+                    errors.ToDictionary(e => e.Key, e => e.Value.ToArray())), false);
             }
 
             // Idempotentie: dezelfde RequestId met dezelfde inhoud geeft de bestaande toezegging terug.
             var existing = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return await ResultForRetryAsync(existing, candidate, cancellationToken);
+                return (await ResultForRetryAsync(existing, request, candidate, cancellationToken), false);
             }
 
             // Nieuwe invoer: hele pallets (na de replaycontrole, zodat een eerder opgeslagen opdracht nog steeds herkend wordt).
@@ -48,13 +64,13 @@ namespace AgfAdmin.Services
             }
             if (errors.Count > 0)
             {
-                return ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+                return (ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray())), false);
             }
 
             var notFound = await FindMissingReferenceAsync(candidate, cancellationToken);
             if (notFound != null)
             {
-                return ServiceResult<SupplyCommitmentDto>.NotFound(notFound);
+                return (ServiceResult<SupplyCommitmentDto>.NotFound(notFound), false);
             }
 
             // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
@@ -69,29 +85,35 @@ namespace AgfAdmin.Services
             }
             if (errors.Count > 0)
             {
-                return ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+                return (ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray())), false);
             }
 
+            // Het ordernummer kent AppDbContext bij opslaan toe (volgende vrije in het jaar). Een gelijktijdige aanmaak kan hetzelfde
+            // nummer kiezen; de unieke index weigert dan de tweede en CreateAsync probeert het opnieuw met een nieuw nummer.
             _db.SupplyCommitments.Add(candidate);
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException exception)
             {
                 // Gelijktijdige retry: de unieke index op RequestId heeft het tweede verzoek geweigerd.
                 _db.ChangeTracker.Clear();
                 var concurrent = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
-                if (concurrent == null)
+                if (concurrent != null)
                 {
-                    throw;
+                    return (await ResultForRetryAsync(concurrent, request, candidate, cancellationToken), false);
                 }
-
-                return await ResultForRetryAsync(concurrent, candidate, cancellationToken);
+                // Anders bezette het nummer een gelijktijdige andere order: opnieuw met het volgende nummer.
+                if (DbErrors.IsUniqueViolation(exception))
+                {
+                    return (null, true);
+                }
+                throw;
             }
 
             var created = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
-            return ServiceResult<SupplyCommitmentDto>.Created(await ToDtoAsync(created, cancellationToken));
+            return (ServiceResult<SupplyCommitmentDto>.Created(await ToDtoAsync(created, cancellationToken)), false);
         }
 
         public async Task<ServiceResult<SupplyCommitmentDto>> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -146,7 +168,7 @@ namespace AgfAdmin.Services
         private async Task<SupplyCommitmentDto> ToDtoAsync(SupplyCommitment commitment, CancellationToken cancellationToken) =>
             ToDto(commitment, await AllocatedForAsync(new[] { commitment }, cancellationToken));
 
-        private static SupplyCommitment BuildCandidate(CreateSupplyCommitmentDto request, Dictionary<string, List<string>> errors)
+        private static SupplyCommitment BuildCandidate(CreateSupplyCommitmentDto request, DateOnly today, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {
@@ -181,6 +203,14 @@ namespace AgfAdmin.Services
             if (request.ExpectedAt == null)
             {
                 AddError(errors, "expectedAt", "An expected arrival/delivery date is required.");
+            }
+
+            // Inkoopordergegevens: alle optioneel; leeg telt als niet opgegeven.
+            var supplierReference = OptionalText(request.SupplierReference, PurchaseOrderRules.MaxSupplierReferenceLength, "supplierReference", errors);
+            var note = OptionalText(request.Note, PurchaseOrderRules.MaxNoteLength, "note", errors);
+            if (request.OrderChannel != null && !PurchaseOrderRules.IsChannel(request.OrderChannel))
+            {
+                AddError(errors, "orderChannel", $"Order channel must be one of: {string.Join(", ", PurchaseOrderRules.Channels)}.");
             }
 
             var lines = new List<SupplyCommitmentLine>();
@@ -233,6 +263,10 @@ namespace AgfAdmin.Services
                 Origin = origin,
                 Destination = destination,
                 ExpectedAt = ToStoredUtc(request.ExpectedAt!.Value),
+                SupplierReference = supplierReference,
+                OrderedOn = request.OrderedOn ?? today,
+                OrderChannel = request.OrderChannel,
+                Note = note,
                 CreatedAt = now,
                 UpdatedAt = now,
                 Lines = lines
@@ -315,6 +349,22 @@ namespace AgfAdmin.Services
             return trimmed;
         }
 
+        // Optionele vrije tekst: leeg of alleen spaties = niet opgegeven (null); anders getrimd en op lengte gecontroleerd.
+        private static string OptionalText(string value, int maxLength, string key, Dictionary<string, List<string>> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+            var trimmed = value.Trim();
+            if (trimmed.Length > maxLength)
+            {
+                AddError(errors, key, $"This field may contain at most {maxLength} characters.");
+                return null;
+            }
+            return trimmed;
+        }
+
         // PostgreSQL timestamptz bewaart microseconden; afkappen houdt een retry na opslag exact vergelijkbaar.
         private static DateTime ToStoredUtc(DateTimeOffset value)
         {
@@ -357,15 +407,25 @@ namespace AgfAdmin.Services
             return missingVariantId == null ? null : $"Product variant {missingVariantId} does not exist.";
         }
 
-        private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, SupplyCommitment candidate, CancellationToken cancellationToken) =>
-            HasSameContent(existing, candidate)
+        private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken) =>
+            HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null)
                 ? ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(existing, cancellationToken))
                 : ServiceResult<SupplyCommitmentDto>.Conflict(
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");
 
         // Strikte vergelijking, inclusief de volgorde van de regels; decimals worden op waarde vergeleken (12.30 == 12.3).
-        private static bool HasSameContent(SupplyCommitment existing, SupplyCommitment candidate)
+        // Inkoopordervelden: weggelaten (null) betekent "niet opgegeven" en is gelijk aan een opgeslagen null; een weggelaten
+        // besteldatum telt niet mee (die is bij opslag vandaag geworden), zodat een oudere bevroren opdracht later nog gelijk is.
+        private static bool HasSameContent(SupplyCommitment existing, SupplyCommitment candidate, bool orderedOnGiven)
         {
+            if (!string.Equals(existing.SupplierReference, candidate.SupplierReference, StringComparison.Ordinal)
+                || !string.Equals(existing.OrderChannel, candidate.OrderChannel, StringComparison.Ordinal)
+                || !string.Equals(existing.Note, candidate.Note, StringComparison.Ordinal)
+                || (orderedOnGiven && existing.OrderedOn != candidate.OrderedOn))
+            {
+                return false;
+            }
+
             if (existing.VendorId != candidate.VendorId
                 || existing.CustomerId != candidate.CustomerId
                 || !string.Equals(existing.Route, candidate.Route, StringComparison.Ordinal)
@@ -427,6 +487,11 @@ namespace AgfAdmin.Services
             Destination = commitment.Destination,
             ExpectedAt = commitment.ExpectedAt == null ? null : DateTime.SpecifyKind(commitment.ExpectedAt.Value, DateTimeKind.Utc),
             CreatedAt = DateTime.SpecifyKind(commitment.CreatedAt, DateTimeKind.Utc),
+            OrderNumber = commitment.OrderNumber,
+            SupplierReference = commitment.SupplierReference,
+            OrderedOn = commitment.OrderedOn,
+            OrderChannel = commitment.OrderChannel,
+            Note = commitment.Note,
             Lines = commitment.Lines
                 .OrderBy(l => l.Id)
                 .Select(l => new SupplyCommitmentLineDto
