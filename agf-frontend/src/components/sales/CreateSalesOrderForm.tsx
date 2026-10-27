@@ -39,7 +39,7 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     lines: command.payload.lines.map((line) => ({
         key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
         mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
-        loosePackages: line.loosePackages === undefined ? '' : formatDecimalInput(line.loosePackages),
+        loosePackages: line.loosePackages == null ? '' : formatDecimalInput(line.loosePackages),
     })),
 });
 
