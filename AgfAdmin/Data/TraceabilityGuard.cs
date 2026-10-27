@@ -75,6 +75,7 @@ namespace AgfAdmin.Data
     //    buiten een afkeuring. Een niet-afsplitsende afkeuringsregel keurt de hele voorraad van een regel af: die regel gaat in dezelfde
     //    save naar Rejected en de afkeuringsregel kopieert exact haar voorraad (aantal en kg), eenheid en bronregel. De herkomst van
     //    afgesplitste inhoud is onveranderlijk; afkeuringen, afkeuringsregels en factuurkoppelingen van inkooporders zijn append-only.
+    //    Een afsplitsing is nooit groter dan de voorraad vóór de save, en de actieve verkoopreserveringen passen er daarna nog in.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -185,11 +186,11 @@ namespace AgfAdmin.Data
             await CheckDirectTradeShipmentCorrectionsAsync(db, async, cancellationToken);
             await CheckDeliveryConfirmationsAsync(db, async, cancellationToken);
             await CheckCorrectionLedgerAsync(db, async, cancellationToken);
-            CheckRejectionLedger(db);
+            await CheckRejectionLedgerAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
-        private static void CheckRejectionLedger(AppDbContext db)
+        private static async Task CheckRejectionLedgerAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             if (db.ChangeTracker.Entries<SupplyRejection>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
                 || db.ChangeTracker.Entries<SupplyRejectionLine>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
@@ -295,6 +296,37 @@ namespace AgfAdmin.Data
                 if (dq < 0m || dkg < 0m || lines.Sum(l => l.Quantity) != dq || lines.Sum(l => l.NetWeightKg) != dkg)
                 {
                     throw new TraceabilityViolationException($"The split-off quantity of pallet content line {entry.Entity.Id} only rises together with partial rejection lines of exactly the same total.");
+                }
+            }
+
+            // Een afsplitsing komt nooit uit meer dan de voorraad vóór deze save (ontvangst - afgeboekt - eerder afgesplitst), en de
+            // actieve verkoopreserveringen op de regel passen daarna nog in de resterende voorraad (aantal en kg).
+            foreach (var entry in changedSplitOff)
+            {
+                var before = entry.OriginalValues;
+                var onHandBefore = ReservationRules.OnHandQuantity(before.GetValue<decimal>(nameof(PalletContentLine.Quantity)),
+                    before.GetValue<decimal>(nameof(PalletContentLine.DispatchedQuantity)), before.GetValue<decimal>(nameof(PalletContentLine.SplitOffQuantity)));
+                var onHandKgBefore = ReservationRules.OnHandQuantity(before.GetValue<decimal>(nameof(PalletContentLine.NetWeightKg)),
+                    before.GetValue<decimal>(nameof(PalletContentLine.DispatchedNetWeightKg)), before.GetValue<decimal>(nameof(PalletContentLine.SplitOffNetWeightKg)));
+                var dq = entry.Entity.SplitOffQuantity - before.GetValue<decimal>(nameof(PalletContentLine.SplitOffQuantity));
+                var dkg = entry.Entity.SplitOffNetWeightKg - before.GetValue<decimal>(nameof(PalletContentLine.SplitOffNetWeightKg));
+                if (dq > onHandBefore || dkg > onHandKgBefore)
+                {
+                    throw new TraceabilityViolationException($"Pallet content line {entry.Entity.Id} has only {onHandBefore} on hand and {onHandKgBefore} kg; {dq} and {dkg} kg cannot be split off.");
+                }
+
+                var contentId = entry.Entity.Id;
+                var stored = await ToListAsync(db.StockReservations.AsNoTracking()
+                    .Where(r => r.PalletContentLineId == contentId && r.SalesOrderLineId != null && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical)
+                    .Select(r => new { r.Id, r.Quantity, r.NetWeightKg }), async, cancellationToken);
+                var tracked = db.ChangeTracker.Entries<StockReservation>().Where(e => e.Entity.PalletContentLineId == contentId && e.Entity.SalesOrderLineId != null).ToList();
+                var active = stored.Where(r => tracked.All(e => e.Entity.Id != r.Id)).Select(r => (r.Quantity, Kg: r.NetWeightKg ?? 0m))
+                    .Concat(tracked.Where(e => e.State != EntityState.Deleted && e.Entity.Status == ReservationRules.StatusActive && e.Entity.Source == ReservationRules.SourcePhysical)
+                        .Select(e => (e.Entity.Quantity, Kg: e.Entity.NetWeightKg ?? 0m)))
+                    .ToList();
+                if (active.Sum(r => r.Quantity) > onHandBefore - dq || active.Sum(r => r.Kg) > onHandKgBefore - dkg)
+                {
+                    throw new TraceabilityViolationException($"Splitting off pallet content line {entry.Entity.Id} would leave less on hand than its active sales reservations.");
                 }
             }
             foreach (var line in rejectionLines.Where(l => l.SplitOff))
