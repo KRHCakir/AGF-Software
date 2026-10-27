@@ -60,4 +60,18 @@ public class PurchaseOrdersControllerTests : IDisposable
         Assert.IsType<ConflictObjectResult>(await controller.AddInvoiceRef(id, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "f-1" }));
         Assert.IsType<NotFoundObjectResult>(await controller.AddInvoiceRef(id + 1, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "F-2" }));
     }
+
+    [Fact]
+    public async Task Reject_WithoutActor_Returns400()
+    {
+        var id = await SeedOrderAsync();
+        await using var db = _factory.CreateContext();
+        var result = await Controller(db).Reject(id, new RejectPurchaseOrderDto
+        {
+            RequestId = Guid.NewGuid(), Reason = "Quality", Decision = "Dispose",
+            Lines = new List<RejectPurchaseOrderLineDto> { new() { PalletContentLineId = 1, ExpectedContentLineVersion = 0, Quantity = 1m } }
+        });
+        var problem = Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Contains("actorReference", problem.Errors.Keys);
+    }
 }
