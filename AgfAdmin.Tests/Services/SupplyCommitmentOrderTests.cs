@@ -14,6 +14,9 @@ public class SupplyCommitmentOrderTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
+    // De service legt CreatedAt = nu vast; het nummer volgt het jaar daarvan (Europe/Amsterdam), dus niet hard op 2026.
+    private static string No(int sequence) => PurchaseOrderRules.FormatNumber(AmsterdamBusinessCalendar.ToAmsterdamDate(DateTime.UtcNow).Year, sequence);
+
     [Fact]
     public async Task Create_AssignsRunningOrderNumber_AndStoresOrderFields()
     {
@@ -25,8 +28,8 @@ public class SupplyCommitmentOrderTests : IDisposable
         request.Note = "  Bevestigd door Piet  ";
         var second = await PurchaseOrderTestData.CreateOrderAsync(_factory, request);
 
-        Assert.Equal("IO-2026-0001", first.OrderNumber);
-        Assert.Equal("IO-2026-0002", second.OrderNumber);
+        Assert.Equal(No(1), first.OrderNumber);
+        Assert.Equal(No(2), second.OrderNumber);
         Assert.Equal("NP-88123", first.SupplierReference);
         Assert.Equal("Phone", first.OrderChannel);
         // Weggelaten besteldatum = vandaag (Europe/Amsterdam, vaste testkalender).
@@ -46,8 +49,8 @@ public class SupplyCommitmentOrderTests : IDisposable
         SupplyCommitmentDto inner = null;
         var outer = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed), new ConcurrentSaveInterceptor(async () => inner = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed))));
 
-        Assert.Equal("IO-2026-0002", inner.OrderNumber);
-        Assert.Equal("IO-2026-0003", outer.OrderNumber);
+        Assert.Equal(No(2), inner.OrderNumber);
+        Assert.Equal(No(3), outer.OrderNumber);
         await using var verify = _factory.CreateContext();
         Assert.Equal(new[] { 1, 2, 3 }, await verify.SupplyCommitments.OrderBy(c => c.OrderSequence).Select(c => c.OrderSequence).ToListAsync());
     }
@@ -62,7 +65,7 @@ public class SupplyCommitmentOrderTests : IDisposable
             var outer = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed), new ConcurrentSaveInterceptor(async () => created.Add((await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed))).OrderNumber)));
             created.Add(outer.OrderNumber);
         }
-        Assert.Equal(Enumerable.Range(1, 8).Select(n => $"IO-2026-{n:D4}"), created.OrderBy(n => n));
+        Assert.Equal(Enumerable.Range(1, 8).Select(No), created.OrderBy(n => n));
     }
 
     [Fact]
