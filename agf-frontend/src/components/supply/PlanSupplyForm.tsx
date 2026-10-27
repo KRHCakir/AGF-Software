@@ -413,7 +413,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <button type="submit" className={primaryButtonClass} disabled={locked}>
                     {submitting ? t('supply_saving') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
                 </button>
-                <span className="text-xs text-gray-600">{t('supply_plan_footer')}</span>
             </div>
         </form>
     );

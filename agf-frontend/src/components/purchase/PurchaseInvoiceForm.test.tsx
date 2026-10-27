@@ -198,6 +198,6 @@ describe('PurchaseInvoiceForm', () => {
         assert.equal(body.paymentTermsDays, 30);
         assert.equal(body.currency, 'EUR');
         await mounted.waitFor(() => text().includes('purchase_saved_title'), 'success');
-        assert.ok(text().includes('purchase_no_stock_effect'));
+        assert.ok(!text().includes('purchase_no_stock_effect'), 'no explanation of internal workings after saving');
     });
 });

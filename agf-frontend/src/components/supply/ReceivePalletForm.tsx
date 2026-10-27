@@ -672,7 +672,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                 <div>
                                     <span className="text-xs font-medium text-gray-700">{t('supply_unit')}</span>
                                     <div className="mt-1.5"><UnitBadge unit={entry.line.expectedUnit} /></div>
-                                    <span className="block text-xs text-gray-500">{t('supply_unit_from_source')}</span>
                                     <FieldError id={key('unit')} messages={e(key('unit'))} />
                                 </div>
                                 <div className="col-span-2">
@@ -721,7 +720,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                 <div>
                                     <span className="text-xs font-medium text-gray-700">{t('supply_quality')}</span>
                                     <div className="mt-1.5"><QualityBadge status="Quarantine" /></div>
-                                    <span className="block text-xs text-gray-500">{t('supply_quality_start_hint')}</span>
                                 </div>
                                 {/* GGN: leveranciers-GGN's als invoerhulp (precies één = voorstel, meer = kiezen), per partij aanpasbaar of bewust leeg; de gekozen waarde staat op de ontvangst. */}
                                 <div className="col-span-2 md:col-span-3">
@@ -739,7 +737,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     </div>
                                     <span className="block text-xs text-gray-500" data-testid={`ggn-state-${id}`}>
                                         {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
-                                        {' '}{t('supply_ggn_hint')}
                                     </span>
                                     {(() => {
                                         const warning = ggnCertificateWarning(draft.ggn, entry.commitment.vendorGgns, todayInAmsterdam());
@@ -765,7 +762,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 <button type="submit" className={primaryButtonClass} disabled={blocked || sources.status !== 'ready'}>
                     {running ? t('supply_saving') : frozen?.pallet.done ? t('supply_continue_registration') : t('supply_register_pallet')}
                 </button>
-                <span className="text-xs text-gray-600">{t('supply_receive_footer')}</span>
             </div>
         </form>
     );

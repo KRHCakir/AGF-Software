@@ -261,7 +261,6 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 <h2 className="text-lg font-semibold text-green-900">{t('purchase_saved_title', { number: result.invoice.invoiceNumber ?? '' })}</h2>
                 {result.replayed && <p className="mt-1 text-sm text-green-900">{t('supply_saved_before')}</p>}
                 <p className="mt-1 text-sm text-gray-800">{t('purchase_saved_summary', { vendor: result.invoice.vendorName ?? '', total: money(result.invoice.totalAmount), currency: result.invoice.currency ?? '', status: result.invoice.status })}</p>
-                <p className="mt-1 text-xs text-gray-600">{t('purchase_no_stock_effect')}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" className={primaryButtonClass} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
                 </div>
@@ -364,7 +363,6 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                     <FieldError id={field} messages={e(field)} />
                                 </div>
                             ))}
-                            <p className="col-span-2 text-xs text-gray-500 md:col-span-4">{t('purchase_extra_hint')}</p>
                         </div>
                     )}
                 </section>

@@ -374,7 +374,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                     <button type="submit" className={primaryButtonClass} disabled={locked}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
-                    <span className="text-xs text-gray-600">{t('sales_save_footer')}</span>
                 </div>
             )}
         </form>

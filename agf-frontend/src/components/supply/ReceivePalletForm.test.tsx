@@ -105,7 +105,7 @@ describe('ReceivePalletForm GGN', () => {
 
         assert.equal(input('line.501.ggn').value, '0049929123456', 'the single supplier GGN is proposed (leading zero kept)');
         assert.ok(state(501).includes('supply_ggn_from_vendor'));
-        assert.ok(state(501).includes('supply_ggn_hint'), 'as given; certification not verified');
+        assert.ok(!state(501).includes('supply_ggn_hint'), 'no explanation of internal workings next to the GGN');
         assert.equal(input('line.502.ggn').value, '0049929123456', 'same supplier, same single proposal on every line');
         await type(input('line.502.ggn'), '');
         assert.ok(state(502).includes('supply_ggn_cleared'));
