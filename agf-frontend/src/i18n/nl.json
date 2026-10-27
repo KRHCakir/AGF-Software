@@ -1597,5 +1597,6 @@
   "po_reject_decision": "Besluit",
   "po_reject_save": "Afkeuring vastleggen",
   "po_reject_too_many": "Hooguit {max}.",
-  "po_cancel": "Annuleren"
+  "po_cancel": "Annuleren",
+  "po_pending_reject": "Afkeuren op order {number}: pallet {pallet} · partij {lot}"
 }

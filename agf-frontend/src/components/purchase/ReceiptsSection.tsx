@@ -8,12 +8,17 @@ import type { PurchaseOrderDetail } from '../../types/purchaseOrder';
 import QualityBadge from '../availability/QualityBadge';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import { sectionClass } from './sectionClass';
+import { rejectReceiptKey } from '../../lib/pendingCommands';
+import { usePendingCommands } from '../sales/PendingCommandsContext';
 import RejectReceiptForm from './RejectReceiptForm';
 
-// Ontvangsten van de order met hun keuring; per afkeurbare regel "Afkeuren" (hooguit één formulier tegelijk open).
+// Ontvangsten van de order met hun keuring; per afkeurbare regel "Afkeuren" (hooguit één formulier tegelijk open). Een
+// afkeuring met onbekende uitkomst staat altijd open (ook als de regel intussen niet meer afkeurbaar lijkt): alleen opnieuw.
 export default function ReceiptsSection({ order, onChanged }: { order: PurchaseOrderDetail; onChanged: (order: PurchaseOrderDetail) => void }) {
     const { t, locale } = useTranslation();
     const [rejecting, setRejecting] = useState<number | null>(null);
+    const { commands } = usePendingCommands();
+    const frozen = (lineId: number) => rejectReceiptKey(order.id, lineId) in commands;
     const qty = (value: number) => formatQuantity(value, locale);
 
     return (
@@ -38,14 +43,14 @@ export default function ReceiptsSection({ order, onChanged }: { order: PurchaseO
                             {receipt.reservedQuantity > 0 && <span className="text-gray-600"> · {t('po_receipt_reserved', { reserved: qty(receipt.reservedQuantity) })}</span>}
                         </p>
                         {receipt.qualityReason && <p className="text-xs text-gray-600">{receipt.qualityReason}</p>}
-                        {receipt.rejectable && rejecting !== receipt.palletContentLineId && (
+                        {receipt.rejectable && rejecting !== receipt.palletContentLineId && !frozen(receipt.palletContentLineId) && (
                             <button type="button" className={`${secondaryButtonClass} mt-1 border-red-300 text-red-800 hover:bg-red-50`} onClick={() => setRejecting(receipt.palletContentLineId)}
                                 aria-label={t('po_reject_line', { pallet: receipt.palletReference, lot: receipt.lotNumber })}>
                                 {t('po_reject')}
                             </button>
                         )}
-                        {rejecting === receipt.palletContentLineId && (
-                            <RejectReceiptForm orderId={order.id} receipt={receipt} onCancel={() => setRejecting(null)}
+                        {(rejecting === receipt.palletContentLineId || frozen(receipt.palletContentLineId)) && (
+                            <RejectReceiptForm orderId={order.id} orderNumber={order.orderNumber} receipt={receipt} onCancel={() => setRejecting(null)}
                                 onDone={(updated) => { setRejecting(null); onChanged(updated); }} />
                         )}
                     </li>

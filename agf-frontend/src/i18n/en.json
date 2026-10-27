@@ -1597,5 +1597,6 @@
   "po_reject_decision": "Decision",
   "po_reject_save": "Record rejection",
   "po_reject_too_many": "At most {max}.",
-  "po_cancel": "Cancel"
+  "po_cancel": "Cancel",
+  "po_pending_reject": "Reject on order {number}: pallet {pallet} · lot {lot}"
 }
