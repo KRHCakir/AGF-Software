@@ -25,8 +25,10 @@ namespace AgfAdmin.Services
         // daarna sorteren (nieuwste eerst) en pagineren op de server.
         public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, CancellationToken cancellationToken = default)
         {
-            var statusFilter = string.IsNullOrWhiteSpace(status) ? "open" : status.Trim();
-            if (statusFilter != "open" && statusFilter != "all" && !PurchaseOrderRules.IsOrderStatus(statusFilter))
+            // Hoofdletterongevoelig ("Open", "received"), maar altijd terug naar een waarde uit de toelatingslijst.
+            var statusFilter = string.IsNullOrWhiteSpace(status) ? "open"
+                : new[] { "open", "all" }.Concat(PurchaseOrderRules.OrderStatuses).FirstOrDefault(s => string.Equals(s, status.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (statusFilter == null)
             {
                 return ServiceResult<PurchaseOrderListDto>.Validation(new Dictionary<string, string[]>
                 {
@@ -45,7 +47,7 @@ namespace AgfAdmin.Services
                 commitments = commitments.Where(c => c.OrderNumber.ToLower().Contains(term)
                     || (c.SupplierReference != null && c.SupplierReference.ToLower().Contains(term))
                     || (c.Vendor.Name != null && c.Vendor.Name.ToLower().Contains(term))
-                    || _db.SupplyCommitmentInvoiceRefs.Any(r => r.SupplyCommitmentId == c.Id && r.InvoiceNumber.ToLower().Contains(term)));
+                    || _db.SupplyCommitmentInvoiceRefs.Any(r => r.SupplyCommitmentId == c.Id && r.InvoiceNumberKey.Contains(term)));
             }
             // Voorfilter op de opgeslagen status: Geannuleerd en Afgekeurd zijn opgeslagen eindtoestanden.
             if (statusFilter == PurchaseOrderRules.OrderCancelled) commitments = commitments.Where(c => c.Status == SupplyRules.StatusCancelled);
@@ -100,15 +102,15 @@ namespace AgfAdmin.Services
             });
         }
 
-        // Orders waaraan dit factuurnummer hangt (zonder hoofdletters en spaties aan de randen); met leverancier alleen diens orders.
+        // Orders waaraan dit factuurnummer hangt (via de sleutel: zonder hoofdletters en spaties aan de randen); met leverancier alleen diens orders.
         public async Task<IReadOnlyList<PurchaseOrderInvoiceMatchDto>> FindByInvoiceNumberAsync(string invoiceNumber, int? vendorId, CancellationToken cancellationToken = default)
         {
-            var number = PurchaseOrderRules.NormalizeInvoiceNumber(invoiceNumber)?.ToLowerInvariant();
-            if (number == null)
+            var key = PurchaseOrderRules.InvoiceNumberKey(invoiceNumber);
+            if (key == null)
             {
                 return Array.Empty<PurchaseOrderInvoiceMatchDto>();
             }
-            var refs = _db.SupplyCommitmentInvoiceRefs.AsNoTracking().Where(r => r.InvoiceNumber.ToLower() == number);
+            var refs = _db.SupplyCommitmentInvoiceRefs.AsNoTracking().Where(r => r.InvoiceNumberKey == key);
             if (vendorId != null) refs = refs.Where(r => r.SupplyCommitment.VendorId == vendorId);
             return await refs
                 .OrderBy(r => r.SupplyCommitment.OrderYear).ThenBy(r => r.SupplyCommitment.OrderSequence).ThenBy(r => r.Id)
