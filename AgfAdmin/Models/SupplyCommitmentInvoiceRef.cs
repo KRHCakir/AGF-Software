@@ -15,6 +15,9 @@ namespace AgfAdmin.Models
 
         public string Kind { get; set; }            // Invoice of CreditNote
         public string InvoiceNumber { get; set; }   // zoals op het document (getrimd)
+        // Vergelijkingssleutel: getrimd en in kleine letters (zoals SearchCodeKey); uniek per order en soort, zodat "F-1" en
+        // "f-1" ook in de database hetzelfde nummer zijn. AppDbContext vult hem bij elke schrijver.
+        public string InvoiceNumberKey { get; set; }
         public DateOnly? InvoiceDate { get; set; }
         public decimal? AmountExclVat { get; set; }
 

@@ -14,6 +14,10 @@ namespace AgfAdmin.Services
 
         public static readonly IReadOnlyList<string> Channels = new[] { "Phone", "Email", "Portal", "Other" };
 
+        // Vergelijkingssleutel van een factuurnummer (zoals SearchCodeKey): getrimd, kleine letters (invariant); leeg = null.
+        public static string InvoiceNumberKey(string invoiceNumber) =>
+            string.IsNullOrWhiteSpace(invoiceNumber) ? null : invoiceNumber.Trim().ToLowerInvariant();
+
         public static bool IsChannel(string value) => value != null && Channels.Contains(value, StringComparer.Ordinal);
 
         // "IO-2026-0001": minstens vier cijfers; boven 9999 groeit het nummer gewoon door (IO-2026-10000).
