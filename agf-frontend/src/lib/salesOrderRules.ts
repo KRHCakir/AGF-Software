@@ -26,7 +26,8 @@ export type RuleCode =
     | 'remainder_mismatch'
     | 'exceeds_remaining'
     | 'future_date'
-    | 'before_shipping';
+    | 'before_shipping'
+    | 'not_whole';
 
 export interface RuleError {
     field: string;
@@ -42,6 +43,7 @@ export interface OrderLineDraft {
     mode: QuantityInputMode;
     palletCount: string;
     packagesPerPallet: string;
+    loosePackages?: string;
 }
 
 export interface OrderDraft {
@@ -104,7 +106,7 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
         const before = errors.length;
         if (!/^[1-9]\d*$/.test(line.productVariantId)) errors.push({ field: `${prefix}.productVariantId`, code: 'required' });
         // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet; de server controleert dezelfde rekensom.
-        const amounts = resolvePalletInput({ mode: line.mode, quantity: line.quantity, palletCount: line.palletCount, packagesPerPallet: line.packagesPerPallet });
+        const amounts = resolvePalletInput(line);
         if (!amounts.ok) for (const error of amounts.errors) errors.push({ field: `${prefix}.${error.field}`, code: error.code as RuleCode });
         if (line.unit === '') errors.push({ field: `${prefix}.unit`, code: 'required' });
         // Eén regel per variant + eenheid, net als de databank-index: anders worden reserveringen dubbelzinnig.
@@ -119,6 +121,8 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
             unit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
             palletCount: amounts.ok ? amounts.value.palletCount : null,
             packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
+            // Losse verpakkingen alleen als ze zijn ingevuld: een regel zonder blijft dezelfde opdracht als vroeger.
+            ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
         };
     });
 

@@ -6,7 +6,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
-import { DecimalError, parsePositiveDecimal } from '../../lib/decimal';
+import { parsePositiveDecimal } from '../../lib/decimal';
 import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -18,8 +18,8 @@ import { UnitBadge } from '../availability/QuantityCell';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import QuantityInput from '../shared/QuantityInput';
 import ErrorNotice from './ErrorNotice';
-import FieldError, { fieldProps, inputClass } from './FieldError';
-import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
+import FieldError, { fieldProps, inputClass, lineTableClass } from './FieldError';
+import { FieldErrors, addError, decimalErrorKey, outcomeUnknown, palletErrorKey } from './messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 
 export interface ReferenceData {
@@ -39,6 +39,7 @@ interface LineDraft {
     mode: QuantityInputMode;
     palletCount: string;
     packagesPerPallet: string;
+    loosePackages?: string;
 }
 
 interface HeaderDraft {
@@ -81,6 +82,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [reference.products]);
+    // Netto en bruto kg per verpakking: alleen voor de rekenregel onder het aantal.
+    const variants = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [reference.products]);
 
     const edited = () => {
         // Na een definitieve weigering (of niets verstuurd) hoort een gewijzigde invoer bij een nieuw verzoek.
@@ -144,8 +147,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             const prefix = `lines[${index}]`;
             if (!line.productVariantId) addError(found, `${prefix}.productVariantId`, t('supply_error_required'));
             // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet; de server controleert dezelfde rekensom.
-            const amounts = resolvePalletInput({ mode: line.mode, quantity: line.quantity, palletCount: line.palletCount, packagesPerPallet: line.packagesPerPallet });
-            if (!amounts.ok) for (const error of amounts.errors) addError(found, `${prefix}.${error.field === 'quantity' ? 'expectedQuantity' : error.field}`, t(decimalErrorKey(error.code as DecimalError)));
+            const amounts = resolvePalletInput(line);
+            if (!amounts.ok) for (const error of amounts.errors) addError(found, `${prefix}.${error.field === 'quantity' ? 'expectedQuantity' : error.field}`, t(palletErrorKey(error.field, error.code)));
             if (line.unit === '') addError(found, `${prefix}.expectedUnit`, t('supply_error_required_unit'));
             const declared = line.declaredKg.trim() === '' ? null : parsePositiveDecimal(line.declaredKg);
             if (declared !== null && !declared.ok) addError(found, `${prefix}.expectedNetWeightKg`, t(decimalErrorKey(declared.error)));
@@ -164,6 +167,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 lotNumber: lot === '' ? null : lot,
                 palletCount: amounts.ok ? amounts.value.palletCount : null,
                 packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
+                ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
             };
         });
 
@@ -337,7 +341,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
                 <div className="overflow-x-auto rounded border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <table className={lineTableClass}>
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
@@ -370,7 +374,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                         </td>
                                         <td className="w-72 px-2 py-1.5">
                                             <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity"
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null} kgDefaults={variants.get(Number(line.productVariantId))}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
