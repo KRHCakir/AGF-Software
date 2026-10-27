@@ -86,6 +86,7 @@ namespace AgfAdmin.Data
             EnsureRelations();
             EnsurePaymentConditionsAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureOrderNumbersAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
+            EnsureInvoiceNumberKeys();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
@@ -96,6 +97,7 @@ namespace AgfAdmin.Data
             EnsureRelations();
             await EnsurePaymentConditionsAsync(async: true, cancellationToken);
             await EnsureOrderNumbersAsync(async: true, cancellationToken);
+            EnsureInvoiceNumberKeys();
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -171,6 +173,15 @@ namespace AgfAdmin.Data
                 commitment.OrderYear = year;
                 commitment.OrderSequence = sequence;
                 commitment.OrderNumber = Services.PurchaseOrderRules.FormatNumber(year, sequence);
+            }
+        }
+
+        // Vergelijkingssleutel van een factuurnummer, ongeacht de schrijver: getrimd en in kleine letters (PurchaseOrderRules.InvoiceNumberKey).
+        private void EnsureInvoiceNumberKeys()
+        {
+            foreach (var entry in ChangeTracker.Entries<SupplyCommitmentInvoiceRef>().Where(e => e.State == EntityState.Added))
+            {
+                entry.Entity.InvoiceNumberKey = Services.PurchaseOrderRules.InvoiceNumberKey(entry.Entity.InvoiceNumber);
             }
         }
 
@@ -380,15 +391,17 @@ namespace AgfAdmin.Data
                 b.Property(r => r.AmountExclVat).HasPrecision(18, 2);
                 b.Property(r => r.ActorReference).HasMaxLength(PurchaseOrderRules.MaxActorLength);
                 b.HasIndex(r => r.RequestId).IsUnique();
-                // Hetzelfde nummer van dezelfde soort maar één keer per order; de service vergelijkt ook zonder hoofdletters.
-                b.HasIndex(r => new { r.SupplyCommitmentId, r.Kind, r.InvoiceNumber }).IsUnique();
-                b.HasIndex(r => r.InvoiceNumber);
+                // Hetzelfde nummer (zonder hoofdletters, via de sleutel) van dezelfde soort maar één keer per order; opzoeken gaat ook via de sleutel.
+                b.Property(r => r.InvoiceNumberKey).IsRequired().HasMaxLength(PurchaseOrderRules.MaxInvoiceNumberLength);
+                b.HasIndex(r => new { r.SupplyCommitmentId, r.Kind, r.InvoiceNumberKey }).IsUnique();
+                b.HasIndex(r => r.InvoiceNumberKey);
                 b.HasOne(r => r.SupplyCommitment).WithMany().HasForeignKey(r => r.SupplyCommitmentId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(r => r.IncomingInvoice).WithMany().HasForeignKey(r => r.IncomingInvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_Kind_Allowed", "\"Kind\" IN ('Invoice', 'CreditNote')");
                     t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumber_NotBlank", "length(trim(\"InvoiceNumber\")) > 0");
+                    t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumberKey_NotBlank", "length(trim(\"InvoiceNumberKey\")) > 0");
                 });
             });
 

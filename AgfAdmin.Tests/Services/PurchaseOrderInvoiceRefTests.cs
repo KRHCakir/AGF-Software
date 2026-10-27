@@ -64,4 +64,31 @@ public class PurchaseOrderInvoiceRefTests : IDisposable
         Assert.Equal(ServiceResultStatus.Validation, (await AddRefAsync(order.Id, "F-3", "Receipt")).Status);
         Assert.Equal(ServiceResultStatus.NotFound, (await AddRefAsync(9999, "F-3")).Status);
     }
+
+    [Fact]
+    public async Task InvoiceRefs_SameNumberOtherCase_Refused_AndKindIsTrimmed()
+    {
+        var seed = await PurchaseOrderTestData.SeedAsync(_factory);
+        var order = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed));
+        Assert.Equal(ServiceResultStatus.Created, (await AddRefAsync(order.Id, "F-1", " Invoice ")).Status);
+        var duplicate = await AddRefAsync(order.Id, "f-1");
+        Assert.Equal(ServiceResultStatus.Conflict, duplicate.Status);
+        Assert.Equal("Invoice", Assert.Single((await DetailAsync(order.Id)).InvoiceRefs).Kind);
+    }
+
+    // Deterministische race zoals bij het ordernummer: beide controleren vóór opslaan, de tweede botst op de unieke index op de
+    // sleutel en krijgt dezelfde 409 als de gewone controle; de eerste wint. Nooit een 500.
+    [Fact]
+    public async Task InvoiceRefs_ConcurrentSameNumberOtherCase_OneWins_OtherGetsDuplicateConflict()
+    {
+        var seed = await PurchaseOrderTestData.SeedAsync(_factory);
+        var order = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed));
+        ServiceResult<PurchaseOrderDetailDto> inner = null;
+        await using var db = _factory.CreateContext(new ConcurrentSaveInterceptor(async () => inner = await AddRefAsync(order.Id, "f-1")));
+        var outer = await new PurchaseOrderService(db).AddInvoiceRefAsync(order.Id, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "F-1" });
+
+        Assert.Equal(ServiceResultStatus.Created, inner.Status);
+        Assert.Equal(ServiceResultStatus.Conflict, outer.Status);
+        Assert.Equal("f-1", Assert.Single((await DetailAsync(order.Id)).InvoiceRefs).InvoiceNumber);
+    }
 }
