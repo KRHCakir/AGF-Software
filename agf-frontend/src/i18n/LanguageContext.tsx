@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import en from './en.json';
 import nl from './nl.json';
+import { reformatDecimalFieldsOnBlur, setInputLocale } from '../lib/decimal';
 
 type Locale = 'en' | 'nl';
 type Dictionaries = { [key in Locale]: Record<string, string> };
@@ -87,9 +88,12 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
         return text;
     };
 
+    // Getalvelden: invoer lezen in de taal van het scherm (vóór de kinderen renderen) en na blur in die notatie tonen (15000 -> 15.000).
+    useEffect(() => reformatDecimalFieldsOnBlur(document), []);
     // Before hydration, we avoid rendering translations that might mismatch the server if we had SSR,
     // but since this is an internal ERP, we just render right away.
     if (!isClient) return null;
+    setInputLocale(locale);
 
     return (
         <LanguageContext.Provider value={{ locale, setLocale, t }}>

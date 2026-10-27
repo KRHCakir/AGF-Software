@@ -8,6 +8,7 @@
 //   - krediet (alleen klant, EUR): limiet leeg of >= 0 met hooguit 2 decimalen; verzekerd -> verzekeraar (Other + naam) en
 //     verzekerde limiet verplicht; niet verzekerd -> alle verzekeringsvelden leeg. Verlopen verzekering = waarschuwing, geen fout.
 
+import { parseLocaleDecimal } from './decimal.ts';
 import { validateFreeTerms } from './paymentCondition.ts';
 import type { FreeTermsRuleCode } from './paymentCondition.ts';
 
@@ -109,12 +110,11 @@ function optionalText(value: string, max: number, field: string, errors: TermsEr
     return text;
 }
 
-// Bedrag in EUR: 0 of meer, hooguit 2 decimalen, komma of punt; geen duizendtalscheiding. Leeg -> null, ongeldig -> undefined.
+// Bedrag in EUR: 0 of meer, hooguit 2 decimalen, in de notatie van de schermtaal (15.000,50). Leeg -> null, ongeldig -> undefined.
 export function parseAmount(value: string): number | null | undefined {
-    const text = value.trim();
-    if (text === '') return null;
-    const match = /^(\d{1,16})(?:[.,](\d{1,2}))?$/.exec(text);
-    return match ? Number(match[2] === undefined ? match[1] : `${match[1]}.${match[2]}`) : undefined;
+    if (value.trim() === '') return null;
+    const parsed = parseLocaleDecimal(value, undefined, { maxDecimals: 2, maxDigits: 16, allowZero: true });
+    return parsed.ok ? parsed.value : undefined;
 }
 
 // defaultTermsDays: standaard betalingstermijn (bedrijfsinstelling) voor een leeg dagenveld; nodig voor de grens van de kortingsdagen.

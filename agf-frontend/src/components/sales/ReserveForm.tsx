@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { calculatedReservationKg } from '../../lib/weight';
-import { parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { ReserveCommand, reserveKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { MAX_REASON_LENGTH, fullRemainderFits, normalizeActor, normalizeReason, remainingAfter, validateReservationInput } from '../../lib/salesOrderRules';
@@ -37,8 +37,8 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
 }) {
     const { t, locale } = useTranslation();
     const [pending, setPending, clearPending] = usePendingCommand<ReserveCommand>(reserveKey(orderId, line.id));
-    const [quantity, setQuantity] = useState(() => (pending === null ? '' : String(pending.payload.quantity)));
-    const [netKg, setNetKg] = useState(() => (pending === null ? '' : String(pending.payload.netWeightKg)));
+    const [quantity, setQuantity] = useState(() => (pending === null ? '' : formatDecimalInput(pending.payload.quantity)));
+    const [netKg, setNetKg] = useState(() => (pending === null ? '' : formatDecimalInput(pending.payload.netWeightKg)));
     const [reason, setReason] = useState(() => pending?.payload.reason ?? '');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
@@ -57,7 +57,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
     const remaining = parsedQuantity.ok ? remainingAfter(line.openQuantity, parsedQuantity.value) : null;
     // Berekend gewicht: de kg volgt het aantal (aantal × kg per verpakking) en is niet vrij in te vullen; nooit "gewogen".
     const calculated = stock !== null && stock.weightMethod === 'Calculated' && stock.netKgPerPackage !== null ? stock.netKgPerPackage : null;
-    const effectiveNetKg = calculated === null || stock === null ? netKg : parsedQuantity.ok ? String(calculatedReservationKg(parsedQuantity.value, calculated, stock.availableQuantity, stock.availableNetWeightKg)) : '';
+    const effectiveNetKg = calculated === null || stock === null ? netKg : parsedQuantity.ok ? formatDecimalInput(calculatedReservationKg(parsedQuantity.value, calculated, stock.availableQuantity, stock.availableNetWeightKg)) : '';
 
     const edit = (setter: (value: string) => void) => (value: string) => {
         if (locked) return;
@@ -68,8 +68,8 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
 
     const copyFullRemainder = () => {
         if (locked || !fits || stock === null) return;
-        setQuantity(String(stock.availableQuantity));
-        setNetKg(String(stock.availableNetWeightKg));
+        setQuantity(formatDecimalInput(stock.availableQuantity));
+        setNetKg(formatDecimalInput(stock.availableNetWeightKg));
         setError(null);
         setFieldErrors({});
     };

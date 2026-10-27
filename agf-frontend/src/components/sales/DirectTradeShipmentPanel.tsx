@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, todayInAmsterdam } from '../../lib/calendarDate';
+import { formatDecimalInput } from '../../lib/decimal';
 import { ShipDirectTradeCommand, blockedBy, shipDirectTradeKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { RuleError, isShippableAllocation, isShippedAllocation, lotDeviates, normalizeActor, normalizeDispatchReference, validateShipmentLine, validateShippedOn } from '../../lib/salesOrderRules';
@@ -41,7 +42,7 @@ export default function DirectTradeShipmentPanel({ order, actor, onShipped, onRe
     const [pending, setPending, clearPending] = usePendingCommand<ShipDirectTradeCommand>(shipDirectTradeKey(order.id));
     const [selectedIds, setSelectedIds] = useState<number[]>(() => pending?.payload.lines.map((line) => line.stockReservationId) ?? []);
     const [inputs, setInputs] = useState<Record<number, RowInput>>(() => Object.fromEntries((pending?.payload.lines ?? []).map((line) => [line.stockReservationId, {
-        netKg: String(line.netWeightKg), lotNumber: line.lotNumber, lotDeviationReason: line.lotDeviationReason ?? '',
+        netKg: formatDecimalInput(line.netWeightKg), lotNumber: line.lotNumber, lotDeviationReason: line.lotDeviationReason ?? '',
     }])));
     const [shippedOn, setShippedOn] = useState(() => pending?.payload.shippedOn ?? today);
     const [reference, setReference] = useState(() => pending?.payload.reference ?? '');

@@ -142,7 +142,7 @@ describe('lines, amounts and payload', () => {
     });
 
     test('errors are reported per field and the blank trailing line is ignored', () => {
-        const d = { ...draft(), lines: [filled({ description: '', unitPrice: '12.505', discount: '120' }), emptyLine(21)] };
+        const d = { ...draft(), lines: [filled({ description: '', unitPrice: '12,505', discount: '120' }), emptyLine(21)] };
         const result = buildPurchaseInvoicePayload(d, settings);
         assert.equal(result.ok, false);
         if (result.ok) return;

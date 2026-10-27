@@ -1,6 +1,6 @@
 import type { PackageUnit } from '../types/availability';
 import type { CreatePurchaseInvoiceLineRequest, CreatePurchaseInvoiceRequest, OptionalFieldValues, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../types/purchaseInvoice';
-import { parsePositiveDecimal } from './decimal.ts';
+import { parseLocaleDecimal, parsePositiveDecimal } from './decimal.ts';
 import { PaymentConditionBasis, conditionDueDate } from './paymentCondition.ts';
 import { fitsAmount, lineNet, lineVat, totals } from './invoiceMath.ts';
 
@@ -53,7 +53,7 @@ export interface InvoiceDraft {
     vendorTerms?: VendorTerms | null;
 }
 
-export type RuleCode = 'required' | 'empty' | 'invalid' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines';
+export type RuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines';
 export interface RuleError { field: string; code: RuleCode }
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; errors: RuleError[] };
 
@@ -170,15 +170,10 @@ export function describeVendor(vendor: PurchaseVendor): string {
     return [vendor.searchCode, vendor.name, vendor.vatNumber, `#${vendor.id}`].filter((part): part is string => typeof part === 'string' && part !== '').join(' · ');
 }
 
-// Niet-negatief bedrag of percentage met hooguit `maxDecimals` decimalen (0 toegestaan).
+// Niet-negatief bedrag of percentage met hooguit `maxDecimals` decimalen (0 toegestaan), in de notatie van de schermtaal.
 export function parseNonNegative(input: string, maxDecimals: number): { ok: true; value: number } | { ok: false; code: RuleCode } {
-    const text = input.trim();
-    if (text === '') return { ok: false, code: 'required' };
-    const match = /^(\d+)(?:[.,](\d+))?$/.exec(text);
-    if (match === null) return { ok: false, code: 'invalid' };
-    if ((match[2] ?? '').length > maxDecimals) return { ok: false, code: 'too_many_decimals' };
-    if (match[1].replace(/^0+(?=\d)/, '').length > 12) return { ok: false, code: 'too_large' };
-    return { ok: true, value: Number(`${match[1]}.${match[2] ?? '0'}`) };
+    const parsed = parseLocaleDecimal(input, undefined, { maxDecimals, maxDigits: 12, allowZero: true });
+    return parsed.ok ? parsed : { ok: false, code: parsed.error === 'empty' ? 'required' : parsed.error };
 }
 
 export interface LineAmounts { net: number; vat: number }

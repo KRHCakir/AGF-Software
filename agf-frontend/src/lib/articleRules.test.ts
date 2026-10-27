@@ -70,7 +70,7 @@ describe('article payload', () => {
     test('an article round-trips into a draft and back without losing optional values', () => {
         const draft = draftFromArticle(article());
         assert.equal(draft.goodsCode, '08044000');
-        assert.equal(draft.defaultGrossKgPerPackage, '4.4');
+        assert.equal(draft.defaultGrossKgPerPackage, '4,4', 'prefilled in screen notation, never as 4.4 (= 44 in nl)');
         const rebuilt = buildArticlePayload(draft);
         assert.equal(rebuilt.ok, true);
         if (rebuilt.ok) assert.deepEqual(rebuilt.value, {

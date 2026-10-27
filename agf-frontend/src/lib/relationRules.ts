@@ -1,5 +1,6 @@
 import type { AddressPurpose, ChannelKind, ContactChannel, CustomerRole, Relation, RelationAddress, RelationBankAccount, RelationContact, RoleTerms, SaveBankAccount, SaveRelationRequest, SaveRoleTerms, VendorGgn } from '../types/relation';
 import { todayInAmsterdam } from './calendarDate.ts';
+import { formatDecimalInput } from './decimal.ts';
 import { emailTypoSuggestion, isStrictEmail } from './emailRules.ts';
 import { resolveGgn } from './ggn.ts';
 import { MAX_ACCOUNT_HOLDER_LENGTH, MAX_BANK_ACCOUNTS, MAX_OTHER_ACCOUNT_NUMBER_LENGTH, checkIban, isBic, normalizeBic, normalizeIban } from './iban.ts';
@@ -145,13 +146,14 @@ export function emptyRelationDraft(): RelationDraft {
 }
 
 const text = (value: string | null) => value ?? '';
-const amountText = (value: number | null) => (value === null ? '' : String(value));
+// Bedragen en percentages als invoertekst in de schermtaal (4,25 en niet 4.25, dat in het Nederlands 425 zou betekenen).
+const amountText = (value: number | null) => (value === null ? '' : formatDecimalInput(value, 2));
 
 // Rolafspraken van de server als invoer (ook na "rol toevoegen": de standaarden van de server komen in het concept).
 export function termsDraftFromRole(role: RoleTerms, currency: string | null): RoleTermsDraft {
     return {
         // Een bestaande rol toont haar huidige termijn (ook als die gelijk is aan de standaard); korting alleen als de conditie die heeft.
-        paymentTermsDays: String(role.paymentTermsDays), paymentTermsEndOfMonth: role.paymentTermsEndOfMonth, discountPercent: role.discountPercent === null ? '' : String(role.discountPercent),
+        paymentTermsDays: String(role.paymentTermsDays), paymentTermsEndOfMonth: role.paymentTermsEndOfMonth, discountPercent: amountText(role.discountPercent),
         discountDays: role.discountDays === null ? '' : String(role.discountDays), paymentMethod: role.paymentMethod ?? 'BankTransfer',
         mandateReference: text(role.mandateReference), mandateSignedOn: text(role.mandateSignedOn), currency: currency ?? 'EUR', deliveryTermKind: text(role.deliveryTermKind),
         incoterm: text(role.incoterm), incotermPlace: text(role.incotermPlace), deliveryTermText: text(role.deliveryTermText), tradeConditions: text(role.tradeConditions),

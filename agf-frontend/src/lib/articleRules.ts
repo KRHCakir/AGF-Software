@@ -2,7 +2,7 @@ import type { PackageUnit } from '../types/availability';
 import { PACKAGE_UNITS } from '../types/availability';
 import type { Article, GoodsCodeSystem, SaveArticleRequest } from '../types/article';
 import { GOODS_CODE_SYSTEMS, isGoodsCodeSystem } from '../types/article';
-import { parsePositiveDecimal } from './decimal.ts';
+import { formatDecimalInput, parsePositiveDecimal } from './decimal.ts';
 import type { WeightMethod } from './weight.ts';
 import { isWeightMethod } from './weight.ts';
 
@@ -30,7 +30,7 @@ export interface ArticleDraft {
     tradeClass: string;
 }
 
-export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length';
+export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length';
 export interface ArticleRuleError { field: string; code: ArticleRuleCode }
 export type ArticleBuildResult = { ok: true; value: SaveArticleRequest } | { ok: false; errors: ArticleRuleError[] };
 
@@ -49,7 +49,8 @@ export function emptyArticleDraft(): ArticleDraft {
     };
 }
 
-const num = (value: number | null) => (value === null ? '' : String(value));
+// Invoertekst in de schermtaal (4,25 kg), zodat een standaard nooit als duizendtal wordt teruggelezen.
+const num = (value: number | null) => (value === null ? '' : formatDecimalInput(value));
 
 export function draftFromArticle(article: Article): ArticleDraft {
     return {

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
+import { formatDecimalInput } from '../../lib/decimal';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
@@ -36,8 +37,8 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     internalNote: command.payload.internalNote ?? '',
     requestedDeliveryDate: isoToDateInput(command.payload.requestedDeliveryDate) ?? '',
     lines: command.payload.lines.map((line) => ({
-        key: newRequestId(), productVariantId: String(line.productVariantId), quantity: String(line.quantity), unit: line.unit,
-        mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : String(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : String(line.packagesPerPallet),
+        key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
+        mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
     })),
 });
 

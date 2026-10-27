@@ -66,8 +66,8 @@ describe('role terms', () => {
 });
 
 describe('credit and insurance', () => {
-    test('amounts: empty, 0 or more with at most 2 decimals, comma or dot', () => {
-        assert.deepEqual(['', '0', '1000', '1000,5', '12.34', '-1', '1.234', '1.000,00'].map(parseAmount), [null, 0, 1000, 1000.5, 12.34, undefined, undefined, undefined]);
+    test('amounts: empty, 0 or more with at most 2 decimals, comma for decimals and dot only for thousands (nl)', () => {
+        assert.deepEqual(['', '0', '1000', '1000,5', '12.34', '-1', '1.234', '1.000,00', '1,234'].map(parseAmount), [null, 0, 1000, 1000.5, undefined, undefined, 1234, 1000, undefined]);
     });
 
     test('not insured clears every insurance field; insured needs an insurer (Other + name) and an insured limit', () => {

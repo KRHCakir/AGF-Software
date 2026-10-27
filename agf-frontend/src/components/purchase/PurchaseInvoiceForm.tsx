@@ -16,6 +16,7 @@ import { createPurchaseInvoice } from '../../services/purchaseInvoiceService';
 import { PACKAGE_UNITS } from '../../types/availability';
 import type { ProductOption } from '../../types/referenceData';
 import type { PurchaseInvoice, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../../types/purchaseInvoice';
+import NumberEcho from '../shared/NumberEcho';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
@@ -407,6 +408,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                     <td className="w-24 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.quantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.quantity`, e(`${prefix}.quantity`))} inputMode="decimal" value={line.quantity} disabled={locked} onChange={(event) => updateLine(line.key, { quantity: event.target.value })} className={inputClass} />
+                                        <NumberEcho value={line.quantity} unit={line.unit === '' ? undefined : t(unitLabelKey(line.unit)).toLowerCase()} testId={`${prefix}.quantity-echo`} />
                                         <FieldError id={`${prefix}.quantity`} messages={e(`${prefix}.quantity`)} />
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
