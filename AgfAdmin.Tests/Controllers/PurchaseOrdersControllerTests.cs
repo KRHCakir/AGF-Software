@@ -47,4 +47,17 @@ public class PurchaseOrdersControllerTests : IDisposable
         Assert.IsType<BadRequestObjectResult>(await controller.List(null, "nope", null));
         Assert.IsType<NotFoundObjectResult>(await controller.GetById(id + 1));
     }
+
+    [Fact]
+    public async Task InvoiceRef_Returns201_ThenDuplicate409_UnknownOrder404()
+    {
+        var id = await SeedOrderAsync();
+        await using var db = _factory.CreateContext();
+        var controller = Controller(db);
+
+        var created = Assert.IsType<ObjectResult>(await controller.AddInvoiceRef(id, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "F-1" }));
+        Assert.Equal(201, created.StatusCode);
+        Assert.IsType<ConflictObjectResult>(await controller.AddInvoiceRef(id, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "f-1" }));
+        Assert.IsType<NotFoundObjectResult>(await controller.AddInvoiceRef(id + 1, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "F-2" }));
+    }
 }
