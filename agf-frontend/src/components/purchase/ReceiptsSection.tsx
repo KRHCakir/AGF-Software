@@ -17,6 +17,9 @@ import RejectReceiptForm from './RejectReceiptForm';
 export default function ReceiptsSection({ order, onChanged }: { order: PurchaseOrderDetail; onChanged: (order: PurchaseOrderDetail) => void }) {
     const { t, locale } = useTranslation();
     const [rejecting, setRejecting] = useState<number | null>(null);
+    // Regels waarvan het formulier open blijft na een definitieve fout van een eerder bevroren afkeuring.
+    const [kept, setKept] = useState<number[]>([]);
+    const keep = (lineId: number, on: boolean) => setKept((current) => (on ? (current.includes(lineId) ? current : [...current, lineId]) : current.filter((id) => id !== lineId)));
     const { commands } = usePendingCommands();
     const frozen = (lineId: number) => rejectReceiptKey(order.id, lineId) in commands;
     const qty = (value: number) => formatQuantity(value, locale);
@@ -43,15 +46,17 @@ export default function ReceiptsSection({ order, onChanged }: { order: PurchaseO
                             {receipt.reservedQuantity > 0 && <span className="text-gray-600"> · {t('po_receipt_reserved', { reserved: qty(receipt.reservedQuantity) })}</span>}
                         </p>
                         {receipt.qualityReason && <p className="text-xs text-gray-600">{receipt.qualityReason}</p>}
-                        {receipt.rejectable && rejecting !== receipt.palletContentLineId && !frozen(receipt.palletContentLineId) && (
+                        {receipt.rejectable && rejecting !== receipt.palletContentLineId && !kept.includes(receipt.palletContentLineId) && !frozen(receipt.palletContentLineId) && (
                             <button type="button" className={`${secondaryButtonClass} mt-1 border-red-300 text-red-800 hover:bg-red-50`} onClick={() => setRejecting(receipt.palletContentLineId)}
                                 aria-label={t('po_reject_line', { pallet: receipt.palletReference, lot: receipt.lotNumber })}>
                                 {t('po_reject')}
                             </button>
                         )}
-                        {(rejecting === receipt.palletContentLineId || frozen(receipt.palletContentLineId)) && (
-                            <RejectReceiptForm orderId={order.id} orderNumber={order.orderNumber} receipt={receipt} onCancel={() => setRejecting(null)}
-                                onDone={(updated) => { setRejecting(null); onChanged(updated); }} />
+                        {(rejecting === receipt.palletContentLineId || kept.includes(receipt.palletContentLineId) || frozen(receipt.palletContentLineId)) && (
+                            <RejectReceiptForm orderId={order.id} orderNumber={order.orderNumber} receipt={receipt}
+                                onCancel={() => { setRejecting(null); keep(receipt.palletContentLineId, false); }}
+                                onFailed={() => keep(receipt.palletContentLineId, true)}
+                                onDone={(updated) => { setRejecting(null); keep(receipt.palletContentLineId, false); onChanged(updated); }} />
                         )}
                     </li>
                 ))}

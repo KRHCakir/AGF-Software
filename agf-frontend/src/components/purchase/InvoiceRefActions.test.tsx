@@ -12,7 +12,8 @@ import InvoiceRefActions from './InvoiceRefActions';
 // en na opslaan krijgt de pagina de bijgewerkte order. Een onbekende uitkomst blijft in de opslag per tabblad staan.
 
 const order = { id: 7, orderNumber: 'IO-2026-0007', vendorName: null, orderedOn: '2026-10-27', status: 'Received', invoiceIndicator: 'Received', expectedQuantity: 1,
-    receivedQuantity: 1, rejectedQuantity: 0, lines: [], receipts: [], invoiceRefs: [], rejections: [], history: [] } as unknown as PurchaseOrderDetail;
+    receivedQuantity: 1, rejectedQuantity: 0, rejectedNetWeightKg: 0, origin: 'Peru', orderChannel: null, note: null, supplierReference: null, expectedAt: null,
+    lines: [], receipts: [], invoiceRefs: [], rejections: [], history: [] } as unknown as PurchaseOrderDetail;
 const view = (onDone: (order: PurchaseOrderDetail) => void = () => {}) => (
     <PendingCommandsProvider storageKey={PURCHASE_COMMANDS_STORAGE_KEY}>
         <HydratedGate><InvoiceRefActions orderId={7} orderNumber="IO-2026-0007" onDone={onDone} /></HydratedGate>

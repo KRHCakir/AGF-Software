@@ -21,11 +21,12 @@ const receipt: PurchaseOrderReceiptLine = {
 
 // Minimale geldige order als antwoord (alleen wat de vormcontrole vraagt).
 const order = { id: 7, orderNumber: 'IO-2026-0007', vendorName: null, orderedOn: '2026-10-27', status: 'Received', invoiceIndicator: 'None', expectedQuantity: 20,
-    receivedQuantity: 20, rejectedQuantity: 5, lines: [], receipts: [], invoiceRefs: [], rejections: [], history: [] } as unknown as PurchaseOrderDetail;
+    receivedQuantity: 20, rejectedQuantity: 5, rejectedNetWeightKg: 20, origin: 'Peru', orderChannel: null, note: null, supplierReference: null, expectedAt: null,
+    lines: [], receipts: [], invoiceRefs: [], rejections: [], history: [] } as unknown as PurchaseOrderDetail;
 
 const view = (onDone: (order: PurchaseOrderDetail) => void = () => {}) => (
     <PendingCommandsProvider storageKey={PURCHASE_COMMANDS_STORAGE_KEY}>
-        <HydratedGate><RejectReceiptForm orderId={7} orderNumber="IO-2026-0007" receipt={receipt} onDone={onDone} onCancel={() => {}} /></HydratedGate>
+        <HydratedGate><RejectReceiptForm orderId={7} orderNumber="IO-2026-0007" receipt={receipt} onDone={onDone} onCancel={() => {}} onFailed={() => {}} /></HydratedGate>
     </PendingCommandsProvider>
 );
 const stored = () => parseStoredCommands(window.sessionStorage.getItem(PURCHASE_COMMANDS_STORAGE_KEY));
