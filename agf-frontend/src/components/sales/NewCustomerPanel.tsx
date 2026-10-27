@@ -44,15 +44,17 @@ const draftFromCommand = (command: CreateCustomerCommand): CustomerDraft => ({
 // hier nooit aangeraakt. Bij versturen worden payload en requestId bevroren: netwerk/5xx -> alleen exact dezelfde herhaling
 // (ook na sluiten, navigeren of verversen; de banner houdt de opdracht zichtbaar). Een 409 met gelijkende klanten is een
 // definitieve afwijzing: "Toch aanmaken" is een NIEUWE opdracht met een nieuwe requestId en de bevestigingsvlag aan.
-export default function NewCustomerPanel({ customers, onCreated, onChooseExisting, onClose }: {
+export default function NewCustomerPanel({ customers, onCreated, onChooseExisting, onClose, initialName = '' }: {
     customers: CustomerOption[];
+    // Getypte zoektekst uit de klantkeuze ("Nieuwe klant" bij geen treffer): alleen een voorinvulling van de naam.
+    initialName?: string;
     onCreated: (customer: CreatedCustomer, replayed: boolean) => void;
     onChooseExisting: (customerId: number) => void;
     onClose: () => void;
 }) {
     const { t } = useTranslation();
     const [pending, setPending, clearPending] = usePendingCommand<CreateCustomerCommand>(CREATE_CUSTOMER_KEY);
-    const [draft, setDraft] = useState<CustomerDraft>(() => (pending === null ? emptyCustomerDraft() : draftFromCommand(pending)));
+    const [draft, setDraft] = useState<CustomerDraft>(() => (pending === null ? { ...emptyCustomerDraft(), name: initialName } : draftFromCommand(pending)));
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});

@@ -1510,5 +1510,11 @@
   "line_kg_gross_below_net": "Bruto kg mag niet lager zijn dan netto kg.",
   "line_kg_total": "Totaal",
   "line_kg_lines_without_one": "1 regel zonder kg",
-  "line_kg_lines_without": "{count} regels zonder kg"
+  "line_kg_lines_without": "{count} regels zonder kg",
+  "sales_customer_search_placeholder": "Zoekcode, naam, plaats of btw-nummer…",
+  "sales_customer_search_hint": "Typ om te zoeken. Pijltjes kiezen een klant; Tab of Enter neemt de gemarkeerde (eerst de bovenste) over; Escape sluit.",
+  "sales_customer_none": "Geen klant gevonden voor '{query}'.",
+  "sales_customer_change": "Andere klant kiezen",
+  "sales_customer_not_found": "Geen klant gevonden.",
+  "sales_new_customer_named": "Nieuwe klant '{name}'"
 }

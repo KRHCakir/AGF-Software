@@ -1510,5 +1510,11 @@
   "line_kg_gross_below_net": "Gross kg may not be less than net kg.",
   "line_kg_total": "Total",
   "line_kg_lines_without_one": "1 line without kg",
-  "line_kg_lines_without": "{count} lines without kg"
+  "line_kg_lines_without": "{count} lines without kg",
+  "sales_customer_search_placeholder": "Search code, name, city or VAT number…",
+  "sales_customer_search_hint": "Type to search. Arrows choose a customer; Tab or Enter takes the highlighted one (the top one first); Escape closes.",
+  "sales_customer_none": "No customer found for '{query}'.",
+  "sales_customer_change": "Choose another customer",
+  "sales_customer_not_found": "No customer found.",
+  "sales_new_customer_named": "New customer '{name}'"
 }

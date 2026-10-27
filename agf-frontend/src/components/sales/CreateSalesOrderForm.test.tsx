@@ -2,16 +2,16 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, click, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { Mounted, click, json, setValue, stubFetch } from '../../test/reactHarness.ts';
 import type { CustomerOption, ProductOption } from '../../types/referenceData';
 import CreateSalesOrderForm from './CreateSalesOrderForm';
 import { HydratedGate, PendingCommandsProvider } from './PendingCommandsContext';
 
 // Kg op de orderregel door de echte componentlevenscyclus: berekend uit het artikel (grijs) en live met het aantal mee,
 // zelf ingevuld (zwart) volgt het aantal niet meer, ↺ zet terug; zonder standaard leeg met hint en "= … per colli"; totaal
-// onder de regels; de payload met kg en bron.
+// onder de regels; de klant kiezen met "Lo" + Tab; geen treffer opent "Nieuwe klant" met de getypte naam.
 
-const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls', searchCode: 'LMS', isActive: true }, { id: 2, name: 'DEMO Klant B', searchCode: null, isActive: true }];
+const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls', searchCode: 'LMS', isActive: true, city: 'Rotterdam' }, { id: 2, name: 'DEMO Klant B', searchCode: null, isActive: true }];
 const variant = (id: number, name: string, net: number | null, gross: number | null) =>
     ({ id, name, origin: 'Peru', packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: 'colli' as const, defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross });
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [variant(1, 'Hass', 10, 10.3), variant(2, 'Green', null, null)] }];
@@ -37,7 +37,7 @@ const chooseVariant = async (index: number, text: string) => {
     await key(`lines[${index}].productVariantId-input`, 'Enter');
 };
 
-describe('CreateSalesOrderForm: kg on the order line', () => {
+describe('CreateSalesOrderForm: kg on the order line and customer search', () => {
     beforeEach(() => {
         window.sessionStorage.clear();
         posted = stubFetch({ onGet: () => json(404, { message: 'unexpected GET' }), nextPost: async () => json(500, { message: 'stop' }) });
@@ -98,10 +98,12 @@ describe('CreateSalesOrderForm: kg on the order line', () => {
         assert.equal(mounted.container.querySelector('[data-testid="order-kg-totals"]')?.textContent?.includes('line_kg_total'), true);
     });
 
-    test('the saved payload carries calculated and entered kg with their source', async () => {
+    test('the saved payload carries calculated and entered kg; "Lo" + Tab chooses the customer; no match opens a new customer with the typed name', async () => {
         await mounted.render(element());
         await mounted.waitFor(() => mounted.form(), 'order form');
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="customerId-input"]')!, '1'); });
+        await type('customerId-input', 'Lo');
+        await key('customerId-input', 'Tab');
+        assert.equal(field('customerId-input').value, 'Local Market Stalls · Rotterdam');
         await type('requestedDeliveryDate-input', '2026-10-30');
         await chooseVariant(0, 'hass');
         await type('lines[0].quantity-input', '1.560');
@@ -117,5 +119,15 @@ describe('CreateSalesOrderForm: kg on the order line', () => {
             { productVariantId: 1, quantity: 1560, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 15600, grossWeightKg: 16068, weightSource: 'Calculated' },
             { productVariantId: 2, quantity: 221, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 2210, weightSource: 'Entered' },
         ]);
+    });
+
+    test('no customer found: "new customer" opens the panel with the typed text as name', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await type('customerId-input', 'Groentehal Jansen');
+        const offer = mounted.container.querySelector<HTMLElement>('[data-testid="customer-no-match"]')!;
+        await click(offer.querySelector('button')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="new-customer-panel"]'), 'panel');
+        assert.equal(field('customer-name-input').value, 'Groentehal Jansen');
     });
 });
