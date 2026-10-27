@@ -182,7 +182,8 @@ function isReceipt(value: unknown): value is PurchaseOrderReceiptLine {
 export function isPurchaseOrderDetail(value: unknown): value is PurchaseOrderDetail {
     return isObject(value) && isNumber(value.id) && isString(value.orderNumber) && isNullableString(value.vendorName) && isString(value.orderedOn)
         && isString(value.status) && isString(value.invoiceIndicator) && isNumber(value.expectedQuantity) && isNumber(value.receivedQuantity)
-        && isNumber(value.rejectedQuantity)
+        && isNumber(value.rejectedQuantity) && isNumber(value.rejectedNetWeightKg) && isString(value.origin) && isNullableString(value.orderChannel)
+        && isNullableString(value.note) && isNullableString(value.supplierReference) && isNullableString(value.expectedAt)
         && isArrayOf(value.lines, (line): line is PurchaseOrderLine => isObject(line) && isNumber(line.id) && isNumber(line.expectedQuantity) && isNumber(line.receivedQuantity) && isNumber(line.rejectedQuantity))
         && isArrayOf(value.receipts, isReceipt)
         && isArrayOf(value.invoiceRefs, (ref): ref is PurchaseOrderInvoiceRef => isObject(ref) && isNumber(ref.id) && isString(ref.kind) && isString(ref.invoiceNumber) && isNullableString(ref.invoiceDate) && isNullableNumber(ref.amountExclVat))

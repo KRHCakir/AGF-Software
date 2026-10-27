@@ -60,6 +60,33 @@ export default function PurchaseOrderDetail({ order, invoices }: {
                 </ul>
             </section>
 
+            <section className={section} aria-labelledby="po-receipts">
+                <h3 id="po-receipts" className={h3}>{t('po_receipts')}</h3>
+                {order.receipts.length === 0 && <p className="text-sm text-gray-600">{t('po_no_receipts')}</p>}
+                <ul className="divide-y divide-gray-100 text-sm">
+                    {order.receipts.map((receipt) => {
+                        const style = qualityStyle(receipt.qualityStatus);
+                        return (
+                            <li key={receipt.palletContentLineId} className="py-1.5">
+                                <span className="font-mono font-medium text-gray-900">{receipt.palletReference}</span>
+                                <span className="text-gray-700"> · {receipt.productName ?? '–'} · {receipt.productVariantName ?? '–'} · {receipt.lotNumber}</span>
+                                <span className={`ml-2 inline-block rounded border px-1.5 text-xs font-medium ${style?.className ?? 'border-gray-300 bg-gray-100 text-gray-800'}`}>
+                                    {style ? `${style.icon} ${t(style.key)}` : receipt.qualityStatus}
+                                </span>
+                                <span className="block font-mono text-gray-800">
+                                    {t('po_receipt_amounts', { quantity: qty(receipt.quantity), weight: formatKg(receipt.netWeightKg, locale), onHand: qty(receipt.onHandQuantity) })}
+                                    {receipt.reservedQuantity > 0 && <> · {t('po_receipt_reserved', { reserved: qty(receipt.reservedQuantity) })}</>}
+                                </span>
+                                <span className="block text-xs text-gray-600">
+                                    {receipt.origin} · {formatDateTime(receipt.receivedAt, locale)}
+                                    {receipt.qualityReason && <> · {receipt.qualityReason}</>}
+                                </span>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </section>
+
             <section className={section} aria-labelledby="po-invoices">
                 <h3 id="po-invoices" className={h3}>{t('po_invoices')}</h3>
                 {order.invoiceRefs.length === 0 && <p className="text-sm text-gray-600">{t('po_no_invoices')}</p>}
