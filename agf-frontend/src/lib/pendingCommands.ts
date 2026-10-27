@@ -1,5 +1,6 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
+import type { RejectRequest } from '../types/purchaseOrder';
 import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, RetractDeliveryRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
@@ -127,7 +128,32 @@ export interface CreateCustomerCommand extends CommandMeta {
     display: { name: string };
 }
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | RetractDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand;
+// Inkooporder: afkeuren van één ontvangen regel. Leeft in een eigen opslag (PURCHASE_COMMANDS_STORAGE_KEY), want het
+// order-id is een inkooporder en nooit een verkooporder; de verkoopregels (blokkeren per order) gelden er niet voor.
+export interface RejectReceiptCommand extends CommandMeta {
+    kind: 'reject-receipt';
+    key: string;
+    orderId: number;
+    palletContentLineId: number;
+    payload: RejectRequest;
+    display: { orderNumber: string; palletReference: string; lotNumber: string };
+}
+
+export type PurchaseCommand = RejectReceiptCommand;
+
+export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | RetractDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand | PurchaseCommand;
+
+const PURCHASE_KINDS: readonly PendingCommand['kind'][] = ['reject-receipt'];
+
+export function isPurchaseCommand(command: PendingCommand): command is PurchaseCommand {
+    return PURCHASE_KINDS.includes(command.kind);
+}
+
+export const PURCHASE_COMMANDS_STORAGE_KEY = 'agf_purchase_pending_commands';
+
+export function rejectReceiptKey(orderId: number, palletContentLineId: number): string {
+    return `reject-receipt:${orderId}:${palletContentLineId}`;
+}
 
 // Regelcommando's: horen bij één orderregel en blokkeren elkaar daar.
 const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'allocate-direct-trade', 'release'];
@@ -187,7 +213,7 @@ export function commandsForLine(commands: PendingCommands, orderId: number, line
 
 // Alle commando's op een order: regelcommando's én een annulering van de order zelf.
 export function commandsForOrder(commands: PendingCommands, orderId: number): PendingCommand[] {
-    return Object.values(commands).filter((command) => command.kind !== 'create-order' && command.kind !== 'create-customer' && command.orderId === orderId);
+    return Object.values(commands).filter((command) => command.kind !== 'create-order' && command.kind !== 'create-customer' && !isPurchaseCommand(command) && command.orderId === orderId);
 }
 
 export type CommandScope =
@@ -397,6 +423,20 @@ function isCorrectDispatchPayload(value: unknown, requestId: string): value is C
         && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
 }
 
+// Eén regel, met versie, hoeveelheid en kg; reden en besluit uit de vaste lijsten; actor verplicht.
+function isRejectReceiptPayload(value: unknown, requestId: string, palletContentLineId: number): value is RejectRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && ['Quality', 'Ripeness', 'Temperature', 'Damaged', 'WrongArticle', 'Other'].includes(value.reason as string)
+        && ['ReturnToSupplier', 'ClaimDiscount', 'Dispose'].includes(value.decision as string)
+        && isBoundedNullableText(value.explanation, 500)
+        && (value.reason !== 'Other' || value.explanation !== null)
+        && isText(value.actorReference)
+        && Array.isArray(value.lines) && value.lines.length === 1
+        && value.lines.every((line: unknown) => isRecord(line) && line.palletContentLineId === palletContentLineId
+            && isNonNegativeInt(line.expectedContentLineVersion) && isPositiveAmount(line.quantity) && isPositiveAmount(line.netWeightKg));
+}
+
 function isBoundedNullableText(value: unknown, max: number): value is string | null {
     return value === null || (typeof value === 'string' && value.trim() !== '' && value.length <= max);
 }
@@ -491,6 +531,12 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
                 && value.key === correctDispatchKey(value.orderId, value.dispatchId)
                 && isCorrectDispatchPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'reject-receipt':
+            return isPositiveInt(value.orderId) && isPositiveInt(value.palletContentLineId)
+                && value.key === rejectReceiptKey(value.orderId, value.palletContentLineId)
+                && isRejectReceiptPayload(value.payload, value.requestId, value.palletContentLineId)
+                && isRecord(value.display) && typeof value.display.orderNumber === 'string'
+                && typeof value.display.palletReference === 'string' && typeof value.display.lotNumber === 'string';
         default:
             return false;
     }

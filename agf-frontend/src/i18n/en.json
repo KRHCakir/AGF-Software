@@ -1604,5 +1604,6 @@
   "po_credit_note_number": "Credit note number",
   "po_amount_excl_vat": "Amount excl. VAT",
   "po_invoice_save": "Record",
-  "po_belongs_to_order": "Belongs to order"
+  "po_belongs_to_order": "Belongs to order",
+  "po_pending_reject": "Reject on order {number}: pallet {pallet} · lot {lot}"
 }

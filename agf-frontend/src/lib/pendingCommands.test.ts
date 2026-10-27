@@ -551,3 +551,26 @@ describe('delivery retraction commands', () => {
     });
 });
 
+
+describe('purchase order commands in the same store mechanism', () => {
+    const reject = {
+        kind: 'reject-receipt', key: 'reject-receipt:7:41', orderId: 7, palletContentLineId: 41, requestId: 'r-1', attempts: 1, lastError: 'network', frozenAt: '2026-10-27T10:00:00.000Z',
+        payload: { requestId: 'r-1', reason: 'Quality', explanation: null, decision: 'ReturnToSupplier', actorReference: 'Jan',
+            lines: [{ palletContentLineId: 41, expectedContentLineVersion: 3, quantity: 48, netWeightKg: 192 }] },
+        display: { orderNumber: 'IO-2026-0007', palletReference: 'P-1', lotNumber: 'LOT-1' },
+    };
+
+    test('a complete reject command survives storage; a damaged one is dropped', () => {
+        assert.deepEqual(Object.keys(parseStoredCommands(JSON.stringify({ [reject.key]: reject }))), [reject.key]);
+        const otherLine = { ...reject, payload: { ...reject.payload, lines: [{ ...reject.payload.lines[0], palletContentLineId: 42 }] } };
+        assert.deepEqual(parseStoredCommands(JSON.stringify({ [reject.key]: otherLine })), {});
+        const otherWithoutExplanation = { ...reject, payload: { ...reject.payload, reason: 'Other' } };
+        assert.deepEqual(parseStoredCommands(JSON.stringify({ [reject.key]: otherWithoutExplanation })), {});
+    });
+
+    test('a purchase order id never blocks a sales order with the same id', () => {
+        const commands = parseStoredCommands(JSON.stringify({ [reject.key]: reject }));
+        assert.equal(blockedBy(commands, { kind: 'cancel-order', orderId: 7 }), null);
+        assert.equal(blockedBy(commands, { kind: 'line', orderId: 7, lineId: 41 }), null);
+    });
+});

@@ -1604,5 +1604,6 @@
   "po_credit_note_number": "Creditnotanummer",
   "po_amount_excl_vat": "Bedrag excl. btw",
   "po_invoice_save": "Vastleggen",
-  "po_belongs_to_order": "Hoort bij order"
+  "po_belongs_to_order": "Hoort bij order",
+  "po_pending_reject": "Afkeuren op order {number}: pallet {pallet} · partij {lot}"
 }

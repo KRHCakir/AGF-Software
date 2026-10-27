@@ -7,9 +7,12 @@ import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../compone
 import InvoiceRefActions from '../../../components/purchase/InvoiceRefActions';
 import PurchaseOrderDetail from '../../../components/purchase/PurchaseOrderDetail';
 import PurchaseOrderList from '../../../components/purchase/PurchaseOrderList';
+import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
+import { HydratedGate, PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { PURCHASE_COMMANDS_STORAGE_KEY, isPurchaseCommand } from '../../../lib/pendingCommands';
 import { ORDER_STATUS_LABEL_KEYS, PURCHASE_ORDER_STATUSES } from '../../../lib/purchaseOrderRules';
 import { supplyShortcutHref } from '../../../lib/supplyShortcut';
 import { toApiError } from '../../../services/apiClient';
@@ -27,7 +30,12 @@ export default function PurchaseOrdersPage() {
     const { t } = useTranslation();
     return (
         <Suspense fallback={<LoadingRows label={t('po_loading')} />}>
-            <PurchaseOrdersWorkspace />
+            {/* Onafgeronde afkeuringen en factuurnummers per tabblad bewaard; formulieren lezen ze pas na het teruglezen. */}
+            <PendingCommandsProvider storageKey={PURCHASE_COMMANDS_STORAGE_KEY}>
+                <HydratedGate fallback={<LoadingRows label={t('po_loading')} />}>
+                    <PurchaseOrdersWorkspace />
+                </HydratedGate>
+            </PendingCommandsProvider>
         </Suspense>
     );
 }
@@ -53,6 +61,7 @@ function PurchaseOrdersWorkspace() {
     const [detail, setDetail] = useState<LoadState<Order> | null>(null);
     const detailRef = useRef<HTMLDivElement | null>(null);
     const searchWidened = useRef(false);
+    const { commands } = usePendingCommands();
 
     const changeQuery = (value: string) => {
         setQuery(value);
@@ -116,6 +125,8 @@ function PurchaseOrdersWorkspace() {
                     <Link href={supplyShortcutHref('plan')} className={primaryButtonClass}>+ {t('po_new')}</Link>
                 </div>
             </div>
+
+            <PendingCommandsBanner commands={commands} onGoTo={(command) => { if (isPurchaseCommand(command)) open(command.orderId); }} />
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="sm:col-span-2">
