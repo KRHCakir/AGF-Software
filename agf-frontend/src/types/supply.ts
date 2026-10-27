@@ -13,6 +13,7 @@ export interface CreateSupplyCommitmentLineRequest {
     // Optioneel, beide of geen: expectedQuantity = palletCount × packagesPerPallet (de server controleert dit).
     palletCount: number | null;
     packagesPerPallet: number | null;
+    loosePackages?: number;
 }
 
 export interface CreateSupplyCommitmentRequest {
@@ -38,6 +39,8 @@ export interface SupplyCommitmentLine {
     // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
     weightMethod: WeightMethod;
     defaultNetKgPerPackage: number | null;
+    defaultGrossKgPerPackage?: number | null;
+    loosePackages?: number | null;
     // Oorspronkelijke palletinvoer (null bij gewone invoer) en de standaard van de variant als invoerhulp.
     palletCount: number | null;
     packagesPerPallet: number | null;

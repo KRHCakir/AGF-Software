@@ -1,6 +1,6 @@
 import { MAX_ACTOR_LENGTH, MAX_CUSTOMER_REFERENCE_LENGTH, MAX_ORDER_LINES, MAX_REASON_LENGTH, RuleError } from '../../lib/salesOrderRules';
 import { DecimalError } from '../../lib/decimal';
-import { FieldErrors, addError, decimalErrorKey } from '../supply/messages';
+import { FieldErrors, addError, decimalErrorKey, palletErrorKey } from '../supply/messages';
 
 type Translate = (key: string, variables?: Record<string, string>) => string;
 
@@ -45,6 +45,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
         case 'future_date': return error.field === 'deliveredOn' ? t('sales_delivery_date_future') : t('sales_ship_date_future');
         case 'before_shipping': return t('sales_delivery_date_before_shipping');
         case 'remainder_mismatch': return t('sales_error_remainder_mismatch');
+        case 'not_whole': return t(palletErrorKey(error.field, error.code));
         default: return t('supply_error_required');
     }
 }

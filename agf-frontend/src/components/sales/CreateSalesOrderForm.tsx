@@ -19,7 +19,7 @@ import { UnitBadge } from '../availability/QuantityCell';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import QuantityInput from '../shared/QuantityInput';
 import ErrorNotice from '../supply/ErrorNotice';
-import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
+import FieldError, { fieldProps, inputClass, lineTableClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import NewCustomerPanel from './NewCustomerPanel';
@@ -39,6 +39,7 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     lines: command.payload.lines.map((line) => ({
         key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
         mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
+        loosePackages: line.loosePackages == null ? '' : formatDecimalInput(line.loosePackages),
     })),
 });
 
@@ -89,6 +90,8 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
+    // Netto en bruto kg per verpakking: alleen voor de rekenregel onder het aantal.
+    const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
     // Verpakkingseenheid uit de artikelstamgegevens: vult alleen een nog lege eenheid voor; een gekozen eenheid blijft staan.
     const variantUnits = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.packagingUnit] as const))), [products]);
 
@@ -103,7 +106,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         edited();
     };
 
-    const updateLine = (key: string, field: 'productVariantId' | 'quantity' | 'unit' | 'mode' | 'palletCount' | 'packagesPerPallet', value: string) => {
+    const updateLine = (key: string, field: 'productVariantId' | 'quantity' | 'unit' | 'mode' | 'palletCount' | 'packagesPerPallet' | 'loosePackages', value: string) => {
         if (locked) return;
         setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, [field]: value } : line)) }));
         edited();
@@ -256,7 +259,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
             {error && pending === null && <ErrorNotice error={error} />}
             <FieldError id="actorReference" messages={e('actorReference')} />
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="col-span-2">
                     <div className="flex items-center justify-between gap-2">
                         <label htmlFor="customerId-input" className="text-xs font-medium text-gray-700">{t('sales_customer')} *</label>
@@ -297,7 +300,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         onChange={(event) => updateHeader('customerReference', event.target.value)} className={inputClass} />
                     <FieldError id="customerReference" messages={e('customerReference')} />
                 </div>
-                <div className="col-span-4">
+                <div className="col-span-2 md:col-span-4">
                     <label htmlFor="internalNote-input" className="text-xs font-medium text-gray-700">{t('internal_note_label')}</label>
                     <input {...fieldProps('internalNote', e('internalNote'))} value={draft.internalNote} disabled={locked} maxLength={1000} placeholder={t('internal_note_placeholder')}
                         onChange={(event) => updateHeader('internalNote', event.target.value)} className={inputClass} />
@@ -310,7 +313,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                 <legend className="text-sm font-semibold text-gray-900">{t('sales_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
                 <div className="overflow-x-auto rounded border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <table className={lineTableClass}>
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
@@ -339,7 +342,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                         </td>
                                         <td className="w-72 px-2 py-1.5">
                                             <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e}
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null} kgDefaults={variants.get(Number(line.productVariantId))}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
@@ -349,7 +352,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                                 <option value="">{t('supply_choose')}</option>
                                                 {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
                                             </select>
-                                            <span className="block text-xs text-gray-500">{t('sales_unit_hint')}</span>
                                             <FieldError id={`${prefix}.unit`} messages={e(`${prefix}.unit`)} />
                                         </td>
                                         <td className="px-2 py-1.5">
@@ -372,7 +374,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                     <button type="submit" className={primaryButtonClass} disabled={locked}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
-                    <span className="text-xs text-gray-600">{t('sales_save_footer')}</span>
                 </div>
             )}
         </form>

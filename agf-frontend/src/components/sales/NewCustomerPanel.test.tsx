@@ -60,6 +60,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         let refreshed = 0;
         await mounted.render(element(() => { refreshed += 1; }));
         await mounted.waitFor(() => orderForm(), 'order form');
+        assert.ok(!mounted.hasText('sales_unit_hint') && !mounted.hasText('sales_save_footer'), 'no explanation of internal workings');
         await typeDraft();
         await click(newCustomerButton());
         assert.ok(panel(), 'panel open');

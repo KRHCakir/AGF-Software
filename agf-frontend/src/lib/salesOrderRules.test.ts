@@ -74,6 +74,13 @@ describe('buildOrderPayload', () => {
         assert.deepEqual(codes(missing), { 'lines[0].packagesPerPallet': ['empty'] });
     });
 
+    test('whole pallets + loose packages: loosePackages is sent only when filled in; 3,5 pallets is refused', () => {
+        const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '3', packagesPerPallet: '120', loosePackages: '15' };
+        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] }, 'office-1');
+        assert.deepEqual(result.ok && result.value.lines, [{ productVariantId: 1, quantity: 375, unit: 'box', palletCount: 3, packagesPerPallet: 120, loosePackages: 15 }]);
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, palletCount: '3,5' }] }, 'office-1')), { 'lines[0].palletCount': ['not_whole'] });
+    });
+
     test('a blank reference becomes null', () => {
         const result = buildOrderPayload({ ...validDraft(), customerReference: '   ' }, 'office-1');
         assert.equal(result.ok && result.value.customerReference, null);
