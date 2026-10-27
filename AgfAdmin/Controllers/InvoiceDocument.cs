@@ -1,8 +1,19 @@
 // InvoiceDocument.cs (updated for invoice lines)
+using System.Globalization;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using AgfAdmin.Models;
+
+// Getallen op de factuur in Nederlandse notatie, los van de servercultuur: bedragen N2, aantallen N0 (decimalen blijven, max. 3).
+public static class InvoiceNumberFormat
+{
+    private static readonly CultureInfo Dutch = CultureInfo.GetCultureInfo("nl-NL");
+
+    public static string Money(decimal value) => $"€ {value.ToString("N2", Dutch)}";
+    public static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "N0" : "#,##0.###", Dutch);
+    public static string Percentage(decimal value) => $"{value.ToString("0.##", Dutch)}%";
+}
 
 public class InvoiceDocument : IDocument
 {
@@ -80,21 +91,21 @@ public class InvoiceDocument : IDocument
                 {
                     row.RelativeItem();
                     row.ConstantItem(200).Text("Subtotal:").SemiBold();
-                    row.ConstantItem(100).Text(Invoice.SubTotal.ToString("C2")).AlignRight();
+                    row.ConstantItem(100).Text(InvoiceNumberFormat.Money(Invoice.SubTotal)).AlignRight();
                 });
                 
                 totalsColumn.Item().Row(row =>
                 {
                     row.RelativeItem();
                     row.ConstantItem(200).Text("VAT:").SemiBold();
-                    row.ConstantItem(100).Text(Invoice.VATAmount.ToString("C2")).AlignRight();
+                    row.ConstantItem(100).Text(InvoiceNumberFormat.Money(Invoice.VATAmount)).AlignRight();
                 });
                 
                 totalsColumn.Item().Row(row =>
                 {
                     row.RelativeItem();
                     row.ConstantItem(200).Text("Total:").SemiBold();
-                    row.ConstantItem(100).Text(Invoice.TotalAmount.ToString("C2")).AlignRight();
+                    row.ConstantItem(100).Text(InvoiceNumberFormat.Money(Invoice.TotalAmount)).AlignRight();
                 });
             });
         });
@@ -128,10 +139,10 @@ public class InvoiceDocument : IDocument
             {
                 table.Cell().Element(CellStyle).Text((index + 1).ToString());
                 table.Cell().Element(CellStyle).Text(item.Description);
-                table.Cell().Element(CellStyle).Text(item.Quantity.ToString());
-                table.Cell().Element(CellStyle).Text(item.UnitPrice.ToString("C2"));
-                table.Cell().Element(CellStyle).Text($"{item.VATPercentage}%");
-                table.Cell().Element(CellStyle).AlignRight().Text(item.Total.ToString("C2"));
+                table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Quantity(item.Quantity));
+                table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Money(item.UnitPrice));
+                table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Percentage(item.VATPercentage));
+                table.Cell().Element(CellStyle).AlignRight().Text(InvoiceNumberFormat.Money(item.Total));
             }
         });
     }

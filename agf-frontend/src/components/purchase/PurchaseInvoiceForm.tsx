@@ -2,6 +2,7 @@
 
 import { KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
+import { formatMoney } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
@@ -251,7 +252,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
         const standard = field === 'paymentTermsDays' ? String(vendor.paymentTermsDays) : (vendor.defaultCurrency ?? settings.defaultCurrency);
         return standard === draft.header[field] ? null : t('purchase_manual_vs_default', { value: standard });
     };
-    const money = (value: number) => new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+    const money = (value: number) => formatMoney(value, null, locale);
     const unknown = serverError !== null && outcomeUnknown(serverError);
 
     if (result !== null) {

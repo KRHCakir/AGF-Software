@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { formatMoney } from '../../../lib/availability';
 import { DashboardData, DashboardService } from '../../../services/dashboardService';
 import { showLegacyDemoChrome } from '../../../lib/featureFlags';
 
@@ -48,7 +49,7 @@ export default function Home() {
 
 // Alleen achter de vlag: de oude kengetallen en de legacy-lijsten, met een expliciete melding over hun herkomst.
 function LegacyMetrics() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [data, setData] = useState<DashboardData | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -65,7 +66,7 @@ function LegacyMetrics() {
       {failed && <p className="text-sm text-red-700">{t('availability_error_network')}</p>}
       {data && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard title="Total Sales Today" value={`€ ${data.kpis.totalSalesToday.toLocaleString()}`} color="blue" />
+          <KPICard title="Total Sales Today" value={`€ ${formatMoney(data.kpis.totalSalesToday, null, locale)}`} color="blue" />
           <KPICard title="Unpaid Invoices" value={data.kpis.unpaidInvoices.toString()} color="red" />
           <KPICard title="Shipments Arriving" value={data.kpis.shipmentsArriving.toString()} color="green" />
           <KPICard title="Margin %" value={data.kpis.margin} color="yellow" />
