@@ -10,7 +10,7 @@ import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 
 // Eén kg-veld (netto of bruto) op een order- of aanvoerregel. Met een standaard van het artikel staat er live aantal × standaard
 // in grijs ("berekend"); zelf typen maakt het zwart ("ingevuld") en dan volgt het het aantal niet meer; ↺ zet het terug.
-// Zonder standaard is het veld leeg en optioneel. Begint met het (op een smal scherm zichtbare) label, net als de andere cellen.
+// Zonder standaard is het veld leeg en optioneel.
 export default function LineKgInput({ id, label, index, field, line, calculated, perPackage, locked, messages, onChange }: {
     // API-foutsleutel van het veld, bijvoorbeeld lines[0].netWeightKg; het invoerveld krijgt `${id}-input`.
     id: string;
@@ -36,13 +36,13 @@ export default function LineKgInput({ id, label, index, field, line, calculated,
 
     return (
         <>
-            <label htmlFor={`${id}-input`} className="sr-only">{label} {index + 1}</label>
+            <label htmlFor={`${id}-input`} className="block text-xs text-gray-700">{label}<span className="sr-only"> {index + 1}</span></label>
             <div className="flex items-center gap-1">
                 <input {...fieldProps(id, messages)} inputMode="decimal" value={shown} disabled={locked} data-weight-state={state}
                     onChange={(event) => onChange({ [textKey]: event.target.value, [enteredKey]: true })}
                     // Leeg gemaakt: terug naar de berekening (of gewoon leeg zonder standaard).
                     onBlur={() => { if (typing && (line[textKey] ?? '').trim() === '') onChange({ [textKey]: '', [enteredKey]: false }); }}
-                    className={`${inputClass} !mt-0 min-w-[6.5rem] flex-1 text-right ${state === 'calculated' ? 'text-gray-500' : 'text-gray-900'}`} />
+                    className={`${inputClass} !mt-0 min-w-0 flex-1 text-right ${state === 'calculated' ? 'text-gray-500' : 'text-gray-900'}`} />
                 {entered && calculated !== null && (
                     <button type="button" disabled={locked} onClick={() => onChange({ [textKey]: '', [enteredKey]: false })}
                         aria-label={t('line_kg_reset', { kg: formatDecimalInput(calculated) })} title={t('line_kg_reset', { kg: formatDecimalInput(calculated) })}
@@ -83,9 +83,9 @@ export function LineKgHint({ variantId, hasDefault, netKg, quantity, unit, testI
     );
 }
 
-// De twee kg-cellen van een regel (netto met hint, bruto) voor de regeltabel van een order- of aanvoerformulier.
-// `netKey`/`grossKey` zijn de API-veldnamen (orders: netWeightKg, aanvoer: expectedNetWeightKg).
-export function LineKgCells({ prefix, index, line, row, netKey, grossKey, unit, locked, errors, onChange }: {
+// Netto en bruto kg van een regel naast elkaar onder het aantal (in dezelfde cel: zo blijft de regeltabel ook in het smalle
+// orderpaneel op 1440 px leesbaar), met de hint eronder. `netKey`/`grossKey` zijn de API-veldnamen (orders: netWeightKg).
+export function LineKgFields({ prefix, index, line, row, netKey, grossKey, unit, locked, errors, onChange }: {
     prefix: string;
     index: number;
     line: LineWeightDraft & { productVariantId: string };
@@ -101,16 +101,14 @@ export function LineKgCells({ prefix, index, line, row, netKey, grossKey, unit, 
     const netDefault = row.defaults?.defaultNetKgPerPackage ?? null;
     return (
         <>
-            <td className="w-40 px-2 py-1.5">
-                <LineKgInput id={`${prefix}.${netKey}`} label={t('line_kg_net')} index={index} field="net" line={line} calculated={row.calculated.net}
-                    perPackage={netDefault} locked={locked} messages={errors(`${prefix}.${netKey}`)} onChange={onChange} />
-                <LineKgHint variantId={line.productVariantId === '' ? null : Number(line.productVariantId)} hasDefault={netDefault !== null}
-                    netKg={row.netKg} quantity={row.quantity} unit={unit} testId={`${prefix}.kg-hint`} />
-            </td>
-            <td className="w-40 px-2 py-1.5">
-                <LineKgInput id={`${prefix}.${grossKey}`} label={t('line_kg_gross')} index={index} field="gross" line={line} calculated={row.calculated.gross}
-                    perPackage={row.defaults?.defaultGrossKgPerPackage ?? null} locked={locked} messages={errors(`${prefix}.${grossKey}`)} onChange={onChange} />
-            </td>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <div><LineKgInput id={`${prefix}.${netKey}`} label={t('line_kg_net')} index={index} field="net" line={line} calculated={row.calculated.net}
+                    perPackage={netDefault} locked={locked} messages={errors(`${prefix}.${netKey}`)} onChange={onChange} /></div>
+                <div><LineKgInput id={`${prefix}.${grossKey}`} label={t('line_kg_gross')} index={index} field="gross" line={line} calculated={row.calculated.gross}
+                    perPackage={row.defaults?.defaultGrossKgPerPackage ?? null} locked={locked} messages={errors(`${prefix}.${grossKey}`)} onChange={onChange} /></div>
+            </div>
+            <LineKgHint variantId={line.productVariantId === '' ? null : Number(line.productVariantId)} hasDefault={netDefault !== null}
+                netKg={row.netKg} quantity={row.quantity} unit={unit} testId={`${prefix}.kg-hint`} />
         </>
     );
 }
