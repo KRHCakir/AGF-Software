@@ -1,6 +1,6 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
-import type { RejectRequest } from '../types/purchaseOrder';
+import type { AddInvoiceRefRequest, RejectRequest } from '../types/purchaseOrder';
 import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, RetractDeliveryRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
@@ -139,17 +139,30 @@ export interface RejectReceiptCommand extends CommandMeta {
     display: { orderNumber: string; palletReference: string; lotNumber: string };
 }
 
-export type PurchaseCommand = RejectReceiptCommand;
+// Inkooporder: factuur- of creditnotanummer vastleggen; per order en soort hooguit één onafgerond.
+export interface InvoiceRefCommand extends CommandMeta {
+    kind: 'invoice-ref';
+    key: string;
+    orderId: number;
+    payload: AddInvoiceRefRequest;
+    display: { orderNumber: string };
+}
+
+export type PurchaseCommand = RejectReceiptCommand | InvoiceRefCommand;
 
 export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | RetractDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand | PurchaseCommand;
 
-const PURCHASE_KINDS: readonly PendingCommand['kind'][] = ['reject-receipt'];
+const PURCHASE_KINDS: readonly PendingCommand['kind'][] = ['reject-receipt', 'invoice-ref'];
 
 export function isPurchaseCommand(command: PendingCommand): command is PurchaseCommand {
     return PURCHASE_KINDS.includes(command.kind);
 }
 
 export const PURCHASE_COMMANDS_STORAGE_KEY = 'agf_purchase_pending_commands';
+
+export function invoiceRefKey(orderId: number, kind: 'Invoice' | 'CreditNote'): string {
+    return `invoice-ref:${orderId}:${kind === 'Invoice' ? 'invoice' : 'credit-note'}`;
+}
 
 export function rejectReceiptKey(orderId: number, palletContentLineId: number): string {
     return `reject-receipt:${orderId}:${palletContentLineId}`;
@@ -437,6 +450,17 @@ function isRejectReceiptPayload(value: unknown, requestId: string, palletContent
             && isNonNegativeInt(line.expectedContentLineVersion) && isPositiveAmount(line.quantity) && isPositiveAmount(line.netWeightKg));
 }
 
+// Nummer verplicht en begrensd; datum yyyy-MM-dd of leeg; bedrag een eindig getal of leeg; actor optioneel.
+function isInvoiceRefPayload(value: unknown, requestId: string): value is AddInvoiceRefRequest {
+    return isRecord(value)
+        && value.requestId === requestId
+        && (value.kind === 'Invoice' || value.kind === 'CreditNote')
+        && isText(value.invoiceNumber) && (value.invoiceNumber as string).length <= 100
+        && (value.invoiceDate === null || (typeof value.invoiceDate === 'string' && DATE_ONLY.test(value.invoiceDate)))
+        && (value.amountExclVat === null || (typeof value.amountExclVat === 'number' && Number.isFinite(value.amountExclVat)))
+        && isBoundedNullableText(value.actorReference, 100);
+}
+
 function isBoundedNullableText(value: unknown, max: number): value is string | null {
     return value === null || (typeof value === 'string' && value.trim() !== '' && value.length <= max);
 }
@@ -531,6 +555,11 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
                 && value.key === correctDispatchKey(value.orderId, value.dispatchId)
                 && isCorrectDispatchPayload(value.payload, value.requestId)
                 && isRecord(value.display) && typeof value.display.customerName === 'string' && isPositiveInt(value.display.lineCount);
+        case 'invoice-ref':
+            return isPositiveInt(value.orderId)
+                && isInvoiceRefPayload(value.payload, value.requestId)
+                && value.key === invoiceRefKey(value.orderId, value.payload.kind)
+                && isRecord(value.display) && typeof value.display.orderNumber === 'string';
         case 'reject-receipt':
             return isPositiveInt(value.orderId) && isPositiveInt(value.palletContentLineId)
                 && value.key === rejectReceiptKey(value.orderId, value.palletContentLineId)

@@ -170,7 +170,7 @@ function PurchaseOrdersWorkspace() {
                 {detail?.status === 'loading' && <LoadingRows rows={4} label={t('po_loading')} />}
                 {detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => setReloadToken((n) => n + 1)} />}
                 {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} onChanged={changed}
-                    invoices={<InvoiceRefActions orderId={detail.data.id} onDone={changed} />} />}
+                    invoices={<InvoiceRefActions orderId={detail.data.id} orderNumber={detail.data.orderNumber} onDone={changed} />} />}
             </div>
         </div>
     );
