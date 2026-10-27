@@ -66,6 +66,11 @@ public class PurchaseOrderServiceTests : IDisposable
         Assert.Equal(ordered.OrderNumber, Assert.Single((await ListAsync(status: "all", page: 2, pageSize: 3)).Items).OrderNumber);
         Assert.Equal(received.OrderNumber, Assert.Single((await ListAsync(status: "Received")).Items).OrderNumber);
 
+        // Status zonder hoofdlettergevoeligheid, maar alleen uit de lijst.
+        Assert.Equal(received.OrderNumber, Assert.Single((await ListAsync(status: " received ")).Items).OrderNumber);
+        Assert.Equal(2, (await ListAsync(status: "OPEN")).Total);
+        Assert.Equal(4, (await ListAsync(status: "All")).Total);
+
         await using var bad = _factory.CreateContext();
         Assert.Equal(ServiceResultStatus.Validation, (await new PurchaseOrderService(bad).ListAsync(null, "Besteld", null, 1, 50)).Status);
     }
