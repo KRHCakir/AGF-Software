@@ -2762,6 +2762,11 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("InvoiceNumberKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -2777,16 +2782,18 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("IncomingInvoiceId");
 
-                    b.HasIndex("InvoiceNumber");
+                    b.HasIndex("InvoiceNumberKey");
 
                     b.HasIndex("RequestId")
                         .IsUnique();
 
-                    b.HasIndex("SupplyCommitmentId", "Kind", "InvoiceNumber")
+                    b.HasIndex("SupplyCommitmentId", "Kind", "InvoiceNumberKey")
                         .IsUnique();
 
                     b.ToTable("SupplyCommitmentInvoiceRefs", t =>
                         {
+                            t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumberKey_NotBlank", "length(trim(\"InvoiceNumberKey\")) > 0");
+
                             t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumber_NotBlank", "length(trim(\"InvoiceNumber\")) > 0");
 
                             t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_Kind_Allowed", "\"Kind\" IN ('Invoice', 'CreditNote')");
