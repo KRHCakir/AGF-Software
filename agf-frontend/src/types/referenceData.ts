@@ -17,6 +17,9 @@ export interface CustomerOption {
     // Zoekcode en actief-vlag van de relatie (Relaties); inactieve klanten zijn niet kiesbaar voor een nieuwe order.
     searchCode: string | null;
     isActive: boolean;
+    // Plaats van het hoofdadres en btw-nummer: alleen om op te zoeken in de klantkeuze.
+    city?: string | null;
+    vatNumber?: string | null;
 }
 
 // Klant aanmaken vanuit Verkoop (POST /api/customers). Lege optionele velden gaan als null mee.

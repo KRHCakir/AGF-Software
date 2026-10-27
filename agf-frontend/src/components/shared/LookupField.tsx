@@ -29,7 +29,15 @@ export function unambiguousLookup<T>(matches: readonly LookupMatch<T>[]): Lookup
     return exact.length === 1 ? exact[0] : null;
 }
 
-export default function LookupField<T>({ id, ariaLabel, selected, search, onSelect, onClear, onFreeText, freeText = '', allowFreeText = false, disabled = false, invalid = false, describedBy, placeholderKey, hintKey, noneKey, moreKey, changeKey, inputRef: externalRef, className = '', renderExtra }: {
+// Volgende focusbare element na het zoekveld in hetzelfde formulier (na Enter op een suggestie, zoals Tab dat zou doen).
+function focusNextAfter(input: HTMLInputElement) {
+    const scope: ParentNode = input.form ?? input.ownerDocument;
+    const focusable = Array.from(scope.querySelectorAll<HTMLElement>('input, select, textarea, button, a[href]'))
+        .filter((element) => element.tabIndex >= 0 && !(element as HTMLInputElement).disabled && (element as HTMLInputElement).type !== 'hidden');
+    focusable[focusable.indexOf(input) + 1]?.focus();
+}
+
+export default function LookupField<T>({ id, ariaLabel, selected, search, onSelect, onClear, onFreeText, freeText = '', allowFreeText = false, disabled = false, invalid = false, describedBy, placeholderKey, hintKey, noneKey, moreKey, changeKey, inputRef: externalRef, className = '', renderExtra, maxSuggestions = MAX_LOOKUP_SUGGESTIONS, takeHighlighted = false, onQueryChange }: {
     // Het invoerveld krijgt `${id}-input`, zoals fieldProps() dat voor labels en foutmeldingen doet.
     id: string;
     ariaLabel: string;
@@ -53,6 +61,12 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
     inputRef?: (element: HTMLInputElement | null) => void;
     className?: string;
     renderExtra?: (match: LookupMatch<T>) => ReactNode;
+    maxSuggestions?: number;
+    // Opt-in (klantkeuze): Tab en Enter nemen altijd de gemarkeerde suggestie over (standaard de bovenste) en gaan naar het
+    // volgende veld; zonder deze vlag neemt Tab alleen een duidelijke suggestie over.
+    takeHighlighted?: boolean;
+    // De getypte zoektekst (bijvoorbeeld om bij geen treffer "Nieuwe klant" met die naam aan te bieden).
+    onQueryChange?: (query: string) => void;
 }) {
     const { t } = useTranslation();
     const listId = useId();
@@ -67,7 +81,7 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
     useEffect(() => { if (allowFreeText && selected === null) setQuery(freeText); }, [freeText, allowFreeText, selected]);
 
     const matches = useMemo(() => (selected === null ? search(query) : []), [search, query, selected]);
-    const shown = matches.slice(0, MAX_LOOKUP_SUGGESTIONS);
+    const shown = matches.slice(0, maxSuggestions);
     const clear = unambiguousLookup(matches);
 
     // De lijst staat vast ten opzichte van het venster (tabellen met overflow zouden haar afsnijden) en opent naar boven
@@ -101,9 +115,14 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
         }
     }, [selected]);
 
+    const changeQuery = (next: string) => {
+        setQuery(next);
+        onQueryChange?.(next);
+    };
+
     const choose = (match: LookupMatch<T>) => {
         onSelect(match.item);
-        setQuery('');
+        changeQuery('');
         setOpen(false);
         setNavigated(false);
     };
@@ -112,7 +131,7 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
         if (disabled) return;
         focusAfterClear.current = true;
         onClear();
-        setQuery('');
+        changeQuery('');
         setHighlight(0);
         setNavigated(false);
     };
@@ -149,11 +168,12 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
                 if (listOpen && shown[highlightIndex]) {
                     event.preventDefault();
                     choose(shown[highlightIndex]);
+                    if (takeHighlighted) focusNextAfter(event.currentTarget);
                 }
                 return;
             case 'Tab': {
                 // Nooit preventDefault: Tab verlaat het veld altijd. Alleen een duidelijke suggestie wordt daarbij overgenomen.
-                const accepted = listOpen ? (navigated ? shown[highlight] ?? null : clear) : null;
+                const accepted = !listOpen ? null : takeHighlighted ? shown[highlightIndex] ?? null : navigated ? shown[highlight] ?? null : clear;
                 if (accepted) choose(accepted);
                 else leaveWithFreeText();
                 return;
@@ -200,7 +220,7 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
                     value={selected ? selected.description : query}
                     placeholder={t(placeholderKey)}
                     title={selected ? selected.description : undefined}
-                    onChange={(event) => { setQuery(event.target.value); setOpen(true); setHighlight(0); setNavigated(false); }}
+                    onChange={(event) => { changeQuery(event.target.value); setOpen(true); setHighlight(0); setNavigated(false); }}
                     onFocus={() => { if (selected === null && query !== '') setOpen(true); }}
                     onBlur={leaveWithFreeText}
                     onKeyDown={onKeyDown}

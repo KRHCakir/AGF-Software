@@ -26,6 +26,7 @@ import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass, lineTableClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import CustomerPicker from './CustomerPicker';
 import NewCustomerPanel from './NewCustomerPanel';
 import { PendingNotice } from './PendingCommandsBanner';
 import { usePendingCommand, usePendingCommands } from './PendingCommandsContext';
@@ -72,6 +73,8 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
     // navigeren of verversen) en kan niet door een tweede worden vervangen. Zojuist aangemaakte klanten staan direct in de keuze.
     const pendingCustomer = (commands[CREATE_CUSTOMER_KEY] as CreateCustomerCommand | undefined) ?? null;
     const [customerPanelOpen, setCustomerPanelOpen] = useState(false);
+    // Getypte naam uit de klantkeuze bij "Nieuwe klant" zonder treffer (alleen voorinvulling).
+    const [newCustomerName, setNewCustomerName] = useState('');
     const [createdCustomers, setCreatedCustomers] = useState<CustomerOption[]>([]);
     const [customerNotice, setCustomerNotice] = useState<string | null>(null);
     const showCustomerPanel = customerPanelOpen || pendingCustomer !== null;
@@ -80,7 +83,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         return extra.length === 0 ? knownCustomers : [...knownCustomers, ...extra].sort((a, b) => a.name.localeCompare(b.name));
     }, [knownCustomers, createdCustomers]);
     const [draft, setDraft] = useState<OrderDraft>(() => (pending === null ? emptyDraft() : draftFromCommand(pending)));
-    const [customerFilter, setCustomerFilter] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
@@ -89,13 +91,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     // Vergrendeld zolang er een onafgerond commando is: nooit een gewijzigde retry, nooit een tweede order ernaast.
     const locked = submitting || result !== null || pending !== null;
-
-    const filteredCustomers = useMemo(() => {
-        const term = customerFilter.trim().toLowerCase();
-        // Inactieve relaties zijn niet kiesbaar voor een nieuwe order (de server weigert ze ook); een al gekozen klant blijft staan.
-        const selectable = customers.filter((customer) => customer.isActive || String(customer.id) === draft.customerId);
-        return term === '' ? selectable : selectable.filter((customer) => customer.name.toLowerCase().includes(term) || (customer.searchCode !== null && customer.searchCode.toLowerCase().includes(term)));
-    }, [customers, customerFilter, draft.customerId]);
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
@@ -196,7 +191,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         setCreatedCustomers((current) => (current.some((c) => c.id === customer.id) ? current : [...current, { id: customer.id, name: customer.name, searchCode: null, isActive: true }]));
         // Alleen de klantkeuze verandert; regels, datum en referentie van het concept blijven staan.
         setDraft((current) => ({ ...current, customerId: String(customer.id) }));
-        setCustomerFilter('');
         setCustomerPanelOpen(false);
         setCustomerNotice(`${t('sales_customer_created', { name: customer.name })}${replayed ? ` ${t('supply_saved_before')}` : ''}`);
         edited();
@@ -205,7 +199,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     const chooseExisting = (customerId: number) => {
         setDraft((current) => ({ ...current, customerId: String(customerId) }));
-        setCustomerFilter('');
         setCustomerPanelOpen(false);
         setCustomerNotice(null);
         edited();
@@ -283,26 +276,21 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                     <div className="flex items-center justify-between gap-2">
                         <label htmlFor="customerId-input" className="text-xs font-medium text-gray-700">{t('sales_customer')} *</label>
                         <button type="button" className={`${secondaryButtonClass} px-2 py-1 text-xs`} disabled={locked && pendingCustomer === null}
-                            onClick={() => { setCustomerNotice(null); setCustomerPanelOpen(true); }} aria-expanded={showCustomerPanel}
+                            onClick={() => { setCustomerNotice(null); setNewCustomerName(''); setCustomerPanelOpen(true); }} aria-expanded={showCustomerPanel}
                             title={locked && pendingCustomer === null ? t('sales_customer_blocked_by_order') : undefined}>
                             + {t('sales_new_customer')}
                         </button>
                     </div>
-                    <input type="search" value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)} disabled={locked}
-                        placeholder={t('sales_customer_filter_placeholder')} aria-label={t('sales_customer_filter')} className={inputClass} />
-                    <select {...fieldProps('customerId', e('customerId'))} value={draft.customerId} disabled={locked}
-                        onChange={(event) => updateHeader('customerId', event.target.value)} className={inputClass}>
-                        <option value="">{t('supply_choose')}</option>
-                        {draft.customerId && !filteredCustomers.some((customer) => String(customer.id) === draft.customerId) && (
-                            <option value={draft.customerId}>{customers.find((customer) => String(customer.id) === draft.customerId)?.name ?? draft.customerId}</option>
-                        )}
-                        {filteredCustomers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-                    </select>
+                    <CustomerPicker id="customerId" customers={customers} value={draft.customerId} disabled={locked}
+                        invalid={(e('customerId') ?? []).length > 0} describedBy={(e('customerId') ?? []).length > 0 ? 'customerId' : undefined}
+                        onChange={(customer) => updateHeader('customerId', customer === null ? '' : String(customer.id))}
+                        newCustomerDisabled={locked && pendingCustomer === null}
+                        onNewCustomer={(name) => { setCustomerNotice(null); setNewCustomerName(name); setCustomerPanelOpen(true); }} />
                     <FieldError id="customerId" messages={e('customerId')} />
                     {customerNotice && <p role="status" className="mt-1 rounded border border-green-300 bg-green-50 px-2 py-1 text-xs text-green-900">{customerNotice}</p>}
                     {showCustomerPanel && (
                         <div className="mt-2">
-                            <NewCustomerPanel customers={customers} onCreated={onCustomerSaved} onChooseExisting={chooseExisting} onClose={() => setCustomerPanelOpen(false)} />
+                            <NewCustomerPanel key={newCustomerName} initialName={newCustomerName} customers={customers} onCreated={onCustomerSaved} onChooseExisting={chooseExisting} onClose={() => setCustomerPanelOpen(false)} />
                         </div>
                     )}
                 </div>
