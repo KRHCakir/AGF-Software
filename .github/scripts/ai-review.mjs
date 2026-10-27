@@ -132,7 +132,7 @@ const GENERATED = [
   /\.min\.(js|css)$/i,
   /\.(png|jpe?g|gif|webp|ico|pdf|svg|woff2?|ttf|eot|zip)$/i,
 ]
-const isTest = (p) => /(^|\/)[^/]*tests?[^/]*\//i.test(p) || /\.(test|spec)\.[jt]sx?$/i.test(p) || /Tests?\.cs$/.test(p)
+const isTest = (p) => /(^|\/)(tests?|__tests__|[^/]*\.Tests)\//i.test(p) || /\.(test|spec)\.[jt]sx?$/i.test(p) || /Tests?\.cs$/.test(p)
 const isDoc = (p) => /\.(md|txt)$/i.test(p) || /^docs\//i.test(p)
 const priority = (p) => (isDoc(p) ? 2 : isTest(p) ? 1 : 0)
 // Verwijderde bestanden worden ook beoordeeld: het weghalen van bv. een autorisatiecheck is een wijziging.
