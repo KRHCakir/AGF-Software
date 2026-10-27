@@ -94,8 +94,12 @@ function PurchaseOrdersWorkspace() {
         const params = new URLSearchParams(searchParams.toString());
         params.set('id', String(id));
         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-        requestAnimationFrame(() => detailRef.current?.scrollIntoView?.({ block: 'start' }));
     }, [router, pathname, searchParams]);
+
+    const readyId = detail?.status === 'ready' ? detail.data.id : null;
+    useEffect(() => {
+        if (readyId !== null) detailRef.current?.scrollIntoView?.({ block: 'start' });
+    }, [readyId]);
 
     const total = list.status === 'ready' ? list.data.total : 0;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));

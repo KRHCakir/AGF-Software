@@ -180,7 +180,9 @@ function isReceipt(value: unknown): value is PurchaseOrderReceiptLine {
 }
 
 export function isPurchaseOrderDetail(value: unknown): value is PurchaseOrderDetail {
-    return isObject(value) && isNumber(value.id) && isString(value.orderNumber) && isNullableString(value.vendorName) && isString(value.orderedOn)
+    return isObject(value) && isNumber(value.id) && isString(value.orderNumber) && isNumber(value.vendorId) && isNullableString(value.vendorName) && isString(value.orderedOn)
+        && isString(value.route) && isNullableString(value.customerName) && isNullableString(value.destination) && isNullableNumber(value.expectedNetWeightKg)
+        && isNumber(value.receivedNetWeightKg)
         && isString(value.status) && isString(value.invoiceIndicator) && isNumber(value.expectedQuantity) && isNumber(value.receivedQuantity)
         && isNumber(value.rejectedQuantity) && isNumber(value.rejectedNetWeightKg) && isString(value.origin) && isNullableString(value.orderChannel)
         && isNullableString(value.note) && isNullableString(value.supplierReference) && isNullableString(value.expectedAt)

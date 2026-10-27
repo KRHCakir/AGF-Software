@@ -35,7 +35,7 @@ export default function PurchaseOrderDetail({ order, invoices }: {
                 <p className="text-sm text-gray-700">
                     {t('po_col_ordered_on')} {formatDateOnly(order.orderedOn, locale)}
                     {order.orderChannel && <> · {label(CHANNEL_LABEL_KEYS, order.orderChannel)}</>}
-                    {' · '}{t('po_col_expected')} {order.expectedAt ? formatCalendarDate(order.expectedAt, locale) : '–'} · {order.origin}
+                    {' · '}{t('po_col_expected')} {order.expectedAt ? formatCalendarDate(order.expectedAt, locale) : '–'}{order.origin && <> · {order.origin}</>}
                 </p>
                 {order.rejectedQuantity > 0 && (
                     <p className="mt-1 text-sm font-medium text-red-800">{t('po_rejected_of', { rejected: qty(order.rejectedQuantity), total: qty(order.receivedQuantity) })} · {formatKg(order.rejectedNetWeightKg, locale)}</p>
@@ -57,6 +57,28 @@ export default function PurchaseOrderDetail({ order, invoices }: {
                             </span>
                         </li>
                     ))}
+                </ul>
+            </section>
+
+            <section className={section} aria-labelledby="po-receipts">
+                <h3 id="po-receipts" className={h3}>{t('po_receipts')}</h3>
+                {order.receipts.length === 0 && <p className="text-sm text-gray-600">{t('po_no_receipts')}</p>}
+                <ul className="divide-y divide-gray-100 text-sm">
+                    {order.receipts.map((receipt) => {
+                        const style = qualityStyle(receipt.qualityStatus);
+                        return (
+                            <li key={receipt.palletContentLineId} className="py-1.5">
+                                <span className="font-mono font-medium text-gray-900">{receipt.palletReference}</span>
+                                <span className="text-gray-800"> · {receipt.productName ?? '–'} · {receipt.productVariantName ?? '–'} · {receipt.lotNumber}</span>
+                                <span className="block font-mono text-gray-800">{qty(receipt.quantity)} · {formatKg(receipt.netWeightKg, locale)}</span>
+                                <span className="block text-xs text-gray-700">
+                                    {style ? t(style.key) : receipt.qualityStatus}
+                                    {receipt.qualityReason && <> ({receipt.qualityReason})</>}
+                                    {' · '}{receipt.rejectable ? t('po_receipt_rejectable', { quantity: qty(receipt.rejectableQuantity) }) : t('po_receipt_not_rejectable')}
+                                </span>
+                            </li>
+                        );
+                    })}
                 </ul>
             </section>
 
