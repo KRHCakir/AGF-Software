@@ -40,7 +40,7 @@ for (const name of readdirSync(casesDir).sort()) {
   const filesDir = join(dir, 'files')
   const files = walk(filesDir).map((full) => {
     const content = readFileSync(full, 'utf8')
-    const lines = content.replace(/\n$/, '').split('\n')
+    const lines = content.replace(/\n+$/, '').split('\n')
     return {
       filename: relative(filesDir, full).split('\\').join('/'),
       status: 'added',

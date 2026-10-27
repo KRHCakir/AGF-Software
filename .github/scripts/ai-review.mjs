@@ -135,6 +135,7 @@ const GENERATED = [
 const isTest = (p) => /(^|\/)[^/]*tests?[^/]*\//i.test(p) || /\.(test|spec)\.[jt]sx?$/i.test(p) || /Tests?\.cs$/.test(p)
 const isDoc = (p) => /\.(md|txt)$/i.test(p) || /^docs\//i.test(p)
 const priority = (p) => (isDoc(p) ? 2 : isTest(p) ? 1 : 0)
+// Verwijderde bestanden worden ook beoordeeld: het weghalen van bv. een autorisatiecheck is een wijziging.
 
 // Testdata van de review-benchmark bevat expres bugs: niet reviewen (en niet laten "fixen").
 const BENCHMARK_DATA = /^\.github\/review-benchmark\//
@@ -145,7 +146,6 @@ function classify(files) {
   for (const f of files) {
     if (!dryRun && BENCHMARK_DATA.test(f.filename)) skipped.push({ path: f.filename, reason: 'benchmark-testdata (bevat expres bugs)' })
     else if (GENERATED.some((re) => re.test(f.filename))) skipped.push({ path: f.filename, reason: 'gegenereerd/binair' })
-    else if (f.status === 'removed') skipped.push({ path: f.filename, reason: 'verwijderd' })
     else if (!f.patch) skipped.push({ path: f.filename, reason: 'geen tekst-diff (binair of te groot voor GitHub)', counts: true })
     else reviewable.push(f)
   }
@@ -376,7 +376,7 @@ function renderComment(r) {
   const c = r.coverage
   lines.push(
     `**Dekking:** ${c.reviewedFiles} van ${c.reviewableFiles} bestanden volledig beoordeeld, in ${c.parts} ${c.parts === 1 ? 'deel' : 'delen'}` +
-      (c.generatedSkipped ? ` · ${c.generatedSkipped} overgeslagen (gegenereerd, binair, verwijderd of benchmark)` : '') +
+      (c.generatedSkipped ? ` · ${c.generatedSkipped} overgeslagen (gegenereerd, binair of benchmark)` : '') +
       '.',
   )
   if (r.status === 'partial') {
@@ -479,12 +479,14 @@ async function main() {
     throw new Error(`No part could be reviewed: ${partResults[0]?.error}`)
   }
 
-  const notReviewed = [
+  const notReviewedAll = [
     ...skipped.filter((s) => s.counts).map((s) => ({ path: s.path, reason: s.reason })),
     ...truncatedFiles.map((p) => ({ path: p, reason: `diff groter dan ${chunkChars} tekens, alleen het begin gezien` })),
     ...droppedChunks.flatMap((c) => c.files.map((f) => ({ path: f.filename, reason: `PR te groot: meer dan ${maxChunks} delen` }))),
     ...partResults.filter((p) => !p.ok).flatMap((p) => p.chunk.files.map((f) => ({ path: f.filename, reason: `review mislukt (${p.error.slice(0, 120)})` }))),
   ]
+  const seen = new Set()
+  const notReviewed = notReviewedAll.filter((n) => !seen.has(n.path) && seen.add(n.path))
   const fullyReviewed = okParts.flatMap((p) => p.chunk.files.filter((f) => !f.truncated)).length
   const findings = okParts.flatMap((p) => p.result.findings)
   const checked = okParts.flatMap((p) => p.result.checked)
