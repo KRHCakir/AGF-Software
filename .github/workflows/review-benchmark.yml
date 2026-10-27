@@ -15,7 +15,7 @@ jobs:
   benchmark:
     name: Benchmark ${{ matrix.reviewer }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -36,6 +36,8 @@ jobs:
           AI_BASE_URL: ${{ matrix.reviewer == 'DeepSeek' && 'https://api.deepseek.com' || vars.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' }}
           AI_MODEL: ${{ matrix.reviewer == 'DeepSeek' && (vars.DEEPSEEK_MODEL || 'deepseek-v4-pro') || (vars.QWEN_MODEL || 'qwen-plus') }}
           AI_API_KEY: ${{ matrix.reviewer == 'DeepSeek' && secrets.DEEPSEEK_API_KEY || secrets.QWEN_API_KEY }}
+          AI_RETRIES: '1'
+          AI_REQUEST_TIMEOUT_MS: '180000'
         run: |
           if [ -z "$AI_API_KEY" ]; then echo "No API key for $AI_NAME - skipping."; exit 0; fi
           node .github/scripts/review-benchmark.mjs

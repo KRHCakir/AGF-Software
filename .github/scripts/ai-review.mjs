@@ -481,9 +481,10 @@ async function main() {
 
   const notReviewedAll = [
     ...skipped.filter((s) => s.counts).map((s) => ({ path: s.path, reason: s.reason })),
-    ...truncatedFiles.map((p) => ({ path: p, reason: `diff groter dan ${chunkChars} tekens, alleen het begin gezien` })),
+    // Volgorde = belangrijkste reden eerst (bij dubbele paden blijft de eerste staan)
     ...droppedChunks.flatMap((c) => c.files.map((f) => ({ path: f.filename, reason: `PR te groot: meer dan ${maxChunks} delen` }))),
     ...partResults.filter((p) => !p.ok).flatMap((p) => p.chunk.files.map((f) => ({ path: f.filename, reason: `review mislukt (${p.error.slice(0, 120)})` }))),
+    ...truncatedFiles.map((p) => ({ path: p, reason: `diff groter dan ${chunkChars} tekens, alleen het begin gezien` })),
   ]
   const seen = new Set()
   const notReviewed = notReviewedAll.filter((n) => !seen.has(n.path) && seen.add(n.path))

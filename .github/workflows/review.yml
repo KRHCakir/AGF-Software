@@ -285,13 +285,14 @@ jobs:
             { echo '<!-- ai-fix-note -->'; echo "### 🤖 Claude: geen codewijziging nodig volgens Claude"; echo; cat "$note"; echo; echo "@$NOTIFY Claude vindt de bevindingen hierboven onterecht en heeft niets aangepast. Beoordeel jij wie gelijk heeft? Na een nieuwe commit lezen de reviewers deze uitleg mee."; } > "$RUNNER_TEMP/body.md"
             gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
           else
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft niets gepusht en geen uitleg gegeven. Kijk even in de log van de job **Claude fix**. (Op een PR die `.github/workflows/review.yml` zelf wijzigt is dit normaal: de Claude-action draait dan uit veiligheid niet.)"
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft niets gepusht en geen uitleg gegeven. Kijk even in de log van de job **Claude fix**. (Op een PR die \`.github/workflows/review.yml\` zelf wijzigt is dit normaal: de Claude-action draait dan uit veiligheid niet.)"
           fi
 
   # Melding voor jou zodra beide reviews klaar zijn (GitHub stuurt die via e-mail / de GitHub-app).
   notify:
     name: Ready to test
     needs: [deepseek, qwen]
+    # Bij request_changes eindigt de review met exit 1 (job = failure), dus dan draait deze job niet.
     if: github.event_name == 'pull_request' && needs.deepseek.result == 'success' && needs.qwen.result == 'success'
     runs-on: ubuntu-latest
     permissions:
