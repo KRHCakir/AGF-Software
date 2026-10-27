@@ -16,11 +16,6 @@ export type RejectionDecision = 'ReturnToSupplier' | 'ClaimDiscount' | 'Dispose'
 export const MAX_SUPPLIER_REFERENCE_LENGTH = 100;
 export const MAX_INVOICE_NUMBER_LENGTH = 100;
 
-// "IO-2026-0001": minstens vier cijfers; daarboven groeit het nummer door.
-export function formatOrderNumber(year: number, sequence: number): string {
-    return `IO-${year}-${String(sequence).padStart(4, '0')}`;
-}
-
 // Delivered (DirectTrade afgeleverd) telt voor de inkoop als ontvangen; ontvangen in de eenheid van de regel.
 export function orderStatus(storedStatus: string, lines: readonly { expected: number; received: number }[]): PurchaseOrderStatus {
     if (storedStatus === 'Cancelled') return 'Cancelled';

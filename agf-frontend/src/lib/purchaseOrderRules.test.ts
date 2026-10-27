@@ -1,15 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { formatOrderNumber, invoiceIndicator, isFullyRejected, labelKey, normalizeInvoiceNumber, orderStatus, ORDER_STATUS_LABEL_KEYS } from './purchaseOrderRules.ts';
+import { invoiceIndicator, isFullyRejected, labelKey, normalizeInvoiceNumber, orderStatus, ORDER_STATUS_LABEL_KEYS } from './purchaseOrderRules.ts';
 
-// Dezelfde gevallen als PurchaseOrderNumberTests en PurchaseOrderServiceTests in de backend.
+// Dezelfde gevallen als PurchaseOrderServiceTests in de backend (het ordernummer zelf komt altijd van de server).
 
 describe('purchaseOrderRules', () => {
-    test('order number has at least four digits', () => {
-        assert.equal(formatOrderNumber(2026, 1), 'IO-2026-0001');
-        assert.equal(formatOrderNumber(2026, 12345), 'IO-2026-12345');
-    });
-
     test('display status follows received quantities; Delivered counts as received', () => {
         const line = (received: number) => [{ expected: 10, received }];
         assert.equal(orderStatus('Expected', line(0)), 'Ordered');
