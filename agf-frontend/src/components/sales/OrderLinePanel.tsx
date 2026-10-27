@@ -12,6 +12,7 @@ import { SaveResult } from '../../services/supplyService';
 import { DirectTradeSupplyLine, ReservableStockLine, SalesOrder, SalesOrderLine, StockReservation } from '../../types/salesOrder';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
+import { lineKgLabel } from '../shared/lineKgLabel';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import AllocateDirectTradeForm from './AllocateDirectTradeForm';
@@ -170,6 +171,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 {palletBreakdownLabel(line, line.unit, t, locale) !== null && (
                     <span className="text-gray-700" data-testid="pallet-breakdown">({palletBreakdownLabel(line, line.unit, t, locale)})</span>
                 )}
+                {lineKgLabel(line, t, locale) !== null && <span className="text-gray-800" data-testid="line-kg">{lineKgLabel(line, t, locale, true)}</span>}
                 <span className="text-gray-800">
                     {t('sales_line_reserved', { quantity: formatQuantity(line.reservedQuantity, locale), kg: formatKg(line.reservedNetWeightKg, locale) })}
                 </span>
