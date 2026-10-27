@@ -66,7 +66,7 @@ namespace AgfAdmin.Services
                 ActorReference = command.Actor,
                 RejectedAt = now
             };
-            var qualityReason = $"{commitment.OrderNumber}: {command.Explanation ?? command.Reason}";
+            var qualityReason = PurchaseOrderRules.QualityReasonText(commitment.OrderNumber, command.Reason, command.Explanation);
             for (var i = 0; i < command.Lines.Count; i++)
             {
                 var key = $"lines[{i}]";
