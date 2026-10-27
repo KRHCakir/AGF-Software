@@ -39,11 +39,11 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
         if (locked) return;
         onChange('mode', mode);
         // Standaard van de variant als invoerhulp; blijft aanpasbaar en wordt per regel bewaard.
-        if (mode === 'pallets' && line.packagesPerPallet === '' && defaultPackagesPerPallet !== null) {
-            onChange('packagesPerPallet', formatDecimalInput(defaultPackagesPerPallet));
-        }
+        const packagesPerPallet = line.packagesPerPallet === '' && defaultPackagesPerPallet !== null ? formatDecimalInput(defaultPackagesPerPallet) : line.packagesPerPallet;
+        if (mode === 'pallets' && packagesPerPallet !== line.packagesPerPallet) onChange('packagesPerPallet', packagesPerPallet);
         // Aantal intussen anders getypt: een oude verdeling zou dat aantal stil vervangen, dus pallets en losse colli opnieuw invullen.
-        const earlier = resolvePalletInput({ ...line, mode: 'pallets' });
+        // Gerekend met het per-pallet-getal dat na deze wissel in beeld staat (ook de net ingevulde standaard).
+        const earlier = resolvePalletInput({ ...line, packagesPerPallet, mode: 'pallets' });
         if (mode === 'pallets' && total !== null && earlier.ok && earlier.value.quantity !== total.quantity) {
             onChange('palletCount', '');
             onChange('loosePackages', '');
