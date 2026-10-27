@@ -45,6 +45,7 @@ const select = (id: string) => mounted.container.querySelector<HTMLSelectElement
 describe('Purchase orders page', () => {
     beforeEach(() => {
         window.localStorage.setItem('agf_actor_reference', 'Jan');
+        window.sessionStorage.clear();
         listUrls = [];
         current = detail();
         listItems = [item()];
@@ -141,7 +142,7 @@ describe('Purchase orders page', () => {
         await mounted.render(<PurchaseOrdersPage />);
         await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent === 'IO-2026-0007', 'detail');
         await click(mounted.button('+ po_invoice_received_action')!);
-        await act(async () => { setValue(input('invoiceRef-number'), 'F-4712'); });
+        await act(async () => { setValue(input('invoiceRef-Invoice-number'), 'F-4712'); });
         await click(mounted.button('po_invoice_save')!);
         await mounted.waitFor(() => posted.length === 1, 'POST');
         assert.match(posted[0].url, /\/purchase-orders\/7\/invoice-refs$/);

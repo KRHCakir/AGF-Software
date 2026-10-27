@@ -6,6 +6,7 @@ import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { MAX_EXPLANATION_LENGTH, REJECTION_DECISIONS, REJECTION_REASONS, defaultRejectedKg } from '../../lib/purchaseOrderRejection';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, RejectionDecision } from '../../lib/purchaseOrderRules';
+import { RejectReceiptCommand, rejectReceiptKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { rejectReceipt } from '../../services/purchaseOrderService';
@@ -15,12 +16,15 @@ import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import { useActorReference } from '../supply/useActorReference';
+import { PendingNotice } from '../sales/PendingCommandsBanner';
+import { usePendingCommand } from '../sales/PendingCommandsContext';
 
 // "Afkeuren" van één ontvangen regel: hoeveelheid en netto kg (standaard het hele afkeurbare deel), reden, besluit en
-// medewerker. Een onbekende uitkomst bevriest het verzoek (zelfde requestId en inhoud bij opnieuw proberen); pas na een
-// definitieve weigering hoort een gewijzigde invoer bij een nieuw verzoek.
-export default function RejectReceiptForm({ orderId, receipt, onDone, onCancel }: {
+// medewerker. Een onbekende uitkomst bevriest het verzoek in de opslag per tabblad (usePendingCommand): ook na weg- en
+// terugnavigeren alleen exact dezelfde herhaling, geen annuleren of weggooien. Een definitief antwoord ruimt het op.
+export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDone, onCancel }: {
     orderId: number;
+    orderNumber: string;
     receipt: PurchaseOrderReceiptLine;
     onDone: (order: PurchaseOrderDetail) => void;
     onCancel: () => void;
@@ -29,20 +33,22 @@ export default function RejectReceiptForm({ orderId, receipt, onDone, onCancel }
     const [actor, setActor] = useActorReference();
     const calculated = receipt.weightMethod === 'Calculated' && receipt.netKgPerPackage !== null;
     const kgFor = (quantity: number) => defaultRejectedKg(quantity, receipt.onHandQuantity, receipt.onHandNetWeightKg, receipt.weightMethod, receipt.netKgPerPackage);
-    const [quantity, setQuantity] = useState(formatDecimalInput(receipt.rejectableQuantity));
-    const [kg, setKg] = useState(formatDecimalInput(kgFor(receipt.rejectableQuantity)));
+    const [pending, setPending, clearPending] = usePendingCommand<RejectReceiptCommand>(rejectReceiptKey(orderId, receipt.palletContentLineId));
+    // Een bevroren opdracht toont exact haar eigen waarden; anders het hele afkeurbare deel als voorstel.
+    const frozen = pending?.payload;
+    const [quantity, setQuantity] = useState(formatDecimalInput(frozen?.lines[0].quantity ?? receipt.rejectableQuantity));
+    const [kg, setKg] = useState(formatDecimalInput(frozen?.lines[0].netWeightKg ?? kgFor(receipt.rejectableQuantity)));
     const [kgTouched, setKgTouched] = useState(false);
-    const [reason, setReason] = useState('');
-    const [explanation, setExplanation] = useState('');
-    const [decision, setDecision] = useState<RejectionDecision>('ReturnToSupplier');
+    const [reason, setReason] = useState(frozen?.reason ?? '');
+    const [explanation, setExplanation] = useState(frozen?.explanation ?? '');
+    const [decision, setDecision] = useState<RejectionDecision>((frozen?.decision as RejectionDecision | undefined) ?? 'ReturnToSupplier');
     const [errors, setErrors] = useState<FieldErrors>({});
     const [error, setError] = useState<ApiError | null>(null);
-    const [pending, setPending] = useState<RejectRequest | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const inFlight = useRef(false);
-    const locked = submitting || (error !== null && outcomeUnknown(error));
+    const locked = submitting || pending !== null;
 
-    const edited = () => { setPending(null); setError(null); setErrors({}); };
+    const edited = () => { setError(null); setErrors({}); };
     const changeQuantity = (value: string) => {
         if (locked) return;
         setQuantity(value);
@@ -76,24 +82,34 @@ export default function RejectReceiptForm({ orderId, receipt, onDone, onCancel }
 
     const submit = async () => {
         if (inFlight.current) return;
-        let request = pending;
-        if (request === null) {
+        let command = pending;
+        if (command === null) {
             const payload = validate();
             if (payload === null) return;
-            request = { requestId: newRequestId(), ...payload };
-            setPending(request);
+            const requestId = newRequestId();
+            command = {
+                kind: 'reject-receipt', key: rejectReceiptKey(orderId, receipt.palletContentLineId), orderId, palletContentLineId: receipt.palletContentLineId,
+                requestId, payload: { requestId, ...payload }, display: { orderNumber, palletReference: receipt.palletReference, lotNumber: receipt.lotNumber },
+                attempts: 0, lastError: null, frozenAt: new Date().toISOString(),
+            };
+            setPending(command);
         }
         inFlight.current = true;
         setSubmitting(true);
         setError(null);
         try {
-            const result = await rejectReceipt(orderId, request);
+            const result = await rejectReceipt(orderId, command.payload);
+            clearPending();
             onDone(result.value);
         } catch (caught) {
             const apiError = toApiError(caught);
-            setError(apiError);
-            setErrors(apiError.fieldErrors);
-            if (!outcomeUnknown(apiError)) setPending(null);
+            if (outcomeUnknown(apiError)) {
+                setPending(withAttempt(command, apiError.message) as RejectReceiptCommand);
+            } else {
+                clearPending();
+                setError(apiError);
+                setErrors(apiError.fieldErrors);
+            }
         } finally {
             inFlight.current = false;
             setSubmitting(false);
@@ -108,7 +124,12 @@ export default function RejectReceiptForm({ orderId, receipt, onDone, onCancel }
             <p className="text-sm font-semibold text-red-900">
                 {t('po_reject_title')}: {receipt.palletReference} · {receipt.lotNumber} · {t('po_reject_max', { quantity: formatQuantity(receipt.rejectableQuantity, locale), kg: formatKg(receipt.rejectableNetWeightKg, locale) })}
             </p>
-            {error && <ErrorNotice error={error} actions={outcomeUnknown(error) ? <button type="submit" className={primaryButtonClass} disabled={submitting}>{t('supply_retry_same')}</button> : undefined} />}
+            {pending !== null && (
+                <PendingNotice command={pending} submitting={submitting}>
+                    <button type="submit" className={primaryButtonClass}>{t('supply_retry_same')}</button>
+                </PendingNotice>
+            )}
+            {error && <ErrorNotice error={error} />}
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor={`${id}-quantity`} className="text-xs font-medium text-gray-700">{t('po_reject_quantity')} *</label>
@@ -154,10 +175,12 @@ export default function RejectReceiptForm({ orderId, receipt, onDone, onCancel }
                     </label>
                 ))}
             </fieldset>
-            <div className="flex flex-wrap gap-2">
-                <button type="submit" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_reject_save')}</button>
-                <button type="button" className={secondaryButtonClass} disabled={locked} onClick={onCancel}>{t('po_cancel')}</button>
-            </div>
+            {pending === null && (
+                <div className="flex flex-wrap gap-2">
+                    <button type="submit" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_reject_save')}</button>
+                    <button type="button" className={secondaryButtonClass} disabled={locked} onClick={onCancel}>{t('po_cancel')}</button>
+                </div>
+            )}
         </form>
     );
 }

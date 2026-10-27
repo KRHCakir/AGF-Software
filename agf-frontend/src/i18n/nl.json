@@ -1609,5 +1609,8 @@
   "po_to_order": "Naar inkooporder",
   "po_supplier_reference": "Leveranciersreferentie",
   "po_ordered_on": "Besteldatum",
-  "po_channel": "Besteld via"
+  "po_channel": "Besteld via",
+  "po_pending_reject": "Afkeuren op order {number}: pallet {pallet} · partij {lot}",
+  "po_pending_invoice": "Factuur {number} bij order {order}",
+  "po_pending_credit_note": "Creditnota {number} bij order {order}"
 }

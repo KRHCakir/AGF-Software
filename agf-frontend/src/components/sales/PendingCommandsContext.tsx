@@ -5,6 +5,7 @@ import { PendingCommand, PendingCommands, parseStoredCommands, serializeCommands
 
 // Onafgeronde commando's boven de formulieren, per tabblad bewaard (sessionStorage). Een formulier dat opnieuw wordt
 // opgebouwd (ander scherm, andere order, ander voorraadregel, verversen) krijgt exact dezelfde payload en requestId terug.
+// Verkoop gebruikt de standaardsleutel; inkooporders hun eigen (PURCHASE_COMMANDS_STORAGE_KEY), zodat order-ids nooit mengen.
 const STORAGE_KEY = 'agf_sales_pending_commands';
 
 interface PendingCommandsContextValue {
@@ -21,28 +22,28 @@ const PendingCommandsContext = createContext<PendingCommandsContextValue>({
     clearCommand: () => undefined,
 });
 
-export function PendingCommandsProvider({ children }: { children: React.ReactNode }) {
+export function PendingCommandsProvider({ children, storageKey = STORAGE_KEY }: { children: React.ReactNode; storageKey?: string }) {
     const [commands, setCommands] = useState<PendingCommands>({});
     const [hydrated, setHydrated] = useState(false);
 
     useEffect(() => {
         try {
-            setCommands(parseStoredCommands(sessionStorage.getItem(STORAGE_KEY)));
+            setCommands(parseStoredCommands(sessionStorage.getItem(storageKey)));
         } catch {
             // Geen opslag beschikbaar: dan alleen in het geheugen van deze pagina.
         }
         setHydrated(true);
-    }, []);
+    }, [storageKey]);
 
     useEffect(() => {
         if (!hydrated) return;
         try {
-            if (Object.keys(commands).length === 0) sessionStorage.removeItem(STORAGE_KEY);
-            else sessionStorage.setItem(STORAGE_KEY, serializeCommands(commands));
+            if (Object.keys(commands).length === 0) sessionStorage.removeItem(storageKey);
+            else sessionStorage.setItem(storageKey, serializeCommands(commands));
         } catch {
             // Niet kunnen bewaren is geen fout voor de lopende actie.
         }
-    }, [commands, hydrated]);
+    }, [commands, hydrated, storageKey]);
 
     const setCommand = useCallback((command: PendingCommand) => {
         setCommands((current) => ({ ...current, [command.key]: command }));
