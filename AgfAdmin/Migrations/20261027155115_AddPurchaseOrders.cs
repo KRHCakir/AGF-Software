@@ -123,6 +123,7 @@ namespace AgfAdmin.Migrations
                     SupplyCommitmentId = table.Column<int>(type: "integer", nullable: false),
                     Kind = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     InvoiceNumber = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    InvoiceNumberKey = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     InvoiceDate = table.Column<DateOnly>(type: "date", nullable: true),
                     AmountExclVat = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     IncomingInvoiceId = table.Column<int>(type: "integer", nullable: true),
@@ -133,6 +134,7 @@ namespace AgfAdmin.Migrations
                 {
                     table.PrimaryKey("PK_SupplyCommitmentInvoiceRefs", x => x.Id);
                     table.CheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumber_NotBlank", "length(trim(\"InvoiceNumber\")) > 0");
+                    table.CheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumberKey_NotBlank", "length(trim(\"InvoiceNumberKey\")) > 0");
                     table.CheckConstraint("CK_SupplyCommitmentInvoiceRefs_Kind_Allowed", "\"Kind\" IN ('Invoice', 'CreditNote')");
                     table.ForeignKey(
                         name: "FK_SupplyCommitmentInvoiceRefs_IncomingInvoices_IncomingInvoic~",
@@ -259,9 +261,9 @@ namespace AgfAdmin.Migrations
                 column: "IncomingInvoiceId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_SupplyCommitmentInvoiceRefs_InvoiceNumber",
+                name: "IX_SupplyCommitmentInvoiceRefs_InvoiceNumberKey",
                 table: "SupplyCommitmentInvoiceRefs",
-                column: "InvoiceNumber");
+                column: "InvoiceNumberKey");
 
             migrationBuilder.CreateIndex(
                 name: "IX_SupplyCommitmentInvoiceRefs_RequestId",
@@ -272,7 +274,7 @@ namespace AgfAdmin.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_SupplyCommitmentInvoiceRefs_SupplyCommitmentId_Kind_Invoice~",
                 table: "SupplyCommitmentInvoiceRefs",
-                columns: new[] { "SupplyCommitmentId", "Kind", "InvoiceNumber" },
+                columns: new[] { "SupplyCommitmentId", "Kind", "InvoiceNumberKey" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
