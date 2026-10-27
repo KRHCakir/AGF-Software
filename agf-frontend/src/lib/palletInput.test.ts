@@ -14,14 +14,14 @@ describe('palletTotal', () => {
 describe('resolvePalletInput', () => {
     test('package mode uses the quantity only and leaves the pallet fields empty', () => {
         assert.deepEqual(resolvePalletInput({ mode: 'packages', quantity: '1080', palletCount: '9', packagesPerPallet: '120' }),
-            { ok: true, value: { quantity: 1080, palletCount: null, packagesPerPallet: null } });
+            { ok: true, value: { quantity: 1080, palletCount: null, packagesPerPallet: null, loosePackages: null } });
         assert.deepEqual(resolvePalletInput({ mode: 'packages', quantity: '', palletCount: '', packagesPerPallet: '' }),
             { ok: false, errors: [{ field: 'quantity', code: 'empty' }] });
     });
 
     test('pallet mode computes the total and keeps the ratio', () => {
         assert.deepEqual(resolvePalletInput({ mode: 'pallets', quantity: '', palletCount: '9', packagesPerPallet: '120' }),
-            { ok: true, value: { quantity: 1080, palletCount: 9, packagesPerPallet: 120 } });
+            { ok: true, value: { quantity: 1080, palletCount: 9, packagesPerPallet: 120, loosePackages: null } });
     });
 
     test('pallet mode requires both fields and reports each missing one', () => {
@@ -29,6 +29,14 @@ describe('resolvePalletInput', () => {
         assert.equal(result.ok, false);
         if (result.ok) return;
         assert.deepEqual(result.errors.map((e) => e.field), ['palletCount', 'packagesPerPallet']);
+    });
+
+    test('whole pallets plus optional loose packages (0 allowed); fractions are refused: 3,5 pallets × 120 is no longer 420', () => {
+        const pallets = (palletCount: string, packagesPerPallet: string, loosePackages = '') => resolvePalletInput({ mode: 'pallets', quantity: '', palletCount, packagesPerPallet, loosePackages });
+        assert.deepEqual(pallets('3', '120', '15'), { ok: true, value: { quantity: 375, palletCount: 3, packagesPerPallet: 120, loosePackages: 15 } });
+        assert.deepEqual(pallets('3', '120', '0'), { ok: true, value: { quantity: 360, palletCount: 3, packagesPerPallet: 120, loosePackages: 0 } });
+        assert.deepEqual(pallets('3,5', '120'), { ok: false, errors: [{ field: 'palletCount', code: 'not_whole' }] });
+        assert.deepEqual(pallets('3', '120,5', '1,5'), { ok: false, errors: [{ field: 'packagesPerPallet', code: 'not_whole' }, { field: 'loosePackages', code: 'not_whole' }] });
     });
 });
 

@@ -14,6 +14,12 @@ export function decimalErrorKey(error: DecimalError): string {
     }
 }
 
+// Palletinvoer: een breuk waar alleen hele aantallen kunnen (3,5 pallets), anders de gewone getalfout.
+export function palletErrorKey(field: string, code: string): string {
+    if (code !== 'not_whole') return decimalErrorKey(code as DecimalError);
+    return field.endsWith('palletCount') ? 'pallet_error_whole_pallets' : 'pallet_error_whole_number';
+}
+
 // Onbekende uitkomst: het verzoek kan bij de server zijn aangekomen. Dan alleen ongewijzigd opnieuw proberen.
 // Bij een configuratiefout is niets verstuurd; bij 4xx heeft de server het verzoek definitief geweigerd.
 export function outcomeUnknown(error: ApiError): boolean {

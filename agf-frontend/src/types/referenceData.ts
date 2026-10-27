@@ -58,6 +58,9 @@ export interface VariantOption {
     defaultPackagesPerPallet: number | null;
     // Verpakkingseenheid uit de artikelstamgegevens: vult een lege eenheid op een nieuwe regel voor; nooit een overschrijving.
     packagingUnit: PackageUnit | null;
+    // Standaard netto en bruto kg per verpakking: alleen voor de rekenregel onder het aantal.
+    defaultNetKgPerPackage?: number | null;
+    defaultGrossKgPerPackage?: number | null;
 }
 
 export interface ProductOption {
@@ -117,6 +120,8 @@ export function toVariantOption(value: Named): VariantOption {
         shortcutCode: optionalString(value.shortcutCode),
         defaultPackagesPerPallet: typeof value.defaultPackagesPerPallet === 'number' ? value.defaultPackagesPerPallet : null,
         packagingUnit: isPackageUnit(value.packagingUnit) ? value.packagingUnit : null,
+        defaultNetKgPerPackage: typeof value.defaultNetKgPerPackage === 'number' ? value.defaultNetKgPerPackage : null,
+        defaultGrossKgPerPackage: typeof value.defaultGrossKgPerPackage === 'number' ? value.defaultGrossKgPerPackage : null,
     };
 }
 

@@ -18,6 +18,8 @@ export interface CreateSalesOrderLineRequest {
     // Optioneel, beide of geen: quantity = palletCount × packagesPerPallet; quantity blijft de bron voor alle controles.
     palletCount: number | null;
     packagesPerPallet: number | null;
+    // Losse verpakkingen naast hele pallets; alleen meegestuurd als ze zijn ingevuld.
+    loosePackages?: number;
 }
 
 export interface CreateSalesOrderRequest {
@@ -245,9 +247,10 @@ export interface SalesOrderLine {
     productVariantName: string | null;
     quantity: number;
     unit: PackageUnit;
-    // Oorspronkelijke palletinvoer ("9 pallets van 120 dozen"); null bij gewone invoer.
+    // Oorspronkelijke palletinvoer ("3 pallets × 120 + 15 colli"); null bij gewone invoer.
     palletCount: number | null;
     packagesPerPallet: number | null;
+    loosePackages?: number | null;
     // Gereserveerd = Active Physical (magazijnvoorraad).
     reservedQuantity: number;
     reservedNetWeightKg: number;
