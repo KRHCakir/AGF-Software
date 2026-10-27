@@ -172,6 +172,16 @@ namespace AgfAdmin.DTOs
         public string Decision { get; set; }
     }
 
+    public sealed class AddPurchaseOrderInvoiceRefDto
+    {
+        public Guid? RequestId { get; set; }
+        public string Kind { get; set; }
+        public string InvoiceNumber { get; set; }
+        public DateOnly? InvoiceDate { get; set; }
+        public decimal? AmountExclVat { get; set; }
+        public string ActorReference { get; set; }
+    }
+
     // Orders waaraan een factuurnummer hangt (melding bij het invoeren van een inkoopfactuur).
     public sealed class PurchaseOrderInvoiceMatchDto
     {
