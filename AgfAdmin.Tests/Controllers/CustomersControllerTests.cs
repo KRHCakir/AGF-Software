@@ -61,4 +61,20 @@ public class CustomersControllerTests : IDisposable
         var list = Assert.IsType<OkObjectResult>(await Call(c => c.GetCustomers()));
         Assert.Equal(2, Assert.IsAssignableFrom<System.Collections.IEnumerable>(list.Value).Cast<object>().Count());
     }
+
+    [Fact]
+    public async Task List_Gives_The_City_Of_The_Main_Address_For_The_Customer_Search()
+    {
+        var created = Assert.IsType<CustomerDto>(Assert.IsType<ObjectResult>(await Call(c => c.CreateCustomer(Request(Guid.NewGuid(), name: "Lommerse Groothandel")))).Value);
+        await using (var db = _factory.CreateContext())
+        {
+            var relationId = await db.Customers.Where(c => c.Id == created.Id).Select(c => c.RelationId).SingleAsync();
+            db.RelationAddresses.Add(new RelationAddress { RelationId = relationId, Purpose = AddressPurpose.Delivery, City = "Venlo", CountryCode = "NL", IsActive = true, SortOrder = 0 });
+            db.RelationAddresses.Add(new RelationAddress { RelationId = relationId, Purpose = AddressPurpose.Main, City = "Barendrecht", CountryCode = "NL", IsActive = true, SortOrder = 1 });
+            await db.SaveChangesAsync();
+        }
+        var list = Assert.IsType<OkObjectResult>(await Call(c => c.GetCustomers()));
+        var item = Assert.Single(Assert.IsAssignableFrom<System.Collections.IEnumerable>(list.Value).Cast<object>());
+        Assert.Equal("Barendrecht", item.GetType().GetProperty("City")!.GetValue(item));
+    }
 }

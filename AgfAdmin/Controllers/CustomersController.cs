@@ -18,7 +18,7 @@ namespace AgfAdmin.Controllers
         private readonly RelationService _relations;
         public CustomersController(AppDbContext context, ICustomerService customers, RelationService relations) { _context = context; _customers = customers; _relations = relations; }
 
-        // Klantenlijst voor pickers: dezelfde velden als voorheen plus zoekcode en actief-vlag van de relatie. Inactieve klanten
+        // Klantenlijst voor pickers: dezelfde velden als voorheen plus zoekcode, actief-vlag en plaats van de relatie. Inactieve klanten
         // blijven in de lijst (bestaande concepten en historie), de schermen tonen ze apart en de server weigert nieuwe documenten.
         [HttpGet]
         public async Task<IActionResult> GetCustomers()
@@ -27,7 +27,9 @@ namespace AgfAdmin.Controllers
                 .Select(c => new
                 {
                     c.Id, c.RelationId, c.Name, c.VATNumber, c.BillingAddress, c.ShippingAddress, c.ContactPerson, c.Email, c.Phone, c.PaymentTermsDays, c.CreatedAt, c.RequestId,
-                    SearchCode = c.Relation.SearchCode, IsActive = c.Relation.IsActive
+                    SearchCode = c.Relation.SearchCode, IsActive = c.Relation.IsActive,
+                    // Plaats van het hoofdadres (zoals in de relatielijst): de klantkeuze in Verkoop zoekt ook op plaats.
+                    City = c.Relation.Addresses.Where(a => a.IsActive).OrderByDescending(a => a.Purpose == AddressPurpose.Main).ThenByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).Select(a => a.City).FirstOrDefault()
                 })
                 .ToListAsync();
             return Ok(customers);

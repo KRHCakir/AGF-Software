@@ -18,6 +18,9 @@ namespace AgfAdmin.DTOs
         public decimal? ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }
         public decimal? ExpectedNetWeightKg { get; set; }
+        // Optioneel: verwachte bruto kg (bruto >= netto) en de bron van de kg (Calculated of Entered; weggelaten = Entered, zoals oudere opdrachten met alleen netto kg).
+        public decimal? ExpectedGrossWeightKg { get; set; }
+        public string WeightSource { get; set; }
         public string LotNumber { get; set; }
         // Optioneel, beide of geen: ExpectedQuantity mag dan weg (server berekent) of moet exact PalletCount × PackagesPerPallet + LoosePackages zijn.
         // Nieuwe invoer: hele pallets en een heel aantal per pallet; LoosePackages (heel, >= 0) alleen samen met palletinvoer.
@@ -73,8 +76,11 @@ namespace AgfAdmin.DTOs
         public string LotNumber { get; set; }
         public decimal ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }
-        // Opgegeven verwacht gewicht van de hele bronregel; nooit afgeleid en nooit het gewicht van een deeltoewijzing.
+        // Verwacht gewicht van de hele bronregel (nooit het gewicht van een deeltoewijzing); WeightSource zegt of het berekend
+        // (aantal × artikelstandaard) of opgegeven is. Null bron = geen kg.
         public decimal? ExpectedNetWeightKg { get; set; }
+        public decimal? ExpectedGrossWeightKg { get; set; }
+        public string WeightSource { get; set; }
         // Gewichtsmethode en standaard kg per verpakking van de variant: invoerhulp bij ontvangst, per regel aanpasbaar.
         public string WeightMethod { get; set; }
         public decimal? DefaultNetKgPerPackage { get; set; }

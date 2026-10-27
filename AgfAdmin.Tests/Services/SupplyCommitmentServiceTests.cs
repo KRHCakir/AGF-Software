@@ -257,6 +257,102 @@ public class SupplyCommitmentServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletRequest(seed, palletCount: 12m, packagesPerPallet: 90m, requestId: requestId))).Status);
     }
 
+    // ---- Verwachte bruto kg en de bron van de kg op de aanvoerregel ----
+
+    private static CreateSupplyCommitmentDto KgRequest(Seed seed, decimal? netKg, decimal? grossKg, string source, Guid? requestId = null)
+    {
+        var request = WarehouseRequest(seed, requestId);
+        request.Lines = new List<CreateSupplyCommitmentLineDto>
+        {
+            new() { ProductVariantId = seed.VariantSize6Id, ExpectedQuantity = 1560m, ExpectedUnit = "colli", ExpectedNetWeightKg = netKg, ExpectedGrossWeightKg = grossKg, WeightSource = source }
+        };
+        return request;
+    }
+
+    private async Task SetKgDefaultsAsync(int variantId, decimal? net, decimal? gross)
+    {
+        await using var db = _factory.CreateContext();
+        var variant = await db.ProductVariants.SingleAsync(v => v.Id == variantId);
+        variant.DefaultNetKgPerPackage = net;
+        variant.DefaultGrossKgPerPackage = gross;
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Supply_Line_Stores_Gross_Kg_And_Its_Source()
+    {
+        var seed = await SeedAsync();
+        await SetKgDefaultsAsync(seed.VariantSize6Id, 10m, 10.3m);
+        var calculated = await CreateAsync(KgRequest(seed, 15600m, 16068m, "Calculated"));
+        Assert.Equal(ServiceResultStatus.Created, calculated.Status);
+        var line = Assert.Single(calculated.Value.Lines);
+        Assert.Equal((15600m, 16068m, "Calculated"), (line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg, line.WeightSource));
+
+        // Alleen netto kg zonder bron (zoals vóór dit veld) is werkelijk opgegeven: Entered.
+        var legacy = await CreateAsync(WarehouseRequest(seed));
+        Assert.Equal(("Entered", (string)null), (legacy.Value.Lines[0].WeightSource, legacy.Value.Lines[1].WeightSource));
+
+        await using var verify = _factory.CreateContext();
+        var stored = await verify.SupplyCommitmentLines.SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((15600m, 16068m, "Calculated"), (stored.ExpectedNetWeightKg, stored.ExpectedGrossWeightKg, stored.WeightSource));
+    }
+
+    [Theory]
+    [InlineData("gross-below-net", "lines[0].expectedGrossWeightKg")]
+    [InlineData("gross-zero", "lines[0].expectedGrossWeightKg")]
+    [InlineData("source-without-kg", "lines[0].weightSource")]
+    [InlineData("calculated-wrong", "lines[0].expectedGrossWeightKg")]
+    public async Task Invalid_Supply_Kg_Is_Refused(string invalidCase, string expectedErrorKey)
+    {
+        var seed = await SeedAsync();
+        await SetKgDefaultsAsync(seed.VariantSize6Id, 10m, 10.3m);
+        var request = invalidCase switch
+        {
+            "gross-below-net" => KgRequest(seed, 15600m, 15599.999m, "Entered"),
+            "gross-zero" => KgRequest(seed, null, 0m, "Entered"),
+            "source-without-kg" => KgRequest(seed, null, null, "Entered"),
+            _ => KgRequest(seed, 15600m, 16000m, "Calculated")
+        };
+        AssertValidation(await CreateAsync(request), expectedErrorKey);
+        await AssertNothingStoredAsync();
+    }
+
+    [Fact]
+    public async Task Supply_Retry_Compares_Gross_Kg_And_Source()
+    {
+        var seed = await SeedAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(KgRequest(seed, 15600m, 16068m, "Entered", requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(KgRequest(seed, 15600m, 16068m, "Entered", requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(KgRequest(seed, 15600m, 16068m, null, requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(KgRequest(seed, 15600m, null, "Entered", requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(KgRequest(seed, 15600m, 16069m, "Entered", requestId))).Status);
+    }
+
+    [Theory]
+    [InlineData("100", "103", "'Entered'", true)]
+    [InlineData("100", "NULL", "'Calculated'", true)]
+    [InlineData("100", "99", "'Entered'", false)]
+    [InlineData("100", "NULL", "NULL", false)]
+    [InlineData("NULL", "0", "'Entered'", false)]
+    public async Task Database_Check_Accepts_Expected_Gross_Not_Below_Net_And_A_Source_Only_With_Kg(string net, string gross, string source, bool accepted)
+    {
+        var seed = await SeedAsync();
+        var commitment = await CreateAsync(WarehouseRequest(seed));
+        await using var raw = _factory.CreateContext();
+        Task<int> Insert() => raw.Database.ExecuteSqlRawAsync(
+            "INSERT INTO \"SupplyCommitmentLines\" (\"SupplyCommitmentId\", \"ProductVariantId\", \"ExpectedQuantity\", \"ExpectedUnit\", \"ExpectedNetWeightKg\", \"ExpectedGrossWeightKg\", \"WeightSource\", \"CreatedAt\", \"Version\") " +
+            $"VALUES ({commitment.Value.Id}, {seed.VariantSize6Id}, 10, 'box', {net}, {gross}, {source}, '2026-10-20 08:00:00', 0)");
+        if (accepted)
+        {
+            Assert.Equal(1, await Insert());
+        }
+        else
+        {
+            Assert.Contains("CK_SupplyCommitmentLines_", (await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(Insert)).Message);
+        }
+    }
+
     private async Task<ServiceResult<SupplyCommitmentDto>> CreateAsync(CreateSupplyCommitmentDto request)
     {
         await using var db = _factory.CreateContext();

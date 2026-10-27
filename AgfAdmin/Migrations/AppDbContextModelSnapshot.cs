@@ -2150,7 +2150,15 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("GrossWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal?>("LoosePackages")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<decimal?>("NetWeightKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
@@ -2181,6 +2189,10 @@ namespace AgfAdmin.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
 
+                    b.Property<string>("WeightSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ProductVariantId");
@@ -2195,6 +2207,12 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
+
+                            t.HasCheckConstraint("CK_SalesOrderLines_WeightSource_Consistent", "(\"WeightSource\" IS NULL AND \"NetWeightKg\" IS NULL AND \"GrossWeightKg\" IS NULL) OR (\"WeightSource\" IS NOT NULL AND \"WeightSource\" IN ('Calculated', 'Entered') AND (\"NetWeightKg\" IS NOT NULL OR \"GrossWeightKg\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_SalesOrderLines_Weights_GrossNotBelowNet", "\"NetWeightKg\" IS NULL OR \"GrossWeightKg\" IS NULL OR CAST(\"GrossWeightKg\" AS NUMERIC) >= CAST(\"NetWeightKg\" AS NUMERIC)");
+
+                            t.HasCheckConstraint("CK_SalesOrderLines_Weights_Positive", "(\"NetWeightKg\" IS NULL OR CAST(\"NetWeightKg\" AS NUMERIC) > 0) AND (\"GrossWeightKg\" IS NULL OR CAST(\"GrossWeightKg\" AS NUMERIC) > 0)");
                         });
                 });
 
@@ -2667,6 +2685,10 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("ExpectedGrossWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal?>("ExpectedNetWeightKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -2705,6 +2727,10 @@ namespace AgfAdmin.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
 
+                    b.Property<string>("WeightSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ProductVariantId");
@@ -2714,6 +2740,12 @@ namespace AgfAdmin.Migrations
                     b.ToTable("SupplyCommitmentLines", t =>
                         {
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)");
+
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_WeightSource_Consistent", "(\"WeightSource\" IS NULL AND \"ExpectedNetWeightKg\" IS NULL AND \"ExpectedGrossWeightKg\" IS NULL) OR (\"WeightSource\" IS NOT NULL AND \"WeightSource\" IN ('Calculated', 'Entered') AND (\"ExpectedNetWeightKg\" IS NOT NULL OR \"ExpectedGrossWeightKg\" IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_Weights_GrossNotBelowNet", "\"ExpectedNetWeightKg\" IS NULL OR \"ExpectedGrossWeightKg\" IS NULL OR CAST(\"ExpectedGrossWeightKg\" AS NUMERIC) >= CAST(\"ExpectedNetWeightKg\" AS NUMERIC)");
+
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_Weights_Positive", "(\"ExpectedNetWeightKg\" IS NULL OR CAST(\"ExpectedNetWeightKg\" AS NUMERIC) > 0) AND (\"ExpectedGrossWeightKg\" IS NULL OR CAST(\"ExpectedGrossWeightKg\" AS NUMERIC) > 0)");
                         });
                 });
 

@@ -14,7 +14,11 @@ namespace AgfAdmin.Models
 
         public decimal ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }            // box, colli, tray, piece of dozen; optioneel tijdens de overgang
-        public decimal? ExpectedNetWeightKg { get; set; }   // werkelijk opgegeven netto kg; nooit afgeleid
+        public decimal? ExpectedNetWeightKg { get; set; }   // verwachte netto kg; bij WeightSource Entered werkelijk opgegeven, nooit afgeleid
+        public decimal? ExpectedGrossWeightKg { get; set; } // verwachte bruto kg; nooit onder netto
+        // Null zonder kg, Calculated = aantal × artikelstandaard, Entered = door de gebruiker opgegeven (LineWeightRules).
+        // Regels van vóór deze kolom met netto kg zijn Entered (dat was toen de enige manier).
+        public string WeightSource { get; set; }
         // Oorspronkelijke palletinvoer (optioneel, beide of geen): ExpectedQuantity = PalletCount × PackagesPerPallet + LoosePackages.
         // ExpectedQuantity blijft de bron voor alle controles; dit is alleen de herkenbare weergave "3 pallets × 120 + 15 colli".
         // Nieuwe invoer heeft hele pallets; oudere regels kunnen een gebroken palletaantal hebben (blijft leesbaar).

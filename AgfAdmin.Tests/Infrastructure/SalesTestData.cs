@@ -75,6 +75,7 @@ public static class SalesTestData
         var direct = Commitment("DirectTrade", customer);
         var directBox = Line(direct, avocado, "box");
         directBox.ExpectedNetWeightKg = 400m;
+        directBox.WeightSource = "Entered";
         directBox.LotNumber = "LOT-DT-SRC";
         var directColli = Line(direct, avocado, "colli");
         directColli.ExpectedQuantity = 50m;
