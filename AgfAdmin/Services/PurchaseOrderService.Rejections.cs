@@ -346,14 +346,15 @@ namespace AgfAdmin.Services
             {
                 return null;
             }
-            var stored = existing.Lines.OrderBy(l => l.Id).ToList();
+            var stored = existing.Lines.OrderBy(l => l.PalletContentLineId).ToList();
+            var requestedLines = command.Lines.OrderBy(l => l.PalletContentLineId).ToList();
             var same = existing.SupplyCommitmentId == id
                 && existing.Reason == command.Reason
                 && string.Equals(existing.Explanation, command.Explanation, StringComparison.Ordinal)
                 && existing.Decision == command.Decision
                 && string.Equals(existing.ActorReference, command.Actor, StringComparison.Ordinal)
                 && stored.Count == command.Lines.Count
-                && stored.Zip(command.Lines).All(p => p.First.PalletContentLineId == p.Second.PalletContentLineId
+                && stored.Zip(requestedLines).All(p => p.First.PalletContentLineId == p.Second.PalletContentLineId
                     && p.First.Quantity == p.Second.Quantity
                     && (p.Second.NetWeightKg == null || p.First.NetWeightKg == p.Second.NetWeightKg));
             return same
