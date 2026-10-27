@@ -125,6 +125,7 @@ describe('ArticleForm', () => {
         await mounted.render(<ArticleForm article={hass} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="article-trade"]')!.click(); });
         assert.equal(mounted.container.querySelector('[id="defaultGgn-input"]'), null);
-        assert.ok(text().includes('articles_ggn_moved'));
+        // Geen uitleg meer over interne werking ("GGN is geen artikelstandaard meer"): alleen wat helpt bij het invullen.
+        assert.ok(!text().includes('articles_ggn_moved'));
     });
 });

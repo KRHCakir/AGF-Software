@@ -227,8 +227,6 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
                                 <GoodsCodeLookup system={draft.goodsCodeSystem} onSystemChange={(system) => update({ goodsCodeSystem: system })} onPick={pickGoodsCode} onManual={enterGoodsCodeManually} disabled={submitting} />
                             </div>
                         )}
-                        {/* GGN is geen artikelstandaard: leveranciers beheren hun GGN's in Relaties; bij ontvangst wordt per partij gekozen. */}
-                        <p className="col-span-2 text-xs text-gray-600 md:col-span-4">{t('articles_ggn_moved')}</p>
                         <div className="col-span-2 md:col-span-4">
                             <label htmlFor="notes-input" className="text-xs font-medium text-gray-700">{t('articles_field_notes')}</label>
                             <textarea {...fieldProps('notes', e('notes'))} rows={2} value={draft.notes} maxLength={500} disabled={submitting} onChange={(event) => update({ notes: event.target.value })} className={inputClass} />

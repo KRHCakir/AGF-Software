@@ -29,6 +29,8 @@ import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
 import GgnBadge from '../shared/GgnBadge';
 import NumberEcho from '../shared/NumberEcho';
+import QuantityKgLine from '../shared/QuantityKgLine';
+import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
@@ -584,7 +586,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                 <td className="px-2 py-1.5 align-top">{line.lotNumber ?? '–'}</td>
                                                 <td className="px-2 py-1.5 text-right align-top">
                                                     {formatQuantity(line.expectedQuantity, locale)}
-                                                    {line.palletCount !== null && line.packagesPerPallet !== null && <span className="block text-xs text-gray-600">{t('pallet_breakdown', { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) })}</span>}
+                                                    {palletBreakdownLabel(line, line.expectedUnit, t, locale) !== null && <span className="block text-xs text-gray-600">{palletBreakdownLabel(line, line.expectedUnit, t, locale)}</span>}
                                                 </td>
                                                 <td className="px-2 py-1.5 align-top"><UnitBadge unit={line.expectedUnit} /></td>
                                                 <td className="px-2 py-1.5 text-right align-top">
@@ -652,7 +654,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         ? t('supply_open_unknown')
                                         : t('supply_open_quantity', { quantity: formatQuantity(open, locale) })}
                             </p>
-                            <div className="grid grid-cols-7 gap-3">
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
                                 <div className="col-span-2">
                                     <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
                                     <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} value={draft.lot} maxLength={100} disabled={!editable}
@@ -662,8 +664,9 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                 <div>
                                     <label htmlFor={`${key('quantity')}-input`} className="text-xs font-medium text-gray-700">{t('supply_quantity')} *</label>
                                     <input {...fieldProps(key('quantity'), e(key('quantity')))} value={draft.quantity} inputMode="decimal" disabled={!editable}
-                                        onChange={(event) => editLine(id, 'quantity', event.target.value)} className={inputClass} />
-                                    <NumberEcho value={draft.quantity} unit={entry.line.expectedUnit === null ? undefined : t(unitLabelKey(entry.line.expectedUnit)).toLowerCase()} testId={`${key('quantity')}-echo`} />
+                                        onChange={(event) => editLine(id, 'quantity', event.target.value)} className={`${inputClass} min-w-[7rem] text-right`} />
+                                    {/* Rekenregel met netto en bruto kg per verpakking van het artikel (alleen weergave), anders "= 1.560 colli". */}
+                                    <QuantityKgLine value={draft.quantity} unit={entry.line.expectedUnit === null ? '' : t(unitLabelKey(entry.line.expectedUnit)).toLowerCase()} defaults={entry.line} testId={key('quantity')} />
                                     <FieldError id={key('quantity')} messages={e(key('quantity'))} />
                                 </div>
                                 <div>
@@ -721,7 +724,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <span className="block text-xs text-gray-500">{t('supply_quality_start_hint')}</span>
                                 </div>
                                 {/* GGN: leveranciers-GGN's als invoerhulp (precies één = voorstel, meer = kiezen), per partij aanpasbaar of bewust leeg; de gekozen waarde staat op de ontvangst. */}
-                                <div className="col-span-3">
+                                <div className="col-span-2 md:col-span-3">
                                     <label htmlFor={`${key('ggn')}-input`} className="text-xs font-medium text-gray-700">{t('supply_ggn')}</label>
                                     <div className="flex flex-wrap gap-2">
                                         <input {...fieldProps(key('ggn'), e(key('ggn')))} value={draft.ggn} inputMode="numeric" maxLength={20} disabled={!editable}

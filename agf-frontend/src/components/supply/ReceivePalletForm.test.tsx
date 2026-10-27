@@ -81,6 +81,22 @@ describe('ReceivePalletForm GGN', () => {
         assert.equal(ggnCertificateWarning('', options, '2026-10-26'), null);
     });
 
+    test('the quantity shows the kg line from the article defaults; the source shows its pallets with loose colli', async () => {
+        const original = commitment.lines[1];
+        commitment.lines[1] = { ...original, expectedQuantity: 375, defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3, palletCount: 3, packagesPerPallet: 120, loosePackages: 15 };
+        try {
+            await mounted.render(<ReceivePalletForm actor="wh-1" preselected={null} onPreselectedConsumed={() => {}} />);
+            await mounted.waitFor(() => mounted.container.querySelector('#source-502') !== null, 'sources loaded');
+            assert.ok(text().includes('pallet_breakdown_loose'));
+            await selectSource(502);
+            await type(input('line.502.quantity'), '1.560');
+            assert.ok(mounted.container.querySelector('[data-testid="line.502.quantity-kg"]'), 'kg line instead of the plain echo');
+            assert.equal(mounted.container.querySelector('[data-testid="line.502.quantity-echo"]'), null);
+        } finally {
+            commitment.lines[1] = original;
+        }
+    });
+
     test('the single supplier GGN is proposed per line, can be adjusted or deliberately cleared, and the chosen value is what is sent', async () => {
         await mounted.render(<ReceivePalletForm actor="wh-1" preselected={null} onPreselectedConsumed={() => {}} />);
         await mounted.waitFor(() => mounted.container.querySelector('#source-501') !== null, 'sources loaded');
