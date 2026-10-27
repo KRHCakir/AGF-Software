@@ -487,6 +487,11 @@ namespace AgfAdmin.Services
             {
                 return $"Supply commitment {commitment.Id} is cancelled.";
             }
+            // Volledig afgekeurde inkoop wordt niet verder ontvangen: een vervangende levering is een nieuwe inkooporder.
+            if (commitment.Status == SupplyRules.StatusRejected)
+            {
+                return $"Supply commitment {commitment.Id} is rejected; record a new purchase order for a replacement delivery.";
+            }
 
             // Geen conversie: de eenheid moet gelijk zijn aan die van de bron, als de bron er een heeft.
             if (source.ExpectedUnit != null && !string.Equals(source.ExpectedUnit, candidate.Unit, StringComparison.Ordinal))

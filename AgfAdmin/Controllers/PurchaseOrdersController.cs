@@ -32,5 +32,9 @@ namespace AgfAdmin.Controllers
         [HttpPost("{id:int}/invoice-refs")]
         public async Task<IActionResult> AddInvoiceRef(int id, [FromBody] AddPurchaseOrderInvoiceRefDto request) =>
             this.ToActionResult(await _service.AddInvoiceRefAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        [HttpPost("{id:int}/rejections")]
+        public async Task<IActionResult> Reject(int id, [FromBody] RejectPurchaseOrderDto request) =>
+            this.ToActionResult(await _service.RejectAsync(id, request, HttpContext?.RequestAborted ?? default));
     }
 }
