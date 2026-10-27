@@ -46,6 +46,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
         case 'before_shipping': return t('sales_delivery_date_before_shipping');
         case 'remainder_mismatch': return t('sales_error_remainder_mismatch');
         case 'not_whole': return t(palletErrorKey(error.field, error.code));
+        case 'gross_below_net': return t('line_kg_gross_below_net');
         default: return t('supply_error_required');
     }
 }

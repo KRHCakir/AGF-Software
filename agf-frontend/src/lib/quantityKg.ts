@@ -8,8 +8,8 @@ export interface PackageKgDefaults {
     defaultGrossKgPerPackage?: number | null;
 }
 
-// 3 decimalen, half omhoog (zoals palletTotal); de weergave rondt daarna af op 1 decimaal.
-const times = (quantity: number, kg: number) => Math.round(quantity * kg * 1000 + Number.EPSILON) / 1000;
+// 3 decimalen, half omhoog (zoals palletTotal en WeightRules.CalculatedTotal); de weergave rondt daarna af op 1 decimaal.
+export const times = (quantity: number, kg: number) => Math.round(quantity * kg * 1000 + Number.EPSILON) / 1000;
 
 export function packageKg(quantity: number | null, defaults: PackageKgDefaults | undefined): { netKgPerPackage: number; netKg: number; grossKg: number | null } | null {
     const net = defaults?.defaultNetKgPerPackage ?? null;

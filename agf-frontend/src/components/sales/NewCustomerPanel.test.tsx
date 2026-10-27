@@ -31,7 +31,9 @@ const orderForm = () => mounted.container.querySelector<HTMLFormElement>('form')
 const panel = () => mounted.container.querySelector<HTMLElement>('[data-testid="new-customer-panel"]');
 const savePanel = () => click(mounted.buttons().find((b) => b.textContent === 'sales_customer_save')!);
 const input = (id: string) => mounted.container.querySelector<HTMLInputElement>(`[id="${id}"]`)!;
-const customerSelect = () => mounted.container.querySelector<HTMLSelectElement>('#customerId-input')!;
+// Klantkeuze (CustomerPicker): na een keuze staat de naam alleen-lezen in het zoekveld.
+const customerPicker = () => mounted.container.querySelector<HTMLInputElement>('#customerId-input')!;
+const chosenCustomer = () => (customerPicker().readOnly ? customerPicker().value : '');
 const newCustomerButton = () => mounted.buttons().find((b) => (b.textContent ?? '').includes('sales_new_customer') && !(b.textContent ?? '').includes('title'))!;
 
 async function typeDraft() {
@@ -76,8 +78,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         const body = JSON.parse(posted[0].body);
         assert.equal(posted[0].url.endsWith('/customers'), true);
         assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', name: 'Groentehal Jansen', contactPerson: null, email: null, phone: '06-1', shippingAddress: null, acknowledgeSimilarNames: false });
-        assert.equal(customerSelect().value, '7', 'created customer selected');
-        assert.ok(Array.from(customerSelect().options).some((o) => o.value === '7' && o.textContent === 'Groentehal Jansen'));
+        assert.equal(chosenCustomer(), 'Groentehal Jansen', 'created customer selected');
         assertDraftIntact();
         assert.equal(mounted.hasText('sales_customer_created'), true);
         assert.equal(refreshed, 1);
@@ -105,7 +106,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         assert.equal(second.acknowledgeSimilarNames, true);
         assert.notEqual(second.requestId, first.requestId, 'acknowledgement is a new command with a new requestId');
         assert.equal(second.name, first.name);
-        assert.equal(customerSelect().value, '8');
+        assert.equal(chosenCustomer(), 'demo klant b');
         assertDraftIntact();
         // Bestaande klant kiezen vanuit de waarschuwing
         await click(newCustomerButton());
@@ -115,7 +116,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         await mounted.waitFor(() => mounted.button('sales_customer_use_existing'), 'use existing');
         await click(mounted.button('sales_customer_use_existing')!);
         assert.equal(panel(), null);
-        assert.equal(customerSelect().value, '2');
+        assert.equal(chosenCustomer(), 'DEMO Klant B');
         assertDraftIntact();
     });
 
@@ -149,7 +150,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         await mounted.waitFor(() => panel() === null, 'resolved');
         assert.deepEqual(JSON.parse(posted[1].body), stored.payload, 'identical payload and requestId');
         assert.deepEqual(storedCommands(), {});
-        assert.equal(customerSelect().value, '7');
+        assert.equal(chosenCustomer(), 'Groentehal Jansen');
         assert.equal(mounted.hasText('supply_saved_before'), true);
     });
 
@@ -162,7 +163,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         nextPost = async () => json(201, created);
         await savePanel();
         await mounted.waitFor(() => panel() === null, 'panel closes under StrictMode');
-        assert.equal(customerSelect().value, '7');
+        assert.equal(chosenCustomer(), 'Groentehal Jansen');
         assert.equal(mounted.hasText('sales_customer_created'), true);
         assert.equal(mounted.hasText('sales_customer_saving'), false, 'not stuck in submitting state');
         assertDraftIntact();
@@ -194,7 +195,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         assert.equal(prevented, false, 'Enter on a button is left to the browser');
         assert.equal(posted.length, 1, 'no save triggered by Enter on the button');
         await click(useExisting);
-        assert.equal(customerSelect().value, '2');
+        assert.equal(chosenCustomer(), 'DEMO Klant B');
         assert.equal(panel(), null);
         // Opnieuw: Enter op "Toch aanmaken" wordt niet onderschept; de activatie stuurt een NIEUWE opdracht met bevestiging.
         await click(newCustomerButton());
@@ -213,7 +214,7 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         const body = JSON.parse(posted[posted.length - 1].body);
         assert.equal(body.acknowledgeSimilarNames, true);
         assert.notEqual(body.requestId, firstRequestId, 'new requestId for the acknowledged command');
-        assert.equal(customerSelect().value, '8');
+        assert.equal(chosenCustomer(), 'demo klant b');
         assertDraftIntact();
     });
 
@@ -232,6 +233,6 @@ describe('NewCustomerPanel inside CreateSalesOrderForm', () => {
         await mounted.waitFor(() => orderForm(), 'rebuilt form');
         slow.resolve(json(201, created));
         for (let i = 0; i < 5; i++) await mounted.waitFor(() => true, 'flush');
-        assert.equal(customerSelect().value, '', 'no automatic selection in the rebuilt draft');
+        assert.equal(chosenCustomer(), '', 'no automatic selection in the rebuilt draft');
     });
 });
