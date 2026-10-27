@@ -2,12 +2,15 @@ import type { PackageUnit } from '../types/availability';
 import type { CreateSalesOrderRequest } from '../types/salesOrder';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
+import { resolveLineWeight, weightPayload, type LineWeightDraft } from './lineWeight.ts';
 import { resolvePalletInput, type QuantityInputMode } from './palletInput.ts';
+import type { PackageKgDefaults } from './quantityKg.ts';
 
 // Pure regels van de verkoopwerkplek, los van React en i18n, zodat ze met node:test te toetsen zijn.
 // Ze spiegelen de backendregels (SalesOrderService, StockReservationService); de server blijft altijd leidend.
-// Er wordt nooit een eenheid omgerekend en nooit kg afgeleid uit hoeveelheid, dozen of maat.
-// Let op: imports met .ts-extensie zijn nodig voor node:test; dit bestand importeert alleen pure modules zonder verdere imports.
+// Er wordt nooit een eenheid omgerekend; kg op een nieuwe orderregel komt alleen uit de standaard kg per verpakking van het
+// artikel ("berekend") of van de gebruiker ("ingevuld"), nooit uit maat of doosnaam.
+// Let op: imports met .ts-extensie zijn nodig voor node:test; dit bestand importeert alleen pure modules.
 
 export const MAX_ORDER_LINES = 200;
 export const MAX_CUSTOMER_REFERENCE_LENGTH = 100;
@@ -27,14 +30,15 @@ export type RuleCode =
     | 'exceeds_remaining'
     | 'future_date'
     | 'before_shipping'
-    | 'not_whole';
+    | 'not_whole'
+    | 'gross_below_net';
 
 export interface RuleError {
     field: string;
     code: RuleCode;
 }
 
-export interface OrderLineDraft {
+export interface OrderLineDraft extends LineWeightDraft {
     key: string;
     productVariantId: string;
     quantity: string;
@@ -79,7 +83,8 @@ export function normalizeReason(text: string, required: boolean): BuildResult<st
 }
 
 // Volledige validatie van een nieuwe order; alle fouten tegelijk, met dezelfde veldsleutels als de backend.
-export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult<OrderPayload> {
+// `kgDefaults` geeft de standaard kg per verpakking van een variant (voor berekende kg); zonder blijft alleen ingevulde kg over.
+export function buildOrderPayload(draft: OrderDraft, actor: string, kgDefaults: (variantId: number) => PackageKgDefaults | undefined = () => undefined): BuildResult<OrderPayload> {
     const errors: RuleError[] = [];
     const actorResult = normalizeActor(actor);
     if (!actorResult.ok) errors.push(...actorResult.errors);
@@ -109,6 +114,9 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
         const amounts = resolvePalletInput(line);
         if (!amounts.ok) for (const error of amounts.errors) errors.push({ field: `${prefix}.${error.field}`, code: error.code as RuleCode });
         if (line.unit === '') errors.push({ field: `${prefix}.unit`, code: 'required' });
+        // Kg optioneel: berekend uit het artikel of ingevuld; bruto nooit onder netto (zelfde regels als LineWeightRules).
+        const weight = resolveLineWeight(line, amounts.ok ? amounts.value.quantity : null, kgDefaults(Number(line.productVariantId)));
+        if (!weight.ok) for (const error of weight.errors) errors.push({ field: `${prefix}.${error.field === 'net' ? 'netWeightKg' : 'grossWeightKg'}`, code: error.code });
         // Eén regel per variant + eenheid, net als de databank-index: anders worden reserveringen dubbelzinnig.
         if (errors.length === before) {
             const key = `${line.productVariantId}|${line.unit}`;
@@ -123,6 +131,8 @@ export function buildOrderPayload(draft: OrderDraft, actor: string): BuildResult
             packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
             // Losse verpakkingen alleen als ze zijn ingevuld: een regel zonder blijft dezelfde opdracht als vroeger.
             ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
+            // Kg en bron alleen als er kg is: een regel zonder kg blijft dezelfde opdracht als vóór deze velden.
+            ...(weight.ok ? weightPayload(weight.value, 'netWeightKg', 'grossWeightKg') : {}),
         };
     });
 

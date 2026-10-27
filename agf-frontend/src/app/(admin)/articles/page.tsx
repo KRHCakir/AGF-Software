@@ -38,6 +38,16 @@ export default function ArticlesPage() {
         return () => controller.abort();
     }, [reloadToken]);
 
+    // Link vanuit een order- of aanvoerregel ("Geen kg per colli bij dit artikel"): /articles?article=<id> opent dat artikel direct.
+    const openedFromLink = useRef(false);
+    useEffect(() => {
+        if (state.status !== 'ready' || openedFromLink.current) return;
+        openedFromLink.current = true;
+        const id = Number(new URLSearchParams(window.location.search).get('article'));
+        const article = state.data.articles.find((candidate) => candidate.id === id);
+        if (article) setEditing({ article, key: article.id });
+    }, [state]);
+
     const shown = useMemo(() => (state.status === 'ready' ? searchArticles(state.data.articles, query) : []), [state, query]);
 
     const openNew = () => setEditing({ article: null, key: Date.now() });

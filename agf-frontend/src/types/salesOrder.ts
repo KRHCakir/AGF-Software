@@ -11,6 +11,17 @@ export type ReservationStatus = 'Active' | 'Released' | 'Consumed' | 'Corrected'
 
 export const RESERVATION_STATUSES: readonly ReservationStatus[] = ['Active', 'Released', 'Consumed', 'Corrected'];
 
+// Bron van de kg op een order- of aanvoerregel: Calculated = aantal × artikelstandaard, Entered = door de gebruiker opgegeven.
+export type WeightSource = 'Calculated' | 'Entered';
+
+export const isWeightSource = (value: unknown): value is WeightSource => value === 'Calculated' || value === 'Entered';
+
+// Kg-velden in een antwoord: ontbreken in oudere antwoorden (dan null).
+export const isOptionalLineWeight = (value: { [key: string]: unknown }, net: string, gross: string) =>
+    (value[net] === undefined || isNullableNumber(value[net]))
+    && (value[gross] === undefined || isNullableNumber(value[gross]))
+    && (value.weightSource === undefined || value.weightSource === null || isWeightSource(value.weightSource));
+
 export interface CreateSalesOrderLineRequest {
     productVariantId: number;
     quantity: number;
@@ -20,6 +31,10 @@ export interface CreateSalesOrderLineRequest {
     packagesPerPallet: number | null;
     // Losse verpakkingen naast hele pallets; alleen meegestuurd als ze zijn ingevuld.
     loosePackages?: number;
+    // Verwachte netto en bruto kg met hun bron; alleen meegestuurd als er kg is (bruto >= netto, de server controleert).
+    netWeightKg?: number;
+    grossWeightKg?: number;
+    weightSource?: WeightSource;
 }
 
 export interface CreateSalesOrderRequest {
@@ -251,6 +266,10 @@ export interface SalesOrderLine {
     palletCount: number | null;
     packagesPerPallet: number | null;
     loosePackages?: number | null;
+    // Verwachte netto en bruto kg van de regel (null = niet opgegeven) en hun bron; het gewogen gewicht volgt bij levering.
+    netWeightKg?: number | null;
+    grossWeightKg?: number | null;
+    weightSource?: WeightSource | null;
     // Gereserveerd = Active Physical (magazijnvoorraad).
     reservedQuantity: number;
     reservedNetWeightKg: number;
@@ -399,6 +418,7 @@ function isSalesOrderLine(value: unknown): value is SalesOrderLine {
         && isUnit(value.unit)
         && isNullableNumber(value.palletCount)
         && isNullableNumber(value.packagesPerPallet)
+        && isOptionalLineWeight(value, 'netWeightKg', 'grossWeightKg')
         && isNumber(value.reservedQuantity)
         && isNumber(value.reservedNetWeightKg)
         && isNumber(value.allocatedQuantity)

@@ -63,6 +63,21 @@ describe('buildOrderPayload', () => {
         ]);
     });
 
+    test('kg: calculated from the article default with source Calculated, typed kg is Entered, no kg keeps the old payload shape', () => {
+        const defaults = (variantId: number) => (variantId === 1 ? { defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 } : undefined);
+        const calculated = buildOrderPayload({ ...validDraft(), lines: [line('1', '1.560', 'colli'), line('3', '12,5')] }, 'office-1', defaults);
+        assert.equal(calculated.ok, true);
+        if (!calculated.ok) return;
+        assert.deepEqual(calculated.value.lines, [
+            { productVariantId: 1, quantity: 1560, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 15600, grossWeightKg: 16068, weightSource: 'Calculated' },
+            { productVariantId: 3, quantity: 12.5, unit: 'box', palletCount: null, packagesPerPallet: null },
+        ]);
+        const entered = buildOrderPayload({ ...validDraft(), lines: [{ ...line('3', '221', 'colli'), netKg: '2.210', netKgEntered: true }] }, 'office-1', defaults);
+        assert.deepEqual(entered.ok && entered.value.lines[0], { productVariantId: 3, quantity: 221, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 2210, weightSource: 'Entered' });
+        const below = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '10', 'colli'), grossKg: '99', grossKgEntered: true }] }, 'office-1', defaults);
+        assert.deepEqual(codes(below), { 'lines[0].grossWeightKg': ['gross_below_net'] });
+    });
+
     test('a line entered per pallet sends the computed total and keeps the ratio; missing pallet fields are reported', () => {
         const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '9', packagesPerPallet: '120' };
         const result = buildOrderPayload({ ...validDraft(), lines: [pallets] }, 'office-1');

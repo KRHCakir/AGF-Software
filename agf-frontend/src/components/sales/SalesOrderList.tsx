@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
+import { formatKgOneDecimal } from '../../lib/quantityKg';
 import { orderProgress } from '../../lib/salesOrderRules';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
@@ -96,6 +97,8 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                                 {palletBreakdownLabel(line, line.unit, t, locale) !== null && <span className="text-gray-600">({palletBreakdownLabel(line, line.unit, t, locale)})</span>}
                                                 {line.dispatchedQuantity > 0 && <span className="text-emerald-900">({t('sales_list_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale) })})</span>}
                                                 <UnitBadge unit={line.unit} />
+                                                {/* Netto kg van de regel (berekend of ingevuld), zoals "221 colli · 2.210,0 kg". */}
+                                                {line.netWeightKg != null && <span className="text-gray-800" data-testid="list-line-kg">· {formatKgOneDecimal(line.netWeightKg, locale)}</span>}
                                             </li>
                                         ))}
                                     </ul>

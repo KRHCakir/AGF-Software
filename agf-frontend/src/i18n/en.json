@@ -1497,5 +1497,18 @@
   "relations_warning_insurance_gap": "Insured limit is lower than the credit limit.",
   "relations_warning_payment_condition_inactive": "Payment condition ({role}) was deactivated in settings; reactivate it there or change the payment term.",
   "supply_ggn_certificate_expired": "Certificate of GGN {ggn} expired ({date}). Check at GLOBALG.A.P. before using the number.",
-  "supply_ggn_never_checked": "GGN {ggn} has never been checked at GLOBALG.A.P."
+  "supply_ggn_never_checked": "GGN {ggn} has never been checked at GLOBALG.A.P.",
+  "line_kg_net": "Net kg",
+  "line_kg_gross": "Gross kg",
+  "line_kg_calculated": "calculated",
+  "line_kg_calculated_per": "calculated · × {perPackage} kg",
+  "line_kg_entered": "entered",
+  "line_kg_reset": "Back to calculated ({kg} kg)",
+  "line_kg_no_default": "No kg per {unit} for this article.",
+  "line_kg_open_article": "Open article",
+  "line_kg_per_package": "= {kg} per {unit}",
+  "line_kg_gross_below_net": "Gross kg may not be less than net kg.",
+  "line_kg_total": "Total",
+  "line_kg_lines_without_one": "1 line without kg",
+  "line_kg_lines_without": "{count} lines without kg"
 }

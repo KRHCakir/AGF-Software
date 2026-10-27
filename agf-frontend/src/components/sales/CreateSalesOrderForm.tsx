@@ -5,6 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
 import { formatDecimalInput } from '../../lib/decimal';
+import { type LineWeightDraft, lineKgRows } from '../../lib/lineWeight';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
@@ -16,6 +17,9 @@ import { PACKAGE_UNITS } from '../../types/availability';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
+import KgTotals from '../shared/KgTotals';
+import { LineKgFields } from '../shared/LineKgInput';
+import { lineKgLabel } from '../shared/lineKgLabel';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import QuantityInput from '../shared/QuantityInput';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -40,6 +44,11 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
         mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
         loosePackages: line.loosePackages == null ? '' : formatDecimalInput(line.loosePackages),
+        // Ingevulde kg als ingevuld terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
+        ...(line.weightSource === 'Entered' ? {
+            netKg: line.netWeightKg == null ? '' : formatDecimalInput(line.netWeightKg), netKgEntered: line.netWeightKg != null,
+            grossKg: line.grossWeightKg == null ? '' : formatDecimalInput(line.grossWeightKg), grossKgEntered: line.grossWeightKg != null,
+        } : {}),
     })),
 });
 
@@ -90,7 +99,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
-    // Netto en bruto kg per verpakking: alleen voor de rekenregel onder het aantal.
+    // Netto en bruto kg per verpakking van het artikel: berekende kg in de kg-velden van de regel.
     const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
     // Verpakkingseenheid uit de artikelstamgegevens: vult alleen een nog lege eenheid voor; een gekozen eenheid blijft staan.
     const variantUnits = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.packagingUnit] as const))), [products]);
@@ -112,6 +121,16 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         edited();
     };
 
+    // Kg-velden van een regel (tekst en "ingevuld"-vlag tegelijk).
+    const updateLineWeight = (key: string, patch: LineWeightDraft) => {
+        if (locked) return;
+        setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, ...patch } : line)) }));
+        edited();
+    };
+
+    // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
+    const { rows: lineKg, totals } = lineKgRows(draft.lines, (variantId) => variants.get(variantId));
+
     const addLine = () => {
         if (locked || draft.lines.length >= MAX_ORDER_LINES) return;
         setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }));
@@ -128,7 +147,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         if (inFlight.current || result !== null) return;
         let command = pending;
         if (command === null) {
-            const built = buildOrderPayload(draft, actor);
+            const built = buildOrderPayload(draft, actor, (variantId) => variants.get(variantId));
             if (!built.ok) {
                 setErrors(ruleErrorsToFieldErrors(built.errors, t));
                 return;
@@ -233,7 +252,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                 )}
                 <ul className="mt-2 list-disc pl-5">
                     {order.lines.map((line) => (
-                        <li key={line.id}>{line.productName} · {line.productVariantName}: {formatQuantity(line.quantity, locale)} <UnitBadge unit={line.unit} /></li>
+                        <li key={line.id}>{line.productName} · {line.productVariantName}: {formatQuantity(line.quantity, locale)} <UnitBadge unit={line.unit} />{lineKgLabel(line, t, locale) !== null && <> · {lineKgLabel(line, t, locale, true)}</>}</li>
                     ))}
                 </ul>
             </SuccessPanel>
@@ -325,6 +344,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         <tbody className="divide-y divide-gray-100">
                             {draft.lines.map((line, index) => {
                                 const prefix = `lines[${index}]`;
+                                const unitText = line.unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(line.unit)).toLowerCase();
                                 return (
                                     <tr key={line.key} className="align-top">
                                         <td className="w-96 px-2 py-1.5">
@@ -342,8 +362,10 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                         </td>
                                         <td className="w-72 px-2 py-1.5">
                                             <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e}
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null} kgDefaults={variants.get(Number(line.productVariantId))}
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
+                                            <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
+                                                locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
@@ -364,6 +386,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         </tbody>
                     </table>
                 </div>
+                <KgTotals totals={totals} lineCount={draft.lines.length} testId="order-kg-totals" />
                 <button type="button" onClick={addLine} disabled={locked || draft.lines.length >= MAX_ORDER_LINES} className={secondaryButtonClass}>
                     + {t('supply_add_line')}
                 </button>
