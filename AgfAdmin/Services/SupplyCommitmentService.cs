@@ -208,7 +208,8 @@ namespace AgfAdmin.Services
             // Inkoopordergegevens: alle optioneel; leeg telt als niet opgegeven.
             var supplierReference = OptionalText(request.SupplierReference, PurchaseOrderRules.MaxSupplierReferenceLength, "supplierReference", errors);
             var note = OptionalText(request.Note, PurchaseOrderRules.MaxNoteLength, "note", errors);
-            if (request.OrderChannel != null && !PurchaseOrderRules.IsChannel(request.OrderChannel))
+            var orderChannel = string.IsNullOrWhiteSpace(request.OrderChannel) ? null : request.OrderChannel.Trim();
+            if (orderChannel != null && !PurchaseOrderRules.IsChannel(orderChannel))
             {
                 AddError(errors, "orderChannel", $"Order channel must be one of: {string.Join(", ", PurchaseOrderRules.Channels)}.");
             }
@@ -265,7 +266,7 @@ namespace AgfAdmin.Services
                 ExpectedAt = ToStoredUtc(request.ExpectedAt!.Value),
                 SupplierReference = supplierReference,
                 OrderedOn = request.OrderedOn ?? today,
-                OrderChannel = request.OrderChannel,
+                OrderChannel = orderChannel,
                 Note = note,
                 CreatedAt = now,
                 UpdatedAt = now,
