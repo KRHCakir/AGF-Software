@@ -1,0 +1,12 @@
+{
+  "title": "Ontvangst: gewicht invoeren",
+  "body": "Parser voor het kg-veld bij ontvangst. Gebruikers typen in Nederlandse notatie.",
+  "bug": "'15.000' wordt 15 in plaats van 15000 (punt is duizendtalscheiding in het Nederlands)",
+  "expect": {
+    "path": "agf-frontend/src/lib/receiptWeight.ts",
+    "lines": [
+      5,
+      9
+    ]
+  }
+}

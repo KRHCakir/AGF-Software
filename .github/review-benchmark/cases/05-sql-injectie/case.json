@@ -1,0 +1,12 @@
+{
+  "title": "Relaties zoeken op naam",
+  "body": "Snelle zoekfunctie voor relaties op (een deel van) de naam.",
+  "bug": "Zoekterm wordt in FromSqlRaw geplakt: SQL-injectie",
+  "expect": {
+    "path": "AgfAdmin/Services/RelationSearchService.cs",
+    "lines": [
+      13,
+      16
+    ]
+  }
+}

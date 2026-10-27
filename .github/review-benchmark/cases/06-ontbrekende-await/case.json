@@ -1,0 +1,12 @@
+{
+  "title": "Ontvangst afboeken",
+  "body": "Markeert een ontvangst als afgeboekt en slaat de tijd op.",
+  "bug": "SaveChangesAsync wordt niet ge-await: wijziging kan verloren gaan, DbContext wordt mogelijk gedisposed tijdens het opslaan",
+  "expect": {
+    "path": "AgfAdmin/Services/ReceiptCloseService.cs",
+    "lines": [
+      14,
+      17
+    ]
+  }
+}

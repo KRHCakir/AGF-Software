@@ -1,0 +1,12 @@
+{
+  "title": "Pakbon: regelnummers toekennen",
+  "body": "Kent oplopende regelnummers toe aan de regels van een pakbon.",
+  "bug": "Lus met <= Count geeft ArgumentOutOfRangeException",
+  "expect": {
+    "path": "AgfAdmin/Services/PackingSlipNumbering.cs",
+    "lines": [
+      9,
+      12
+    ]
+  }
+}

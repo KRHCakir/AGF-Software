@@ -574,3 +574,6 @@ FodyWeavers.xsd
 
 # Lokale ontwikkelconfiguratie met credentials (zie docs/development-setup.md)
 AgfAdmin/appsettings.Development.json
+
+# Toelichting van de Claude fix-loop (wordt als PR-comment geplaatst, niet gecommit)
+.ai-fix-note.md

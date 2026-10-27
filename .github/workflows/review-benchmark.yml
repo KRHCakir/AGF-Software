@@ -1,0 +1,84 @@
+name: AI Review Benchmark
+
+# Meet hoeveel echte bugs DeepSeek en Qwen vangen, met expres ingebouwde bugs in
+# .github/review-benchmark/cases/ (plus foutloze controles om valse alarmen te tellen).
+# Starten: Actions -> AI Review Benchmark -> Run workflow. Plaatst niets op PR's.
+# Draai hem opnieuw na het wisselen van model of prompt, en vergelijk de scores.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Benchmark ${{ matrix.reviewer }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        reviewer: [DeepSeek, Qwen]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run benchmark
+        env:
+          AI_NAME: ${{ matrix.reviewer }}
+          AI_BASE_URL: ${{ matrix.reviewer == 'DeepSeek' && 'https://api.deepseek.com' || vars.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' }}
+          AI_MODEL: ${{ matrix.reviewer == 'DeepSeek' && (vars.DEEPSEEK_MODEL || 'deepseek-v4-pro') || (vars.QWEN_MODEL || 'qwen-plus') }}
+          AI_API_KEY: ${{ matrix.reviewer == 'DeepSeek' && secrets.DEEPSEEK_API_KEY || secrets.QWEN_API_KEY }}
+        run: |
+          if [ -z "$AI_API_KEY" ]; then echo "No API key for $AI_NAME - skipping."; exit 0; fi
+          node .github/scripts/review-benchmark.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ matrix.reviewer }}
+          path: benchmark-*.json
+          if-no-files-found: ignore
+
+  combined:
+    name: Combined score
+    needs: benchmark
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+          merge-multiple: true
+
+      - name: Summarize
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const files = fs.existsSync('results') ? fs.readdirSync('results').filter((f) => f.endsWith('.json')) : []
+          const runs = files.map((f) => JSON.parse(fs.readFileSync('results/' + f, 'utf8')))
+          if (!runs.length) { console.log('No results.'); process.exit(0) }
+          const names = [...new Set(runs.flatMap((r) => r.rows.map((x) => x.name)))].sort()
+          const bugCases = names.filter((n) => runs.some((r) => r.rows.find((x) => x.name === n)?.bug))
+          const caughtByAny = bugCases.filter((n) => runs.some((r) => r.rows.find((x) => x.name === n)?.outcome === 'caught'))
+          const onlyBy = (who) => bugCases.filter((n) =>
+            runs.find((r) => r.reviewer === who)?.rows.find((x) => x.name === n)?.outcome === 'caught' &&
+            runs.filter((r) => r.reviewer !== who).every((r) => r.rows.find((x) => x.name === n)?.outcome !== 'caught'))
+          const lines = [
+            '## Samen',
+            '',
+            ...runs.map((r) => `- **${r.reviewer}** (\`${r.model}\`): ${r.caught}/${r.bugs} bugs, ${r.falseAlarms}/${r.controls} valse alarmen`),
+            `- **Samen** (minstens één van beide): ${caughtByAny.length}/${bugCases.length} bugs`,
+            ...runs.map((r) => `- Alleen door ${r.reviewer} gevangen: ${onlyBy(r.reviewer).join(', ') || 'geen'}`),
+            '',
+            '_Een reviewer die niets extra vangt en wel valse alarmen geeft, voegt weinig toe._',
+          ]
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n')
+          console.log(lines.join('\n'))
+          NODE

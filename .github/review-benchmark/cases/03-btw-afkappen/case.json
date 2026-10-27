@@ -1,0 +1,12 @@
+{
+  "title": "Btw per regel voor de verkoopfactuur",
+  "body": "Btw-bedrag per regel voor de verkoopfactuur-PDF.",
+  "bug": "Afkappen met (long) in plaats van half-omhoog afronden: btw-bedragen kloppen niet op de cent",
+  "expect": {
+    "path": "AgfAdmin/Services/SalesInvoiceVat.cs",
+    "lines": [
+      8,
+      10
+    ]
+  }
+}

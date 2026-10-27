@@ -1,0 +1,12 @@
+{
+  "title": "Endpoint om een bankrekening te verwijderen",
+  "body": "Nieuwe DELETE-endpoint voor bankrekeningen van een relatie.",
+  "bug": "[AllowAnonymous] op een DELETE: iedereen zonder login kan bankrekeningen verwijderen",
+  "expect": {
+    "path": "AgfAdmin/Controllers/BankAccountsController.cs",
+    "lines": [
+      11,
+      14
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "Weegschaal: grammen naar kg",
+  "body": "De weegschaal geeft grammen door; wij slaan kg op met 3 decimalen.",
+  "bug": "Integerdeling grams / 1000 gooit de decimalen weg (1.250 g wordt 1 kg)",
+  "expect": {
+    "path": "AgfAdmin/Services/ScaleReading.cs",
+    "lines": [
+      7,
+      9
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "InvoiceMath: gemiddeld regelbedrag",
+  "body": "Hulpfunctie voor het overzicht: gemiddeld regelbedrag van een factuur.",
+  "bug": "Deling door nul bij een factuur zonder regels",
+  "expect": {
+    "path": "AgfAdmin/Services/InvoiceAverages.cs",
+    "lines": [
+      10,
+      13
+    ]
+  }
+}

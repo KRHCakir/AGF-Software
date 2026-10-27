@@ -1,0 +1,6 @@
+{
+  "title": "Bedragen tonen in Nederlandse notatie",
+  "body": "Eén functie om bedragen te tonen: 2 decimalen, notatie van de schermtaal.",
+  "bug": null,
+  "expect": null
+}

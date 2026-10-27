@@ -1,14 +1,18 @@
 name: AI PR Review
 
-# Reviewt elke pull request eerst met DeepSeek en daarna (als die goedkeurt) met Qwen.
+# Reviewt elke pull request eerst met DeepSeek en daarna met Qwen als tweede reviewer.
+# Qwen krijgt de bevindingen van DeepSeek mee en zoekt juist wat DeepSeek miste.
+# Grote PR's worden in delen beoordeeld, zodat elk bestand gezien wordt. Lukt dat niet
+# (te groot, timeout), dan heet de review "gedeeltelijk beoordeeld" en NIET "goedgekeurd".
 # Elk model zet één comment op de PR en werkt die bij bij nieuwe commits.
-# Rood = een model vraagt om wijzigingen. Groen = beide keuren goed.
+# Rood = een model vraagt om wijzigingen.
 #
 # Instellingen (Settings -> Secrets and variables -> Actions):
 #   Secrets:   DEEPSEEK_API_KEY (verplicht), QWEN_API_KEY (optioneel; zonder wordt Qwen overgeslagen)
 #   Variables: DEEPSEEK_MODEL (standaard deepseek-v4-pro)
 #              QWEN_MODEL     (standaard qwen-plus)
 #              QWEN_BASE_URL  (standaard https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
+#              REVIEW_MAX_CHUNKS (standaard 15) - max. aantal delen per review; meer = gedeeltelijk
 #              AI_FIX_MAX_ROUNDS (standaard 3) - hoe vaak Claude zelf mag fixen per PR
 #              NOTIFY_USER    (standaard: eigenaar van de repo) - wie de "klaar"-melding krijgt
 #
@@ -46,7 +50,9 @@ jobs:
     name: DeepSeek review
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.review.outputs.status }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,12 +64,14 @@ jobs:
           node-version: 22
 
       - name: Review with DeepSeek
+        id: review
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AI_NAME: DeepSeek
           AI_BASE_URL: https://api.deepseek.com
           AI_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-pro' }}
           AI_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          MAX_CHUNKS: ${{ vars.REVIEW_MAX_CHUNKS || '15' }}
           REVIEW_OUTPUT: deepseek-review.json
         run: node .github/scripts/ai-review.mjs
 
@@ -79,9 +87,10 @@ jobs:
     name: Qwen review
     needs: deepseek
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     outputs:
       ran: ${{ steps.key.outputs.present }}
+      status: ${{ steps.review.outputs.status }}
     steps:
       - name: Check for Qwen key
         id: key
@@ -105,14 +114,26 @@ jobs:
         with:
           node-version: 22
 
-      - name: Review with Qwen
+      - name: Get DeepSeek's findings
+        if: steps.key.outputs.present == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: deepseek-review
+          path: previous
+        continue-on-error: true
+
+      - name: Review with Qwen (second reviewer)
+        id: review
         if: steps.key.outputs.present == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AI_NAME: Qwen
+          AI_ROLE: second
+          PREVIOUS_REVIEW: previous/deepseek-review.json
           AI_BASE_URL: ${{ vars.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' }}
           AI_MODEL: ${{ vars.QWEN_MODEL || 'qwen-plus' }}
           AI_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          MAX_CHUNKS: ${{ vars.REVIEW_MAX_CHUNKS || '15' }}
           REVIEW_OUTPUT: qwen-review.json
         run: node .github/scripts/ai-review.mjs
 
@@ -124,7 +145,8 @@ jobs:
           path: qwen-review.json
           if-no-files-found: ignore
 
-  # Vraagt een reviewer om wijzigingen? Dan laat Claude het oplossen en pusht hij een commit.
+  # Vraagt een reviewer om wijzigingen? Dan beoordeelt Claude de bevindingen:
+  # terechte punten lost hij op (één commit), onterechte legt hij uit in een PR-comment.
   autofix:
     name: Claude fix
     needs: [deepseek, qwen]
@@ -167,14 +189,13 @@ jobs:
             .filter((r) => r.verdict === 'request_changes')
           let text = ''
           for (const r of asking) {
-            text += `## ${r.reviewer} (${r.model}): ${r.summary}\n`
+            text += `## ${r.reviewer} (${r.model})\n`
             for (const f of r.findings) {
               text += `- [${f.severity}] ${f.path}${f.line ? ':' + f.line : ''} - ${f.title}: ${f.detail}\n`
             }
             text += '\n'
           }
           fs.writeFileSync(process.env.RUNNER_TEMP + '/findings.md', text)
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_findings=${asking.length > 0}\n`)
           NODE
 
           if ! grep -q . "$RUNNER_TEMP/findings.md"; then
@@ -203,16 +224,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Let Claude fix the review findings
+      - name: Let Claude handle the review findings
         if: steps.plan.outputs.run_claude == 'true'
         uses: anthropics/claude-code-action@v1
         with:
           # Geen github_token meegeven: dan pusht Claude als de Claude GitHub App,
           # en alleen dan start de review-workflow opnieuw op zijn commit.
-          # Draait op je Claude-abonnement (token via `claude setup-token`), dus geen API-kosten.
-          # Liever een API-key? Vervang de regel hieronder door:
-          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Neemt CLAUDE_CODE_OAUTH_TOKEN, of anders het token dat onder ANTHROPIC_API_KEY staat.
+          # In beide gevallen moet het het abonnementstoken uit `claude setup-token` zijn (sk-ant-oat...).
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_API_KEY }}
           allowed_bots: "claude[bot]"
           claude_args: >-
             --max-turns 40
@@ -226,16 +246,47 @@ jobs:
             ${{ steps.plan.outputs.findings }}
 
             Opdracht:
-            1. Los de blocker- en major-bevindingen op. Minor/nit alleen als het klein en veilig is.
-            2. Verander niets wat niet met deze bevindingen te maken heeft.
-            3. Klopt een bevinding aantoonbaar niet? Pas dan niets aan voor dat punt en leg het uit
-               in de commit-message.
-            4. Controleer je werk waar mogelijk: `node --check` voor .mjs-bestanden, `dotnet build` /
+            1. Controleer elke blocker- en major-bevinding in de echte code. AI-reviewers hebben het
+               niet altijd bij het rechte eind.
+            2. Terechte bevindingen: los ze op. Minor/nit alleen als het klein en veilig is.
+               Verander niets wat niet met deze bevindingen te maken heeft.
+            3. Controleer je werk waar mogelijk: `node --check` voor .mjs-bestanden, `dotnet build` /
                `dotnet test` voor C#, `npm run lint` / `npm test` in agf-frontend voor de frontend.
-            5. Maak precies één commit met een message die begint met `fix: ` en eindigt met ` [ai-fix]`,
-               en push die naar `${{ github.event.pull_request.head.ref }}`. Push nooit naar main.
+            4. Heb je code aangepast: maak precies één commit met een message die begint met `fix: `
+               en eindigt met ` [ai-fix]`, en push die naar `${{ github.event.pull_request.head.ref }}`.
+               Push nooit naar main.
+            5. Maak NOOIT een commit zonder codewijziging (geen lege commits, geen `--allow-empty`).
+            6. Vind je een bevinding onterecht, of heb je een punt bewust niet aangepast? Schrijf dan per
+               punt kort in het Nederlands waarom, met verwijzing naar bestand en regel, in het bestand
+               `.ai-fix-note.md` in de root van de repository. Commit dat bestand NIET; de workflow
+               plaatst het als comment op de PR, en de reviewers lezen het bij de volgende ronde mee.
 
-  # Alles goedgekeurd? Dan krijg jij een melding (GitHub stuurt die via e-mail / de GitHub-app).
+      - name: Post Claude's explanation and check what happened
+        if: always() && steps.plan.outputs.run_claude == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NOTIFY: ${{ vars.NOTIFY_USER || github.repository_owner }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          OLD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          new_sha=$(gh api "repos/$REPO/branches/$BRANCH" --jq .commit.sha)
+          note=".ai-fix-note.md"
+          if [ "$new_sha" != "$OLD_SHA" ]; then
+            echo "Claude pushed $new_sha - the review runs again on that commit."
+            if [ -s "$note" ]; then
+              { echo '<!-- ai-fix-note -->'; echo "### 🤖 Claude: toelichting bij fix-ronde"; echo; cat "$note"; } > "$RUNNER_TEMP/body.md"
+              gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+            fi
+          elif [ -s "$note" ]; then
+            { echo '<!-- ai-fix-note -->'; echo "### 🤖 Claude: geen codewijziging nodig volgens Claude"; echo; cat "$note"; echo; echo "@$NOTIFY Claude vindt de bevindingen hierboven onterecht en heeft niets aangepast. Beoordeel jij wie gelijk heeft? Na een nieuwe commit lezen de reviewers deze uitleg mee."; } > "$RUNNER_TEMP/body.md"
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft de review-bevindingen bekeken maar niets gepusht en geen uitleg gegeven. Kijk even in de log van de job **Claude fix**."
+          fi
+
+  # Melding voor jou zodra beide reviews klaar zijn (GitHub stuurt die via e-mail / de GitHub-app).
   notify:
     name: Ready to test
     needs: [deepseek, qwen]
@@ -250,17 +301,28 @@ jobs:
           REPO: ${{ github.repository }}
           NOTIFY: ${{ vars.NOTIFY_USER || github.repository_owner }}
           QWEN_RAN: ${{ needs.qwen.outputs.ran }}
+          DEEPSEEK_STATUS: ${{ needs.deepseek.outputs.status }}
+          QWEN_STATUS: ${{ needs.qwen.outputs.status }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          reviewers="DeepSeek"
-          if [ "$QWEN_RAN" = "true" ]; then reviewers="DeepSeek en Qwen"; fi
+          label() { case "$1" in approve) echo "geen problemen gevonden";; partial) echo "⚠️ gedeeltelijk beoordeeld";; *) echo "$1";; esac; }
+          lines="- DeepSeek: **$(label "$DEEPSEEK_STATUS")**"
+          partial=false
+          [ "$DEEPSEEK_STATUS" = "partial" ] && partial=true
+          if [ "$QWEN_RAN" = "true" ]; then
+            lines="$lines"$'\n'"- Qwen: **$(label "$QWEN_STATUS")**"
+            [ "$QWEN_STATUS" = "partial" ] && partial=true
+          fi
           rounds=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
             --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
-          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "✅ @$NOTIFY PR #$PR_NUMBER is klaar om te testen!
-
-          - Goedgekeurd door: **$reviewers**
-          - Automatische fix-rondes door Claude: **$rounds**
-          - Commit: \`${HEAD_SHA:0:7}\`
-
-          Test het op deze branch en merge als alles werkt. (Kijk ook even of de Quality-checks groen zijn.)"
+          if [ "$partial" = "true" ]; then
+            title="⚠️ @$NOTIFY PR #$PR_NUMBER is klaar om te testen, maar de AI-review heeft niet alles gezien."
+            extra="Kijk in de review-comments welke bestanden niet beoordeeld zijn, en test die extra goed (of splits de PR)."
+          else
+            title="✅ @$NOTIFY PR #$PR_NUMBER is klaar om te testen."
+            extra="De AI-review is een extra paar ogen, geen keurmerk: jouw eigen test en de Quality-checks blijven de echte controle."
+          fi
+          printf '%s\n\n%s\n- Automatische fix-rondes door Claude: **%s**\n- Commit: `%s`\n\n%s\n' \
+            "$title" "$lines" "$rounds" "${HEAD_SHA:0:7}" "$extra" > "$RUNNER_TEMP/body.md"
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"

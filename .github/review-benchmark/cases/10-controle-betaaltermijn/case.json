@@ -1,0 +1,6 @@
+{
+  "title": "Vervaldatum berekenen",
+  "body": "Vervaldatum = factuurdatum + termijn in dagen; bij 'einde maand' eerst naar de laatste dag van de maand.",
+  "bug": null,
+  "expect": null
+}
