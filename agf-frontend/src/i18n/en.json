@@ -1604,5 +1604,10 @@
   "po_credit_note_number": "Credit note number",
   "po_amount_excl_vat": "Amount excl. VAT",
   "po_invoice_save": "Record",
-  "po_belongs_to_order": "Belongs to order"
+  "po_belongs_to_order": "Belongs to order",
+  "po_own_order_number": "Own order number",
+  "po_to_order": "Open purchase order",
+  "po_supplier_reference": "Supplier reference",
+  "po_ordered_on": "Order date",
+  "po_channel": "Ordered via"
 }
