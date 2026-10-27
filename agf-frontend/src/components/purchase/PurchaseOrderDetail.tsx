@@ -4,7 +4,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { CHANNEL_LABEL_KEYS, DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey } from '../../lib/purchaseOrderRules';
-import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent, PurchaseOrderReceiptLine } from '../../types/purchaseOrder';
+import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 import { sectionClass } from './sectionClass';
 
@@ -13,10 +13,9 @@ const h3 = 'mb-2 text-sm font-semibold text-gray-900';
 
 // Detail van een inkooporder: kop met eigen nummer, regels (besteld/ontvangen/afgekeurd), ontvangsten met keuring en
 // "Afkeuren", facturen, afkeuringen en geschiedenis. `invoices` is de plek voor het koppelen van factuurnummers.
-export default function PurchaseOrderDetail({ order, invoices, receiptActions }: {
+export default function PurchaseOrderDetail({ order, invoices }: {
     order: Order;
     invoices?: React.ReactNode;
-    receiptActions?: (receipt: PurchaseOrderReceiptLine) => React.ReactNode;
 }) {
     const { t, locale } = useTranslation();
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
@@ -58,35 +57,6 @@ export default function PurchaseOrderDetail({ order, invoices, receiptActions }:
                             </span>
                         </li>
                     ))}
-                </ul>
-            </section>
-
-            <section className={section} aria-labelledby="po-receipts">
-                <h3 id="po-receipts" className={h3}>{t('po_receipts')}</h3>
-                {order.receipts.length === 0 && <p className="text-sm text-gray-600">{t('po_no_receipts')}</p>}
-                <ul className="divide-y divide-gray-100 text-sm">
-                    {order.receipts.map((receipt) => {
-                        const quality = qualityStyle(receipt.qualityStatus);
-                        return (
-                            <li key={receipt.palletContentLineId} className="py-1.5">
-                                <span className="font-mono font-medium text-gray-900">{receipt.palletReference}</span>
-                                <span className="text-gray-900"> · {receipt.productName ?? '–'} · {receipt.productVariantName ?? '–'}</span>
-                                <span className="text-gray-600"> · {receipt.lotNumber}</span>
-                                <span className="block font-mono text-gray-800">
-                                    {qty(receipt.quantity)} · {formatKg(receipt.netWeightKg, locale)}
-                                    {' · '}<span className="font-sans">{quality ? t(quality.key) : receipt.qualityStatus}</span>
-                                    {receipt.qualityReason && <span className="font-sans text-gray-600"> ({receipt.qualityReason})</span>}
-                                </span>
-                                <span className="block text-xs text-gray-600">{formatDateTime(receipt.receivedAt, locale)}</span>
-                                {receipt.rejectable && (
-                                    <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-700">
-                                        {t('po_receipt_rejectable', { quantity: qty(receipt.rejectableQuantity), weight: formatKg(receipt.rejectableNetWeightKg, locale) })}
-                                        {receiptActions?.(receipt)}
-                                    </span>
-                                )}
-                            </li>
-                        );
-                    })}
                 </ul>
             </section>
 
