@@ -1597,5 +1597,12 @@
   "po_reject_decision": "Decision",
   "po_reject_save": "Record rejection",
   "po_reject_too_many": "At most {max}.",
-  "po_cancel": "Cancel"
+  "po_cancel": "Cancel",
+  "po_invoice_received_action": "Invoice received",
+  "po_credit_note_received_action": "Credit note received",
+  "po_invoice_duplicate": "This number is already recorded on this order.",
+  "po_credit_note_number": "Credit note number",
+  "po_amount_excl_vat": "Amount excl. VAT",
+  "po_invoice_save": "Record",
+  "po_belongs_to_order": "Belongs to order"
 }

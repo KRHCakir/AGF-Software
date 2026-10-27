@@ -1597,5 +1597,12 @@
   "po_reject_decision": "Besluit",
   "po_reject_save": "Afkeuring vastleggen",
   "po_reject_too_many": "Hooguit {max}.",
-  "po_cancel": "Annuleren"
+  "po_cancel": "Annuleren",
+  "po_invoice_received_action": "Factuur ontvangen",
+  "po_credit_note_received_action": "Creditnota ontvangen",
+  "po_invoice_duplicate": "Dit nummer staat al bij deze order.",
+  "po_credit_note_number": "Creditnotanummer",
+  "po_amount_excl_vat": "Bedrag excl. btw",
+  "po_invoice_save": "Vastleggen",
+  "po_belongs_to_order": "Hoort bij order"
 }

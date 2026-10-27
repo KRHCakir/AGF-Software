@@ -56,6 +56,12 @@ describe('Purchase orders page', () => {
                 return json(404, { message: `unexpected GET ${url}` });
             },
             nextPost: async () => {
+                if (posted[posted.length - 1].url.endsWith('/invoice-refs')) {
+                    const body = JSON.parse(posted[posted.length - 1].body);
+                    current = detail({ invoiceRefs: [...current.invoiceRefs, { id: 2, kind: body.kind, invoiceNumber: body.invoiceNumber, invoiceDate: null, amountExclVat: null, incomingInvoiceId: null, actorReference: 'Jan', createdAt: '2026-10-27T12:00:00Z' }] });
+                    listItems = [item({ invoiceNumbers: [...listItems[0].invoiceNumbers, { kind: body.kind, invoiceNumber: body.invoiceNumber }] })];
+                    return json(201, current);
+                }
                 current = detail({
                     rejectedQuantity: 48, rejectedNetWeightKg: 192, invoiceIndicator: 'CreditNoteExpected',
                     rejections: [{ id: 1, reason: 'Quality', explanation: null, decision: 'ReturnToSupplier', actorReference: 'Jan', rejectedAt: '2026-10-27T12:00:00Z',
@@ -126,5 +132,16 @@ describe('Purchase orders page', () => {
         assert.ok(mounted.hasText('po_invoice_credit_note_expected'));
         assert.equal(mounted.container.querySelector('form[aria-label="po_reject_title"]'), null);
         await mounted.waitFor(() => listUrls.length >= 2, 'list reloaded');
+    });
+    test('"Factuur ontvangen" records the number on the order and the list shows it right away', async () => {
+        navigate('/purchase-orders?id=7');
+        await mounted.render(<PurchaseOrdersPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent === 'IO-2026-0007', 'detail');
+        await click(mounted.button('+ po_invoice_received_action')!);
+        await act(async () => { setValue(input('invoiceRef-number'), 'F-4712'); });
+        await click(mounted.button('po_invoice_save')!);
+        await mounted.waitFor(() => posted.length === 1, 'POST');
+        assert.match(posted[0].url, /\/purchase-orders\/7\/invoice-refs$/);
+        await mounted.waitFor(() => listUrls.length >= 2 && (mounted.container.textContent ?? '').split('F-4712').length > 2, 'number in detail and list');
     });
 });

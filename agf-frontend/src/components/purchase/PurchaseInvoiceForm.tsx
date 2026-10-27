@@ -23,6 +23,7 @@ import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import InvoiceOrderNotice from './InvoiceOrderNotice';
 import VendorPicker from './VendorPicker';
 
 // Eén compacte werkplek voor een inkoopfactuur: documentkop, direct bewerkbare regels, live totalen en een ingeklapt
@@ -309,6 +310,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                     <label htmlFor="invoiceNumber-input" className="text-xs font-medium text-gray-700">{t('invoice_number')} *</label>
                     <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} value={draft.header.invoiceNumber} maxLength={100} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} className={inputClass} />
                     <FieldError id="invoiceNumber" messages={e('invoiceNumber')} />
+                    <InvoiceOrderNotice invoiceNumber={draft.header.invoiceNumber} vendorId={draft.header.vendorId === '' ? null : Number(draft.header.vendorId)} />
                 </div>
                 <div>
                     <label htmlFor="invoiceDate-input" className="text-xs font-medium text-gray-700">{t('invoice_date')} *</label>

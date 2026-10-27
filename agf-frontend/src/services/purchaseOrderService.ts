@@ -1,6 +1,7 @@
 import { ApiError, getJson, postJson } from './apiClient';
 import type { SaveResult } from './supplyService';
 import {
+    AddInvoiceRefRequest,
     PurchaseOrderDetail,
     PurchaseOrderInvoiceMatch,
     PurchaseOrderList,
@@ -10,7 +11,8 @@ import {
     isPurchaseOrderList,
 } from '../types/purchaseOrder';
 
-// /api/purchase-orders: lijst (server zoekt, filtert en pagineert), detail, opzoeken op factuurnummer en afkeuren.
+// /api/purchase-orders: lijst (server zoekt, filtert en pagineert), detail, opzoeken op factuurnummer,
+// factuurnummer koppelen en afkeuren.
 // POST is idempotent via requestId: 201 = nieuw, 200 = exact hetzelfde verzoek was al opgeslagen.
 
 export interface PurchaseOrderQuery {
@@ -42,6 +44,12 @@ export async function findOrdersByInvoiceNumber(invoiceNumber: string, vendorId:
     const json = await getJson(`/purchase-orders/by-invoice-number?${params.toString()}`, signal);
     if (!isInvoiceMatchList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het opzoeken van het factuurnummer.');
     return json;
+}
+
+export async function addInvoiceRef(orderId: number, request: AddInvoiceRefRequest, signal?: AbortSignal): Promise<SaveResult<PurchaseOrderDetail>> {
+    const { status, json } = await postJson(`/purchase-orders/${orderId}/invoice-refs`, request, signal);
+    if (!isPurchaseOrderDetail(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het vastleggen van het factuurnummer.');
+    return { value: json, replayed: status === 200 };
 }
 
 export async function rejectReceipt(orderId: number, request: RejectRequest, signal?: AbortSignal): Promise<SaveResult<PurchaseOrderDetail>> {

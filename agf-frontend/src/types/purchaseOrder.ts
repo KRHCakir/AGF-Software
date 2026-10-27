@@ -160,6 +160,15 @@ export interface PurchaseOrderInvoiceMatch {
     vendorName: string | null;
 }
 
+export interface AddInvoiceRefRequest {
+    requestId: string;
+    kind: 'Invoice' | 'CreditNote';
+    invoiceNumber: string;
+    invoiceDate: string | null;
+    amountExclVat: number | null;
+    actorReference: string | null;
+}
+
 export interface RejectRequest {
     requestId: string;
     reason: string;
