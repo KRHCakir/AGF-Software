@@ -1,7 +1,8 @@
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from './availability';
 import { isOptionalLineWeight, type WeightSource } from './salesOrder';
-import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
+import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isOptionalNullableString, isString } from './guards';
+import type { OrderChannel } from '../lib/purchaseOrderRules';
 
 // Exact het contract van POST/GET /api/supply-commitments (backend: AgfAdmin/DTOs/SupplyCommitmentDtos.cs).
 
@@ -28,6 +29,10 @@ export interface CreateSupplyCommitmentRequest {
     origin: string;
     destination: string | null;
     expectedAt: string;
+    // Inkooporder (optioneel): alleen meegestuurd als ingevuld, zodat oudere bevroren opdrachten gelijk blijven.
+    supplierReference?: string;
+    orderedOn?: string;
+    orderChannel?: OrderChannel;
     lines: CreateSupplyCommitmentLineRequest[];
 }
 
@@ -75,6 +80,11 @@ export interface SupplyCommitment {
     origin: string;
     destination: string | null;
     expectedAt: string | null;
+    // Eigen inkoopordernummer (IO-2026-0001) en bestelgegevens; optioneel in het type voor oudere antwoorden.
+    orderNumber?: string;
+    supplierReference?: string | null;
+    orderedOn?: string;
+    orderChannel?: string | null;
     vendorGgns: VendorGgnOption[];
     lines: SupplyCommitmentLine[];
 }
@@ -118,6 +128,9 @@ export function isSupplyCommitment(value: unknown): value is SupplyCommitment {
         && isString(value.origin)
         && isNullableString(value.destination)
         && isNullableString(value.expectedAt)
+        && (value.orderNumber === undefined || isString(value.orderNumber))
+        && isOptionalNullableString(value.supplierReference)
+        && isOptionalNullableString(value.orderChannel)
         && isArrayOf(value.vendorGgns, (item): item is VendorGgnOption => isObject(item) && isString(item.ggn) && isNullableString(item.producerName)
             && isNullableString(item.checkedOn) && isNullableString(item.certificateValidUntil) && typeof item.hasGgnLabel === 'boolean')
         && isArrayOf(value.lines, isLine);

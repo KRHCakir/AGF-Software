@@ -2,7 +2,8 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { todayInAmsterdam } from '../../lib/calendarDate.ts';
+import { Mounted, click, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
 // Aanvoerregel met netto en bruto kg: berekend uit het artikel, bruto onder netto geweigerd vóór versturen, en de payload
@@ -16,6 +17,7 @@ const reference: ReferenceData = {
 
 let mounted: Mounted;
 let posted: { url: string; body: string }[];
+let answer: () => Promise<Response>;
 
 const field = (id: string) => mounted.container.querySelector<HTMLInputElement>(`[id="${id}"]`)!;
 const type = (id: string, text: string) => act(async () => { field(id).focus(); setValue(field(id), text); });
@@ -23,7 +25,8 @@ const submit = () => act(async () => { mounted.form()!.dispatchEvent(new window.
 
 describe('PlanSupplyForm: net and gross kg on the supply line', () => {
     beforeEach(() => {
-        posted = stubFetch({ onGet: () => json(404, { message: 'unexpected GET' }), nextPost: async () => json(500, { message: 'stop' }) });
+        answer = async () => json(500, { message: 'stop' });
+        posted = stubFetch({ onGet: () => json(404, { message: 'unexpected GET' }), nextPost: () => answer() });
         mounted = new Mounted();
     });
     afterEach(async () => { await mounted.unmount(); });
@@ -50,5 +53,53 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await mounted.waitFor(() => posted.length > 0, 'POST');
         const line = JSON.parse(posted[0].body).lines[0];
         assert.deepEqual([line.expectedNetWeightKg, line.expectedGrossWeightKg, line.weightSource], [15600, 16100, 'Entered']);
+    });
+
+    test('phone order: supplier reference, order date (today) and channel are sent; the own order number is shown large', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        assert.equal(field('orderedOn-input').value, todayInAmsterdam());
+        await type('supplierReference-input', '  NP-88123 ');
+        await click(mounted.button('po_channel_phone')!);
+        assert.equal(mounted.button('po_channel_phone')!.getAttribute('aria-pressed'), 'true');
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="vendorId-input"]')!, '3'); });
+        await type('origin-input', 'Peru');
+        await type('expectedAt-input', '2026-10-30');
+        await type('lines[0].productVariantId-input', 'hass');
+        await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
+        await type('lines[0].expectedQuantity-input', '221');
+
+        answer = async () => {
+            const sent = JSON.parse(posted[0].body);
+            return json(201, { id: 45, requestId: sent.requestId, vendorId: 3, vendorName: 'Supplier B', customerId: null, customerName: null, route: 'Warehouse', status: 'Expected',
+                origin: 'Peru', destination: null, expectedAt: sent.expectedAt, orderNumber: 'IO-2026-0045', supplierReference: 'NP-88123', orderedOn: sent.orderedOn, orderChannel: 'Phone',
+                vendorGgns: [], lines: [] });
+        };
+        await submit();
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        const body = JSON.parse(posted[0].body);
+        assert.equal(body.supplierReference, 'NP-88123');
+        assert.equal(body.orderedOn, todayInAmsterdam());
+        assert.equal(body.orderChannel, 'Phone');
+        const number = await mounted.waitFor(() => mounted.container.querySelector('[data-testid="supply-order-number"]'), 'order number');
+        assert.equal(number.textContent, 'IO-2026-0045');
+        assert.ok(number.className.includes('text-3xl'));
+        assert.equal(mounted.container.querySelector('a[href="/purchase-orders?id=45"]')?.textContent, 'po_to_order');
+    });
+
+    test('without supplier reference or channel the payload stays as before (fields omitted)', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="vendorId-input"]')!, '3'); });
+        await type('origin-input', 'Peru');
+        await type('expectedAt-input', '2026-10-30');
+        await type('lines[0].productVariantId-input', 'hass');
+        await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
+        await type('lines[0].expectedQuantity-input', '10');
+        await submit();
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        const body = JSON.parse(posted[0].body);
+        assert.equal('supplierReference' in body, false);
+        assert.equal('orderChannel' in body, false);
     });
 });

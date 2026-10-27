@@ -1605,6 +1605,11 @@
   "po_amount_excl_vat": "Amount excl. VAT",
   "po_invoice_save": "Record",
   "po_belongs_to_order": "Belongs to order",
+  "po_own_order_number": "Own order number",
+  "po_to_order": "Open purchase order",
+  "po_supplier_reference": "Supplier reference",
+  "po_ordered_on": "Order date",
+  "po_channel": "Ordered via",
   "po_pending_reject": "Reject on order {number}: pallet {pallet} · lot {lot}",
   "po_pending_invoice": "Invoice {number} on order {order}",
   "po_pending_credit_note": "Credit note {number} on order {order}"

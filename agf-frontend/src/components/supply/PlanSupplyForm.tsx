@@ -8,6 +8,8 @@ import { formatDateTime, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { type LineWeightDraft, lineKgRows, resolveLineWeight, weightPayload } from '../../lib/lineWeight';
 import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
+import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
+import { CHANNEL_LABEL_KEYS, MAX_SUPPLIER_REFERENCE_LENGTH, ORDER_CHANNELS, OrderChannel } from '../../lib/purchaseOrderRules';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
@@ -51,6 +53,10 @@ interface HeaderDraft {
     origin: string;
     destination: string;
     expectedDate: string;
+    // Inkooporder: referentie van de leverancier, besteldatum (standaard vandaag) en kanaal (optioneel).
+    supplierReference: string;
+    orderedOn: string;
+    orderChannel: OrderChannel | '';
 }
 
 // Bevroren verzending: exact deze payload en requestId worden bij "opnieuw proberen" verstuurd.
@@ -61,7 +67,7 @@ interface PendingSubmission {
 
 const MAX_LINES = 200;
 const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
-const emptyHeader: HeaderDraft = { vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '' };
+const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), orderChannel: '' });
 
 // Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
 export default function PlanSupplyForm({ route, reference, onReceive }: {
@@ -154,6 +160,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             else expectedAt = local.toISOString();
         }
 
+        const supplierReference = header.supplierReference.trim();
+        if (supplierReference.length > MAX_SUPPLIER_REFERENCE_LENGTH) addError(found, 'supplierReference', t('supply_error_too_long', { max: String(MAX_SUPPLIER_REFERENCE_LENGTH) }));
+        if (header.orderedOn !== '' && !isDateOnly(header.orderedOn)) addError(found, 'orderedOn', t('supply_error_required_date'));
+
         if (lines.length === 0) addError(found, 'lines', t('supply_error_lines_required'));
         const seen = new Set<string>();
         const payloadLines = lines.map((line, index) => {
@@ -198,6 +208,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 origin,
                 destination: destination === '' ? null : destination,
                 expectedAt,
+                ...(supplierReference === '' ? {} : { supplierReference }),
+                ...(header.orderedOn === '' ? {} : { orderedOn: header.orderedOn }),
+                ...(header.orderChannel === '' ? {} : { orderChannel: header.orderChannel }),
                 lines: payloadLines,
             },
             errors: {},
@@ -232,7 +245,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     };
 
     const startOver = () => {
-        setHeader(emptyHeader);
+        setHeader(emptyHeader());
         setLines([emptyLine()]);
         setPending(null);
         setError(null);
@@ -255,6 +268,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 actions={(
                     <>
                         <Link href={href} className={primaryButtonClass}>{t('supply_view_availability')}</Link>
+                        <Link href={`/purchase-orders?id=${commitment.id}`} className={secondaryButtonClass}>{t('po_to_order')}</Link>
                         {!isDirect && (
                             <button type="button" className={secondaryButtonClass} onClick={() => onReceive(commitment)}>
                                 {t('supply_receive_for_this')}
@@ -264,7 +278,14 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     </>
                 )}
             >
+                {commitment.orderNumber && (
+                    <p className="mb-2">
+                        <span className="block text-xs font-medium uppercase tracking-wide text-green-900">{t('po_own_order_number')}</span>
+                        <span className="block font-mono text-3xl font-bold text-gray-900" data-testid="supply-order-number">{commitment.orderNumber}</span>
+                    </p>
+                )}
                 <p>
+                    {commitment.supplierReference && <>{t('po_col_supplier_reference')} <span className="font-mono">{commitment.supplierReference}</span> · </>}
                     {commitment.vendorName ?? '–'} · {commitment.origin}
                     {commitment.customerName && <> · 🔒 {commitment.customerName}</>}
                     {commitment.destination && <> → {commitment.destination}</>}
@@ -308,6 +329,33 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     </>
                 ) : undefined} />
             )}
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div>
+                    <label htmlFor="supplierReference-input" className="text-xs font-medium text-gray-700">{t('po_supplier_reference')}</label>
+                    <input {...fieldProps('supplierReference', e('supplierReference'))} value={header.supplierReference} disabled={locked} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH}
+                        onChange={(event) => updateHeader('supplierReference', event.target.value)} className={inputClass} />
+                    <FieldError id="supplierReference" messages={e('supplierReference')} />
+                </div>
+                <div>
+                    <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
+                    <input {...fieldProps('orderedOn', e('orderedOn'))} type="date" value={header.orderedOn} disabled={locked}
+                        onChange={(event) => updateHeader('orderedOn', event.target.value)} className={inputClass} />
+                    <FieldError id="orderedOn" messages={e('orderedOn')} />
+                </div>
+                <fieldset className="col-span-2">
+                    <legend className="text-xs font-medium text-gray-700">{t('po_channel')}</legend>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                        {ORDER_CHANNELS.map((channel) => (
+                            <button key={channel} type="button" aria-pressed={header.orderChannel === channel} disabled={locked}
+                                onClick={() => updateHeader('orderChannel', header.orderChannel === channel ? '' : channel)}
+                                className={`rounded border px-2 py-1 text-xs font-medium ${header.orderChannel === channel ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'}`}>
+                                {t(CHANNEL_LABEL_KEYS[channel])}
+                            </button>
+                        ))}
+                    </div>
+                </fieldset>
+            </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
