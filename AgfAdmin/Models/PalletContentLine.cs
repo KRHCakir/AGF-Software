@@ -42,6 +42,16 @@ namespace AgfAdmin.Models
         public int? OriginCorrectionLineId { get; set; }
         public SalesDispatchCorrectionLine OriginCorrectionLine { get; set; }
 
+        // Deel van deze regel dat door een gedeeltelijke afkeuring naar een eigen inhoudsregel (Rejected) is afgesplitst.
+        // Alleen stijgend en nooit boven ontvangst minus afgeboekt; voorraad = ontvangst - afgeboekt - afgesplitst.
+        public decimal SplitOffQuantity { get; set; }
+        public decimal SplitOffNetWeightKg { get; set; }
+
+        // Herkomst bij een afsplitsing: de afkeuringsregel waaruit deze (Rejected) inhoud is ontstaan (onveranderlijk, uniek).
+        // Zulke inhoud telt evenmin als registratie tegen de bronregel: die goederen zijn al bij de oorspronkelijke regel geteld.
+        public int? OriginRejectionLineId { get; set; }
+        public SupplyRejectionLine OriginRejectionLine { get; set; }
+
         public string QualityStatus { get; set; }  // Quarantine, Approved, Blocked, Rejected
         public string QualityReason { get; set; }  // optioneel
 
