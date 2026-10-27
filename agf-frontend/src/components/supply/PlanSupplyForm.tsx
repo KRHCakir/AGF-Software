@@ -293,7 +293,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 ) : undefined} />
             )}
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
                     <select {...fieldProps('vendorId', e('vendorId'))} value={header.vendorId} disabled={locked}
@@ -318,7 +318,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             </div>
 
             {isDirect && (
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <div>
                         <label htmlFor="customerId-input" className="text-xs font-medium text-violet-900">{t('supply_customer')} *</label>
                         <select {...fieldProps('customerId', e('customerId'))} value={header.customerId} disabled={locked}
