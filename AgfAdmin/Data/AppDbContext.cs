@@ -213,6 +213,19 @@ namespace AgfAdmin.Data
             "AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) " +
             $"AND abs(CAST(\"{quantityColumn}\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)";
 
+        // Kg op aanvoer- en orderregels (spiegel van LineWeightRules): netto en bruto leeg of positief, bruto nooit onder netto, en een
+        // bron (Calculated of Entered) precies als er kg is.
+        private static void LineWeightChecks(Microsoft.EntityFrameworkCore.Metadata.Builders.TableBuilder table, string name, string netColumn, string grossColumn)
+        {
+            table.HasCheckConstraint($"CK_{name}_Weights_Positive",
+                $"(\"{netColumn}\" IS NULL OR CAST(\"{netColumn}\" AS NUMERIC) > 0) AND (\"{grossColumn}\" IS NULL OR CAST(\"{grossColumn}\" AS NUMERIC) > 0)");
+            table.HasCheckConstraint($"CK_{name}_Weights_GrossNotBelowNet",
+                $"\"{netColumn}\" IS NULL OR \"{grossColumn}\" IS NULL OR CAST(\"{grossColumn}\" AS NUMERIC) >= CAST(\"{netColumn}\" AS NUMERIC)");
+            table.HasCheckConstraint($"CK_{name}_WeightSource_Consistent",
+                $"(\"WeightSource\" IS NULL AND \"{netColumn}\" IS NULL AND \"{grossColumn}\" IS NULL) " +
+                $"OR (\"WeightSource\" IS NOT NULL AND \"WeightSource\" IN ('Calculated', 'Entered') AND (\"{netColumn}\" IS NOT NULL OR \"{grossColumn}\" IS NOT NULL))");
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -316,11 +329,17 @@ namespace AgfAdmin.Data
                 b.Property(l => l.PalletCount).HasPrecision(18, 3);
                 b.Property(l => l.PackagesPerPallet).HasPrecision(18, 3);
                 b.Property(l => l.LoosePackages).HasPrecision(18, 3);
+                b.Property(l => l.ExpectedGrossWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.WeightSource).HasMaxLength(16);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
-                // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en ExpectedQuantity
-                // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
-                b.ToTable(t => t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", PalletInputCheck("ExpectedQuantity")));
+                b.ToTable(t =>
+                {
+                    // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en ExpectedQuantity
+                    // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
+                    t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", PalletInputCheck("ExpectedQuantity"));
+                    LineWeightChecks(t, "SupplyCommitmentLines", "ExpectedNetWeightKg", "ExpectedGrossWeightKg");
+                });
 
                 b.HasOne(l => l.SupplyCommitment)
                     .WithMany(c => c.Lines)
@@ -650,6 +669,9 @@ namespace AgfAdmin.Data
                 b.Property(l => l.PalletCount).HasPrecision(18, 3);
                 b.Property(l => l.PackagesPerPallet).HasPrecision(18, 3);
                 b.Property(l => l.LoosePackages).HasPrecision(18, 3);
+                b.Property(l => l.NetWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.GrossWeightKg).HasPrecision(18, 3);
+                b.Property(l => l.WeightSource).HasMaxLength(16);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
                 // Eén regel per variant + eenheid per order: anders worden reserveringen dubbelzinnig.
@@ -662,6 +684,7 @@ namespace AgfAdmin.Data
                     // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en Quantity
                     // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
                     t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", PalletInputCheck("Quantity"));
+                    LineWeightChecks(t, "SalesOrderLines", "NetWeightKg", "GrossWeightKg");
                 });
 
                 b.HasOne(l => l.SalesOrder)

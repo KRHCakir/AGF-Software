@@ -216,6 +216,163 @@ public class SalesOrderServiceTests : IDisposable
         }
     }
 
+    // ---- Kg op de orderregel: netto en bruto optioneel, berekend (aantal × artikelstandaard) of ingevuld ----
+
+    private CreateSalesOrderDto KgOrder(decimal quantity, decimal? netKg, decimal? grossKg, string source, Guid? requestId = null)
+    {
+        var request = Request(requestId);
+        request.Lines = new List<CreateSalesOrderLineDto> { new() { ProductVariantId = _seed.AvocadoId, Quantity = quantity, Unit = "colli", NetWeightKg = netKg, GrossWeightKg = grossKg, WeightSource = source } };
+        return request;
+    }
+
+    // Artikelstandaard 10 kg netto / 10,3 kg bruto per colli (zoals in de praktijk: 1.560 colli = 15.600 kg netto, 16.068 kg bruto).
+    private async Task SetKgDefaultsAsync(decimal? net, decimal? gross)
+    {
+        await using var db = _factory.CreateContext();
+        var variant = await db.ProductVariants.SingleAsync(v => v.Id == _seed.AvocadoId);
+        variant.DefaultNetKgPerPackage = net;
+        variant.DefaultGrossKgPerPackage = gross;
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Calculated_Kg_Is_Stored_On_The_Line_And_Shown_In_Detail_And_List()
+    {
+        await SeedAsync();
+        await SetKgDefaultsAsync(10m, 10.3m);
+        var result = await CreateAsync(KgOrder(1560m, 15600m, 16068m, "Calculated"));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal((15600m, 16068m, "Calculated"), (line.NetWeightKg, line.GrossWeightKg, line.WeightSource));
+
+        await using var db = _factory.CreateContext();
+        var service = new SalesOrderService(db);
+        var detail = Assert.Single((await service.GetAsync(result.Value.Id)).Value.Lines);
+        Assert.Equal((15600m, 16068m, "Calculated"), (detail.NetWeightKg, detail.GrossWeightKg, detail.WeightSource));
+        var listed = Assert.Single((await service.ListAsync(new SalesOrderFilter())).Value, o => o.Id == result.Value.Id);
+        Assert.Equal((15600m, 16068m), (listed.Lines[0].NetWeightKg, listed.Lines[0].GrossWeightKg));
+    }
+
+    [Fact]
+    public async Task Entered_Kg_Is_Stored_As_Given_Without_Article_Default_And_Never_Changes_The_Article()
+    {
+        await SeedAsync();
+        // Gewogen artikel zonder kg per colli (zoals Avocado · Green): de gebruiker vult zelf kg in.
+        var result = await CreateAsync(KgOrder(221m, 2210m, 2290.5m, "Entered"));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal((2210m, 2290.5m, "Entered"), (result.Value.Lines[0].NetWeightKg, result.Value.Lines[0].GrossWeightKg, result.Value.Lines[0].WeightSource));
+        // Overschreven bij een artikel mét standaard: ook Entered, en de waarde wordt niet teruggerekend.
+        await SetKgDefaultsAsync(10m, 10.3m);
+        var overridden = await CreateAsync(KgOrder(1560m, 15450.5m, 16068m, "Entered"));
+        Assert.Equal(ServiceResultStatus.Created, overridden.Status);
+        Assert.Equal((15450.5m, 16068m, "Entered"), (overridden.Value.Lines[0].NetWeightKg, overridden.Value.Lines[0].GrossWeightKg, overridden.Value.Lines[0].WeightSource));
+        // Kg zonder bron is Entered.
+        var withoutSource = await CreateAsync(KgOrder(5m, 51m, null, null));
+        Assert.Equal("Entered", withoutSource.Value.Lines[0].WeightSource);
+
+        await using var db = _factory.CreateContext();
+        var variant = await db.ProductVariants.SingleAsync(v => v.Id == _seed.AvocadoId);
+        Assert.Equal((10m, 10.3m), (variant.DefaultNetKgPerPackage, variant.DefaultGrossKgPerPackage));
+    }
+
+    [Fact]
+    public async Task A_Line_Without_Kg_Is_Allowed_And_Has_No_Weight_Source()
+    {
+        await SeedAsync();
+        await SetKgDefaultsAsync(10m, 10.3m);
+        var result = await CreateAsync(KgOrder(30m, null, null, null));
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal(((decimal?)null, (decimal?)null, (string)null), (result.Value.Lines[0].NetWeightKg, result.Value.Lines[0].GrossWeightKg, result.Value.Lines[0].WeightSource));
+    }
+
+    [Theory]
+    [InlineData("gross-below-net", "lines[0].grossWeightKg")]
+    [InlineData("net-zero", "lines[0].netWeightKg")]
+    [InlineData("gross-negative", "lines[0].grossWeightKg")]
+    [InlineData("net-four-decimals", "lines[0].netWeightKg")]
+    [InlineData("unknown-source", "lines[0].weightSource")]
+    [InlineData("source-without-kg", "lines[0].weightSource")]
+    [InlineData("calculated-wrong-net", "lines[0].netWeightKg")]
+    [InlineData("calculated-wrong-gross", "lines[0].grossWeightKg")]
+    [InlineData("calculated-without-default", "lines[0].grossWeightKg")]
+    public async Task Invalid_Kg_Is_Refused_And_Nothing_Is_Stored(string invalidCase, string expectedErrorKey)
+    {
+        await SeedAsync();
+        await SetKgDefaultsAsync(10m, invalidCase == "calculated-without-default" ? null : 10.3m);
+        var request = invalidCase switch
+        {
+            "gross-below-net" => KgOrder(10m, 100m, 99.999m, "Entered"),
+            "net-zero" => KgOrder(10m, 0m, null, "Entered"),
+            "gross-negative" => KgOrder(10m, null, -1m, "Entered"),
+            "net-four-decimals" => KgOrder(10m, 100.0001m, null, "Entered"),
+            "unknown-source" => KgOrder(10m, 100m, null, "Weighed"),
+            "source-without-kg" => KgOrder(10m, null, null, "Calculated"),
+            "calculated-wrong-net" => KgOrder(10m, 101m, 103m, "Calculated"),
+            "calculated-wrong-gross" => KgOrder(10m, 100m, 104m, "Calculated"),
+            _ => KgOrder(10m, 100m, 103m, "Calculated")
+        };
+        var result = await CreateAsync(request);
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains(expectedErrorKey, result.Errors.Keys);
+        Assert.Equal(0, await OrderCountAsync());
+    }
+
+    [Fact]
+    public async Task Order_Retry_Compares_Kg_And_Source_And_Old_Payloads_Without_Kg_Still_Replay()
+    {
+        await SeedAsync();
+        await SetKgDefaultsAsync(10m, 10.3m);
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(KgOrder(1560m, 15600m, 16068m, "Calculated", requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(KgOrder(1560m, 15600m, 16068m, "Calculated", requestId))).Status);
+        // Herhaling na een wijziging van de artikelstandaard: dezelfde opdracht, dus herkend (de controle hoort bij nieuwe invoer).
+        await SetKgDefaultsAsync(11m, 11.3m);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(KgOrder(1560m, 15600m, 16068m, "Calculated", requestId))).Status);
+        // Andere kg, andere bron of geen kg: een andere opdracht.
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(KgOrder(1560m, 15600m, 16000m, "Calculated", requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(KgOrder(1560m, 15600m, 16068m, "Entered", requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(KgOrder(1560m, null, null, null, requestId))).Status);
+
+        // Een opdracht van vóór dit veld (geen kg in de payload) blijft gelijk aan een opgeslagen regel zonder kg.
+        var oldStyle = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(Request(oldStyle))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(Request(oldStyle))).Status);
+        var withKg = Request(oldStyle);
+        withKg.Lines[0].NetWeightKg = 300m;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(withKg)).Status);
+    }
+
+    // Databasecheck buiten de service om: kg leeg of positief, bruto >= netto, en een bron precies als er kg is.
+    [Theory]
+    [InlineData("100", "103", "'Calculated'", true)]
+    [InlineData("100", "NULL", "'Entered'", true)]
+    [InlineData("NULL", "103", "'Entered'", true)]
+    [InlineData("NULL", "NULL", "NULL", true)]
+    [InlineData("100", "100", "'Entered'", true)]
+    [InlineData("100", "99.5", "'Entered'", false)]
+    [InlineData("0", "NULL", "'Entered'", false)]
+    [InlineData("NULL", "-1", "'Entered'", false)]
+    [InlineData("100", "NULL", "NULL", false)]
+    [InlineData("NULL", "NULL", "'Entered'", false)]
+    [InlineData("100", "NULL", "'Weighed'", false)]
+    public async Task Database_Check_Accepts_Positive_Kg_Gross_Not_Below_Net_And_A_Source_Only_With_Kg(string net, string gross, string source, bool accepted)
+    {
+        await SeedAsync();
+        var order = await CreateAsync(Request());
+        await using var raw = _factory.CreateContext();
+        Task<int> Insert() => raw.Database.ExecuteSqlRawAsync(
+            "INSERT INTO \"SalesOrderLines\" (\"SalesOrderId\", \"ProductVariantId\", \"Quantity\", \"Unit\", \"NetWeightKg\", \"GrossWeightKg\", \"WeightSource\", \"CreatedAt\", \"Version\") " +
+            $"VALUES ({order.Value.Id}, {_seed.AvocadoId}, 10, 'tray', {net}, {gross}, {source}, '2026-10-20 08:00:00', 0)");
+        if (accepted)
+        {
+            Assert.Equal(1, await Insert());
+        }
+        else
+        {
+            Assert.Contains("CK_SalesOrderLines_", (await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(Insert)).Message);
+        }
+    }
+
     private async Task<ServiceResult<SalesOrderDto>> CreateAsync(CreateSalesOrderDto request)
     {
         await using var db = _factory.CreateContext();

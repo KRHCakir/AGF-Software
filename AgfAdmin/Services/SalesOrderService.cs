@@ -64,11 +64,24 @@ namespace AgfAdmin.Services
                 return ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {candidate.CustomerId} belongs to an inactive relation; reactivate the relation first or choose another customer." } });
             }
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
-            var known = await _db.ProductVariants.Where(v => variantIds.Contains(v.Id)).Select(v => v.Id).ToListAsync(cancellationToken);
-            var missing = variantIds.Except(known).Cast<int?>().FirstOrDefault();
+            var known = await _db.ProductVariants.Where(v => variantIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.DefaultNetKgPerPackage, v.DefaultGrossKgPerPackage }).ToDictionaryAsync(v => v.Id, cancellationToken);
+            var missing = variantIds.Except(known.Keys).Cast<int?>().FirstOrDefault();
             if (missing != null)
             {
                 return ServiceResult<SalesOrderDto>.NotFound($"Product variant {missing} does not exist.");
+            }
+
+            // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var variant = known[lines[i].ProductVariantId];
+                LineWeightRules.CalculatedErrors(lines[i].Quantity, lines[i].NetWeightKg, lines[i].GrossWeightKg, lines[i].WeightSource,
+                    variant.DefaultNetKgPerPackage, variant.DefaultGrossKgPerPackage, $"lines[{i}]", "netWeightKg", "grossWeightKg", errors, ValidationErrors.Add);
+            }
+            if (errors.Count > 0)
+            {
+                return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
             }
 
             _db.SalesOrders.Add(candidate);
@@ -164,6 +177,8 @@ namespace AgfAdmin.Services
                     }
                     // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet + losse verpakkingen, of moet daar exact aan gelijk zijn.
                     var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.Quantity, key, "quantity", errors, ValidationErrors.Add);
+                    // Kg optioneel: positief, bruto >= netto; een bron alleen met kg (zonder bron = Entered).
+                    var weightSource = LineWeightRules.Validate(line.NetWeightKg, line.GrossWeightKg, line.WeightSource, key, "netWeightKg", "grossWeightKg", errors, ValidationErrors.Add);
                     if (errors.Count > before || total == null)
                     {
                         continue;
@@ -174,7 +189,8 @@ namespace AgfAdmin.Services
                         ValidationErrors.Add(errors, key, "The same product variant and unit occur more than once.");
                         continue;
                     }
-                    lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet, LoosePackages = line.LoosePackages });
+                    lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet, LoosePackages = line.LoosePackages,
+                        NetWeightKg = line.NetWeightKg, GrossWeightKg = line.GrossWeightKg, WeightSource = weightSource });
                 }
             }
 
@@ -203,7 +219,8 @@ namespace AgfAdmin.Services
             };
         }
 
-        // Strikt: klant, genormaliseerde referentie, leverdatum (UTC, microseconden), actor en de regels in volgorde.
+        // Strikt: klant, genormaliseerde referentie, leverdatum (UTC, microseconden), actor en de regels in volgorde (met kg en bron;
+        // een oudere opdracht zonder kg komt overeen met een regel zonder kg).
         private static ServiceResult<SalesOrderDto> ResultForRetry(SalesOrder existing, SalesOrder candidate)
         {
             var existingLines = existing.Lines.OrderBy(l => l.Id).ToList();
@@ -220,6 +237,9 @@ namespace AgfAdmin.Services
                     && pair.First.PalletCount == pair.Second.PalletCount
                     && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                     && pair.First.LoosePackages == pair.Second.LoosePackages
+                    && pair.First.NetWeightKg == pair.Second.NetWeightKg
+                    && pair.First.GrossWeightKg == pair.Second.GrossWeightKg
+                    && string.Equals(pair.First.WeightSource, pair.Second.WeightSource, StringComparison.Ordinal)
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
             return same
@@ -689,6 +709,9 @@ namespace AgfAdmin.Services
                     PalletCount = line.PalletCount,
                     PackagesPerPallet = line.PackagesPerPallet,
                     LoosePackages = line.LoosePackages,
+                    NetWeightKg = line.NetWeightKg,
+                    GrossWeightKg = line.GrossWeightKg,
+                    WeightSource = line.WeightSource,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
                     AllocatedQuantity = allocatedQuantity,

@@ -57,6 +57,21 @@ namespace AgfAdmin.Services
                 return ServiceResult<SupplyCommitmentDto>.NotFound(notFound);
             }
 
+            // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
+            var variantIds = lines.Select(l => l.ProductVariantId).Distinct().ToList();
+            var defaults = await _db.ProductVariants.AsNoTracking().Where(v => variantIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.DefaultNetKgPerPackage, v.DefaultGrossKgPerPackage }).ToDictionaryAsync(v => v.Id, cancellationToken);
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var variant = defaults[lines[i].ProductVariantId];
+                LineWeightRules.CalculatedErrors(lines[i].ExpectedQuantity, lines[i].ExpectedNetWeightKg, lines[i].ExpectedGrossWeightKg, lines[i].WeightSource,
+                    variant.DefaultNetKgPerPackage, variant.DefaultGrossKgPerPackage, $"lines[{i}]", "expectedNetWeightKg", "expectedGrossWeightKg", errors, AddError);
+            }
+            if (errors.Count > 0)
+            {
+                return ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+            }
+
             _db.SupplyCommitments.Add(candidate);
             try
             {
@@ -245,10 +260,8 @@ namespace AgfAdmin.Services
                 AddError(errors, $"{key}.expectedUnit", $"Expected unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}.");
             }
 
-            if (line.ExpectedNetWeightKg != null && !SupplyRules.IsPositiveDecimal18_3(line.ExpectedNetWeightKg.Value))
-            {
-                AddError(errors, $"{key}.expectedNetWeightKg", "Expected net weight, when given, must be positive and may have at most 3 decimals.");
-            }
+            // Kg optioneel: positief, bruto >= netto; een bron alleen met kg (zonder bron = Entered, zoals oudere opdrachten).
+            var weightSource = LineWeightRules.Validate(line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg, line.WeightSource, key, "expectedNetWeightKg", "expectedGrossWeightKg", errors, AddError);
 
             var lotNumber = ValidateText(line.LotNumber, required: false, MaxLotNumberLength, $"{key}.lotNumber", errors);
 
@@ -269,6 +282,8 @@ namespace AgfAdmin.Services
                 LoosePackages = line.LoosePackages,
                 ExpectedUnit = line.ExpectedUnit,
                 ExpectedNetWeightKg = line.ExpectedNetWeightKg,
+                ExpectedGrossWeightKg = line.ExpectedGrossWeightKg,
+                WeightSource = weightSource,
                 LotNumber = lotNumber
             };
         }
@@ -373,6 +388,8 @@ namespace AgfAdmin.Services
                 && pair.First.ExpectedQuantity == pair.Second.ExpectedQuantity
                 && string.Equals(pair.First.ExpectedUnit, pair.Second.ExpectedUnit, StringComparison.Ordinal)
                 && pair.First.ExpectedNetWeightKg == pair.Second.ExpectedNetWeightKg
+                && pair.First.ExpectedGrossWeightKg == pair.Second.ExpectedGrossWeightKg
+                && string.Equals(pair.First.WeightSource, pair.Second.WeightSource, StringComparison.Ordinal)
                 && pair.First.PalletCount == pair.Second.PalletCount
                 && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                 && pair.First.LoosePackages == pair.Second.LoosePackages
@@ -422,6 +439,8 @@ namespace AgfAdmin.Services
                     ExpectedQuantity = l.ExpectedQuantity,
                     ExpectedUnit = l.ExpectedUnit,
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
+                    ExpectedGrossWeightKg = l.ExpectedGrossWeightKg,
+                    WeightSource = l.WeightSource,
                     WeightMethod = l.ProductVariant?.WeightMethod ?? WeightRules.Weighed,
                     DefaultNetKgPerPackage = l.ProductVariant?.DefaultNetKgPerPackage,
                     DefaultGrossKgPerPackage = l.ProductVariant?.DefaultGrossKgPerPackage,

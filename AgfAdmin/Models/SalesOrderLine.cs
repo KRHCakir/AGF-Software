@@ -20,6 +20,11 @@ namespace AgfAdmin.Models
         public decimal? PackagesPerPallet { get; set; }
         // Losse verpakkingen naast de hele pallets ("3 pallets × 120 + 15 colli"); alleen bij palletinvoer, heel en >= 0.
         public decimal? LoosePackages { get; set; }
+        // Verwachte netto en bruto kg van de regel (optioneel; het gewogen gewicht volgt bij levering). Bruto nooit onder netto.
+        // WeightSource: null zonder kg, Calculated = aantal × artikelstandaard, Entered = door de gebruiker opgegeven (LineWeightRules).
+        public decimal? NetWeightKg { get; set; }
+        public decimal? GrossWeightKg { get; set; }
+        public string WeightSource { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

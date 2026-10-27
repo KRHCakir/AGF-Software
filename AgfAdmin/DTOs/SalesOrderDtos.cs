@@ -22,6 +22,11 @@ namespace AgfAdmin.DTOs
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
         public decimal? LoosePackages { get; set; }
+        // Optioneel: verwachte netto en bruto kg (> 0, hooguit 3 decimalen, bruto >= netto) met de bron Calculated of Entered
+        // (alleen met kg; weggelaten = Entered). Calculated moet exact aantal × artikelstandaard zijn (LineWeightRules).
+        public decimal? NetWeightKg { get; set; }
+        public decimal? GrossWeightKg { get; set; }
+        public string WeightSource { get; set; }
     }
 
     public sealed class SalesOrderFilter
@@ -90,6 +95,10 @@ namespace AgfAdmin.DTOs
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
         public decimal? LoosePackages { get; set; }
+        // Verwachte netto en bruto kg van de regel (null = niet opgegeven) en hun bron: Calculated, Entered of null zonder kg.
+        public decimal? NetWeightKg { get; set; }
+        public decimal? GrossWeightKg { get; set; }
+        public string WeightSource { get; set; }
         // Alleen Active Physical verkoopreserveringen (magazijnvoorraad); nooit omgerekend.
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }

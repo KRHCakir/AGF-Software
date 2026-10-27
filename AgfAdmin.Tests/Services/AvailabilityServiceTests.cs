@@ -54,6 +54,7 @@ public class AvailabilityServiceTests : IDisposable
             ExpectedQuantity = quantity,
             ExpectedUnit = unit,
             ExpectedNetWeightKg = declaredKg,
+            WeightSource = declaredKg == null ? null : "Entered",
             LotNumber = "PROVISIONAL"
         };
 

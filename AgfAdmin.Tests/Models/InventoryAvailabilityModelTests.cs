@@ -297,7 +297,8 @@ public class InventoryAvailabilityModelTests : IDisposable
                 ProductVariantId = graph.ProductVariantId,
                 ExpectedQuantity = 12.345m,
                 ExpectedUnit = "box",
-                ExpectedNetWeightKg = 67.890m
+                ExpectedNetWeightKg = 67.890m,
+                WeightSource = "Entered"
             };
             db.SupplyCommitmentLines.Add(line);
             await db.SaveChangesAsync();
@@ -378,6 +379,9 @@ public class InventoryAvailabilityModelTests : IDisposable
     [Theory]
     [InlineData(typeof(SupplyCommitmentLine), nameof(SupplyCommitmentLine.ExpectedQuantity))]
     [InlineData(typeof(SupplyCommitmentLine), nameof(SupplyCommitmentLine.ExpectedNetWeightKg))]
+    [InlineData(typeof(SupplyCommitmentLine), nameof(SupplyCommitmentLine.ExpectedGrossWeightKg))]
+    [InlineData(typeof(SalesOrderLine), nameof(SalesOrderLine.NetWeightKg))]
+    [InlineData(typeof(SalesOrderLine), nameof(SalesOrderLine.GrossWeightKg))]
     [InlineData(typeof(StockMovement), nameof(StockMovement.Quantity))]
     [InlineData(typeof(StockMovement), nameof(StockMovement.NetWeightKg))]
     [InlineData(typeof(StockReservation), nameof(StockReservation.Quantity))]

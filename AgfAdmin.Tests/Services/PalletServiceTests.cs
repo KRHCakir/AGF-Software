@@ -48,6 +48,7 @@ public class PalletServiceTests : IDisposable
             ExpectedQuantity = 100m,
             ExpectedUnit = unit,
             ExpectedNetWeightKg = 400m,
+            WeightSource = "Entered",
             LotNumber = "PROVISIONAL"
         };
 
