@@ -11,4 +11,6 @@ test('the ratio of a stored line: "3 pallets × 120 + 15 colli"; without loose c
     assert.equal(palletBreakdownLabel({ palletCount: 3, packagesPerPallet: 120, loosePackages: 0 }, 'colli', t, 'nl'), '3 pallets × 120');
     assert.equal(palletBreakdownLabel({ palletCount: 3.5, packagesPerPallet: 120 }, 'colli', t, 'nl'), '3,5 pallets × 120');
     assert.equal(palletBreakdownLabel({ palletCount: null, packagesPerPallet: null }, 'colli', t, 'nl'), null);
+    // Aanvoerregel zonder eenheid (optioneel tijdens de overgang): geen losse spatie achteraan.
+    assert.equal(palletBreakdownLabel({ palletCount: 3, packagesPerPallet: 120, loosePackages: 15 }, null, t, 'nl'), '3 pallets × 120 + 15');
 });

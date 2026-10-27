@@ -8,6 +8,6 @@ export function palletBreakdownLabel(line: { palletCount: number | null; package
     if (line.palletCount === null || line.packagesPerPallet === null) return null;
     const values = { pallets: formatQuantity(line.palletCount, locale), perPallet: formatQuantity(line.packagesPerPallet, locale) };
     return line.loosePackages
-        ? t('pallet_breakdown_loose', { ...values, loose: formatQuantity(line.loosePackages, locale), unit: unit === null ? '' : t(unitLabelKey(unit)).toLowerCase() })
+        ? t('pallet_breakdown_loose', { ...values, loose: formatQuantity(line.loosePackages, locale), unit: unit === null ? '' : t(unitLabelKey(unit)).toLowerCase() }).trim()
         : t('pallet_breakdown', values);
 }
