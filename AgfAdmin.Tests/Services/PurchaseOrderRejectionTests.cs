@@ -157,6 +157,65 @@ public class PurchaseOrderRejectionTests : IDisposable
     }
 
     [Fact]
+    public async Task ClaimDiscount_All_BlocksLot_OrderNotRejected_ReleasableViaQuality_AndNotRejectedTwice()
+    {
+        var seed = await PurchaseOrderTestData.SeedAsync(_factory);
+        var order = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed, quantity: 40m));
+        var content = await PurchaseOrderTestData.ReceiveAsync(_factory, order.Id, 40m, 160m);
+
+        var result = await RejectAsync(order.Id, content, 40m, decision: "ClaimDiscount");
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        // De partij blijft: de order is Ontvangen, niet Afgekeurd; wel creditnota verwacht.
+        Assert.Equal("Received", result.Value.Status);
+        Assert.NotEqual("Rejected", result.Value.StoredStatus);
+        Assert.Equal(40m, result.Value.RejectedQuantity);
+        Assert.Equal("CreditNoteExpected", result.Value.InvoiceIndicator);
+        var line = Assert.Single(result.Value.Receipts);
+        Assert.Equal("Blocked", line.QualityStatus);
+        Assert.False(line.Rejectable);
+
+        // Nog eens afkeuren zou dubbel tellen.
+        Assert.Equal(ServiceResultStatus.Conflict, (await RejectAsync(order.Id, content, 40m)).Status);
+
+        await using var db = _factory.CreateContext();
+        var supply = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = seed.HassId })).Value.Variants.Single().WarehouseSupply.Single();
+        Assert.Equal(0m, supply.AvailableAfterReservations.Quantity);
+        Assert.Equal(0m, supply.Warehouse.Rejected.Quantity);
+
+        // Vrijgeven via de keuring maakt de partij weer verkoopbaar.
+        var stored = await db.PalletContentLines.AsNoTracking().SingleAsync(c => c.Id == content);
+        var release = await new PalletService(db).ChangeQualityStatusAsync(stored.PalletId, content, new ChangeQualityStatusDto
+        {
+            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = stored.Version, ToStatus = "Approved", ActorReference = "Jan", Reason = "Korting afgesproken"
+        });
+        Assert.Equal(ServiceResultStatus.Ok, release.Status);
+        var after = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = seed.HassId })).Value.Variants.Single().WarehouseSupply.Single();
+        Assert.Equal(40m, after.AvailableAfterReservations.Quantity);
+        Assert.Equal("Received", (await DetailAsync(order.Id)).Status);
+    }
+
+    [Fact]
+    public async Task ClaimDiscount_Partial_SplitsBlockedLine_ThatIsNotRejectableAgain()
+    {
+        var seed = await PurchaseOrderTestData.SeedAsync(_factory);
+        var order = await PurchaseOrderTestData.CreateOrderAsync(_factory, PurchaseOrderTestData.OrderRequest(seed, quantity: 20m));
+        var content = await PurchaseOrderTestData.ReceiveAsync(_factory, order.Id, 20m, 80m);
+
+        var result = await RejectAsync(order.Id, content, 10m, decision: "ClaimDiscount");
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal(40m, result.Value.RejectedNetWeightKg);
+        var split = result.Value.Receipts.Single(r => r.Origin == "RejectionSplit");
+        Assert.Equal("Blocked", split.QualityStatus);
+        Assert.False(split.Rejectable);
+        Assert.Equal(ServiceResultStatus.Conflict, (await RejectAsync(order.Id, split.PalletContentLineId, 10m)).Status);
+
+        // De rest gaat terug: alles wat weg is, is maar de helft, dus de order is niet Afgekeurd.
+        var rest = await RejectAsync(order.Id, content, 10m);
+        Assert.Equal("Received", rest.Value.Status);
+        Assert.Equal(20m, rest.Value.RejectedQuantity);
+    }
+
+    [Fact]
     public async Task Reject_MoreThanOnHandOrFree_IsRefused_AndDispatchedPartIsNotRejectable()
     {
         var seed = await PurchaseOrderTestData.SeedAsync(_factory);

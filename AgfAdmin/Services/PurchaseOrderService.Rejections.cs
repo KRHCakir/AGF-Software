@@ -22,6 +22,8 @@ namespace AgfAdmin.Services
         // wordt een eigen inhoudsregel (Rejected, herkomst = afkeuringsregel) op dezelfde pallet, zoals correctie-inhoud bij een
         // verzendcorrectie. Zo blijft kwaliteit per inhoudsregel, telt de ontvangst nooit dubbel en blijft de palletvoorraad gelijk.
         // Alles wat ontvangen is afgekeurd: de order wordt Rejected en telt niet meer als verwacht.
+        // Korting claimen houdt de partij: de inhoud (of het afgesplitste deel) wordt Blocked in plaats van Rejected, is later vrij te geven
+        // via de keuring en telt niet mee voor "alles afgekeurd". Inhoud die al onder een afkeuring valt, wordt nooit nog eens afgekeurd.
         public async Task<ServiceResult<PurchaseOrderDetailDto>> RejectAsync(int id, RejectPurchaseOrderDto request, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, List<string>>();
@@ -54,6 +56,11 @@ namespace AgfAdmin.Services
                 .Where(c => contentIds.Contains(c.Id))
                 .ToListAsync(cancellationToken);
             var reserved = await ReservedByContentAsync(contentIds, cancellationToken);
+            var wholeRejected = (await _db.SupplyRejectionLines.AsNoTracking()
+                .Where(l => contentIds.Contains(l.PalletContentLineId) && !l.SplitOff)
+                .Select(l => l.PalletContentLineId)
+                .ToListAsync(cancellationToken)).ToHashSet();
+            var targetStatus = PurchaseOrderRules.RejectionQualityStatus(command.Decision);
 
             var now = DateTime.UtcNow;
             var rejection = new SupplyRejection
@@ -87,6 +94,10 @@ namespace AgfAdmin.Services
                 if (content.QualityStatus == PalletRules.QualityRejected)
                 {
                     return ServiceResult<PurchaseOrderDetailDto>.Conflict($"Content line {content.Id} is already rejected.");
+                }
+                if (PurchaseOrderRules.IsCoveredByRejection(content.OriginRejectionLineId, wholeRejected.Contains(content.Id)))
+                {
+                    return ServiceResult<PurchaseOrderDetailDto>.Conflict($"Content line {content.Id} is already covered by a rejection; change its quality on the pallet instead.");
                 }
 
                 var onHand = ReservationRules.OnHandQuantity(content.Quantity, content.DispatchedQuantity, content.SplitOffQuantity);
@@ -146,7 +157,7 @@ namespace AgfAdmin.Services
                 if (whole)
                 {
                     var oldValue = Snapshot(new { qualityStatus = content.QualityStatus, qualityReason = content.QualityReason, version = content.Version });
-                    content.QualityStatus = PalletRules.QualityRejected;
+                    content.QualityStatus = targetStatus;
                     content.QualityReason = qualityReason;
                     _db.PalletAuditEvents.Add(new PalletAuditEvent
                     {
@@ -154,7 +165,7 @@ namespace AgfAdmin.Services
                         PalletContentLineId = content.Id,
                         EventType = PalletService.QualityStatusChangedEvent,
                         OldValue = oldValue,
-                        NewValue = Snapshot(new { qualityStatus = PalletRules.QualityRejected, qualityReason }),
+                        NewValue = Snapshot(new { qualityStatus = targetStatus, qualityReason }),
                         Reason = qualityReason,
                         ActorReference = command.Actor,
                         OccurredAt = now
@@ -177,7 +188,7 @@ namespace AgfAdmin.Services
                         WeightMethod = content.WeightMethod,
                         NetKgPerPackage = content.NetKgPerPackage,
                         Ggn = content.Ggn,
-                        QualityStatus = PalletRules.QualityRejected,
+                        QualityStatus = targetStatus,
                         QualityReason = qualityReason,
                         OriginRejectionLine = line,
                         CreatedAt = now
@@ -218,7 +229,8 @@ namespace AgfAdmin.Services
             // Alles wat ontvangen is afgekeurd: de order is Afgekeurd en telt niet meer als verwachte aanvoer.
             var facts = (await LoadFactsAsync(new List<int> { id }, cancellationToken)).For(id);
             var receivedQuantity = facts.Lines.Sum(l => l.ReceivedAllUnitsQuantity);
-            if (PurchaseOrderRules.IsFullyRejected(receivedQuantity, facts.RejectedQuantity + rejection.Lines.Sum(l => l.Quantity))
+            var removedNow = PurchaseOrderRules.KeepsGoods(command.Decision) ? 0m : rejection.Lines.Sum(l => l.Quantity);
+            if (PurchaseOrderRules.IsFullyRejected(receivedQuantity, facts.RemovedQuantity + removedNow)
                 && commitment.Status is SupplyRules.StatusExpected or SupplyRules.StatusPartiallyReceived or SupplyRules.StatusReceived)
             {
                 commitment.Status = SupplyRules.StatusRejected;

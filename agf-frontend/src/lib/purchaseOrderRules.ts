@@ -29,6 +29,21 @@ export function isFullyRejected(receivedQuantity: number, rejectedQuantity: numb
     return receivedQuantity > 0 && rejectedQuantity >= receivedQuantity;
 }
 
+// Orderregel: elk aantal met zijn eigen kg, zodat het bestelde gewicht nooit naast het ontvangen aantal staat.
+// Ontvangen kg alleen als er iets ontvangen is; afgekeurd alleen als er iets afgekeurd is.
+export type LineAmountPart = { key: 'po_line_ordered' | 'po_line_received' | 'po_line_rejected'; quantity: number; kg: number | null };
+
+export function lineAmountParts(line: {
+    expectedQuantity: number; expectedNetWeightKg: number | null; receivedQuantity: number; receivedNetWeightKg: number; rejectedQuantity: number; rejectedNetWeightKg: number;
+}): LineAmountPart[] {
+    const parts: LineAmountPart[] = [
+        { key: 'po_line_ordered', quantity: line.expectedQuantity, kg: line.expectedNetWeightKg },
+        { key: 'po_line_received', quantity: line.receivedQuantity, kg: line.receivedQuantity > 0 ? line.receivedNetWeightKg : null },
+    ];
+    if (line.rejectedQuantity > 0) parts.push({ key: 'po_line_rejected', quantity: line.rejectedQuantity, kg: line.rejectedNetWeightKg });
+    return parts;
+}
+
 export function expectsCreditNote(decision: string): boolean {
     return decision === 'ReturnToSupplier' || decision === 'ClaimDiscount';
 }

@@ -159,12 +159,14 @@ namespace AgfAdmin.Services
                 .AsSplitQuery()
                 .ToListAsync(cancellationToken);
 
+            var wholeRejected = rejections.SelectMany(r => r.Lines).Where(l => !l.SplitOff).Select(l => l.PalletContentLineId).ToHashSet();
             var receipts = contents.Select(c =>
             {
                 var (rq, rkg) = reserved.GetValueOrDefault(c.Id);
                 var onHand = ReservationRules.OnHandQuantity(c.Quantity, c.DispatchedQuantity, c.SplitOffQuantity);
                 var onHandKg = ReservationRules.OnHandQuantity(c.NetWeightKg, c.DispatchedNetWeightKg, c.SplitOffNetWeightKg);
-                var rejectable = c.PalletStatus == PalletRules.StatusReceived && c.QualityStatus != PalletRules.QualityRejected && onHand - rq > 0m;
+                var rejectable = c.PalletStatus == PalletRules.StatusReceived && c.QualityStatus != PalletRules.QualityRejected && onHand - rq > 0m
+                    && !PurchaseOrderRules.IsCoveredByRejection(c.OriginRejectionLineId, wholeRejected.Contains(c.Id));
                 return new PurchaseOrderReceiptLineDto
                 {
                     PalletContentLineId = c.Id,
@@ -300,6 +302,8 @@ namespace AgfAdmin.Services
             public decimal ReceivedAllUnitsQuantity { get; set; }
             public decimal RejectedQuantity { get; set; }
             public decimal RejectedNetWeightKg { get; set; }
+            // Afgekeurd met terugsturen of vernietigen (zonder korting claimen): bepaalt "alles afgekeurd".
+            public decimal RemovedQuantity { get; set; }
         }
 
         private sealed record RefFact(int Id, int SupplyCommitmentId, string Kind, string InvoiceNumber, DateOnly? InvoiceDate, decimal? AmountExclVat, int? IncomingInvoiceId, string ActorReference, DateTime CreatedAt);
@@ -311,10 +315,11 @@ namespace AgfAdmin.Services
             public List<(string Decision, DateTime RejectedAt)> Rejections { get; } = new();
             public decimal RejectedQuantity => Lines.Sum(l => l.RejectedQuantity);
             public decimal RejectedNetWeightKg => Lines.Sum(l => l.RejectedNetWeightKg);
+            public decimal RemovedQuantity => Lines.Sum(l => l.RemovedQuantity);
 
             // Volledig afgekeurd telt ook als de opgeslagen status (nog) niet is bijgewerkt.
             public string Status(string storedStatus) =>
-                storedStatus != SupplyRules.StatusCancelled && PurchaseOrderRules.IsFullyRejected(Lines.Sum(l => l.ReceivedAllUnitsQuantity), RejectedQuantity)
+                storedStatus != SupplyRules.StatusCancelled && PurchaseOrderRules.IsFullyRejected(Lines.Sum(l => l.ReceivedAllUnitsQuantity), RemovedQuantity)
                     ? PurchaseOrderRules.OrderRejected
                     : PurchaseOrderRules.OrderStatus(storedStatus, Lines.Select(l => (l.ExpectedQuantity, l.ReceivedQuantity)));
 
@@ -351,7 +356,7 @@ namespace AgfAdmin.Services
                 .Select(c => new { c.SupplyCommitmentLineId, c.Quantity, c.Unit, c.NetWeightKg })
                 .ToListAsync(cancellationToken);
             var rejected = await _db.SupplyRejectionLines.AsNoTracking().Where(l => ids.Contains(l.SupplyRejection.SupplyCommitmentId))
-                .Select(l => new { l.SupplyCommitmentLineId, l.Quantity, l.NetWeightKg })
+                .Select(l => new { l.SupplyCommitmentLineId, l.Quantity, l.NetWeightKg, l.SupplyRejection.Decision })
                 .ToListAsync(cancellationToken);
             var rejections = await _db.SupplyRejections.AsNoTracking().Where(r => ids.Contains(r.SupplyCommitmentId))
                 .Select(r => new { r.SupplyCommitmentId, r.Decision, r.RejectedAt })
@@ -393,6 +398,7 @@ namespace AgfAdmin.Services
                 if (!byLine.TryGetValue(line.SupplyCommitmentLineId, out var fact)) continue;
                 fact.RejectedQuantity += line.Quantity;
                 fact.RejectedNetWeightKg += line.NetWeightKg;
+                if (!PurchaseOrderRules.KeepsGoods(line.Decision)) fact.RemovedQuantity += line.Quantity;
             }
             foreach (var rejection in rejections) Order(rejection.SupplyCommitmentId).Rejections.Add((rejection.Decision, rejection.RejectedAt));
             foreach (var reference in refs) Order(reference.SupplyCommitmentId).Refs.Add(reference);

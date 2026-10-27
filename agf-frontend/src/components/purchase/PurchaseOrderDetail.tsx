@@ -3,7 +3,7 @@
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
-import { CHANNEL_LABEL_KEYS, DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey } from '../../lib/purchaseOrderRules';
+import { CHANNEL_LABEL_KEYS, DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 import ReceiptsSection from './ReceiptsSection';
@@ -53,9 +53,11 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                             <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                             {line.lotNumber && <span className="text-gray-600"> · {line.lotNumber}</span>}
                             <span className="block font-mono text-gray-800">
-                                {t('po_line_amounts', { ordered: qty(line.expectedQuantity), received: qty(line.receivedQuantity) })}
-                                {line.expectedNetWeightKg !== null && <> · {formatKg(line.expectedNetWeightKg, locale)}</>}
-                                {line.rejectedQuantity > 0 && <span className="text-red-800"> · {t('po_line_rejected', { rejected: qty(line.rejectedQuantity) })}</span>}
+                                {lineAmountParts(line).map((part, index) => (
+                                    <span key={part.key} className={part.key === 'po_line_rejected' ? 'text-red-800' : undefined}>
+                                        {index > 0 && ' · '}{t(part.key, { quantity: qty(part.quantity) })}{part.kg !== null && <> · {formatKg(part.kg, locale)}</>}
+                                    </span>
+                                ))}
                             </span>
                         </li>
                     ))}

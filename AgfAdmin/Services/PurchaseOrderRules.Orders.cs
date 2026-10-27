@@ -18,6 +18,14 @@ namespace AgfAdmin.Services
         // Na terugsturen of korting claimen hoort er een creditnota van de leverancier te komen; bij vernietigen niet.
         public static bool ExpectsCreditNote(string decision) => decision is DecisionReturnToSupplier or DecisionClaimDiscount;
 
+        // Korting claimen houdt de partij: die gaat naar Blocked (later vrij te geven). Terugsturen en vernietigen keuren definitief af.
+        public static bool KeepsGoods(string decision) => decision == DecisionClaimDiscount;
+
+        public static string RejectionQualityStatus(string decision) => KeepsGoods(decision) ? PalletRules.QualityBlocked : PalletRules.QualityRejected;
+
+        // Afgesplitste inhoud en inhoud die al in zijn geheel is afgekeurd vallen al onder een afkeuring; nog eens afkeuren zou dubbel tellen.
+        public static bool IsCoveredByRejection(int? originRejectionLineId, bool wholeRejected) => originRejectionLineId != null || wholeRejected;
+
         // Weergavestatus van de inkooporder (los van de opgeslagen Status, die bij ontvangst niet wordt bijgewerkt):
         // Ordered (Besteld), PartiallyReceived, Received, Rejected (Afgekeurd), Cancelled. Delivered (DirectTrade bij de klant
         // afgeleverd) telt voor de inkoop als Received: de goederen zijn geleverd.
@@ -48,6 +56,7 @@ namespace AgfAdmin.Services
         }
 
         // Volledig afgekeurd: er is iets ontvangen en alles wat ontvangen is, is afgekeurd (niets goedgekeurd verkocht of over).
+        // Korting claimen telt hier niet mee: die partij blijft.
         public static bool IsFullyRejected(decimal receivedQuantity, decimal rejectedQuantity) =>
             receivedQuantity > 0m && rejectedQuantity >= receivedQuantity;
 
