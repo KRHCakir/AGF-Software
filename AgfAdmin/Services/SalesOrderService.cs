@@ -42,6 +42,17 @@ namespace AgfAdmin.Services
                 return await WithCreditWarningAsync(ResultForRetry(existing, candidate), cancellationToken);
             }
 
+            // Nieuwe invoer: hele pallets (na de replaycontrole, zodat een eerder opgeslagen opdracht nog steeds herkend wordt).
+            var lines = candidate.Lines.ToList();
+            for (var i = 0; i < lines.Count; i++)
+            {
+                PackagingRules.WholePalletErrors(lines[i].PalletCount, lines[i].PackagesPerPallet, $"lines[{i}]", errors, ValidationErrors.Add);
+            }
+            if (errors.Count > 0)
+            {
+                return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
+            }
+
             var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
             if (customerState == null)
             {
@@ -151,8 +162,8 @@ namespace AgfAdmin.Services
                     {
                         ValidationErrors.Add(errors, $"{key}.unit", $"Unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}.");
                     }
-                    // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet, of moet daar exact aan gelijk zijn.
-                    var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.Quantity, key, "quantity", errors, ValidationErrors.Add);
+                    // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet + losse verpakkingen, of moet daar exact aan gelijk zijn.
+                    var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.Quantity, key, "quantity", errors, ValidationErrors.Add);
                     if (errors.Count > before || total == null)
                     {
                         continue;
@@ -163,7 +174,7 @@ namespace AgfAdmin.Services
                         ValidationErrors.Add(errors, key, "The same product variant and unit occur more than once.");
                         continue;
                     }
-                    lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet });
+                    lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet, LoosePackages = line.LoosePackages });
                 }
             }
 
@@ -208,6 +219,7 @@ namespace AgfAdmin.Services
                     && pair.First.Quantity == pair.Second.Quantity
                     && pair.First.PalletCount == pair.Second.PalletCount
                     && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
+                    && pair.First.LoosePackages == pair.Second.LoosePackages
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
             return same
@@ -676,6 +688,7 @@ namespace AgfAdmin.Services
                     Unit = line.Unit,
                     PalletCount = line.PalletCount,
                     PackagesPerPallet = line.PackagesPerPallet,
+                    LoosePackages = line.LoosePackages,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
                     AllocatedQuantity = allocatedQuantity,

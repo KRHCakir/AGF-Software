@@ -203,6 +203,14 @@ namespace AgfAdmin.Data
             table.HasCheckConstraint($"CK_{name}_TradeConditions_Allowed", "\"TradeConditions\" IS NULL OR \"TradeConditions\" IN ('Own', 'Frugiventa', 'Cofreurop', 'Other')");
         }
 
+        // Palletinvoer op aanvoer- en orderregels (spiegel van PackagingRules): alles leeg, of pallets en per pallet positief met
+        // losse verpakkingen leeg of heel en >= 0, en het totaal exact pallets × per pallet + los (3 decimalen).
+        private static string PalletInputCheck(string quantityColumn) =>
+            "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
+            "AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 " +
+            "AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) " +
+            $"AND abs(CAST(\"{quantityColumn}\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)";
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -305,13 +313,12 @@ namespace AgfAdmin.Data
                 b.Property(l => l.ExpectedNetWeightKg).HasPrecision(18, 3);
                 b.Property(l => l.PalletCount).HasPrecision(18, 3);
                 b.Property(l => l.PackagesPerPallet).HasPrecision(18, 3);
+                b.Property(l => l.LoosePackages).HasPrecision(18, 3);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
-                // Palletinvoer: beide leeg, of beide positief met ExpectedQuantity exact gelijk aan het product (3 decimalen).
-                b.ToTable(t => t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent",
-                    "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
-                    "AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 " +
-                    "AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC)) < 0.001)"));
+                // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en ExpectedQuantity
+                // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
+                b.ToTable(t => t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", PalletInputCheck("ExpectedQuantity")));
 
                 b.HasOne(l => l.SupplyCommitment)
                     .WithMany(c => c.Lines)
@@ -640,6 +647,7 @@ namespace AgfAdmin.Data
                 b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
                 b.Property(l => l.PalletCount).HasPrecision(18, 3);
                 b.Property(l => l.PackagesPerPallet).HasPrecision(18, 3);
+                b.Property(l => l.LoosePackages).HasPrecision(18, 3);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
                 // Eén regel per variant + eenheid per order: anders worden reserveringen dubbelzinnig.
@@ -649,11 +657,9 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
-                    // Palletinvoer: beide leeg, of beide positief met Quantity exact gelijk aan het product (3 decimalen).
-                    t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent",
-                        "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL " +
-                        "AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 " +
-                        "AND abs(CAST(\"Quantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC)) < 0.001)");
+                    // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en Quantity
+                    // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
+                    t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", PalletInputCheck("Quantity"));
                 });
 
                 b.HasOne(l => l.SalesOrder)

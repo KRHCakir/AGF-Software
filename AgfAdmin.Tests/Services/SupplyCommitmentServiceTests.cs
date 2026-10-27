@@ -67,14 +67,125 @@ public class SupplyCommitmentServiceTests : IDisposable
 
     // ---- Palletinvoer: pallets × verpakkingen per pallet; het totaal blijft de bron ----
 
-    private static CreateSupplyCommitmentDto PalletRequest(Seed seed, decimal? quantity = null, decimal? palletCount = 9m, decimal? packagesPerPallet = 120m, Guid? requestId = null)
+    private static CreateSupplyCommitmentDto PalletRequest(Seed seed, decimal? quantity = null, decimal? palletCount = 9m, decimal? packagesPerPallet = 120m, Guid? requestId = null, decimal? loosePackages = null)
     {
         var request = WarehouseRequest(seed, requestId);
         request.Lines = new List<CreateSupplyCommitmentLineDto>
         {
-            new() { ProductVariantId = seed.VariantSize6Id, ExpectedQuantity = quantity, PalletCount = palletCount, PackagesPerPallet = packagesPerPallet, ExpectedUnit = "box", LotNumber = "LOT-PAL" }
+            new() { ProductVariantId = seed.VariantSize6Id, ExpectedQuantity = quantity, PalletCount = palletCount, PackagesPerPallet = packagesPerPallet, LoosePackages = loosePackages, ExpectedUnit = "box", LotNumber = "LOT-PAL" }
         };
         return request;
+    }
+
+    [Fact]
+    public async Task Pallet_Input_With_Loose_Packages_Adds_Them_To_The_Total_And_Shows_Article_Kg_Defaults()
+    {
+        var seed = await SeedAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var variant = await db.ProductVariants.SingleAsync(v => v.Id == seed.VariantSize6Id);
+            (variant.DefaultNetKgPerPackage, variant.DefaultGrossKgPerPackage) = (10m, 10.3m);
+            await db.SaveChangesAsync();
+        }
+        var result = await CreateAsync(PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m));
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        var line = Assert.Single(result.Value.Lines);
+        Assert.Equal((375m, 3m, 120m, 15m), (line.ExpectedQuantity, line.PalletCount, line.PackagesPerPallet, line.LoosePackages));
+        // Artikelstandaarden voor de rekenregel bij ontvangst (alleen weergave).
+        Assert.Equal((10m, 10.3m), (line.DefaultNetKgPerPackage, line.DefaultGrossKgPerPackage));
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(15m, (await verify.SupplyCommitmentLines.SingleAsync(l => l.LotNumber == "LOT-PAL")).LoosePackages);
+    }
+
+    [Theory]
+    [InlineData("fractional-pallets", "lines[0].palletCount")]
+    [InlineData("fractional-per-pallet", "lines[0].packagesPerPallet")]
+    [InlineData("fractional-loose", "lines[0].loosePackages")]
+    [InlineData("negative-loose", "lines[0].loosePackages")]
+    [InlineData("loose-without-pallets", "lines[0].loosePackages")]
+    [InlineData("total-mismatch-with-loose", "lines[0].expectedQuantity")]
+    public async Task New_Pallet_Input_Needs_Whole_Pallets_And_Whole_Loose_Packages(string invalidCase, string expectedErrorKey)
+    {
+        var seed = await SeedAsync();
+        var request = invalidCase switch
+        {
+            "fractional-pallets" => PalletRequest(seed, palletCount: 3.5m, packagesPerPallet: 120m),
+            "fractional-per-pallet" => PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120.5m),
+            "fractional-loose" => PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 2.5m),
+            "negative-loose" => PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120m, loosePackages: -1m),
+            "loose-without-pallets" => PalletRequest(seed, quantity: 15m, palletCount: null, packagesPerPallet: null, loosePackages: 15m),
+            _ => PalletRequest(seed, quantity: 360m, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m)
+        };
+        AssertValidation(await CreateAsync(request), expectedErrorKey);
+        await AssertNothingStoredAsync();
+    }
+
+    // Bestaande aanvoerregels met een gebroken palletaantal blijven leesbaar en een herhaling van die opdracht wordt herkend;
+    // aanvoerregels zijn na aanmaken niet wijzigbaar, dus er is geen bewerkpad dat de breuk opnieuw zou moeten valideren.
+    [Fact]
+    public async Task Existing_Line_With_A_Fractional_Pallet_Count_Stays_Readable_And_Replays()
+    {
+        var seed = await SeedAsync();
+        var requestId = Guid.NewGuid();
+        int commitmentId;
+        await using (var db = _factory.CreateContext())
+        {
+            var commitment = new SupplyCommitment
+            {
+                RequestId = requestId, VendorId = seed.VendorId, Route = "Warehouse", Status = "Expected", Origin = "Peru",
+                ExpectedAt = ExpectedAt.UtcDateTime, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+                Lines = new List<SupplyCommitmentLine> { new() { ProductVariantId = seed.VariantSize6Id, ExpectedQuantity = 420m, ExpectedUnit = "box", PalletCount = 3.5m, PackagesPerPallet = 120m, LotNumber = "LOT-PAL" } }
+            };
+            db.SupplyCommitments.Add(commitment);
+            await db.SaveChangesAsync();
+            commitmentId = commitment.Id;
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var line = Assert.Single((await CreateService(db).GetAsync(commitmentId)).Value.Lines);
+            Assert.Equal((420m, 3.5m, 120m, (decimal?)null), (line.ExpectedQuantity, line.PalletCount, line.PackagesPerPallet, line.LoosePackages));
+        }
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletRequest(seed, palletCount: 3.5m, packagesPerPallet: 120m, requestId: requestId))).Status);
+        AssertValidation(await CreateAsync(PalletRequest(seed, palletCount: 3.5m, packagesPerPallet: 120m)), "lines[0].palletCount");
+        await using var verify = _factory.CreateContext();
+        Assert.Equal(1, await verify.SupplyCommitments.CountAsync());
+    }
+
+    [Fact]
+    public async Task Retry_Compares_Loose_Packages()
+    {
+        var seed = await SeedAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 15m, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletRequest(seed, palletCount: 3m, packagesPerPallet: 125m, requestId: requestId))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(PalletRequest(seed, palletCount: 3m, packagesPerPallet: 120m, loosePackages: 14m, quantity: 374m, requestId: requestId))).Status);
+    }
+
+    [Theory]
+    [InlineData("375", "3", "120", "15", true)]
+    [InlineData("420", "3.5", "120", "NULL", true)]
+    [InlineData("375", "3", "120", "NULL", false)]
+    [InlineData("362.5", "3", "120", "2.5", false)]
+    [InlineData("15", "NULL", "NULL", "15", false)]
+    public async Task Database_Check_Accepts_Pallets_Times_Per_Pallet_Plus_Loose_Packages(string quantity, string palletCount, string perPallet, string loose, bool accepted)
+    {
+        var seed = await SeedAsync();
+        var commitment = await CreateAsync(WarehouseRequest(seed));
+        await using var raw = _factory.CreateContext();
+        Task<int> Insert() => raw.Database.ExecuteSqlRawAsync(
+            "INSERT INTO \"SupplyCommitmentLines\" (\"SupplyCommitmentId\", \"ProductVariantId\", \"ExpectedQuantity\", \"ExpectedUnit\", \"PalletCount\", \"PackagesPerPallet\", \"LoosePackages\", \"CreatedAt\", \"Version\") " +
+            $"VALUES ({commitment.Value.Id}, {seed.VariantSize6Id}, {quantity}, 'box', {palletCount}, {perPallet}, {loose}, '2026-10-20 08:00:00', 0)");
+        if (accepted)
+        {
+            Assert.Equal(1, await Insert());
+        }
+        else
+        {
+            Assert.Contains("CK_SupplyCommitmentLines_PalletInput_Consistent", (await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(Insert)).Message);
+        }
     }
 
     [Fact]

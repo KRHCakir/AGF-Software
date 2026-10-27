@@ -13,10 +13,13 @@ namespace AgfAdmin.Models
 
         public decimal Quantity { get; set; } // > 0, decimal(18,3)
         public string Unit { get; set; }      // box, colli, tray, piece of dozen; nooit omgerekend
-        // Oorspronkelijke palletinvoer (optioneel, beide of geen): Quantity = PalletCount × PackagesPerPallet.
+        // Oorspronkelijke palletinvoer (optioneel, beide of geen): Quantity = PalletCount × PackagesPerPallet + LoosePackages.
         // Quantity blijft de bron voor vraag, reservering en verzending; resterend wordt nooit naar hele pallets afgerond.
+        // Nieuwe invoer heeft hele pallets; oudere regels kunnen een gebroken palletaantal hebben (blijft leesbaar).
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
+        // Losse verpakkingen naast de hele pallets ("3 pallets × 120 + 15 colli"); alleen bij palletinvoer, heel en >= 0.
+        public decimal? LoosePackages { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -2150,6 +2150,10 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("LoosePackages")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal?>("PackagesPerPallet")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -2186,7 +2190,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("SalesOrderLines", t =>
                         {
-                            t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND abs(CAST(\"Quantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC)) < 0.001)");
+                            t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) AND abs(CAST(\"Quantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)");
 
                             t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
 
@@ -2675,6 +2679,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<decimal?>("LoosePackages")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<string>("LotNumber")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -2705,7 +2713,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("SupplyCommitmentLines", t =>
                         {
-                            t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC)) < 0.001)");
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)");
                         });
                 });
 

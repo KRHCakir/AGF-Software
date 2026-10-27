@@ -15,10 +15,13 @@ namespace AgfAdmin.Models
         public decimal ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }            // box, colli, tray, piece of dozen; optioneel tijdens de overgang
         public decimal? ExpectedNetWeightKg { get; set; }   // werkelijk opgegeven netto kg; nooit afgeleid
-        // Oorspronkelijke palletinvoer (optioneel, beide of geen): ExpectedQuantity = PalletCount × PackagesPerPallet.
-        // ExpectedQuantity blijft de bron voor alle controles; dit is alleen de herkenbare weergave "9 pallets van 120".
+        // Oorspronkelijke palletinvoer (optioneel, beide of geen): ExpectedQuantity = PalletCount × PackagesPerPallet + LoosePackages.
+        // ExpectedQuantity blijft de bron voor alle controles; dit is alleen de herkenbare weergave "3 pallets × 120 + 15 colli".
+        // Nieuwe invoer heeft hele pallets; oudere regels kunnen een gebroken palletaantal hebben (blijft leesbaar).
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
+        // Losse verpakkingen naast de hele pallets; alleen bij palletinvoer, heel en >= 0.
+        public decimal? LoosePackages { get; set; }
         public string LotNumber { get; set; } // optioneel
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
