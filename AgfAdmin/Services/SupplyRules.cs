@@ -9,12 +9,16 @@ namespace AgfAdmin.Services
 
         public const string StatusExpected = "Expected";
         public const string StatusCancelled = "Cancelled";
+        public const string StatusReceived = "Received";
+        public const string StatusDelivered = "Delivered";
+        // Alle ontvangen inhoud is afgekeurd en niets is goedgekeurd of verkocht: telt niet meer als verwacht (PurchaseOrderService).
+        public const string StatusRejected = "Rejected";
 
         public static readonly IReadOnlyList<string> Routes = new[] { RouteWarehouse, RouteDirectTrade };
 
         public static readonly IReadOnlyList<string> CommitmentStatuses = new[]
         {
-            StatusExpected, "PartiallyReceived", "Received", StatusCancelled, "Delivered"
+            StatusExpected, "PartiallyReceived", StatusReceived, StatusCancelled, StatusDelivered, StatusRejected
         };
 
         // Expliciete toelatingslijst: alleen in deze statussen kan DirectTrade-aanvoer aan een verkooporder worden toegewezen.

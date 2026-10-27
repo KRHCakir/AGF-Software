@@ -46,6 +46,11 @@ namespace AgfAdmin.Data
         public DbSet<StockMovement> StockMovements { get; set; }
         public DbSet<StockReservation> StockReservations { get; set; }
 
+        // Inkooporder: factuurnummers bij een order en afkeuringen van ontvangen inkoop.
+        public DbSet<SupplyCommitmentInvoiceRef> SupplyCommitmentInvoiceRefs { get; set; }
+        public DbSet<SupplyRejection> SupplyRejections { get; set; }
+        public DbSet<SupplyRejectionLine> SupplyRejectionLines { get; set; }
+
         // Pallet-traceability: logistieke drager, atomaire inhoudsregels en append-only auditrecords.
         public DbSet<Pallet> Pallets { get; set; }
         public DbSet<PalletContentLine> PalletContentLines { get; set; }
@@ -80,6 +85,8 @@ namespace AgfAdmin.Data
         {
             EnsureRelations();
             EnsurePaymentConditionsAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
+            EnsureOrderNumbersAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
+            EnsureInvoiceNumberKeys();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
@@ -89,6 +96,8 @@ namespace AgfAdmin.Data
         {
             EnsureRelations();
             await EnsurePaymentConditionsAsync(async: true, cancellationToken);
+            await EnsureOrderNumbersAsync(async: true, cancellationToken);
+            EnsureInvoiceNumberKeys();
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -133,6 +142,46 @@ namespace AgfAdmin.Data
             foreach (var entry in ChangeTracker.Entries<Vendor>().Where(e => e.State == EntityState.Added && e.Entity.PaymentCondition == null && e.Entity.PaymentConditionId == 0).ToList())
             {
                 PaymentConditionResolver.Assign(entry.Entity, async ? await PaymentConditionResolver.ForDaysAsync(this, entry.Entity.PaymentTermsDays, cancellationToken) : PaymentConditionResolver.ForDays(this, entry.Entity.PaymentTermsDays));
+            }
+        }
+
+        // Inkoopordernummer voor elke nieuwe toezegging, ongeacht de schrijver (service, seed, tests): volgende vrije volgnummer in het
+        // jaar van CreatedAt (Europe/Amsterdam), na de hoogste opgeslagen en de al in deze save toegekende. Een gelijktijdige schrijver kan
+        // hetzelfde nummer kiezen; de unieke index weigert dan de tweede (SupplyCommitmentService probeert opnieuw). Besteldatum zonder
+        // waarde wordt de aanmaakdatum. Een bestaand nummer wordt hier nooit gewijzigd.
+        private async Task EnsureOrderNumbersAsync(bool async, CancellationToken cancellationToken)
+        {
+            var added = ChangeTracker.Entries<SupplyCommitment>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            var next = new Dictionary<int, int>();
+            foreach (var commitment in added.Where(c => c.OrderNumber == null).OrderBy(c => c.CreatedAt))
+            {
+                var created = BusinessCalendar.DateOf(commitment.CreatedAt);
+                if (commitment.OrderedOn == default)
+                {
+                    commitment.OrderedOn = created;
+                }
+                var year = created.Year;
+                if (!next.TryGetValue(year, out var sequence))
+                {
+                    var query = SupplyCommitments.AsNoTracking().Where(c => c.OrderYear == year).Select(c => (int?)c.OrderSequence);
+                    var stored = (async ? await query.MaxAsync(cancellationToken) : query.Max()) ?? 0;
+                    var tracked = added.Where(c => c.OrderNumber != null && c.OrderYear == year).Select(c => c.OrderSequence).DefaultIfEmpty(0).Max();
+                    sequence = Math.Max(stored, tracked);
+                }
+                sequence++;
+                next[year] = sequence;
+                commitment.OrderYear = year;
+                commitment.OrderSequence = sequence;
+                commitment.OrderNumber = Services.PurchaseOrderRules.FormatNumber(year, sequence);
+            }
+        }
+
+        // Vergelijkingssleutel van een factuurnummer, ongeacht de schrijver: getrimd en in kleine letters (PurchaseOrderRules.InvoiceNumberKey).
+        private void EnsureInvoiceNumberKeys()
+        {
+            foreach (var entry in ChangeTracker.Entries<SupplyCommitmentInvoiceRef>().Where(e => e.State == EntityState.Added))
+            {
+                entry.Entity.InvoiceNumberKey = Services.PurchaseOrderRules.InvoiceNumberKey(entry.Entity.InvoiceNumber);
             }
         }
 
@@ -314,10 +363,82 @@ namespace AgfAdmin.Data
                     .OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(c => c.CustomerId);
 
+                // Inkoopordernummer: uniek, en per jaar doorlopend (jaar + volgnummer uniek; een botsing bij gelijktijdig
+                // aanmaken wordt in de service opnieuw geprobeerd met het volgende nummer).
+                b.Property(c => c.OrderNumber).IsRequired().HasMaxLength(20);
+                b.HasIndex(c => c.OrderNumber).IsUnique();
+                b.HasIndex(c => new { c.OrderYear, c.OrderSequence }).IsUnique();
+                b.Property(c => c.SupplierReference).HasMaxLength(PurchaseOrderRules.MaxSupplierReferenceLength);
+                b.Property(c => c.OrderChannel).HasMaxLength(16);
+                b.Property(c => c.Note).HasMaxLength(PurchaseOrderRules.MaxNoteLength);
+
                 // DirectTrade is altijd klantgebonden; Warehouse-aanbod is nooit aan een klant gebonden.
-                b.ToTable(t => t.HasCheckConstraint(
-                    "CK_SupplyCommitments_Route_CustomerLink",
-                    "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)"));
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint(
+                        "CK_SupplyCommitments_Route_CustomerLink",
+                        "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)");
+                    t.HasCheckConstraint("CK_SupplyCommitments_OrderSequence_Positive", "\"OrderSequence\" > 0");
+                    t.HasCheckConstraint("CK_SupplyCommitments_OrderChannel_Allowed",
+                        "\"OrderChannel\" IS NULL OR \"OrderChannel\" IN ('Phone', 'Email', 'Portal', 'Other')");
+                });
+            });
+
+            modelBuilder.Entity<SupplyCommitmentInvoiceRef>(b =>
+            {
+                b.Property(r => r.Kind).IsRequired().HasMaxLength(16);
+                b.Property(r => r.InvoiceNumber).IsRequired().HasMaxLength(PurchaseOrderRules.MaxInvoiceNumberLength);
+                b.Property(r => r.AmountExclVat).HasPrecision(18, 2);
+                b.Property(r => r.ActorReference).HasMaxLength(PurchaseOrderRules.MaxActorLength);
+                b.HasIndex(r => r.RequestId).IsUnique();
+                // Hetzelfde nummer (zonder hoofdletters, via de sleutel) van dezelfde soort maar één keer per order; opzoeken gaat ook via de sleutel.
+                b.Property(r => r.InvoiceNumberKey).IsRequired().HasMaxLength(PurchaseOrderRules.MaxInvoiceNumberLength);
+                b.HasIndex(r => new { r.SupplyCommitmentId, r.Kind, r.InvoiceNumberKey }).IsUnique();
+                b.HasIndex(r => r.InvoiceNumberKey);
+                b.HasOne(r => r.SupplyCommitment).WithMany().HasForeignKey(r => r.SupplyCommitmentId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(r => r.IncomingInvoice).WithMany().HasForeignKey(r => r.IncomingInvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_Kind_Allowed", "\"Kind\" IN ('Invoice', 'CreditNote')");
+                    t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumber_NotBlank", "length(trim(\"InvoiceNumber\")) > 0");
+                    t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumberKey_NotBlank", "length(trim(\"InvoiceNumberKey\")) > 0");
+                });
+            });
+
+            modelBuilder.Entity<SupplyRejection>(b =>
+            {
+                b.Property(r => r.Reason).IsRequired().HasMaxLength(32);
+                b.Property(r => r.Explanation).HasMaxLength(PurchaseOrderRules.MaxExplanationLength);
+                b.Property(r => r.Decision).IsRequired().HasMaxLength(32);
+                b.Property(r => r.ActorReference).IsRequired().HasMaxLength(PurchaseOrderRules.MaxActorLength);
+                b.HasIndex(r => r.RequestId).IsUnique();
+                b.HasIndex(r => r.SupplyCommitmentId);
+                b.HasOne(r => r.SupplyCommitment).WithMany().HasForeignKey(r => r.SupplyCommitmentId).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SupplyRejections_Reason_Allowed",
+                        "\"Reason\" IN ('Quality', 'Ripeness', 'Temperature', 'Damaged', 'WrongArticle', 'Other')");
+                    t.HasCheckConstraint("CK_SupplyRejections_Decision_Allowed",
+                        "\"Decision\" IN ('ReturnToSupplier', 'ClaimDiscount', 'Dispose')");
+                    t.HasCheckConstraint("CK_SupplyRejections_OtherExplained",
+                        "\"Reason\" <> 'Other' OR (\"Explanation\" IS NOT NULL AND length(trim(\"Explanation\")) > 0)");
+                });
+            });
+
+            modelBuilder.Entity<SupplyRejectionLine>(b =>
+            {
+                b.Property(l => l.Quantity).HasPrecision(18, 3);
+                b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
+                b.Property(l => l.NetWeightKg).HasPrecision(18, 3);
+                b.HasIndex(l => l.PalletContentLineId);
+                b.HasOne(l => l.SupplyRejection).WithMany(r => r.Lines).HasForeignKey(l => l.SupplyRejectionId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.PalletContentLine).WithMany().HasForeignKey(l => l.PalletContentLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SupplyCommitmentLine).WithMany().HasForeignKey(l => l.SupplyCommitmentLineId).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SupplyRejectionLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_SupplyRejectionLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+                });
             });
 
             modelBuilder.Entity<SupplyCommitmentLine>(b =>
@@ -753,6 +874,14 @@ namespace AgfAdmin.Data
                     .WithOne(l => l.RestoredContentLine)
                     .HasForeignKey<PalletContentLine>(c => c.OriginCorrectionLineId)
                     .OnDelete(DeleteBehavior.Restrict);
+                // Afsplitsing door een gedeeltelijke afkeuring: dezelfde richting (de afgesplitste regel verwijst naar haar afkeuringsregel).
+                b.Property(c => c.SplitOffQuantity).HasPrecision(18, 3).HasDefaultValue(0m);
+                b.Property(c => c.SplitOffNetWeightKg).HasPrecision(18, 3).HasDefaultValue(0m);
+                b.HasIndex(c => c.OriginRejectionLineId).IsUnique();
+                b.HasOne(c => c.OriginRejectionLine)
+                    .WithOne(l => l.SplitContentLine)
+                    .HasForeignKey<PalletContentLine>(c => c.OriginRejectionLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
                 b.Property(c => c.LotNumber).IsRequired().HasMaxLength(100);
                 b.Property(c => c.Quantity).HasPrecision(18, 3);
                 b.Property(c => c.Unit).IsRequired().HasMaxLength(32);
@@ -787,6 +916,14 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds",
                         "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) " +
                         "AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) >= 0 AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) <= CAST(\"NetWeightKg\" AS NUMERIC)");
+                    // Afgesplitst (afkeuring) is nooit negatief en samen met afgeboekt nooit meer dan de ontvangst.
+                    t.HasCheckConstraint("CK_PalletContentLines_SplitOff_Bounds",
+                        "CAST(\"SplitOffQuantity\" AS NUMERIC) >= 0 AND CAST(\"SplitOffNetWeightKg\" AS NUMERIC) >= 0 " +
+                        "AND CAST(\"DispatchedQuantity\" AS NUMERIC) + CAST(\"SplitOffQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) " +
+                        "AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) + CAST(\"SplitOffNetWeightKg\" AS NUMERIC) <= CAST(\"NetWeightKg\" AS NUMERIC)");
+                    // Hooguit één herkomst: teruggeboekt uit een correctie of afgesplitst door een afkeuring, nooit beide.
+                    t.HasCheckConstraint("CK_PalletContentLines_SingleOrigin",
+                        "\"OriginCorrectionLineId\" IS NULL OR \"OriginRejectionLineId\" IS NULL");
                 });
 
                 b.Property(c => c.Version).IsConcurrencyToken();

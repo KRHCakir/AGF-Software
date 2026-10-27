@@ -1139,6 +1139,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int?>("OriginCorrectionLineId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("OriginRejectionLineId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("PalletId")
                         .HasColumnType("integer");
 
@@ -1157,6 +1160,18 @@ namespace AgfAdmin.Migrations
 
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("SplitOffNetWeightKg")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("SplitOffQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasDefaultValue(0m);
 
                     b.Property<int>("SupplyCommitmentLineId")
                         .HasColumnType("integer");
@@ -1182,6 +1197,9 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("OriginCorrectionLineId")
                         .IsUnique();
 
+                    b.HasIndex("OriginRejectionLineId")
+                        .IsUnique();
+
                     b.HasIndex("PalletId");
 
                     b.HasIndex("RequestId")
@@ -1202,6 +1220,10 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed", "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
 
                             t.HasCheckConstraint("CK_PalletContentLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_SingleOrigin", "\"OriginCorrectionLineId\" IS NULL OR \"OriginRejectionLineId\" IS NULL");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_SplitOff_Bounds", "CAST(\"SplitOffQuantity\" AS NUMERIC) >= 0 AND CAST(\"SplitOffNetWeightKg\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) + CAST(\"SplitOffQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) + CAST(\"SplitOffNetWeightKg\" AS NUMERIC) <= CAST(\"NetWeightKg\" AS NUMERIC)");
 
                             t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
 
@@ -2635,6 +2657,28 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime?>("ExpectedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("OrderChannel")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("OrderSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrderYear")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("OrderedOn")
+                        .HasColumnType("date");
+
                     b.Property<string>("Origin")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2653,6 +2697,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("SupplierReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2663,14 +2711,92 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("OrderNumber")
+                        .IsUnique();
+
                     b.HasIndex("RequestId")
                         .IsUnique();
 
                     b.HasIndex("VendorId");
 
+                    b.HasIndex("OrderYear", "OrderSequence")
+                        .IsUnique();
+
                     b.ToTable("SupplyCommitments", t =>
                         {
+                            t.HasCheckConstraint("CK_SupplyCommitments_OrderChannel_Allowed", "\"OrderChannel\" IS NULL OR \"OrderChannel\" IN ('Phone', 'Email', 'Portal', 'Other')");
+
+                            t.HasCheckConstraint("CK_SupplyCommitments_OrderSequence_Positive", "\"OrderSequence\" > 0");
+
                             t.HasCheckConstraint("CK_SupplyCommitments_Route_CustomerLink", "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentInvoiceRef", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("AmountExclVat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("IncomingInvoiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("InvoiceDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("InvoiceNumberKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IncomingInvoiceId");
+
+                    b.HasIndex("InvoiceNumberKey");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SupplyCommitmentId", "Kind", "InvoiceNumberKey")
+                        .IsUnique();
+
+                    b.ToTable("SupplyCommitmentInvoiceRefs", t =>
+                        {
+                            t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumberKey_NotBlank", "length(trim(\"InvoiceNumberKey\")) > 0");
+
+                            t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_InvoiceNumber_NotBlank", "length(trim(\"InvoiceNumber\")) > 0");
+
+                            t.HasCheckConstraint("CK_SupplyCommitmentInvoiceRefs_Kind_Allowed", "\"Kind\" IN ('Invoice', 'CreditNote')");
                         });
                 });
 
@@ -2746,6 +2872,108 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_Weights_GrossNotBelowNet", "\"ExpectedNetWeightKg\" IS NULL OR \"ExpectedGrossWeightKg\" IS NULL OR CAST(\"ExpectedGrossWeightKg\" AS NUMERIC) >= CAST(\"ExpectedNetWeightKg\" AS NUMERIC)");
 
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_Weights_Positive", "(\"ExpectedNetWeightKg\" IS NULL OR CAST(\"ExpectedNetWeightKg\" AS NUMERIC) > 0) AND (\"ExpectedGrossWeightKg\" IS NULL OR CAST(\"ExpectedGrossWeightKg\" AS NUMERIC) > 0)");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyRejection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Explanation")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("RejectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SupplyCommitmentId");
+
+                    b.ToTable("SupplyRejections", t =>
+                        {
+                            t.HasCheckConstraint("CK_SupplyRejections_Decision_Allowed", "\"Decision\" IN ('ReturnToSupplier', 'ClaimDiscount', 'Dispose')");
+
+                            t.HasCheckConstraint("CK_SupplyRejections_OtherExplained", "\"Reason\" <> 'Other' OR (\"Explanation\" IS NOT NULL AND length(trim(\"Explanation\")) > 0)");
+
+                            t.HasCheckConstraint("CK_SupplyRejections_Reason_Allowed", "\"Reason\" IN ('Quality', 'Ripeness', 'Temperature', 'Damaged', 'WrongArticle', 'Other')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyRejectionLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("PalletContentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<bool>("SplitOff")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyRejectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PalletContentLineId");
+
+                    b.HasIndex("SupplyCommitmentLineId");
+
+                    b.HasIndex("SupplyRejectionId");
+
+                    b.ToTable("SupplyRejectionLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_SupplyRejectionLines_NetWeightKg_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_SupplyRejectionLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
                         });
                 });
 
@@ -3218,6 +3446,11 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("AgfAdmin.Models.PalletContentLine", "OriginCorrectionLineId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.SupplyRejectionLine", "OriginRejectionLine")
+                        .WithOne("SplitContentLine")
+                        .HasForeignKey("AgfAdmin.Models.PalletContentLine", "OriginRejectionLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.Pallet", "Pallet")
                         .WithMany("ContentLines")
                         .HasForeignKey("PalletId")
@@ -3231,6 +3464,8 @@ namespace AgfAdmin.Migrations
                         .IsRequired();
 
                     b.Navigation("OriginCorrectionLine");
+
+                    b.Navigation("OriginRejectionLine");
 
                     b.Navigation("Pallet");
 
@@ -3596,6 +3831,24 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Vendor");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentInvoiceRef", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.IncomingInvoice", "IncomingInvoice")
+                        .WithMany()
+                        .HasForeignKey("IncomingInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("IncomingInvoice");
+
+                    b.Navigation("SupplyCommitment");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentLine", b =>
                 {
                     b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
@@ -3613,6 +3866,44 @@ namespace AgfAdmin.Migrations
                     b.Navigation("ProductVariant");
 
                     b.Navigation("SupplyCommitment");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyRejection", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SupplyCommitment");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyRejectionLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyRejection", "SupplyRejection")
+                        .WithMany("Lines")
+                        .HasForeignKey("SupplyRejectionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PalletContentLine");
+
+                    b.Navigation("SupplyCommitmentLine");
+
+                    b.Navigation("SupplyRejection");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>
@@ -3791,6 +4082,16 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitment", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyRejection", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyRejectionLine", b =>
+                {
+                    b.Navigation("SplitContentLine");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Vendor", b =>

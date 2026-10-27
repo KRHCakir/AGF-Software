@@ -514,9 +514,9 @@ public class InventoryAvailabilityModelTests : IDisposable
         using var db = _factory.CreateContext();
         var entity = db.Model.FindEntityType(typeof(SupplyCommitment))!;
 
-        var requestIdIndex = Assert.Single(entity.GetIndexes(), i => i.Properties.Single().Name == nameof(SupplyCommitment.RequestId));
+        var requestIdIndex = Assert.Single(entity.GetIndexes(), i => i.Properties.Count == 1 && i.Properties.Single().Name == nameof(SupplyCommitment.RequestId));
         Assert.True(requestIdIndex.IsUnique);
-        Assert.Contains(entity.GetIndexes(), i => i.Properties.Single().Name == nameof(SupplyCommitment.CustomerId));
+        Assert.Contains(entity.GetIndexes(), i => i.Properties.Count == 1 && i.Properties.Single().Name == nameof(SupplyCommitment.CustomerId));
 
         var customerFk = Assert.Single(entity.GetForeignKeys(), fk => fk.PrincipalEntityType.ClrType == typeof(Customer));
         Assert.Equal(DeleteBehavior.Restrict, customerFk.DeleteBehavior);
