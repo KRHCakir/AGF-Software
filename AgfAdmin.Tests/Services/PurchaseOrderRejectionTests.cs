@@ -246,4 +246,14 @@ public class PurchaseOrderRejectionTests : IDisposable
         Assert.Equal(20m, PurchaseOrderRules.DefaultRejectedKg(5m, 20m, 80m, "Calculated", 4m));
         Assert.Equal(80.5m, PurchaseOrderRules.DefaultRejectedKg(20m, 20m, 80.5m, "Calculated", 4m));
     }
+
+    [Fact]
+    public void QualityReasonText_IsDutch_AndFitsTheColumn()
+    {
+        Assert.Equal("IO-2026-0001 afgekeurd (Rijpheid)", PurchaseOrderRules.QualityReasonText("IO-2026-0001", "Ripeness", null));
+        Assert.Equal("IO-2026-0001 afgekeurd (Anders): Schimmel", PurchaseOrderRules.QualityReasonText("IO-2026-0001", "Other", "Schimmel"));
+        var longest = PurchaseOrderRules.QualityReasonText("IO-2026-0001", "Other", new string('x', PurchaseOrderRules.MaxExplanationLength));
+        Assert.Equal(PurchaseOrderRules.MaxQualityReasonLength, longest.Length);
+        Assert.EndsWith("…", longest);
+    }
 }
