@@ -39,7 +39,8 @@ namespace AgfAdmin.Services
             }
             catch (DbUpdateException exception)
             {
-                // Gelijktijdige retry (RequestId) of gelijktijdig hetzelfde nummer (unieke index op order + soort + nummer).
+                // Gelijktijdige retry (RequestId) of gelijktijdig hetzelfde nummer (unieke index op order + soort + sleutel): dan
+                // dezelfde 409 als de gewone controle, nooit een 500.
                 _db.ChangeTracker.Clear();
                 var concurrent = await _db.SupplyCommitmentInvoiceRefs.AsNoTracking().SingleOrDefaultAsync(r => r.RequestId == candidate.RequestId, cancellationToken);
                 if (concurrent != null)
@@ -68,7 +69,8 @@ namespace AgfAdmin.Services
             {
                 AddError(errors, "requestId", "A client-generated, non-empty requestId is required.");
             }
-            if (!PurchaseOrderRules.IsInvoiceKind(request.Kind))
+            var kind = request.Kind?.Trim();
+            if (!PurchaseOrderRules.IsInvoiceKind(kind))
             {
                 AddError(errors, "kind", $"Kind must be one of: {string.Join(", ", PurchaseOrderRules.InvoiceKinds)}.");
             }
@@ -100,8 +102,9 @@ namespace AgfAdmin.Services
             {
                 RequestId = request.RequestId!.Value,
                 SupplyCommitmentId = id,
-                Kind = request.Kind,
+                Kind = kind,
                 InvoiceNumber = number,
+                InvoiceNumberKey = PurchaseOrderRules.InvoiceNumberKey(number),
                 InvoiceDate = request.InvoiceDate,
                 AmountExclVat = request.AmountExclVat,
                 ActorReference = actor,
@@ -111,9 +114,9 @@ namespace AgfAdmin.Services
 
         private async Task<ServiceResult<PurchaseOrderDetailDto>> DuplicateInvoiceRefAsync(SupplyCommitmentInvoiceRef candidate, CancellationToken cancellationToken)
         {
-            var number = candidate.InvoiceNumber.ToLowerInvariant();
+            // Zelfde sleutel als de unieke index (getrimd, kleine letters): "F-1" en "f-1" zijn hetzelfde nummer.
             var taken = await _db.SupplyCommitmentInvoiceRefs.AsNoTracking()
-                .AnyAsync(r => r.SupplyCommitmentId == candidate.SupplyCommitmentId && r.Kind == candidate.Kind && r.InvoiceNumber.ToLower() == number, cancellationToken);
+                .AnyAsync(r => r.SupplyCommitmentId == candidate.SupplyCommitmentId && r.Kind == candidate.Kind && r.InvoiceNumberKey == candidate.InvoiceNumberKey, cancellationToken);
             return taken
                 ? ServiceResult<PurchaseOrderDetailDto>.Conflict(
                     $"{(candidate.Kind == PurchaseOrderRules.KindCreditNote ? "Credit note" : "Invoice")} {candidate.InvoiceNumber} is already recorded on this purchase order.",
