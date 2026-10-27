@@ -18,7 +18,7 @@ import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/refe
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import KgTotals from '../shared/KgTotals';
-import { LineKgCells } from '../shared/LineKgInput';
+import { LineKgFields } from '../shared/LineKgInput';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import QuantityInput from '../shared/QuantityInput';
@@ -325,8 +325,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                             <tr>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_quantity')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('line_kg_net')}</th>
-                                <th scope="col" className="px-2 py-1.5">{t('line_kg_gross')}</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_unit')} *</th>
                                 <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                             </tr>
@@ -354,9 +352,9 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e}
                                                 defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
+                                            <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
+                                                locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
                                         </td>
-                                        <LineKgCells prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
-                                            locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
                                             <select {...fieldProps(`${prefix}.unit`, e(`${prefix}.unit`))} value={line.unit} disabled={locked}
