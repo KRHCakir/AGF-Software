@@ -197,7 +197,7 @@ namespace AgfAdmin.Services
             {
                 new() { OccurredAt = Utc(commitment.CreatedAt), Type = "Ordered", Reference = commitment.SupplierReference, Channel = commitment.OrderChannel }
             };
-            history.AddRange(contents.Where(c => c.OriginCorrectionLineId == null && c.OriginRejectionLineId == null).Select(c => new PurchaseOrderHistoryEventDto
+            history.AddRange(contents.Where(c => c.OriginCorrectionLineId == null && c.OriginRejectionLineId == null && c.PalletStatus != PalletRules.StatusCancelled).Select(c => new PurchaseOrderHistoryEventDto
             {
                 OccurredAt = Utc(c.CreatedAt), Type = "Received", Reference = c.PalletReference, Quantity = c.Quantity, Unit = c.Unit
             }));
@@ -326,13 +326,19 @@ namespace AgfAdmin.Services
             public OrderFacts For(int id) => ByOrder.TryGetValue(id, out var facts) ? facts : new OrderFacts();
         }
 
+        // In batches, zodat de IN-clauses onder de SQLite-parameterlimiet blijven.
         private async Task<FactSet> LoadFactsAsync(List<int> ids, CancellationToken cancellationToken)
         {
             var set = new FactSet();
-            if (ids.Count == 0)
+            foreach (var batch in ids.Chunk(500))
             {
-                return set;
+                await LoadFactsBatchAsync(batch.ToList(), set, cancellationToken);
             }
+            return set;
+        }
+
+        private async Task LoadFactsBatchAsync(List<int> ids, FactSet set, CancellationToken cancellationToken)
+        {
             var lines = await _db.SupplyCommitmentLines.AsNoTracking().Where(l => ids.Contains(l.SupplyCommitmentId))
                 .Select(l => new { l.Id, l.SupplyCommitmentId, l.ExpectedQuantity, l.ExpectedUnit, l.ExpectedNetWeightKg })
                 .ToListAsync(cancellationToken);
@@ -388,7 +394,6 @@ namespace AgfAdmin.Services
             }
             foreach (var rejection in rejections) Order(rejection.SupplyCommitmentId).Rejections.Add((rejection.Decision, rejection.RejectedAt));
             foreach (var reference in refs) Order(reference.SupplyCommitmentId).Refs.Add(reference);
-            return set;
         }
 
         // Actieve fysieke verkoopreserveringen per inhoudsregel (hoeveelheid en kg); som in het geheugen (SQLite kent geen decimal-SUM).
