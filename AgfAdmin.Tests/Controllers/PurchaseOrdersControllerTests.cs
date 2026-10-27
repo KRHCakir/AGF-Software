@@ -40,7 +40,7 @@ public class PurchaseOrdersControllerTests : IDisposable
         var controller = Controller(db);
 
         var list = Assert.IsType<PurchaseOrderListDto>(Assert.IsType<OkObjectResult>(await controller.List("F-1", null, null)).Value);
-        Assert.Equal("IO-2026-0001", Assert.Single(list.Items).OrderNumber);
+        Assert.Equal(PurchaseOrderRules.FormatNumber(AmsterdamBusinessCalendar.ToAmsterdamDate(DateTime.UtcNow).Year, 1), Assert.Single(list.Items).OrderNumber);
         var matches = Assert.IsAssignableFrom<IReadOnlyList<PurchaseOrderInvoiceMatchDto>>(Assert.IsType<OkObjectResult>(await controller.ByInvoiceNumber("f-1", null)).Value);
         Assert.Equal(id, Assert.Single(matches).Id);
         Assert.Equal("NP-1", Assert.IsType<PurchaseOrderDetailDto>(Assert.IsType<OkObjectResult>(await controller.GetById(id)).Value).SupplierReference);
