@@ -574,3 +574,17 @@ describe('purchase order commands in the same store mechanism', () => {
         assert.equal(blockedBy(commands, { kind: 'line', orderId: 7, lineId: 41 }), null);
     });
 });
+
+describe('invoice reference commands', () => {
+    const ref = {
+        kind: 'invoice-ref', key: 'invoice-ref:7:credit-note', orderId: 7, requestId: 'i-1', attempts: 1, lastError: null, frozenAt: '2026-10-27T10:00:00.000Z',
+        payload: { requestId: 'i-1', kind: 'CreditNote', invoiceNumber: 'CN-12', invoiceDate: null, amountExclVat: -48.5, actorReference: null },
+        display: { orderNumber: 'IO-2026-0007' },
+    };
+
+    test('the key follows order and kind; a mismatching kind is dropped', () => {
+        assert.deepEqual(Object.keys(parseStoredCommands(JSON.stringify({ [ref.key]: ref }))), [ref.key]);
+        const wrongKind = { ...ref, payload: { ...ref.payload, kind: 'Invoice' } };
+        assert.deepEqual(parseStoredCommands(JSON.stringify({ [ref.key]: wrongKind })), {});
+    });
+});

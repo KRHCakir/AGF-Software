@@ -16,6 +16,7 @@ export function pendingLabel(command: PendingCommand, t: (key: string, variables
         case 'confirm-delivery': return t('sales_pending_confirm_delivery', { id: String(command.orderId), shipment: String(command.shipmentId), kind: command.shipmentKind === 'Warehouse' ? t('sales_delivery_kind_warehouse') : t('sales_delivery_kind_direct_trade'), customer: command.display.customerName });
         case 'correct-dt-shipment': return t('sales_pending_correct_dt', { id: String(command.orderId), shipment: String(command.shipmentId), customer: command.display.customerName, count: String(command.display.lineCount) });
         case 'ship-direct-trade': return t('sales_pending_ship_direct_trade', { id: String(command.orderId), customer: command.display.customerName, count: String(command.display.lineCount) });
+        case 'invoice-ref': return t(command.payload.kind === 'CreditNote' ? 'po_pending_credit_note' : 'po_pending_invoice', { number: command.payload.invoiceNumber, order: command.display.orderNumber });
         case 'reject-receipt': return t('po_pending_reject', { number: command.display.orderNumber, pallet: command.display.palletReference, lot: command.display.lotNumber });
         case 'dispatch': return t('sales_pending_dispatch', { id: String(command.orderId), customer: command.display.customerName, count: String(command.display.lineCount) });
         default: return t('sales_pending_correct', { id: String(command.orderId), dispatch: String(command.dispatchId), customer: command.display.customerName, count: String(command.display.lineCount) });

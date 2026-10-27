@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import InvoiceRefActions from '../../../components/purchase/InvoiceRefActions';
 import PurchaseOrderDetail from '../../../components/purchase/PurchaseOrderDetail';
 import PurchaseOrderList from '../../../components/purchase/PurchaseOrderList';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
@@ -168,7 +169,8 @@ function PurchaseOrdersWorkspace() {
             <div ref={detailRef}>
                 {detail?.status === 'loading' && <LoadingRows rows={4} label={t('po_loading')} />}
                 {detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-                {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} onChanged={changed} />}
+                {detail?.status === 'ready' && <PurchaseOrderDetail key={detail.data.id} order={detail.data} onChanged={changed}
+                    invoices={<InvoiceRefActions orderId={detail.data.id} orderNumber={detail.data.orderNumber} onDone={changed} />} />}
             </div>
         </div>
     );
