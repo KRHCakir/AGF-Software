@@ -19,8 +19,9 @@ import type { VendorOption } from '../../../types/referenceData';
 
 const PAGE_SIZE = 50;
 
-// Inkoopopdrachten: zoeken op ordernummer, leveranciersreferentie, leverancier of factuurnummer (de server zoekt en
-// pagineert), filters status (standaard open) en leverancier; nieuwste eerst. Klikken opent het detail (?id=).
+// Inkoopopdrachten: de server zoekt (ordernummer, leveranciersref, leverancier, factuurnummer) en pagineert; filters status
+// (standaard open) en leverancier; nieuwste eerst; klikken opent het detail (?id=). Zoeken zet Open zichtbaar op Alle (een
+// factuur hoort meestal bij een ontvangen order); leegmaken zet het terug.
 export default function PurchaseOrdersPage() {
     const { t } = useTranslation();
     return (
@@ -50,6 +51,13 @@ function PurchaseOrdersWorkspace() {
     const [vendors, setVendors] = useState<VendorOption[]>([]);
     const [detail, setDetail] = useState<LoadState<Order> | null>(null);
     const detailRef = useRef<HTMLDivElement | null>(null);
+    const searchWidened = useRef(false);
+
+    const changeQuery = (value: string) => {
+        setQuery(value);
+        if (value.trim() !== '' && status === 'open') { setStatus('all'); searchWidened.current = true; }
+        else if (value.trim() === '' && searchWidened.current) { setStatus('open'); searchWidened.current = false; }
+    };
 
     useEffect(() => {
         const handle = setTimeout(() => setDebounced(query.trim()), 250);
@@ -111,11 +119,11 @@ function PurchaseOrdersWorkspace() {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="sm:col-span-2">
                     <label htmlFor="po-search" className="text-xs font-medium text-gray-700">{t('po_search')}</label>
-                    <input id="po-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('po_search_placeholder')} className={inputClass} />
+                    <input id="po-search" type="search" value={query} onChange={(event) => changeQuery(event.target.value)} placeholder={t('po_search_placeholder')} className={inputClass} />
                 </div>
                 <div>
                     <label htmlFor="po-status" className="text-xs font-medium text-gray-700">{t('po_col_status')}</label>
-                    <select id="po-status" value={status} onChange={(event) => setStatus(event.target.value)} className={inputClass}>
+                    <select id="po-status" value={status} onChange={(event) => { searchWidened.current = false; setStatus(event.target.value); }} className={inputClass}>
                         <option value="open">{t('po_filter_open')}</option>
                         <option value="all">{t('po_filter_all')}</option>
                         {PURCHASE_ORDER_STATUSES.map((value) => <option key={value} value={value}>{t(ORDER_STATUS_LABEL_KEYS[value])}</option>)}
