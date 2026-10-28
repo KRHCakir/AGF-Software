@@ -19,6 +19,7 @@ import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/sup
 import { UnitBadge } from '../availability/QuantityCell';
 import KgTotals from '../shared/KgTotals';
 import VendorPicker from '../purchase/VendorPicker';
+import CustomerPicker from '../sales/CustomerPicker';
 import { LineKgFields } from '../shared/LineKgInput';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import { lineKgLabel } from '../shared/lineKgLabel';
@@ -370,11 +371,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <div>
                         <label htmlFor="customerId-input" className="text-xs font-medium text-violet-900">{t('supply_customer')} *</label>
-                        <select {...fieldProps('customerId', e('customerId'))} value={header.customerId} disabled={locked}
-                            onChange={(event) => updateHeader('customerId', event.target.value)} className={inputClass}>
-                            <option value="">{t('supply_choose')}</option>
-                            {reference.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-                        </select>
+                        <CustomerPicker id="customerId" customers={reference.customers} value={header.customerId} disabled={locked}
+                            invalid={!!e('customerId')} describedBy={e('customerId') ? 'customerId' : undefined}
+                            onChange={(customer) => updateHeader('customerId', customer === null ? '' : String(customer.id))} />
                         <FieldError id="customerId" messages={e('customerId')} />
                     </div>
                     <div className="col-span-2">

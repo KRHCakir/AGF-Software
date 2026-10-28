@@ -15,7 +15,10 @@ const reference: ReferenceData = {
         { id: 4, name: 'Nature\'s Pride', searchCode: 'NP', vatNumber: 'NL001', isActive: true },
         { id: 5, name: 'Supplier Old', searchCode: null, vatNumber: null, isActive: false },
     ],
-    customers: [],
+    customers: [
+        { id: 8, name: 'Lommerse Groothandel', searchCode: 'LOM', isActive: true, city: 'Barendrecht', vatNumber: null },
+        { id: 9, name: 'Lommer Oud', searchCode: null, isActive: false, city: null, vatNumber: null },
+    ],
     products: [{ id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: 'Peru', packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: 'colli', defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 }] }],
 };
 
@@ -80,6 +83,30 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST');
         assert.equal(JSON.parse(posted[0].body).vendorId, 4);
+    });
+
+    test('DirectTrade: customer is typed with suggestions (search code, name, city), not picked from a dropdown; inactive customers are not offered', async () => {
+        await mounted.render(<PlanSupplyForm route="DirectTrade" reference={reference} onReceive={() => {}} />);
+        assert.equal(mounted.container.querySelector('select[id="customerId-input"]'), null);
+        await type('customerId-input', 'lomm');
+        assert.ok(mounted.hasText('Lommerse Groothandel'));
+        assert.equal(mounted.hasText('Lommer Oud'), false);
+        assert.equal(mounted.button('sales_new_customer_named'), null);
+        await type('customerId-input', 'barendrecht');
+        await enter('customerId-input');
+        assert.ok(field('customerId-input').value.includes('Lommerse Groothandel'));
+        await chooseVendor('supb');
+        await type('origin-input', 'Peru');
+        await type('destination-input', 'DC Barendrecht');
+        await type('expectedAt-input', '2026-10-30');
+        await type('lines[0].productVariantId-input', 'hass');
+        await enter('lines[0].productVariantId-input');
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
+        await type('lines[0].expectedQuantity-input', '10');
+        await submit();
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        const body = JSON.parse(posted[0].body);
+        assert.deepEqual([body.route, body.customerId, body.vendorId], ['DirectTrade', 8, 3]);
     });
 
     test('order: supplier reference and order date (today) are sent, no order channel; the own order number is shown large', async () => {
