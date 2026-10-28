@@ -71,9 +71,10 @@ namespace AgfAdmin.Data
     // 17. het afkeuringsgrootboek is in beide richtingen consistent: een verhoging van SplitOffQuantity/-NetWeightKg op een inhoudsregel
     //    bestaat alleen samen met nieuwe afsplitsende afkeuringsregels (SplitOff) op die regel van exact hetzelfde totaal, elk met precies
     //    één nieuwe afgesplitste inhoudsregel (herkomst = die afkeuringsregel) op dezelfde pallet, met dezelfde bronregel, partij en
-    //    eenheid, exact die hoeveelheid en kg, Rejected en zonder afboeking; afgesplitst daalt nooit en afgesplitste inhoud bestaat nooit
-    //    buiten een afkeuring. Een niet-afsplitsende afkeuringsregel keurt de hele voorraad van een regel af: die regel gaat in dezelfde
-    //    save naar Rejected en de afkeuringsregel kopieert exact haar voorraad (aantal en kg), eenheid en bronregel. De herkomst van
+    //    eenheid, exact die hoeveelheid en kg, Rejected (Blocked bij korting claimen) en zonder afboeking; afgesplitst daalt nooit en
+    //    afgesplitste inhoud bestaat nooit buiten een afkeuring. Een niet-afsplitsende afkeuringsregel keurt de hele voorraad van een regel
+    //    af: die regel gaat in dezelfde save naar Rejected (Blocked bij korting claimen) en de afkeuringsregel kopieert exact haar voorraad
+    //    (aantal en kg), eenheid en bronregel. De herkomst van
     //    afgesplitste inhoud is onveranderlijk; afkeuringen, afkeuringsregels en factuurkoppelingen van inkooporders zijn append-only.
     //    Een afsplitsing is nooit groter dan de voorraad vóór de save, en de actieve verkoopreserveringen passen er daarna nog in.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
@@ -230,6 +231,15 @@ namespace AgfAdmin.Data
                 return;
             }
 
+            // Doelstatus volgt het besluit van de afkeuring waarmee de regel in dezelfde save wordt toegevoegd.
+            var rejections = db.ChangeTracker.Entries<SupplyRejection>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            string TargetStatusOf(SupplyRejectionLine line)
+            {
+                var rejection = line.SupplyRejection ?? rejections.FirstOrDefault(r => r.Lines.Contains(line))
+                    ?? throw new TraceabilityViolationException($"Rejection line for pallet content line {line.PalletContentLineId} must be saved together with its rejection.");
+                return PurchaseOrderRules.RejectionQualityStatus(rejection.Decision);
+            }
+
             // Inhoudsregel van een afkeuringsregel: navigatie of alleen FK, altijd de gevolgde entry (de service laadt hem gevolgd).
             EntityEntry<PalletContentLine> ContentOf(SupplyRejectionLine line) =>
                 contentEntries.FirstOrDefault(e => ReferenceEquals(e.Entity, line.PalletContentLine) || (line.PalletContentLine == null && e.Entity.Id == line.PalletContentLineId))
@@ -258,11 +268,11 @@ namespace AgfAdmin.Data
                         || !string.Equals(split.LotNumber, content.Entity.LotNumber, StringComparison.Ordinal)
                         || !string.Equals(split.Unit, content.Entity.Unit, StringComparison.Ordinal)
                         || split.Quantity != line.Quantity || split.NetWeightKg != line.NetWeightKg
-                        || split.QualityStatus != PalletRules.QualityRejected
+                        || split.QualityStatus != TargetStatusOf(line)
                         || split.DispatchedQuantity != 0m || split.DispatchedNetWeightKg != 0m
                         || split.OriginCorrectionLineId != null || split.OriginCorrectionLine != null)
                     {
-                        throw new TraceabilityViolationException($"Split-off content of pallet content line {content.Entity.Id} must be a Rejected copy on the same pallet with the same source, lot, unit, quantity and kg.");
+                        throw new TraceabilityViolationException($"Split-off content of pallet content line {content.Entity.Id} must be a Rejected (Blocked for a discount claim) copy on the same pallet with the same source, lot, unit, quantity and kg.");
                     }
                 }
                 else
@@ -272,10 +282,10 @@ namespace AgfAdmin.Data
                         content.OriginalValues.GetValue<decimal>(nameof(PalletContentLine.DispatchedQuantity)), content.OriginalValues.GetValue<decimal>(nameof(PalletContentLine.SplitOffQuantity)));
                     var onHandKg = ReservationRules.OnHandQuantity(content.OriginalValues.GetValue<decimal>(nameof(PalletContentLine.NetWeightKg)),
                         content.OriginalValues.GetValue<decimal>(nameof(PalletContentLine.DispatchedNetWeightKg)), content.OriginalValues.GetValue<decimal>(nameof(PalletContentLine.SplitOffNetWeightKg)));
-                    if (originalStatus == PalletRules.QualityRejected || content.Entity.QualityStatus != PalletRules.QualityRejected
+                    if (originalStatus == PalletRules.QualityRejected || content.Entity.QualityStatus != TargetStatusOf(line)
                         || line.Quantity != onHandQuantity || line.NetWeightKg != onHandKg)
                     {
-                        throw new TraceabilityViolationException($"A whole rejection of pallet content line {content.Entity.Id} turns it Rejected in the same save and copies exactly its on-hand quantity and kg.");
+                        throw new TraceabilityViolationException($"A whole rejection of pallet content line {content.Entity.Id} turns it Rejected (Blocked for a discount claim) in the same save and copies exactly its on-hand quantity and kg.");
                     }
                 }
             }

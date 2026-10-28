@@ -231,4 +231,47 @@ public class RejectionLedgerGuardTests : IDisposable
             await db.SaveChangesAsync();
         }
     }
+
+    [Theory]
+    [InlineData("ReturnToSupplier", "Blocked")]
+    [InlineData("ClaimDiscount", "Rejected")]
+    public async Task SplitStatus_MustFollowDecision(string decision, string status)
+    {
+        var seed = await SeedAsync();
+        await using var db = _factory.CreateContext();
+        var content = await db.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+        var rejection = Rejection(seed.OrderId);
+        rejection.Decision = decision;
+        db.SupplyRejections.Add(rejection);
+        var (_, split) = SplitOff(db, content, rejection, 30m, 120m);
+        split.QualityStatus = status;
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task ClaimDiscount_Split_IsBlocked_AndWholeLineGoesBlocked()
+    {
+        var seed = await SeedAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var content = await db.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+            var rejection = Rejection(seed.OrderId);
+            rejection.Decision = "ClaimDiscount";
+            db.SupplyRejections.Add(rejection);
+            var (_, split) = SplitOff(db, content, rejection, 30m, 120m);
+            split.QualityStatus = "Blocked";
+            await db.SaveChangesAsync();
+        }
+
+        await using var whole = _factory.CreateContext();
+        var rest = await whole.PalletContentLines.SingleAsync(c => c.Id == seed.ContentId);
+        var discount = Rejection(seed.OrderId);
+        discount.Decision = "ClaimDiscount";
+        discount.Lines.Add(new SupplyRejectionLine { PalletContentLine = rest, SupplyCommitmentLineId = rest.SupplyCommitmentLineId, Quantity = 70m, Unit = rest.Unit, NetWeightKg = 280m });
+        whole.SupplyRejections.Add(discount);
+        rest.QualityStatus = "Rejected";
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => whole.SaveChangesAsync());
+        rest.QualityStatus = "Blocked";
+        await whole.SaveChangesAsync();
+    }
 }
