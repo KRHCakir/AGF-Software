@@ -2,7 +2,6 @@ import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from './availability';
 import { isOptionalLineWeight, type WeightSource } from './salesOrder';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isOptionalNullableString, isString } from './guards';
-import type { OrderChannel } from '../lib/purchaseOrderRules';
 
 // Exact het contract van POST/GET /api/supply-commitments (backend: AgfAdmin/DTOs/SupplyCommitmentDtos.cs).
 
@@ -32,7 +31,6 @@ export interface CreateSupplyCommitmentRequest {
     // Inkooporder (optioneel): alleen meegestuurd als ingevuld, zodat oudere bevroren opdrachten gelijk blijven.
     supplierReference?: string;
     orderedOn?: string;
-    orderChannel?: OrderChannel;
     lines: CreateSupplyCommitmentLineRequest[];
 }
 

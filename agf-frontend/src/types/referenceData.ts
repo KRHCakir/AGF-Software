@@ -4,11 +4,15 @@ import { JsonObject, isArrayOf, isNumber, isObject, isOptionalNullableString, is
 const isPackageUnit = (value: unknown): value is PackageUnit => typeof value === 'string' && (PACKAGE_UNITS as readonly string[]).includes(value);
 
 // Alleen de velden die de werkplek gebruikt uit de bestaande endpoints
-// GET /api/incominginvoices/vendors, GET /api/customers en GET /api/products?includeVariants=true.
+// GET /api/purchase-invoices/vendors, GET /api/customers en GET /api/products?includeVariants=true.
 
 export interface VendorOption {
     id: number;
     name: string;
+    // Zoekcode, btw-nummer en actief-vlag van de relatie: alleen om op te zoeken in de leverancierskeuze.
+    searchCode: string | null;
+    vatNumber: string | null;
+    isActive: boolean;
 }
 
 export interface CustomerOption {

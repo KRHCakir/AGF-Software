@@ -1,8 +1,5 @@
 // Inkooporder (spiegel van AgfAdmin/Services/PurchaseOrderRules*.cs): ordernummer, weergavestatus en factuurindicator.
 // Afkeuren: purchaseOrderRejection.ts. Pure module zonder React of i18n, zodat ze met node:test te toetsen is.
-export type OrderChannel = 'Phone' | 'Email' | 'Portal' | 'Other';
-export const ORDER_CHANNELS: readonly OrderChannel[] = ['Phone', 'Email', 'Portal', 'Other'];
-
 export type PurchaseOrderStatus = 'Ordered' | 'PartiallyReceived' | 'Received' | 'Rejected' | 'Cancelled';
 export const PURCHASE_ORDER_STATUSES: readonly PurchaseOrderStatus[] = ['Ordered', 'PartiallyReceived', 'Received', 'Rejected', 'Cancelled'];
 export type PurchaseOrderStatusFilter = 'open' | 'all' | PurchaseOrderStatus;
@@ -76,13 +73,6 @@ export const INVOICE_INDICATOR_LABEL_KEYS: Readonly<Record<InvoiceIndicator, str
     None: 'po_invoice_none',
     Received: 'po_invoice_received',
     CreditNoteExpected: 'po_invoice_credit_note_expected',
-};
-
-export const CHANNEL_LABEL_KEYS: Readonly<Record<OrderChannel, string>> = {
-    Phone: 'po_channel_phone',
-    Email: 'po_channel_email',
-    Portal: 'po_channel_portal',
-    Other: 'po_channel_other',
 };
 
 export const REASON_LABEL_KEYS: Readonly<Record<RejectionReason, string>> = {

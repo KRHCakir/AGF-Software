@@ -3,7 +3,7 @@
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
-import { CHANNEL_LABEL_KEYS, DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
+import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 import ReceiptsSection from './ReceiptsSection';
@@ -36,7 +36,6 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 </p>
                 <p className="text-sm text-gray-700">
                     {t('po_col_ordered_on')} {formatDateOnly(order.orderedOn, locale)}
-                    {order.orderChannel && <> · {label(CHANNEL_LABEL_KEYS, order.orderChannel)}</>}
                     {' · '}{t('po_col_expected')} {order.expectedAt ? formatCalendarDate(order.expectedAt, locale) : '–'} · {order.origin}
                 </p>
                 {order.rejectedQuantity > 0 && (
@@ -118,7 +117,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
 function historyText(event: PurchaseOrderHistoryEvent, t: (key: string, values?: Record<string, string>) => string,
     label: (keys: Readonly<Record<string, string>>, value: string | null) => string, qty: (value: number) => string): string {
     switch (event.type) {
-        case 'Ordered': return t('po_history_ordered') + (event.channel ? ` (${label(CHANNEL_LABEL_KEYS, event.channel)})` : '');
+        case 'Ordered': return t('po_history_ordered');
         case 'Received': return t('po_history_received', { quantity: qty(event.quantity ?? 0), pallet: event.reference ?? '–' });
         case 'QualityChanged': {
             const quality = (status: string | null) => { const style = status === null ? null : qualityStyle(status); return style ? t(style.key) : (status ?? '–'); };

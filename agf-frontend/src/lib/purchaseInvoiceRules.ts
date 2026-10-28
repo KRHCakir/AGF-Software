@@ -152,8 +152,11 @@ function normalize(value: string): string {
     return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
+// Wat de leverancierskeuze nodig heeft; inkoopfactuur, aanvoer plannen en de inkooporderlijst delen dezelfde zoekregels.
+export interface SearchableVendor { id: number; name: string; searchCode: string | null; vatNumber: string | null }
+
 // Zoeken op naam, btw-nummer en #nummer ("#12" of "12" zoekt eerst het exacte nummer).
-export function searchVendors(vendors: readonly PurchaseVendor[], query: string): PurchaseVendor[] {
+export function searchVendors<T extends SearchableVendor>(vendors: readonly T[], query: string): T[] {
     const term = normalize(query);
     if (term === '') return [];
     const number = /^#?(\d{1,10})$/.exec(term);
@@ -166,7 +169,7 @@ export function searchVendors(vendors: readonly PurchaseVendor[], query: string)
     return [...exactCode, ...rest];
 }
 
-export function describeVendor(vendor: PurchaseVendor): string {
+export function describeVendor(vendor: SearchableVendor): string {
     return [vendor.searchCode, vendor.name, vendor.vatNumber, `#${vendor.id}`].filter((part): part is string => typeof part === 'string' && part !== '').join(' · ');
 }
 
