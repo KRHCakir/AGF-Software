@@ -27,11 +27,14 @@ export function tourStepIndexFor(pathname: string): number {
 const ORDER_LINK = /^\/sales-orders\?orderId=[1-9]\d{0,9}$/;
 const INSPECTION_SEARCH_LINK = /^\/inspection\?search=[A-Za-z0-9-]{1,40}$/;
 const PURCHASE_ORDER_LINK = /^\/purchase-orders\?(id=[1-9]\d{0,9}|query=[A-Za-z0-9-]{1,40})$/;
+const AVAILABILITY_VARIANT_LINK = /^\/availability\?productVariantId=[1-9]\d{0,9}$/;
 
-// Alleen een vaste route, een keuringszoekterm of een link naar één verkoop- of inkooporder (of een inkoopzoekterm);
+// Alleen een vaste route, een keuringszoekterm, een link naar één verkoop- of inkooporder (of een inkoopzoekterm) of de
+// beschikbaarheid van één variant;
 // nooit externe URL's, scripts of andere paden.
 export function isAllowedDemoHref(href: string): boolean {
-    return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href);
+    return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href)
+        || AVAILABILITY_VARIANT_LINK.test(href);
 }
 
 export function orderHref(id: number): string {
