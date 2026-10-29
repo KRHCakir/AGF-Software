@@ -71,7 +71,7 @@ export default function ReservableStockTable({ orderId, line, token, selectedId,
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {state.data.map((stock) => {
+                    {state.data.map((stock, index, all) => {
                         const selected = stock.palletContentLineId === selectedId;
                         return (
                             <tr key={stock.palletContentLineId} className={selected ? 'bg-blue-50' : undefined} aria-selected={selected}>
@@ -91,7 +91,7 @@ export default function ReservableStockTable({ orderId, line, token, selectedId,
                                 </td>
                                 <td className={td}><QualityBadge status={stock.qualityStatus} /></td>
                                 <td className={td}>
-                                    <button type="button" className={secondaryButtonClass} onClick={() => onSelect(stock)} aria-pressed={selected} disabled={!selectable}
+                                    <button type="button" data-tour="sales-stock" data-tour-key={index === all.findIndex((candidate) => candidate.availableQuantity >= line.openQuantity) ? 'fit' : index} className={secondaryButtonClass} onClick={() => onSelect(stock)} aria-pressed={selected} disabled={!selectable}
                                         aria-label={t('sales_select_stock', { pallet: stock.palletReference, lot: stock.lotNumber })}>
                                         {selected ? t('sales_selected') : t('supply_select')}
                                     </button>

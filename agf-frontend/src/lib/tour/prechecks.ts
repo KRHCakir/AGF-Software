@@ -3,11 +3,14 @@
 // anders precies wat er ontbreekt. De zoekregels zijn die van de schermen zelf (searchVendors), zodat Tab dezelfde keuze maakt.
 
 import { todayInAmsterdam } from '../calendarDate';
+import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
-import { getProductsWithVariants, getVendors } from '../../services/referenceDataService';
+import { getAvailabilityOverview } from '../../services/availabilityService';
+import { getCustomers, getProductsWithVariants, getVendors } from '../../services/referenceDataService';
+import type { AvailabilityOverview } from '../../types/availability';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
-import type { ProductOption, VendorOption } from '../../types/referenceData';
+import type { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { TOUR_REF_PREFIX } from './types';
 import type { TourMissing, TourPrecheck } from './types';
 
@@ -15,6 +18,8 @@ export const TOUR_VENDOR_SEARCH = 'Nature';
 export const TOUR_PRODUCT = 'Avocado';
 export const TOUR_VARIANT = 'Hass';
 export const TOUR_ORDER_QUANTITY = 20;
+export const TOUR_CUSTOMER_SEARCH = 'Lo';
+export const TOUR_SALES_QUANTITY = 4;
 
 // Tab neemt alleen een duidelijke suggestie over: de zoekterm moet precies één actieve leverancier vinden.
 export function findTourVendor(vendors: readonly VendorOption[], search: string): VendorOption | TourMissing {
@@ -88,6 +93,39 @@ export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck
             variantId: String(line.productVariantId),
             quantity: String(line.expectedQuantity),
             rejectQuantity: String(Math.max(1, Math.floor(line.expectedQuantity / 4))),
+        },
+    };
+}
+
+// De klantzoeker neemt met Tab de bovenste suggestie: er moet minstens één actieve klant op de zoekterm passen.
+export function findTourCustomer(customers: readonly CustomerOption[], search: string): CustomerOption | TourMissing {
+    return searchCustomers(customers, search)[0] ?? { key: 'tour_missing_customer', params: { search } };
+}
+
+// Reserveren kan alleen op goedgekeurde magazijnvoorraad in dezelfde eenheid, na bestaande reserveringen.
+export function hasSellableStock(overview: AvailabilityOverview, variantId: number, unit: string, quantity: number): boolean {
+    return overview.variants.some((variant) => variant.productVariantId === variantId
+        && variant.warehouseSupply.some((supply) => supply.unit === unit && supply.availableAfterReservations.quantity >= quantity));
+}
+
+export async function precheckSales(signal: AbortSignal): Promise<TourPrecheck> {
+    const [customers, products] = await Promise.all([getCustomers(signal), getProductsWithVariants(signal)]);
+    const customer = findTourCustomer(customers, TOUR_CUSTOMER_SEARCH);
+    const article = findTourArticle(products);
+    if (isMissing(customer) || isMissing(article)) return { missing: [customer, article].filter(isMissing) };
+    const overview = await getAvailabilityOverview({ productVariantId: article.variantId, route: 'Warehouse' }, signal);
+    if (!hasSellableStock(overview, article.variantId, article.unit, TOUR_SALES_QUANTITY)) {
+        return { missing: [{ key: 'tour_missing_stock', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}`, quantity: String(TOUR_SALES_QUANTITY) } }] };
+    }
+    const today = todayInAmsterdam();
+    return {
+        missing: [],
+        vars: {
+            customerSearch: TOUR_CUSTOMER_SEARCH,
+            customerName: customer.name,
+            productCode: article.code,
+            quantity: String(TOUR_SALES_QUANTITY),
+            deliveryDate: addDays(today, 3) ?? today,
         },
     };
 }

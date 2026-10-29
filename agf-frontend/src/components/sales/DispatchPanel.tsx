@@ -169,7 +169,7 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
             <section aria-labelledby={`${idPrefix}-select`}>
                 <div className="flex items-center justify-between">
                     <h4 id={`${idPrefix}-select`} className="text-sm font-semibold text-gray-900">{t('sales_dispatch_select')}</h4>
-                    <button type="button" className={secondaryButtonClass} onClick={selectAll} disabled={locked || dispatchable.length === 0}>{t('sales_dispatch_select_all')}</button>
+                    <button type="button" data-tour="sales-dispatch-all" className={secondaryButtonClass} onClick={selectAll} disabled={locked || dispatchable.length === 0}>{t('sales_dispatch_select_all')}</button>
                 </div>
                 {excludedAllocations > 0 && (
                     <p role="note" className="mt-1 rounded border border-violet-300 bg-violet-50 px-2 py-1 text-xs text-violet-950">{t('sales_dispatch_allocations_excluded', { count: String(excludedAllocations) })}</p>
@@ -239,7 +239,7 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
 
             {!locked && !readOnlyOrder && (
                 <div className="flex gap-2">
-                    <button type="submit" className={`${primaryButtonClass} bg-emerald-700 hover:bg-emerald-800`} disabled={selected.length === 0}>
+                    <button type="submit" data-tour="sales-dispatch-save" className={`${primaryButtonClass} bg-emerald-700 hover:bg-emerald-800`} disabled={selected.length === 0}>
                         {t('sales_dispatch_confirm', { count: String(selected.length) })}
                     </button>
                     <button type="button" className={secondaryButtonClass} onClick={onClose}>{t('inspection_cancel')}</button>

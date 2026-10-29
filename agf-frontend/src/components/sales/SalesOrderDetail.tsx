@@ -290,7 +290,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                             {showHistory ? t('sales_history_hide') : t('sales_history')}
                         </button>
                         {!readOnly && !showDispatch && (
-                            <button type="button" className={`${secondaryButtonClass} border-emerald-300 text-emerald-900 hover:bg-emerald-50`} onClick={() => { setDispatchNotice(null); setDispatching(true); }}
+                            <button type="button" data-tour="sales-dispatch" className={`${secondaryButtonClass} border-emerald-300 text-emerald-900 hover:bg-emerald-50`} onClick={() => { setDispatchNotice(null); setDispatching(true); }}
                                 disabled={!hasDispatchable || (dispatchBlocker !== null && dispatchBlocker.kind !== 'dispatch')}>
                                 {t('sales_dispatch_order')}
                             </button>
@@ -327,7 +327,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     </div>
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_customer_reference')}</dt>
-                        <dd className="font-medium text-gray-900">{order.customerReference ?? t('sales_no_reference')}</dd>
+                        <dd className="font-medium text-gray-900" data-tour="sales-detail" data-tour-key={order.customerReference ?? ''}>{order.customerReference ?? t('sales_no_reference')}</dd>
                     </div>
                     {order.internalNote && (
                         <div className="col-span-full" data-testid="internal-note">
@@ -373,7 +373,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             </header>
 
             {dispatchNotice && (
-                <div role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
+                <div role="status" data-tour="sales-dispatch-done" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
                     <p className="font-medium"><span aria-hidden="true">✓ </span>{t('sales_notice_dispatched', { id: String(dispatchNotice.value.id), count: String(dispatchNotice.value.lines.length) })}</p>
                     {dispatchNotice.replayed && <p className="mt-1">{t('supply_saved_before')}</p>}
                 </div>

@@ -277,7 +277,7 @@ function SalesWorkspace() {
                                 aria-busy={listRefreshing} aria-label={t('sales_refresh')} title={t('sales_refresh')}>
                                 <span aria-hidden="true">↻</span>{listRefreshing && <span className="sr-only">{t('sales_refreshing')}</span>}
                             </button>
-                            <button type="button" className={creating ? secondaryButtonClass : primaryButtonClass} onClick={() => setCreating(true)}
+                            <button type="button" data-tour="sales-new" className={creating ? secondaryButtonClass : primaryButtonClass} onClick={() => setCreating(true)}
                                 disabled={creating || reference.status !== 'ready' || !hydrated}>
                                 {createPending ? t('sales_pending_open_create') : `+ ${t('sales_new_order')}`}
                             </button>

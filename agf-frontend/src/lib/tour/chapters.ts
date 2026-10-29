@@ -2,6 +2,7 @@
 // bijbehorende hoofdstuk mee (met de data-tour-attributen en de test); zie docs/demo-tour.md.
 
 import { ORDER_CHAPTER, RECEIVE_CHAPTER } from './purchaseChapters.ts';
+import { INVOICE_CHAPTER, SALES_CHAPTER } from './salesChapters.ts';
 import type { TourChapter, TourStep } from './types.ts';
 
 const screen = (id: string, route: string): TourStep => ({
@@ -28,4 +29,4 @@ export const SCREENS_CHAPTER: TourChapter = {
     ],
 };
 
-export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER];
+export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER, SALES_CHAPTER, INVOICE_CHAPTER];

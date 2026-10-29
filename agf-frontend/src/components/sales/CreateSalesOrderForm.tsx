@@ -223,7 +223,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                 note={result.replayed ? t('supply_saved_before') : undefined}
                 actions={(
                     <>
-                        <button type="button" className={primaryButtonClass} onClick={() => onOpen(order.id)}>{t('sales_reserve_for_this_order')}</button>
+                        <button type="button" data-tour="sales-open-saved" className={primaryButtonClass} onClick={() => onOpen(order.id)}>{t('sales_reserve_for_this_order')}</button>
                         <button type="button" className={secondaryButtonClass} onClick={startOver}>{t('sales_another_order')}</button>
                     </>
                 )}
@@ -281,7 +281,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                             + {t('sales_new_customer')}
                         </button>
                     </div>
-                    <CustomerPicker id="customerId" customers={customers} value={draft.customerId} disabled={locked}
+                    <CustomerPicker id="customerId" dataTour="sales-customer" customers={customers} value={draft.customerId} disabled={locked}
                         invalid={(e('customerId') ?? []).length > 0} describedBy={(e('customerId') ?? []).length > 0 ? 'customerId' : undefined}
                         onChange={(customer) => updateHeader('customerId', customer === null ? '' : String(customer.id))}
                         newCustomerDisabled={locked && pendingCustomer === null}
@@ -296,13 +296,13 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                 </div>
                 <div>
                     <label htmlFor="requestedDeliveryDate-input" className="text-xs font-medium text-gray-700">{t('sales_delivery_date')} *</label>
-                    <input {...fieldProps('requestedDeliveryDate', e('requestedDeliveryDate'))} type="date" value={draft.requestedDeliveryDate} disabled={locked}
+                    <input {...fieldProps('requestedDeliveryDate', e('requestedDeliveryDate'))} data-tour="sales-delivery" type="date" value={draft.requestedDeliveryDate} disabled={locked}
                         onChange={(event) => updateHeader('requestedDeliveryDate', event.target.value)} className={inputClass} />
                     <FieldError id="requestedDeliveryDate" messages={e('requestedDeliveryDate')} />
                 </div>
                 <div>
                     <label htmlFor="customerReference-input" className="text-xs font-medium text-gray-700">{t('sales_customer_reference')}</label>
-                    <input {...fieldProps('customerReference', e('customerReference'))} value={draft.customerReference} disabled={locked} maxLength={100}
+                    <input {...fieldProps('customerReference', e('customerReference'))} data-tour="sales-reference" value={draft.customerReference} disabled={locked} maxLength={100}
                         placeholder={t('sales_customer_reference_placeholder')}
                         onChange={(event) => updateHeader('customerReference', event.target.value)} className={inputClass} />
                     <FieldError id="customerReference" messages={e('customerReference')} />
@@ -337,7 +337,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                     <tr key={line.key} className="align-top">
                                         <td className="w-96 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <ProductVariantPicker id={`${prefix}.productVariantId`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
+                                            <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`sales-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                                 value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
                                                 describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
                                                 onChange={(variantId) => {
@@ -349,11 +349,13 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>
                                         <td className="w-72 px-2 py-1.5">
-                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e}
+                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} dataTour="sales-line-quantity"
                                                 defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
-                                            <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
-                                                locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
+                                            <div data-tour="sales-line-kg" data-tour-key={index}>
+                                                <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
+                                                    locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
+                                            </div>
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
@@ -382,7 +384,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
 
             {pending === null && (
                 <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                    <button type="submit" className={primaryButtonClass} disabled={locked}>
+                    <button type="submit" data-tour="sales-save" className={primaryButtonClass} disabled={locked}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
                 </div>
