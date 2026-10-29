@@ -27,8 +27,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
         <article className="space-y-3" aria-labelledby="po-detail-title">
             <header className={section}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 id="po-detail-title" className="font-mono text-2xl font-bold text-gray-900">{order.orderNumber}</h2>
-                    <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span>
+                    <h2 id="po-detail-title" data-tour="po-detail-number" className="font-mono text-2xl font-bold text-gray-900">{order.orderNumber}</h2>
+                    <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><span data-tour="po-invoice-indicator" data-tour-key={order.invoiceIndicator}><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span></span>
                 </div>
                 <p className="mt-1 break-words text-sm text-gray-900">
                     <span className="font-medium">{order.vendorName ?? '–'}</span>
@@ -70,7 +70,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 {order.invoiceRefs.length === 0 && <p className="text-sm text-gray-600">{t('po_no_invoices')}</p>}
                 <ul className="text-sm">
                     {order.invoiceRefs.map((ref) => (
-                        <li key={ref.id} className="break-words py-0.5">
+                        <li key={ref.id} data-tour="po-invoice-ref" data-tour-key={ref.invoiceNumber} className="break-words py-0.5">
                             <span className="font-medium">{ref.kind === 'CreditNote' ? t('po_credit_note') : t('po_invoice')}</span>{' '}
                             <span className="font-mono">{ref.invoiceNumber}</span>
                             {ref.invoiceDate && <> · {formatDateOnly(ref.invoiceDate, locale)}</>}

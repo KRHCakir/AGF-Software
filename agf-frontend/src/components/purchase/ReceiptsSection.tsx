@@ -47,7 +47,7 @@ export default function ReceiptsSection({ order, onChanged }: { order: PurchaseO
                         </p>
                         {receipt.qualityReason && <p className="text-xs text-gray-600">{receipt.qualityReason}</p>}
                         {receipt.rejectable && rejecting !== receipt.palletContentLineId && !kept.includes(receipt.palletContentLineId) && !frozen(receipt.palletContentLineId) && (
-                            <button type="button" className={`${secondaryButtonClass} mt-1 border-red-300 text-red-800 hover:bg-red-50`} onClick={() => setRejecting(receipt.palletContentLineId)}
+                            <button type="button" data-tour="po-reject" data-tour-key={receipt.lotNumber} className={`${secondaryButtonClass} mt-1 border-red-300 text-red-800 hover:bg-red-50`} onClick={() => setRejecting(receipt.palletContentLineId)}
                                 aria-label={t('po_reject_line', { pallet: receipt.palletReference, lot: receipt.lotNumber })}>
                                 {t('po_reject')}
                             </button>

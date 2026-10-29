@@ -66,8 +66,8 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
                                 <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
                                 <td className={td}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
                                 <td className={td}><QuantityCell value={row.supply.reserved} /></td>
-                                <td className={`${td} bg-emerald-50/60`}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
-                                <td className={`${td} ${marked('quarantine')}`}><QuantityCell value={row.supply.warehouse.quarantine} /></td>
+                                <td className={`${td} bg-emerald-50/60`} data-tour="availability-available" data-tour-key={row.variant.productVariantId}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
+                                <td className={`${td} ${marked('quarantine')}`} data-tour="availability-quarantine" data-tour-key={row.variant.productVariantId}><QuantityCell value={row.supply.warehouse.quarantine} /></td>
                                 <td className={`${td} ${marked('expected')}`}><ExpectedCell value={row.supply.expectedUnregistered} /></td>
                                 <td className={td}><WarningBadges warnings={row.supply.warnings} /></td>
                             </tr>
@@ -116,7 +116,7 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
                         <tr key={row.key} className="hover:bg-blue-50/40">
                             {nameCell(row)}
                             <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
-                            <td className={`${td} bg-green-50/60 ${marked('available')}`}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>
+                            <td className={`${td} bg-green-50/60 ${marked('available')}`} data-tour="availability-available" data-tour-key={row.variant.productVariantId}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>
                             <td className={td}><QuantityCell value={row.supply.reserved} /></td>
                             <td className={`${td} bg-emerald-50/60`}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
                             <td className={td}><QuantityCell value={row.supply.reservedOnHold} /></td>

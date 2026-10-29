@@ -132,7 +132,7 @@ function PurchaseOrdersWorkspace() {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="sm:col-span-2">
                     <label htmlFor="po-search" className="text-xs font-medium text-gray-700">{t('po_search')}</label>
-                    <input id="po-search" type="search" value={query} onChange={(event) => changeQuery(event.target.value)} placeholder={t('po_search_placeholder')} className={inputClass} />
+                    <input id="po-search" data-tour="po-search" type="search" value={query} onChange={(event) => changeQuery(event.target.value)} placeholder={t('po_search_placeholder')} className={inputClass} />
                 </div>
                 <div>
                     <label htmlFor="po-status" className="text-xs font-medium text-gray-700">{t('po_col_status')}</label>
