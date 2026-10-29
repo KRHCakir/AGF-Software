@@ -23,10 +23,12 @@ function escapeAttribute(value: string): string {
     return value.replace(/["\\]/g, '\\$&');
 }
 
-// Het eerste zichtbare element; jsdom kent geen layout, daar telt alleen of het in het document staat en niet verborgen is.
+// Het eerste zichtbare element (een scherm kan dezelfde knop voor desktop en mobiel hebben, één ervan verborgen).
+// jsdom kent geen layout; daar telt alleen of het in het document staat en niet verborgen is.
 export function findTarget(doc: Document, target: TourTarget, vars: Readonly<Record<string, string>>): HTMLElement | null {
-    const all = Array.from(doc.querySelectorAll<HTMLElement>(targetSelector(target, vars)));
-    return all.find((element) => element.isConnected && !element.closest('[hidden]')) ?? null;
+    const all = Array.from(doc.querySelectorAll<HTMLElement>(targetSelector(target, vars)))
+        .filter((element) => element.isConnected && !element.closest('[hidden]'));
+    return all.find((element) => element.getClientRects().length > 0) ?? all[0] ?? null;
 }
 
 export function rectOf(element: Element): TourRect {

@@ -98,7 +98,7 @@ export default function SupplyPage() {
                     {modes.map((option) => (
                         <label key={option.value}
                             className="flex cursor-pointer items-start gap-2 rounded border border-gray-300 bg-white px-3 py-2 text-sm has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
-                            <input type="radio" name="supply-mode" value={option.value} checked={mode === option.value}
+                            <input type="radio" name="supply-mode" value={option.value} checked={mode === option.value} data-tour="supply-mode" data-tour-key={option.value}
                                 onChange={() => setMode(option.value)} className="mt-0.5" />
                             <span>
                                 <span className="block font-medium text-gray-900">{option.label}</span>

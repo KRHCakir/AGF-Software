@@ -270,7 +270,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         <Link href={href} className={primaryButtonClass}>{t('supply_view_availability')}</Link>
                         <Link href={`/purchase-orders?id=${commitment.id}`} className={secondaryButtonClass}>{t('po_to_order')}</Link>
                         {!isDirect && (
-                            <button type="button" className={secondaryButtonClass} onClick={() => onReceive(commitment)}>
+                            <button type="button" data-tour="supply-receive" className={secondaryButtonClass} onClick={() => onReceive(commitment)}>
                                 {t('supply_receive_for_this')}
                             </button>
                         )}
@@ -281,7 +281,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 {commitment.orderNumber && (
                     <p className="mb-2">
                         <span className="block text-xs font-medium uppercase tracking-wide text-green-900">{t('po_own_order_number')}</span>
-                        <span className="block font-mono text-3xl font-bold text-gray-900" data-testid="supply-order-number">{commitment.orderNumber}</span>
+                        <span className="block font-mono text-3xl font-bold text-gray-900" data-testid="supply-order-number" data-tour="supply-order-number">{commitment.orderNumber}</span>
                     </p>
                 )}
                 <p>
@@ -333,13 +333,13 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor="supplierReference-input" className="text-xs font-medium text-gray-700">{t('po_supplier_reference')}</label>
-                    <input {...fieldProps('supplierReference', e('supplierReference'))} value={header.supplierReference} disabled={locked} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH}
+                    <input {...fieldProps('supplierReference', e('supplierReference'))} data-tour="supply-reference" value={header.supplierReference} disabled={locked} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH}
                         onChange={(event) => updateHeader('supplierReference', event.target.value)} className={inputClass} />
                     <FieldError id="supplierReference" messages={e('supplierReference')} />
                 </div>
                 <div>
                     <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
-                    <input {...fieldProps('orderedOn', e('orderedOn'))} type="date" value={header.orderedOn} disabled={locked}
+                    <input {...fieldProps('orderedOn', e('orderedOn'))} data-tour="supply-ordered-on" type="date" value={header.orderedOn} disabled={locked}
                         onChange={(event) => updateHeader('orderedOn', event.target.value)} className={inputClass} />
                     <FieldError id="orderedOn" messages={e('orderedOn')} />
                 </div>
@@ -348,20 +348,20 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
-                    <VendorPicker id="vendorId" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked}
+                    <VendorPicker id="vendorId" dataTour="supply-vendor" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked}
                         invalid={!!e('vendorId')} describedBy={e('vendorId') ? 'vendorId' : undefined}
                         onChange={(vendor) => updateHeader('vendorId', vendor === null ? '' : String(vendor.id))} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
                 </div>
                 <div>
                     <label htmlFor="origin-input" className="text-xs font-medium text-gray-700">{t('supply_origin')} *</label>
-                    <input {...fieldProps('origin', e('origin'))} value={header.origin} disabled={locked} maxLength={200}
+                    <input {...fieldProps('origin', e('origin'))} data-tour="supply-origin" value={header.origin} disabled={locked} maxLength={200}
                         onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} />
                     <FieldError id="origin" messages={e('origin')} />
                 </div>
                 <div>
                     <label htmlFor="expectedAt-input" className="text-xs font-medium text-gray-700">{t('supply_expected_date')} *</label>
-                    <input {...fieldProps('expectedAt', e('expectedAt'))} type="date" value={header.expectedDate} disabled={locked}
+                    <input {...fieldProps('expectedAt', e('expectedAt'))} data-tour="supply-expected" type="date" value={header.expectedDate} disabled={locked}
                         onChange={(event) => updateHeader('expectedDate', event.target.value)} className={inputClass} />
                     <FieldError id="expectedAt" messages={e('expectedAt')} />
                 </div>
@@ -408,7 +408,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                     <tr key={line.key} className="align-top">
                                         <td className="w-80 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <ProductVariantPicker id={`${prefix}.productVariantId`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={reference.products}
+                                            <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={reference.products}
                                                 value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
                                                 describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
                                                 onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
@@ -422,15 +422,17 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                             <FieldError id={`${prefix}.lotNumber`} messages={e(`${prefix}.lotNumber`)} />
                                         </td>
                                         <td className="w-72 px-2 py-1.5">
-                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity"
+                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity" dataTour="supply-line-quantity"
                                                 defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
                                                 onChange={(field, value) => updateLine(line.key, field, value)} />
-                                            <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="expectedNetWeightKg" grossKey="expectedGrossWeightKg" unit={unitText}
-                                                locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
+                                            <div data-tour="supply-line-kg" data-tour-key={index}>
+                                                <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="expectedNetWeightKg" grossKey="expectedGrossWeightKg" unit={unitText}
+                                                    locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
+                                            </div>
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.expectedUnit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
-                                            <select {...fieldProps(`${prefix}.expectedUnit`, e(`${prefix}.expectedUnit`))} value={line.unit} disabled={locked}
+                                            <select {...fieldProps(`${prefix}.expectedUnit`, e(`${prefix}.expectedUnit`))} data-tour="supply-line-unit" data-tour-key={index} value={line.unit} disabled={locked}
                                                 onChange={(event) => updateLine(line.key, 'unit', event.target.value)} className={inputClass}>
                                                 <option value="">{t('supply_choose')}</option>
                                                 {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
@@ -454,7 +456,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             </fieldset>
 
             <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={locked}>
+                <button type="submit" data-tour="supply-save" className={primaryButtonClass} disabled={locked}>
                     {submitting ? t('supply_saving') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
                 </button>
             </div>

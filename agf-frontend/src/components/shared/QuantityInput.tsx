@@ -15,7 +15,7 @@ import QuantityKgLine from './QuantityKgLine';
 // Alleen voor pallets met dezelfde inhoud; gemengde pallets blijven via afzonderlijke inhoudsregels werken.
 export type QuantityField = 'quantity' | 'mode' | 'palletCount' | 'packagesPerPallet' | 'loosePackages';
 
-export default function QuantityInput({ prefix, index, line, locked, errors, quantityField = 'quantity', defaultPackagesPerPallet, kgDefaults, onChange }: {
+export default function QuantityInput({ prefix, index, line, locked, errors, quantityField = 'quantity', defaultPackagesPerPallet, kgDefaults, onChange, dataTour }: {
     prefix: string;
     index: number;
     line: { quantity: string; unit: PackageUnit | ''; mode: QuantityInputMode; palletCount: string; packagesPerPallet: string; loosePackages?: string };
@@ -27,6 +27,8 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
     // Netto en bruto kg per verpakking van het artikel: alleen voor de rekenregel.
     kgDefaults?: PackageKgDefaults;
     onChange: (field: QuantityField, value: string) => void;
+    // Vaste naam voor de rondleiding (data-tour) op het aantalveld; de sleutel is het regelnummer.
+    dataTour?: string;
 }) {
     const { t, locale } = useTranslation();
     // Vertaald eenheidslabel (Doos, Colli, …); zonder gekozen eenheid het woord "eenheid".
@@ -69,7 +71,7 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
                 <>
                     <label htmlFor={`${totalKey}-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
                     <div className="flex items-center gap-2">
-                        <input {...fieldProps(totalKey, errors(totalKey))} inputMode="decimal" value={line.quantity} disabled={locked}
+                        <input {...fieldProps(totalKey, errors(totalKey))} inputMode="decimal" value={line.quantity} disabled={locked} data-tour={dataTour} data-tour-key={dataTour ? index : undefined}
                             onChange={(event) => onChange('quantity', event.target.value)} className={`${inputClass} !mt-0 min-w-[7rem] flex-1 text-right`} />
                         <span className="text-sm text-gray-700" data-testid={`${prefix}.unit-suffix`}>{unit}</span>
                         {link('pallets', 'quantity_per_pallet')}

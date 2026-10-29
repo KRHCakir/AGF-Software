@@ -12,7 +12,7 @@ import { secondaryButtonClass } from '../supply/SuccessPanel';
 // nemen de gemarkeerde (standaard de bovenste) over en gaan naar het volgende veld; Escape sluit. Geen treffer: "Nieuwe klant"
 // met de getypte tekst als naam (de bestaande klantopdracht; hier wordt niets opgeslagen). Zonder onNewCustomer (Aanvoer
 // plannen, DirectTrade) alleen zoeken en kiezen.
-export default function CustomerPicker({ id, customers, value, onChange, onNewCustomer, disabled = false, invalid = false, describedBy, newCustomerDisabled = false }: {
+export default function CustomerPicker({ id, customers, value, onChange, onNewCustomer, disabled = false, invalid = false, describedBy, newCustomerDisabled = false, dataTour }: {
     id: string;
     customers: readonly CustomerOption[];
     value: string;
@@ -22,6 +22,8 @@ export default function CustomerPicker({ id, customers, value, onChange, onNewCu
     invalid?: boolean;
     describedBy?: string;
     newCustomerDisabled?: boolean;
+    // Vaste naam voor de rondleiding (data-tour) op het zoekveld.
+    dataTour?: string;
 }) {
     const { t } = useTranslation();
     const [query, setQuery] = useState('');
@@ -41,6 +43,7 @@ export default function CustomerPicker({ id, customers, value, onChange, onNewCu
         <>
             <LookupField<CustomerOption>
                 id={id}
+                dataTour={dataTour}
                 ariaLabel={t('sales_customer')}
                 selected={selected}
                 search={search}

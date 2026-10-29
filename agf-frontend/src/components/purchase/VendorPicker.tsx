@@ -6,7 +6,7 @@ import LookupField, { LookupMatch } from '../shared/LookupField';
 
 // Crediteur/leverancier zoeken op naam, zoekcode, btw-nummer en #nummer, op het gedeelde LookupField: typen in plaats van
 // een lange lijst doorlopen. Gebruikt in de inkoopfactuur, Aanvoer plannen en het filter van Inkoopopdrachten.
-export default function VendorPicker<T extends SearchableVendor & { isActive: boolean }>({ id, vendors, value, onChange, disabled = false, invalid = false, describedBy, ariaLabel, inputRef, badge, includeInactive = false }: {
+export default function VendorPicker<T extends SearchableVendor & { isActive: boolean }>({ id, vendors, value, onChange, disabled = false, invalid = false, describedBy, ariaLabel, inputRef, badge, includeInactive = false, dataTour }: {
     id: string;
     vendors: readonly T[];
     value: string;
@@ -20,6 +20,8 @@ export default function VendorPicker<T extends SearchableVendor & { isActive: bo
     badge?: (vendor: T) => string | null;
     // Filteren op bestaande orders: ook inactieve leveranciers zijn dan vindbaar.
     includeInactive?: boolean;
+    // Vaste naam voor de rondleiding (data-tour) op het zoekveld.
+    dataTour?: string;
 }) {
     const selected = useMemo(() => {
         const vendor = vendors.find((candidate) => String(candidate.id) === value);
@@ -39,6 +41,7 @@ export default function VendorPicker<T extends SearchableVendor & { isActive: bo
     return (
         <LookupField<T>
             id={id}
+            dataTour={dataTour}
             ariaLabel={ariaLabel}
             selected={selected}
             search={search}
