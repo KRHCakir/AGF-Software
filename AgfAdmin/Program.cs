@@ -50,11 +50,15 @@ var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// CORS configuratie
+// CORS configuratie: standaard alleen de frontend op :3000. Een tweede lokale frontend (zoals de e2e-tests van de
+// rondleiding op :3001) zet Cors__Origins__0=... in de omgeving van de API.
+var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() is { Length: > 0 } configured
+    ? configured
+    : new[] { "http://localhost:3000" };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
-        policy => policy.WithOrigins("http://localhost:3000")  // Pas dit aan naar je frontend-URL
+        policy => policy.WithOrigins(corsOrigins)
                         .AllowAnyMethod()
                         .AllowAnyHeader());
 });

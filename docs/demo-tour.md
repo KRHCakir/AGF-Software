@@ -52,6 +52,28 @@ scripts/demo-db-snapshot.sh restore agf_smoke
 Het script weigert databases waarvan de naam geen `smoke`, `demo` of `tour` bevat, en vraagt bij restore om de
 databasenaam ter bevestiging. Restore zet de hele database terug: ook ander werk van na de momentopname verdwijnt.
 
+## E2E-tests (`npm run test:tour`)
+
+Playwright speelt elk hoofdstuk af door het echte paneel (Kijk mee en Doe zelf) en controleert dat alle stappen
+voorbijkomen, dat geen controle faalt, dat de eigen gebruikersnaam terugkomt en wat er via de API in het systeem staat.
+Altijd tegen een aparte testdatabase, nooit tegen `agf_smoke`.
+
+1. Testdatabase maken, bijvoorbeeld als kopie van een dump van de demo:
+   `pg_dump -Fc -d agf_smoke -f /tmp/demo.dump && createdb agf_tour_test && pg_restore -d agf_tour_test --no-owner /tmp/demo.dump`.
+   Leg er meteen een momentopname van vast (`scripts/demo-db-snapshot.sh save agf_tour_test`), dan kun je na een run
+   terug. De test maakt "Nature's Pride" (leverancier) en een klant op "Lo" via de gewone API aan als ze ontbreken;
+   Avocado Hass met snelcode, eenheid en kg per verpakking moet al bestaan.
+2. API op de testdatabase (poort 5198, CORS voor de testfrontend):
+   `ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=agf_tour_test;Username=…" ASPNETCORE_URLS=http://localhost:5198 Cors__Origins__0=http://localhost:3001 dotnet run --project AgfAdmin --no-launch-profile`
+3. Frontend met de rondleiding aan (poort 3001, naast de demo op 3000):
+   `NEXT_PUBLIC_API_URL=http://localhost:5198/api NEXT_PUBLIC_DEMO_ASSISTANT=true NEXT_PUBLIC_DEMO_TOUR=true npx next dev -p 3001`
+4. In `agf-frontend`: `TOUR_TEST_DATABASE=agf_tour_test npm run test:tour` (ongeveer 2 minuten).
+
+Standaard gebruikt de test de geïnstalleerde Google Chrome. Zonder Chrome: `npx playwright install chromium` en
+`TOUR_BROWSER_CHANNEL=chromium`. Andere adressen: `TOUR_BASE_URL` en `TOUR_API_URL`; meekijken: `TOUR_HEADED=true`.
+De set zit (nog) niet in de standaard-CI: hij heeft Postgres, de API en een draaiende frontend nodig en duurt een paar
+minuten.
+
 ## Een hoofdstuk schrijven
 
 - Een hoofdstuk (`TourChapter`) heeft stappen (`TourStep`) met een route, `titleKey`, `whatKey` ("Nu doen we dit"),

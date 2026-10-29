@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { isAllowedDemoHref } from '../../lib/demoAssistant';
 import { todayInAmsterdam } from '../../lib/calendarDate';
 import { TourRunner } from '../../lib/tour/runner';
-import { TOUR_REF_PREFIX, TOUR_SPEEDS } from '../../lib/tour/types';
+import { TOUR_ACTOR, TOUR_REF_PREFIX, TOUR_SPEEDS } from '../../lib/tour/types';
 import type { TourChapter, TourMode, TourSpeed, TourState, TourTiming } from '../../lib/tour/types';
 import { readStoredActor, writeStoredActor } from '../supply/useActorReference';
 
@@ -15,6 +15,36 @@ import { readStoredActor, writeStoredActor } from '../supply/useActorReference';
 const SEQUENCE_KEY = 'agf_demo_tour_seq';
 const DONE_KEY = 'agf_demo_tour_done';
 const SETTINGS_KEY = 'agf_demo_tour_settings';
+// De eigen gebruikersnaam tijdens een hoofdstuk: zo komt hij ook terug als het tabblad midden in de rondleiding sluit.
+const SAVED_ACTOR_KEY = 'agf_demo_tour_saved_actor';
+
+function remove(key: string) {
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        // Niets te doen.
+    }
+}
+
+// Tijdens een hoofdstuk "Demo-assistent", met de eigen naam apart bewaard; daarna (of bij de volgende keer openen) terug.
+const tourActor = {
+    get: readStoredActor,
+    set: (value: string | null) => {
+        if (value === TOUR_ACTOR) {
+            if (read(SAVED_ACTOR_KEY, (raw) => raw) === null) write(SAVED_ACTOR_KEY, JSON.stringify(readStoredActor()));
+        } else {
+            remove(SAVED_ACTOR_KEY);
+        }
+        writeStoredActor(value);
+    },
+};
+
+function restoreInterruptedActor() {
+    const saved = read(SAVED_ACTOR_KEY, (raw) => { try { return { value: JSON.parse(raw) as string | null }; } catch { return { value: null }; } });
+    if (saved === null) return;
+    if (readStoredActor() === TOUR_ACTOR) writeStoredActor(saved.value);
+    remove(SAVED_ACTOR_KEY);
+}
 
 export interface TourSettings {
     mode: TourMode;
@@ -85,13 +115,14 @@ export function useTour(allowWrites: boolean, timing?: (speed: TourSpeed) => Tou
     useEffect(() => {
         setSettingsState(read(SETTINGS_KEY, parseSettings) ?? { mode: 'watch', speed: 'normal' });
         setDone(read(DONE_KEY, parseDone) ?? []);
+        restoreInterruptedActor();
         const runner = new TourRunner({
             document: window.document,
             navigate: (href) => routerRef.current.push(href),
             currentPath: () => pathRef.current ?? '',
             isAllowedHref: isAllowedDemoHref,
             allowWrites,
-            actor: { get: readStoredActor, set: writeStoredActor },
+            actor: tourActor,
             nextRef: nextTourRef,
             today: todayInAmsterdam,
             onChange: setState,
