@@ -247,7 +247,7 @@ function SalesWorkspace() {
             <div ref={aboveRef} className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('sales')}</h1>
+                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('sales')}</h1>
                     <p className="text-sm text-gray-600">{t('sales_subtitle')}</p>
                 </div>
                 <div className="w-full sm:w-64">

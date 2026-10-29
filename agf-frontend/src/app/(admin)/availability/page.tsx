@@ -117,7 +117,7 @@ function AvailabilityWorkspace() {
         <div className="mx-auto max-w-[110rem] space-y-4 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('availability')}</h1>
+                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('availability')}</h1>
                     <p className="text-sm text-gray-600">{t('availability_subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-600">

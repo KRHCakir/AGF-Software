@@ -1,8 +1,8 @@
 // Pure regels van de demo-assistent, los van React en i18n, zodat ze met node:test te toetsen zijn.
-// De assistent mag alleen navigeren, zoeken en uitleggen: vaste routes, een vaste rondleiding en zoeken in de
-// bestaande orderlijst (GET). Er is geen AI en er wordt nooit iets gewijzigd.
+// De assistent navigeert alleen naar vaste routes. De vaste rondleiding en het orderzoeken wijzigen nooit iets; de autopilot
+// (lib/tour, alleen met NEXT_PUBLIC_DEMO_TOUR=true) vult schermen in via dezelfde routes. Er is geen AI.
 
-export const DEMO_ROUTES = ['/supply', '/inspection', '/availability', '/sales-orders'] as const;
+export const DEMO_ROUTES = ['/supply', '/inspection', '/availability', '/sales-orders', '/purchase-orders'] as const;
 export type DemoRoute = (typeof DEMO_ROUTES)[number];
 
 export interface TourStep {
@@ -26,10 +26,12 @@ export function tourStepIndexFor(pathname: string): number {
 
 const ORDER_LINK = /^\/sales-orders\?orderId=[1-9]\d{0,9}$/;
 const INSPECTION_SEARCH_LINK = /^\/inspection\?search=[A-Za-z0-9-]{1,40}$/;
+const PURCHASE_ORDER_LINK = /^\/purchase-orders\?(id=[1-9]\d{0,9}|query=[A-Za-z0-9-]{1,40})$/;
 
-// Alleen een vaste route, een keuringszoekterm of een link naar één verkooporder; nooit externe URL's, scripts of andere paden.
+// Alleen een vaste route, een keuringszoekterm of een link naar één verkoop- of inkooporder (of een inkoopzoekterm);
+// nooit externe URL's, scripts of andere paden.
 export function isAllowedDemoHref(href: string): boolean {
-    return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href);
+    return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href);
 }
 
 export function orderHref(id: number): string {
