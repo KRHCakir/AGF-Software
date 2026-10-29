@@ -16,7 +16,7 @@ export default function DestinationChooser({ value, onChange }: { value: SupplyR
             <div className="grid grid-cols-2 gap-3">
                 {options.map((option) => (
                     <label key={option.route} className={`flex cursor-pointer gap-3 rounded-md border bg-white p-3 ${option.className}`}>
-                        <input type="radio" name="supply-destination" value={option.route} checked={value === option.route}
+                        <input type="radio" name="supply-destination" value={option.route} checked={value === option.route} data-tour="supply-destination" data-tour-key={option.route}
                             onChange={() => onChange(option.route)} className="mt-1" />
                         <span>
                             <span className="block font-semibold text-gray-900">

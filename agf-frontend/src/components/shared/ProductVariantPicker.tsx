@@ -10,7 +10,7 @@ import LookupField, { LookupMatch } from './LookupField';
 // kiest uitsluitend een variant; hoeveelheid, prijs of gewicht wordt hier nooit ingevuld.
 // Met `allowFreeText` (inkoopfactuur) blijft een getypte tekst zonder keuze staan als vrije omschrijving.
 
-export default function ProductVariantPicker({ id, products, value, onChange, disabled = false, invalid = false, describedBy, ariaLabel, allowFreeText = false, freeText = '', onFreeText, inputRef, className }: {
+export default function ProductVariantPicker({ id, products, value, onChange, disabled = false, invalid = false, describedBy, ariaLabel, allowFreeText = false, freeText = '', onFreeText, inputRef, className, dataTour }: {
     id: string;
     products: readonly SearchableProduct[];
     value: string;
@@ -24,6 +24,8 @@ export default function ProductVariantPicker({ id, products, value, onChange, di
     onFreeText?: (text: string) => void;
     inputRef?: (element: HTMLInputElement | null) => void;
     className?: string;
+    // Vaste naam voor de rondleiding (data-tour) op het zoekveld.
+    dataTour?: string;
 }) {
     const selected = useMemo(() => (value === '' ? null : findVariant(products, Number(value))), [products, value]);
     const search = useCallback((query: string): LookupMatch<VariantMatch>[] => searchVariants(products, query).map((match) => ({
@@ -38,6 +40,7 @@ export default function ProductVariantPicker({ id, products, value, onChange, di
     return (
         <LookupField<VariantMatch>
             id={id}
+            dataTour={dataTour}
             ariaLabel={ariaLabel}
             selected={selected}
             search={search}

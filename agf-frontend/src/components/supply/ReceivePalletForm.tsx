@@ -462,7 +462,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                     <>
                         <Link href={href} className={primaryButtonClass}>{t('supply_view_availability')}</Link>
                         {frozen.pallet.result && (
-                            <Link href={`/inspection?palletId=${frozen.pallet.result.id}`} className={secondaryButtonClass}>{t('supply_to_inspection')}</Link>
+                            <Link href={`/inspection?palletId=${frozen.pallet.result.id}`} data-tour="receive-to-inspection" className={secondaryButtonClass}>{t('supply_to_inspection')}</Link>
                         )}
                         <button type="button" className={secondaryButtonClass} onClick={() => reset(null)}>{t('supply_another_pallet')}</button>
                     </>
@@ -525,7 +525,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                     </div>
                     <label className="text-xs font-medium text-gray-700">
                         {t('supply_receive_search')}
-                        <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+                        <input type="search" data-tour="receive-search" value={search} onChange={(event) => setSearch(event.target.value)}
                             placeholder={t('supply_receive_search_placeholder')} className={`${inputClass} w-72`} />
                     </label>
                 </div>
@@ -569,7 +569,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         return (
                                             <tr key={line.id} className={missingUnit ? 'bg-red-50/40' : checked ? 'bg-blue-50' : undefined}>
                                                 <td className="px-2 py-1.5 align-top">
-                                                    <input id={inputId} type="checkbox" checked={checked} disabled={missingUnit || !palletEditable}
+                                                    <input id={inputId} type="checkbox" checked={checked} disabled={missingUnit || !palletEditable} data-tour="receive-line" data-tour-key={`${commitment.id}-${line.id}`}
                                                         aria-describedby={missingUnit ? `${inputId}-missing-unit` : undefined}
                                                         onChange={() => toggleSource({ commitment, line })} />
                                                 </td>
@@ -657,13 +657,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
                                 <div className="col-span-2">
                                     <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
-                                    <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} value={draft.lot} maxLength={100} disabled={!editable}
+                                    <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} data-tour="receive-lot" data-tour-key={id} value={draft.lot} maxLength={100} disabled={!editable}
                                         onChange={(event) => editLine(id, 'lot', event.target.value)} className={inputClass} />
                                     <FieldError id={key('lotNumber')} messages={e(key('lotNumber'))} />
                                 </div>
                                 <div>
                                     <label htmlFor={`${key('quantity')}-input`} className="text-xs font-medium text-gray-700">{t('supply_quantity')} *</label>
-                                    <input {...fieldProps(key('quantity'), e(key('quantity')))} value={draft.quantity} inputMode="decimal" disabled={!editable}
+                                    <input {...fieldProps(key('quantity'), e(key('quantity')))} data-tour="receive-quantity" data-tour-key={id} value={draft.quantity} inputMode="decimal" disabled={!editable}
                                         onChange={(event) => editLine(id, 'quantity', event.target.value)} className={`${inputClass} min-w-[7rem] text-right`} />
                                     {/* Rekenregel met netto en bruto kg per verpakking van het artikel (alleen weergave), anders "= 1.560 colli". */}
                                     <QuantityKgLine value={draft.quantity} unit={entry.line.expectedUnit === null ? '' : t(unitLabelKey(entry.line.expectedUnit)).toLowerCase()} defaults={entry.line} testId={key('quantity')} />
@@ -674,7 +674,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <div className="mt-1.5"><UnitBadge unit={entry.line.expectedUnit} /></div>
                                     <FieldError id={key('unit')} messages={e(key('unit'))} />
                                 </div>
-                                <div className="col-span-2">
+                                <div className="col-span-2" data-tour="receive-weight" data-tour-key={id}>
                                     <fieldset>
                                         <legend className="text-xs font-medium text-gray-700">{t('supply_weight_method')} *</legend>
                                         <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-800">
@@ -759,7 +759,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             {progress.length > 0 && <SubmitProgress steps={progress} />}
 
             <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={blocked || sources.status !== 'ready'}>
+                <button type="submit" data-tour="receive-save" className={primaryButtonClass} disabled={blocked || sources.status !== 'ready'}>
                     {running ? t('supply_saving') : frozen?.pallet.done ? t('supply_continue_registration') : t('supply_register_pallet')}
                 </button>
             </div>
