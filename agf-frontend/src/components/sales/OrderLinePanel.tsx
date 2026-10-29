@@ -187,7 +187,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                         {line.directTradeShippedQuantity > 0 && <span className="ml-1 text-violet-900">({t('sales_line_dt_shipped', { quantity: formatQuantity(line.directTradeShippedQuantity, locale) })})</span>}
                     </span>
                 )}
-                <span className={`font-medium ${statusClass}`}>{statusText}</span>
+                <span className={`font-medium ${statusClass}`} data-tour="sales-line-state" data-tour-key={line.openQuantity === 0 ? 'reserved' : 'open'}>{statusText}</span>
                 {progress.onHold && <OnHoldBadge />}
                 {line.allocatedQuantity > 0 && <ExpectedAllocationBadge />}
                 <div className="ml-auto flex h-2 w-40 overflow-hidden rounded bg-gray-200" role="progressbar" aria-valuemin={0} aria-valuemax={line.quantity} aria-valuenow={committed + line.allocatedQuantity}
@@ -347,7 +347,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
             <div className="border-t border-gray-200 px-3 py-2">
                 {!showChooser && !showAllocator && (
                     <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" className={primaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
+                        <button type="button" data-tour="sales-choose-stock" className={primaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
                             {t('sales_choose_stock')}
                         </button>
                         <button type="button" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} disabled={!canStart} onClick={() => { setNotice(null); setAllocating(true); }}>

@@ -170,7 +170,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
             <div className="grid grid-cols-3 gap-3">
                 <div>
                     <label htmlFor={`${idPrefix}-quantity-input`} className="text-xs font-medium text-gray-700">{t('sales_reserve_quantity')} *</label>
-                    <input {...fieldProps(`${idPrefix}-quantity`, fieldErrors.quantity)} inputMode="decimal" value={quantity} disabled={locked}
+                    <input {...fieldProps(`${idPrefix}-quantity`, fieldErrors.quantity)} data-tour="sales-reserve-quantity" inputMode="decimal" value={quantity} disabled={locked}
                         onChange={(event) => edit(setQuantity)(event.target.value)} className={inputClass} />
                     <FieldError id={`${idPrefix}-quantity`} messages={fieldErrors.quantity} />
                 </div>
@@ -184,7 +184,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
                     <FieldError id={`${idPrefix}-kg`} messages={fieldErrors.netWeightKg} />
                 </div>
                 <div className="flex flex-col justify-end">
-                    <button type="button" className={secondaryButtonClass} onClick={copyFullRemainder} disabled={locked || !fits}>
+                    <button type="button" data-tour="sales-reserve-full" className={secondaryButtonClass} onClick={copyFullRemainder} disabled={locked || !fits}>
                         {t('sales_reserve_full_remainder')}
                     </button>
                     <span className="mt-1 block text-xs text-gray-600">
@@ -226,7 +226,7 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
 
             {!locked && (
                 <div className="flex gap-2">
-                    <button type="submit" className={primaryButtonClass} disabled={unitMismatch || stock === null}>{t('sales_confirm_reservation')}</button>
+                    <button type="submit" data-tour="sales-reserve-confirm" className={primaryButtonClass} disabled={unitMismatch || stock === null}>{t('sales_confirm_reservation')}</button>
                     <button type="button" className={secondaryButtonClass} onClick={onCancel}>{t('inspection_cancel')}</button>
                 </div>
             )}
