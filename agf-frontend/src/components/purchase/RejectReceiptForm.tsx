@@ -138,19 +138,19 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor={`${id}-quantity`} className="text-xs font-medium text-gray-700">{t('po_reject_quantity')} *</label>
-                    <input {...fieldProps('lines[0].quantity', e('lines[0].quantity'))} id={`${id}-quantity`} inputMode="decimal" value={quantity} disabled={locked}
+                    <input {...fieldProps('lines[0].quantity', e('lines[0].quantity'))} id={`${id}-quantity`} data-tour="reject-quantity" inputMode="decimal" value={quantity} disabled={locked}
                         onChange={(event) => changeQuantity(event.target.value)} className={inputClass} />
                     <FieldError id="lines[0].quantity" messages={e('lines[0].quantity')} />
                 </div>
                 <div>
                     <label htmlFor={`${id}-kg`} className="text-xs font-medium text-gray-700">{t('po_reject_kg')} *</label>
-                    <input {...fieldProps('lines[0].netWeightKg', e('lines[0].netWeightKg'))} id={`${id}-kg`} inputMode="decimal" value={kg} disabled={locked} readOnly={calculated}
+                    <input {...fieldProps('lines[0].netWeightKg', e('lines[0].netWeightKg'))} id={`${id}-kg`} data-tour="reject-kg" inputMode="decimal" value={kg} disabled={locked} readOnly={calculated}
                         onChange={(event) => { if (locked) return; setKg(event.target.value); setKgTouched(true); edited(); }} className={inputClass} />
                     <FieldError id="lines[0].netWeightKg" messages={e('lines[0].netWeightKg')} />
                 </div>
                 <div>
                     <label htmlFor={`${id}-reason`} className="text-xs font-medium text-gray-700">{t('po_reject_reason')} *</label>
-                    <select {...fieldProps('reason', e('reason'))} id={`${id}-reason`} value={reason} disabled={locked}
+                    <select {...fieldProps('reason', e('reason'))} id={`${id}-reason`} data-tour="reject-reason" value={reason} disabled={locked}
                         onChange={(event) => { if (locked) return; setReason(event.target.value); edited(); }} className={inputClass}>
                         <option value="">{t('supply_choose')}</option>
                         {REJECTION_REASONS.map((value) => <option key={value} value={value}>{t(REASON_LABEL_KEYS[value])}</option>)}
@@ -174,7 +174,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
                 <legend className="mb-1 text-xs font-medium text-gray-700">{t('po_reject_decision')}</legend>
                 {REJECTION_DECISIONS.map((value) => (
                     <label key={value} className="flex cursor-pointer items-center gap-2 rounded border border-gray-300 bg-white px-2 py-1 text-sm has-[:checked]:border-red-500 has-[:checked]:bg-red-50">
-                        <input type="radio" name={`${id}-decision`} value={value} checked={decision === value} disabled={locked}
+                        <input type="radio" name={`${id}-decision`} value={value} checked={decision === value} data-tour="reject-decision" data-tour-key={value} disabled={locked}
                             onChange={() => { if (locked) return; setDecision(value); edited(); }} />
                         {t(DECISION_LABEL_KEYS[value])}
                     </label>
@@ -182,7 +182,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
             </fieldset>
             {pending === null && (
                 <div className="flex flex-wrap gap-2">
-                    <button type="submit" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_reject_save')}</button>
+                    <button type="submit" data-tour="reject-save" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_reject_save')}</button>
                     <button type="button" className={secondaryButtonClass} disabled={locked} onClick={onCancel}>{t('po_cancel')}</button>
                 </div>
             )}

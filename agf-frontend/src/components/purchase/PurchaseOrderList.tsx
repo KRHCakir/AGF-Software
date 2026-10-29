@@ -43,7 +43,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                         {items.map((item) => (
                             <tr key={item.id} aria-selected={item.id === selectedId} className={`cursor-pointer hover:bg-blue-50 ${item.id === selectedId ? 'bg-blue-50' : ''}`} onClick={() => onOpen(item.id)}>
                                 <td className={`${th} whitespace-nowrap font-mono`}>
-                                    <button type="button" className="font-semibold text-blue-800 hover:underline" aria-label={t('po_open_order', { number: item.orderNumber })} onClick={(event) => { event.stopPropagation(); onOpen(item.id); }}>
+                                    <button type="button" data-tour="po-open" data-tour-key={item.orderNumber} className="font-semibold text-blue-800 hover:underline" aria-label={t('po_open_order', { number: item.orderNumber })} onClick={(event) => { event.stopPropagation(); onOpen(item.id); }}>
                                         {item.orderNumber}
                                     </button>
                                 </td>
@@ -67,7 +67,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
             <ul className="space-y-2 md:hidden">
                 {items.map((item) => (
                     <li key={item.id}>
-                        <button type="button" onClick={() => onOpen(item.id)} aria-label={t('po_open_order', { number: item.orderNumber })}
+                        <button type="button" data-tour="po-open" data-tour-key={item.orderNumber} onClick={() => onOpen(item.id)} aria-label={t('po_open_order', { number: item.orderNumber })}
                             className={`w-full rounded-md border bg-white p-3 text-left text-sm ${item.id === selectedId ? 'border-blue-500' : 'border-gray-200'}`}>
                             <span className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="font-mono font-semibold text-blue-800">{item.orderNumber}</span>

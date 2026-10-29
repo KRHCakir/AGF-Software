@@ -142,14 +142,14 @@ function InspectionWorkspace() {
                 <div className="flex items-end gap-4">
                     <div className="w-72">
                         <label htmlFor="inspection-actor" className="text-xs font-medium text-gray-700">{t('inspection_actor_label')} *</label>
-                        <select id="inspection-actor" value={actorChoice} onChange={(event) => setActorChoice(event.target.value as typeof actorChoice)}
+                        <select id="inspection-actor" data-tour="inspection-actor" value={actorChoice} onChange={(event) => setActorChoice(event.target.value as typeof actorChoice)}
                             className={inputClass} aria-describedby="inspection-actor-hint">
                             <option value="">{t('inspection_actor_choose')}</option>
                             {DEMO_INSPECTORS.map((name) => <option key={name} value={name}>{name}</option>)}
                             <option value="other">{t('inspection_actor_other')}</option>
                         </select>
                         {actorChoice === 'other' && (
-                            <input id="inspection-actor-other" aria-label={t('inspection_actor_other')} value={actorOther} maxLength={100} onChange={(event) => setActorOther(event.target.value)}
+                            <input id="inspection-actor-other" data-tour="inspection-actor-other" aria-label={t('inspection_actor_other')} value={actorOther} maxLength={100} onChange={(event) => setActorOther(event.target.value)}
                                 placeholder={t('supply_actor_placeholder')} className={inputClass} />
                         )}
                         <span id="inspection-actor-hint" className="block text-xs text-gray-500">{t('inspection_actor_hint')}</span>

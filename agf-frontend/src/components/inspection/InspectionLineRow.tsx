@@ -150,7 +150,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
                 <span className="block text-xs text-gray-600">{commitment?.origin ?? t('availability_unknown')} · #{line.supplyCommitmentId}</span>
             </td>
             <td className="px-3 py-2">
-                <QualityBadge status={line.qualityStatus} />
+                <span data-tour="inspection-status" data-tour-key={`${line.lotNumber}-${line.qualityStatus}`}><QualityBadge status={line.qualityStatus} /></span>
                 {line.qualityReason && <span className="mt-1 block text-xs italic text-gray-700">“{line.qualityReason}”</span>}
                 {inspected && (
                     <span className="mt-1 block text-xs text-gray-800" data-testid="inspected-by">
@@ -165,7 +165,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
                 {actions.length > 0 && action === null && (
                     <div className="flex flex-wrap gap-2">
                         {actions.map((to) => (
-                            <button key={to} type="button" className={secondaryButtonClass} onClick={() => open(to)}
+                            <button key={to} type="button" data-tour="inspection-action" data-tour-key={`${to}-${line.lotNumber}`} className={secondaryButtonClass} onClick={() => open(to)}
                                 aria-label={`${t(actionLabelKey(line.qualityStatus, to))}: ${line.productName ?? ''} · ${line.productVariantName ?? ''} · ${line.lotNumber}`}>
                                 {t(actionLabelKey(line.qualityStatus, to))}
                             </button>
@@ -211,7 +211,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
 
                         {!locked && (
                             <div className="flex gap-2">
-                                <button type="submit" className={primaryButtonClass}>{t('inspection_confirm', { action: t(actionLabelKey(line.qualityStatus, action)) })}</button>
+                                <button type="submit" data-tour="inspection-confirm" data-tour-key={line.lotNumber} className={primaryButtonClass}>{t('inspection_confirm', { action: t(actionLabelKey(line.qualityStatus, action)) })}</button>
                                 <button type="button" className={secondaryButtonClass} onClick={close}>{t('inspection_cancel')}</button>
                             </div>
                         )}

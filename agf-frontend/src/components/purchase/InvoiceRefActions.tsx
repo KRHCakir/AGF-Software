@@ -38,7 +38,7 @@ export default function InvoiceRefActions({ orderId, orderNumber, onDone }: { or
             ))}
             {open.length === 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                    {KINDS.map((kind) => <button key={kind} type="button" className={secondaryButtonClass} onClick={() => setOpened(kind)}>+ {label(kind)}</button>)}
+                    {KINDS.map((kind) => <button key={kind} type="button" data-tour="po-add-invoice" data-tour-key={kind} className={secondaryButtonClass} onClick={() => setOpened(kind)}>+ {label(kind)}</button>)}
                 </div>
             )}
         </>
@@ -121,7 +121,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <div>
                     <label htmlFor={`invoiceRef-${kind}-number`} className="text-xs font-medium text-gray-700">{kind === 'Invoice' ? t('invoice_number') : t('po_credit_note_number')} *</label>
-                    <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} id={`invoiceRef-${kind}-number`} value={number} maxLength={MAX_INVOICE_NUMBER_LENGTH} disabled={locked} autoFocus
+                    <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} id={`invoiceRef-${kind}-number`} data-tour="po-invoice-number" value={number} maxLength={MAX_INVOICE_NUMBER_LENGTH} disabled={locked} autoFocus
                         onChange={(event) => edit(() => setNumber(event.target.value))} className={inputClass} />
                     <FieldError id="invoiceNumber" messages={e('invoiceNumber')} />
                 </div>
@@ -138,7 +138,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
             </div>
             {pending === null && (
                 <div className="flex flex-wrap gap-2">
-                    <button type="submit" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_invoice_save')}</button>
+                    <button type="submit" data-tour="po-invoice-save" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_invoice_save')}</button>
                     <button type="button" className={secondaryButtonClass} disabled={locked} onClick={onClose}>{t('po_cancel')}</button>
                 </div>
             )}
