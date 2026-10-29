@@ -7,6 +7,7 @@ import { Mounted, click, deferred, flush, json, setValue, stubFetch, submit } fr
 import type { Posted } from '../../test/reactHarness.ts';
 import { currentUrl, navigate } from '../../test/nextNavigationStub.ts';
 import DemoAssistant from './DemoAssistant';
+import type { TourChapter } from '../../lib/tour/types.ts';
 
 // Demo-assistent via de echte component: rondleiding met Volgende/Vorige/Stoppen en orderzoeken dat alleen GET gebruikt.
 
@@ -148,5 +149,112 @@ describe('DemoAssistant', () => {
         assert.deepEqual(posted, []);
         assert.ok(methods.every((m) => m === 'GET'));
         assert.ok(gets.every((url) => /\/sales-orders$/.test(url)));
+    });
+
+    test('without NEXT_PUBLIC_DEMO_TOUR the tour stays the navigation tour: no autopilot, no chapters', async () => {
+        await mounted.render(<DemoAssistant />);
+        await open();
+        assert.ok(mounted.button('demo_tour_start'));
+        assert.equal(mounted.hasText('demo_tour_mode_watch'), false);
+        assert.equal(mounted.hasText('demo_tour_chapters'), false);
+        assert.ok(mounted.hasText('demo_no_ai_label'));
+    });
+});
+
+// Autopilot via de echte component: hoofdstukkenlijst, afspelen met "Nu doen we dit" en "Waarom", invullen op de pagina
+// met DEMO-TOUR-referentie en de actor "Demo-assistent", klikblokkade tijdens Kijk mee, en een voorcontrole die zegt wat ontbreekt.
+const QUICK = () => ({ charMs: 1, actionMs: 1, readMs: 5, cursorMs: 0, pollMs: 2, timeoutMs: 500 });
+
+const writing: TourChapter = {
+    id: 'write', titleKey: 'ch_write', summaryKey: 'ch_write_summary', writes: true, doneKey: 'ch_write_done',
+    steps: [
+        { id: 'ref', route: '/supply', titleKey: 'st_ref', whatKey: 'what_ref', whyKey: 'why_ref', actions: [{ kind: 'type', target: 'supply-reference', text: '{{tourRef}}' }] },
+        { id: 'wait', route: '/supply', titleKey: 'st_wait', whatKey: 'what_wait', whyKey: 'why_wait', actions: [{ kind: 'wait', target: 'tour-gate' }] },
+    ],
+};
+const blocked: TourChapter = {
+    id: 'blocked', titleKey: 'ch_blocked', summaryKey: 'ch_blocked_summary', writes: true, steps: writing.steps,
+    precheck: async () => ({ missing: [{ key: 'tour_missing_vendor', params: { search: 'Nature' } }] }),
+};
+const soon: TourChapter = { id: 'soon', titleKey: 'ch_soon', summaryKey: 'ch_soon_summary', writes: true, steps: [], comingSoon: true };
+
+async function until(condition: () => boolean, what: string) {
+    for (let i = 0; i < 400; i++) {
+        if (condition()) return;
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 3)); });
+    }
+    throw new Error(`Timed out waiting for ${what}`);
+}
+
+describe('DemoAssistant autopilot', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        localStorage.setItem('agf_actor_reference', 'Jan');
+        navigate('/dashboard');
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    const page = (
+        <>
+            <input data-tour="supply-reference" defaultValue="" />
+            <DemoAssistant autopilot chapters={[writing, blocked, soon]} tourTiming={QUICK} />
+        </>
+    );
+
+    test('chapter list with mode and speed; a writing chapter fills the page as Demo-assistent and shows Now/Why and the controls', async () => {
+        await mounted.render(page);
+        await click(mounted.button('demo_assistant_open')!);
+        assert.ok(mounted.hasText('demo_autopilot_label'));
+        for (const key of ['demo_tour_mode_watch', 'demo_tour_mode_self', 'demo_tour_speed_slow', 'demo_tour_speed_normal', 'demo_tour_speed_fast']) assert.ok(mounted.button(key), key);
+        assert.ok(mounted.hasText('demo_tour_coming_soon'));
+        assert.equal(mounted.container.querySelectorAll('[data-testid="tour-chapter-soon"] button').length, 0);
+
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="tour-chapter-write"] button')!);
+        await until(() => mounted.hasText('what_wait'), 'second step');
+        assert.equal(currentUrl(), '/supply');
+        assert.equal(mounted.container.querySelector<HTMLInputElement>('[data-tour="supply-reference"]')!.value, 'DEMO-TOUR-001');
+        assert.equal(localStorage.getItem('agf_actor_reference'), 'Demo-assistent');
+        assert.ok(mounted.hasText('demo_step_counter'));
+        assert.ok(mounted.hasText('demo_tour_now') && mounted.hasText('demo_tour_why') && mounted.hasText('why_wait'));
+        for (const key of ['demo_tour_pause', 'demo_tour_back', 'demo_tour_next', 'demo_tour_stop']) assert.ok(mounted.button(key), key);
+        assert.ok(window.document.querySelector('[data-testid="tour-blocker"]'), 'page clicks are blocked while watching');
+
+        await click(mounted.button('demo_tour_pause')!);
+        assert.ok(mounted.hasText('demo_tour_paused'));
+        assert.equal(window.document.querySelector('[data-testid="tour-blocker"]'), null);
+        await click(mounted.button('demo_tour_resume')!);
+        await act(async () => {
+            const gate = window.document.createElement('span');
+            gate.setAttribute('data-tour', 'tour-gate');
+            mounted.container.appendChild(gate);
+        });
+        await until(() => mounted.hasText('demo_tour_done'), 'done');
+        assert.ok(mounted.hasText('ch_write_done'));
+        assert.ok(mounted.hasText('demo_tour_chapter_done'));
+        assert.equal(localStorage.getItem('agf_actor_reference'), 'Jan');
+        assert.equal(posted.length, 0);
+    });
+
+    test('a failed precheck names what is missing and offers no retry', async () => {
+        await mounted.render(page);
+        await click(mounted.button('demo_assistant_open')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="tour-chapter-blocked"] button')!);
+        await until(() => mounted.hasText('demo_tour_precheck_title'), 'precheck message');
+        assert.ok(mounted.hasText('tour_missing_vendor'));
+        assert.equal(mounted.button('demo_tour_retry'), null);
+        assert.equal(currentUrl(), '/dashboard');
+        await click(mounted.button('demo_tour_to_chapters')!);
+        assert.ok(mounted.hasText('demo_tour_chapters'));
+    });
+
+    test('Stop and closing the panel end the tour and give the user name back', async () => {
+        await mounted.render(page);
+        await click(mounted.button('demo_assistant_open')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="tour-chapter-write"] button')!);
+        await until(() => mounted.hasText('what_wait'), 'second step');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-label="demo_close"]')!);
+        assert.equal(localStorage.getItem('agf_actor_reference'), 'Jan');
+        assert.equal(window.document.querySelector('[data-testid="tour-highlight"]'), null);
     });
 });
