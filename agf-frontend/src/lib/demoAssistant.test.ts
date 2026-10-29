@@ -33,8 +33,10 @@ describe('allowed navigation', () => {
         assert.ok(isAllowedDemoHref('/purchase-orders'));
         assert.ok(isAllowedDemoHref('/purchase-orders?id=57'));
         assert.ok(isAllowedDemoHref('/purchase-orders?query=DEMO-TOUR-007'));
+        assert.ok(isAllowedDemoHref('/availability?productVariantId=10'));
         for (const href of ['https://evil.example', '//evil.example', 'javascript:alert(1)', '/orders', '/sales-orders?orderId=1;x', '/sales-orders?orderId=0', '/supply/../orders', '/sales-orders?orderId=13&x=1', '/inspection?search=', '/inspection?search=a b', '/inspection?search=x&y=1',
-            '/purchase-orders?id=0', '/purchase-orders?id=1&x=2', '/purchase-orders?query=a b', '/purchase-orders/../orders', 'https://localhost:3000/purchase-orders']) {
+            '/purchase-orders?id=0', '/purchase-orders?id=1&x=2', '/purchase-orders?query=a b', '/purchase-orders/../orders', 'https://localhost:3000/purchase-orders',
+            '/availability?productVariantId=0', '/availability?productVariantId=10&x=1', '/availability?route=Warehouse']) {
             assert.equal(isAllowedDemoHref(href), false, href);
         }
     });

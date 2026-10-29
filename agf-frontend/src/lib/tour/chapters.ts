@@ -1,6 +1,7 @@
 // De hoofdstukken van de rondleiding, in volgorde. Elke nieuwe functie die een scherm toevoegt of wijzigt, neemt het
 // bijbehorende hoofdstuk mee (met de data-tour-attributen en de test); zie docs/demo-tour.md.
 
+import { ORDER_CHAPTER, RECEIVE_CHAPTER } from './purchaseChapters.ts';
 import type { TourChapter, TourStep } from './types.ts';
 
 const screen = (id: string, route: string): TourStep => ({
@@ -27,4 +28,4 @@ export const SCREENS_CHAPTER: TourChapter = {
     ],
 };
 
-export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER];
+export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER];
