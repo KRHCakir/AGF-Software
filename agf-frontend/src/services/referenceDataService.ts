@@ -14,11 +14,12 @@ import {
 const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name);
 
 export async function getVendors(signal?: AbortSignal): Promise<VendorOption[]> {
-    const json = await getJson('/incominginvoices/vendors', signal);
+    const json = await getJson('/purchase-invoices/vendors', signal);
     if (!isNamedList(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij leveranciers.');
     }
-    return json.map(({ id, name }) => ({ id, name })).sort(byName);
+    const text = (value: unknown) => (typeof value === 'string' && value.trim() !== '' ? value : null);
+    return json.map((item) => ({ id: item.id, name: item.name, searchCode: text(item.searchCode), vatNumber: text(item.vatNumber), isActive: item.isActive !== false })).sort(byName);
 }
 
 export async function getCustomers(signal?: AbortSignal): Promise<CustomerOption[]> {

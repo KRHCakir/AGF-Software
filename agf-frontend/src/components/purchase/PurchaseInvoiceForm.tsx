@@ -37,6 +37,8 @@ function todayIso(): string {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+const vendorTermsBadge = (vendor: PurchaseVendor) => (vendor.paymentTermsDays > 0 ? `${vendor.paymentTermsDays} d` : null);
+
 function codeKey(code: string): string {
     return `purchase_error_${code}`;
 }
@@ -296,7 +298,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('purchase_vendor')} *</label>
                     <VendorPicker id="vendorId" ariaLabel={t('purchase_vendor')} vendors={vendors} value={draft.header.vendorId} disabled={locked} invalid={!!e('vendorId')}
                         describedBy={e('vendorId') ? 'vendorId' : undefined} inputRef={(element) => { vendorInput.current = element; }}
-                        onChange={(chosen) => update(selectVendor(draft, chosen, settings))} />
+                        badge={vendorTermsBadge} onChange={(chosen) => update(selectVendor(draft, chosen, settings))} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
                     {/* Betalen naar een niet-bevestigde rekening is het risico: duidelijk tonen, niet blokkeren (de factuur zelf mag erin). */}
                     {vendor?.defaultBankAccountUnconfirmed && (

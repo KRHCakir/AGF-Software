@@ -18,6 +18,7 @@ import { supplyShortcutHref } from '../../../lib/supplyShortcut';
 import { toApiError } from '../../../services/apiClient';
 import { getPurchaseOrder, listPurchaseOrders } from '../../../services/purchaseOrderService';
 import { getVendors } from '../../../services/referenceDataService';
+import VendorPicker from '../../../components/purchase/VendorPicker';
 import type { PurchaseOrderDetail as Order, PurchaseOrderList as OrderList } from '../../../types/purchaseOrder';
 import type { VendorOption } from '../../../types/referenceData';
 
@@ -142,11 +143,10 @@ function PurchaseOrdersWorkspace() {
                     </select>
                 </div>
                 <div>
-                    <label htmlFor="po-vendor" className="text-xs font-medium text-gray-700">{t('po_col_vendor')}</label>
-                    <select id="po-vendor" value={vendorId} onChange={(event) => setVendorId(event.target.value)} className={inputClass}>
-                        <option value="">{t('po_filter_all_vendors')}</option>
-                        {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
-                    </select>
+                    <label htmlFor="po-vendor-input" className="text-xs font-medium text-gray-700">{t('po_col_vendor')}</label>
+                    {/* Leeg = alle leveranciers. */}
+                    <VendorPicker id="po-vendor" ariaLabel={t('po_col_vendor')} vendors={vendors} value={vendorId} includeInactive
+                        onChange={(vendor) => setVendorId(vendor === null ? '' : String(vendor.id))} />
                 </div>
             </div>
 

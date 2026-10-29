@@ -9,7 +9,7 @@ import { unitLabelKey } from '../../lib/units';
 import { type LineWeightDraft, lineKgRows, resolveLineWeight, weightPayload } from '../../lib/lineWeight';
 import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
 import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
-import { CHANNEL_LABEL_KEYS, MAX_SUPPLIER_REFERENCE_LENGTH, ORDER_CHANNELS, OrderChannel } from '../../lib/purchaseOrderRules';
+import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
@@ -18,6 +18,8 @@ import { CustomerOption, ProductOption, VendorOption } from '../../types/referen
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
 import KgTotals from '../shared/KgTotals';
+import VendorPicker from '../purchase/VendorPicker';
+import CustomerPicker from '../sales/CustomerPicker';
 import { LineKgFields } from '../shared/LineKgInput';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import { lineKgLabel } from '../shared/lineKgLabel';
@@ -53,10 +55,9 @@ interface HeaderDraft {
     origin: string;
     destination: string;
     expectedDate: string;
-    // Inkooporder: referentie van de leverancier, besteldatum (standaard vandaag) en kanaal (optioneel).
+    // Inkooporder: referentie van de leverancier en besteldatum (standaard vandaag).
     supplierReference: string;
     orderedOn: string;
-    orderChannel: OrderChannel | '';
 }
 
 // Bevroren verzending: exact deze payload en requestId worden bij "opnieuw proberen" verstuurd.
@@ -67,7 +68,7 @@ interface PendingSubmission {
 
 const MAX_LINES = 200;
 const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
-const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), orderChannel: '' });
+const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam() });
 
 // Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
 export default function PlanSupplyForm({ route, reference, onReceive }: {
@@ -210,7 +211,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 expectedAt,
                 ...(supplierReference === '' ? {} : { supplierReference }),
                 ...(header.orderedOn === '' ? {} : { orderedOn: header.orderedOn }),
-                ...(header.orderChannel === '' ? {} : { orderChannel: header.orderChannel }),
                 lines: payloadLines,
             },
             errors: {},
@@ -343,28 +343,14 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         onChange={(event) => updateHeader('orderedOn', event.target.value)} className={inputClass} />
                     <FieldError id="orderedOn" messages={e('orderedOn')} />
                 </div>
-                <fieldset className="col-span-2">
-                    <legend className="text-xs font-medium text-gray-700">{t('po_channel')}</legend>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                        {ORDER_CHANNELS.map((channel) => (
-                            <button key={channel} type="button" aria-pressed={header.orderChannel === channel} disabled={locked}
-                                onClick={() => updateHeader('orderChannel', header.orderChannel === channel ? '' : channel)}
-                                className={`rounded border px-2 py-1 text-xs font-medium ${header.orderChannel === channel ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'}`}>
-                                {t(CHANNEL_LABEL_KEYS[channel])}
-                            </button>
-                        ))}
-                    </div>
-                </fieldset>
             </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
-                    <select {...fieldProps('vendorId', e('vendorId'))} value={header.vendorId} disabled={locked}
-                        onChange={(event) => updateHeader('vendorId', event.target.value)} className={inputClass}>
-                        <option value="">{t('supply_choose')}</option>
-                        {reference.vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
-                    </select>
+                    <VendorPicker id="vendorId" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked}
+                        invalid={!!e('vendorId')} describedBy={e('vendorId') ? 'vendorId' : undefined}
+                        onChange={(vendor) => updateHeader('vendorId', vendor === null ? '' : String(vendor.id))} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
                 </div>
                 <div>
@@ -385,11 +371,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <div>
                         <label htmlFor="customerId-input" className="text-xs font-medium text-violet-900">{t('supply_customer')} *</label>
-                        <select {...fieldProps('customerId', e('customerId'))} value={header.customerId} disabled={locked}
-                            onChange={(event) => updateHeader('customerId', event.target.value)} className={inputClass}>
-                            <option value="">{t('supply_choose')}</option>
-                            {reference.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-                        </select>
+                        <CustomerPicker id="customerId" customers={reference.customers} value={header.customerId} disabled={locked}
+                            invalid={!!e('customerId')} describedBy={e('customerId') ? 'customerId' : undefined}
+                            onChange={(customer) => updateHeader('customerId', customer === null ? '' : String(customer.id))} />
                         <FieldError id="customerId" messages={e('customerId')} />
                     </div>
                     <div className="col-span-2">

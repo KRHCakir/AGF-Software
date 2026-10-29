@@ -51,7 +51,7 @@ describe('Purchase orders page', () => {
         listItems = [item()];
         posted = stubFetch({
             onGet: (url) => {
-                if (/\/incominginvoices\/vendors$/.test(url)) return json(200, [{ id: 3, name: "Nature's Pride" }]);
+                if (/\/purchase-invoices\/vendors$/.test(url)) return json(200, [{ id: 3, name: "Nature's Pride", searchCode: 'NP', vatNumber: null, isActive: true }]);
                 if (/\/purchase-orders\?/.test(url)) { listUrls.push(url); return json(200, { items: listItems, total: listItems.length, page: 1, pageSize: 50 }); }
                 if (/\/purchase-orders\/7$/.test(url)) return json(200, current);
                 return json(404, { message: `unexpected GET ${url}` });

@@ -1,39 +1,43 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-import { describeVendor, searchVendors } from '../../lib/purchaseInvoiceRules';
-import type { PurchaseVendor } from '../../types/purchaseInvoice';
+import { SearchableVendor, describeVendor, searchVendors } from '../../lib/purchaseInvoiceRules';
 import LookupField, { LookupMatch } from '../shared/LookupField';
 
-// Crediteur/leverancier zoeken op naam, btw-nummer en #nummer, op het gedeelde LookupField.
-export default function VendorPicker({ id, vendors, value, onChange, disabled = false, invalid = false, describedBy, ariaLabel, inputRef }: {
+// Crediteur/leverancier zoeken op naam, zoekcode, btw-nummer en #nummer, op het gedeelde LookupField: typen in plaats van
+// een lange lijst doorlopen. Gebruikt in de inkoopfactuur, Aanvoer plannen en het filter van Inkoopopdrachten.
+export default function VendorPicker<T extends SearchableVendor & { isActive: boolean }>({ id, vendors, value, onChange, disabled = false, invalid = false, describedBy, ariaLabel, inputRef, badge, includeInactive = false }: {
     id: string;
-    vendors: readonly PurchaseVendor[];
+    vendors: readonly T[];
     value: string;
-    onChange: (vendor: PurchaseVendor | null) => void;
+    onChange: (vendor: T | null) => void;
     disabled?: boolean;
     invalid?: boolean;
     describedBy?: string;
     ariaLabel: string;
     inputRef?: (element: HTMLInputElement | null) => void;
+    // Extra kenmerk rechts in de suggestie (de inkoopfactuur toont de betaaltermijn).
+    badge?: (vendor: T) => string | null;
+    // Filteren op bestaande orders: ook inactieve leveranciers zijn dan vindbaar.
+    includeInactive?: boolean;
 }) {
     const selected = useMemo(() => {
         const vendor = vendors.find((candidate) => String(candidate.id) === value);
         return vendor ? { description: describeVendor(vendor) } : null;
     }, [vendors, value]);
-    const search = useCallback((query: string): LookupMatch<PurchaseVendor>[] => {
+    const search = useCallback((query: string): LookupMatch<T>[] => {
         const term = query.trim();
         const exactNumber = /^#?(\d{1,10})$/.exec(term);
         // Inactieve relaties zijn niet kiesbaar voor een nieuwe factuur (de server weigert ze ook); een al gekozen waarde blijft zichtbaar.
-        return searchVendors(vendors.filter((vendor) => vendor.isActive), query).map((vendor) => ({
+        return searchVendors(vendors.filter((vendor) => includeInactive || vendor.isActive), query).map((vendor) => ({
             key: String(vendor.id), item: vendor, description: describeVendor(vendor),
             exact: (exactNumber !== null && vendor.id === Number(exactNumber[1])) || (vendor.searchCode !== null && vendor.searchCode.toLowerCase() === term.toLowerCase()),
-            badge: vendor.paymentTermsDays > 0 ? `${vendor.paymentTermsDays} d` : null,
+            badge: badge ? badge(vendor) : null,
         }));
-    }, [vendors]);
+    }, [vendors, badge, includeInactive]);
 
     return (
-        <LookupField<PurchaseVendor>
+        <LookupField<T>
             id={id}
             ariaLabel={ariaLabel}
             selected={selected}
