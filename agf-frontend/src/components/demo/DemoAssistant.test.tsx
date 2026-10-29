@@ -236,6 +236,14 @@ describe('DemoAssistant autopilot', () => {
         assert.equal(posted.length, 0);
     });
 
+    test('a tab closed in the middle of a chapter: the next visit gives the own user name back', async () => {
+        localStorage.setItem('agf_actor_reference', 'Demo-assistent');
+        localStorage.setItem('agf_demo_tour_saved_actor', JSON.stringify('Jan'));
+        await mounted.render(page);
+        assert.equal(localStorage.getItem('agf_actor_reference'), 'Jan');
+        assert.equal(localStorage.getItem('agf_demo_tour_saved_actor'), null);
+    });
+
     test('a failed precheck names what is missing and offers no retry', async () => {
         await mounted.render(page);
         await click(mounted.button('demo_assistant_open')!);

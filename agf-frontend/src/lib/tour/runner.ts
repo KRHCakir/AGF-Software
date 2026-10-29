@@ -54,6 +54,8 @@ export class TourRunner {
     private clickedTargets = new Set<string>();
     private readonly onClick = (event: Event) => this.recordClick(event);
     private readonly onViewportChange = () => this.refreshTarget();
+    // De pagina kan verschuiven zonder te scrollen (een melding verschijnt); het kader volgt het element dan ook.
+    private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
     constructor(options: TourRunnerOptions) {
         this.options = options;
@@ -244,7 +246,7 @@ export class TourRunner {
                 const text = textOf(element).trim();
                 const match = action.pattern ? action.pattern.exec(text) : null;
                 const value = action.pattern ? match?.[1] ?? match?.[0] ?? null : text;
-                if (!value) throw new StepFailure({ key: 'tour_error_remember', params: { target: action.target } });
+                if (!value) throw new StepFailure({ key: 'tour_error_remember', params: { target: this.text(action.target) } });
                 this.emit({ vars: { ...this.state.vars, [action.name]: value } });
                 return;
             }
@@ -263,7 +265,7 @@ export class TourRunner {
                 element.click();
                 return;
             case 'select': {
-                if (!isEditable(element)) throw new StepFailure({ key: 'tour_error_not_field', params: { target: action.target } });
+                if (!isEditable(element)) throw new StepFailure({ key: 'tour_error_not_field', params: { target: this.text(action.target) } });
                 const value = this.text(action.value);
                 setValueAtOnce(element, value);
                 if (element.value !== value) throw new StepFailure({ key: 'tour_error_option', params: { value } });
@@ -291,7 +293,7 @@ export class TourRunner {
     }
 
     private async typeInto(element: HTMLElement, target: TourTarget, text: string, my: number) {
-        if (!isEditable(element)) throw new StepFailure({ key: 'tour_error_not_field', params: { target } });
+        if (!isEditable(element)) throw new StepFailure({ key: 'tour_error_not_field', params: { target: this.text(target) } });
         focus(element);
         if (typesAtOnce(element)) {
             setValueAtOnce(element, text);
@@ -358,8 +360,8 @@ export class TourRunner {
             : normalizeText(textOf(element)).includes(normalizeText(expected))));
         if (!found) {
             throw new StepFailure(expected === null
-                ? { key: 'tour_error_not_found', params: { target } }
-                : { key: 'tour_error_assert', params: { target, expected } });
+                ? { key: 'tour_error_not_found', params: { target: this.text(target) } }
+                : { key: 'tour_error_assert', params: { target: this.text(target), expected } });
         }
         await this.point(found, my);
     }
@@ -368,7 +370,7 @@ export class TourRunner {
         const text = options.text !== undefined ? this.text(options.text) : null;
         const found = await this.find(target, my, (element) => (text === null || normalizeText(textOf(element)).includes(normalizeText(text)))
             && (!options.enabled || !isDisabled(element)));
-        if (!found) throw new StepFailure(text === null ? { key: 'tour_error_not_found', params: { target } } : { key: 'tour_error_assert', params: { target, expected: text } });
+        if (!found) throw new StepFailure(text === null ? { key: 'tour_error_not_found', params: { target: this.text(target) } } : { key: 'tour_error_assert', params: { target: this.text(target), expected: text } });
         return found;
     }
 
@@ -402,7 +404,11 @@ export class TourRunner {
     }
 
     private refreshTarget() {
-        if (this.focused?.isConnected) this.emit({ target: rectOf(this.focused) });
+        if (!this.focused?.isConnected) return;
+        const next = rectOf(this.focused);
+        const current = this.state.target;
+        if (current && current.top === next.top && current.left === next.left && current.width === next.width && current.height === next.height) return;
+        this.emit({ target: next });
     }
 
     private async sleep(ms: number, my: number) {
@@ -439,12 +445,15 @@ export class TourRunner {
         this.options.document.addEventListener('click', this.onClick, true);
         this.view().addEventListener('scroll', this.onViewportChange, true);
         this.view().addEventListener('resize', this.onViewportChange);
+        this.refreshTimer = setInterval(this.onViewportChange, 250);
     }
 
     private unlisten() {
         this.options.document.removeEventListener('click', this.onClick, true);
         this.view()?.removeEventListener('scroll', this.onViewportChange, true);
         this.view()?.removeEventListener('resize', this.onViewportChange);
+        if (this.refreshTimer !== null) clearInterval(this.refreshTimer);
+        this.refreshTimer = null;
     }
 
     // Tijdens de rondleiding staat "Demo-assistent" als gebruikersnaam (audit en historie); daarna de eigen naam weer.
