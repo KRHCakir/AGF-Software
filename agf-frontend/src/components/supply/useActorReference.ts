@@ -37,11 +37,7 @@ export function useActorReference(): [string, (value: string) => void] {
 
     const setActor = useCallback((value: string) => {
         setActorState(value);
-        try {
-            localStorage.setItem(ACTOR_STORAGE_KEY, value);
-        } catch {
-            // Niet onthouden is geen fout.
-        }
+        writeStoredActor(value);
     }, []);
 
     return [actor, setActor];
