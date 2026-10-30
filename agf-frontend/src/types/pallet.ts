@@ -33,6 +33,11 @@ export interface AddPalletContentLineRequest {
     ggn: string | null;
     actorReference: string | null;
     reason: string | null;
+    // Afwijkende ontvangst: de werkelijk ontvangen variant (null = de variant van de bronregel) en de bevestiging "Ja, klopt".
+    receivedProductVariantId?: number | null;
+    confirmDeviation?: boolean | null;
+    deviationReason?: string | null;
+    deviationReasonNote?: string | null;
 }
 
 export interface PalletSummary {
