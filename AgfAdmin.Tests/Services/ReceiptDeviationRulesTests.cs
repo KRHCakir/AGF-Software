@@ -31,6 +31,16 @@ public sealed class ReceiptDeviationRulesTests
     }
 
     [Fact]
+    public void With_a_country_on_both_sides_only_the_country_code_counts()
+    {
+        var peru = Hass() with { Origin = "Peru", OriginCountryCode = "PE" };
+        Assert.Equal(new[] { KindOther }, DifferingKinds(peru, Hass(2) with { Origin = "PE", OriginCountryCode = "PE" }));
+        Assert.Equal(new[] { KindOrigin }, DifferingKinds(peru, Hass(2) with { Origin = "Chili", OriginCountryCode = "CL" }));
+        // Een oude variant zonder land: dan de tekst, exact zoals voorheen.
+        Assert.Equal(new[] { KindOrigin }, DifferingKinds(peru, Hass(2) with { Origin = "PE", OriginCountryCode = null }));
+    }
+
+    [Fact]
     public void Null_And_Empty_Are_The_Same_Value() =>
         Assert.Equal(new[] { KindOther }, DifferingKinds(Hass(brand: null), Hass(2, brand: "  ")));
 

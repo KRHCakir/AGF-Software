@@ -80,7 +80,7 @@ namespace AgfAdmin.Data
             var contents = db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Added).ToDictionary(e => e.Property(c => c.Id).CurrentValue);
             var variantIds = deviations.SelectMany(d => new[] { d.Entity.ExpectedProductVariantId, d.Entity.ReceivedProductVariantId }).Distinct().ToList();
             var variants = (await ToListAsync(db.ProductVariants.AsNoTracking().Where(v => variantIds.Contains(v.Id))
-                    .Select(v => new ReceiptDeviationRules.VariantFacts(v.Id, v.ProductId, v.Product.Name, v.Name, v.Origin, v.SizeCategory, v.Packaging, v.PackagingUnit, v.TradeClass, v.Brand)),
+                    .Select(v => new ReceiptDeviationRules.VariantFacts(v.Id, v.ProductId, v.Product.Name, v.Name, v.Origin, v.SizeCategory, v.Packaging, v.PackagingUnit, v.TradeClass, v.Brand, v.OriginCountryCode)),
                     async, cancellationToken))
                 .ToDictionary(v => v.Id);
             var directOriginals = stored.Values.Where(l => l.Route == SupplyRules.RouteDirectTrade && deviations.Any(d => OriginalOf(d) == l.Id)).Select(l => l.Id).ToList();

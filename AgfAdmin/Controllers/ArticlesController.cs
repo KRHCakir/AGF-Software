@@ -40,6 +40,13 @@ namespace AgfAdmin.Controllers
             return Ok(_goodsCodes.Result(query, chosen));
         }
 
+        [HttpGet("origin-cleanup")]
+        public async Task<IActionResult> OriginCleanup() => Ok(await _service.OriginCleanupAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPost("{id:int}/origin-country")]
+        public async Task<IActionResult> SetOriginCountry(int id, [FromBody] SetOriginCountryDto request) =>
+            this.ToActionResult(await _service.SetOriginCountryAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
 

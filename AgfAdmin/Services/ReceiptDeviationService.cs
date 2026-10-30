@@ -31,7 +31,7 @@ namespace AgfAdmin.Services
             var expected = await VariantAsync(line.ProductVariantId, cancellationToken);
             var variants = await _db.ProductVariants.AsNoTracking()
                 .Where(v => v.ProductId == expected.ProductId && v.Id != expected.Id)
-                .Select(v => new { Facts = new ReceiptDeviationRules.VariantFacts(v.Id, v.ProductId, v.Product.Name, v.Name, v.Origin, v.SizeCategory, v.Packaging, v.PackagingUnit, v.TradeClass, v.Brand), v.ShortcutCode })
+                .Select(v => new { Facts = new ReceiptDeviationRules.VariantFacts(v.Id, v.ProductId, v.Product.Name, v.Name, v.Origin, v.SizeCategory, v.Packaging, v.PackagingUnit, v.TradeClass, v.Brand, v.OriginCountryCode), v.ShortcutCode })
                 .ToListAsync(cancellationToken);
             return ServiceResult<IReadOnlyList<ReceiptDeviationCandidateDto>>.Ok(variants
                 .OrderBy(v => v.Facts.Name).ThenBy(v => v.Facts.Origin).ThenBy(v => v.Facts.Size).ThenBy(v => v.Facts.Id)
@@ -128,7 +128,7 @@ namespace AgfAdmin.Services
         private Task<ReceiptDeviationRules.VariantFacts> VariantAsync(int id, CancellationToken cancellationToken) =>
             _db.ProductVariants.AsNoTracking()
                 .Where(v => v.Id == id)
-                .Select(v => new ReceiptDeviationRules.VariantFacts(v.Id, v.ProductId, v.Product.Name, v.Name, v.Origin, v.SizeCategory, v.Packaging, v.PackagingUnit, v.TradeClass, v.Brand))
+                .Select(v => new ReceiptDeviationRules.VariantFacts(v.Id, v.ProductId, v.Product.Name, v.Name, v.Origin, v.SizeCategory, v.Packaging, v.PackagingUnit, v.TradeClass, v.Brand, v.OriginCountryCode))
                 .SingleOrDefaultAsync(cancellationToken);
 
         internal static ReceiptDeviationVariantDto ToDto(ReceiptDeviationRules.VariantFacts facts) => new()
@@ -138,6 +138,7 @@ namespace AgfAdmin.Services
             ProductName = facts.ProductName,
             VariantName = facts.Name,
             Origin = facts.Origin,
+            OriginCountryCode = facts.OriginCountryCode,
             Size = facts.Size,
             Packaging = facts.Packaging,
             PackagingUnit = facts.PackagingUnit,

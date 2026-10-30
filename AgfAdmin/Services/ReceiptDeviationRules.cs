@@ -32,8 +32,14 @@ namespace AgfAdmin.Services
 
         // De kenmerken die een variant onderscheiden. Maat staat in SizeCategory ("12", "47+"); handelsklasse in TradeClass;
         // verpakking is de omschrijving (Packaging, "4kg Box") plus de verpakkingseenheid (PackagingUnit, colli/box).
+        // Herkomst: met een land aan beide kanten telt alleen de landcode ("PE" en "Peru" zijn hetzelfde land); anders de tekst.
         public sealed record VariantFacts(int Id, int ProductId, string ProductName, string Name, string Origin, string Size,
-            string Packaging, string PackagingUnit, string TradeClass, string Brand);
+            string Packaging, string PackagingUnit, string TradeClass, string Brand, string OriginCountryCode = null);
+
+        private static bool SameOrigin(VariantFacts a, VariantFacts b) =>
+            a.OriginCountryCode != null && b.OriginCountryCode != null
+                ? string.Equals(a.OriginCountryCode, b.OriginCountryCode, StringComparison.Ordinal)
+                : Same(a.Origin, b.Origin);
 
         private static string Normalize(string value) => string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
 
@@ -51,7 +57,7 @@ namespace AgfAdmin.Services
                 return Array.Empty<string>();
             }
             var kinds = new List<string>();
-            if (!Same(expected.Origin, received.Origin)) kinds.Add(KindOrigin);
+            if (!SameOrigin(expected, received)) kinds.Add(KindOrigin);
             if (!Same(expected.Size, received.Size)) kinds.Add(KindSize);
             if (!Same(expected.Packaging, received.Packaging) || !Same(expected.PackagingUnit, received.PackagingUnit)) kinds.Add(KindPackaging);
             if (!Same(expected.TradeClass, received.TradeClass)) kinds.Add(KindTradeClass);
