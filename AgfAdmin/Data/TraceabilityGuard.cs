@@ -77,6 +77,11 @@ namespace AgfAdmin.Data
     //    (aantal en kg), eenheid en bronregel. De herkomst van
     //    afgesplitste inhoud is onveranderlijk; afkeuringen, afkeuringsregels en factuurkoppelingen van inkooporders zijn append-only.
     //    Een afsplitsing is nooit groter dan de voorraad vóór de save, en de actieve verkoopreserveringen passen er daarna nog in.
+    // 18. afwijkende ontvangst (zie TraceabilityGuard.Deviations.cs): order, variant, eenheid en vervanging van een opgeslagen
+    //    aanvoerregel liggen vast; verwacht, kg en palletweergave veranderen alleen samen met precies één nieuwe afwijking op die regel,
+    //    met exact haar verlaging. Een afwijking verwijst naar een opgeslagen regel en een nieuwe vervangende regel van dezelfde order,
+    //    hetzelfde artikel (product en ras) maar een andere variant, met verwacht = de ontvangen hoeveelheid, en naar de nieuwe inhoudsregel
+    //    op die vervangende regel; klantgebonden toewijzingen passen daarna nog op de oorspronkelijke regel. Afwijkingen zijn append-only.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -87,7 +92,7 @@ namespace AgfAdmin.Data
     // SalesDispatchCorrectionLines, Dispatch-mutaties en compenserende Correction-mutaties (andere mutatietypen blijven ongemoeid).
     // Er wordt nooit automatisch omgekoppeld. Een niet-bestaande inhoudsregel laten we over aan de FK in de database.
     // Let op: ExecuteUpdate/ExecuteDelete en ruwe SQL gaan buiten de change tracker om en dus ook buiten deze guard.
-    internal static class TraceabilityGuard
+    internal static partial class TraceabilityGuard
     {
         public static void Validate(AppDbContext db) =>
             // Met async = false voert de kern alleen synchrone EF-aanroepen uit en is de taak al voltooid.
@@ -188,6 +193,7 @@ namespace AgfAdmin.Data
             await CheckDeliveryConfirmationsAsync(db, async, cancellationToken);
             await CheckCorrectionLedgerAsync(db, async, cancellationToken);
             await CheckRejectionLedgerAsync(db, async, cancellationToken);
+            await CheckReceiptDeviationsAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

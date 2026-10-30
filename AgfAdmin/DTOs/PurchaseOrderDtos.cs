@@ -39,6 +39,8 @@ namespace AgfAdmin.DTOs
         public List<PurchaseOrderInvoiceNumberDto> InvoiceNumbers { get; set; } = new();
         // None, Received of CreditNoteExpected (PurchaseOrderRules.InvoiceIndicator).
         public string InvoiceIndicator { get; set; }
+        // Er is bij deze order minstens één afwijkende ontvangst vastgelegd.
+        public bool HasDeviation { get; set; }
     }
 
     public sealed class PurchaseOrderDetailDto
@@ -71,6 +73,7 @@ namespace AgfAdmin.DTOs
         public List<PurchaseOrderReceiptLineDto> Receipts { get; set; } = new();
         public List<PurchaseOrderInvoiceRefDto> InvoiceRefs { get; set; } = new();
         public List<PurchaseOrderRejectionDto> Rejections { get; set; } = new();
+        public List<PurchaseOrderDeviationDto> Deviations { get; set; } = new();
         public List<PurchaseOrderHistoryEventDto> History { get; set; } = new();
     }
 
@@ -80,10 +83,17 @@ namespace AgfAdmin.DTOs
         public int ProductVariantId { get; set; }
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
+        // Huidige kenmerken van de variant (herkomst, maat, verpakking), zodat een vervangende regel herkenbaar is.
+        public string Origin { get; set; }
+        public string Size { get; set; }
+        public string Packaging { get; set; }
         public string LotNumber { get; set; }
         public decimal ExpectedQuantity { get; set; }
         public string Unit { get; set; }
         public decimal? ExpectedNetWeightKg { get; set; }
+        // Afwijkende ontvangst: deze regel vervangt (een deel van) die regel, of is (deels) vervangen door die regels.
+        public int? ReplacesLineId { get; set; }
+        public List<int> ReplacedByLineIds { get; set; } = new();
         // Ontvangen = fysieke ontvangst in de eenheid van de regel (geen correctie- of afgesplitste inhoud, geen geannuleerde pallet).
         public decimal ReceivedQuantity { get; set; }
         public decimal ReceivedNetWeightKg { get; set; }
@@ -160,7 +170,7 @@ namespace AgfAdmin.DTOs
     public sealed class PurchaseOrderHistoryEventDto
     {
         public DateTime OccurredAt { get; set; }
-        public string Type { get; set; }      // Ordered, Received, QualityChanged, InvoiceRecorded, CreditNoteRecorded, Rejected
+        public string Type { get; set; }      // Ordered, Received, QualityChanged, InvoiceRecorded, CreditNoteRecorded, Rejected, DeviationRecorded
         public string ActorReference { get; set; }
         public string Reference { get; set; } // leveranciersreferentie, pallet of factuurnummer
         public string Channel { get; set; }   // Ordered
@@ -168,8 +178,9 @@ namespace AgfAdmin.DTOs
         public string Unit { get; set; }
         public string FromStatus { get; set; } // QualityChanged
         public string ToStatus { get; set; }
-        public string Reason { get; set; }    // Rejected
+        public string Reason { get; set; }    // Rejected, DeviationRecorded
         public string Decision { get; set; }
+        public string Kinds { get; set; }     // DeviationRecorded: afwijkende kenmerken (komma-gescheiden)
     }
 
     public sealed class AddPurchaseOrderInvoiceRefDto
