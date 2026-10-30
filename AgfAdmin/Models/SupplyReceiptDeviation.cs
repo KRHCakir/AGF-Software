@@ -17,14 +17,16 @@ namespace AgfAdmin.Models
         public int OriginalLineId { get; set; }
         public SupplyCommitmentLine OriginalLine { get; set; }
 
-        public int NewLineId { get; set; }
+        // Vervangende regel bij een andere variant; null bij een afwijking in alleen het gewicht (zelfde variant, zelfde regel).
+        public int? NewLineId { get; set; }
         public SupplyCommitmentLine NewLine { get; set; }
 
         public int PalletContentLineId { get; set; }
         public PalletContentLine PalletContentLine { get; set; }
 
         // Afwijkende kenmerken, komma-gescheiden: Origin, Size, Packaging, TradeClass, Brand; Other als de kenmerken gelijk zijn
-        // maar het toch een andere variant is (nooit automatisch gelijkgesteld).
+        // maar het toch een andere variant is (nooit automatisch gelijkgesteld); Weight als het netto kg per verpakking meer dan de
+        // tolerantie afwijkt (ReceiptDeviationRules.WeightTolerance).
         public string Kinds { get; set; }
 
         // Momentopname van de verwachte en de ontvangen variant (id + JSON met artikel, ras, herkomst, maat, verpakking, klasse, merk).
@@ -38,6 +40,9 @@ namespace AgfAdmin.Models
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
         public decimal ReducedQuantity { get; set; }
+        // Netto kg per verpakking: verwacht (bronregel of artikelstandaard) en ontvangen (inhoudsregel); null zonder verwachting.
+        public decimal? ExpectedKgPerPackage { get; set; }
+        public decimal? ReceivedKgPerPackage { get; set; }
         // De oorspronkelijke regel vóór en na (aantal, kg, palletweergave) als JSON.
         public string OriginalLineBefore { get; set; }
         public string OriginalLineAfter { get; set; }

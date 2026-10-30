@@ -4461,6 +4461,10 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("ExpectedKgPerPackage")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<int>("ExpectedProductVariantId")
                         .HasColumnType("integer");
 
@@ -4474,7 +4478,7 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int>("NewLineId")
+                    b.Property<int?>("NewLineId")
                         .HasColumnType("integer");
 
                     b.Property<string>("OriginalLineAfter")
@@ -4504,6 +4508,10 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("ReasonNote")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("ReceivedKgPerPackage")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
 
                     b.Property<int>("ReceivedProductVariantId")
                         .HasColumnType("integer");
@@ -4559,7 +4567,9 @@ namespace AgfAdmin.Migrations
 
                             t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reduced_Range", "CAST(\"ReducedQuantity\" AS NUMERIC) >= 0 AND CAST(\"ReducedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC)");
 
-                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Variants_Differ", "\"ExpectedProductVariantId\" <> \"ReceivedProductVariantId\"");
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Variants_Differ", "\"ExpectedProductVariantId\" <> \"ReceivedProductVariantId\" OR \"NewLineId\" IS NULL");
+
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_WeightOnly_SameLine", "\"NewLineId\" IS NOT NULL OR (\"ExpectedProductVariantId\" = \"ReceivedProductVariantId\" AND CAST(\"ReducedQuantity\" AS NUMERIC) = 0)");
                         });
                 });
 
@@ -5588,8 +5598,7 @@ namespace AgfAdmin.Migrations
                     b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "NewLine")
                         .WithMany()
                         .HasForeignKey("NewLineId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "OriginalLine")
                         .WithMany()

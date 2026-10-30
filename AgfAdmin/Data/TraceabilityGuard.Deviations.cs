@@ -29,7 +29,7 @@ namespace AgfAdmin.Data
                 return;
             }
 
-            int NewLineOf(EntityEntry<SupplyReceiptDeviation> d) => d.Property(x => x.NewLineId).CurrentValue;
+            int NewLineOf(EntityEntry<SupplyReceiptDeviation> d) => d.Property(x => x.NewLineId).CurrentValue ?? 0;
             int OriginalOf(EntityEntry<SupplyReceiptDeviation> d) => d.Property(x => x.OriginalLineId).CurrentValue;
 
             var storedIds = lines.Where(e => e.State == EntityState.Modified).Select(e => e.Entity.Id)

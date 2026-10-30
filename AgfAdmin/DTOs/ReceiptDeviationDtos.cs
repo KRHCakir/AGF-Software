@@ -65,7 +65,8 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public int OriginalLineId { get; set; }
-        public int NewLineId { get; set; }
+        // Null bij een afwijking in alleen het gewicht (geen vervangende regel).
+        public int? NewLineId { get; set; }
         public int PalletContentLineId { get; set; }
         public string PalletReference { get; set; }
         public List<string> Kinds { get; set; } = new();

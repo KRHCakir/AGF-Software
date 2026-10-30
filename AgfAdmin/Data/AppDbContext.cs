@@ -461,6 +461,8 @@ namespace AgfAdmin.Data
                 b.Property(d => d.Quantity).HasPrecision(18, 3);
                 b.Property(d => d.Unit).IsRequired().HasMaxLength(32);
                 b.Property(d => d.ReducedQuantity).HasPrecision(18, 3);
+                b.Property(d => d.ExpectedKgPerPackage).HasPrecision(18, 3);
+                b.Property(d => d.ReceivedKgPerPackage).HasPrecision(18, 3);
                 b.Property(d => d.OriginalLineBefore).IsRequired().HasMaxLength(2000);
                 b.Property(d => d.OriginalLineAfter).IsRequired().HasMaxLength(2000);
                 b.Property(d => d.Reason).HasMaxLength(32);
@@ -483,7 +485,10 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reduced_Range",
                         "CAST(\"ReducedQuantity\" AS NUMERIC) >= 0 AND CAST(\"ReducedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC)");
                     t.HasCheckConstraint("CK_SupplyReceiptDeviations_Lines_Differ", "\"OriginalLineId\" <> \"NewLineId\"");
-                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Variants_Differ", "\"ExpectedProductVariantId\" <> \"ReceivedProductVariantId\"");
+                    // Een andere variant heeft een vervangende regel; alleen een gewichtsafwijking houdt dezelfde variant en regel, zonder verlaging.
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Variants_Differ", "\"ExpectedProductVariantId\" <> \"ReceivedProductVariantId\" OR \"NewLineId\" IS NULL");
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_WeightOnly_SameLine",
+                        "\"NewLineId\" IS NOT NULL OR (\"ExpectedProductVariantId\" = \"ReceivedProductVariantId\" AND CAST(\"ReducedQuantity\" AS NUMERIC) = 0)");
                     t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reason_Allowed",
                         "\"Reason\" IS NULL OR \"Reason\" IN ('SupplierDeliveredDifferently', 'OtherLotLoaded', 'Other')");
                     t.HasCheckConstraint("CK_SupplyReceiptDeviations_OtherExplained",
