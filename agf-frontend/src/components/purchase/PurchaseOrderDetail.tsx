@@ -40,7 +40,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 </p>
                 <p className="text-sm text-gray-700">
                     {t('po_col_ordered_on')} {formatDateOnly(order.orderedOn, locale)}
-                    {' · '}{t('po_col_expected')} {order.expectedAt ? formatCalendarDate(order.expectedAt, locale) : '–'} · {order.origin}
+                    {' · '}{t('po_col_expected')} {order.expectedAt ? formatCalendarDate(order.expectedAt, locale) : '–'}
+                    {(order.linesOrigin || order.origin) && <> · <span data-tour="po-origin">{order.linesOrigin || order.origin}</span></>}
                 </p>
                 {order.rejectedQuantity > 0 && (
                     <p className="mt-1 text-sm font-medium text-red-800">{t('po_rejected_of', { rejected: qty(order.rejectedQuantity), total: qty(order.receivedQuantity) })} · {formatKg(order.rejectedNetWeightKg, locale)}</p>

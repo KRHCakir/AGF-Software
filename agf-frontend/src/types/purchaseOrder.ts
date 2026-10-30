@@ -17,6 +17,8 @@ export interface PurchaseOrderListItem {
     supplierReference: string | null;
     orderedOn: string;
     expectedAt: string | null;
+    // Herkomst afgeleid van de regels ("Peru" of "Chili, Peru"); het kopveld origin is alleen een bijschrift.
+    linesOrigin?: string | null;
     route: string;
     customerName: string | null;
     status: string;
@@ -145,6 +147,7 @@ export interface PurchaseOrderDetail {
     route: string;
     customerName: string | null;
     origin: string;
+    linesOrigin?: string | null;
     destination: string | null;
     expectedAt: string | null;
     status: string;

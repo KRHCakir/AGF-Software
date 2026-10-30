@@ -4,6 +4,16 @@ namespace AgfAdmin.Services
     // "Box" of "kg" is geen geldige eenheid, en er wordt nooit een eenheid omgerekend.
     public static class SupplyRules
     {
+        // Herkomst van een order afgeleid van haar regels (de herkomst van de artikelen): één land als alle regels hetzelfde hebben,
+        // anders de unieke herkomsten gesorteerd ("Chili, Peru"); null zonder herkomst op de regels. Het kopveld Origin is daarnaast
+        // alleen een optioneel bijschrift.
+        public static string LinesOrigin(IEnumerable<string> lineOrigins)
+        {
+            var origins = lineOrigins.Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim()).Distinct(StringComparer.Ordinal)
+                .OrderBy(o => o, StringComparer.Create(new System.Globalization.CultureInfo("nl-NL"), true)).ToList();
+            return origins.Count == 0 ? null : string.Join(", ", origins);
+        }
+
         public const string RouteWarehouse = "Warehouse";
         public const string RouteDirectTrade = "DirectTrade";
 

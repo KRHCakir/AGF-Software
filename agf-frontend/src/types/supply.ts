@@ -75,7 +75,9 @@ export interface SupplyCommitment {
     customerName: string | null;
     route: SupplyRoute;
     status: string;
+    // Optioneel bijschrift van de order ("" = leeg); de herkomst van de regels (afgeleid) staat in linesOrigin.
     origin: string;
+    linesOrigin?: string | null;
     destination: string | null;
     expectedAt: string | null;
     // Eigen inkoopordernummer (IO-2026-0001) en bestelgegevens; optioneel in het type voor oudere antwoorden.

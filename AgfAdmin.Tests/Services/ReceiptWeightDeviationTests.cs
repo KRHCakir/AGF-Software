@@ -212,7 +212,7 @@ public sealed partial class ReceiptWeightDeviationTests : IDisposable
     public async Task Without_any_expected_weight_there_is_no_weight_check()
     {
         await ArrangeAsync(expectedNetKg: null);
-        var mango = await CreateOrderAsync("Brazilië", new CreateSupplyCommitmentLineDto { ProductVariantId = _bare, ExpectedQuantity = 10m, ExpectedUnit = "colli" });
+        var mango = await CreateOrderAsync("", new CreateSupplyCommitmentLineDto { ProductVariantId = _bare, ExpectedQuantity = 10m, ExpectedUnit = "colli" });
 
         var result = await AddAsync(Receive(mango.Lines.Single().Id, 10m, 9m, weighed: true));
 

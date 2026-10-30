@@ -197,7 +197,8 @@ namespace AgfAdmin.Services
                 AddError(errors, "customerId", "A Warehouse commitment must not be linked to a customer.");
             }
 
-            var origin = ValidateText(request.Origin, required: true, MaxOriginLength, "origin", errors);
+            // Herkomst van de order is optioneel (de herkomst staat per regel bij het artikel); leeg = "" (de kolom blijft verplicht).
+            var origin = string.IsNullOrWhiteSpace(request.Origin) ? "" : ValidateText(request.Origin, required: false, MaxOriginLength, "origin", errors) ?? "";
             var destination = ValidateText(request.Destination, required: routeIsValid && isDirectTrade, MaxDestinationLength, "destination", errors);
 
             if (request.ExpectedAt == null)
@@ -519,7 +520,8 @@ namespace AgfAdmin.Services
                         ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null,
                     ReplacesLineId = l.ReplacesLineId
                 })
-                .ToList()
+                .ToList(),
+            LinesOrigin = SupplyRules.LinesOrigin(commitment.Lines.Where(l => l.ExpectedQuantity > 0m).Select(l => l.ProductVariant?.Origin))
         };
 
         private static void AddError(Dictionary<string, List<string>> errors, string key, string message)

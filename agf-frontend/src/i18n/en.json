@@ -266,7 +266,7 @@
   "supply_direct_banner": "Customer-bound: never becomes general warehouse stock and is never shown as available.",
   "supply_vendor": "Supplier",
   "supply_customer": "Customer",
-  "supply_origin": "Country of origin",
+  "supply_origin": "Order origin (optional)",
   "supply_destination": "Destination",
   "supply_destination_placeholder": "For example country, city or delivery address",
   "supply_expected_date": "Expected on",
@@ -1819,5 +1819,11 @@
   "country_alias_country": "Country",
   "country_alias_add": "Add",
   "country_alias_none": "No own shortcuts yet.",
-  "country_alias_remove": "Remove shortcut {alias}"
+  "country_alias_remove": "Remove shortcut {alias}",
+  "supply_origin_hint": "Only if all lines come from the same country. Otherwise leave empty; the origin is on each line's article.",
+  "deviation_attr_weight": "Weight",
+  "deviation_weight_value": "{perPackage} per {unit} ({total})",
+  "deviation_question_weight": "Order {order} expects {article} of {expected}, received {received}. Is this correct?",
+  "deviation_consequence_weight": "If yes, the line expects {perPackage} per {unit} from now on ({total} in total).",
+  "po_deviation_weight": "{expected} → {received} per {unit}"
 }

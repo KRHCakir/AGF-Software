@@ -3,8 +3,8 @@
 import { KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatQuantity } from '../../lib/availability';
-import { DEVIATION_REASONS, DEVIATION_REASON_LABEL_KEYS, DeviationReason, articleName, deviationRows, shortNames, unitText } from '../../lib/receiptDeviation';
+import { formatKg, formatQuantity } from '../../lib/availability';
+import { DEVIATION_REASONS, DEVIATION_REASON_LABEL_KEYS, DeviationReason, articleName, deviationRows, isWeightOnly, shortNames, unitText } from '../../lib/receiptDeviation';
 import type { DeviationPreview } from '../../types/receiptDeviation';
 import { inputClass } from './FieldError';
 import { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
@@ -36,7 +36,19 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
     const names = shortNames(preview);
     // "Avocado Hass Peru" en "Zuid-Afrika"; zonder afwijkend kenmerk (Other) zijn de korte namen al de volledige omschrijving.
     const expectedText = preview.kinds.includes('Other') ? names.expected : `${articleName(preview.expected)} ${names.expected}`;
-    const rows = deviationRows(preview.expected, preview.received, preview.kinds);
+    // Gewicht (netto) als extra rij: "4 kg per colli (40 kg)"; rood alleen als de server het als afwijking noemt.
+    const kg = (value: number | null | undefined) => (value === null || value === undefined ? '–' : formatKg(value, locale));
+    const weightText = (perPackage: number | null | undefined, total: number | null | undefined) =>
+        t('deviation_weight_value', { perPackage: kg(perPackage), unit, total: kg(total) });
+    const expectedWeight = weightText(preview.expectedKgPerPackage, preview.expectedNetKg);
+    const receivedWeight = weightText(preview.receivedKgPerPackage, preview.receivedNetKg);
+    const weightOnly = isWeightOnly(preview.kinds);
+    const rows = [
+        ...deviationRows(preview.expected, preview.received, preview.kinds),
+        ...(preview.expectedKgPerPackage != null || preview.receivedKgPerPackage != null
+            ? [{ labelKey: 'deviation_attr_weight', expected: expectedWeight, received: receivedWeight, differs: preview.kinds.includes('Weight') }]
+            : []),
+    ];
 
     const yes = () => {
         const trimmed = note.trim();
@@ -60,7 +72,9 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
                 className="max-h-full w-full overflow-y-auto rounded-t-lg bg-white p-4 pb-20 shadow-xl sm:max-w-xl sm:rounded-lg sm:pb-4">
                 <h2 id={titleId} className="text-lg font-semibold text-gray-900">{t('deviation_title')}</h2>
                 <p className="mt-1 text-sm text-gray-900">
-                    {t('deviation_question', { order: preview.orderNumber, expected: expectedText, received: names.received })}
+                    {weightOnly
+                        ? t('deviation_question_weight', { order: preview.orderNumber, article: articleName(preview.expected), expected: expectedWeight, received: receivedWeight })
+                        : t('deviation_question', { order: preview.orderNumber, expected: expectedText, received: names.received })}
                 </p>
 
                 <dl className="mt-3 divide-y divide-gray-100 rounded border border-gray-200 text-sm" data-testid="deviation-rows">
@@ -79,7 +93,9 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
                 </dl>
 
                 <p className="mt-3 text-sm text-gray-900" data-testid="deviation-consequence">
-                    {preview.reducedQuantity > 0
+                    {weightOnly
+                        ? t('deviation_consequence_weight', { perPackage: kg(preview.receivedKgPerPackage), unit, total: kg(preview.originalExpectedNetKgAfter) })
+                        : preview.reducedQuantity > 0
                         ? t('deviation_consequence', { expected: names.expected, from: qty(preview.originalExpectedQuantity), to: qty(preview.originalExpectedQuantityAfter), received: names.received, quantity: qty(preview.quantity), unit })
                         : t('deviation_consequence_add_only', { expected: names.expected, received: names.received, quantity: qty(preview.quantity), unit })}
                     {preview.excessQuantity > 0 && <> {t('deviation_excess', { quantity: qty(preview.excessQuantity), unit })}</>}
