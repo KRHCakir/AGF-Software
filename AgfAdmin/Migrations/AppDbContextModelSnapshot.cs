@@ -89,6 +89,1565 @@ namespace AgfAdmin.Migrations
                     b.ToTable("CompanySettings");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Country", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .IsFixedLength();
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NameNl")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Code");
+
+                    b.ToTable("Countries");
+
+                    b.HasData(
+                        new
+                        {
+                            Code = "AD",
+                            NameEn = "Andorra",
+                            NameNl = "Andorra"
+                        },
+                        new
+                        {
+                            Code = "AE",
+                            NameEn = "United Arab Emirates",
+                            NameNl = "Verenigde Arabische Emiraten"
+                        },
+                        new
+                        {
+                            Code = "AF",
+                            NameEn = "Afghanistan",
+                            NameNl = "Afghanistan"
+                        },
+                        new
+                        {
+                            Code = "AG",
+                            NameEn = "Antigua & Barbuda",
+                            NameNl = "Antigua en Barbuda"
+                        },
+                        new
+                        {
+                            Code = "AI",
+                            NameEn = "Anguilla",
+                            NameNl = "Anguilla"
+                        },
+                        new
+                        {
+                            Code = "AL",
+                            NameEn = "Albania",
+                            NameNl = "Albanië"
+                        },
+                        new
+                        {
+                            Code = "AM",
+                            NameEn = "Armenia",
+                            NameNl = "Armenië"
+                        },
+                        new
+                        {
+                            Code = "AO",
+                            NameEn = "Angola",
+                            NameNl = "Angola"
+                        },
+                        new
+                        {
+                            Code = "AQ",
+                            NameEn = "Antarctica",
+                            NameNl = "Antarctica"
+                        },
+                        new
+                        {
+                            Code = "AR",
+                            NameEn = "Argentina",
+                            NameNl = "Argentinië"
+                        },
+                        new
+                        {
+                            Code = "AS",
+                            NameEn = "American Samoa",
+                            NameNl = "Amerikaans-Samoa"
+                        },
+                        new
+                        {
+                            Code = "AT",
+                            NameEn = "Austria",
+                            NameNl = "Oostenrijk"
+                        },
+                        new
+                        {
+                            Code = "AU",
+                            NameEn = "Australia",
+                            NameNl = "Australië"
+                        },
+                        new
+                        {
+                            Code = "AW",
+                            NameEn = "Aruba",
+                            NameNl = "Aruba"
+                        },
+                        new
+                        {
+                            Code = "AX",
+                            NameEn = "Åland Islands",
+                            NameNl = "Åland"
+                        },
+                        new
+                        {
+                            Code = "AZ",
+                            NameEn = "Azerbaijan",
+                            NameNl = "Azerbeidzjan"
+                        },
+                        new
+                        {
+                            Code = "BA",
+                            NameEn = "Bosnia & Herzegovina",
+                            NameNl = "Bosnië en Herzegovina"
+                        },
+                        new
+                        {
+                            Code = "BB",
+                            NameEn = "Barbados",
+                            NameNl = "Barbados"
+                        },
+                        new
+                        {
+                            Code = "BD",
+                            NameEn = "Bangladesh",
+                            NameNl = "Bangladesh"
+                        },
+                        new
+                        {
+                            Code = "BE",
+                            NameEn = "Belgium",
+                            NameNl = "België"
+                        },
+                        new
+                        {
+                            Code = "BF",
+                            NameEn = "Burkina Faso",
+                            NameNl = "Burkina Faso"
+                        },
+                        new
+                        {
+                            Code = "BG",
+                            NameEn = "Bulgaria",
+                            NameNl = "Bulgarije"
+                        },
+                        new
+                        {
+                            Code = "BH",
+                            NameEn = "Bahrain",
+                            NameNl = "Bahrein"
+                        },
+                        new
+                        {
+                            Code = "BI",
+                            NameEn = "Burundi",
+                            NameNl = "Burundi"
+                        },
+                        new
+                        {
+                            Code = "BJ",
+                            NameEn = "Benin",
+                            NameNl = "Benin"
+                        },
+                        new
+                        {
+                            Code = "BL",
+                            NameEn = "St. Barthélemy",
+                            NameNl = "Saint-Barthélemy"
+                        },
+                        new
+                        {
+                            Code = "BM",
+                            NameEn = "Bermuda",
+                            NameNl = "Bermuda"
+                        },
+                        new
+                        {
+                            Code = "BN",
+                            NameEn = "Brunei",
+                            NameNl = "Brunei"
+                        },
+                        new
+                        {
+                            Code = "BO",
+                            NameEn = "Bolivia",
+                            NameNl = "Bolivia"
+                        },
+                        new
+                        {
+                            Code = "BQ",
+                            NameEn = "Caribbean Netherlands",
+                            NameNl = "Caribisch Nederland"
+                        },
+                        new
+                        {
+                            Code = "BR",
+                            NameEn = "Brazil",
+                            NameNl = "Brazilië"
+                        },
+                        new
+                        {
+                            Code = "BS",
+                            NameEn = "Bahamas",
+                            NameNl = "Bahama's"
+                        },
+                        new
+                        {
+                            Code = "BT",
+                            NameEn = "Bhutan",
+                            NameNl = "Bhutan"
+                        },
+                        new
+                        {
+                            Code = "BV",
+                            NameEn = "Bouvet Island",
+                            NameNl = "Bouveteiland"
+                        },
+                        new
+                        {
+                            Code = "BW",
+                            NameEn = "Botswana",
+                            NameNl = "Botswana"
+                        },
+                        new
+                        {
+                            Code = "BY",
+                            NameEn = "Belarus",
+                            NameNl = "Belarus"
+                        },
+                        new
+                        {
+                            Code = "BZ",
+                            NameEn = "Belize",
+                            NameNl = "Belize"
+                        },
+                        new
+                        {
+                            Code = "CA",
+                            NameEn = "Canada",
+                            NameNl = "Canada"
+                        },
+                        new
+                        {
+                            Code = "CC",
+                            NameEn = "Cocos (Keeling) Islands",
+                            NameNl = "Cocoseilanden"
+                        },
+                        new
+                        {
+                            Code = "CD",
+                            NameEn = "Congo - Kinshasa",
+                            NameNl = "Congo-Kinshasa"
+                        },
+                        new
+                        {
+                            Code = "CF",
+                            NameEn = "Central African Republic",
+                            NameNl = "Centraal-Afrikaanse Republiek"
+                        },
+                        new
+                        {
+                            Code = "CG",
+                            NameEn = "Congo - Brazzaville",
+                            NameNl = "Congo-Brazzaville"
+                        },
+                        new
+                        {
+                            Code = "CH",
+                            NameEn = "Switzerland",
+                            NameNl = "Zwitserland"
+                        },
+                        new
+                        {
+                            Code = "CI",
+                            NameEn = "Côte d'Ivoire",
+                            NameNl = "Ivoorkust"
+                        },
+                        new
+                        {
+                            Code = "CK",
+                            NameEn = "Cook Islands",
+                            NameNl = "Cookeilanden"
+                        },
+                        new
+                        {
+                            Code = "CL",
+                            NameEn = "Chile",
+                            NameNl = "Chili"
+                        },
+                        new
+                        {
+                            Code = "CM",
+                            NameEn = "Cameroon",
+                            NameNl = "Kameroen"
+                        },
+                        new
+                        {
+                            Code = "CN",
+                            NameEn = "China",
+                            NameNl = "China"
+                        },
+                        new
+                        {
+                            Code = "CO",
+                            NameEn = "Colombia",
+                            NameNl = "Colombia"
+                        },
+                        new
+                        {
+                            Code = "CR",
+                            NameEn = "Costa Rica",
+                            NameNl = "Costa Rica"
+                        },
+                        new
+                        {
+                            Code = "CU",
+                            NameEn = "Cuba",
+                            NameNl = "Cuba"
+                        },
+                        new
+                        {
+                            Code = "CV",
+                            NameEn = "Cape Verde",
+                            NameNl = "Kaapverdië"
+                        },
+                        new
+                        {
+                            Code = "CW",
+                            NameEn = "Curaçao",
+                            NameNl = "Curaçao"
+                        },
+                        new
+                        {
+                            Code = "CX",
+                            NameEn = "Christmas Island",
+                            NameNl = "Christmaseiland"
+                        },
+                        new
+                        {
+                            Code = "CY",
+                            NameEn = "Cyprus",
+                            NameNl = "Cyprus"
+                        },
+                        new
+                        {
+                            Code = "CZ",
+                            NameEn = "Czechia",
+                            NameNl = "Tsjechië"
+                        },
+                        new
+                        {
+                            Code = "DE",
+                            NameEn = "Germany",
+                            NameNl = "Duitsland"
+                        },
+                        new
+                        {
+                            Code = "DJ",
+                            NameEn = "Djibouti",
+                            NameNl = "Djibouti"
+                        },
+                        new
+                        {
+                            Code = "DK",
+                            NameEn = "Denmark",
+                            NameNl = "Denemarken"
+                        },
+                        new
+                        {
+                            Code = "DM",
+                            NameEn = "Dominica",
+                            NameNl = "Dominica"
+                        },
+                        new
+                        {
+                            Code = "DO",
+                            NameEn = "Dominican Republic",
+                            NameNl = "Dominicaanse Republiek"
+                        },
+                        new
+                        {
+                            Code = "DZ",
+                            NameEn = "Algeria",
+                            NameNl = "Algerije"
+                        },
+                        new
+                        {
+                            Code = "EC",
+                            NameEn = "Ecuador",
+                            NameNl = "Ecuador"
+                        },
+                        new
+                        {
+                            Code = "EE",
+                            NameEn = "Estonia",
+                            NameNl = "Estland"
+                        },
+                        new
+                        {
+                            Code = "EG",
+                            NameEn = "Egypt",
+                            NameNl = "Egypte"
+                        },
+                        new
+                        {
+                            Code = "EH",
+                            NameEn = "Western Sahara",
+                            NameNl = "Westelijke Sahara"
+                        },
+                        new
+                        {
+                            Code = "ER",
+                            NameEn = "Eritrea",
+                            NameNl = "Eritrea"
+                        },
+                        new
+                        {
+                            Code = "ES",
+                            NameEn = "Spain",
+                            NameNl = "Spanje"
+                        },
+                        new
+                        {
+                            Code = "ET",
+                            NameEn = "Ethiopia",
+                            NameNl = "Ethiopië"
+                        },
+                        new
+                        {
+                            Code = "FI",
+                            NameEn = "Finland",
+                            NameNl = "Finland"
+                        },
+                        new
+                        {
+                            Code = "FJ",
+                            NameEn = "Fiji",
+                            NameNl = "Fiji"
+                        },
+                        new
+                        {
+                            Code = "FK",
+                            NameEn = "Falkland Islands",
+                            NameNl = "Falklandeilanden"
+                        },
+                        new
+                        {
+                            Code = "FM",
+                            NameEn = "Micronesia",
+                            NameNl = "Micronesia"
+                        },
+                        new
+                        {
+                            Code = "FO",
+                            NameEn = "Faroe Islands",
+                            NameNl = "Faeröer"
+                        },
+                        new
+                        {
+                            Code = "FR",
+                            NameEn = "France",
+                            NameNl = "Frankrijk"
+                        },
+                        new
+                        {
+                            Code = "GA",
+                            NameEn = "Gabon",
+                            NameNl = "Gabon"
+                        },
+                        new
+                        {
+                            Code = "GB",
+                            NameEn = "United Kingdom",
+                            NameNl = "Verenigd Koninkrijk"
+                        },
+                        new
+                        {
+                            Code = "GD",
+                            NameEn = "Grenada",
+                            NameNl = "Grenada"
+                        },
+                        new
+                        {
+                            Code = "GE",
+                            NameEn = "Georgia",
+                            NameNl = "Georgië"
+                        },
+                        new
+                        {
+                            Code = "GF",
+                            NameEn = "French Guiana",
+                            NameNl = "Frans-Guyana"
+                        },
+                        new
+                        {
+                            Code = "GG",
+                            NameEn = "Guernsey",
+                            NameNl = "Guernsey"
+                        },
+                        new
+                        {
+                            Code = "GH",
+                            NameEn = "Ghana",
+                            NameNl = "Ghana"
+                        },
+                        new
+                        {
+                            Code = "GI",
+                            NameEn = "Gibraltar",
+                            NameNl = "Gibraltar"
+                        },
+                        new
+                        {
+                            Code = "GL",
+                            NameEn = "Greenland",
+                            NameNl = "Groenland"
+                        },
+                        new
+                        {
+                            Code = "GM",
+                            NameEn = "Gambia",
+                            NameNl = "Gambia"
+                        },
+                        new
+                        {
+                            Code = "GN",
+                            NameEn = "Guinea",
+                            NameNl = "Guinee"
+                        },
+                        new
+                        {
+                            Code = "GP",
+                            NameEn = "Guadeloupe",
+                            NameNl = "Guadeloupe"
+                        },
+                        new
+                        {
+                            Code = "GQ",
+                            NameEn = "Equatorial Guinea",
+                            NameNl = "Equatoriaal-Guinea"
+                        },
+                        new
+                        {
+                            Code = "GR",
+                            NameEn = "Greece",
+                            NameNl = "Griekenland"
+                        },
+                        new
+                        {
+                            Code = "GS",
+                            NameEn = "South Georgia & South Sandwich Islands",
+                            NameNl = "Zuid-Georgia en Zuidelijke Sandwicheilanden"
+                        },
+                        new
+                        {
+                            Code = "GT",
+                            NameEn = "Guatemala",
+                            NameNl = "Guatemala"
+                        },
+                        new
+                        {
+                            Code = "GU",
+                            NameEn = "Guam",
+                            NameNl = "Guam"
+                        },
+                        new
+                        {
+                            Code = "GW",
+                            NameEn = "Guinea-Bissau",
+                            NameNl = "Guinee-Bissau"
+                        },
+                        new
+                        {
+                            Code = "GY",
+                            NameEn = "Guyana",
+                            NameNl = "Guyana"
+                        },
+                        new
+                        {
+                            Code = "HK",
+                            NameEn = "Hong Kong SAR China",
+                            NameNl = "Hongkong SAR van China"
+                        },
+                        new
+                        {
+                            Code = "HM",
+                            NameEn = "Heard & McDonald Islands",
+                            NameNl = "Heard en McDonaldeilanden"
+                        },
+                        new
+                        {
+                            Code = "HN",
+                            NameEn = "Honduras",
+                            NameNl = "Honduras"
+                        },
+                        new
+                        {
+                            Code = "HR",
+                            NameEn = "Croatia",
+                            NameNl = "Kroatië"
+                        },
+                        new
+                        {
+                            Code = "HT",
+                            NameEn = "Haiti",
+                            NameNl = "Haïti"
+                        },
+                        new
+                        {
+                            Code = "HU",
+                            NameEn = "Hungary",
+                            NameNl = "Hongarije"
+                        },
+                        new
+                        {
+                            Code = "ID",
+                            NameEn = "Indonesia",
+                            NameNl = "Indonesië"
+                        },
+                        new
+                        {
+                            Code = "IE",
+                            NameEn = "Ireland",
+                            NameNl = "Ierland"
+                        },
+                        new
+                        {
+                            Code = "IL",
+                            NameEn = "Israel",
+                            NameNl = "Israël"
+                        },
+                        new
+                        {
+                            Code = "IM",
+                            NameEn = "Isle of Man",
+                            NameNl = "Isle of Man"
+                        },
+                        new
+                        {
+                            Code = "IN",
+                            NameEn = "India",
+                            NameNl = "India"
+                        },
+                        new
+                        {
+                            Code = "IO",
+                            NameEn = "British Indian Ocean Territory",
+                            NameNl = "Brits Indische Oceaanterritorium"
+                        },
+                        new
+                        {
+                            Code = "IQ",
+                            NameEn = "Iraq",
+                            NameNl = "Irak"
+                        },
+                        new
+                        {
+                            Code = "IR",
+                            NameEn = "Iran",
+                            NameNl = "Iran"
+                        },
+                        new
+                        {
+                            Code = "IS",
+                            NameEn = "Iceland",
+                            NameNl = "IJsland"
+                        },
+                        new
+                        {
+                            Code = "IT",
+                            NameEn = "Italy",
+                            NameNl = "Italië"
+                        },
+                        new
+                        {
+                            Code = "JE",
+                            NameEn = "Jersey",
+                            NameNl = "Jersey"
+                        },
+                        new
+                        {
+                            Code = "JM",
+                            NameEn = "Jamaica",
+                            NameNl = "Jamaica"
+                        },
+                        new
+                        {
+                            Code = "JO",
+                            NameEn = "Jordan",
+                            NameNl = "Jordanië"
+                        },
+                        new
+                        {
+                            Code = "JP",
+                            NameEn = "Japan",
+                            NameNl = "Japan"
+                        },
+                        new
+                        {
+                            Code = "KE",
+                            NameEn = "Kenya",
+                            NameNl = "Kenia"
+                        },
+                        new
+                        {
+                            Code = "KG",
+                            NameEn = "Kyrgyzstan",
+                            NameNl = "Kirgizië"
+                        },
+                        new
+                        {
+                            Code = "KH",
+                            NameEn = "Cambodia",
+                            NameNl = "Cambodja"
+                        },
+                        new
+                        {
+                            Code = "KI",
+                            NameEn = "Kiribati",
+                            NameNl = "Kiribati"
+                        },
+                        new
+                        {
+                            Code = "KM",
+                            NameEn = "Comoros",
+                            NameNl = "Comoren"
+                        },
+                        new
+                        {
+                            Code = "KN",
+                            NameEn = "St. Kitts & Nevis",
+                            NameNl = "Saint Kitts en Nevis"
+                        },
+                        new
+                        {
+                            Code = "KP",
+                            NameEn = "North Korea",
+                            NameNl = "Noord-Korea"
+                        },
+                        new
+                        {
+                            Code = "KR",
+                            NameEn = "South Korea",
+                            NameNl = "Zuid-Korea"
+                        },
+                        new
+                        {
+                            Code = "KW",
+                            NameEn = "Kuwait",
+                            NameNl = "Koeweit"
+                        },
+                        new
+                        {
+                            Code = "KY",
+                            NameEn = "Cayman Islands",
+                            NameNl = "Kaaimaneilanden"
+                        },
+                        new
+                        {
+                            Code = "KZ",
+                            NameEn = "Kazakhstan",
+                            NameNl = "Kazachstan"
+                        },
+                        new
+                        {
+                            Code = "LA",
+                            NameEn = "Laos",
+                            NameNl = "Laos"
+                        },
+                        new
+                        {
+                            Code = "LB",
+                            NameEn = "Lebanon",
+                            NameNl = "Libanon"
+                        },
+                        new
+                        {
+                            Code = "LC",
+                            NameEn = "St. Lucia",
+                            NameNl = "Saint Lucia"
+                        },
+                        new
+                        {
+                            Code = "LI",
+                            NameEn = "Liechtenstein",
+                            NameNl = "Liechtenstein"
+                        },
+                        new
+                        {
+                            Code = "LK",
+                            NameEn = "Sri Lanka",
+                            NameNl = "Sri Lanka"
+                        },
+                        new
+                        {
+                            Code = "LR",
+                            NameEn = "Liberia",
+                            NameNl = "Liberia"
+                        },
+                        new
+                        {
+                            Code = "LS",
+                            NameEn = "Lesotho",
+                            NameNl = "Lesotho"
+                        },
+                        new
+                        {
+                            Code = "LT",
+                            NameEn = "Lithuania",
+                            NameNl = "Litouwen"
+                        },
+                        new
+                        {
+                            Code = "LU",
+                            NameEn = "Luxembourg",
+                            NameNl = "Luxemburg"
+                        },
+                        new
+                        {
+                            Code = "LV",
+                            NameEn = "Latvia",
+                            NameNl = "Letland"
+                        },
+                        new
+                        {
+                            Code = "LY",
+                            NameEn = "Libya",
+                            NameNl = "Libië"
+                        },
+                        new
+                        {
+                            Code = "MA",
+                            NameEn = "Morocco",
+                            NameNl = "Marokko"
+                        },
+                        new
+                        {
+                            Code = "MC",
+                            NameEn = "Monaco",
+                            NameNl = "Monaco"
+                        },
+                        new
+                        {
+                            Code = "MD",
+                            NameEn = "Moldova",
+                            NameNl = "Moldavië"
+                        },
+                        new
+                        {
+                            Code = "ME",
+                            NameEn = "Montenegro",
+                            NameNl = "Montenegro"
+                        },
+                        new
+                        {
+                            Code = "MF",
+                            NameEn = "St. Martin",
+                            NameNl = "Saint-Martin"
+                        },
+                        new
+                        {
+                            Code = "MG",
+                            NameEn = "Madagascar",
+                            NameNl = "Madagaskar"
+                        },
+                        new
+                        {
+                            Code = "MH",
+                            NameEn = "Marshall Islands",
+                            NameNl = "Marshalleilanden"
+                        },
+                        new
+                        {
+                            Code = "MK",
+                            NameEn = "North Macedonia",
+                            NameNl = "Noord-Macedonië"
+                        },
+                        new
+                        {
+                            Code = "ML",
+                            NameEn = "Mali",
+                            NameNl = "Mali"
+                        },
+                        new
+                        {
+                            Code = "MM",
+                            NameEn = "Myanmar (Burma)",
+                            NameNl = "Myanmar (Birma)"
+                        },
+                        new
+                        {
+                            Code = "MN",
+                            NameEn = "Mongolia",
+                            NameNl = "Mongolië"
+                        },
+                        new
+                        {
+                            Code = "MO",
+                            NameEn = "Macao SAR China",
+                            NameNl = "Macau SAR van China"
+                        },
+                        new
+                        {
+                            Code = "MP",
+                            NameEn = "Northern Mariana Islands",
+                            NameNl = "Noordelijke Marianen"
+                        },
+                        new
+                        {
+                            Code = "MQ",
+                            NameEn = "Martinique",
+                            NameNl = "Martinique"
+                        },
+                        new
+                        {
+                            Code = "MR",
+                            NameEn = "Mauritania",
+                            NameNl = "Mauritanië"
+                        },
+                        new
+                        {
+                            Code = "MS",
+                            NameEn = "Montserrat",
+                            NameNl = "Montserrat"
+                        },
+                        new
+                        {
+                            Code = "MT",
+                            NameEn = "Malta",
+                            NameNl = "Malta"
+                        },
+                        new
+                        {
+                            Code = "MU",
+                            NameEn = "Mauritius",
+                            NameNl = "Mauritius"
+                        },
+                        new
+                        {
+                            Code = "MV",
+                            NameEn = "Maldives",
+                            NameNl = "Maldiven"
+                        },
+                        new
+                        {
+                            Code = "MW",
+                            NameEn = "Malawi",
+                            NameNl = "Malawi"
+                        },
+                        new
+                        {
+                            Code = "MX",
+                            NameEn = "Mexico",
+                            NameNl = "Mexico"
+                        },
+                        new
+                        {
+                            Code = "MY",
+                            NameEn = "Malaysia",
+                            NameNl = "Maleisië"
+                        },
+                        new
+                        {
+                            Code = "MZ",
+                            NameEn = "Mozambique",
+                            NameNl = "Mozambique"
+                        },
+                        new
+                        {
+                            Code = "NA",
+                            NameEn = "Namibia",
+                            NameNl = "Namibië"
+                        },
+                        new
+                        {
+                            Code = "NC",
+                            NameEn = "New Caledonia",
+                            NameNl = "Nieuw-Caledonië"
+                        },
+                        new
+                        {
+                            Code = "NE",
+                            NameEn = "Niger",
+                            NameNl = "Niger"
+                        },
+                        new
+                        {
+                            Code = "NF",
+                            NameEn = "Norfolk Island",
+                            NameNl = "Norfolk"
+                        },
+                        new
+                        {
+                            Code = "NG",
+                            NameEn = "Nigeria",
+                            NameNl = "Nigeria"
+                        },
+                        new
+                        {
+                            Code = "NI",
+                            NameEn = "Nicaragua",
+                            NameNl = "Nicaragua"
+                        },
+                        new
+                        {
+                            Code = "NL",
+                            NameEn = "Netherlands",
+                            NameNl = "Nederland"
+                        },
+                        new
+                        {
+                            Code = "NO",
+                            NameEn = "Norway",
+                            NameNl = "Noorwegen"
+                        },
+                        new
+                        {
+                            Code = "NP",
+                            NameEn = "Nepal",
+                            NameNl = "Nepal"
+                        },
+                        new
+                        {
+                            Code = "NR",
+                            NameEn = "Nauru",
+                            NameNl = "Nauru"
+                        },
+                        new
+                        {
+                            Code = "NU",
+                            NameEn = "Niue",
+                            NameNl = "Niue"
+                        },
+                        new
+                        {
+                            Code = "NZ",
+                            NameEn = "New Zealand",
+                            NameNl = "Nieuw-Zeeland"
+                        },
+                        new
+                        {
+                            Code = "OM",
+                            NameEn = "Oman",
+                            NameNl = "Oman"
+                        },
+                        new
+                        {
+                            Code = "PA",
+                            NameEn = "Panama",
+                            NameNl = "Panama"
+                        },
+                        new
+                        {
+                            Code = "PE",
+                            NameEn = "Peru",
+                            NameNl = "Peru"
+                        },
+                        new
+                        {
+                            Code = "PF",
+                            NameEn = "French Polynesia",
+                            NameNl = "Frans-Polynesië"
+                        },
+                        new
+                        {
+                            Code = "PG",
+                            NameEn = "Papua New Guinea",
+                            NameNl = "Papoea-Nieuw-Guinea"
+                        },
+                        new
+                        {
+                            Code = "PH",
+                            NameEn = "Philippines",
+                            NameNl = "Filipijnen"
+                        },
+                        new
+                        {
+                            Code = "PK",
+                            NameEn = "Pakistan",
+                            NameNl = "Pakistan"
+                        },
+                        new
+                        {
+                            Code = "PL",
+                            NameEn = "Poland",
+                            NameNl = "Polen"
+                        },
+                        new
+                        {
+                            Code = "PM",
+                            NameEn = "St. Pierre & Miquelon",
+                            NameNl = "Saint-Pierre en Miquelon"
+                        },
+                        new
+                        {
+                            Code = "PN",
+                            NameEn = "Pitcairn Islands",
+                            NameNl = "Pitcairneilanden"
+                        },
+                        new
+                        {
+                            Code = "PR",
+                            NameEn = "Puerto Rico",
+                            NameNl = "Puerto Rico"
+                        },
+                        new
+                        {
+                            Code = "PS",
+                            NameEn = "Palestinian Territories",
+                            NameNl = "Palestijnse gebieden"
+                        },
+                        new
+                        {
+                            Code = "PT",
+                            NameEn = "Portugal",
+                            NameNl = "Portugal"
+                        },
+                        new
+                        {
+                            Code = "PW",
+                            NameEn = "Palau",
+                            NameNl = "Palau"
+                        },
+                        new
+                        {
+                            Code = "PY",
+                            NameEn = "Paraguay",
+                            NameNl = "Paraguay"
+                        },
+                        new
+                        {
+                            Code = "QA",
+                            NameEn = "Qatar",
+                            NameNl = "Qatar"
+                        },
+                        new
+                        {
+                            Code = "RE",
+                            NameEn = "Réunion",
+                            NameNl = "Réunion"
+                        },
+                        new
+                        {
+                            Code = "RO",
+                            NameEn = "Romania",
+                            NameNl = "Roemenië"
+                        },
+                        new
+                        {
+                            Code = "RS",
+                            NameEn = "Serbia",
+                            NameNl = "Servië"
+                        },
+                        new
+                        {
+                            Code = "RU",
+                            NameEn = "Russia",
+                            NameNl = "Rusland"
+                        },
+                        new
+                        {
+                            Code = "RW",
+                            NameEn = "Rwanda",
+                            NameNl = "Rwanda"
+                        },
+                        new
+                        {
+                            Code = "SA",
+                            NameEn = "Saudi Arabia",
+                            NameNl = "Saoedi-Arabië"
+                        },
+                        new
+                        {
+                            Code = "SB",
+                            NameEn = "Solomon Islands",
+                            NameNl = "Salomonseilanden"
+                        },
+                        new
+                        {
+                            Code = "SC",
+                            NameEn = "Seychelles",
+                            NameNl = "Seychellen"
+                        },
+                        new
+                        {
+                            Code = "SD",
+                            NameEn = "Sudan",
+                            NameNl = "Soedan"
+                        },
+                        new
+                        {
+                            Code = "SE",
+                            NameEn = "Sweden",
+                            NameNl = "Zweden"
+                        },
+                        new
+                        {
+                            Code = "SG",
+                            NameEn = "Singapore",
+                            NameNl = "Singapore"
+                        },
+                        new
+                        {
+                            Code = "SH",
+                            NameEn = "St. Helena",
+                            NameNl = "Sint-Helena"
+                        },
+                        new
+                        {
+                            Code = "SI",
+                            NameEn = "Slovenia",
+                            NameNl = "Slovenië"
+                        },
+                        new
+                        {
+                            Code = "SJ",
+                            NameEn = "Svalbard & Jan Mayen",
+                            NameNl = "Spitsbergen en Jan Mayen"
+                        },
+                        new
+                        {
+                            Code = "SK",
+                            NameEn = "Slovakia",
+                            NameNl = "Slowakije"
+                        },
+                        new
+                        {
+                            Code = "SL",
+                            NameEn = "Sierra Leone",
+                            NameNl = "Sierra Leone"
+                        },
+                        new
+                        {
+                            Code = "SM",
+                            NameEn = "San Marino",
+                            NameNl = "San Marino"
+                        },
+                        new
+                        {
+                            Code = "SN",
+                            NameEn = "Senegal",
+                            NameNl = "Senegal"
+                        },
+                        new
+                        {
+                            Code = "SO",
+                            NameEn = "Somalia",
+                            NameNl = "Somalië"
+                        },
+                        new
+                        {
+                            Code = "SR",
+                            NameEn = "Suriname",
+                            NameNl = "Suriname"
+                        },
+                        new
+                        {
+                            Code = "SS",
+                            NameEn = "South Sudan",
+                            NameNl = "Zuid-Soedan"
+                        },
+                        new
+                        {
+                            Code = "ST",
+                            NameEn = "São Tomé & Príncipe",
+                            NameNl = "Sao Tomé en Principe"
+                        },
+                        new
+                        {
+                            Code = "SV",
+                            NameEn = "El Salvador",
+                            NameNl = "El Salvador"
+                        },
+                        new
+                        {
+                            Code = "SX",
+                            NameEn = "Sint Maarten",
+                            NameNl = "Sint-Maarten"
+                        },
+                        new
+                        {
+                            Code = "SY",
+                            NameEn = "Syria",
+                            NameNl = "Syrië"
+                        },
+                        new
+                        {
+                            Code = "SZ",
+                            NameEn = "Eswatini",
+                            NameNl = "Eswatini"
+                        },
+                        new
+                        {
+                            Code = "TC",
+                            NameEn = "Turks & Caicos Islands",
+                            NameNl = "Turks- en Caicoseilanden"
+                        },
+                        new
+                        {
+                            Code = "TD",
+                            NameEn = "Chad",
+                            NameNl = "Tsjaad"
+                        },
+                        new
+                        {
+                            Code = "TF",
+                            NameEn = "French Southern Territories",
+                            NameNl = "Franse Gebieden in de zuidelijke Indische Oceaan"
+                        },
+                        new
+                        {
+                            Code = "TG",
+                            NameEn = "Togo",
+                            NameNl = "Togo"
+                        },
+                        new
+                        {
+                            Code = "TH",
+                            NameEn = "Thailand",
+                            NameNl = "Thailand"
+                        },
+                        new
+                        {
+                            Code = "TJ",
+                            NameEn = "Tajikistan",
+                            NameNl = "Tadzjikistan"
+                        },
+                        new
+                        {
+                            Code = "TK",
+                            NameEn = "Tokelau",
+                            NameNl = "Tokelau"
+                        },
+                        new
+                        {
+                            Code = "TL",
+                            NameEn = "Timor-Leste",
+                            NameNl = "Oost-Timor"
+                        },
+                        new
+                        {
+                            Code = "TM",
+                            NameEn = "Turkmenistan",
+                            NameNl = "Turkmenistan"
+                        },
+                        new
+                        {
+                            Code = "TN",
+                            NameEn = "Tunisia",
+                            NameNl = "Tunesië"
+                        },
+                        new
+                        {
+                            Code = "TO",
+                            NameEn = "Tonga",
+                            NameNl = "Tonga"
+                        },
+                        new
+                        {
+                            Code = "TR",
+                            NameEn = "Türkiye",
+                            NameNl = "Turkije"
+                        },
+                        new
+                        {
+                            Code = "TT",
+                            NameEn = "Trinidad & Tobago",
+                            NameNl = "Trinidad en Tobago"
+                        },
+                        new
+                        {
+                            Code = "TV",
+                            NameEn = "Tuvalu",
+                            NameNl = "Tuvalu"
+                        },
+                        new
+                        {
+                            Code = "TW",
+                            NameEn = "Taiwan",
+                            NameNl = "Taiwan"
+                        },
+                        new
+                        {
+                            Code = "TZ",
+                            NameEn = "Tanzania",
+                            NameNl = "Tanzania"
+                        },
+                        new
+                        {
+                            Code = "UA",
+                            NameEn = "Ukraine",
+                            NameNl = "Oekraïne"
+                        },
+                        new
+                        {
+                            Code = "UG",
+                            NameEn = "Uganda",
+                            NameNl = "Oeganda"
+                        },
+                        new
+                        {
+                            Code = "UM",
+                            NameEn = "U.S. Outlying Islands",
+                            NameNl = "Kleine afgelegen eilanden van de Verenigde Staten"
+                        },
+                        new
+                        {
+                            Code = "US",
+                            NameEn = "United States",
+                            NameNl = "Verenigde Staten"
+                        },
+                        new
+                        {
+                            Code = "UY",
+                            NameEn = "Uruguay",
+                            NameNl = "Uruguay"
+                        },
+                        new
+                        {
+                            Code = "UZ",
+                            NameEn = "Uzbekistan",
+                            NameNl = "Oezbekistan"
+                        },
+                        new
+                        {
+                            Code = "VA",
+                            NameEn = "Vatican City",
+                            NameNl = "Vaticaanstad"
+                        },
+                        new
+                        {
+                            Code = "VC",
+                            NameEn = "St. Vincent & Grenadines",
+                            NameNl = "Saint Vincent en de Grenadines"
+                        },
+                        new
+                        {
+                            Code = "VE",
+                            NameEn = "Venezuela",
+                            NameNl = "Venezuela"
+                        },
+                        new
+                        {
+                            Code = "VG",
+                            NameEn = "British Virgin Islands",
+                            NameNl = "Britse Maagdeneilanden"
+                        },
+                        new
+                        {
+                            Code = "VI",
+                            NameEn = "U.S. Virgin Islands",
+                            NameNl = "Amerikaanse Maagdeneilanden"
+                        },
+                        new
+                        {
+                            Code = "VN",
+                            NameEn = "Vietnam",
+                            NameNl = "Vietnam"
+                        },
+                        new
+                        {
+                            Code = "VU",
+                            NameEn = "Vanuatu",
+                            NameNl = "Vanuatu"
+                        },
+                        new
+                        {
+                            Code = "WF",
+                            NameEn = "Wallis & Futuna",
+                            NameNl = "Wallis en Futuna"
+                        },
+                        new
+                        {
+                            Code = "WS",
+                            NameEn = "Samoa",
+                            NameNl = "Samoa"
+                        },
+                        new
+                        {
+                            Code = "YE",
+                            NameEn = "Yemen",
+                            NameNl = "Jemen"
+                        },
+                        new
+                        {
+                            Code = "YT",
+                            NameEn = "Mayotte",
+                            NameNl = "Mayotte"
+                        },
+                        new
+                        {
+                            Code = "ZA",
+                            NameEn = "South Africa",
+                            NameNl = "Zuid-Afrika"
+                        },
+                        new
+                        {
+                            Code = "ZM",
+                            NameEn = "Zambia",
+                            NameNl = "Zambia"
+                        },
+                        new
+                        {
+                            Code = "ZW",
+                            NameEn = "Zimbabwe",
+                            NameNl = "Zimbabwe"
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.CountryAlias", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Alias")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("AliasKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AliasKey")
+                        .IsUnique();
+
+                    b.HasIndex("CountryCode");
+
+                    b.ToTable("CountryAliases");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Customer", b =>
                 {
                     b.Property<int>("Id")
@@ -1388,6 +2947,11 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Origin")
                         .HasColumnType("text");
 
+                    b.Property<string>("OriginCountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .IsFixedLength();
+
                     b.Property<string>("Packaging")
                         .HasColumnType("text");
 
@@ -1419,6 +2983,8 @@ namespace AgfAdmin.Migrations
                         .HasDefaultValue("Weighed");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OriginCountryCode");
 
                     b.HasIndex("ProductId");
 
@@ -3281,6 +4847,15 @@ namespace AgfAdmin.Migrations
                     b.ToTable("WasteLogs");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.CountryAlias", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Country", null)
+                        .WithMany()
+                        .HasForeignKey("CountryCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Customer", b =>
                 {
                     b.HasOne("AgfAdmin.Models.PaymentCondition", "PaymentCondition")
@@ -3596,6 +5171,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.ProductVariant", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.Country", null)
+                        .WithMany()
+                        .HasForeignKey("OriginCountryCode")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.Product", "Product")
                         .WithMany("Variants")
                         .HasForeignKey("ProductId")
