@@ -7,15 +7,18 @@ import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability
 import { formatDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { unitLabelKey } from '../../lib/units';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
-import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
+import { parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
-import { DEVIATION_CODES, deviationConflict, variantLabel } from '../../lib/receiptDeviation';
+import { DEVIATION_CODES, deviationConflict } from '../../lib/receiptDeviation';
+import { EnteredAttributes, ReceiptAttribute, articleVariants, emptyEntered, matchVariant, requiredFields, shownAttributes } from '../../lib/receiptBlindEntry';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getAvailabilityVariant } from '../../services/availabilityService';
 import { addPalletContentLine, createReceivedWarehousePallet } from '../../services/palletService';
+import { getCountries } from '../../services/countryService';
+import { getProductsWithVariants } from '../../services/referenceDataService';
 import { getDeviationPreview } from '../../services/receiptDeviationService';
 import { listOpenWarehouseCommitments } from '../../services/supplyService';
 import { PackageUnit } from '../../types/availability';
@@ -25,20 +28,21 @@ import {
     PalletContentLineSummary,
     PalletSummary,
 } from '../../types/pallet';
-import { DeviationCandidate, DeviationPreview, isDeviationPreview } from '../../types/receiptDeviation';
+import type { CountryReference } from '../../types/country';
+import { DeviationPreview, isDeviationPreview } from '../../types/receiptDeviation';
+import type { ProductOption } from '../../types/referenceData';
 import { SupplyCommitment, SupplyCommitmentLine, VendorGgnOption } from '../../types/supply';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
 import GgnBadge from '../shared/GgnBadge';
 import NumberEcho from '../shared/NumberEcho';
-import QuantityKgLine from '../shared/QuantityKgLine';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import DeviationDialog, { DeviationChoice } from './DeviationDialog';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
-import ReceivedVariantPicker from './ReceivedVariantPicker';
+import ReceivedAttributes from './ReceivedAttributes';
 import SubmitProgress, { ProgressStep, StepState } from './SubmitProgress';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 
@@ -51,8 +55,11 @@ interface ContentDraft {
     netKg: string;
     // GGN van deze partij: alleen bij precies één actieve leveranciers-GGN vooraf ingevuld; bij meer kiest de gebruiker; altijd aanpasbaar of leeg.
     ggn: string;
-    // "Ander artikel ontvangen": de werkelijk ontvangen variant (null = het bestelde artikel) en de bevestiging uit het venster.
-    received: DeviationCandidate | null;
+    // Blinde invoer: wat er werkelijk is aangekomen (leeg tot de gebruiker het invult), de variant die daar bij registreren bij
+    // bleek te horen, of de invoer al gecontroleerd is (exact, zonder venster) en de bevestiging uit het venster.
+    entered: EnteredAttributes;
+    matchedVariantId: number | null;
+    verified: boolean;
     deviation: DeviationChoice | null;
 }
 
@@ -61,10 +68,13 @@ const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOpti
     lot: line.lotNumber ?? '',
     quantity: '',
     method: line.weightMethod,
-    kgPerPackage: line.defaultNetKgPerPackage === null ? '' : formatDecimalInput(line.defaultNetKgPerPackage),
+    // Blind: ook het etiketgewicht vult de gebruiker zelf in (de bestelling wordt niet vooraf getoond).
+    kgPerPackage: '',
     netKg: '',
     ggn: proposedGgn(vendorGgns) ?? '',
-    received: null,
+    entered: emptyEntered(),
+    matchedVariantId: null,
+    verified: false,
     deviation: null,
 });
 
@@ -153,7 +163,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     // Venster "Afwijking van de bestelling"; afterRun = de pallet bestaat al (409 als vangnet), Ja stuurt dan dezelfde aanvraag opnieuw.
     const [dialog, setDialog] = useState<{ lineId: number; preview: DeviationPreview; afterRun: boolean } | null>(null);
     const [checking, setChecking] = useState(false);
-    const [pickerOpen, setPickerOpen] = useState<number[]>([]);
+    // Varianten per product en de landenlijst: suggesties en het zoeken van de ontvangen variant bij registreren.
+    const [products, setProducts] = useState<ProductOption[] | null>(null);
+    const [countries, setCountries] = useState<CountryReference | null>(null);
+    const [combinations, setCombinations] = useState<Record<number, 'missing' | 'ambiguous'>>({});
     const inFlight = useRef(false);
     const requestedUnregistered = useRef(new Set<number>());
     const mounted = useRef(true);
@@ -161,6 +174,14 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     useEffect(() => {
         mounted.current = true;
         return () => { mounted.current = false; };
+    }, []);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        Promise.all([getProductsWithVariants(controller.signal), getCountries(controller.signal)])
+            .then(([productList, countryList]) => { setProducts(productList); setCountries(countryList); })
+            .catch(() => { /* zonder lijsten blijft registreren geblokkeerd met een melding */ });
+        return () => controller.abort();
     }, []);
 
     useEffect(() => {
@@ -254,7 +275,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     // afwijking geldt voor precies deze invoer: elke wijziging vraagt opnieuw "Klopt dit?".
     const editLine = <K extends keyof ContentDraft>(id: number, field: K, value: ContentDraft[K]) => {
         if (!lineEditable(id)) return;
-        setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value, deviation: null } }));
+        setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value, matchedVariantId: null, verified: false, deviation: null } }));
+        setCombinations((current) => { const next = { ...current }; delete next[id]; return next; });
         setFrozen((current) => {
             if (current === null || !current.lines[id]) return current;
             const lines = { ...current.lines };
@@ -291,8 +313,38 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 if (!netKg.ok) addError(found, `line.${id}.netWeightKg`, t(decimalErrorKey(netKg.error)));
             }
             if (!resolveGgn(draft.ggn).ok) addError(found, `line.${id}.ggn`, t('supply_error_ggn'));
+            const article = articleOf(id);
+            if (article === null) {
+                addError(found, 'general', t('receipt_lists_unavailable'));
+                continue;
+            }
+            const required = requiredFields(article.variants, article.shown);
+            if (required.origin && draft.entered.origin === null) addError(found, `line.${id}.origin`, t('supply_error_required'));
+            for (const attribute of required.attributes) {
+                if (draft.entered[attribute].trim() === '') addError(found, `line.${id}.${attribute}`, t('supply_error_required'));
+            }
         }
         return found;
+    };
+
+    // Varianten van hetzelfde artikel als de bronregel en welke kenmerken gevraagd worden; null zolang de lijsten niet geladen zijn.
+    const articleOf = (id: number): { variants: ReturnType<typeof articleVariants>; shown: ReceiptAttribute[] } | null => {
+        const entry = index.get(id);
+        if (!entry || products === null || countries === null) return null;
+        const variants = articleVariants(products, entry.line.productVariantId);
+        return { variants, shown: shownAttributes(variants) };
+    };
+    const countryNames = useMemo(() => new Map((countries?.countries ?? []).map((country) => [country.code, country.nameNl])), [countries]);
+
+    // Netto kg zoals het verstuurd wordt: berekend = aantal × kg per verpakking (zelfde afronding als de server), anders gewogen.
+    const netKgOf = (draft: ContentDraft): number | null => {
+        const quantity = parsePositiveDecimal(draft.quantity);
+        if (draft.method === 'Calculated') {
+            const perPackage = parsePositiveDecimal(draft.kgPerPackage);
+            return quantity.ok && perPackage.ok ? calculatedTotalKg(quantity.value, perPackage.value) : null;
+        }
+        const netKg = parsePositiveDecimal(draft.netKg);
+        return netKg.ok ? netKg.value : null;
     };
 
     const buildLine = (id: number, actorReference: string | null, source: Record<number, ContentDraft>): FrozenLine => {
@@ -325,10 +377,11 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 ggn: ggn.ok ? ggn.value : null,
                 actorReference,
                 reason: null,
-                receivedProductVariantId: draft.received?.variant.productVariantId ?? null,
-                confirmDeviation: draft.received !== null && draft.deviation !== null ? true : null,
-                deviationReason: draft.received === null ? null : draft.deviation?.reason ?? null,
-                deviationReasonNote: draft.received === null ? null : draft.deviation?.note ?? null,
+                // De variant die bij de ingevulde kenmerken hoort; bevestigen alleen na Ja in het venster, nooit bij een exacte controle.
+                receivedProductVariantId: draft.matchedVariantId,
+                confirmDeviation: draft.deviation !== null ? true : null,
+                deviationReason: draft.deviation?.reason ?? null,
+                deviationReasonNote: draft.deviation?.note ?? null,
             },
             done: false,
             result: null,
@@ -393,18 +446,29 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         }
     };
 
-    // Afwijkend artikel: eerst "Klopt dit?" (alleen lezen), vóórdat er iets wordt aangemaakt, zodat Nee echt niets achterlaat.
-    const checkDeviation = async (id: number, source: Record<number, ContentDraft>) => {
-        const quantity = parsePositiveDecimal(source[id].quantity);
-        const received = source[id].received;
-        if (!quantity.ok || received === null) return;
+    // Elke regel eerst controleren (alleen lezen), vóórdat er iets wordt aangemaakt, zodat Nee echt niets achterlaat: de variant die bij
+    // de invoer hoort en het gewicht. Exact = zonder venster verder; anders het venster "Afwijking van de bestelling".
+    const checkLine = async (id: number, source: Record<number, ContentDraft>) => {
+        const draft = source[id];
+        const quantity = parsePositiveDecimal(draft.quantity);
+        const article = articleOf(id);
+        const entry = index.get(id);
+        if (!quantity.ok || article === null || entry === undefined) return;
+        const match = matchVariant(article.variants, draft.entered, article.shown, entry.line.productVariantId, countryNames);
+        if (match.kind !== 'match') {
+            setCombinations((current) => ({ ...current, [id]: match.kind === 'none' ? 'missing' : 'ambiguous' }));
+            return;
+        }
         inFlight.current = true;
         setChecking(true);
-        let exact = false;
+        let next: Record<number, ContentDraft> | null = null;
         try {
-            const preview = await getDeviationPreview(id, received.variant.productVariantId, quantity.value);
-            if (preview.status === 'Deviation') setDialog({ lineId: id, preview, afterRun: false });
-            else if (preview.status === 'Exact') exact = true;
+            const preview = await getDeviationPreview(id, match.variantId, quantity.value, netKgOf(draft));
+            const withVariant = { ...draft, matchedVariantId: match.variantId };
+            if (preview.status === 'Deviation') {
+                setDrafts((current) => ({ ...current, [id]: withVariant }));
+                setDialog({ lineId: id, preview, afterRun: false });
+            } else if (preview.status === 'Exact') next = { ...source, [id]: { ...withVariant, verified: true } };
             else setErrors({ [`line.${id}.supplyCommitmentLineId`]: [t(preview.status === 'OtherArticle' ? 'deviation_other_article' : 'deviation_blocked_assigned')] });
         } catch {
             if (mounted.current) setErrors({ general: [t('deviation_check_failed')] });
@@ -412,8 +476,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             inFlight.current = false;
             if (mounted.current) setChecking(false);
         }
-        if (exact) {
-            const next = { ...source, [id]: { ...source[id], received: null, deviation: null } };
+        if (next !== null) {
             setDrafts(next);
             submit(next);
         }
@@ -424,9 +487,9 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         const found = validate(source);
         setErrors(found);
         if (Object.keys(found).length > 0) return;
-        const unconfirmed = selected.find((id) => !(frozen?.lines[id]?.done ?? false) && source[id].received !== null && source[id].deviation === null);
-        if (unconfirmed !== undefined) {
-            void checkDeviation(unconfirmed, source);
+        const unchecked = selected.find((id) => !(frozen?.lines[id]?.done ?? false) && !source[id].verified && source[id].deviation === null);
+        if (unchecked !== undefined) {
+            void checkLine(unchecked, source);
             return;
         }
 
@@ -475,7 +538,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
 
     const reset = useCallback((notice: string | null) => {
         setDialog(null);
-        setPickerOpen([]);
+        setCombinations({});
         setSelected([]);
         setDrafts({});
         setPallet({ reference: '', sscc: '', bin: '' });
@@ -555,10 +618,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 <ul className="mt-2 space-y-1">
                     {savedLines.map((line) => {
                         const entry = index.get(line.payload.supplyCommitmentLineId);
-                        const received = drafts[line.payload.supplyCommitmentLineId]?.received ?? null;
+                        const deviated = drafts[line.payload.supplyCommitmentLineId]?.deviation != null;
                         return (
                             <li key={line.requestId} className="flex flex-wrap items-center gap-2">
-                                <span>{received === null ? `${entry?.line.productName} · ${entry?.line.productVariantName}` : `${variantLabel(received.variant)} (${t('deviation_recorded')})`}</span>
+                                <span>{entry?.line.productName} · {entry?.line.productVariantName}{deviated && ` (${t('deviation_recorded')})`}</span>
                                 <span>· {t('supply_lot')} {line.payload.lotNumber}</span>
                                 <span>· {formatQuantity(line.payload.quantity, locale)}</span>
                                 <UnitBadge unit={line.payload.unit} />
@@ -578,7 +641,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         .map((commitment) => ({
             commitment,
             lines: commitment.lines.filter((line) => term === ''
-                || `${commitment.id} ${commitment.vendorName ?? ''} ${commitment.origin} ${line.productName ?? ''} ${line.productVariantName ?? ''} ${line.lotNumber ?? ''}`
+                || `${commitment.id} ${commitment.vendorName ?? ''} ${line.productName ?? ''} ${line.productVariantName ?? ''} ${line.lotNumber ?? ''}`
                     .toLowerCase().includes(term)),
         }))
         .filter((group) => group.lines.length > 0);
@@ -635,14 +698,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <th scope="col" className="px-2 py-1.5">{t('supply_lot_provisional')}</th>
                                     <th scope="col" className="px-2 py-1.5 text-right">{t('supply_expected')}</th>
                                     <th scope="col" className="px-2 py-1.5">{t('supply_unit')}</th>
-                                    <th scope="col" className="px-2 py-1.5 text-right">{t('supply_declared_kg')}</th>
                                 </tr>
                             </thead>
                             {visibleCommitments.map(({ commitment, lines }) => (
                                 <tbody key={commitment.id} className="divide-y divide-gray-100 border-t border-gray-200">
                                     <tr className="bg-gray-50">
-                                        <th scope="rowgroup" colSpan={6} className="px-2 py-1 text-left text-xs font-semibold text-gray-700">
-                                            #{commitment.id} · {commitment.vendorName ?? '–'} · {commitment.origin}
+                                        <th scope="rowgroup" colSpan={5} className="px-2 py-1 text-left text-xs font-semibold text-gray-700">
+                                            #{commitment.id} · {commitment.vendorName ?? '–'}
                                             {commitment.expectedAt && <> · {t('supply_expected_on', { date: formatDateTime(commitment.expectedAt, locale) })}</>}
                                         </th>
                                     </tr>
@@ -673,9 +735,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                     {palletBreakdownLabel(line, line.expectedUnit, t, locale) !== null && <span className="block text-xs text-gray-600">{palletBreakdownLabel(line, line.expectedUnit, t, locale)}</span>}
                                                 </td>
                                                 <td className="px-2 py-1.5 align-top"><UnitBadge unit={line.expectedUnit} /></td>
-                                                <td className="px-2 py-1.5 text-right align-top">
-                                                    {line.expectedNetWeightKg === null ? '–' : formatKg(line.expectedNetWeightKg, locale)}
-                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -738,25 +797,16 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         ? t('supply_open_unknown')
                                         : t('supply_open_quantity', { quantity: formatQuantity(open, locale) })}
                             </p>
-                            {draft.received === null && !pickerOpen.includes(id) ? (
-                                <button type="button" data-tour="receive-deviation-toggle" data-tour-key={id} disabled={!editable}
-                                    onClick={() => setPickerOpen((current) => [...current, id])} className="mb-2 text-xs font-medium text-blue-800 underline disabled:text-gray-500">
-                                    {t('deviation_other_received')}
-                                </button>
-                            ) : (
-                                <div className="mb-2 rounded border border-amber-300 bg-amber-50 p-2">
-                                    <label htmlFor={`line.${id}.receivedVariant-input`} className="text-xs font-medium text-gray-800">{t('deviation_received_article')}</label>
-                                    <ReceivedVariantPicker lineId={id} value={draft.received} disabled={!editable} onChange={(candidate) => editLine(id, 'received', candidate)} />
-                                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-950">
-                                        {draft.received !== null && <span>{t(draft.deviation === null ? 'deviation_will_ask' : 'deviation_confirmed')}</span>}
-                                        <button type="button" disabled={!editable} className="font-medium text-blue-800 underline disabled:text-gray-500"
-                                            onClick={() => { editLine(id, 'received', null); setPickerOpen((current) => current.filter((x) => x !== id)); }}>
-                                            {t('deviation_back_to_ordered')}
-                                        </button>
-                                    </p>
-                                </div>
-                            )}
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
+                                {/* Eerst wat er werkelijk is aangekomen (blind, nooit vooraf ingevuld); Tab loopt herkomst, maat, verpakking, klasse, merk, partij, aantal, kg. */}
+                                {(() => {
+                                    const article = articleOf(id);
+                                    return article === null || countries === null
+                                        ? <p className="col-span-2 text-xs text-gray-600 md:col-span-7">{products === null ? t('supply_open_loading') : t('receipt_lists_unavailable')}</p>
+                                        : <ReceivedAttributes lineId={id} variants={article.variants} shown={article.shown} countries={countries} value={draft.entered}
+                                            onChange={(patch) => editLine(id, 'entered', { ...draft.entered, ...patch })} disabled={!editable} errors={e}
+                                            combination={combinations[id] ?? null} />;
+                                })()}
                                 <div className="col-span-2">
                                     <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
                                     <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} data-tour="receive-lot" data-tour-key={id} value={draft.lot} maxLength={100} disabled={!editable}
@@ -767,8 +817,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <label htmlFor={`${key('quantity')}-input`} className="text-xs font-medium text-gray-700">{t('supply_quantity')} *</label>
                                     <input {...fieldProps(key('quantity'), e(key('quantity')))} data-tour="receive-quantity" data-tour-key={id} value={draft.quantity} inputMode="decimal" disabled={!editable}
                                         onChange={(event) => editLine(id, 'quantity', event.target.value)} className={`${inputClass} min-w-[7rem] text-right`} />
-                                    {/* Rekenregel met netto en bruto kg per verpakking van het artikel (alleen weergave), anders "= 1.560 colli". */}
-                                    <QuantityKgLine value={draft.quantity} unit={entry.line.expectedUnit === null ? '' : t(unitLabelKey(entry.line.expectedUnit)).toLowerCase()} defaults={entry.line} testId={key('quantity')} />
+                                    {/* Alleen het getal terug ("= 1.560"); geen rekenregel met het artikelgewicht, zodat de bestelling niet vooraf zichtbaar is. */}
+                                    <NumberEcho value={draft.quantity} unit={entry.line.expectedUnit === null ? '' : t(unitLabelKey(entry.line.expectedUnit)).toLowerCase()} testId={`${key('quantity')}-echo`} />
                                     <FieldError id={key('quantity')} messages={e(key('quantity'))} />
                                 </div>
                                 <div>
@@ -793,7 +843,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     {draft.method === 'Calculated' ? (
                                         <div className="mt-1">
                                             <label htmlFor={`${key('netKgPerPackage')}-input`} className="text-xs font-medium text-gray-700">{t('supply_kg_per_package')} *</label>
-                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable}
+                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable}
                                                 onChange={(event) => editLine(id, 'kgPerPackage', event.target.value)} className={inputClass} />
                                             <span className="block text-xs text-gray-500">{t('supply_kg_per_package_hint')}</span>
                                             <span className="block text-xs font-medium text-amber-900" data-testid={`calculated-total-${id}`}>
@@ -811,7 +861,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     ) : (
                                         <div className="mt-1">
                                             <label htmlFor={`${key('netWeightKg')}-input`} className="text-xs font-medium text-gray-700">{t('supply_actual_net_kg')} *</label>
-                                            <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} value={draft.netKg} inputMode="decimal" disabled={!editable}
+                                            <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} data-tour="receive-net-kg" data-tour-key={id} value={draft.netKg} inputMode="decimal" disabled={!editable}
                                                 onChange={(event) => editLine(id, 'netKg', event.target.value)} className={inputClass} />
                                             <NumberEcho value={draft.netKg} unit="kg" testId={`${key('netWeightKg')}-echo`} />
                                             <span className="block text-xs text-gray-500">{t('supply_actual_net_kg_hint')}</span>
