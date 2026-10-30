@@ -28,6 +28,10 @@ namespace AgfAdmin.Models
         public decimal? LoosePackages { get; set; }
         public string LotNumber { get; set; } // optioneel
 
+        // Vervangende regel na een bevestigde afwijkende ontvangst (SupplyReceiptDeviation): de oorspronkelijke regel. Onveranderlijk.
+        public int? ReplacesLineId { get; set; }
+        public SupplyCommitmentLine ReplacesLine { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Optimistisch concurrency-token: wordt aangeraakt bij elke DirectTrade-toewijzing of vrijgave op deze regel,

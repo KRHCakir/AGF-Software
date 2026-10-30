@@ -2846,6 +2846,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("ProductVariantId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ReplacesLineId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("SupplyCommitmentId")
                         .HasColumnType("integer");
 
@@ -2861,6 +2864,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("ProductVariantId");
 
+                    b.HasIndex("ReplacesLineId");
+
                     b.HasIndex("SupplyCommitmentId");
 
                     b.ToTable("SupplyCommitmentLines", t =>
@@ -2872,6 +2877,123 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_Weights_GrossNotBelowNet", "\"ExpectedNetWeightKg\" IS NULL OR \"ExpectedGrossWeightKg\" IS NULL OR CAST(\"ExpectedGrossWeightKg\" AS NUMERIC) >= CAST(\"ExpectedNetWeightKg\" AS NUMERIC)");
 
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_Weights_Positive", "(\"ExpectedNetWeightKg\" IS NULL OR CAST(\"ExpectedNetWeightKg\" AS NUMERIC) > 0) AND (\"ExpectedGrossWeightKg\" IS NULL OR CAST(\"ExpectedGrossWeightKg\" AS NUMERIC) > 0)");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyReceiptDeviation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExpectedProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExpectedVariantSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Kinds")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("NewLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OriginalLineAfter")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("OriginalLineBefore")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("OriginalLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PalletContentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ReasonNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ReceivedProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReceivedVariantSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal>("ReducedQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpectedProductVariantId");
+
+                    b.HasIndex("NewLineId")
+                        .IsUnique();
+
+                    b.HasIndex("OriginalLineId");
+
+                    b.HasIndex("PalletContentLineId")
+                        .IsUnique();
+
+                    b.HasIndex("ReceivedProductVariantId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SupplyCommitmentId");
+
+                    b.ToTable("SupplyReceiptDeviations", t =>
+                        {
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Lines_Differ", "\"OriginalLineId\" <> \"NewLineId\"");
+
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_OtherExplained", "\"Reason\" IS NULL OR \"Reason\" <> 'Other' OR (\"ReasonNote\" IS NOT NULL AND length(trim(\"ReasonNote\")) > 0)");
+
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reason_Allowed", "\"Reason\" IS NULL OR \"Reason\" IN ('SupplierDeliveredDifferently', 'OtherLotLoaded', 'Other')");
+
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reduced_Range", "CAST(\"ReducedQuantity\" AS NUMERIC) >= 0 AND CAST(\"ReducedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC)");
+
+                            t.HasCheckConstraint("CK_SupplyReceiptDeviations_Variants_Differ", "\"ExpectedProductVariantId\" <> \"ReceivedProductVariantId\"");
                         });
                 });
 
@@ -3857,6 +3979,11 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "ReplacesLine")
+                        .WithMany()
+                        .HasForeignKey("ReplacesLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
                         .WithMany("Lines")
                         .HasForeignKey("SupplyCommitmentId")
@@ -3864,6 +3991,55 @@ namespace AgfAdmin.Migrations
                         .IsRequired();
 
                     b.Navigation("ProductVariant");
+
+                    b.Navigation("ReplacesLine");
+
+                    b.Navigation("SupplyCommitment");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SupplyReceiptDeviation", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("ExpectedProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "NewLine")
+                        .WithMany()
+                        .HasForeignKey("NewLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "OriginalLine")
+                        .WithMany()
+                        .HasForeignKey("OriginalLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("ReceivedProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("NewLine");
+
+                    b.Navigation("OriginalLine");
+
+                    b.Navigation("PalletContentLine");
 
                     b.Navigation("SupplyCommitment");
                 });

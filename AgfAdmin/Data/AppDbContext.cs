@@ -50,6 +50,7 @@ namespace AgfAdmin.Data
         public DbSet<SupplyCommitmentInvoiceRef> SupplyCommitmentInvoiceRefs { get; set; }
         public DbSet<SupplyRejection> SupplyRejections { get; set; }
         public DbSet<SupplyRejectionLine> SupplyRejectionLines { get; set; }
+        public DbSet<SupplyReceiptDeviation> SupplyReceiptDeviations { get; set; }
 
         // Pallet-traceability: logistieke drager, atomaire inhoudsregels en append-only auditrecords.
         public DbSet<Pallet> Pallets { get; set; }
@@ -425,6 +426,45 @@ namespace AgfAdmin.Data
                 });
             });
 
+            // Afwijkende ontvangst (append-only, TraceabilityGuard regel 18): één per ontvangen inhoudsregel en per vervangende regel.
+            modelBuilder.Entity<SupplyReceiptDeviation>(b =>
+            {
+                b.Property(d => d.Kinds).IsRequired().HasMaxLength(100);
+                b.Property(d => d.ExpectedVariantSnapshot).IsRequired().HasMaxLength(2000);
+                b.Property(d => d.ReceivedVariantSnapshot).IsRequired().HasMaxLength(2000);
+                b.Property(d => d.Quantity).HasPrecision(18, 3);
+                b.Property(d => d.Unit).IsRequired().HasMaxLength(32);
+                b.Property(d => d.ReducedQuantity).HasPrecision(18, 3);
+                b.Property(d => d.OriginalLineBefore).IsRequired().HasMaxLength(2000);
+                b.Property(d => d.OriginalLineAfter).IsRequired().HasMaxLength(2000);
+                b.Property(d => d.Reason).HasMaxLength(32);
+                b.Property(d => d.ReasonNote).HasMaxLength(PurchaseOrderRules.MaxExplanationLength);
+                b.Property(d => d.ActorReference).HasMaxLength(PurchaseOrderRules.MaxActorLength);
+                b.HasIndex(d => d.RequestId).IsUnique();
+                b.HasIndex(d => d.SupplyCommitmentId);
+                b.HasIndex(d => d.OriginalLineId);
+                b.HasIndex(d => d.NewLineId).IsUnique();
+                b.HasIndex(d => d.PalletContentLineId).IsUnique();
+                b.HasOne(d => d.SupplyCommitment).WithMany().HasForeignKey(d => d.SupplyCommitmentId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.OriginalLine).WithMany().HasForeignKey(d => d.OriginalLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.NewLine).WithMany().HasForeignKey(d => d.NewLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.PalletContentLine).WithMany().HasForeignKey(d => d.PalletContentLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne<ProductVariant>().WithMany().HasForeignKey(d => d.ExpectedProductVariantId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne<ProductVariant>().WithMany().HasForeignKey(d => d.ReceivedProductVariantId).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reduced_Range",
+                        "CAST(\"ReducedQuantity\" AS NUMERIC) >= 0 AND CAST(\"ReducedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC)");
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Lines_Differ", "\"OriginalLineId\" <> \"NewLineId\"");
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Variants_Differ", "\"ExpectedProductVariantId\" <> \"ReceivedProductVariantId\"");
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_Reason_Allowed",
+                        "\"Reason\" IS NULL OR \"Reason\" IN ('SupplierDeliveredDifferently', 'OtherLotLoaded', 'Other')");
+                    t.HasCheckConstraint("CK_SupplyReceiptDeviations_OtherExplained",
+                        "\"Reason\" IS NULL OR \"Reason\" <> 'Other' OR (\"ReasonNote\" IS NOT NULL AND length(trim(\"ReasonNote\")) > 0)");
+                });
+            });
+
             modelBuilder.Entity<SupplyRejectionLine>(b =>
             {
                 b.Property(l => l.Quantity).HasPrecision(18, 3);
@@ -470,6 +510,12 @@ namespace AgfAdmin.Data
                 b.HasOne(l => l.ProductVariant)
                     .WithMany()
                     .HasForeignKey(l => l.ProductVariantId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Vervangende regel van een afwijkende ontvangst: verwijst naar de oorspronkelijke regel (nooit verwijderd).
+                b.HasOne(l => l.ReplacesLine)
+                    .WithMany()
+                    .HasForeignKey(l => l.ReplacesLineId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
