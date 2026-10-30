@@ -29,6 +29,16 @@ async function ensurePrerequisites(request: APIRequestContext) {
         const created = await request.post(`${API}/relations`, { data: { requestId: randomUUID(), searchCode: 'LOKAAL', name: 'Lokaal Fruit B.V.', preferredLanguage: 'nl', customer: {} } });
         expect(created.ok(), await created.text()).toBeTruthy();
     }
+    // Afwijking bij ontvangst: een tweede variant van het rondleidingsartikel met een andere herkomst (zelfde maat en verpakking).
+    type Variant = { id: number; name: string; shortcutCode: string | null; packagingUnit: string | null; defaultNetKgPerPackage: number | null; originCountryCode: string | null };
+    const products = await json<{ name: string; variants: Variant[] }[]>(request, '/products?includeVariants=true');
+    const hass = (products.find((product) => product.name.toLowerCase() === 'avocado')?.variants ?? []).filter((variant) => variant.name.toLowerCase().startsWith('hass'));
+    const article = [...hass].sort((a, b) => a.id - b.id).find((variant) => variant.shortcutCode && variant.packagingUnit && variant.defaultNetKgPerPackage);
+    if (article && !hass.some((variant) => variant.id !== article.id && variant.name === article.name && variant.originCountryCode !== article.originCountryCode)) {
+        const full = await json<Record<string, unknown>>(request, `/articles/${article.id}`);
+        const created = await request.post(`${API}/articles`, { data: { ...full, id: undefined, shortcutCode: `${article.shortcutCode}-ZA`, originCountryCode: article.originCountryCode === 'ZA' ? 'CL' : 'ZA' } });
+        expect(created.ok(), await created.text()).toBeTruthy();
+    }
 }
 
 // Speelt een hoofdstuk af en geeft de stapnummers die voorbijkwamen en de afsluittekst terug.
@@ -165,6 +175,20 @@ test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" ma
         if (await help.isVisible()) await help.click();
         return /Klaar:/.test(text);
     }, { timeout: 200_000, intervals: [300] }).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    await page.close();
+});
+
+test('Afwijking bij ontvangst: blind ingevuld, "Klopt dit?" en de afwijking op de order', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'deviation');
+    expectAllSteps(result);
+    const number = /Order (IO-\d{4}-\d+)/.exec(result.done)?.[1];
+    const list = await json<{ items: { id: number; orderNumber: string; hasDeviation: boolean }[] }>(request, `/purchase-orders?status=all&query=${number}`);
+    const order = list.items.find((item) => item.orderNumber === number)!;
+    expect(order.hasDeviation).toBe(true);
+    const detail = await json<{ deviations: { kinds: string[]; actorReference: string; reason: string }[] }>(request, `/purchase-orders/${order.id}`);
+    expect(detail.deviations.map((deviation) => [deviation.actorReference, deviation.reason])).toEqual([['Demo-assistent', 'SupplierDeliveredDifferently']]);
     expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
     await page.close();
 });
