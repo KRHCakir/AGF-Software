@@ -61,6 +61,7 @@ namespace AgfAdmin.Services
                 })
                 .ToListAsync(cancellationToken);
             var facts = await LoadFactsAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
+            var withDeviation = await OrdersWithDeviationAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
 
             var items = headers
                 .Select(h =>
@@ -85,7 +86,8 @@ namespace AgfAdmin.Services
                         RejectedQuantity = f.RejectedQuantity,
                         InvoiceNumbers = f.Refs.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
                             .Select(r => new PurchaseOrderInvoiceNumberDto { Kind = r.Kind, InvoiceNumber = r.InvoiceNumber }).ToList(),
-                        InvoiceIndicator = f.InvoiceIndicator()
+                        InvoiceIndicator = f.InvoiceIndicator(),
+                        HasDeviation = withDeviation.Contains(h.Id)
                     });
                 })
                 .Where(i => statusFilter == "all"
@@ -159,6 +161,12 @@ namespace AgfAdmin.Services
                 .AsSplitQuery()
                 .ToListAsync(cancellationToken);
 
+            var deviations = await _db.SupplyReceiptDeviations.AsNoTracking()
+                .Where(d => d.SupplyCommitmentId == id)
+                .Select(d => new { Deviation = d, PalletReference = d.PalletContentLine.Pallet.Reference })
+                .OrderBy(d => d.Deviation.CreatedAt).ThenBy(d => d.Deviation.Id)
+                .ToListAsync(cancellationToken);
+
             var wholeRejected = rejections.SelectMany(r => r.Lines).Where(l => !l.SplitOff).Select(l => l.PalletContentLineId).ToHashSet();
             var receipts = contents.Select(c =>
             {
@@ -221,6 +229,11 @@ namespace AgfAdmin.Services
                 OccurredAt = Utc(r.RejectedAt), Type = "Rejected", ActorReference = r.ActorReference, Reason = r.Reason, Decision = r.Decision,
                 Quantity = r.Lines.Sum(l => l.Quantity), Unit = r.Lines.Select(l => l.Unit).Distinct().Count() == 1 ? r.Lines.First().Unit : null
             }));
+            history.AddRange(deviations.Select(d => new PurchaseOrderHistoryEventDto
+            {
+                OccurredAt = Utc(d.Deviation.CreatedAt), Type = "DeviationRecorded", ActorReference = d.Deviation.ActorReference, Reference = d.PalletReference,
+                Quantity = d.Deviation.Quantity, Unit = d.Deviation.Unit, Reason = d.Deviation.Reason, Kinds = d.Deviation.Kinds
+            }));
 
             var lines = commitment.Lines.OrderBy(l => l.Id).Select(l =>
             {
@@ -231,10 +244,15 @@ namespace AgfAdmin.Services
                     ProductVariantId = l.ProductVariantId,
                     ProductName = l.ProductVariant?.Product?.Name,
                     ProductVariantName = l.ProductVariant?.Name,
+                    Origin = l.ProductVariant?.Origin,
+                    Size = l.ProductVariant?.SizeCategory,
+                    Packaging = l.ProductVariant?.Packaging,
                     LotNumber = l.LotNumber,
                     ExpectedQuantity = l.ExpectedQuantity,
                     Unit = l.ExpectedUnit,
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
+                    ReplacesLineId = l.ReplacesLineId,
+                    ReplacedByLineIds = commitment.Lines.Where(r => r.ReplacesLineId == l.Id).OrderBy(r => r.Id).Select(r => r.Id).ToList(),
                     ReceivedQuantity = line.ReceivedQuantity,
                     ReceivedNetWeightKg = line.ReceivedNetWeightKg,
                     RejectedQuantity = line.RejectedQuantity,
@@ -283,6 +301,16 @@ namespace AgfAdmin.Services
                         PalletContentLineId = l.PalletContentLineId, PalletReference = l.PalletContentLine?.Pallet?.Reference, LotNumber = l.PalletContentLine?.LotNumber,
                         Quantity = l.Quantity, Unit = l.Unit, NetWeightKg = l.NetWeightKg, SplitOff = l.SplitOff
                     }).ToList()
+                }).ToList(),
+                Deviations = deviations.Select(d => new PurchaseOrderDeviationDto
+                {
+                    Id = d.Deviation.Id, OriginalLineId = d.Deviation.OriginalLineId, NewLineId = d.Deviation.NewLineId,
+                    PalletContentLineId = d.Deviation.PalletContentLineId, PalletReference = d.PalletReference,
+                    Kinds = d.Deviation.Kinds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+                    Expected = ReceiptDeviationService.ReadVariant(d.Deviation.ExpectedVariantSnapshot),
+                    Received = ReceiptDeviationService.ReadVariant(d.Deviation.ReceivedVariantSnapshot),
+                    Quantity = d.Deviation.Quantity, Unit = d.Deviation.Unit, ReducedQuantity = d.Deviation.ReducedQuantity,
+                    Reason = d.Deviation.Reason, ReasonNote = d.Deviation.ReasonNote, ActorReference = d.Deviation.ActorReference, CreatedAt = Utc(d.Deviation.CreatedAt)
                 }).ToList(),
                 History = history.OrderBy(h => h.OccurredAt).ToList()
             });
@@ -402,6 +430,19 @@ namespace AgfAdmin.Services
             }
             foreach (var rejection in rejections) Order(rejection.SupplyCommitmentId).Rejections.Add((rejection.Decision, rejection.RejectedAt));
             foreach (var reference in refs) Order(reference.SupplyCommitmentId).Refs.Add(reference);
+        }
+
+        // Orders met minstens één vastgelegde afwijkende ontvangst (lijstaanduiding), in batches zoals LoadFactsAsync.
+        private async Task<HashSet<int>> OrdersWithDeviationAsync(List<int> ids, CancellationToken cancellationToken)
+        {
+            var result = new HashSet<int>();
+            foreach (var batch in ids.Chunk(500))
+            {
+                var found = await _db.SupplyReceiptDeviations.AsNoTracking().Where(d => batch.Contains(d.SupplyCommitmentId))
+                    .Select(d => d.SupplyCommitmentId).Distinct().ToListAsync(cancellationToken);
+                result.UnionWith(found);
+            }
+            return result;
         }
 
         // Actieve fysieke verkoopreserveringen per inhoudsregel (hoeveelheid en kg); som in het geheugen (SQLite kent geen decimal-SUM).
