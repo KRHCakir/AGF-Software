@@ -516,7 +516,8 @@ namespace AgfAdmin.Services
                     DefaultPackagesPerPallet = l.ProductVariant?.DefaultPackagesPerPallet,
                     DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
                     DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
-                        ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null
+                        ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null,
+                    ReplacesLineId = l.ReplacesLineId
                 })
                 .ToList()
         };

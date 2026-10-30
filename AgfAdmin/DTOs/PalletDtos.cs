@@ -37,6 +37,13 @@ namespace AgfAdmin.DTOs
         public string Ggn { get; set; }
         public string ActorReference { get; set; }
         public string Reason { get; set; }
+        // Afwijkende ontvangst: de werkelijk ontvangen variant als die anders is dan die van de bronregel. Leeg of gelijk = gewone
+        // ontvangst. Anders weigert de server met 409 DEVIATION_CONFIRMATION_REQUIRED (met het verschil) tot dezelfde aanvraag
+        // terugkomt met ConfirmDeviation = true; de reden is optioneel (toelichting verplicht bij Other).
+        public int? ReceivedProductVariantId { get; set; }
+        public bool? ConfirmDeviation { get; set; }
+        public string DeviationReason { get; set; }
+        public string DeviationReasonNote { get; set; }
     }
 
     public sealed class PalletDto
