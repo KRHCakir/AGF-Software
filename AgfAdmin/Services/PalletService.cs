@@ -9,7 +9,7 @@ namespace AgfAdmin.Services
     // Legt pallets en hun atomaire inhoudsregels vast, elk met een append-only auditrecord in dezelfde save.
     // Gewichten worden exact zoals gemeten/ingevoerd opgeslagen: nooit een gewicht per verpakking, eenheid of pallet
     // afleiden, en nooit een eenheid omrekenen. Deze service schrijft geen voorraadbewegingen of reserveringen.
-    public sealed class PalletService : IPalletService
+    public sealed partial class PalletService : IPalletService
     {
         public const string PalletCreatedEvent = "PalletCreated";
         public const string ContentLineAddedEvent = "ContentLineAdded";
@@ -292,11 +292,11 @@ namespace AgfAdmin.Services
                 return Validation<PalletContentLineDto>(errors);
             }
 
-            // Idempotentie: dezelfde RequestId met dezelfde inhoud geeft de bestaande regel terug.
+            // Idempotentie: dezelfde RequestId met dezelfde inhoud geeft de bestaande regel terug (ook na een bevestigde afwijking).
             var existing = await ContentLineQuery().SingleOrDefaultAsync(c => c.RequestId == candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return ResultForContentLineRetry(existing, candidate);
+                return await ResultForContentLineRetryAsync(existing, candidate, request.ReceivedProductVariantId, cancellationToken);
             }
 
             // Gevolgd geladen: de pallet wordt hieronder "aangeraakt" (versie +1), zodat twee gelijktijdige
@@ -322,6 +322,18 @@ namespace AgfAdmin.Services
                 return ServiceResult<PalletContentLineDto>.Conflict(conflict);
             }
 
+            // Afwijkende ontvangst: alleen dezelfde variant boekt zonder vragen; elk verschil vraagt een bevestiging (409 met het verschil).
+            SupplyReceiptDeviation deviation = null;
+            if (request.ReceivedProductVariantId != null && request.ReceivedProductVariantId != source.ProductVariantId)
+            {
+                var planned = await PlanDeviationAsync(source, candidate, request, actor, cancellationToken);
+                if (planned.Refused != null)
+                {
+                    return planned.Refused;
+                }
+                deviation = planned.Deviation;
+            }
+
             _db.PalletContentLines.Add(candidate);
             _db.Entry(pallet).Property(p => p.Version).IsModified = true;
             _db.PalletAuditEvents.Add(new PalletAuditEvent
@@ -329,16 +341,29 @@ namespace AgfAdmin.Services
                 PalletId = palletId,
                 PalletContentLine = candidate,
                 EventType = ContentLineAddedEvent,
-                NewValue = Snapshot(new
-                {
-                    candidate.SupplyCommitmentLineId,
-                    candidate.LotNumber,
-                    candidate.Quantity,
-                    candidate.Unit,
-                    candidate.NetWeightKg,
-                    candidate.Ggn,
-                    candidate.QualityStatus
-                }),
+                // Bij een afwijking krijgt de vervangende bronregel pas bij het opslaan een id: dan de oorspronkelijke regel en de variant.
+                NewValue = deviation == null
+                    ? Snapshot(new
+                    {
+                        candidate.SupplyCommitmentLineId,
+                        candidate.LotNumber,
+                        candidate.Quantity,
+                        candidate.Unit,
+                        candidate.NetWeightKg,
+                        candidate.Ggn,
+                        candidate.QualityStatus
+                    })
+                    : Snapshot(new
+                    {
+                        ReplacesSupplyCommitmentLineId = deviation.OriginalLineId,
+                        deviation.ReceivedProductVariantId,
+                        candidate.LotNumber,
+                        candidate.Quantity,
+                        candidate.Unit,
+                        candidate.NetWeightKg,
+                        candidate.Ggn,
+                        candidate.QualityStatus
+                    }),
                 Reason = reason,
                 ActorReference = actor,
                 OccurredAt = candidate.CreatedAt
@@ -355,11 +380,11 @@ namespace AgfAdmin.Services
                 var concurrent = await ContentLineQuery().SingleOrDefaultAsync(c => c.RequestId == candidate.RequestId, cancellationToken);
                 if (concurrent != null)
                 {
-                    return ResultForContentLineRetry(concurrent, candidate);
+                    return await ResultForContentLineRetryAsync(concurrent, candidate, request.ReceivedProductVariantId, cancellationToken);
                 }
                 if (exception is DbUpdateConcurrencyException)
                 {
-                    return ServiceResult<PalletContentLineDto>.Conflict(ConcurrentChangeMessage($"Pallet {palletId}"));
+                    return ServiceResult<PalletContentLineDto>.Conflict(ConcurrentChangeMessage(deviation != null ? $"Supply commitment line {source.Id}" : $"Pallet {palletId}"));
                 }
                 throw;
             }
@@ -452,6 +477,7 @@ namespace AgfAdmin.Services
             // Medewerker is optioneel bij ontvangst (zie BuildPallet); keuring en statuswijzigingen blijven hem eisen.
             actor = OptionalActor(request.ActorReference, errors);
             reason = OptionalReason(request.Reason, errors);
+            ValidateDeviationFields(request, errors);
 
             if (errors.Count > 0)
             {
@@ -473,6 +499,27 @@ namespace AgfAdmin.Services
                 QualityStatus = PalletRules.QualityQuarantine,
                 CreatedAt = DateTime.UtcNow
             };
+        }
+
+        private static void ValidateDeviationFields(AddPalletContentLineDto request, Dictionary<string, List<string>> errors)
+        {
+            if (request.ReceivedProductVariantId is <= 0)
+            {
+                AddError(errors, "receivedProductVariantId", "The received product variant must be a positive id.");
+            }
+            if (request.DeviationReason != null && !ReceiptDeviationRules.IsReason(request.DeviationReason))
+            {
+                AddError(errors, "deviationReason", $"Deviation reason must be one of: {string.Join(", ", ReceiptDeviationRules.Reasons)}, or be omitted.");
+            }
+            var note = string.IsNullOrWhiteSpace(request.DeviationReasonNote) ? null : request.DeviationReasonNote.Trim();
+            if (note != null && note.Length > MaxReasonLength)
+            {
+                AddError(errors, "deviationReasonNote", $"This field may contain at most {MaxReasonLength} characters.");
+            }
+            if (request.DeviationReason == ReceiptDeviationRules.ReasonOther && note == null)
+            {
+                AddError(errors, "deviationReasonNote", "An explanation is required for deviation reason Other.");
+            }
         }
 
         private static string FindBusinessRuleConflict(Pallet pallet, SupplyCommitmentLine source, PalletContentLine candidate)
@@ -514,10 +561,25 @@ namespace AgfAdmin.Services
             return PalletInvariants.CheckGrossWeight(pallet.GrossKg, pallet.TareKg, pallet.ContentLines, candidate.NetWeightKg);
         }
 
-        private static ServiceResult<PalletContentLineDto> ResultForContentLineRetry(PalletContentLine existing, PalletContentLine candidate)
+        // Na een bevestigde afwijking hangt de opgeslagen regel aan de vervangende bronregel: de herhaling (oorspronkelijke bronregel en
+        // dezelfde ontvangen variant) is dan dezelfde aanvraag.
+        private async Task<ServiceResult<PalletContentLineDto>> ResultForContentLineRetryAsync(PalletContentLine existing, PalletContentLine candidate, int? receivedProductVariantId, CancellationToken cancellationToken)
+        {
+            var deviation = await _db.SupplyReceiptDeviations.AsNoTracking()
+                .Where(d => d.PalletContentLineId == existing.Id)
+                .Select(d => new { d.OriginalLineId, d.ReceivedProductVariantId })
+                .SingleOrDefaultAsync(cancellationToken);
+            var sameSource = deviation == null
+                ? existing.SupplyCommitmentLineId == candidate.SupplyCommitmentLineId
+                    && (receivedProductVariantId == null || receivedProductVariantId == existing.SupplyCommitmentLine.ProductVariantId)
+                : deviation.OriginalLineId == candidate.SupplyCommitmentLineId && deviation.ReceivedProductVariantId == receivedProductVariantId;
+            return ResultForContentLineRetry(existing, candidate, sameSource);
+        }
+
+        private static ServiceResult<PalletContentLineDto> ResultForContentLineRetry(PalletContentLine existing, PalletContentLine candidate, bool sameSource)
         {
             var same = existing.PalletId == candidate.PalletId
-                && existing.SupplyCommitmentLineId == candidate.SupplyCommitmentLineId
+                && sameSource
                 && string.Equals(existing.LotNumber, candidate.LotNumber, StringComparison.Ordinal)
                 && existing.Quantity == candidate.Quantity
                 && string.Equals(existing.Unit, candidate.Unit, StringComparison.Ordinal)

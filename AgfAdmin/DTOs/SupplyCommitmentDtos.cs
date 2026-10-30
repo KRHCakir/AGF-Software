@@ -107,5 +107,7 @@ namespace AgfAdmin.DTOs
         // Null bij route Warehouse: magazijnaanvoer heeft geen toewijsbare verwachte capaciteit (die wordt pas voorraad na ontvangst en keuring).
         public decimal? DirectTradeAllocatedQuantity { get; set; }
         public decimal? DirectTradeRemainingQuantity { get; set; }
+        // Vervangende regel na een afwijkende ontvangst: de oorspronkelijke regel (anders null).
+        public int? ReplacesLineId { get; set; }
     }
 }
