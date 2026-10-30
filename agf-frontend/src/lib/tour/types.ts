@@ -10,7 +10,11 @@ export type TourMode = 'watch' | 'self';
 // "naam" of "naam:sleutel"; in de sleutel en in teksten wordt {{variabele}} ingevuld (bijv. {{tourRef}}, {{orderNumber}}).
 export type TourTarget = string;
 
-export type TourAction =
+// Elke actie kan `when` hebben: de actie wordt overgeslagen als die tekst (na invullen van {{variabelen}}) leeg is, bijv. een
+// kenmerk dat bij dit artikel niet gevraagd wordt.
+export type TourAction = TourActionKind & { when?: string };
+
+export type TourActionKind =
     | { kind: 'navigate'; href: string }
     | { kind: 'highlight'; target: TourTarget }
     // Letter voor letter typen (datum- en keuzevelden in één keer), met echte invoer-events.

@@ -1825,5 +1825,18 @@
   "deviation_weight_value": "{perPackage} per {unit} ({total})",
   "deviation_question_weight": "Order {order} expects {article} of {expected}, received {received}. Is this correct?",
   "deviation_consequence_weight": "If yes, the line expects {perPackage} per {unit} from now on ({total} in total).",
-  "po_deviation_weight": "{expected} → {received} per {unit}"
+  "po_deviation_weight": "{expected} → {received} per {unit}",
+  "receipt_attr_origin": "Origin",
+  "receipt_attr_size": "Size",
+  "receipt_attr_packaging": "Packaging",
+  "receipt_attr_trade_class": "Class",
+  "receipt_attr_brand": "Brand",
+  "receipt_attr_placeholder": "Type what it says",
+  "receipt_attr_hint": "Suggestions from the existing articles. Tab takes the top one.",
+  "receipt_attr_none": "Does not exist for this article",
+  "receipt_attr_change": "Clear",
+  "receipt_combination_missing": "This combination does not exist as an article yet. Create it in Articles first.",
+  "receipt_combination_ambiguous": "Several articles match. Make them distinct in Articles first.",
+  "receipt_combination_to_articles": "To Articles",
+  "receipt_lists_unavailable": "The articles could not be loaded; please try again."
 }

@@ -3,6 +3,8 @@
 // anders precies wat er ontbreekt. De zoekregels zijn die van de schermen zelf (searchVendors), zodat Tab dezelfde keuze maakt.
 
 import { todayInAmsterdam } from '../calendarDate';
+import { formatDecimalInput } from '../decimal';
+import { articleVariants, shownAttributes } from '../receiptBlindEntry';
 import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
@@ -10,7 +12,7 @@ import { getAvailabilityOverview } from '../../services/availabilityService';
 import { getCustomers, getProductsWithVariants, getVendors } from '../../services/referenceDataService';
 import type { AvailabilityOverview } from '../../types/availability';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
-import type { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
+import type { CustomerOption, ProductOption, VariantOption, VendorOption } from '../../types/referenceData';
 import { TOUR_REF_PREFIX } from './types';
 import type { TourMissing, TourPrecheck } from './types';
 
@@ -77,13 +79,52 @@ export async function precheckPurchase(signal: AbortSignal): Promise<TourPrechec
     };
 }
 
-export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck> {
+// Blinde invoer: wat de rondleiding bij ontvangst invult voor deze variant (alleen de kenmerken die het scherm vraagt; een lege waarde
+// slaat de actie over via `when`) en het juiste kg-veld met het kg per verpakking.
+export function receiptVars(variant: VariantOption, variants: readonly VariantOption[], quantity: number, kgPerPackage: number): Record<string, string> {
+    const shown = shownAttributes(variants);
+    const calculated = variant.weightMethod === 'Calculated';
+    return {
+        originText: variant.originCountryCode ?? variant.origin ?? '',
+        originName: variant.origin ?? '',
+        size: variant.sizeCategory ?? '',
+        packaging: variant.packaging ?? '',
+        tradeClass: shown.includes('tradeClass') ? variant.tradeClass ?? '' : '',
+        brand: shown.includes('brand') ? variant.brand ?? '' : '',
+        // Berekend: kg per verpakking (etiket); gewogen: het totaal. Het andere veld blijft leeg en de actie wordt overgeslagen.
+        kgPerPackage: calculated ? formatDecimalInput(kgPerPackage) : '',
+        netKg: calculated ? '' : formatDecimalInput(Math.round(quantity * kgPerPackage * 1000) / 1000),
+    };
+}
+
+// Een andere variant van hetzelfde artikel om een afwijking te laten zien: bij voorkeur alleen een andere herkomst.
+export function findDeviationVariant(ordered: VariantOption, variants: readonly VariantOption[]): VariantOption | null {
+    const others = variants.filter((variant) => variant.id !== ordered.id).sort((a, b) => a.id - b.id);
+    const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
+    return others.find((variant) => !same(variant.originCountryCode ?? variant.origin, ordered.originCountryCode ?? ordered.origin)
+        && same(variant.sizeCategory, ordered.sizeCategory) && same(variant.packaging, ordered.packaging)) ?? others[0] ?? null;
+}
+
+async function openTourLine(signal: AbortSignal, minimum: number) {
     const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'open', vendorId: null, page: 1, pageSize: 50 }, signal);
     const order = findOpenTourOrder(list.items);
-    if (!order) return { missing: [{ key: 'tour_missing_open_order' }] };
+    if (!order) return null;
     const detail = await getPurchaseOrder(order.id, signal);
-    const line = detail.lines.find((candidate) => candidate.unit !== null && Number.isInteger(candidate.expectedQuantity) && candidate.expectedQuantity >= 2);
-    if (!line) return { missing: [{ key: 'tour_missing_open_order' }] };
+    const line = detail.lines.find((candidate) => candidate.unit !== null && Number.isInteger(candidate.expectedQuantity) && candidate.expectedQuantity >= minimum);
+    return line ? { order, line } : null;
+}
+
+const kgPerPackageOf = (line: { expectedNetWeightKg: number | null; expectedQuantity: number }, variant: VariantOption) =>
+    line.expectedNetWeightKg !== null && line.expectedQuantity > 0 ? line.expectedNetWeightKg / line.expectedQuantity : variant.defaultNetKgPerPackage ?? null;
+
+export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck> {
+    const [open, products] = await Promise.all([openTourLine(signal, 2), getProductsWithVariants(signal)]);
+    if (!open) return { missing: [{ key: 'tour_missing_open_order' }] };
+    const { order, line } = open;
+    const variants = articleVariants(products, line.productVariantId);
+    const variant = variants.find((candidate) => candidate.id === line.productVariantId);
+    const kg = variant ? kgPerPackageOf(line, variant) : null;
+    if (!variant || kg === null) return { missing: [{ key: 'tour_missing_open_order' }] };
     return {
         missing: [],
         vars: {
@@ -93,6 +134,31 @@ export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck
             variantId: String(line.productVariantId),
             quantity: String(line.expectedQuantity),
             rejectQuantity: String(Math.max(1, Math.floor(line.expectedQuantity / 4))),
+            ...receiptVars(variant, variants, line.expectedQuantity, kg),
+        },
+    };
+}
+
+// Afwijking bij ontvangst: een deel van een open demo-inkooporder komt als een andere variant van hetzelfde artikel binnen.
+export async function precheckDeviation(signal: AbortSignal): Promise<TourPrecheck> {
+    const [open, products] = await Promise.all([openTourLine(signal, 2), getProductsWithVariants(signal)]);
+    if (!open) return { missing: [{ key: 'tour_missing_open_order' }] };
+    const { order, line } = open;
+    const variants = articleVariants(products, line.productVariantId);
+    const ordered = variants.find((candidate) => candidate.id === line.productVariantId);
+    const other = ordered ? findDeviationVariant(ordered, variants) : null;
+    const kg = ordered ? kgPerPackageOf(line, ordered) : null;
+    if (!ordered || !other || kg === null) return { missing: [{ key: 'tour_missing_deviation_variant', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
+    const quantity = Math.max(1, Math.floor(line.expectedQuantity / 2));
+    return {
+        missing: [],
+        vars: {
+            orderId: String(order.id),
+            orderNumber: order.orderNumber,
+            lineId: String(line.id),
+            quantity: String(quantity),
+            expectedOrigin: ordered.origin ?? '',
+            ...receiptVars(other, variants, quantity, kg),
         },
     };
 }

@@ -219,6 +219,7 @@ export class TourRunner {
         if (pathname(this.options.currentPath()) !== pathname(step.route)) await this.navigateTo(step.route, my);
         await this.sleep(this.state.mode === 'watch' ? this.timing().readMs : this.timing().actionMs, my);
         for (const action of step.actions) {
+            if (action.when !== undefined && this.text(action.when).trim() === '') continue;
             await this.perform(action, my);
         }
         if (step.expect) await this.assertTarget(step.expect.target, step.expect.text, undefined, my);
