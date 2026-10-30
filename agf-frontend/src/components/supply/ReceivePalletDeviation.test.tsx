@@ -36,7 +36,7 @@ const commitment: SupplyCommitment = {
 interface Call { method: string; url: string; body: Record<string, unknown> | null }
 let mounted: Mounted;
 let calls: Call[];
-let previewAnswer: () => Response;
+let previewAnswer: () => Response | Promise<Response>;
 let contentAnswers: (() => Response)[];
 
 const doc = () => window.document;
@@ -142,6 +142,21 @@ describe('ReceivePalletForm deviation', () => {
             [12, true, 'SupplierDeliveredDifferently', null]);
         await mounted.waitFor(() => mounted.hasText('supply_receive_success'), 'success');
         assert.ok(mounted.hasText('deviation_recorded'));
+    });
+
+    test('while the deviation is being checked the input is locked, so what is booked is what was checked', async () => {
+        await arrange();
+        await chooseReceived('za');
+        let release: (response: Response) => void = () => {};
+        previewAnswer = () => new Promise<Response>((resolve) => { release = resolve; });
+        await submit();
+        await mounted.waitFor(() => calls.some((call) => call.url.includes('/deviation-preview')), 'preview requested');
+        assert.equal(input('line.501.quantity').disabled, true);
+        assert.equal(input('line.501.lotNumber').disabled, true);
+        await act(async () => { release(json(200, preview())); });
+        await mounted.waitFor(dialog, 'dialog shown');
+        await key(dialog()!, 'Escape');
+        assert.equal(input('line.501.quantity').disabled, false, 'editable again after No');
     });
 
     test('preview refusals are shown in plain language and nothing is booked', async () => {

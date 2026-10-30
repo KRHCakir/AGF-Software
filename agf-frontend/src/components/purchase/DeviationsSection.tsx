@@ -24,7 +24,7 @@ export default function DeviationsSection({ deviations }: { deviations: readonly
                         <span className="block font-mono text-gray-800">
                             {formatQuantity(deviation.quantity, locale)} {unitText(t, deviation.unit)}
                             {deviation.palletReference && <> · {deviation.palletReference}</>}
-                            {' · '}{deviation.kinds.map((kind) => t(DEVIATION_KIND_LABEL_KEYS[kind] ?? kind)).join(', ')}
+                            {deviation.kinds.length > 0 && <> · {deviation.kinds.map((kind) => t(DEVIATION_KIND_LABEL_KEYS[kind] ?? kind)).join(', ')}</>}
                         </span>
                         <span className="block text-xs text-gray-600">
                             {deviation.actorReference ?? '–'} · {formatDateTime(deviation.createdAt, locale)}

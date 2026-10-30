@@ -223,7 +223,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
 
     const succeeded = frozen !== null && frozen.pallet.done && selected.length > 0 && selected.every((id) => frozen.lines[id]?.done);
     const unknownFailure = failure !== null && outcomeUnknown(failure.error);
-    const blocked = running || succeeded || unknownFailure;
+    // Tijdens de controle van een afwijking ligt de invoer ook vast: Ja en een exacte match boeken precies wat gecontroleerd is.
+    const blocked = running || checking || succeeded || unknownFailure;
     const palletEditable = !blocked && !(frozen?.pallet.done ?? false);
     const lineEditable = (id: number) => !blocked && !(frozen?.lines[id]?.done ?? false);
 
