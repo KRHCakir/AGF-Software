@@ -1,4 +1,5 @@
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
+import { PurchaseOrderDeviation, isPurchaseOrderDeviation } from './receiptDeviation';
 
 // Exact het contract van /api/purchase-orders (backend: AgfAdmin/DTOs/PurchaseOrderDtos.cs en PurchaseOrderRejectionDtos.cs).
 // Datums zonder tijd (orderedOn, invoiceDate) als yyyy-MM-dd; tijdstippen als ISO in UTC.
@@ -26,6 +27,8 @@ export interface PurchaseOrderListItem {
     rejectedQuantity: number;
     invoiceNumbers: PurchaseOrderInvoiceNumber[];
     invoiceIndicator: string;
+    // Minstens één afwijkende ontvangst vastgelegd (aanduiding "Afwijking" in de lijst).
+    hasDeviation?: boolean;
 }
 
 export interface PurchaseOrderList {
@@ -40,10 +43,16 @@ export interface PurchaseOrderLine {
     productVariantId: number;
     productName: string | null;
     productVariantName: string | null;
+    origin?: string | null;
+    size?: string | null;
+    packaging?: string | null;
     lotNumber: string | null;
     expectedQuantity: number;
     unit: string | null;
     expectedNetWeightKg: number | null;
+    // Afwijkende ontvangst: deze regel vervangt die regel, of is (deels) vervangen door die regels.
+    replacesLineId?: number | null;
+    replacedByLineIds?: number[];
     receivedQuantity: number;
     receivedNetWeightKg: number;
     rejectedQuantity: number;
@@ -121,6 +130,7 @@ export interface PurchaseOrderHistoryEvent {
     toStatus: string | null;
     reason: string | null;
     decision: string | null;
+    kinds?: string | null;
 }
 
 export interface PurchaseOrderDetail {
@@ -150,6 +160,7 @@ export interface PurchaseOrderDetail {
     receipts: PurchaseOrderReceiptLine[];
     invoiceRefs: PurchaseOrderInvoiceRef[];
     rejections: PurchaseOrderRejection[];
+    deviations?: PurchaseOrderDeviation[];
     history: PurchaseOrderHistoryEvent[];
 }
 
@@ -206,7 +217,8 @@ export function isPurchaseOrderDetail(value: unknown): value is PurchaseOrderDet
         && isArrayOf(value.receipts, isReceipt)
         && isArrayOf(value.invoiceRefs, (ref): ref is PurchaseOrderInvoiceRef => isObject(ref) && isNumber(ref.id) && isString(ref.kind) && isString(ref.invoiceNumber) && isNullableString(ref.invoiceDate) && isNullableNumber(ref.amountExclVat))
         && isArrayOf(value.rejections, (rejection): rejection is PurchaseOrderRejection => isObject(rejection) && isString(rejection.reason) && isString(rejection.decision) && Array.isArray(rejection.lines))
-        && isArrayOf(value.history, (event): event is PurchaseOrderHistoryEvent => isObject(event) && isString(event.occurredAt) && isString(event.type));
+        && isArrayOf(value.history, (event): event is PurchaseOrderHistoryEvent => isObject(event) && isString(event.occurredAt) && isString(event.type))
+        && (value.deviations === undefined || isArrayOf(value.deviations, isPurchaseOrderDeviation));
 }
 
 export function isInvoiceMatchList(value: unknown): value is PurchaseOrderInvoiceMatch[] {

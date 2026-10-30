@@ -20,6 +20,12 @@ export function OrderStatusBadge({ status }: { status: string }) {
     return <span className={`${badge} ${STATUS_STYLES[status] ?? STATUS_STYLES.Cancelled}`}>{key ? t(key) : status}</span>;
 }
 
+// Er is iets anders ontvangen dan besteld (bevestigd met "Klopt dit?").
+export function DeviationBadge() {
+    const { t } = useTranslation();
+    return <span className={`${badge} border-amber-400 bg-amber-50 text-amber-900`} data-tour="po-deviation-badge">{t('po_deviation_badge')}</span>;
+}
+
 // Factuur: Geen / Ontvangen / Creditnota verwacht. Een verwachte creditnota valt op; "Geen" blijft rustig.
 export function InvoiceIndicatorBadge({ indicator }: { indicator: string }) {
     const { t } = useTranslation();

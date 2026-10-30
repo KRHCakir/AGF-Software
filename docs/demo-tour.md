@@ -11,6 +11,10 @@ geven), niet voor klanten.
 het script in `lib/tour/`, de `data-tour`-attributen op de schermelementen en de test.** Al gepland: inkoop-afwijkingen
 en mixpallets, verkoopfactuur, creditfactuur en periodeafsluiting.
 
+Afwijkende ontvangst ("Klopt dit?"): de `data-tour`-attributen staan er al (`receive-deviation-toggle`,
+`receive-deviation-search`, `deviation-dialog`, `deviation-reason`, `deviation-no`, `deviation-yes`, `po-deviations`,
+`po-line-replacement`, `po-deviation-badge`); het hoofdstuk zelf volgt in een vervolg-PR.
+
 ## Aanzetten
 
 Twee frontend-instellingen, allebei standaard uit:

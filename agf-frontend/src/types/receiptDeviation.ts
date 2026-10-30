@@ -76,7 +76,7 @@ export function isDeviationCandidateList(value: unknown): value is DeviationCand
 
 export function isDeviationPreview(value: unknown): value is DeviationPreview {
     return isObject(value) && isString(value.status) && ['Exact', 'Deviation', 'OtherArticle', 'BlockedAssigned'].includes(value.status)
-        && isNumber(value.originalLineId) && isString(value.orderNumber) && isDeviationVariant(value.expected) && isDeviationVariant(value.received)
+        && isNumber(value.supplyCommitmentId) && isNumber(value.originalLineId) && isString(value.orderNumber) && isDeviationVariant(value.expected) && isDeviationVariant(value.received)
         && isStringArray(value.kinds) && isNumber(value.quantity) && isNullableString(value.unit) && isNumber(value.originalExpectedQuantity)
         && isNumber(value.originalReceivedQuantity) && isNumber(value.reducedQuantity) && isNumber(value.originalExpectedQuantityAfter)
         && isNumber(value.excessQuantity) && isNullableNumber(value.assignedQuantity);

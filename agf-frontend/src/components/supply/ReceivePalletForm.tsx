@@ -9,12 +9,14 @@ import { unitLabelKey } from '../../lib/units';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
+import { DEVIATION_CODES, deviationConflict, variantLabel } from '../../lib/receiptDeviation';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getAvailabilityVariant } from '../../services/availabilityService';
 import { addPalletContentLine, createReceivedWarehousePallet } from '../../services/palletService';
+import { getDeviationPreview } from '../../services/receiptDeviationService';
 import { listOpenWarehouseCommitments } from '../../services/supplyService';
 import { PackageUnit } from '../../types/availability';
 import {
@@ -23,6 +25,7 @@ import {
     PalletContentLineSummary,
     PalletSummary,
 } from '../../types/pallet';
+import { DeviationCandidate, DeviationPreview, isDeviationPreview } from '../../types/receiptDeviation';
 import { SupplyCommitment, SupplyCommitmentLine, VendorGgnOption } from '../../types/supply';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
@@ -31,9 +34,11 @@ import GgnBadge from '../shared/GgnBadge';
 import NumberEcho from '../shared/NumberEcho';
 import QuantityKgLine from '../shared/QuantityKgLine';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
+import DeviationDialog, { DeviationChoice } from './DeviationDialog';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
+import ReceivedVariantPicker from './ReceivedVariantPicker';
 import SubmitProgress, { ProgressStep, StepState } from './SubmitProgress';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 
@@ -46,6 +51,9 @@ interface ContentDraft {
     netKg: string;
     // GGN van deze partij: alleen bij precies één actieve leveranciers-GGN vooraf ingevuld; bij meer kiest de gebruiker; altijd aanpasbaar of leeg.
     ggn: string;
+    // "Ander artikel ontvangen": de werkelijk ontvangen variant (null = het bestelde artikel) en de bevestiging uit het venster.
+    received: DeviationCandidate | null;
+    deviation: DeviationChoice | null;
 }
 
 // Startwaarden uit de variant (methode, standaard kg per verpakking) en de leverancier (GGN), per regel aanpasbaar.
@@ -56,6 +64,8 @@ const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOpti
     kgPerPackage: line.defaultNetKgPerPackage === null ? '' : formatDecimalInput(line.defaultNetKgPerPackage),
     netKg: '',
     ggn: proposedGgn(vendorGgns) ?? '',
+    received: null,
+    deviation: null,
 });
 
 // Voorstel alleen als er precies één toepasselijk nummer is; bij meerdere nummers kiest de gebruiker zelf.
@@ -140,6 +150,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     const [failure, setFailure] = useState<Failure | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
     const [abandonedNotice, setAbandonedNotice] = useState<string | null>(null);
+    // Venster "Afwijking van de bestelling"; afterRun = de pallet bestaat al (409 als vangnet), Ja stuurt dan dezelfde aanvraag opnieuw.
+    const [dialog, setDialog] = useState<{ lineId: number; preview: DeviationPreview; afterRun: boolean } | null>(null);
+    const [checking, setChecking] = useState(false);
+    const [pickerOpen, setPickerOpen] = useState<number[]>([]);
     const inFlight = useRef(false);
     const requestedUnregistered = useRef(new Set<number>());
     const mounted = useRef(true);
@@ -209,7 +223,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
 
     const succeeded = frozen !== null && frozen.pallet.done && selected.length > 0 && selected.every((id) => frozen.lines[id]?.done);
     const unknownFailure = failure !== null && outcomeUnknown(failure.error);
-    const blocked = running || succeeded || unknownFailure;
+    // Tijdens de controle van een afwijking ligt de invoer ook vast: Ja en een exacte match boeken precies wat gecontroleerd is.
+    const blocked = running || checking || succeeded || unknownFailure;
     const palletEditable = !blocked && !(frozen?.pallet.done ?? false);
     const lineEditable = (id: number) => !blocked && !(frozen?.lines[id]?.done ?? false);
 
@@ -235,10 +250,11 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         clearFailure();
     };
 
-    // Alleen een regel die nog niet is opgeslagen mag wijzigen; die krijgt bij versturen een nieuwe requestId.
-    const editLine = (id: number, field: keyof ContentDraft, value: string | WeightMethod) => {
+    // Alleen een regel die nog niet is opgeslagen mag wijzigen; die krijgt bij versturen een nieuwe requestId. Een bevestigde
+    // afwijking geldt voor precies deze invoer: elke wijziging vraagt opnieuw "Klopt dit?".
+    const editLine = <K extends keyof ContentDraft>(id: number, field: K, value: ContentDraft[K]) => {
         if (!lineEditable(id)) return;
-        setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value } }));
+        setDrafts((current) => ({ ...current, [id]: { ...current[id], [field]: value, deviation: null } }));
         setFrozen((current) => {
             if (current === null || !current.lines[id]) return current;
             const lines = { ...current.lines };
@@ -248,7 +264,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         clearFailure();
     };
 
-    const validate = (): FieldErrors => {
+    const validate = (source: Record<number, ContentDraft>): FieldErrors => {
         const found: FieldErrors = {};
         // Medewerker en eigen palletnummer zijn optioneel bij ontvangst; leeg blokkeert niets.
         if (actor.trim().length > 100) addError(found, 'actorReference', t('supply_error_too_long', { max: '100' }));
@@ -261,7 +277,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         if (selected.length === 0) addError(found, 'lines', t('supply_error_select_source'));
         for (const id of selected) {
             if (frozen?.lines[id]?.done) continue;
-            const draft = drafts[id];
+            const draft = source[id];
             const lot = draft.lot.trim();
             if (lot === '') addError(found, `line.${id}.lotNumber`, t('supply_error_required'));
             else if (lot.length > 100) addError(found, `line.${id}.lotNumber`, t('supply_error_too_long', { max: '100' }));
@@ -279,13 +295,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         return found;
     };
 
-    const buildLine = (id: number, actorReference: string | null): FrozenLine => {
+    const buildLine = (id: number, actorReference: string | null, source: Record<number, ContentDraft>): FrozenLine => {
         const entry = index.get(id);
         const unit = entry?.line.expectedUnit;
         if (!entry || unit === null || unit === undefined) {
             throw new Error('Bronregel zonder eenheid kan niet worden ontvangen.');
         }
-        const draft = drafts[id];
+        const draft = source[id];
         const quantity = parsePositiveDecimal(draft.quantity);
         const perPackage = parsePositiveDecimal(draft.kgPerPackage);
         // Berekend: het totaal volgt uit aantal × kg per verpakking (zelfde afronding als de server); nooit als gewogen gestuurd.
@@ -309,6 +325,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 ggn: ggn.ok ? ggn.value : null,
                 actorReference,
                 reason: null,
+                receivedProductVariantId: draft.received?.variant.productVariantId ?? null,
+                confirmDeviation: draft.received !== null && draft.deviation !== null ? true : null,
+                deviationReason: draft.received === null ? null : draft.deviation?.reason ?? null,
+                deviationReasonNote: draft.received === null ? null : draft.deviation?.note ?? null,
             },
             done: false,
             result: null,
@@ -355,7 +375,17 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             const apiError = toApiError(caught);
             if (mounted.current) {
                 setFailure({ step, error: apiError });
-                setErrors(mapServerErrors(step, apiError));
+                const mapped = mapServerErrors(step, apiError);
+                // Vangnet: de server eist een bevestiging (of weigert de afwijking) terwijl het venster vooraf niet getoond is.
+                const conflict = step !== 'pallet' && apiError.status === 409 ? deviationConflict(apiError.body) : null;
+                if (conflict !== null && step !== 'pallet') {
+                    if (conflict.code === DEVIATION_CODES.confirmationRequired && isDeviationPreview(conflict.deviation)) {
+                        setDialog({ lineId: step, preview: conflict.deviation, afterRun: true });
+                    } else {
+                        addError(mapped, `line.${step}.supplyCommitmentLineId`, t(conflict.code === DEVIATION_CODES.otherArticle ? 'deviation_other_article' : 'deviation_blocked_assigned'));
+                    }
+                }
+                setErrors(mapped);
             }
         } finally {
             inFlight.current = false;
@@ -363,11 +393,42 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         }
     };
 
-    const submit = () => {
+    // Afwijkend artikel: eerst "Klopt dit?" (alleen lezen), vóórdat er iets wordt aangemaakt, zodat Nee echt niets achterlaat.
+    const checkDeviation = async (id: number, source: Record<number, ContentDraft>) => {
+        const quantity = parsePositiveDecimal(source[id].quantity);
+        const received = source[id].received;
+        if (!quantity.ok || received === null) return;
+        inFlight.current = true;
+        setChecking(true);
+        let exact = false;
+        try {
+            const preview = await getDeviationPreview(id, received.variant.productVariantId, quantity.value);
+            if (preview.status === 'Deviation') setDialog({ lineId: id, preview, afterRun: false });
+            else if (preview.status === 'Exact') exact = true;
+            else setErrors({ [`line.${id}.supplyCommitmentLineId`]: [t(preview.status === 'OtherArticle' ? 'deviation_other_article' : 'deviation_blocked_assigned')] });
+        } catch {
+            if (mounted.current) setErrors({ general: [t('deviation_check_failed')] });
+        } finally {
+            inFlight.current = false;
+            if (mounted.current) setChecking(false);
+        }
+        if (exact) {
+            const next = { ...source, [id]: { ...source[id], received: null, deviation: null } };
+            setDrafts(next);
+            submit(next);
+        }
+    };
+
+    const submit = (source: Record<number, ContentDraft> = drafts) => {
         if (inFlight.current || succeeded) return;
-        const found = validate();
+        const found = validate(source);
         setErrors(found);
         if (Object.keys(found).length > 0) return;
+        const unconfirmed = selected.find((id) => !(frozen?.lines[id]?.done ?? false) && source[id].received !== null && source[id].deviation === null);
+        if (unconfirmed !== undefined) {
+            void checkDeviation(unconfirmed, source);
+            return;
+        }
 
         const actorReference = actor.trim() === '' ? null : actor.trim();
         const next: FrozenSubmission = {
@@ -386,13 +447,35 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 result: null,
                 replayed: false,
             },
-            lines: Object.fromEntries(selected.map((id) => [id, frozen?.lines[id] ?? buildLine(id, actorReference)])),
+            lines: Object.fromEntries(selected.map((id) => [id, frozen?.lines[id] ?? buildLine(id, actorReference, source)])),
         };
         setFrozen(next);
         void run(next, selected);
     };
 
+    // Ja, klopt: vóór het boeken gewoon verder registreren; na een 409 dezelfde aanvraag (zelfde requestId) met bevestiging opnieuw.
+    const confirmDeviation = (choice: DeviationChoice) => {
+        if (dialog === null) return;
+        const { lineId, afterRun } = dialog;
+        setDialog(null);
+        const next = { ...drafts, [lineId]: { ...drafts[lineId], deviation: choice } };
+        setDrafts(next);
+        const line = frozen?.lines[lineId];
+        if (afterRun && frozen !== null && line !== undefined) {
+            const updated: FrozenSubmission = { ...frozen, lines: { ...frozen.lines, [lineId]: { ...line, payload: {
+                ...line.payload, confirmDeviation: true, deviationReason: choice.reason, deviationReasonNote: choice.note,
+            } } } };
+            setFrozen(updated);
+            setErrors({});
+            void run(updated, selected);
+        } else {
+            submit(next);
+        }
+    };
+
     const reset = useCallback((notice: string | null) => {
+        setDialog(null);
+        setPickerOpen([]);
         setSelected([]);
         setDrafts({});
         setPallet({ reference: '', sscc: '', bin: '' });
@@ -472,9 +555,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 <ul className="mt-2 space-y-1">
                     {savedLines.map((line) => {
                         const entry = index.get(line.payload.supplyCommitmentLineId);
+                        const received = drafts[line.payload.supplyCommitmentLineId]?.received ?? null;
                         return (
                             <li key={line.requestId} className="flex flex-wrap items-center gap-2">
-                                <span>{entry?.line.productName} · {entry?.line.productVariantName}</span>
+                                <span>{received === null ? `${entry?.line.productName} · ${entry?.line.productVariantName}` : `${variantLabel(received.variant)} (${t('deviation_recorded')})`}</span>
                                 <span>· {t('supply_lot')} {line.payload.lotNumber}</span>
                                 <span>· {formatQuantity(line.payload.quantity, locale)}</span>
                                 <UnitBadge unit={line.payload.unit} />
@@ -500,7 +584,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         .filter((group) => group.lines.length > 0);
 
     return (
-        <form noValidate aria-busy={running} onSubmit={(event) => { event.preventDefault(); submit(); }}
+        <form noValidate aria-busy={running || checking} onSubmit={(event) => { event.preventDefault(); submit(); }}
             className="space-y-5 rounded-md border border-gray-300 bg-white p-4">
             {abandonedNotice && (
                 <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">{abandonedNotice}</p>
@@ -654,6 +738,24 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         ? t('supply_open_unknown')
                                         : t('supply_open_quantity', { quantity: formatQuantity(open, locale) })}
                             </p>
+                            {draft.received === null && !pickerOpen.includes(id) ? (
+                                <button type="button" data-tour="receive-deviation-toggle" data-tour-key={id} disabled={!editable}
+                                    onClick={() => setPickerOpen((current) => [...current, id])} className="mb-2 text-xs font-medium text-blue-800 underline disabled:text-gray-500">
+                                    {t('deviation_other_received')}
+                                </button>
+                            ) : (
+                                <div className="mb-2 rounded border border-amber-300 bg-amber-50 p-2">
+                                    <label htmlFor={`line.${id}.receivedVariant-input`} className="text-xs font-medium text-gray-800">{t('deviation_received_article')}</label>
+                                    <ReceivedVariantPicker lineId={id} value={draft.received} disabled={!editable} onChange={(candidate) => editLine(id, 'received', candidate)} />
+                                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-amber-950">
+                                        {draft.received !== null && <span>{t(draft.deviation === null ? 'deviation_will_ask' : 'deviation_confirmed')}</span>}
+                                        <button type="button" disabled={!editable} className="font-medium text-blue-800 underline disabled:text-gray-500"
+                                            onClick={() => { editLine(id, 'received', null); setPickerOpen((current) => current.filter((x) => x !== id)); }}>
+                                            {t('deviation_back_to_ordered')}
+                                        </button>
+                                    </p>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
                                 <div className="col-span-2">
                                     <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
@@ -759,10 +861,11 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             {progress.length > 0 && <SubmitProgress steps={progress} />}
 
             <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                <button type="submit" data-tour="receive-save" className={primaryButtonClass} disabled={blocked || sources.status !== 'ready'}>
-                    {running ? t('supply_saving') : frozen?.pallet.done ? t('supply_continue_registration') : t('supply_register_pallet')}
+                <button type="submit" data-tour="receive-save" className={primaryButtonClass} disabled={blocked || checking || dialog !== null || sources.status !== 'ready'}>
+                    {running || checking ? t('supply_saving') : frozen?.pallet.done ? t('supply_continue_registration') : t('supply_register_pallet')}
                 </button>
             </div>
+            {dialog !== null && <DeviationDialog preview={dialog.preview} onNo={() => setDialog(null)} onYes={confirmDeviation} />}
         </form>
     );
 }
