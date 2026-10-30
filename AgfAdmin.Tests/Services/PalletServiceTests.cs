@@ -94,6 +94,14 @@ public class PalletServiceTests : IDisposable
         ActorReference = "office-1"
     };
 
+    // Voor tests over brutogrenzen en het ongewijzigd opslaan van gewichten: een bronregel zonder verwacht kg, zodat de
+    // gewichtscontrole bij ontvangst (ReceiptDeviationRules.WeightTolerance) hier niet meespeelt. Ruwe SQL: alleen testdata.
+    private async Task WithoutExpectedWeightAsync(int lineId)
+    {
+        await using var db = _factory.CreateContext();
+        await db.Database.ExecuteSqlRawAsync("UPDATE \"SupplyCommitmentLines\" SET \"ExpectedNetWeightKg\" = NULL, \"ExpectedGrossWeightKg\" = NULL, \"WeightSource\" = NULL WHERE \"Id\" = {0}", lineId);
+    }
+
     private static AddPalletContentLineDto ContentRequest(int sourceLineId, Guid? requestId = null) => new()
     {
         RequestId = requestId ?? Guid.NewGuid(),
@@ -464,6 +472,7 @@ public class PalletServiceTests : IDisposable
     public async Task Calculated_ContentLine_Computes_Total_From_Package_Weight_And_Stores_Method()
     {
         var seed = await SeedAsync();
+        await WithoutExpectedWeightAsync(seed.WarehouseLine);
         var palletId = await CreatedPalletIdAsync(PalletRequest());
 
         var result = await AddContentAsync(palletId, CalculatedRequest(seed.WarehouseLine, 80m, 4.125m));
@@ -737,7 +746,7 @@ public class PalletServiceTests : IDisposable
         var second = ContentRequest(seed.WarehouseLine);
         second.LotNumber = "LOT-6B";
         second.Quantity = 3m;
-        second.NetWeightKg = 11.111m;
+        second.NetWeightKg = 11.987m; // binnen de gewichtstolerantie van de bronregel (4 kg per doos)
         await AddContentAsync(palletId, first);
         await AddContentAsync(palletId, second);
 
@@ -748,7 +757,7 @@ public class PalletServiceTests : IDisposable
         Assert.Equal(400.25m, pallet.DeclaredNetKg);
 
         var lines = await verify.PalletContentLines.OrderBy(l => l.Id).ToListAsync();
-        Assert.Equal(new[] { 160.125m, 11.111m }, lines.Select(l => l.NetWeightKg));
+        Assert.Equal(new[] { 160.125m, 11.987m }, lines.Select(l => l.NetWeightKg));
         Assert.Equal(new[] { 40m, 3m }, lines.Select(l => l.Quantity));
 
         // De verwachte waarden van de bronregel worden niet overgenomen of aangepast.
@@ -850,6 +859,7 @@ public class PalletServiceTests : IDisposable
     public async Task Add_ContentLine_Accepts_Weight_Exactly_At_Gross_Limit_And_Rejects_Sum_Above_It()
     {
         var seed = await SeedAsync();
+        await WithoutExpectedWeightAsync(seed.WarehouseLine);
         var palletId = await CreatedPalletIdAsync(PalletRequest());
 
         var first = ContentRequest(seed.WarehouseLine);
@@ -870,6 +880,7 @@ public class PalletServiceTests : IDisposable
     public async Task Gross_Check_Without_Tare_Uses_Net_Only_And_Is_Skipped_Without_Gross()
     {
         var seed = await SeedAsync();
+        await WithoutExpectedWeightAsync(seed.WarehouseLine);
         var grossOnly = PalletRequest("PAL-GROSS");
         grossOnly.Sscc = null;
         grossOnly.TareKg = null;
@@ -1056,6 +1067,7 @@ public class PalletServiceTests : IDisposable
     public async Task Get_Returns_Pallet_With_Lines_Source_Info_And_Summed_Net()
     {
         var seed = await SeedAsync();
+        await WithoutExpectedWeightAsync(seed.WarehouseLine);
         var palletId = await CreatedPalletIdAsync(PalletRequest());
         var first = ContentRequest(seed.WarehouseLine);
         var second = ContentRequest(seed.WarehouseLine);

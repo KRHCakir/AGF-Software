@@ -310,6 +310,7 @@ namespace AgfAdmin.Services
                     Expected = ReceiptDeviationService.ReadVariant(d.Deviation.ExpectedVariantSnapshot),
                     Received = ReceiptDeviationService.ReadVariant(d.Deviation.ReceivedVariantSnapshot),
                     Quantity = d.Deviation.Quantity, Unit = d.Deviation.Unit, ReducedQuantity = d.Deviation.ReducedQuantity,
+                    ExpectedKgPerPackage = d.Deviation.ExpectedKgPerPackage, ReceivedKgPerPackage = d.Deviation.ReceivedKgPerPackage,
                     Reason = d.Deviation.Reason, ReasonNote = d.Deviation.ReasonNote, ActorReference = d.Deviation.ActorReference, CreatedAt = Utc(d.Deviation.CreatedAt)
                 }).ToList(),
                 History = history.OrderBy(h => h.OccurredAt).ToList()

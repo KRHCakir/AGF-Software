@@ -5,8 +5,9 @@ using Microsoft.EntityFrameworkCore;
 namespace AgfAdmin.Services
 {
     // Afwijkende ontvangst binnen een bestaande order (zie ReceiptDeviationRules). Na "Ja, klopt" in dezelfde save als de inhoudsregel:
-    // een vervangende bronregel voor de ontvangen variant (verwacht = ontvangen hoeveelheid, ReplacesLineId = oorspronkelijke regel),
-    // de oorspronkelijke regel omlaag (nooit onder wat er al ontvangen is), de inhoud aan de vervangende regel en een afwijkingsrecord.
+    // bij een andere variant een vervangende bronregel (verwacht = ontvangen hoeveelheid en kg, ReplacesLineId = oorspronkelijke regel),
+    // de oorspronkelijke regel omlaag (nooit onder wat er al ontvangen is) en de inhoud aan de vervangende regel; bij alleen een ander
+    // gewicht verwacht de oorspronkelijke regel voortaan het ontvangen kg per verpakking en blijft de inhoud erop. Altijd een afwijkingsrecord.
     // Zonder bevestiging, bij een ander artikel of bij klantgebonden aanvoer die geraakt zou worden: 409 met code en het verschil.
     public sealed partial class PalletService
     {
@@ -14,12 +15,16 @@ namespace AgfAdmin.Services
 
         private async Task<DeviationOutcome> PlanDeviationAsync(SupplyCommitmentLine source, PalletContentLine candidate, AddPalletContentLineDto request, string actor, CancellationToken cancellationToken)
         {
-            var plan = await new ReceiptDeviationService(_db).PlanAsync(source, request.ReceivedProductVariantId!.Value, candidate.Quantity, cancellationToken);
+            var plan = await new ReceiptDeviationService(_db).PlanAsync(source, request.ReceivedProductVariantId ?? source.ProductVariantId, candidate.Quantity, candidate.NetWeightKg, cancellationToken);
             if (plan == null)
             {
                 return Refuse(ServiceResult<PalletContentLineDto>.NotFound($"Product variant {request.ReceivedProductVariantId} does not exist."));
             }
             var preview = plan.Preview;
+            if (preview.Status == "Exact")
+            {
+                return new DeviationOutcome(null, null);
+            }
             if (preview.Status == "OtherArticle")
             {
                 return Refuse(DeviationConflict(ReceiptDeviationRules.CodeOtherArticle, preview,
@@ -33,7 +38,7 @@ namespace AgfAdmin.Services
             if (request.ConfirmDeviation != true)
             {
                 return Refuse(DeviationConflict(ReceiptDeviationRules.CodeConfirmationRequired, preview,
-                    $"Order {preview.OrderNumber} expects product variant {preview.Expected.ProductVariantId}, received {preview.Received.ProductVariantId} ({string.Join(", ", preview.Kinds)}); confirm the deviation."));
+                    $"Order {preview.OrderNumber} expects product variant {preview.Expected.ProductVariantId} at {preview.ExpectedKgPerPackage?.ToString() ?? "-"} kg per package, received {preview.Received.ProductVariantId} at {preview.ReceivedKgPerPackage?.ToString() ?? "-"} kg ({string.Join(", ", preview.Kinds)}); confirm the deviation."));
             }
 
             // Gevolgd geladen: de versie van de oorspronkelijke regel is het concurrency-token tegen een gelijktijdige afwijking of toewijzing.
@@ -42,10 +47,9 @@ namespace AgfAdmin.Services
             {
                 return Refuse(ServiceResult<PalletContentLineDto>.Conflict(ConcurrentChangeMessage($"Supply commitment line {source.Id}")));
             }
-            var before = new ReceiptDeviationRules.LineShape(original.ExpectedQuantity, original.ExpectedNetWeightKg, original.ExpectedGrossWeightKg,
-                original.WeightSource, original.PalletCount, original.PackagesPerPallet, original.LoosePackages);
-            var after = ReceiptDeviationRules.Reduce(before, preview.ReducedQuantity);
-            if (preview.ReducedQuantity > 0m)
+            var before = plan.Before;
+            var after = plan.After;
+            if (!after.Equals(before))
             {
                 original.ExpectedQuantity = after.ExpectedQuantity;
                 original.ExpectedNetWeightKg = after.NetKg;
@@ -57,8 +61,41 @@ namespace AgfAdmin.Services
             }
             else
             {
-                // Niets te verlagen (alles al ontvangen): toch de versie ophogen, zodat twee afwijkingen op dezelfde regel elkaar uitsluiten.
+                // Niets aan de regel te veranderen (alles al ontvangen): toch de versie ophogen, zodat twee afwijkingen op dezelfde regel
+                // elkaar uitsluiten.
                 _db.Entry(original).Property(l => l.Version).IsModified = true;
+            }
+
+            var note = string.IsNullOrWhiteSpace(request.DeviationReasonNote) ? null : request.DeviationReasonNote.Trim();
+            var deviation = new SupplyReceiptDeviation
+            {
+                RequestId = candidate.RequestId,
+                SupplyCommitmentId = original.SupplyCommitmentId,
+                OriginalLineId = original.Id,
+                PalletContentLine = candidate,
+                Kinds = string.Join(",", preview.Kinds),
+                ExpectedProductVariantId = plan.Expected.Id,
+                ExpectedVariantSnapshot = ReceiptDeviationService.Snapshot(preview.Expected),
+                ReceivedProductVariantId = plan.Received.Id,
+                ReceivedVariantSnapshot = ReceiptDeviationService.Snapshot(preview.Received),
+                Quantity = candidate.Quantity,
+                Unit = original.ExpectedUnit ?? candidate.Unit,
+                ReducedQuantity = preview.ReducedQuantity,
+                ExpectedKgPerPackage = preview.ExpectedKgPerPackage,
+                ReceivedKgPerPackage = preview.ReceivedKgPerPackage,
+                OriginalLineBefore = ReceiptDeviationService.Snapshot(before),
+                OriginalLineAfter = ReceiptDeviationService.Snapshot(after),
+                Reason = request.DeviationReason,
+                // Een toelichting zonder reden hoort bij "Anders"; zonder reden geen losse toelichting.
+                ReasonNote = request.DeviationReason == null ? null : note,
+                ActorReference = actor,
+                CreatedAt = candidate.CreatedAt
+            };
+            _db.SupplyReceiptDeviations.Add(deviation);
+            if (plan.Expected.Id == plan.Received.Id)
+            {
+                // Alleen het gewicht: de inhoud blijft op de bestelde regel; geen vervangende regel.
+                return new DeviationOutcome(deviation, null);
             }
 
             // De vervangende regel verwacht precies wat er binnenkwam, met het werkelijke kg (opgegeven, niet afgeleid) en de partij.
@@ -78,31 +115,7 @@ namespace AgfAdmin.Services
             candidate.SupplyCommitmentLineId = 0;
             candidate.SupplyCommitmentLine = replacement;
 
-            var note = string.IsNullOrWhiteSpace(request.DeviationReasonNote) ? null : request.DeviationReasonNote.Trim();
-            var deviation = new SupplyReceiptDeviation
-            {
-                RequestId = candidate.RequestId,
-                SupplyCommitmentId = original.SupplyCommitmentId,
-                OriginalLineId = original.Id,
-                NewLine = replacement,
-                PalletContentLine = candidate,
-                Kinds = string.Join(",", preview.Kinds),
-                ExpectedProductVariantId = plan.Expected.Id,
-                ExpectedVariantSnapshot = ReceiptDeviationService.Snapshot(preview.Expected),
-                ReceivedProductVariantId = plan.Received.Id,
-                ReceivedVariantSnapshot = ReceiptDeviationService.Snapshot(preview.Received),
-                Quantity = candidate.Quantity,
-                Unit = replacement.ExpectedUnit,
-                ReducedQuantity = preview.ReducedQuantity,
-                OriginalLineBefore = ReceiptDeviationService.Snapshot(before),
-                OriginalLineAfter = ReceiptDeviationService.Snapshot(preview.ReducedQuantity > 0m ? after : before),
-                Reason = request.DeviationReason,
-                // Een toelichting zonder reden hoort bij "Anders"; zonder reden geen losse toelichting.
-                ReasonNote = request.DeviationReason == null ? null : note,
-                ActorReference = actor,
-                CreatedAt = candidate.CreatedAt
-            };
-            _db.SupplyReceiptDeviations.Add(deviation);
+            deviation.NewLine = replacement;
             return new DeviationOutcome(deviation, null);
         }
 

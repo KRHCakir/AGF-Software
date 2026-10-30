@@ -47,11 +47,12 @@ namespace AgfAdmin.Services
 
         // Wat "Ja, klopt" zou doen voor deze hoeveelheid, zonder iets te boeken. De client vraagt dit vóór het aanmaken van de pallet,
         // zodat "Nee" echt niets achterlaat; de server controleert bij het boeken alles opnieuw.
-        public async Task<ServiceResult<ReceiptDeviationPreviewDto>> PreviewAsync(int lineId, int? receivedProductVariantId, decimal? quantity, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<ReceiptDeviationPreviewDto>> PreviewAsync(int lineId, int? receivedProductVariantId, decimal? quantity, decimal? netWeightKg = null, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, string[]>();
             if (receivedProductVariantId == null) errors["receivedProductVariantId"] = new[] { "The received product variant is required." };
             if (quantity == null || !SupplyRules.IsPositiveDecimal18_3(quantity.Value)) errors["quantity"] = new[] { "Quantity is required, must be positive and may have at most 3 decimals." };
+            if (netWeightKg != null && !SupplyRules.IsPositiveDecimal18_3(netWeightKg.Value)) errors["netWeightKg"] = new[] { "Net kg, when given, must be positive and may have at most 3 decimals." };
             if (errors.Count > 0)
             {
                 return ServiceResult<ReceiptDeviationPreviewDto>.Validation(errors);
@@ -61,7 +62,7 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<ReceiptDeviationPreviewDto>.NotFound($"Supply commitment line {lineId} does not exist.");
             }
-            var plan = await PlanAsync(line, receivedProductVariantId!.Value, quantity!.Value, cancellationToken);
+            var plan = await PlanAsync(line, receivedProductVariantId!.Value, quantity!.Value, netWeightKg, cancellationToken);
             return plan == null
                 ? ServiceResult<ReceiptDeviationPreviewDto>.NotFound($"Product variant {receivedProductVariantId} does not exist.")
                 : ServiceResult<ReceiptDeviationPreviewDto>.Ok(plan.Preview);
@@ -69,10 +70,11 @@ namespace AgfAdmin.Services
 
         // ---------------- Plan (ook gebruikt door PalletService) ----------------
 
-        internal sealed record Plan(ReceiptDeviationPreviewDto Preview, ReceiptDeviationRules.VariantFacts Expected, ReceiptDeviationRules.VariantFacts Received);
+        internal sealed record Plan(ReceiptDeviationPreviewDto Preview, ReceiptDeviationRules.VariantFacts Expected, ReceiptDeviationRules.VariantFacts Received,
+            ReceiptDeviationRules.LineShape Before, ReceiptDeviationRules.LineShape After);
 
         // Null als de ontvangen variant niet bestaat. Status: Exact, Deviation, OtherArticle of BlockedAssigned.
-        internal async Task<Plan> PlanAsync(SupplyCommitmentLine line, int receivedProductVariantId, decimal quantity, CancellationToken cancellationToken)
+        internal async Task<Plan> PlanAsync(SupplyCommitmentLine line, int receivedProductVariantId, decimal quantity, decimal? netWeightKg, CancellationToken cancellationToken)
         {
             var received = await VariantAsync(receivedProductVariantId, cancellationToken);
             if (received == null)
@@ -80,19 +82,33 @@ namespace AgfAdmin.Services
                 return null;
             }
             var expected = await VariantAsync(line.ProductVariantId, cancellationToken);
+            var sameVariant = expected.Id == received.Id;
             var receivedOnLine = await ReceivedOnLineAsync(line.Id, line.ExpectedUnit, cancellationToken);
-            var reduced = ReceiptDeviationRules.ReducedQuantity(line.ExpectedQuantity, receivedOnLine, quantity);
+            // Alleen een gewichtsafwijking verandert het aantal van de regel niet; een andere variant verlaagt haar (nooit onder ontvangen).
+            var reduced = sameVariant ? 0m : ReceiptDeviationRules.ReducedQuantity(line.ExpectedQuantity, receivedOnLine, quantity);
             decimal? assigned = null;
             if (line.SupplyCommitment.Route == SupplyRules.RouteDirectTrade)
             {
                 assigned = (await DirectTradeAllocationService.AllocatedBySourceLineAsync(_db, new List<int> { line.Id }, cancellationToken)).GetValueOrDefault(line.Id);
             }
 
-            var status = expected.Id == received.Id ? "Exact"
+            var defaultKg = await _db.ProductVariants.AsNoTracking().Where(v => v.Id == line.ProductVariantId).Select(v => v.DefaultNetKgPerPackage).SingleAsync(cancellationToken);
+            var expectedPerPackage = ReceiptDeviationRules.ExpectedKgPerPackage(line.ExpectedQuantity, line.ExpectedNetWeightKg, defaultKg);
+            var receivedPerPackage = netWeightKg == null ? (decimal?)null : ReceiptDeviationRules.ReceivedKgPerPackage(quantity, netWeightKg.Value);
+            var weight = netWeightKg != null && ReceiptDeviationRules.IsWeightDeviation(expectedPerPackage, quantity, netWeightKg.Value);
+            var kinds = ReceiptDeviationRules.DifferingKinds(expected, received).ToList();
+            if (weight) kinds.Add(ReceiptDeviationRules.KindWeight);
+
+            var status = sameVariant ? (weight ? "Deviation" : "Exact")
                 : !ReceiptDeviationRules.IsSameArticle(expected, received) ? "OtherArticle"
                 // Klantgebonden aanvoer: de oorspronkelijke regel moet zijn toewijzingen blijven dragen (verhuizen is een volgende fase).
                 : assigned != null && line.ExpectedQuantity - reduced < assigned.Value ? "BlockedAssigned"
                 : "Deviation";
+            var shape = new ReceiptDeviationRules.LineShape(line.ExpectedQuantity, line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg, line.WeightSource,
+                line.PalletCount, line.PackagesPerPallet, line.LoosePackages);
+            var after = sameVariant
+                ? (weight ? ReceiptDeviationRules.Reweigh(shape, receivedPerPackage!.Value) : shape)
+                : ReceiptDeviationRules.Reduce(shape, reduced);
             return new Plan(new ReceiptDeviationPreviewDto
             {
                 Status = status,
@@ -101,16 +117,22 @@ namespace AgfAdmin.Services
                 OriginalLineId = line.Id,
                 Expected = ToDto(expected),
                 Received = ToDto(received),
-                Kinds = ReceiptDeviationRules.DifferingKinds(expected, received).ToList(),
+                Kinds = kinds,
                 Quantity = quantity,
                 Unit = line.ExpectedUnit,
                 OriginalExpectedQuantity = line.ExpectedQuantity,
                 OriginalReceivedQuantity = receivedOnLine,
                 ReducedQuantity = reduced,
                 OriginalExpectedQuantityAfter = line.ExpectedQuantity - reduced,
-                ExcessQuantity = quantity - reduced,
-                AssignedQuantity = assigned
-            }, expected, received);
+                ExcessQuantity = sameVariant ? 0m : quantity - reduced,
+                AssignedQuantity = assigned,
+                ExpectedKgPerPackage = expectedPerPackage == null ? null : decimal.Round(expectedPerPackage.Value, 3, MidpointRounding.AwayFromZero),
+                ReceivedKgPerPackage = receivedPerPackage == null ? null : decimal.Round(receivedPerPackage.Value, 3, MidpointRounding.AwayFromZero),
+                ExpectedNetKg = expectedPerPackage == null ? null : decimal.Round(expectedPerPackage.Value * quantity, 3, MidpointRounding.AwayFromZero),
+                ReceivedNetKg = netWeightKg,
+                OriginalExpectedNetKg = line.ExpectedNetWeightKg,
+                OriginalExpectedNetKgAfter = after.NetKg
+            }, expected, received, shape, after);
         }
 
         // Fysiek ontvangen op de regel, in de eenheid van de regel: zelfde telling als de orderstatus (PurchaseOrderService):

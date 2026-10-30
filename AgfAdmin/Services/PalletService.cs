@@ -310,6 +310,7 @@ namespace AgfAdmin.Services
             var source = await _db.SupplyCommitmentLines
                 .AsNoTracking()
                 .Include(l => l.SupplyCommitment)
+                .Include(l => l.ProductVariant)
                 .SingleOrDefaultAsync(l => l.Id == candidate.SupplyCommitmentLineId, cancellationToken);
             if (source == null)
             {
@@ -322,9 +323,14 @@ namespace AgfAdmin.Services
                 return ServiceResult<PalletContentLineDto>.Conflict(conflict);
             }
 
-            // Afwijkende ontvangst: alleen dezelfde variant boekt zonder vragen; elk verschil vraagt een bevestiging (409 met het verschil).
+            // Afwijkende ontvangst: alleen dezelfde variant met het verwachte netto kg per verpakking (binnen de tolerantie) boekt zonder
+            // vragen; een andere variant of een ander gewicht vraagt een bevestiging (409 met het verschil).
             SupplyReceiptDeviation deviation = null;
-            if (request.ReceivedProductVariantId != null && request.ReceivedProductVariantId != source.ProductVariantId)
+            var otherVariant = request.ReceivedProductVariantId != null && request.ReceivedProductVariantId != source.ProductVariantId;
+            var otherWeight = ReceiptDeviationRules.IsWeightDeviation(
+                ReceiptDeviationRules.ExpectedKgPerPackage(source.ExpectedQuantity, source.ExpectedNetWeightKg, source.ProductVariant?.DefaultNetKgPerPackage),
+                candidate.Quantity, candidate.NetWeightKg);
+            if (otherVariant || otherWeight)
             {
                 var planned = await PlanDeviationAsync(source, candidate, request, actor, cancellationToken);
                 if (planned.Refused != null)
@@ -342,7 +348,7 @@ namespace AgfAdmin.Services
                 PalletContentLine = candidate,
                 EventType = ContentLineAddedEvent,
                 // Bij een afwijking krijgt de vervangende bronregel pas bij het opslaan een id: dan de oorspronkelijke regel en de variant.
-                NewValue = deviation == null
+                NewValue = deviation?.NewLine == null
                     ? Snapshot(new
                     {
                         candidate.SupplyCommitmentLineId,
@@ -567,12 +573,13 @@ namespace AgfAdmin.Services
         {
             var deviation = await _db.SupplyReceiptDeviations.AsNoTracking()
                 .Where(d => d.PalletContentLineId == existing.Id)
-                .Select(d => new { d.OriginalLineId, d.ReceivedProductVariantId })
+                .Select(d => new { d.OriginalLineId, d.ExpectedProductVariantId, d.ReceivedProductVariantId })
                 .SingleOrDefaultAsync(cancellationToken);
             var sameSource = deviation == null
                 ? existing.SupplyCommitmentLineId == candidate.SupplyCommitmentLineId
                     && (receivedProductVariantId == null || receivedProductVariantId == existing.SupplyCommitmentLine.ProductVariantId)
-                : deviation.OriginalLineId == candidate.SupplyCommitmentLineId && deviation.ReceivedProductVariantId == receivedProductVariantId;
+                : deviation.OriginalLineId == candidate.SupplyCommitmentLineId
+                    && deviation.ReceivedProductVariantId == (receivedProductVariantId ?? deviation.ExpectedProductVariantId);
             return ResultForContentLineRetry(existing, candidate, sameSource);
         }
 
