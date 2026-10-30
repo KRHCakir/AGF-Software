@@ -14,7 +14,8 @@ export interface ArticleDraft {
     productName: string;
     variantName: string;
     shortcutCode: string;
-    origin: string;
+    // Land uit de vaste lijst (ISO-code); '' = nog niet gekozen.
+    originCountryCode: string;
     brand: string;
     sizeCategory: string;
     packaging: string;
@@ -44,7 +45,7 @@ export const GOODS_CODE_LENGTH: Readonly<Record<GoodsCodeSystem, number>> = { HS
 
 export function emptyArticleDraft(): ArticleDraft {
     return {
-        productName: '', variantName: '', shortcutCode: '', origin: '', brand: '', sizeCategory: '', packaging: '', packagingUnit: '', season: '', notes: '',
+        productName: '', variantName: '', shortcutCode: '', originCountryCode: '', brand: '', sizeCategory: '', packaging: '', packagingUnit: '', season: '', notes: '',
         weightMethod: 'Weighed', defaultNetKgPerPackage: '', defaultGrossKgPerPackage: '', defaultPackagesPerPallet: '', goodsCode: '', goodsCodeSystem: '', tradeClass: '',
     };
 }
@@ -54,7 +55,7 @@ const num = (value: number | null) => (value === null ? '' : formatDecimalInput(
 
 export function draftFromArticle(article: Article): ArticleDraft {
     return {
-        productName: article.productName, variantName: article.variantName, shortcutCode: article.shortcutCode ?? '', origin: article.origin ?? '',
+        productName: article.productName, variantName: article.variantName, shortcutCode: article.shortcutCode ?? '', originCountryCode: article.originCountryCode ?? '',
         brand: article.brand ?? '', sizeCategory: article.sizeCategory ?? '', packaging: article.packaging ?? '', packagingUnit: article.packagingUnit ?? '',
         season: article.season ?? '', notes: article.notes ?? '', weightMethod: article.weightMethod,
         defaultNetKgPerPackage: num(article.defaultNetKgPerPackage), defaultGrossKgPerPackage: num(article.defaultGrossKgPerPackage), defaultPackagesPerPallet: num(article.defaultPackagesPerPallet),
@@ -100,7 +101,8 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     const variantName = text(draft.variantName, MAX_NAME_LENGTH, 'variantName', errors);
     const shortcutCode = text(draft.shortcutCode, MAX_SHORTCUT_LENGTH, 'shortcutCode', errors);
     if (shortcutCode !== null && !SHORTCUT.test(shortcutCode)) errors.push({ field: 'shortcutCode', code: 'invalid' });
-    const origin = text(draft.origin, MAX_NAME_LENGTH, 'origin', errors);
+    const originCountryCode = draft.originCountryCode.trim();
+    if (originCountryCode === '') errors.push({ field: 'originCountryCode', code: 'required' });
     const brand = text(draft.brand, MAX_NAME_LENGTH, 'brand', errors);
     const sizeCategory = text(draft.sizeCategory, MAX_NAME_LENGTH, 'sizeCategory', errors);
     const packaging = text(draft.packaging, MAX_NAME_LENGTH, 'packaging', errors);
@@ -133,7 +135,7 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     return {
         ok: true,
         value: {
-            productName, variantName, shortcutCode, origin, brand, sizeCategory, packaging, packagingUnit, season, notes, weightMethod,
+            productName, variantName, shortcutCode, originCountryCode, brand, sizeCategory, packaging, packagingUnit, season, notes, weightMethod,
             defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross, defaultPackagesPerPallet: perPallet,
             goodsCode: goodsCode === null ? null : goodsCode, goodsCodeSystem: goodsCode === null ? null : goodsCodeSystem, tradeClass,
         },

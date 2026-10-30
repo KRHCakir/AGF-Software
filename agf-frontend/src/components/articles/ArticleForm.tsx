@@ -10,6 +10,8 @@ import { ApiError, toApiError } from '../../services/apiClient';
 import { createArticle, updateArticle } from '../../services/articleService';
 import { PACKAGE_UNITS } from '../../types/availability';
 import type { Article, ArticleReference, GoodsCodeSystem } from '../../types/article';
+import type { CountryReference } from '../../types/country';
+import CountryPicker from '../shared/CountryPicker';
 import { GOODS_CODE_SYSTEMS, isGoodsCodeSystem } from '../../types/article';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
@@ -28,9 +30,10 @@ function hasTradeValues(draft: ArticleDraft): boolean {
     return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.tradeClass !== '' || draft.season !== '' || draft.notes !== '';
 }
 
-export default function ArticleForm({ article, reference, onSaved, onClose }: {
+export default function ArticleForm({ article, reference, countries, onSaved, onClose }: {
     article: Article | null;
     reference: ArticleReference;
+    countries: CountryReference;
     onSaved: (article: Article, created: boolean) => void;
     onClose: () => void;
 }) {
@@ -138,7 +141,15 @@ export default function ArticleForm({ article, reference, onSaved, onClose }: {
                 {textField('productName', 'articles_field_product', { list: 'article-product-names' })}
                 <datalist id="article-product-names">{reference.productNames.map((name) => <option key={name} value={name} />)}</datalist>
                 {textField('variantName', 'articles_field_variant')}
-                {textField('origin', 'articles_field_origin')}
+                <div>
+                    <label htmlFor="originCountryCode-input" className="text-xs font-medium text-gray-700">{t('articles_field_origin')} *</label>
+                    <CountryPicker id="originCountryCode" dataTour="article-origin" countries={countries} value={draft.originCountryCode === '' ? null : draft.originCountryCode}
+                        onChange={(code) => update({ originCountryCode: code ?? '' })} disabled={submitting} invalid={e('originCountryCode') !== undefined} describedBy="originCountryCode-error" />
+                    {article !== null && !article.originCountryCode && article.origin && (
+                        <span className="block text-xs text-amber-900">{t('articles_origin_old_text', { origin: article.origin })}</span>
+                    )}
+                    <FieldError id="originCountryCode" messages={e('originCountryCode')} />
+                </div>
                 {textField('brand', 'articles_field_brand')}
                 {textField('sizeCategory', 'articles_field_size')}
                 <div>

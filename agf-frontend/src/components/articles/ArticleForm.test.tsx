@@ -4,14 +4,16 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, json, setSelectValue, setValue } from '../../test/reactHarness.ts';
 import type { Article, ArticleReference } from '../../types/article';
+import type { CountryReference } from '../../types/country';
 import ArticleForm from './ArticleForm';
 
 // Artikelformulier door de echte componentlevenscyclus: aanmaken met alleen een productsoort, inline fouten met behoud
 // van invoer, goederencode via de referentielijst (bron zichtbaar, gebruiker neemt zelf over), bewerken via PUT.
 
 const reference: ArticleReference = { productNames: ['Avocado', 'Mango'], packagingUnits: ['box', 'colli', 'tray', 'piece', 'dozen'], weightMethods: ['Weighed', 'Calculated'], goodsCodeSystems: ['HS', 'CN', 'TARIC'], tradeClassSuggestions: ['Extra', 'I', 'II'] };
+const countries: CountryReference = { countries: [{ code: 'PE', nameNl: 'Peru', nameEn: 'Peru' }, { code: 'PY', nameNl: 'Paraguay', nameEn: 'Paraguay' }, { code: 'NL', nameNl: 'Nederland', nameEn: 'Netherlands' }], aliases: [] };
 const hass: Article = {
-    id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru', brand: null,
+    id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru', originCountryCode: 'PE', brand: null,
     sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box', season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: null,
     defaultPackagesPerPallet: 120, goodsCode: null, goodsCodeSystem: null, tradeClass: null, defaultPrice: 12.5,
 };
@@ -39,19 +41,25 @@ describe('ArticleForm', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('a new article needs only a product kind; optional fields are sent as null and the trade section stays collapsed', async () => {
+    test('a new article needs a product kind and a country; "PE" chooses Peru and only the country code is sent; optional fields are null', async () => {
         let saved: Article | null = null;
         respond = (call) => json(201, { ...hass, id: 7, productName: call.body && typeof call.body === 'object' ? (call.body as { productName: string }).productName : '', variantName: '', description: 'Tomaat', shortcutCode: 'tom', packagingUnit: null, weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultPackagesPerPallet: null });
-        await mounted.render(<ArticleForm article={null} reference={reference} onSaved={(article) => { saved = article; }} onClose={() => {}} />);
+        await mounted.render(<ArticleForm article={null} reference={reference} countries={countries} onSaved={(article) => { saved = article; }} onClose={() => {}} />);
         assert.equal(window.document.activeElement, input('shortcutCode'), 'search code gets focus first');
         assert.equal(mounted.container.querySelector('#article-trade'), null, 'trade data collapsed');
         await type(input('shortcutCode'), 'tom');
         await type(input('productName'), 'Tomaat');
         await save();
+        assert.equal(calls.length, 0, 'no country: nothing sent');
+        assert.ok(text().includes('articles_error_required'));
+        await type(input('originCountryCode'), 'PE');
+        await act(async () => { input('originCountryCode').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        assert.equal(input('originCountryCode').value, 'Peru', 'the country is shown, not the abbreviation');
+        await save();
         await mounted.waitFor(() => calls.length === 1, 'posted');
         assert.equal(calls[0].method, 'POST');
         assert.deepEqual(calls[0].body, {
-            productName: 'Tomaat', variantName: null, shortcutCode: 'tom', origin: null, brand: null, sizeCategory: null, packaging: null, packagingUnit: null, season: null, notes: null,
+            productName: 'Tomaat', variantName: null, shortcutCode: 'tom', originCountryCode: 'PE', brand: null, sizeCategory: null, packaging: null, packagingUnit: null, season: null, notes: null,
             weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: null,
         });
         await mounted.waitFor(() => saved !== null, 'onSaved called');
@@ -59,7 +67,7 @@ describe('ArticleForm', () => {
     });
 
     test('validation keeps the input and shows inline errors; gross below net and a goods code without system are refused before any request', async () => {
-        await mounted.render(<ArticleForm article={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.render(<ArticleForm article={null} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
         await type(input('productName'), 'Avocado');
         await type(input('defaultNetKgPerPackage'), '4');
         await type(input('defaultGrossKgPerPackage'), '3,5');
@@ -86,7 +94,7 @@ describe('ArticleForm', () => {
             if (call.method === 'PUT') return json(200, { ...hass, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I' });
             return json(404, {});
         };
-        await mounted.render(<ArticleForm article={hass} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.render(<ArticleForm article={hass} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
         assert.equal(input('shortcutCode').value, 'avohassper22');
         assert.equal(input('defaultPackagesPerPallet').value, '120');
         assert.ok(text().includes('box'), 'unit-specific labels mention the packaging unit');
@@ -122,7 +130,7 @@ describe('ArticleForm', () => {
     });
 
     test('the article form carries no GGN field: GGNs are supplier data, chosen per lot on receipt', async () => {
-        await mounted.render(<ArticleForm article={hass} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.render(<ArticleForm article={hass} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
         await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="article-trade"]')!.click(); });
         assert.equal(mounted.container.querySelector('[id="defaultGgn-input"]'), null);
         // Geen uitleg meer over interne werking ("GGN is geen artikelstandaard meer"): alleen wat helpt bij het invullen.
