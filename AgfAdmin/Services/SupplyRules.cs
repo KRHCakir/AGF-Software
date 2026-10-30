@@ -9,7 +9,7 @@ namespace AgfAdmin.Services
         // alleen een optioneel bijschrift.
         public static string LinesOrigin(IEnumerable<string> lineOrigins)
         {
-            var origins = lineOrigins.Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim()).Distinct(StringComparer.Ordinal)
+            var origins = lineOrigins.Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(o => o, StringComparer.Create(new System.Globalization.CultureInfo("nl-NL"), true)).ToList();
             return origins.Count == 0 ? null : string.Join(", ", origins);
         }
