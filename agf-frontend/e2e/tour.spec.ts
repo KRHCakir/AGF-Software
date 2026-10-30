@@ -36,7 +36,8 @@ async function ensurePrerequisites(request: APIRequestContext) {
     const article = [...hass].sort((a, b) => a.id - b.id).find((variant) => variant.shortcutCode && variant.packagingUnit && variant.defaultNetKgPerPackage);
     if (article && !hass.some((variant) => variant.id !== article.id && variant.name === article.name && variant.originCountryCode !== article.originCountryCode)) {
         const full = await json<Record<string, unknown>>(request, `/articles/${article.id}`);
-        const created = await request.post(`${API}/articles`, { data: { ...full, id: undefined, shortcutCode: `${article.shortcutCode}-ZA`, originCountryCode: article.originCountryCode === 'ZA' ? 'CL' : 'ZA' } });
+        const other = article.originCountryCode === 'ZA' ? 'CL' : 'ZA';
+        const created = await request.post(`${API}/articles`, { data: { ...full, id: undefined, shortcutCode: `${article.shortcutCode}-${other}`, originCountryCode: other } });
         expect(created.ok(), await created.text()).toBeTruthy();
     }
 }
