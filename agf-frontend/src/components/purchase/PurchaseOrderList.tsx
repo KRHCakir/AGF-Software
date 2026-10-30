@@ -4,7 +4,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
-import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import { DeviationBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 
 // Lijst "Inkoopopdrachten": vanaf md een tabel, smaller kaarten met dezelfde gegevens (niets afgekapt).
 export default function PurchaseOrderList({ items, selectedId, onOpen }: {
@@ -51,7 +51,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                 <td className={`${th} font-mono`}>{item.supplierReference ?? '–'}</td>
                                 <td className={`${th} whitespace-nowrap`}>{formatDateOnly(item.orderedOn, locale)}</td>
                                 <td className={`${th} whitespace-nowrap`}>{expected(item)}</td>
-                                <td className={th}><OrderStatusBadge status={item.status} />{rejected(item)}</td>
+                                <td className={th}><OrderStatusBadge status={item.status} />{item.hasDeviation && <span className="ml-1"><DeviationBadge /></span>}{rejected(item)}</td>
                                 <td className={`${th} text-right font-mono`}>{formatQuantity(item.expectedQuantity, locale)}</td>
                                 <td className={`${th} whitespace-nowrap text-right font-mono`}>{kg(item)}</td>
                                 <td className={th}>
@@ -71,7 +71,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                             className={`w-full rounded-md border bg-white p-3 text-left text-sm ${item.id === selectedId ? 'border-blue-500' : 'border-gray-200'}`}>
                             <span className="flex flex-wrap items-center justify-between gap-2">
                                 <span className="font-mono font-semibold text-blue-800">{item.orderNumber}</span>
-                                <OrderStatusBadge status={item.status} />
+                                <span className="flex flex-wrap gap-1"><OrderStatusBadge status={item.status} />{item.hasDeviation && <DeviationBadge />}</span>
                             </span>
                             <span className="mt-1 block break-words font-medium text-gray-900">{item.vendorName ?? '–'}</span>
                             <span className="block break-words text-gray-700">{t('po_col_supplier_reference')}: <span className="font-mono">{item.supplierReference ?? '–'}</span></span>

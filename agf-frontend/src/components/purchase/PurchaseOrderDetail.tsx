@@ -6,11 +6,13 @@ import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
 
 const section = sectionClass;
 const h3 = 'mb-2 text-sm font-semibold text-gray-900';
+const replacementBadge = 'whitespace-nowrap rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900';
 
 // Detail van een inkooporder: kop met eigen nummer, regels (besteld/ontvangen/afgekeurd), ontvangsten met keuring en
 // "Afkeuren", facturen, afkeuringen en geschiedenis. `invoices` is de plek voor het koppelen van factuurnummers.
@@ -22,6 +24,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     const { t, locale } = useTranslation();
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
     const qty = (value: number) => formatQuantity(value, locale);
+    // Herkenbare naam van een andere regel van deze order: het onderscheidende kenmerk (herkomst, maat of verpakking).
+    const lineName = (id: number) => { const other = order.lines.find((line) => line.id === id); return other ? [other.origin, other.size, other.packaging].filter(Boolean).join(' · ') || `#${id}` : `#${id}`; };
 
     return (
         <article className="space-y-3" aria-labelledby="po-detail-title">
@@ -50,7 +54,14 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     {order.lines.map((line) => (
                         <li key={line.id} className="py-1.5">
                             <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
+                            {[line.origin, line.size, line.packaging].filter(Boolean).length > 0 && <span className="text-gray-700"> · {[line.origin, line.size, line.packaging].filter(Boolean).join(' · ')}</span>}
                             {line.lotNumber && <span className="text-gray-600"> · {line.lotNumber}</span>}
+                            {(line.replacesLineId || (line.replacedByLineIds ?? []).length > 0) && (
+                                <span className="ml-1 inline-flex flex-wrap gap-1 align-middle" data-tour="po-line-replacement" data-tour-key={line.id}>
+                                    {line.replacesLineId && <span className={replacementBadge}>{t('po_line_replaces', { line: lineName(line.replacesLineId) })}</span>}
+                                    {(line.replacedByLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_replaced_by', { line: lineName(id) })}</span>)}
+                                </span>
+                            )}
                             <span className="block font-mono text-gray-800">
                                 {lineAmountParts(line).map((part, index) => (
                                     <span key={part.key} className={part.key === 'po_line_rejected' ? 'text-red-800' : undefined}>
@@ -64,6 +75,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
             </section>
 
             <ReceiptsSection order={order} onChanged={onChanged} />
+
+            {(order.deviations ?? []).length > 0 && <DeviationsSection deviations={order.deviations ?? []} />}
 
             <section className={section} aria-labelledby="po-invoices">
                 <h3 id="po-invoices" className={h3}>{t('po_invoices')}</h3>
@@ -126,6 +139,7 @@ function historyText(event: PurchaseOrderHistoryEvent, t: (key: string, values?:
         case 'InvoiceRecorded': return t('po_history_invoice', { number: event.reference ?? '–' });
         case 'CreditNoteRecorded': return t('po_history_credit_note', { number: event.reference ?? '–' });
         case 'Rejected': return t('po_history_rejected', { quantity: qty(event.quantity ?? 0), reason: label(REASON_LABEL_KEYS, event.reason), decision: label(DECISION_LABEL_KEYS, event.decision) });
+        case 'DeviationRecorded': return t('po_history_deviation', { quantity: qty(event.quantity ?? 0), pallet: event.reference ?? '–' });
         default: return event.type;
     }
 }
