@@ -119,6 +119,10 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException("The replacement line expects exactly the received quantity, in the unit of the original line.");
                 }
+                if (deviation.ReducedQuantity < 0m)
+                {
+                    throw new TraceabilityViolationException($"The reduction of the receipt deviation on line {originalId} cannot be negative ({deviation.ReducedQuantity}).");
+                }
                 var currentOriginal = trackedLines.TryGetValue(originalId, out var originalEntry) ? originalEntry.Entity.ExpectedQuantity : original.ExpectedQuantity;
                 if (currentOriginal != original.ExpectedQuantity - deviation.ReducedQuantity || currentOriginal < 0m)
                 {
@@ -127,6 +131,10 @@ namespace AgfAdmin.Data
                 if (assigned.TryGetValue(originalId, out var allocation) && allocation > currentOriginal)
                 {
                     throw new TraceabilityViolationException($"Supply commitment line {originalId} would drop below its customer assignments ({allocation}); move or release those first.");
+                }
+                if (contents.Values.Count(c => c.Property(x => x.SupplyCommitmentLineId).CurrentValue == NewLineOf(entry)) != 1)
+                {
+                    throw new TraceabilityViolationException("A receipt deviation adds exactly one new received content line on its replacement line.");
                 }
                 if (!contents.TryGetValue(entry.Property(d => d.PalletContentLineId).CurrentValue, out var contentEntry)
                     || contentEntry.Property(c => c.SupplyCommitmentLineId).CurrentValue != NewLineOf(entry)
