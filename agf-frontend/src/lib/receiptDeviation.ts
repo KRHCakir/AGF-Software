@@ -26,7 +26,13 @@ export const DEVIATION_KIND_LABEL_KEYS: Readonly<Record<string, string>> = {
     TradeClass: 'deviation_attr_trade_class',
     Brand: 'deviation_attr_brand',
     Other: 'deviation_kind_other',
+    Weight: 'deviation_attr_weight',
 };
+
+// Alleen een afwijking in het gewicht (zelfde artikel): dan gaat de vraag over kg per verpakking, niet over kenmerken.
+export function isWeightOnly(kinds: readonly string[]): boolean {
+    return kinds.length === 1 && kinds[0] === 'Weight';
+}
 
 export interface DeviationRow {
     labelKey: string;

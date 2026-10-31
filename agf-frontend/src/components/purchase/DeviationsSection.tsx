@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDateTime, formatQuantity } from '../../lib/availability';
+import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { DEVIATION_KIND_LABEL_KEYS, DEVIATION_REASON_LABEL_KEYS, unitText, variantLabel } from '../../lib/receiptDeviation';
 import type { PurchaseOrderDeviation } from '../../types/receiptDeviation';
 import { sectionClass } from './sectionClass';
@@ -25,6 +25,9 @@ export default function DeviationsSection({ deviations }: { deviations: readonly
                             {formatQuantity(deviation.quantity, locale)} {unitText(t, deviation.unit)}
                             {deviation.palletReference && <> · {deviation.palletReference}</>}
                             {deviation.kinds.length > 0 && <> · {deviation.kinds.map((kind) => t(DEVIATION_KIND_LABEL_KEYS[kind] ?? kind)).join(', ')}</>}
+                            {deviation.kinds.includes('Weight') && deviation.expectedKgPerPackage != null && deviation.receivedKgPerPackage != null && (
+                                <> · {t('po_deviation_weight', { expected: formatKg(deviation.expectedKgPerPackage, locale), received: formatKg(deviation.receivedKgPerPackage, locale), unit: unitText(t, deviation.unit) })}</>
+                            )}
                         </span>
                         <span className="block text-xs text-gray-600">
                             {deviation.actorReference ?? '–'} · {formatDateTime(deviation.createdAt, locale)}

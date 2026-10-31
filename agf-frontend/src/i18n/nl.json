@@ -250,7 +250,7 @@
   "supply_direct_banner": "Klantgebonden: wordt nooit algemene magazijnvoorraad en nooit als beschikbaar getoond.",
   "supply_vendor": "Leverancier",
   "supply_customer": "Klant",
-  "supply_origin": "Land van herkomst",
+  "supply_origin": "Herkomst order (optioneel)",
   "supply_destination": "Bestemming",
   "supply_destination_placeholder": "Bijvoorbeeld land, stad of afleveradres",
   "supply_expected_date": "Verwacht op",
@@ -1819,5 +1819,11 @@
   "country_alias_country": "Land",
   "country_alias_add": "Toevoegen",
   "country_alias_none": "Nog geen eigen snelkoppelingen.",
-  "country_alias_remove": "Snelkoppeling {alias} verwijderen"
+  "country_alias_remove": "Snelkoppeling {alias} verwijderen",
+  "supply_origin_hint": "Alleen als alle regels uit hetzelfde land komen. Anders leeg laten; de herkomst staat per regel bij het artikel.",
+  "deviation_attr_weight": "Gewicht",
+  "deviation_weight_value": "{perPackage} per {unit} ({total})",
+  "deviation_question_weight": "Order {order} verwacht {article} van {expected}, ontvangen {received}. Klopt dit?",
+  "deviation_consequence_weight": "Bij Ja verwacht de regel voortaan {perPackage} per {unit} ({total} in totaal).",
+  "po_deviation_weight": "{expected} → {received} per {unit}"
 }

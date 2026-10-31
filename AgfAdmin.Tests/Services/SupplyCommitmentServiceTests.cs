@@ -502,8 +502,6 @@ public class SupplyCommitmentServiceTests : IDisposable
     [InlineData("route-unknown", "route")]
     [InlineData("route-empty", "route")]
     [InlineData("route-padded", "route")]
-    [InlineData("origin-missing", "origin")]
-    [InlineData("origin-blank", "origin")]
     [InlineData("origin-too-long", "origin")]
     [InlineData("destination-blank", "destination")]
     [InlineData("destination-too-long", "destination")]
@@ -525,8 +523,6 @@ public class SupplyCommitmentServiceTests : IDisposable
             case "route-unknown": request.Route = "Direct"; break;
             case "route-empty": request.Route = ""; break;
             case "route-padded": request.Route = " Warehouse"; break;
-            case "origin-missing": request.Origin = null; break;
-            case "origin-blank": request.Origin = "   "; break;
             case "origin-too-long": request.Origin = new string('x', 201); break;
             case "destination-blank": request.Destination = "  "; break;
             case "destination-too-long": request.Destination = new string('x', 201); break;
@@ -639,12 +635,28 @@ public class SupplyCommitmentServiceTests : IDisposable
         Assert.Equal(4, result.Value.Lines.Count);
     }
 
+    // De herkomst van de order is optioneel (de herkomst staat per regel bij het artikel): leeg of alleen spaties wordt "".
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task Create_Accepts_An_Empty_Order_Origin(string origin)
+    {
+        var seed = await SeedAsync();
+        var request = WarehouseRequest(seed);
+        request.Origin = origin;
+
+        var result = await CreateAsync(request);
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal("", result.Value.Origin);
+    }
+
     [Fact]
     public async Task Create_Reports_All_Validation_Errors_At_Once()
     {
         var seed = await SeedAsync();
         var request = WarehouseRequest(seed);
-        request.Origin = " ";
+        request.Origin = new string('x', 201);
         request.Lines[0].ExpectedUnit = "kg";
         request.Lines[1].ExpectedQuantity = 0m;
 

@@ -144,9 +144,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         const customerId = Number(header.customerId);
         if (isDirect && !header.customerId) addError(found, 'customerId', t('supply_error_required_customer'));
 
+        // Herkomst van de order is optioneel: de herkomst staat per regel bij het artikel.
         const origin = header.origin.trim();
-        if (origin === '') addError(found, 'origin', t('supply_error_required'));
-        else if (origin.length > 200) addError(found, 'origin', t('supply_error_too_long', { max: '200' }));
+        if (origin.length > 200) addError(found, 'origin', t('supply_error_too_long', { max: '200' }));
 
         const destination = header.destination.trim();
         if (isDirect && destination === '') addError(found, 'destination', t('supply_error_required_destination'));
@@ -286,7 +286,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 )}
                 <p>
                     {commitment.supplierReference && <>{t('po_col_supplier_reference')} <span className="font-mono">{commitment.supplierReference}</span> · </>}
-                    {commitment.vendorName ?? '–'} · {commitment.origin}
+                    {commitment.vendorName ?? '–'}{(commitment.linesOrigin || commitment.origin) && <> · {commitment.linesOrigin || commitment.origin}</>}
                     {commitment.customerName && <> · 🔒 {commitment.customerName}</>}
                     {commitment.destination && <> → {commitment.destination}</>}
                     {commitment.expectedAt && <> · {formatDateTime(commitment.expectedAt, locale)}</>}
@@ -354,9 +354,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     <FieldError id="vendorId" messages={e('vendorId')} />
                 </div>
                 <div>
-                    <label htmlFor="origin-input" className="text-xs font-medium text-gray-700">{t('supply_origin')} *</label>
+                    <label htmlFor="origin-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
                     <input {...fieldProps('origin', e('origin'))} data-tour="supply-origin" value={header.origin} disabled={locked} maxLength={200}
-                        onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} />
+                        onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} aria-describedby="origin-hint" />
+                    <span id="origin-hint" className="block text-xs text-gray-500">{t('supply_origin_hint')}</span>
                     <FieldError id="origin" messages={e('origin')} />
                 </div>
                 <div>

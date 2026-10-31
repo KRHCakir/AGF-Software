@@ -47,7 +47,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                         {item.orderNumber}
                                     </button>
                                 </td>
-                                <td className={th}>{item.vendorName ?? '–'}</td>
+                                <td className={th}>{item.vendorName ?? '–'}{item.linesOrigin && <span className="block text-xs text-gray-600">{item.linesOrigin}</span>}</td>
                                 <td className={`${th} font-mono`}>{item.supplierReference ?? '–'}</td>
                                 <td className={`${th} whitespace-nowrap`}>{formatDateOnly(item.orderedOn, locale)}</td>
                                 <td className={`${th} whitespace-nowrap`}>{expected(item)}</td>
@@ -73,7 +73,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                 <span className="font-mono font-semibold text-blue-800">{item.orderNumber}</span>
                                 <span className="flex flex-wrap gap-1"><OrderStatusBadge status={item.status} />{item.hasDeviation && <DeviationBadge />}</span>
                             </span>
-                            <span className="mt-1 block break-words font-medium text-gray-900">{item.vendorName ?? '–'}</span>
+                            <span className="mt-1 block break-words font-medium text-gray-900">{item.vendorName ?? '–'}{item.linesOrigin && <span className="font-normal text-gray-700"> · {item.linesOrigin}</span>}</span>
                             <span className="block break-words text-gray-700">{t('po_col_supplier_reference')}: <span className="font-mono">{item.supplierReference ?? '–'}</span></span>
                             <span className="block text-gray-700">{t('po_col_ordered_on')} {formatDateOnly(item.orderedOn, locale)} · {t('po_col_expected')} {expected(item)}</span>
                             <span className="block font-mono text-gray-900">{formatQuantity(item.expectedQuantity, locale)} {t('po_packages')} · {kg(item)}</span>

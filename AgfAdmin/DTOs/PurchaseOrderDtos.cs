@@ -26,6 +26,8 @@ namespace AgfAdmin.DTOs
         public string SupplierReference { get; set; }
         public DateOnly OrderedOn { get; set; }
         public DateTime? ExpectedAt { get; set; }
+        // Herkomst afgeleid van de regels (SupplyRules.LinesOrigin); het kopveld is alleen een bijschrift.
+        public string LinesOrigin { get; set; }
         public string Route { get; set; }
         public string CustomerName { get; set; }
         // Weergavestatus (PurchaseOrderRules.OrderStatus) en de opgeslagen status van de toezegging.
@@ -57,6 +59,7 @@ namespace AgfAdmin.DTOs
         public int? CustomerId { get; set; }
         public string CustomerName { get; set; }
         public string Origin { get; set; }
+        public string LinesOrigin { get; set; }
         public string Destination { get; set; }
         public DateTime? ExpectedAt { get; set; }
         public DateTime CreatedAt { get; set; }

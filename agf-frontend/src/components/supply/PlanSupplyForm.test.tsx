@@ -65,6 +65,20 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         assert.deepEqual([line.expectedNetWeightKg, line.expectedGrossWeightKg, line.weightSource], [15600, 16100, 'Entered']);
     });
 
+    test('the order origin is optional: an empty field is sent as empty, never as an error', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await chooseVendor('supb');
+        await type('expectedAt-input', '2026-10-30');
+        await type('lines[0].productVariantId-input', 'hass');
+        await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
+        await type('lines[0].expectedQuantity-input', '10');
+        assert.ok(mounted.hasText('supply_origin_hint'));
+        await submit();
+        await mounted.waitFor(() => posted.length > 0, 'POST without an origin');
+        assert.equal(JSON.parse(posted[0].body).origin, '');
+    });
+
     test('supplier is typed with suggestions (name, search code, VAT number), not picked from a dropdown; inactive suppliers are not offered', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         assert.equal(mounted.container.querySelector('select[id="vendorId-input"]'), null);

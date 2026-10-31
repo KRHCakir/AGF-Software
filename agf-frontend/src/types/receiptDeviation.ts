@@ -41,12 +41,20 @@ export interface DeviationPreview {
     originalExpectedQuantityAfter: number;
     excessQuantity: number;
     assignedQuantity: number | null;
+    // Netto gewicht (nooit bruto): per verpakking en voor deze hoeveelheid, en het verwachte kg van de regel vóór en na Ja.
+    expectedKgPerPackage?: number | null;
+    receivedKgPerPackage?: number | null;
+    expectedNetKg?: number | null;
+    receivedNetKg?: number | null;
+    originalExpectedNetKg?: number | null;
+    originalExpectedNetKgAfter?: number | null;
 }
 
 export interface PurchaseOrderDeviation {
     id: number;
     originalLineId: number;
-    newLineId: number;
+    // Null bij een afwijking in alleen het gewicht (geen vervangende regel).
+    newLineId: number | null;
     palletContentLineId: number;
     palletReference: string | null;
     kinds: string[];
@@ -55,6 +63,8 @@ export interface PurchaseOrderDeviation {
     quantity: number;
     unit: string;
     reducedQuantity: number;
+    expectedKgPerPackage?: number | null;
+    receivedKgPerPackage?: number | null;
     reason: string | null;
     reasonNote: string | null;
     actorReference: string | null;
@@ -83,7 +93,7 @@ export function isDeviationPreview(value: unknown): value is DeviationPreview {
 }
 
 export function isPurchaseOrderDeviation(value: unknown): value is PurchaseOrderDeviation {
-    return isObject(value) && isNumber(value.id) && isNumber(value.originalLineId) && isNumber(value.newLineId) && isStringArray(value.kinds)
+    return isObject(value) && isNumber(value.id) && isNumber(value.originalLineId) && isNullableNumber(value.newLineId) && isStringArray(value.kinds)
         && (value.expected === null || isDeviationVariant(value.expected)) && (value.received === null || isDeviationVariant(value.received))
         && isNumber(value.quantity) && isString(value.unit) && isNumber(value.reducedQuantity) && isNullableString(value.reason)
         && isNullableString(value.reasonNote) && isNullableString(value.actorReference) && isString(value.createdAt) && isNullableString(value.palletReference);

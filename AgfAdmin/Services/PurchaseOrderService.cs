@@ -76,6 +76,7 @@ namespace AgfAdmin.Services
                         SupplierReference = h.SupplierReference,
                         OrderedOn = h.OrderedOn,
                         ExpectedAt = h.ExpectedAt == null ? null : DateTime.SpecifyKind(h.ExpectedAt.Value, DateTimeKind.Utc),
+                        LinesOrigin = f.LinesOrigin,
                         Route = h.Route,
                         CustomerName = h.CustomerName,
                         StoredStatus = h.Status,
@@ -274,6 +275,7 @@ namespace AgfAdmin.Services
                 CustomerId = commitment.CustomerId,
                 CustomerName = commitment.Customer?.Name,
                 Origin = commitment.Origin,
+                LinesOrigin = facts.LinesOrigin,
                 Destination = commitment.Destination,
                 ExpectedAt = commitment.ExpectedAt == null ? null : Utc(commitment.ExpectedAt.Value),
                 CreatedAt = Utc(commitment.CreatedAt),
@@ -325,6 +327,7 @@ namespace AgfAdmin.Services
             public decimal ExpectedQuantity { get; init; }
             public string Unit { get; init; }
             public decimal? ExpectedNetWeightKg { get; init; }
+            public string Origin { get; init; }
             // In de eenheid van de regel (voor de status); ReceivedAllUnits telt elke eenheid (voor "alles afgekeurd").
             public decimal ReceivedQuantity { get; set; }
             public decimal ReceivedNetWeightKg { get; set; }
@@ -345,6 +348,8 @@ namespace AgfAdmin.Services
             public decimal RejectedQuantity => Lines.Sum(l => l.RejectedQuantity);
             public decimal RejectedNetWeightKg => Lines.Sum(l => l.RejectedNetWeightKg);
             public decimal RemovedQuantity => Lines.Sum(l => l.RemovedQuantity);
+            // Regels die nog iets verwachten of iets ontvingen; een geheel vervangen regel zonder ontvangst telt niet mee.
+            public string LinesOrigin => SupplyRules.LinesOrigin(Lines.Where(l => l.ExpectedQuantity > 0m || l.ReceivedAllUnitsQuantity > 0m).Select(l => l.Origin));
 
             // Volledig afgekeurd telt ook als de opgeslagen status (nog) niet is bijgewerkt.
             public string Status(string storedStatus) =>
@@ -376,7 +381,7 @@ namespace AgfAdmin.Services
         private async Task LoadFactsBatchAsync(List<int> ids, FactSet set, CancellationToken cancellationToken)
         {
             var lines = await _db.SupplyCommitmentLines.AsNoTracking().Where(l => ids.Contains(l.SupplyCommitmentId))
-                .Select(l => new { l.Id, l.SupplyCommitmentId, l.ExpectedQuantity, l.ExpectedUnit, l.ExpectedNetWeightKg })
+                .Select(l => new { l.Id, l.SupplyCommitmentId, l.ExpectedQuantity, l.ExpectedUnit, l.ExpectedNetWeightKg, l.ProductVariant.Origin })
                 .ToListAsync(cancellationToken);
             // Fysieke ontvangst: geen teruggeboekte of afgesplitste inhoud (al bij de oorspronkelijke regel geteld), geen geannuleerde pallet.
             var receipts = await _db.PalletContentLines.AsNoTracking()
@@ -407,7 +412,7 @@ namespace AgfAdmin.Services
             var byLine = new Dictionary<int, LineFact>();
             foreach (var line in lines.OrderBy(l => l.Id))
             {
-                var fact = new LineFact { Id = line.Id, ExpectedQuantity = line.ExpectedQuantity, Unit = line.ExpectedUnit, ExpectedNetWeightKg = line.ExpectedNetWeightKg };
+                var fact = new LineFact { Id = line.Id, ExpectedQuantity = line.ExpectedQuantity, Unit = line.ExpectedUnit, ExpectedNetWeightKg = line.ExpectedNetWeightKg, Origin = line.Origin };
                 byLine[line.Id] = fact;
                 Order(line.SupplyCommitmentId).Lines.Add(fact);
             }

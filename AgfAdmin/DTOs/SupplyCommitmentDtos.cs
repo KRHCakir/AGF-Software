@@ -53,7 +53,10 @@ namespace AgfAdmin.DTOs
         public string CustomerName { get; set; }
         public string Route { get; set; }
         public string Status { get; set; }
+        // Optioneel bijschrift van de order ("" = leeg); de herkomst van de regels staat in LinesOrigin.
         public string Origin { get; set; }
+        // Afgeleid van de regels (SupplyRules.LinesOrigin): "Peru" of "Chili, Peru"; null zonder herkomst op de regels.
+        public string LinesOrigin { get; set; }
         public string Destination { get; set; }
         public DateTime? ExpectedAt { get; set; }
         public DateTime CreatedAt { get; set; }
