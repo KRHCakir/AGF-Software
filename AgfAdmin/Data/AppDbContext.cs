@@ -51,6 +51,8 @@ namespace AgfAdmin.Data
         public DbSet<SupplyRejection> SupplyRejections { get; set; }
         public DbSet<SupplyRejectionLine> SupplyRejectionLines { get; set; }
         public DbSet<SupplyReceiptDeviation> SupplyReceiptDeviations { get; set; }
+        public DbSet<Country> Countries { get; set; }
+        public DbSet<CountryAlias> CountryAliases { get; set; }
 
         // Pallet-traceability: logistieke drager, atomaire inhoudsregels en append-only auditrecords.
         public DbSet<Pallet> Pallets { get; set; }
@@ -331,6 +333,10 @@ namespace AgfAdmin.Data
                 b.Property(v => v.GoodsCodeSystem).HasMaxLength(8);
                 b.Property(v => v.TradeClass).HasMaxLength(50);
                 b.Property(v => v.DefaultGgn).HasMaxLength(13);
+                // Herkomst als land uit de vaste lijst; Origin blijft de weergavenaam (zie ProductVariant).
+                b.Property(v => v.OriginCountryCode).HasMaxLength(2).IsFixedLength();
+                b.HasIndex(v => v.OriginCountryCode);
+                b.HasOne<Country>().WithMany().HasForeignKey(v => v.OriginCountryCode).OnDelete(DeleteBehavior.Restrict);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
@@ -424,6 +430,26 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_SupplyRejections_OtherExplained",
                         "\"Reason\" <> 'Other' OR (\"Explanation\" IS NOT NULL AND length(trim(\"Explanation\")) > 0)");
                 });
+            });
+
+            // Vaste landenlijst (CountryList) als referentie voor de herkomst van artikelen; eigen aliassen wijzen naar precies één land.
+            modelBuilder.Entity<Country>(b =>
+            {
+                b.HasKey(c => c.Code);
+                b.Property(c => c.Code).HasMaxLength(2).IsFixedLength();
+                b.Property(c => c.NameNl).IsRequired().HasMaxLength(100);
+                b.Property(c => c.NameEn).IsRequired().HasMaxLength(100);
+                b.HasData(CountryList.All.Select(c => new Country { Code = c.Code, NameNl = c.NameNl, NameEn = c.NameEn }));
+            });
+
+            modelBuilder.Entity<CountryAlias>(b =>
+            {
+                b.Property(a => a.Alias).IsRequired().HasMaxLength(CountryRules.MaxAliasLength);
+                b.Property(a => a.AliasKey).IsRequired().HasMaxLength(CountryRules.MaxAliasLength);
+                b.Property(a => a.CountryCode).IsRequired().HasMaxLength(2).IsFixedLength();
+                b.Property(a => a.ActorReference).HasMaxLength(PurchaseOrderRules.MaxActorLength);
+                b.HasIndex(a => a.AliasKey).IsUnique();
+                b.HasOne<Country>().WithMany().HasForeignKey(a => a.CountryCode).OnDelete(DeleteBehavior.Restrict);
             });
 
             // Afwijkende ontvangst (append-only, TraceabilityGuard regel 18): één per ontvangen inhoudsregel en per vervangende regel.

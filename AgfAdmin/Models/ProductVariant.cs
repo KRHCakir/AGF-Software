@@ -14,7 +14,10 @@ namespace AgfAdmin.Models
         public Product Product { get; set; }
 
         public string Name { get; set; } // e.g. "Cherry"
-        public string Origin { get; set; } // e.g. "Spain"
+        public string Origin { get; set; } // weergavenaam van de herkomst; met een land de Nederlandse landnaam ("Peru")
+        // Herkomst als land uit de vaste lijst (Countries, ISO 3166-1 alpha-2). Null bij oude varianten waarvan de tekst niet
+        // eenduidig een land was ("Herkomst opschonen" in Artikelen). Vergelijken en filteren gaat op deze code, nooit op de tekst.
+        public string? OriginCountryCode { get; set; }
         public string? Season { get; set; } // bijv. "Mei - Augustus"
         public string? Notes { get; set; }  // bijv. "Let op: extra zoet"
         public string Packaging { get; set; } // e.g. "5kg Box"
