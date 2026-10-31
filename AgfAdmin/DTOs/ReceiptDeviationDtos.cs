@@ -10,6 +10,7 @@ namespace AgfAdmin.DTOs
         public string ProductName { get; set; }
         public string VariantName { get; set; }
         public string Origin { get; set; }
+        public string OriginCountryCode { get; set; }
         public string Size { get; set; }
         public string Packaging { get; set; }
         public string PackagingUnit { get; set; }

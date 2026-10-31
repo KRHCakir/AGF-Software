@@ -34,23 +34,23 @@ public class ArticleServiceTests : IDisposable
 
     private static SaveArticleDto Hass() => new()
     {
-        ProductName = "Avocado", VariantName = "Hass", ShortcutCode = "avohassper22", Origin = "Peru", Packaging = "4kg Box", PackagingUnit = "box",
+        ProductName = "Avocado", VariantName = "Hass", ShortcutCode = "avohassper22", OriginCountryCode = "PE", Packaging = "4kg Box", PackagingUnit = "box",
         WeightMethod = "Calculated", DefaultNetKgPerPackage = 4m, DefaultGrossKgPerPackage = 4.4m, DefaultPackagesPerPallet = 120m,
         GoodsCode = "0804 40 00", GoodsCodeSystem = "CN", TradeClass = "I", Brand = "Sol"
     };
 
     [Fact]
-    public async Task Create_With_Only_A_Product_Kind_Leaves_Everything_Else_Empty_And_Weighed()
+    public async Task Create_With_Only_A_Product_Kind_And_Country_Leaves_Everything_Else_Empty_And_Weighed()
     {
-        var created = await CreateAsync(new SaveArticleDto { ProductName = " Tomaat " });
+        var created = await CreateAsync(new SaveArticleDto { ProductName = " Tomaat ", OriginCountryCode = "nl" });
         Assert.Equal(ServiceResultStatus.Created, created.Status);
         var article = created.Value;
         Assert.Equal("Tomaat", article.ProductName);
         Assert.Equal("", article.VariantName);
-        Assert.Equal("Tomaat", article.Description);
+        Assert.Equal("Tomaat · Nederland", article.Description);
         Assert.Equal(WeightRules.Weighed, article.WeightMethod);
         Assert.Null(article.ShortcutCode);
-        Assert.Null(article.Origin);
+        Assert.Equal(("NL", "Nederland"), (article.OriginCountryCode, article.Origin));
         Assert.Null(article.PackagingUnit);
         Assert.Null(article.DefaultNetKgPerPackage);
         Assert.Null(article.DefaultGrossKgPerPackage);
@@ -151,7 +151,7 @@ public class ArticleServiceTests : IDisposable
     [InlineData("080440", "HS")]        // controle: dezelfde opbouw met geldige cijfers wordt wel geaccepteerd (zie onder)
     public async Task Goods_Codes_With_Letters_Or_Other_Characters_Are_Rejected_Never_Silently_Stripped(string input, string system)
     {
-        var result = await CreateAsync(new SaveArticleDto { ProductName = "Avocado", GoodsCode = input, GoodsCodeSystem = system });
+        var result = await CreateAsync(new SaveArticleDto { OriginCountryCode = "PE", ProductName = "Avocado", GoodsCode = input, GoodsCodeSystem = system });
         if (input == "080440")
         {
             Assert.Equal(ServiceResultStatus.Created, result.Status);
@@ -171,7 +171,7 @@ public class ArticleServiceTests : IDisposable
     [InlineData("08044000", "CN", "08044000")]
     public async Task Goods_Codes_Are_Stored_As_Text_With_Their_Leading_Zeros(string input, string system, string stored)
     {
-        var request = new SaveArticleDto { ProductName = "Tomaat", GoodsCode = input, GoodsCodeSystem = system.ToLowerInvariant() };
+        var request = new SaveArticleDto { OriginCountryCode = "PE", ProductName = "Tomaat", GoodsCode = input, GoodsCodeSystem = system.ToLowerInvariant() };
         var created = await CreateAsync(request);
         Assert.Equal(ServiceResultStatus.Created, created.Status);
         Assert.Equal(stored, created.Value.GoodsCode);
@@ -267,7 +267,7 @@ public class ArticleServiceTests : IDisposable
         Assert.Equal("Avocado (Hass)", renamed.ProductName);
         Assert.Equal(hass.ProductId, renamed.ProductId); // het enige artikel van een soort hernoemt de soort zelf
 
-        var kent = (await CreateAsync(new SaveArticleDto { ProductName = "Mango", VariantName = "Kent" })).Value;
+        var kent = (await CreateAsync(new SaveArticleDto { OriginCountryCode = "PE", ProductName = "Mango", VariantName = "Kent" })).Value;
         var move = Hass();
         move.ProductName = "mango"; // bestaande soort, andere schrijfwijze
         var moved = (await UpdateAsync(hass.Id, move)).Value;
@@ -277,7 +277,7 @@ public class ArticleServiceTests : IDisposable
         // De verlaten soort bestaat nog (geen stille verwijdering); een gedeelde soort wordt nooit hernoemd.
         await using var db = _factory.CreateContext();
         Assert.Equal(2, await db.Products.CountAsync());
-        var split = new SaveArticleDto { ProductName = "Mango Kent los", VariantName = "Kent" };
+        var split = new SaveArticleDto { OriginCountryCode = "PE", ProductName = "Mango Kent los", VariantName = "Kent" };
         var splitResult = (await UpdateAsync(kent.Id, split)).Value;
         Assert.NotEqual(moved.ProductId, splitResult.ProductId);
         Assert.Equal("Mango", (await db.Products.SingleAsync(p => p.Id == moved.ProductId)).Name);

@@ -35,6 +35,40 @@ namespace AgfAdmin.Services
             TradeClassSuggestions = ArticleRules.TradeClassSuggestions.ToList()
         };
 
+        // "Herkomst opschonen": artikelen zonder land (oude, niet eenduidige herkomsttekst of leeg), met de landen die de tekst
+        // zou kunnen zijn als voorstel. Er wordt nooit automatisch gekozen.
+        public async Task<IReadOnlyList<OriginCleanupItemDto>> OriginCleanupAsync(CancellationToken cancellationToken = default) =>
+            (await _db.ProductVariants.AsNoTracking().Include(v => v.Product).Where(v => v.OriginCountryCode == null).ToListAsync(cancellationToken))
+                .Select(v => new OriginCleanupItemDto
+                {
+                    Id = v.Id,
+                    Description = Describe(v),
+                    ShortcutCode = Blank(v.ShortcutCode),
+                    Origin = Blank(v.Origin),
+                    Suggestions = CountryRules.Matches(v.Origin).ToList()
+                })
+                .OrderBy(i => i.Description, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+        // Alleen het land van een artikel zetten (vanuit "Herkomst opschonen"); de rest van het artikel blijft zoals het is.
+        public async Task<ServiceResult<ArticleDto>> SetOriginCountryAsync(int id, SetOriginCountryDto request, CancellationToken cancellationToken = default)
+        {
+            var country = CountryRules.Find(string.IsNullOrWhiteSpace(request?.OriginCountryCode) ? null : request.OriginCountryCode.Trim().ToUpperInvariant());
+            if (country == null)
+            {
+                return ServiceResult<ArticleDto>.Validation(new Dictionary<string, string[]> { ["originCountryCode"] = new[] { "Choose the country of origin from the country list." } });
+            }
+            var variant = await _db.ProductVariants.Include(v => v.Product).SingleOrDefaultAsync(v => v.Id == id, cancellationToken);
+            if (variant == null)
+            {
+                return ServiceResult<ArticleDto>.NotFound($"Article {id} does not exist.");
+            }
+            variant.OriginCountryCode = country.Code;
+            variant.Origin = country.NameNl;
+            await _db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<ArticleDto>.Ok(ToDto(variant));
+        }
+
         public async Task<ServiceResult<ArticleDto>> CreateAsync(SaveArticleDto request, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, List<string>>();
@@ -102,7 +136,7 @@ namespace AgfAdmin.Services
         }
 
         private sealed record Values(
-            string ProductName, string VariantName, string ShortcutCode, string Origin, string Brand, string SizeCategory, string Packaging,
+            string ProductName, string VariantName, string ShortcutCode, string OriginCountryCode, string Origin, string Brand, string SizeCategory, string Packaging,
             string PackagingUnit, string Season, string Notes, string WeightMethod, decimal? NetKg, decimal? GrossKg, decimal? PackagesPerPallet,
             string GoodsCode, string GoodsCodeSystem, string TradeClass);
 
@@ -135,7 +169,15 @@ namespace AgfAdmin.Services
                 }
             }
 
-            var origin = ValidationErrors.OptionalText(request.Origin, ArticleRules.MaxTextLength, "origin", errors);
+            // Herkomst is een land uit de vaste lijst (verplicht bij nieuw en wijzigen); de weergavetekst Origin wordt de Nederlandse
+            // naam. Een vrije herkomsttekst (request.Origin) wordt niet meer overgenomen: alleen het land telt.
+            var country = CountryRules.Find(string.IsNullOrWhiteSpace(request.OriginCountryCode) ? null : request.OriginCountryCode.Trim().ToUpperInvariant());
+            if (country == null)
+            {
+                ValidationErrors.Add(errors, "originCountryCode", string.IsNullOrWhiteSpace(request.OriginCountryCode)
+                    ? "Choose the country of origin from the country list."
+                    : $"Country '{request.OriginCountryCode}' is not in the country list.");
+            }
             var brand = ValidationErrors.OptionalText(request.Brand, ArticleRules.MaxTextLength, "brand", errors);
             var size = ValidationErrors.OptionalText(request.SizeCategory, ArticleRules.MaxTextLength, "sizeCategory", errors);
             var packaging = ValidationErrors.OptionalText(request.Packaging, ArticleRules.MaxTextLength, "packaging", errors);
@@ -203,7 +245,7 @@ namespace AgfAdmin.Services
 
             // GGN is geen artikelstandaard meer (leveranciers beheren hun GGN's in de relatiewerkplek). Een oude waarde in
             // ProductVariant.DefaultGgn blijft staan en wordt via api/relations/reference gerapporteerd voor handmatige toewijzing.
-            return new Values(productName, variantName, shortcut, origin, brand, size, packaging, packagingUnit, season, notes, method,
+            return new Values(productName, variantName, shortcut, country?.Code, country?.NameNl, brand, size, packaging, packagingUnit, season, notes, method,
                 request.DefaultNetKgPerPackage, request.DefaultGrossKgPerPackage, request.DefaultPackagesPerPallet, goodsCode, system, tradeClass);
         }
 
@@ -211,6 +253,7 @@ namespace AgfAdmin.Services
         {
             variant.Name = values.VariantName;
             variant.ShortcutCode = values.ShortcutCode;
+            variant.OriginCountryCode = values.OriginCountryCode;
             variant.Origin = values.Origin;
             variant.Brand = values.Brand;
             variant.SizeCategory = values.SizeCategory;
@@ -241,6 +284,7 @@ namespace AgfAdmin.Services
             Description = Describe(v),
             ShortcutCode = Blank(v.ShortcutCode),
             Origin = Blank(v.Origin),
+            OriginCountryCode = v.OriginCountryCode,
             Brand = Blank(v.Brand),
             SizeCategory = Blank(v.SizeCategory),
             Packaging = Blank(v.Packaging),

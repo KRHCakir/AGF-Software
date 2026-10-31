@@ -10,7 +10,8 @@ namespace AgfAdmin.DTOs
         public string VariantName { get; set; }     // ras / variëteit (mag leeg zijn)
         public string Description { get; set; }     // herkenbare artikelomschrijving (afgeleid)
         public string ShortcutCode { get; set; }
-        public string Origin { get; set; }
+        public string Origin { get; set; }          // weergavenaam van de herkomst (Nederlandse landnaam)
+        public string OriginCountryCode { get; set; } // land uit de vaste lijst; null = nog opschonen
         public string Brand { get; set; }
         public string SizeCategory { get; set; }
         public string Packaging { get; set; }       // vrije verpakkingsomschrijving ("4kg Box")
@@ -33,6 +34,8 @@ namespace AgfAdmin.DTOs
         public string ProductName { get; set; }
         public string VariantName { get; set; }
         public string ShortcutCode { get; set; }
+        // Land uit de vaste lijst (ISO-code, bijv. "PE"); verplicht. Origin wordt genegeerd (oude clients): de server zet de landnaam.
+        public string OriginCountryCode { get; set; }
         public string Origin { get; set; }
         public string Brand { get; set; }
         public string SizeCategory { get; set; }
@@ -92,5 +95,20 @@ namespace AgfAdmin.DTOs
         public string DescriptionEn { get; set; }
         // Alleen bij HS: de GN-codes uit de lijst die tot deze post zijn samengevoegd (leeg als de post geen GN-codes in de lijst heeft).
         public List<string> MergedCodes { get; set; }
+    }
+
+    // Artikel zonder land in "Herkomst opschonen", met de landen die de oude tekst zou kunnen zijn.
+    public sealed class OriginCleanupItemDto
+    {
+        public int Id { get; set; }
+        public string Description { get; set; }
+        public string ShortcutCode { get; set; }
+        public string Origin { get; set; }
+        public List<string> Suggestions { get; set; } = new();
+    }
+
+    public sealed class SetOriginCountryDto
+    {
+        public string OriginCountryCode { get; set; }
     }
 }
