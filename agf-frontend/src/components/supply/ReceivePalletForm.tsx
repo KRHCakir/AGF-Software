@@ -888,7 +888,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                 <NewArticlePrompt articleName={`${entry.line.productName} ${entry.line.productVariantName}`}
                                                     countryName={countryNames.get(draft.entered.origin) ?? null} entered={draft.entered}
                                                     similar={similarVariants(article.variants, draft.entered, countryNames)}
-                                                    onChoose={(variant) => chooseSimilar(id, enteredFrom(variant))} onCreate={() => void createArticle(id)}
+                                                    onChoose={(variant) => chooseSimilar(id, enteredFrom(variant, countryNames))} onCreate={() => void createArticle(id)}
                                                     busy={creation[id]?.busy ?? false} error={creation[id]?.error ?? null} dataTourKey={id} />
                                             ) : undefined} />;
                                 })()}
