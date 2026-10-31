@@ -8,6 +8,7 @@ import { formatDateTime, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { type LineWeightDraft, lineKgRows, resolveLineWeight, weightPayload } from '../../lib/lineWeight';
 import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
+import { withArticle } from '../../lib/articleFromEntry';
 import { isDateOnly, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from '../../lib/calendarDate';
 import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
 import { newRequestId } from '../../lib/requestId';
@@ -22,6 +23,7 @@ import VendorPicker from '../purchase/VendorPicker';
 import CustomerPicker from '../sales/CustomerPicker';
 import { LineKgFields } from '../shared/LineKgInput';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
+import NewSupplyArticle from './NewSupplyArticle';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import QuantityInput from '../shared/QuantityInput';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
@@ -87,14 +89,17 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     const [result, setResult] = useState<SaveResult<SupplyCommitment> | null>(null);
     const inFlight = useRef(false);
     const expectedInput = useRef<HTMLInputElement | null>(null);
+    // Artikelen van dit formulier: de referentielijst plus wat hier met "Nieuw artikel" is aangemaakt; per regel het open blok.
+    const [products, setProducts] = useState(reference.products);
+    const [newArticleFor, setNewArticleFor] = useState<string | null>(null);
 
     // Na een onbekende uitkomst of na succes is het formulier vergrendeld (geen dubbele aanvoer door een gewijzigde retry).
     const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
-    const variantDefaults = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [reference.products]);
+    const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
     // Netto en bruto kg per verpakking van het artikel: berekende kg in de kg-velden van de regel.
-    const variants = useMemo(() => new Map(reference.products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [reference.products]);
+    const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
 
     const edited = () => {
         // Na een definitieve weigering (of niets verstuurd) hoort een gewijzigde invoer bij een nieuw verzoek.
@@ -414,12 +419,23 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                     <tr key={line.key} className="align-top">
                                         <td className="w-80 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={reference.products}
+                                            <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                                 value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
                                                 describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
                                                 onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
+                                            {newArticleFor === line.key ? (
+                                                <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
+                                                    onUse={(variantId, created) => {
+                                                        if (created !== null) setProducts((current) => withArticle(current, created));
+                                                        updateLine(line.key, 'productVariantId', String(variantId));
+                                                        setNewArticleFor(null);
+                                                    }} />
+                                            ) : !locked && (
+                                                <button type="button" className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                                                    data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                                            )}
                                         </td>
                                         <td className="px-2 py-1.5">
                                             <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
