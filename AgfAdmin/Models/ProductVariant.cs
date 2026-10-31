@@ -58,6 +58,16 @@ namespace AgfAdmin.Models
         // Optioneel tijdens de overgang; nooit afgeleid uit maat of verpakking.
         public string AvailabilityUnit { get; set; }
 
+        // Gearchiveerd (inactief): verdwijnt uit keuzelijsten en suggesties voor nieuwe invoer, blijft zichtbaar in de historie en kan
+        // weer worden teruggezet. Voor een artikel waar al iets aan hangt (verwijderen kan dan niet). Nooit met terugwerkende kracht.
+        public bool IsArchived { get; set; }
+        public DateTime? ArchivedAt { get; set; }
+        public string? ArchivedBy { get; set; }
+
+        // Idempotentiesleutel van "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst: een herhaald verzoek maakt nooit een
+        // tweede artikel. Leeg bij artikelen die op een andere manier zijn aangemaakt; uniek.
+        public Guid? RequestId { get; set; }
+
         // Relationships
         [JsonIgnore]
         public ICollection<OrderLine> OrderLines { get; set; }

@@ -32,6 +32,13 @@ namespace AgfAdmin.Models
         // certificeringsstatus niet gecontroleerd.
         public string Ggn { get; set; }
 
+        // Blinde invoer: de gebruiker liet vóór het invullen de verwachte kenmerken van de bestelling zien ("Toon verwachte kenmerken").
+        // Vastgelegd bij het aanmaken van de regel, met tijdstip en gebruiker, zodat later zichtbaar is dat de verwachting vooraf
+        // bekend was. Onveranderlijk; false = niet getoond (ook bij alle regels van vóór deze kolom).
+        public bool ExpectedShownBeforeEntry { get; set; }
+        public DateTime? ExpectedShownAt { get; set; }
+        public string ExpectedShownBy { get; set; }
+
         // Lopende afboeking door verzendingen (som van Dispatch-mutaties; alleen stijgend, nooit boven de ontvangst).
         // Quantity/NetWeightKg blijven de historische ontvangst; voorraad = ontvangst - afgeboekt.
         public decimal DispatchedQuantity { get; set; }

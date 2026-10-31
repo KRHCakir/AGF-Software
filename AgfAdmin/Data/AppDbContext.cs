@@ -58,6 +58,7 @@ namespace AgfAdmin.Data
         public DbSet<Pallet> Pallets { get; set; }
         public DbSet<PalletContentLine> PalletContentLines { get; set; }
         public DbSet<PalletAuditEvent> PalletAuditEvents { get; set; }
+        public DbSet<ArticleAuditEvent> ArticleAuditEvents { get; set; }
 
         // Schone verkoopflow (los van legacy Order/OrderLine/OrderLineAllocation/Inventory).
         public DbSet<SalesOrder> SalesOrders { get; set; }
@@ -337,8 +338,13 @@ namespace AgfAdmin.Data
                 b.Property(v => v.OriginCountryCode).HasMaxLength(2).IsFixedLength();
                 b.HasIndex(v => v.OriginCountryCode);
                 b.HasOne<Country>().WithMany().HasForeignKey(v => v.OriginCountryCode).OnDelete(DeleteBehavior.Restrict);
+                // Archiveren (inactief) en idempotent aanmaken vanuit aanvoer/ontvangst (zie ProductVariant).
+                b.Property(v => v.IsArchived).HasDefaultValue(false);
+                b.Property(v => v.ArchivedBy).HasMaxLength(100);
+                b.HasIndex(v => v.RequestId).IsUnique();
                 b.ToTable(t =>
                 {
+                    t.HasCheckConstraint("CK_ProductVariants_Archived_HasMoment", "NOT \"IsArchived\" OR \"ArchivedAt\" IS NOT NULL");
                     t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
@@ -968,6 +974,9 @@ namespace AgfAdmin.Data
                 b.Property(c => c.Ggn).HasMaxLength(13);
                 b.Property(c => c.QualityStatus).IsRequired().HasMaxLength(32);
                 b.Property(c => c.QualityReason).HasMaxLength(500);
+                // Verwachte kenmerken vooraf getoond (blinde invoer): alleen samen met tijdstip; zonder tonen geen tijdstip of gebruiker.
+                b.Property(c => c.ExpectedShownBeforeEntry).HasDefaultValue(false);
+                b.Property(c => c.ExpectedShownBy).HasMaxLength(100);
 
                 // CAST AS NUMERIC: exact in PostgreSQL (numeric -> numeric) en dwingt in SQLite, waar EF decimals
                 // als TEXT opslaat, een numerieke in plaats van een tekstuele vergelijking af.
@@ -978,6 +987,8 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_PalletContentLines_LotNumber_NotBlank", "length(trim(\"LotNumber\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_Unit_NotBlank", "length(trim(\"Unit\")) > 0");
                     t.HasCheckConstraint("CK_PalletContentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
+                    t.HasCheckConstraint("CK_PalletContentLines_ExpectedShown_Consistent",
+                        "(\"ExpectedShownBeforeEntry\" AND \"ExpectedShownAt\" IS NOT NULL) OR (NOT \"ExpectedShownBeforeEntry\" AND \"ExpectedShownAt\" IS NULL AND \"ExpectedShownBy\" IS NULL)");
                     t.HasCheckConstraint("CK_PalletContentLines_QualityStatus_Allowed",
                         "\"QualityStatus\" IN ('Quarantine', 'Approved', 'Blocked', 'Rejected')");
                     // Gewogen: geen kg per verpakking. Berekend: kg per verpakking > 0 en bij fysieke ontvangst is het totaal exact
@@ -1259,6 +1270,21 @@ namespace AgfAdmin.Data
                 // Hooguit één intrekking per bevestiging: de één-op-één-relatie maakt de FK uniek.
                 b.HasOne(r => r.Confirmation).WithOne(c => c.Retraction).HasForeignKey<ShipmentDeliveryRetraction>(r => r.ShipmentDeliveryConfirmationId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(r => r.SalesOrder).WithMany().HasForeignKey(r => r.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<ArticleAuditEvent>(b =>
+            {
+                b.Property(e => e.EventType).IsRequired().HasMaxLength(64);
+                b.Property(e => e.Description).IsRequired().HasMaxLength(500);
+                b.Property(e => e.Reason).HasMaxLength(500);
+                b.Property(e => e.ActorReference).HasMaxLength(100);
+                b.HasIndex(e => e.ProductVariantId);
+                b.HasIndex(e => e.ProductId);
+                // NULL telt als verschillend: events zonder RequestId blijven toegestaan.
+                b.HasIndex(e => e.RequestId).IsUnique();
+                b.ToTable(t => t.HasCheckConstraint(
+                    "CK_ArticleAuditEvents_HasTarget",
+                    "\"ProductVariantId\" IS NOT NULL OR \"ProductId\" IS NOT NULL"));
             });
 
             modelBuilder.Entity<PalletAuditEvent>(b =>

@@ -22,6 +22,59 @@ namespace AgfAdmin.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AgfAdmin.Models.ArticleAuditEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProductVariantId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.ToTable("ArticleAuditEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_ArticleAuditEvents_HasTarget", "\"ProductVariantId\" IS NOT NULL OR \"ProductId\" IS NOT NULL");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.CompanySettings", b =>
                 {
                     b.Property<int>("Id")
@@ -2678,6 +2731,18 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("numeric(18,3)")
                         .HasDefaultValue(0m);
 
+                    b.Property<DateTime?>("ExpectedShownAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ExpectedShownBeforeEntry")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ExpectedShownBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Ggn")
                         .HasMaxLength(13)
                         .HasColumnType("character varying(13)");
@@ -2769,6 +2834,8 @@ namespace AgfAdmin.Migrations
                     b.ToTable("PalletContentLines", t =>
                         {
                             t.HasCheckConstraint("CK_PalletContentLines_Dispatched_Bounds", "CAST(\"DispatchedQuantity\" AS NUMERIC) >= 0 AND CAST(\"DispatchedQuantity\" AS NUMERIC) <= CAST(\"Quantity\" AS NUMERIC) AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) >= 0 AND CAST(\"DispatchedNetWeightKg\" AS NUMERIC) <= CAST(\"NetWeightKg\" AS NUMERIC)");
+
+                            t.HasCheckConstraint("CK_PalletContentLines_ExpectedShown_Consistent", "(\"ExpectedShownBeforeEntry\" AND \"ExpectedShownAt\" IS NOT NULL) OR (NOT \"ExpectedShownBeforeEntry\" AND \"ExpectedShownAt\" IS NULL AND \"ExpectedShownBy\" IS NULL)");
 
                             t.HasCheckConstraint("CK_PalletContentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
 
@@ -2903,6 +2970,13 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ArchivedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("AvailabilityUnit")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -2938,6 +3012,11 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
 
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Name")
                         .HasColumnType("text");
 
@@ -2961,6 +3040,9 @@ namespace AgfAdmin.Migrations
 
                     b.Property<int>("ProductId")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Season")
                         .HasColumnType("text");
@@ -2988,8 +3070,13 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("ProductId");
 
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
                     b.ToTable("ProductVariants", t =>
                         {
+                            t.HasCheckConstraint("CK_ProductVariants_Archived_HasMoment", "NOT \"IsArchived\" OR \"ArchivedAt\" IS NOT NULL");
+
                             t.HasCheckConstraint("CK_ProductVariants_DefaultGgn_Length", "\"DefaultGgn\" IS NULL OR length(\"DefaultGgn\") = 13");
 
                             t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
