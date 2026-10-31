@@ -93,6 +93,18 @@ describe('PlanSupplyForm: new article on a supply line', () => {
         assert.equal(JSON.parse(posted[1].body).lines[0].productVariantId, 50);
     });
 
+    test('while the article is being created, every field of the block is locked', async () => {
+        await openNewArticle();
+        let release: () => void = () => {};
+        answers.push(() => new Promise<Response>((resolve) => { release = () => resolve(json(201, { article: created, replayed: false })); }));
+        await click(tour('new-article-create'));
+        for (const name of ['supply-new-article-kind', 'supply-new-article-origin', 'supply-new-article-size', 'supply-new-article-brand', 'supply-new-article-kg']) {
+            assert.equal(tour<HTMLInputElement>(name).disabled, true, name);
+        }
+        await act(async () => { release(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-tour="supply-new-article"]') === null, 'block closed');
+    });
+
     test('"Choose this" puts the existing variant on the line and creates nothing', async () => {
         await openNewArticle();
         await type(tour<HTMLInputElement>('supply-new-article-packaging'), '4 kg doos');
