@@ -347,13 +347,15 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         const draft = drafts[id];
         const entry = index.get(id);
         if (!draft || !entry || draft.entered.origin === null || products === null) return;
-        const snapshot = JSON.stringify(draft.entered);
+        const perPackage = draft.method === 'Calculated' ? parsePositiveDecimal(draft.kgPerPackage) : null;
+        const netKgPerPackage = perPackage?.ok ? perPackage.value : null;
+        // De sleutel bevat alles wat de aanmaak-body bepaalt, zodat een gecorrigeerd kg per colli een nieuwe RequestId krijgt.
+        const snapshot = JSON.stringify({ entered: draft.entered, method: draft.method, netKgPerPackage, templateVariantId: entry.line.productVariantId });
         let request = creationRequests.current.get(id);
         if (!request || request.key !== snapshot) {
             request = { key: snapshot, requestId: newRequestId() };
             creationRequests.current.set(id, request);
         }
-        const perPackage = draft.method === 'Calculated' ? parsePositiveDecimal(draft.kgPerPackage) : null;
         const text = (value: string) => (value.trim() === '' ? null : value.trim());
         setCreation((current) => ({ ...current, [id]: { busy: true, error: null } }));
         let article = null;
@@ -361,7 +363,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             article = await createArticleFromEntry({
                 requestId: request.requestId, source: 'Receipt', templateVariantId: entry.line.productVariantId, originCountryCode: draft.entered.origin,
                 sizeCategory: text(draft.entered.size), packaging: text(draft.entered.packaging), tradeClass: text(draft.entered.tradeClass), brand: text(draft.entered.brand),
-                netKgPerPackage: perPackage?.ok ? perPackage.value : null, actorReference: actor.trim() === '' ? null : actor.trim(),
+                netKgPerPackage, actorReference: actor.trim() === '' ? null : actor.trim(),
             });
         } catch (caught) {
             const existing = existingArticle(caught);
