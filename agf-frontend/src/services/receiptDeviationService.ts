@@ -10,8 +10,10 @@ export async function listDeviationCandidates(lineId: number, signal?: AbortSign
     return json;
 }
 
-export async function getDeviationPreview(lineId: number, receivedProductVariantId: number, quantity: number, signal?: AbortSignal): Promise<DeviationPreview> {
-    const json = await getJson(`/supply-commitment-lines/${lineId}/deviation-preview?receivedProductVariantId=${receivedProductVariantId}&quantity=${quantity}`, signal);
+// Met netto kg controleert de server ook het gewicht (kg per verpakking).
+export async function getDeviationPreview(lineId: number, receivedProductVariantId: number, quantity: number, netWeightKg: number | null = null, signal?: AbortSignal): Promise<DeviationPreview> {
+    const kg = netWeightKg === null ? '' : `&netWeightKg=${netWeightKg}`;
+    const json = await getJson(`/supply-commitment-lines/${lineId}/deviation-preview?receivedProductVariantId=${receivedProductVariantId}&quantity=${quantity}${kg}`, signal);
     if (!isDeviationPreview(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij de controle van de afwijking.');
     }

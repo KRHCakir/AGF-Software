@@ -59,6 +59,11 @@ export interface VariantOption {
     origin: string | null;
     // Land van herkomst (ISO-code) als de variant er een heeft; zoeken op "PE" vindt Peru.
     originCountryCode?: string | null;
+    // Handelsklasse en merk (bij ontvangst alleen gevraagd als de varianten van een artikel daarin verschillen).
+    tradeClass?: string | null;
+    brand?: string | null;
+    // Gewichtsmethode van de variant (Weighed of Calculated): de rondleiding vult daarmee het juiste kg-veld in.
+    weightMethod?: string | null;
     packaging: string | null;
     sizeCategory: string | null;
     // Bestaande snelcode van de variant (beheer via Producten); kiest alleen een variant, nooit hoeveelheid of gewicht.
@@ -125,6 +130,9 @@ export function toVariantOption(value: Named): VariantOption {
         name: value.name,
         origin: optionalString(value.origin),
         originCountryCode: optionalString(value.originCountryCode),
+        tradeClass: optionalString(value.tradeClass),
+        brand: optionalString(value.brand),
+        weightMethod: optionalString(value.weightMethod),
         packaging: optionalString(value.packaging),
         sizeCategory: optionalString(value.sizeCategory),
         shortcutCode: optionalString(value.shortcutCode),

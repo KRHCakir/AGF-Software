@@ -8,7 +8,7 @@ import LookupField, { LookupMatch } from './LookupField';
 
 // Herkomst kiezen uit de vaste landenlijst: typen met suggesties op code ("PE"), Nederlandse en Engelse naam en eigen aliassen;
 // Tab en Enter nemen de bovenste. Er staat daarna altijd het land (Nederlandse naam); alleen de landcode gaat naar de server.
-export default function CountryPicker({ id, countries, value, onChange, disabled = false, invalid = false, describedBy, dataTour, ariaLabel }: {
+export default function CountryPicker({ id, countries, value, onChange, disabled = false, invalid = false, describedBy, dataTour, dataTourKey, ariaLabel }: {
     id: string;
     countries: CountryReference;
     value: string | null;
@@ -17,6 +17,7 @@ export default function CountryPicker({ id, countries, value, onChange, disabled
     invalid?: boolean;
     describedBy?: string;
     dataTour?: string;
+    dataTourKey?: string | number;
     ariaLabel?: string;
 }) {
     const { t } = useTranslation();
@@ -33,6 +34,7 @@ export default function CountryPicker({ id, countries, value, onChange, disabled
         <LookupField<string>
             id={id}
             dataTour={dataTour}
+            dataTourKey={dataTourKey}
             ariaLabel={ariaLabel ?? t('country_label')}
             selected={selected}
             search={search}

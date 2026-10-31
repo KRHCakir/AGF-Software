@@ -98,6 +98,19 @@ describe('TourRunner', () => {
         assert.equal(storedActor, 'Jan');
     });
 
+    test('an action with an empty `when` is skipped, so a field the screen does not ask for is never needed', async () => {
+        const log: string[] = [];
+        await mounted.render(<Field log={log} />);
+        await act(async () => {
+            void runner.start(chapter([step('skip', [
+                { kind: 'type', target: 'receive-class:1', text: '{{tradeClass}}', when: '{{tradeClass}}' },
+                { kind: 'type', target: 'supply-reference', text: 'X', when: '{{tourRef}}' },
+            ])], { precheck: async () => ({ missing: [], vars: { tradeClass: '' } }) }), { mode: 'watch', speed: 'fast' });
+        });
+        await until(() => latest().status === 'done', 'done');
+        assert.equal(mounted.container.querySelector('input')!.value, 'X');
+    });
+
     test('pick: types in the vendor search and takes the suggestion with Tab, like a user', async () => {
         let picked = '';
         await mounted.render(<Vendor onPicked={(id) => { picked = id; }} />);

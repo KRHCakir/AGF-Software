@@ -1825,5 +1825,18 @@
   "deviation_weight_value": "{perPackage} per {unit} ({total})",
   "deviation_question_weight": "Order {order} verwacht {article} van {expected}, ontvangen {received}. Klopt dit?",
   "deviation_consequence_weight": "Bij Ja verwacht de regel voortaan {perPackage} per {unit} ({total} in totaal).",
-  "po_deviation_weight": "{expected} → {received} per {unit}"
+  "po_deviation_weight": "{expected} → {received} per {unit}",
+  "receipt_attr_origin": "Herkomst",
+  "receipt_attr_size": "Maat",
+  "receipt_attr_packaging": "Verpakking",
+  "receipt_attr_trade_class": "Klasse",
+  "receipt_attr_brand": "Merk",
+  "receipt_attr_placeholder": "Typ wat er staat",
+  "receipt_attr_hint": "Suggesties uit de bestaande artikelen. Tab neemt de bovenste.",
+  "receipt_attr_none": "Bestaat niet bij dit artikel",
+  "receipt_attr_change": "Wissen",
+  "receipt_combination_missing": "Deze combinatie bestaat nog niet als artikel. Maak hem eerst aan bij Artikelen.",
+  "receipt_combination_ambiguous": "Meer artikelen passen hierop. Maak ze eerst verschillend bij Artikelen.",
+  "receipt_combination_to_articles": "Naar Artikelen",
+  "receipt_lists_unavailable": "De artikelen konden niet geladen worden; probeer het opnieuw."
 }

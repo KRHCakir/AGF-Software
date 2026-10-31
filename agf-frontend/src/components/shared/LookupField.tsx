@@ -37,7 +37,7 @@ function focusNextAfter(input: HTMLInputElement) {
     focusable[focusable.indexOf(input) + 1]?.focus();
 }
 
-export default function LookupField<T>({ id, ariaLabel, selected, search, onSelect, onClear, onFreeText, freeText = '', allowFreeText = false, disabled = false, invalid = false, describedBy, placeholderKey, hintKey, noneKey, moreKey, changeKey, inputRef: externalRef, className = '', renderExtra, maxSuggestions = MAX_LOOKUP_SUGGESTIONS, takeHighlighted = false, onQueryChange, dataTour }: {
+export default function LookupField<T>({ id, ariaLabel, selected, search, onSelect, onClear, onFreeText, freeText = '', allowFreeText = false, disabled = false, invalid = false, describedBy, placeholderKey, hintKey, noneKey, moreKey, changeKey, inputRef: externalRef, className = '', renderExtra, maxSuggestions = MAX_LOOKUP_SUGGESTIONS, takeHighlighted = false, onQueryChange, dataTour, dataTourKey }: {
     // Het invoerveld krijgt `${id}-input`, zoals fieldProps() dat voor labels en foutmeldingen doet.
     id: string;
     ariaLabel: string;
@@ -69,6 +69,8 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
     onQueryChange?: (query: string) => void;
     // Vaste naam voor de rondleiding (data-tour) op het invoerveld zelf.
     dataTour?: string;
+    // Onderscheidt hetzelfde veld per regel voor de rondleiding (data-tour-key).
+    dataTourKey?: string | number;
 }) {
     const { t } = useTranslation();
     const listId = useId();
@@ -208,6 +210,7 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
                     ref={(element) => { inputRef.current = element; externalRef?.(element); }}
                     id={`${id}-input`}
                     data-tour={dataTour}
+                    data-tour-key={dataTourKey}
                     type="text"
                     role="combobox"
                     aria-label={ariaLabel}
