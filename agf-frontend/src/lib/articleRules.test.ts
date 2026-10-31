@@ -7,14 +7,14 @@ import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCo
 // bruto nooit kleiner dan netto, lijstfilter met exacte zoekcode bovenaan.
 
 const article = (over: Partial<Article> = {}): Article => ({
-    id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru',
+    id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru', originCountryCode: 'PE',
     brand: null, sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box', season: null, notes: null, weightMethod: 'Calculated',
     defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I', defaultPrice: 12.5, ...over,
 });
 
 describe('article payload', () => {
-    test('only the product kind is required; everything else stays empty (null) when not recorded', () => {
-        const result = buildArticlePayload({ ...emptyArticleDraft(), productName: ' Tomaat ' });
+    test('only the product kind and the country are required; everything else stays empty (null) when not recorded', () => {
+        const result = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: ' Tomaat ' });
         assert.equal(result.ok, true);
         if (!result.ok) return;
         assert.equal(result.value.productName, 'Tomaat');
@@ -26,7 +26,7 @@ describe('article payload', () => {
         assert.equal(result.value.weightMethod, 'Weighed');
         const missing = buildArticlePayload(emptyArticleDraft());
         assert.equal(missing.ok, false);
-        if (!missing.ok) assert.deepEqual(groupArticleErrors(missing.errors), { productName: ['required'] });
+        if (!missing.ok) assert.deepEqual(groupArticleErrors(missing.errors), { productName: ['required'], originCountryCode: ['required'] });
     });
 
     test('goods codes are text: leading zeros survive, spaces are allowed, and the length follows the code system', () => {
@@ -34,35 +34,35 @@ describe('article payload', () => {
         assert.equal(normalizeGoodsCode(' 0702.00.00 '), '07020000');
         assert.equal(normalizeGoodsCode('0804ABC4000'), '0804ABC4000', 'letters are kept so validation can refuse them');
         for (const bad of ['0804ABC4000', '0804 40 0O', '0804-40-00', '0804/4000', '0804\t40\t00']) {
-            const result = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Avocado', goodsCode: bad, goodsCodeSystem: 'CN' });
+            const result = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Avocado', goodsCode: bad, goodsCodeSystem: 'CN' });
             assert.equal(result.ok, false, `${JSON.stringify(bad)} must be refused`);
             if (!result.ok) assert.deepEqual(groupArticleErrors(result.errors), { goodsCode: ['invalid'] }, `${JSON.stringify(bad)} gives an inline goods code error`);
         }
         assert.equal(formatGoodsCode('07020000'), '0702 00 00');
         assert.equal(formatGoodsCode('070200'), '0702 00');
         assert.equal(formatGoodsCode('0702000010'), '0702 00 00 10');
-        const cn = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Tomaat', goodsCode: '0702 00 00', goodsCodeSystem: 'CN' });
+        const cn = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', goodsCode: '0702 00 00', goodsCodeSystem: 'CN' });
         assert.equal(cn.ok, true);
         if (cn.ok) assert.deepEqual([cn.value.goodsCode, cn.value.goodsCodeSystem], ['07020000', 'CN']);
-        const hs = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Tomaat', goodsCode: '0702 00 00', goodsCodeSystem: 'HS' });
+        const hs = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', goodsCode: '0702 00 00', goodsCodeSystem: 'HS' });
         assert.equal(hs.ok, false);
         if (!hs.ok) assert.deepEqual(groupArticleErrors(hs.errors), { goodsCode: ['wrong_length'] });
-        const noSystem = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Tomaat', goodsCode: '07020000' });
+        const noSystem = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', goodsCode: '07020000' });
         assert.equal(noSystem.ok, false);
         if (!noSystem.ok) assert.deepEqual(groupArticleErrors(noSystem.errors), { goodsCodeSystem: ['system_required'] });
-        const letters = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Tomaat', goodsCode: '0702AB', goodsCodeSystem: 'HS' });
+        const letters = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', goodsCode: '0702AB', goodsCodeSystem: 'HS' });
         assert.equal(letters.ok, false);
         if (!letters.ok) assert.deepEqual(groupArticleErrors(letters.errors), { goodsCode: ['invalid'] });
-        const systemOnly = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Tomaat', goodsCodeSystem: 'TARIC' });
+        const systemOnly = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', goodsCodeSystem: 'TARIC' });
         assert.equal(systemOnly.ok, true);
         if (systemOnly.ok) assert.equal(systemOnly.value.goodsCodeSystem, null, 'a system without a code is not recorded');
     });
 
     test('weight and pallet defaults are positive decimals; gross kg may not be below net kg; search codes have no spaces', () => {
-        const ok = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Avocado', variantName: 'Hass', weightMethod: 'Calculated', defaultNetKgPerPackage: '4', defaultGrossKgPerPackage: '4,4', defaultPackagesPerPallet: '120', packagingUnit: 'box', shortcutCode: 'avo-hass.22' });
+        const ok = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Avocado', variantName: 'Hass', weightMethod: 'Calculated', defaultNetKgPerPackage: '4', defaultGrossKgPerPackage: '4,4', defaultPackagesPerPallet: '120', packagingUnit: 'box', shortcutCode: 'avo-hass.22' });
         assert.equal(ok.ok, true);
         if (ok.ok) assert.deepEqual([ok.value.defaultNetKgPerPackage, ok.value.defaultGrossKgPerPackage, ok.value.defaultPackagesPerPallet, ok.value.packagingUnit], [4, 4.4, 120, 'box']);
-        const bad = buildArticlePayload({ ...emptyArticleDraft(), productName: 'Avocado', defaultNetKgPerPackage: '4', defaultGrossKgPerPackage: '3,9', defaultPackagesPerPallet: '0', shortcutCode: 'avo hass' });
+        const bad = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Avocado', defaultNetKgPerPackage: '4', defaultGrossKgPerPackage: '3,9', defaultPackagesPerPallet: '0', shortcutCode: 'avo hass' });
         assert.equal(bad.ok, false);
         if (!bad.ok) assert.deepEqual(groupArticleErrors(bad.errors), { shortcutCode: ['invalid'], defaultGrossKgPerPackage: ['gross_below_net'], defaultPackagesPerPallet: ['not_positive'] });
     });
@@ -74,7 +74,7 @@ describe('article payload', () => {
         const rebuilt = buildArticlePayload(draft);
         assert.equal(rebuilt.ok, true);
         if (rebuilt.ok) assert.deepEqual(rebuilt.value, {
-            productName: 'Avocado', variantName: 'Hass', shortcutCode: 'avohassper22', origin: 'Peru', brand: null, sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box',
+            productName: 'Avocado', variantName: 'Hass', shortcutCode: 'avohassper22', originCountryCode: 'PE', brand: null, sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box',
             season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I',
         });
     });

@@ -19,6 +19,11 @@ const products: SearchableProduct[] = [
 ];
 
 describe('searchVariants', () => {
+    test('the country code of the origin finds the variant too ("PE" -> Peru)', () => {
+        const withCountry: SearchableProduct[] = [{ id: 1, name: 'Avocado', variants: [{ ...variant(1, 'Hass', 'Peru', '4 kg doos', '18', null), originCountryCode: 'PE' }, { ...variant(2, 'Hass', 'Chili', '4 kg doos', '18', null), originCountryCode: 'CL' }] }];
+        assert.deepEqual(searchVariants(withCountry, 'hass pe').map((m) => m.variantId), [1]);
+    });
+
     test('an empty query gives no suggestions', () => {
         assert.deepEqual(searchVariants(products, '   '), []);
     });

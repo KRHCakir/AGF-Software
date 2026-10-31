@@ -6,6 +6,8 @@ export interface SearchableVariant {
     id: number;
     name: string;
     origin: string | null;
+    // Land van herkomst (ISO-code): "PE" vindt ook de varianten uit Peru.
+    originCountryCode?: string | null;
     packaging: string | null;
     sizeCategory: string | null;
     shortcutCode: string | null;
@@ -40,7 +42,7 @@ export function describeVariant(productName: string, variant: SearchableVariant)
 }
 
 function haystack(productName: string, variant: SearchableVariant): string {
-    return normalize([productName, variant.name, variant.packaging ?? '', variant.origin ?? '', variant.sizeCategory ?? '', variant.shortcutCode ?? ''].join(' '));
+    return normalize([productName, variant.name, variant.packaging ?? '', variant.origin ?? '', variant.originCountryCode ?? '', variant.sizeCategory ?? '', variant.shortcutCode ?? ''].join(' '));
 }
 
 // Elke door spaties gescheiden term moet voorkomen (in willekeurige volgorde). Een exacte snelcode staat bovenaan.

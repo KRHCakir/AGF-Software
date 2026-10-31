@@ -12,9 +12,12 @@ import { isMacPlatform, matchShortcut, shortcutLabel } from '../../../lib/shortc
 import { unitLabelKey } from '../../../lib/units';
 import { toApiError } from '../../../services/apiClient';
 import { getArticleReference, listArticles } from '../../../services/articleService';
+import { getCountries } from '../../../services/countryService';
 import type { Article, ArticleReference } from '../../../types/article';
+import type { CountryReference } from '../../../types/country';
+import OriginSettings from '../../../components/articles/OriginSettings';
 
-interface Loaded { articles: Article[]; reference: ArticleReference }
+interface Loaded { articles: Article[]; reference: ArticleReference; countries: CountryReference }
 
 // Artikelen: compacte beheerwerkplek. Zoeken (⌥F), kiezen met pijltjes/Enter of klik, toevoegen (⌥N) en bewerken in één
 // formulier boven de lijst. Een artikel wordt één keer vastgelegd; bij inkoop en verkoop kiest de gebruiker de zoekcode.
@@ -29,8 +32,8 @@ export default function ArticlesPage() {
 
     useEffect(() => {
         const controller = new AbortController();
-        Promise.all([listArticles(controller.signal), getArticleReference(controller.signal)])
-            .then(([articles, reference]) => setState({ status: 'ready', data: { articles, reference } }))
+        Promise.all([listArticles(controller.signal), getArticleReference(controller.signal), getCountries(controller.signal)])
+            .then(([articles, reference, countries]) => setState({ status: 'ready', data: { articles, reference, countries } }))
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
                 if (apiError.kind !== 'aborted') setState({ status: 'error', error: apiError });
@@ -72,7 +75,7 @@ export default function ArticlesPage() {
             if (current.status !== 'ready') return current;
             const articles = created ? [...current.data.articles, saved] : current.data.articles.map((a) => (a.id === saved.id ? saved : a));
             const productNames = current.data.reference.productNames.includes(saved.productName) ? current.data.reference.productNames : [...current.data.reference.productNames, saved.productName].sort();
-            return { status: 'ready', data: { articles, reference: { ...current.data.reference, productNames } } };
+            return { status: 'ready', data: { ...current.data, articles, reference: { ...current.data.reference, productNames } } };
         });
         // Dezelfde key: het formulier blijft gemonteerd (melding en focus blijven), maar werkt voortaan op het opgeslagen artikel.
         setEditing((current) => ({ article: saved, key: current?.key ?? saved.id }));
@@ -99,7 +102,7 @@ export default function ArticlesPage() {
             {state.status === 'ready' && (
                 <>
                     {editing !== null && (
-                        <ArticleForm key={editing.key} article={editing.article} reference={state.data.reference} onSaved={onSaved} onClose={() => setEditing(null)} />
+                        <ArticleForm key={editing.key} article={editing.article} reference={state.data.reference} countries={state.data.countries} onSaved={onSaved} onClose={() => setEditing(null)} />
                     )}
                     <div className="flex flex-wrap items-center gap-2">
                         <label htmlFor="article-search" className="sr-only">{t('articles_search_label')}</label>
@@ -141,6 +144,10 @@ export default function ArticlesPage() {
                             </tbody>
                         </table>
                     </div>
+                    <OriginSettings countries={state.data.countries} cleanupToken={reloadToken}
+                        onCountriesChanged={(countries) => setState((current) => (current.status === 'ready' ? { status: 'ready', data: { ...current.data, countries } } : current))}
+                        onArticleChanged={(saved) => setState((current) => (current.status === 'ready'
+                            ? { status: 'ready', data: { ...current.data, articles: current.data.articles.map((a) => (a.id === saved.id ? saved : a)) } } : current))} />
                 </>
             )}
         </div>

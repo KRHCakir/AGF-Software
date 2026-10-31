@@ -18,7 +18,9 @@ export interface Article {
     variantName: string;
     description: string;
     shortcutCode: string | null;
+    // Weergavenaam van de herkomst (Nederlandse landnaam) en het land zelf; zonder land = nog opschonen (oude tekst).
     origin: string | null;
+    originCountryCode?: string | null;
     brand: string | null;
     sizeCategory: string | null;
     packaging: string | null;
@@ -39,7 +41,8 @@ export interface SaveArticleRequest {
     productName: string;
     variantName: string | null;
     shortcutCode: string | null;
-    origin: string | null;
+    // Land uit de vaste lijst (ISO-code); verplicht. De server zet de landnaam als weergave.
+    originCountryCode: string;
     brand: string | null;
     sizeCategory: string | null;
     packaging: string | null;
