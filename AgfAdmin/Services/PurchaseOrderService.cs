@@ -145,7 +145,8 @@ namespace AgfAdmin.Services
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, PalletStatus = c.Pallet.LogisticsStatus, c.SupplyCommitmentLineId,
                     ProductName = c.SupplyCommitmentLine.ProductVariant.Product.Name, VariantName = c.SupplyCommitmentLine.ProductVariant.Name,
                     c.LotNumber, c.Quantity, c.Unit, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg,
-                    c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.QualityReason, c.OriginCorrectionLineId, c.OriginRejectionLineId, c.CreatedAt, c.Version
+                    c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.QualityReason, c.OriginCorrectionLineId, c.OriginRejectionLineId, c.CreatedAt, c.Version,
+                    c.ExpectedShownBeforeEntry, c.ExpectedShownAt, c.ExpectedShownBy
                 })
                 .OrderBy(c => c.Id)
                 .ToListAsync(cancellationToken);
@@ -199,6 +200,9 @@ namespace AgfAdmin.Services
                     QualityReason = c.QualityReason,
                     Origin = c.OriginCorrectionLineId != null ? "DispatchCorrection" : c.OriginRejectionLineId != null ? "RejectionSplit" : "Receipt",
                     ReceivedAt = DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc),
+                    ExpectedShownBeforeEntry = c.ExpectedShownBeforeEntry,
+                    ExpectedShownAt = c.ExpectedShownAt == null ? null : DateTime.SpecifyKind(c.ExpectedShownAt.Value, DateTimeKind.Utc),
+                    ExpectedShownBy = c.ExpectedShownBy,
                     Rejectable = rejectable,
                     RejectableQuantity = rejectable ? onHand - rq : 0m,
                     RejectableNetWeightKg = rejectable ? Math.Max(0m, onHandKg - rkg) : 0m,

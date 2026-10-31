@@ -38,6 +38,9 @@ export interface AddPalletContentLineRequest {
     confirmDeviation?: boolean | null;
     deviationReason?: string | null;
     deviationReasonNote?: string | null;
+    // "Toon verwachte kenmerken" vóór het invullen gebruikt: true met het moment (alleen meegestuurd als het gebeurde).
+    expectedShownBeforeEntry?: boolean;
+    expectedShownAt?: string;
 }
 
 export interface PalletSummary {

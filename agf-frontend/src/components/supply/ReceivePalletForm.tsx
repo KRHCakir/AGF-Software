@@ -11,6 +11,7 @@ import { parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
 import { DEVIATION_CODES, deviationConflict } from '../../lib/receiptDeviation';
 import { enteredFrom, similarVariants, withArticle } from '../../lib/articleFromEntry';
+import { lineOrdinals, orderListGroups } from '../../lib/receiptOrderList';
 import { EnteredAttributes, articleVariants, emptyEntered, matchVariant } from '../../lib/receiptBlindEntry';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
@@ -42,6 +43,7 @@ import NewArticlePrompt from '../shared/NewArticlePrompt';
 import NumberEcho from '../shared/NumberEcho';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import DeviationDialog, { DeviationChoice } from './DeviationDialog';
+import ExpectedAttributes from './ExpectedAttributes';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
@@ -64,6 +66,9 @@ interface ContentDraft {
     matchedVariantId: number | null;
     verified: boolean;
     deviation: DeviationChoice | null;
+    // "Toon verwachte kenmerken": het moment waarop de gebruiker de verwachting van de bestelling liet zien (null = niet getoond).
+    // Blijft staan, ook als het weer wordt dichtgeklapt of de invoer wijzigt: de gebruiker heeft het gezien.
+    expectedShownAt: string | null;
 }
 
 // Startwaarden uit de variant (methode, standaard kg per verpakking) en de leverancier (GGN), per regel aanpasbaar.
@@ -77,6 +82,7 @@ const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOpti
     ggn: proposedGgn(vendorGgns) ?? '',
     entered: emptyEntered(),
     matchedVariantId: null,
+    expectedShownAt: null,
     verified: false,
     deviation: null,
 });
@@ -332,6 +338,9 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         return found;
     };
 
+    // De bestelde variant (alleen voor "Toon verwachte kenmerken").
+    const orderedVariant = (variantId: number) => products?.flatMap((product) => product.variants).find((variant) => variant.id === variantId);
+
     // Varianten van hetzelfde artikel als de bronregel; null zolang de lijsten niet geladen zijn.
     const articleOf = (id: number): { variants: ReturnType<typeof articleVariants> } | null => {
         const entry = index.get(id);
@@ -435,6 +444,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 confirmDeviation: draft.deviation !== null ? true : null,
                 deviationReason: draft.deviation?.reason ?? null,
                 deviationReasonNote: draft.deviation?.note ?? null,
+                ...(draft.expectedShownAt !== null ? { expectedShownBeforeEntry: true, expectedShownAt: draft.expectedShownAt } : {}),
             },
             done: false,
             result: null,
@@ -696,15 +706,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         );
     }
 
-    const term = search.trim().toLowerCase();
-    const visibleCommitments = commitments
-        .map((commitment) => ({
-            commitment,
-            lines: commitment.lines.filter((line) => term === ''
-                || `${commitment.id} ${commitment.vendorName ?? ''} ${line.productName ?? ''} ${line.productVariantName ?? ''} ${line.lotNumber ?? ''}`
-                    .toLowerCase().includes(term)),
-        }))
-        .filter((group) => group.lines.length > 0);
+    // Eerst wat vandaag of eerder verwacht werd; zoeken op leverancier, ordernummer, referentie, partij en product (elk woord).
+    const visibleCommitments = orderListGroups(commitments, search, todayInAmsterdam());
 
     return (
         <form noValidate aria-busy={running || checking} onSubmit={(event) => { event.preventDefault(); submit(); }}
@@ -725,15 +728,15 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             <FieldError id="actorReference" messages={e('actorReference')} />
 
             <section aria-labelledby="receive-sources" className="space-y-2">
-                <div className="flex items-end justify-between gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
                     <div>
                         <h3 id="receive-sources" className="font-semibold text-gray-900">{t('supply_receive_sources_title')}</h3>
                         <p className="text-sm text-gray-600">{t('supply_receive_sources_hint')}</p>
                     </div>
-                    <label className="text-xs font-medium text-gray-700">
+                    <label className="block text-xs font-medium text-gray-700">
                         {t('supply_receive_search')}
                         <input type="search" data-tour="receive-search" value={search} onChange={(event) => setSearch(event.target.value)}
-                            placeholder={t('supply_receive_search_placeholder')} className={`${inputClass} w-72`} />
+                            placeholder={t('supply_receive_search_placeholder')} className={`${inputClass} w-full sm:w-80`} />
                     </label>
                 </div>
                 <FieldError id="lines" messages={e('lines')} />
@@ -750,8 +753,9 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 )}
                 {sources.status === 'ready' && visibleCommitments.length > 0 && (
                     <div className="max-h-80 overflow-y-auto rounded border border-gray-200">
-                        <table className="min-w-full text-sm">
-                            <thead className="sticky top-0 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                        {/* Smal scherm (390 px): geen tabel maar per regel onder elkaar (zelfde markup, dus unieke ids en data-tour). */}
+                        <table className="block w-full text-sm md:table md:min-w-full">
+                            <thead className="sticky top-0 hidden bg-gray-50 md:table-header-group text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                                 <tr>
                                     <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_select')}</span></th>
                                     <th scope="col" className="px-2 py-1.5">{t('supply_variant')}</th>
@@ -760,12 +764,20 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     <th scope="col" className="px-2 py-1.5">{t('supply_unit')}</th>
                                 </tr>
                             </thead>
-                            {visibleCommitments.map(({ commitment, lines }) => (
-                                <tbody key={commitment.id} className="divide-y divide-gray-100 border-t border-gray-200">
-                                    <tr className="bg-gray-50">
-                                        <th scope="rowgroup" colSpan={5} className="px-2 py-1 text-left text-xs font-semibold text-gray-700">
-                                            #{commitment.id} · {commitment.vendorName ?? '–'}
-                                            {commitment.expectedAt && <> · {t('supply_expected_on', { date: formatDateTime(commitment.expectedAt, locale) })}</>}
+                            {visibleCommitments.map(({ commitment, lines, due }) => {
+                                const ordinals = lineOrdinals(commitment.lines);
+                                return (
+                                <tbody key={commitment.id} className="block divide-y divide-gray-100 border-t border-gray-200 md:table-row-group">
+                                    <tr className="block bg-gray-50 md:table-row">
+                                        <th scope="rowgroup" colSpan={5} className="block px-2 py-1 text-left md:table-cell text-xs font-semibold text-gray-700" data-testid={`receive-order-${commitment.id}`}>
+                                            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 break-words">
+                                                <span className="font-mono text-gray-900">{commitment.orderNumber ?? `#${commitment.id}`}</span>
+                                                <span>· {commitment.vendorName ?? '–'}</span>
+                                                {commitment.supplierReference && <span>· {t('receive_order_reference', { reference: commitment.supplierReference })}</span>}
+                                                {commitment.orderedOn && <span>· {t('receive_order_ordered_on', { date: formatDateOnly(commitment.orderedOn, locale) })}</span>}
+                                                {commitment.expectedAt && <span>· {t('supply_expected_on', { date: formatDateTime(commitment.expectedAt, locale) })}</span>}
+                                                {due && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900">{t('receive_order_due')}</span>}
+                                            </span>
                                         </th>
                                     </tr>
                                     {lines.map((line) => {
@@ -773,8 +785,8 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         const missingUnit = line.expectedUnit === null;
                                         const inputId = `source-${line.id}`;
                                         return (
-                                            <tr key={line.id} className={missingUnit ? 'bg-red-50/40' : checked ? 'bg-blue-50' : undefined}>
-                                                <td className="px-2 py-1.5 align-top">
+                                            <tr key={line.id} className={`grid grid-cols-[auto_1fr] md:table-row ${missingUnit ? 'bg-red-50/40' : checked ? 'bg-blue-50' : ''}`}>
+                                                <td className="row-span-4 px-2 py-1.5 align-top">
                                                     <input id={inputId} type="checkbox" checked={checked} disabled={missingUnit || !palletEditable} data-tour="receive-line" data-tour-key={`${commitment.id}-${line.id}`}
                                                         aria-describedby={missingUnit ? `${inputId}-missing-unit` : undefined}
                                                         onChange={() => toggleSource({ commitment, line })} />
@@ -782,6 +794,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                 <td className="px-2 py-1.5 align-top">
                                                     <label htmlFor={inputId} className={missingUnit ? 'text-gray-600' : 'cursor-pointer'}>
                                                         {line.productName} · {line.productVariantName}
+                                                        {ordinals.has(line.id) && <span className="ml-1 text-xs text-gray-600">· {t('receive_line_ordinal', { index: String(ordinals.get(line.id)!.index), of: String(ordinals.get(line.id)!.of) })}</span>}
                                                     </label>
                                                     {missingUnit && (
                                                         <p id={`${inputId}-missing-unit`} className="mt-1 text-xs font-medium text-red-800">
@@ -789,17 +802,18 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                         </p>
                                                     )}
                                                 </td>
-                                                <td className="px-2 py-1.5 align-top">{line.lotNumber ?? '–'}</td>
-                                                <td className="px-2 py-1.5 text-right align-top">
+                                                <td className="px-2 pb-0.5 align-top md:py-1.5"><span className="text-xs text-gray-600 md:hidden">{t('supply_lot_provisional')}: </span>{line.lotNumber ?? '–'}</td>
+                                                <td className="px-2 pb-0.5 align-top md:py-1.5 md:text-right"><span className="text-xs text-gray-600 md:hidden">{t('supply_expected')}: </span>
                                                     {formatQuantity(line.expectedQuantity, locale)}
                                                     {palletBreakdownLabel(line, line.expectedUnit, t, locale) !== null && <span className="block text-xs text-gray-600">{palletBreakdownLabel(line, line.expectedUnit, t, locale)}</span>}
                                                 </td>
-                                                <td className="px-2 py-1.5 align-top"><UnitBadge unit={line.expectedUnit} /></td>
+                                                <td className="px-2 pb-1.5 align-top md:py-1.5"><UnitBadge unit={line.expectedUnit} /></td>
                                             </tr>
                                         );
                                     })}
                                 </tbody>
-                            ))}
+                                );
+                            })}
                         </table>
                     </div>
                 )}
@@ -849,7 +863,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                 {entry.line.productName} · {entry.line.productVariantName}
                             </legend>
                             <p className="mb-2 text-xs text-gray-700">
-                                #{entry.commitment.id} · {entry.commitment.vendorName ?? '–'} · {t('supply_expected')} {formatQuantity(entry.line.expectedQuantity, locale)} {entry.line.expectedUnit === null ? t('availability_unit_unknown') : t(unitLabelKey(entry.line.expectedUnit))}
+                                {entry.commitment.orderNumber ?? `#${entry.commitment.id}`} · {entry.commitment.vendorName ?? '–'} · {t('supply_expected')} {formatQuantity(entry.line.expectedQuantity, locale)} {entry.line.expectedUnit === null ? t('availability_unit_unknown') : t(unitLabelKey(entry.line.expectedUnit))}
                                 {' · '}
                                 {open === 'loading' || open === undefined
                                     ? t('supply_open_loading')
@@ -858,6 +872,12 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                         : t('supply_open_quantity', { quantity: formatQuantity(open, locale) })}
                             </p>
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-7">
+                                <div className="col-span-2 md:col-span-7">
+                                    <ExpectedAttributes lineId={id} variant={orderedVariant(entry.line.productVariantId)} disabled={!editable}
+                                        kgPerPackage={entry.line.expectedNetWeightKg !== null && entry.line.expectedQuantity > 0 ? entry.line.expectedNetWeightKg / entry.line.expectedQuantity : orderedVariant(entry.line.productVariantId)?.defaultNetKgPerPackage ?? null}
+                                        shownAt={draft.expectedShownAt}
+                                        onShow={() => setDrafts((current) => (current[id].expectedShownAt !== null ? current : { ...current, [id]: { ...current[id], expectedShownAt: new Date().toISOString() } }))} />
+                                </div>
                                 {/* Eerst wat er werkelijk is aangekomen (blind, nooit vooraf ingevuld); Tab loopt herkomst, maat, verpakking, klasse, merk, partij, aantal, kg. */}
                                 {(() => {
                                     const article = articleOf(id);

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatKg, formatQuantity } from '../../lib/availability';
+import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import type { PurchaseOrderDetail } from '../../types/purchaseOrder';
 import QualityBadge from '../availability/QualityBadge';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
@@ -46,6 +46,11 @@ export default function ReceiptsSection({ order, onChanged }: { order: PurchaseO
                             {receipt.reservedQuantity > 0 && <span className="text-gray-600"> · {t('po_receipt_reserved', { reserved: qty(receipt.reservedQuantity) })}</span>}
                         </p>
                         {receipt.qualityReason && <p className="text-xs text-gray-600">{receipt.qualityReason}</p>}
+                        {receipt.expectedShownBeforeEntry && (
+                            <p className="text-xs text-amber-900" data-testid={`po-expected-shown-${receipt.palletContentLineId}`}>
+                                {t('po_receipt_expected_shown', { when: receipt.expectedShownAt ? formatDateTime(receipt.expectedShownAt, locale) : '–', who: receipt.expectedShownBy ?? '–' })}
+                            </p>
+                        )}
                         {receipt.rejectable && rejecting !== receipt.palletContentLineId && !kept.includes(receipt.palletContentLineId) && !frozen(receipt.palletContentLineId) && (
                             <button type="button" data-tour="po-reject" data-tour-key={receipt.lotNumber} className={`${secondaryButtonClass} mt-1 border-red-300 text-red-800 hover:bg-red-50`} onClick={() => setRejecting(receipt.palletContentLineId)}
                                 aria-label={t('po_reject_line', { pallet: receipt.palletReference, lot: receipt.lotNumber })}>
