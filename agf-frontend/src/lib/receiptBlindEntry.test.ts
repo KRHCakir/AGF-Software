@@ -65,6 +65,12 @@ describe('receiptBlindEntry', () => {
         assert.deepEqual(matchVariant(branded, { ...entered('PE', '18', '4 kg doos'), brand: ' test ' }, 22, names), { kind: 'match', variantId: 22 });
     });
 
+    test('archived variants are not candidates, except the ordered one (an open order stays receivable)', () => {
+        const withArchived: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [...hass, { ...variant(9, 'Peru', 'PE', '24'), isArchived: true }, { ...variant(10, 'Chili', 'CL', '24'), isArchived: true }] }];
+        assert.deepEqual(articleVariants(withArchived, 1).map((v) => v.id), [1, 2, 3, 4]);
+        assert.deepEqual(articleVariants(withArchived, 10).map((v) => v.id), [1, 2, 3, 4, 10]);
+    });
+
     test('an old variant without a country matches on its origin text', () => {
         const old = [variant(9, 'peru', null, '18')];
         assert.deepEqual(matchVariant(old, entered('PE', '18'), 9, names), { kind: 'match', variantId: 9 });

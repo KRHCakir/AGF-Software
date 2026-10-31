@@ -34,10 +34,11 @@ const attributeOf = (variant: VariantOption, attribute: ReceiptAttribute): strin
 };
 
 // Varianten van hetzelfde artikel als de bestelde: zelfde product en zelfde ras/naam (zoals ReceiptDeviationRules.IsSameArticle).
+// Gearchiveerde varianten doen niet mee, behalve de bestelde zelf (een open order blijft ontvangbaar).
 export function articleVariants(products: readonly ProductOption[], orderedVariantId: number): VariantOption[] {
     for (const product of products) {
         const ordered = product.variants.find((variant) => variant.id === orderedVariantId);
-        if (ordered) return product.variants.filter((variant) => key(variant.name) === key(ordered.name));
+        if (ordered) return product.variants.filter((variant) => key(variant.name) === key(ordered.name) && (!variant.isArchived || variant.id === orderedVariantId));
     }
     return [];
 }

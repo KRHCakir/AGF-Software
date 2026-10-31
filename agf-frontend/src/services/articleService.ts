@@ -1,5 +1,5 @@
 import { ApiError, getJson, postJson, putJson } from './apiClient';
-import { Article, ArticleReference, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, isArticle, isArticleList, isArticleReference, isGoodsCodeSearch } from '../types/article';
+import { Article, ArticleReference, ArticleUsage, EmptyProduct, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, isArticle, isArticleList, isArticleReference, isArticleUsage, isEmptyProductList, isGoodsCodeSearch } from '../types/article';
 
 // Artikelwerkplek via api/articles: beheer van productsoorten en artikelen (ProductVariants). Raakt nooit documenten of voorraad.
 
@@ -33,4 +33,32 @@ export async function searchGoodsCodes(query: string, system: GoodsCodeSystem, s
     const json = await getJson(`/articles/goods-codes?query=${encodeURIComponent(query)}&system=${encodeURIComponent(system)}`, signal);
     if (!isGoodsCodeSearch(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de goederencodes.');
     return json;
+}
+
+// Waar een artikel aan hangt (verwijderen kan alleen zonder gebruik).
+export async function getArticleUsage(id: number, signal?: AbortSignal): Promise<ArticleUsage> {
+    const json = await getJson(`/articles/${id}/usage`, signal);
+    if (!isArticleUsage(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het gebruik van het artikel.');
+    return json;
+}
+
+// Verwijderen (204) of 409 "article-in-use" met de reden; de actor gaat mee voor de historie.
+export async function deleteArticle(id: number, actorReference: string | null, signal?: AbortSignal): Promise<void> {
+    await postJson(`/articles/${id}/delete`, { actorReference }, signal);
+}
+
+export async function setArticleArchived(id: number, archived: boolean, actorReference: string | null, signal?: AbortSignal): Promise<Article> {
+    const { json } = await postJson(`/articles/${id}/${archived ? 'archive' : 'restore'}`, { actorReference }, signal);
+    if (!isArticle(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het archiveren van het artikel.');
+    return json;
+}
+
+export async function listEmptyProducts(signal?: AbortSignal): Promise<EmptyProduct[]> {
+    const json = await getJson('/articles/products/empty', signal);
+    if (!isEmptyProductList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de productsoorten.');
+    return json;
+}
+
+export async function deleteProduct(id: number, actorReference: string | null, signal?: AbortSignal): Promise<void> {
+    await postJson(`/articles/products/${id}/delete`, { actorReference }, signal);
 }
