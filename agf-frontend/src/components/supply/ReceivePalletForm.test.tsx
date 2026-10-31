@@ -19,6 +19,19 @@ const commitment: SupplyCommitment = {
     ],
 };
 
+// Artikelen zonder herkomst, maat of verpakking: bij blinde invoer is dan niets verplicht en past de bestelde variant exact.
+const products = [
+    { id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: null, originCountryCode: null, packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
+    { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: null, originCountryCode: null, packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
+];
+const countries = { countries: [{ code: 'PE', nameNl: 'Peru', nameEn: 'Peru' }], aliases: [] };
+const exactPreview = (url: string) => ({
+    status: 'Exact', supplyCommitmentId: 41, orderNumber: 'IO-2026-0041', originalLineId: 501, kinds: [], quantity: 1, unit: 'box', originalExpectedQuantity: 40,
+    originalReceivedQuantity: 0, reducedQuantity: 0, originalExpectedQuantityAfter: 40, excessQuantity: 0, assignedQuantity: null,
+    expected: { productVariantId: Number(new URL(url).searchParams.get('receivedProductVariantId')), productId: 1, productName: 'Avocado', variantName: 'Hass', origin: null, size: null, packaging: null, packagingUnit: null, tradeClass: null, brand: null },
+    received: { productVariantId: Number(new URL(url).searchParams.get('receivedProductVariantId')), productId: 1, productName: 'Avocado', variantName: 'Hass', origin: null, size: null, packaging: null, packagingUnit: null, tradeClass: null, brand: null },
+});
+
 interface Call { method: string; url: string; body: Record<string, unknown> | null }
 let mounted: Mounted;
 let calls: Call[];
@@ -38,6 +51,9 @@ describe('ReceivePalletForm GGN', () => {
             const call: Call = { method: init?.method ?? 'GET', url, body: init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null };
             calls.push(call);
             if (call.method === 'GET' && url.includes('/supply-commitments')) return json(200, [commitment]);
+            if (call.method === 'GET' && url.includes('/products')) return json(200, products);
+            if (call.method === 'GET' && url.includes('/countries')) return json(200, countries);
+            if (call.method === 'GET' && url.includes('/deviation-preview')) return json(200, exactPreview(url));
             if (call.method === 'GET') return json(500, {});
             if (url.endsWith('/pallets')) return json(201, { id: 77, reference: 'P-000077', logisticsStatus: 'Received', locationContext: 'Warehouse', warehouseLocation: null });
             if (url.endsWith('/content-lines')) {
@@ -81,7 +97,7 @@ describe('ReceivePalletForm GGN', () => {
         assert.equal(ggnCertificateWarning('', options, '2026-10-26'), null);
     });
 
-    test('the quantity shows the kg line from the article defaults; the source shows its pallets with loose colli', async () => {
+    test('blind entry: the quantity only echoes the number (no kg line from the article); the source shows its pallets with loose colli', async () => {
         const original = commitment.lines[1];
         commitment.lines[1] = { ...original, expectedQuantity: 375, defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3, palletCount: 3, packagesPerPallet: 120, loosePackages: 15 };
         try {
@@ -90,8 +106,9 @@ describe('ReceivePalletForm GGN', () => {
             assert.ok(text().includes('pallet_breakdown_loose'));
             await selectSource(502);
             await type(input('line.502.quantity'), '1.560');
-            assert.ok(mounted.container.querySelector('[data-testid="line.502.quantity-kg"]'), 'kg line instead of the plain echo');
-            assert.equal(mounted.container.querySelector('[data-testid="line.502.quantity-echo"]'), null);
+            assert.equal(mounted.container.querySelector('[data-testid="line.502.quantity-kg"]'), null, 'no kg line from the article defaults');
+            assert.ok(mounted.container.querySelector('[data-testid="line.502.quantity-echo"]'));
+            assert.equal(input('line.502.netWeightKg').value, '', 'nothing prefilled');
         } finally {
             commitment.lines[1] = original;
         }
@@ -140,7 +157,8 @@ describe('ReceivePalletForm GGN', () => {
 
     test('with several supplier GGNs nothing is proposed and the user chooses from the list or types another', async () => {
         const two = { ...commitment, vendorGgns: [{ ggn: '0049929123456', producerName: 'Finca Uno', checkedOn: '2026-10-01', certificateValidUntil: '2099-12-31', hasGgnLabel: true }, { ggn: '0049929000002', producerName: 'Finca Dos', checkedOn: null, certificateValidUntil: null, hasGgnLabel: false }] };
-        globalThis.fetch = (async (inputUrl: RequestInfo | URL) => (String(inputUrl).includes('/supply-commitments') ? json(200, [two]) : json(500, {}))) as typeof fetch;
+        globalThis.fetch = (async (inputUrl: RequestInfo | URL) => (String(inputUrl).includes('/supply-commitments') ? json(200, [two])
+            : String(inputUrl).includes('/products') ? json(200, products) : String(inputUrl).includes('/countries') ? json(200, countries) : json(500, {}))) as typeof fetch;
         await mounted.render(<ReceivePalletForm actor="wh-1" preselected={null} onPreselectedConsumed={() => {}} />);
         await mounted.waitFor(() => mounted.container.querySelector('#source-501') !== null, 'sources loaded');
         await selectSource(501);
