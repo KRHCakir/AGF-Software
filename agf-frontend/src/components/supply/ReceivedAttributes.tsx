@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { ReactNode, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { EnteredAttributes, RECEIPT_ATTRIBUTES, ReceiptAttribute, optionsFor } from '../../lib/receiptBlindEntry';
@@ -19,8 +19,9 @@ const TOUR_NAMES: Record<ReceiptAttribute, string> = {
 
 // Wat er werkelijk is aangekomen, per kenmerk en zonder voorinvulling: herkomst (verplicht; landkiezer met snelkoppelingen) en
 // optioneel maat, verpakking, klasse en merk (leeg = bewust "geen"). Elk veld typt met suggesties uit de bestaande varianten van dit
-// artikel, gefilterd op wat al is ingevuld; Tab neemt de bovenste. Een combinatie die niet bestaat, wordt hier nooit aangemaakt.
-export default function ReceivedAttributes({ lineId, variants, countries, value, onChange, disabled, errors, combination }: {
+// artikel, gefilterd op wat al is ingevuld; Tab neemt de bovenste. Een combinatie die niet bestaat: de melding "Nieuw artikel" met
+// "Artikel aanmaken en doorgaan" (missingPrompt); hier zelf wordt nooit iets aangemaakt.
+export default function ReceivedAttributes({ lineId, variants, countries, value, onChange, disabled, errors, combination, missingPrompt }: {
     lineId: number;
     variants: readonly VariantOption[];
     countries: CountryReference;
@@ -30,6 +31,7 @@ export default function ReceivedAttributes({ lineId, variants, countries, value,
     errors: (field: string) => string[] | undefined;
     // 'missing' of 'ambiguous' na registreren: deze invoer past niet op precies één artikel.
     combination: 'missing' | 'ambiguous' | null;
+    missingPrompt?: ReactNode;
 }) {
     const { t } = useTranslation();
     const names = useMemo(() => new Map(countries.countries.map((country) => [country.code, country.nameNl])), [countries]);
@@ -49,7 +51,8 @@ export default function ReceivedAttributes({ lineId, variants, countries, value,
                     invalid={errors(key(attribute)) !== undefined} onChange={(text) => onChange({ [attribute]: text } as Partial<EnteredAttributes>)}
                     messages={errors(key(attribute))} />
             ))}
-            {combination !== null && (
+            {combination === 'missing' && missingPrompt !== undefined && <div className="col-span-2 md:col-span-5">{missingPrompt}</div>}
+            {combination !== null && (combination === 'ambiguous' || missingPrompt === undefined) && (
                 <p role="alert" className="col-span-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900 md:col-span-5"
                     data-tour="receive-combination-missing" data-tour-key={lineId}>
                     {t(combination === 'missing' ? 'receipt_combination_missing' : 'receipt_combination_ambiguous')}{' '}
