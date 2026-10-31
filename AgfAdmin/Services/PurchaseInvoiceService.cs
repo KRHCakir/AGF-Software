@@ -243,6 +243,10 @@ namespace AgfAdmin.Services
                     {
                         ValidationErrors.Add(errors, $"{key}.productVariantId", $"Product variant {line.ProductVariantId} does not exist.");
                     }
+                    else if (variant?.IsArchived == true)
+                    {
+                        ValidationErrors.Add(errors, $"{key}.productVariantId", ArticleRules.ArchivedMessage(variant.Id));
+                    }
                     var description = string.IsNullOrWhiteSpace(line.Description)
                         ? (variant == null ? null : $"{variant.Product?.Name} · {variant.Name}")
                         : line.Description.Trim();

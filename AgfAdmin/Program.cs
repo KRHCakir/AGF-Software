@@ -20,6 +20,7 @@ builder.Services.AddScoped<IAIExtractorService, MockAIExtractorService>();
 builder.Services.AddScoped<ISalesParserService, SimpleSalesParserService>();
 builder.Services.AddScoped<PurchaseInvoiceService>();
 builder.Services.AddScoped<ArticleService>();
+builder.Services.AddScoped<ArticleLifecycleService>();
 builder.Services.AddScoped<RelationService>();
 builder.Services.AddScoped<PaymentConditionService>();
 builder.Services.AddScoped<PurchaseOrderService>();

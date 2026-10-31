@@ -147,7 +147,8 @@ public class SalesOrderModelTests : IDisposable
                 case "order": db.SalesOrders.Remove(new SalesOrder { Id = orderId }); break;
                 default: db.ProductVariants.Remove(new ProductVariant { Id = seed.AvocadoId }); break;
             }
-        });
+        // Een gebruikt artikel houdt guard-regel 19 al vóór de database tegen (de foreign key blijft het vangnet).
+        }, guardMayRejectFirst: principal == "variant");
     }
 
     [Fact]

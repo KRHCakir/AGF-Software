@@ -298,6 +298,9 @@ namespace AgfAdmin.Services
             GoodsCode = Blank(v.GoodsCode),
             GoodsCodeSystem = Blank(v.GoodsCodeSystem),
             TradeClass = Blank(v.TradeClass),
+            IsArchived = v.IsArchived,
+            ArchivedAt = v.ArchivedAt == null ? null : DateTime.SpecifyKind(v.ArchivedAt.Value, DateTimeKind.Utc),
+            ArchivedBy = Blank(v.ArchivedBy),
             DefaultPrice = v.DefaultPrice
         };
 

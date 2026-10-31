@@ -66,6 +66,7 @@ namespace AgfAdmin.Models
 
         // Idempotentiesleutel van "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst: een herhaald verzoek maakt nooit een
         // tweede artikel. Leeg bij artikelen die op een andere manier zijn aangemaakt; uniek.
+        [JsonIgnore]
         public Guid? RequestId { get; set; }
 
         // Relationships

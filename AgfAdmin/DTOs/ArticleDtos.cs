@@ -26,6 +26,40 @@ namespace AgfAdmin.DTOs
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
         public decimal DefaultPrice { get; set; }
+        // Gearchiveerd (inactief): niet meer in keuzelijsten en suggesties; terugzetten kan altijd.
+        public bool IsArchived { get; set; }
+        public DateTime? ArchivedAt { get; set; }
+        public string ArchivedBy { get; set; }
+    }
+
+    // GET api/articles/{id}/usage: waar het artikel aan hangt. Verwijderen kan alleen zonder enig gebruik; anders archiveren.
+    public sealed class ArticleUsageDto
+    {
+        public int ArticleId { get; set; }
+        public bool CanDelete { get; set; }
+        // Alleen soorten met minstens één verwijzing, in vaste volgorde (ArticleLifecycleService.UsageKinds).
+        public List<ArticleUsageCountDto> Usages { get; set; } = new();
+        // Reden in gewone taal ("Dit artikel is gebruikt in 3 ontvangsten …"); null als verwijderen kan.
+        public string Message { get; set; }
+    }
+
+    public sealed class ArticleUsageCountDto
+    {
+        public string Kind { get; set; }
+        public int Count { get; set; }
+    }
+
+    // Archiveren, terugzetten en verwijderen: wie het deed (vrije tekst tot er gebruikersaccounts zijn).
+    public sealed class ArticleActionDto
+    {
+        public string ActorReference { get; set; }
+    }
+
+    // Productsoorten zonder artikelen (bijv. na het verwijderen van het laatste artikel elders): mogen worden verwijderd.
+    public sealed class EmptyProductDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
     }
 
     // POST api/articles en PUT api/articles/{id}. Lege tekst = niet vastgelegd (null); alleen productsoort is verplicht.
