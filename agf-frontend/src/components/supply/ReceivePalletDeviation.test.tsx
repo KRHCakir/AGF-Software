@@ -10,7 +10,8 @@ import ReceivePalletForm from './ReceivePalletForm';
 // Blinde invoer bij ontvangst: lege velden, de bestelling (herkomst, maat, verpakking, kg) wordt niet vooraf getoond; de gebruiker typt
 // wat er staat (snelkoppeling "PE" kiest Peru), alleen bestaande combinaties passen. Bij registreren: exact = boeken zonder venster;
 // een andere variant of een ander gewicht = het venster vóór er iets wordt aangemaakt (Nee boekt niets); een combinatie die niet
-// bestaat = melding met link naar Artikelen, nooit een nieuw artikel. Een 409 van de server toont hetzelfde venster.
+// bestaat = "Nieuw artikel: …" met "Bedoel je dit?" en "Artikel aanmaken en doorgaan" (daarna de gewone controle). Een 409 van de
+// server toont hetzelfde venster.
 
 const variant = (id: number, origin: string, code: string, size: string) =>
     ({ id, name: 'Hass', origin, originCountryCode: code, packaging: '4 kg doos', sizeCategory: size, shortcutCode: null, packagingUnit: 'colli', tradeClass: 'I', brand: null, defaultNetKgPerPackage: 4 });
@@ -34,6 +35,13 @@ const commitment: SupplyCommitment = {
 };
 
 interface Call { method: string; url: string; body: Record<string, unknown> | null }
+// Het artikel dat "Artikel aanmaken en doorgaan" teruggeeft (Avocado Hass · Zuid-Afrika · maat 20).
+const created = {
+    id: 50, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4 kg doos · Zuid-Afrika · 20', shortcutCode: null, origin: 'Zuid-Afrika',
+    originCountryCode: 'ZA', brand: null, sizeCategory: '20', packaging: '4 kg doos', packagingUnit: 'colli', season: null, notes: null, weightMethod: 'Calculated',
+    defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: 'I', defaultPrice: 0, isArchived: false,
+};
+let articleAnswers: (() => Response)[];
 let mounted: Mounted;
 let calls: Call[];
 let contentAnswers: (() => Response)[];
@@ -56,8 +64,8 @@ function answer(url: string): DeviationPreview {
     const id = Number(params.get('receivedProductVariantId'));
     const perPackage = Number(params.get('netWeightKg')) / Number(params.get('quantity'));
     const weight = Math.abs(perPackage - 4) / 4 > 0.02;
-    const received = id === 12 ? dto(12, 'Zuid-Afrika', '18') : id === 11 ? dto(11, 'Peru', '20') : dto(10, 'Peru', '18');
-    const kinds = [...(id === 12 ? ['Origin'] : id === 11 ? ['Size'] : []), ...(weight ? ['Weight'] : [])];
+    const received = id === 12 ? dto(12, 'Zuid-Afrika', '18') : id === 11 ? dto(11, 'Peru', '20') : id === 50 ? dto(50, 'Zuid-Afrika', '20') : dto(10, 'Peru', '18');
+    const kinds = [...(id === 12 ? ['Origin'] : id === 11 ? ['Size'] : id === 50 ? ['Origin', 'Size'] : []), ...(weight ? ['Weight'] : [])];
     return preview(kinds.length === 0 ? 'Exact' : 'Deviation', received, kinds, { receivedKgPerPackage: perPackage, receivedNetKg: perPackage * 10 });
 }
 
@@ -82,6 +90,7 @@ describe('ReceivePalletForm blind entry', () => {
     beforeEach(() => {
         calls = [];
         contentAnswers = [];
+        articleAnswers = [];
         globalThis.fetch = (async (inputUrl: RequestInfo | URL, init?: RequestInit) => {
             const url = String(inputUrl);
             const call: Call = { method: init?.method ?? 'GET', url, body: init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null };
@@ -91,6 +100,7 @@ describe('ReceivePalletForm blind entry', () => {
             if (call.method === 'GET' && url.includes('/countries')) return json(200, countries);
             if (call.method === 'GET' && url.includes('/deviation-preview')) return json(200, answer(url));
             if (call.method === 'GET') return json(500, {});
+            if (url.endsWith('/articles/from-entry')) return articleAnswers.shift()?.() ?? json(201, { article: created, replayed: false });
             if (url.endsWith('/pallets')) return json(201, { id: 77, reference: 'P-000077', logisticsStatus: 'Received', locationContext: 'Warehouse', warehouseLocation: null });
             if (url.endsWith('/content-lines')) {
                 const next = contentAnswers.shift();
@@ -186,20 +196,75 @@ describe('ReceivePalletForm blind entry', () => {
         assert.equal(posts().length, 0);
     });
 
-    test('a combination that does not exist gives the message with a link to Articles; nothing is checked or created', async () => {
+    // Zuid-Afrika maat 20 bestaat niet: eerst niets gecontroleerd of aangemaakt, wel wat er zou worden aangemaakt en wat erop lijkt.
+    async function missingCombination() {
         await arrange();
         await pick('line.501.origin', 'ZA');
         await type(input('line.501.size'), '20');
         await key(input('line.501.size'), 'Tab');
-        await pick('line.501.packaging', '4');
+        // Zonder suggesties (geen variant Zuid-Afrika 20) blijft wat er getypt is staan: de volledige verpakking.
+        await pick('line.501.packaging', '4 kg doos');
+        await pick('line.501.tradeClass', 'I');
         await type(input('line.501.lotNumber'), 'TEST-001');
         await type(input('line.501.quantity'), '10');
         await type(input('line.501.netKgPerPackage'), '4');
         await submit();
-        await mounted.waitFor(() => mounted.hasText('receipt_combination_missing'), 'message');
-        assert.ok(mounted.container.querySelector('a[href="/articles"]'));
+        await mounted.waitFor(() => mounted.hasText('new_article_title'), 'new article prompt');
+    }
+    const similar = () => Array.from(mounted.container.querySelectorAll('[data-testid="new-article-similar"]')).map((item) => item.textContent ?? '');
+    const createButton = () => mounted.container.querySelector<HTMLButtonElement>('[data-tour="new-article-create"]')!;
+    const articlePosts = () => posts().filter((call) => call.url.endsWith('/articles/from-entry')).map((call) => call.body!);
+
+    test('a combination that does not exist offers "Did you mean this?" and "Create article and continue"; nothing is checked or created first', async () => {
+        await missingCombination();
+        // Zelfde artikel met precies één ander kenmerk: Peru 20 (herkomst) en Zuid-Afrika 18 (maat).
+        assert.deepEqual(similar().map((text) => text.includes('new_article_differs_origin') ? 'origin' : text.includes('new_article_differs_size') ? 'size' : text), ['origin', 'size']);
         assert.equal(previews().length, 0);
         assert.equal(posts().length, 0);
+        assert.equal(mounted.container.querySelector('a[href="/articles"]'), null);
+
+        // Eén klik: het artikel wordt aangemaakt met wat er staat, daarna de gewone controle tegen de bestelling (het venster).
+        await click(createButton());
+        await mounted.waitFor(() => dialog() !== null, 'deviation dialog after creating');
+        const body = articlePosts()[0];
+        assert.deepEqual({ ...body, requestId: typeof body.requestId }, {
+            requestId: 'string', source: 'Receipt', templateVariantId: 10, originCountryCode: 'ZA', sizeCategory: '20', packaging: '4 kg doos', tradeClass: 'I', brand: null,
+            netKgPerPackage: 4, actorReference: 'Kees',
+        });
+        assert.equal(previews().at(-1)!.get('receivedProductVariantId'), '50');
+        assert.equal(posts().filter((call) => call.url.endsWith('/pallets')).length, 0, 'No pallet before the answer to "Klopt dit?"');
+    });
+
+    test('a lost answer: clicking again sends the same request id, so never a second article', async () => {
+        await missingCombination();
+        articleAnswers.push(() => { throw new TypeError('Failed to fetch'); });
+        await click(createButton());
+        await mounted.waitFor(() => !createButton().disabled && mounted.container.querySelector('[data-tour="new-article"] [role="alert"]') !== null, 'error shown');
+        await click(createButton());
+        await mounted.waitFor(() => dialog() !== null, 'dialog after the retry');
+        const ids = articlePosts().map((body) => body.requestId);
+        assert.equal(ids.length, 2);
+        assert.equal(ids[0], ids[1]);
+    });
+
+    test('while the article is being created, the attributes and kg per colli cannot change', async () => {
+        await missingCombination();
+        let release: () => void = () => {};
+        articleAnswers.push((() => new Promise<Response>((resolve) => { release = () => resolve(json(201, { article: created, replayed: false })); })) as unknown as () => Response);
+        await click(createButton());
+        for (const field of ['line.501.size', 'line.501.packaging', 'line.501.tradeClass', 'line.501.brand', 'line.501.netKgPerPackage']) assert.equal(input(field).disabled, true, field);
+        await act(async () => { release(); });
+        await mounted.waitFor(() => dialog() !== null, 'dialog after creating');
+    });
+
+    test('"Choose this" takes the existing variant and continues with the normal check', async () => {
+        await missingCombination();
+        const choose = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('[data-tour="new-article-choose"]')).find((button) => button.dataset.tourKey === '501-12')!;
+        await click(choose);
+        await mounted.waitFor(() => dialog() !== null, 'deviation dialog for Zuid-Afrika 18');
+        assert.equal(previews().at(-1)!.get('receivedProductVariantId'), '12');
+        assert.equal(articlePosts().length, 0);
+        assert.equal(input('line.501.size').value, '18');
     });
 
     test('only origin is required before anything is checked; size, packaging, class and brand may stay empty', async () => {

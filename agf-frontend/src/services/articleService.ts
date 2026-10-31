@@ -62,3 +62,32 @@ export async function listEmptyProducts(signal?: AbortSignal): Promise<EmptyProd
 export async function deleteProduct(id: number, actorReference: string | null, signal?: AbortSignal): Promise<void> {
     await postJson(`/articles/products/${id}/delete`, { actorReference }, signal);
 }
+
+// "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst (idempotent via requestId).
+export interface ArticleFromEntryRequest {
+    requestId: string;
+    source: 'Supply' | 'Receipt';
+    templateVariantId: number;
+    originCountryCode: string;
+    sizeCategory: string | null;
+    packaging: string | null;
+    tradeClass: string | null;
+    brand: string | null;
+    netKgPerPackage: number | null;
+    actorReference: string | null;
+}
+
+// 201 nieuw of 200 herhaling: het artikel. Een 409 "article-exists" bevat het bestaande artikel (existingArticle haalt het eruit).
+export async function createArticleFromEntry(request: ArticleFromEntryRequest, signal?: AbortSignal): Promise<Article> {
+    const { json } = await postJson('/articles/from-entry', request, signal);
+    const article = typeof json === 'object' && json !== null ? (json as Record<string, unknown>).article : null;
+    if (!isArticle(article)) throw new ApiError('shape', 'Onverwacht antwoord bij het aanmaken van het artikel.');
+    return article;
+}
+
+// Het bestaande artikel uit een 409 "article-exists"; null bij elke andere fout.
+export function existingArticle(caught: unknown): Article | null {
+    if (!(caught instanceof ApiError) || caught.status !== 409 || typeof caught.body !== 'object' || caught.body === null) return null;
+    const body = caught.body as Record<string, unknown>;
+    return body.code === 'article-exists' && isArticle(body.article) ? body.article : null;
+}

@@ -10,11 +10,13 @@ import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
 import { DEVIATION_CODES, deviationConflict } from '../../lib/receiptDeviation';
+import { enteredFrom, similarVariants, withArticle } from '../../lib/articleFromEntry';
 import { EnteredAttributes, articleVariants, emptyEntered, matchVariant } from '../../lib/receiptBlindEntry';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
 import { ApiError, toApiError } from '../../services/apiClient';
+import { createArticleFromEntry, existingArticle } from '../../services/articleService';
 import { getAvailabilityVariant } from '../../services/availabilityService';
 import { addPalletContentLine, createReceivedWarehousePallet } from '../../services/palletService';
 import { getCountries } from '../../services/countryService';
@@ -36,6 +38,7 @@ import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
 import GgnBadge from '../shared/GgnBadge';
+import NewArticlePrompt from '../shared/NewArticlePrompt';
 import NumberEcho from '../shared/NumberEcho';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import DeviationDialog, { DeviationChoice } from './DeviationDialog';
@@ -167,6 +170,11 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     const [products, setProducts] = useState<ProductOption[] | null>(null);
     const [countries, setCountries] = useState<CountryReference | null>(null);
     const [combinations, setCombinations] = useState<Record<number, 'missing' | 'ambiguous'>>({});
+    // "Artikel aanmaken en doorgaan" per regel: bezig/foutmelding, en per invoer één vaste requestId (een herhaalde klik of een
+    // verloren antwoord maakt nooit een tweede artikel; een gewijzigde invoer is een nieuw verzoek).
+    const [creation, setCreation] = useState<Record<number, { busy: boolean; error: string | null }>>({});
+    const creationRequests = useRef(new Map<number, { key: string; requestId: string }>());
+    const resumeAfterCreate = useRef(false);
     const inFlight = useRef(false);
     const requestedUnregistered = useRef(new Set<number>());
     const mounted = useRef(true);
@@ -332,6 +340,55 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
     };
     const countryNames = useMemo(() => new Map((countries?.countries ?? []).map((country) => [country.code, country.nameNl])), [countries]);
 
+    // Nieuw artikel aanmaken met wat er is ingevuld, onder het bestelde artikel (zelfde productsoort en ras), en dan gewoon verder
+    // registreren: de lijst kent het artikel nu, dus de controle vindt het en vraagt zo nodig "Klopt dit?". Bestaat het al (409), dan
+    // dat artikel; is dat gearchiveerd, dan de melding.
+    const createArticle = async (id: number) => {
+        const draft = drafts[id];
+        const entry = index.get(id);
+        if (!draft || !entry || draft.entered.origin === null || products === null) return;
+        const perPackage = draft.method === 'Calculated' ? parsePositiveDecimal(draft.kgPerPackage) : null;
+        const netKgPerPackage = perPackage?.ok ? perPackage.value : null;
+        // De sleutel bevat alles wat de aanmaak-body bepaalt, zodat een gecorrigeerd kg per colli een nieuwe RequestId krijgt.
+        const snapshot = JSON.stringify({ entered: draft.entered, method: draft.method, netKgPerPackage, templateVariantId: entry.line.productVariantId });
+        let request = creationRequests.current.get(id);
+        if (!request || request.key !== snapshot) {
+            request = { key: snapshot, requestId: newRequestId() };
+            creationRequests.current.set(id, request);
+        }
+        const text = (value: string) => (value.trim() === '' ? null : value.trim());
+        setCreation((current) => ({ ...current, [id]: { busy: true, error: null } }));
+        let article = null;
+        try {
+            article = await createArticleFromEntry({
+                requestId: request.requestId, source: 'Receipt', templateVariantId: entry.line.productVariantId, originCountryCode: draft.entered.origin,
+                sizeCategory: text(draft.entered.size), packaging: text(draft.entered.packaging), tradeClass: text(draft.entered.tradeClass), brand: text(draft.entered.brand),
+                netKgPerPackage, actorReference: actor.trim() === '' ? null : actor.trim(),
+            });
+        } catch (caught) {
+            const existing = existingArticle(caught);
+            if (existing === null || existing.isArchived) {
+                if (mounted.current) setCreation((current) => ({ ...current, [id]: { busy: false, error: toApiError(caught).message } }));
+                return;
+            }
+            article = existing;
+        }
+        if (!mounted.current) return;
+        setCreation((current) => ({ ...current, [id]: { busy: false, error: null } }));
+        setCombinations((current) => { const next = { ...current }; delete next[id]; return next; });
+        resumeAfterCreate.current = true;
+        setProducts((current) => withArticle(current ?? [], article));
+    };
+
+    // Tijdens "Artikel aanmaken en doorgaan" liggen de kenmerken en het kg per colli vast: het artikel komt overeen met wat er staat.
+    const creating = (id: number) => creation[id]?.busy ?? false;
+
+    // Kies een bestaande variant uit "Bedoel je dit?": de invoer wordt die variant, daarna gewoon registreren.
+    const chooseSimilar = (id: number, entered: EnteredAttributes) => {
+        editLine(id, 'entered', entered);
+        resumeAfterCreate.current = true;
+    };
+
     // Netto kg zoals het verstuurd wordt: berekend = aantal × kg per verpakking (zelfde afronding als de server), anders gewogen.
     const netKgOf = (draft: ContentDraft): number | null => {
         const quantity = parsePositiveDecimal(draft.quantity);
@@ -477,6 +534,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             submit(next);
         }
     };
+
+    // Na "Artikel aanmaken en doorgaan" of "Kies dit": opnieuw registreren zodra de lijst of de invoer is bijgewerkt.
+    useEffect(() => {
+        if (!resumeAfterCreate.current) return;
+        resumeAfterCreate.current = false;
+        submit();
+    });
 
     const submit = (source: Record<number, ContentDraft> = drafts) => {
         if (inFlight.current || succeeded) return;
@@ -800,8 +864,15 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     return article === null || countries === null
                                         ? <p className="col-span-2 text-xs text-gray-600 md:col-span-7">{products === null ? t('supply_open_loading') : t('receipt_lists_unavailable')}</p>
                                         : <ReceivedAttributes lineId={id} variants={article.variants} countries={countries} value={draft.entered}
-                                            onChange={(patch) => editLine(id, 'entered', { ...draft.entered, ...patch })} disabled={!editable} errors={e}
-                                            combination={combinations[id] ?? null} />;
+                                            onChange={(patch) => editLine(id, 'entered', { ...draft.entered, ...patch })} disabled={!editable || creating(id)} errors={e}
+                                            combination={combinations[id] ?? null}
+                                            missingPrompt={combinations[id] === 'missing' && draft.entered.origin !== null ? (
+                                                <NewArticlePrompt articleName={`${entry.line.productName} ${entry.line.productVariantName}`}
+                                                    countryName={countryNames.get(draft.entered.origin) ?? null} entered={draft.entered}
+                                                    similar={similarVariants(article.variants, draft.entered, countryNames)}
+                                                    onChoose={(variant) => chooseSimilar(id, enteredFrom(variant, countryNames))} onCreate={() => void createArticle(id)}
+                                                    busy={creation[id]?.busy ?? false} error={creation[id]?.error ?? null} dataTourKey={id} />
+                                            ) : undefined} />;
                                 })()}
                                 <div className="col-span-2">
                                     <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
@@ -839,7 +910,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     {draft.method === 'Calculated' ? (
                                         <div className="mt-1">
                                             <label htmlFor={`${key('netKgPerPackage')}-input`} className="text-xs font-medium text-gray-700">{t('supply_kg_per_package')} *</label>
-                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable}
+                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable || creating(id)}
                                                 onChange={(event) => editLine(id, 'kgPerPackage', event.target.value)} className={inputClass} />
                                             <span className="block text-xs text-gray-500">{t('supply_kg_per_package_hint')}</span>
                                             <span className="block text-xs font-medium text-amber-900" data-testid={`calculated-total-${id}`}>
