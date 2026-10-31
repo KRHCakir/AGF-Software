@@ -21,6 +21,26 @@ namespace AgfAdmin.Services
         public const string EventDeleted = "Deleted";
         public const string EventProductDeleted = "ProductDeleted";
 
+        // Vergelijksleutel voor kenmerken van een artikel: hoofdletters, accenten en dubbele spaties tellen niet, leeg = null = "".
+        // "Test" en "test" zijn dus hetzelfde kenmerk; zelfde regel als countryKey in de frontend (lib/countries.ts).
+        public static string AttributeKey(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "";
+            }
+            var decomposed = value.Trim().Normalize(System.Text.NormalizationForm.FormD);
+            var letters = decomposed.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark);
+            return Regex.Replace(new string(letters.ToArray()), @"\s+", " ").ToLowerInvariant();
+        }
+
+        // Ingetypte tekst zoals hij wordt bewaard: randen eraf en dubbele spaties enkel; leeg = null. Hoofdletters blijven zoals getypt.
+        public static string TypedText(string value) =>
+            string.IsNullOrWhiteSpace(value) ? null : Regex.Replace(value.Trim(), @"\s+", " ");
+
+        public const string SourceSupply = "Supply";
+        public const string SourceReceipt = "Receipt";
+
         // Een gearchiveerd artikel komt niet meer op nieuwe regels (guard-regel 19); dezelfde melding in elke service.
         public static string ArchivedMessage(int id) => $"Article {id} is archived; restore it in Articles before using it on a new line.";
 

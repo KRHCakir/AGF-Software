@@ -11,12 +11,14 @@ namespace AgfAdmin.Controllers
     {
         private readonly ArticleService _service;
         private readonly ArticleLifecycleService _lifecycle;
+        private readonly ArticleFromEntryService _fromEntry;
         private readonly GoodsCodeCatalog _goodsCodes;
 
-        public ArticlesController(ArticleService service, ArticleLifecycleService lifecycle, GoodsCodeCatalog goodsCodes)
+        public ArticlesController(ArticleService service, ArticleLifecycleService lifecycle, ArticleFromEntryService fromEntry, GoodsCodeCatalog goodsCodes)
         {
             _service = service;
             _lifecycle = lifecycle;
+            _fromEntry = fromEntry;
             _goodsCodes = goodsCodes;
         }
 
@@ -62,6 +64,12 @@ namespace AgfAdmin.Controllers
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] SaveArticleDto request) =>
             this.ToActionResult(await _service.UpdateAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst: 201 nieuw, 200 herhaling (zelfde requestId), 409 "article-exists"
+        // met het bestaande artikel, 409 "article-request-reused" als de requestId al voor iets anders werd gebruikt.
+        [HttpPost("from-entry")]
+        public async Task<IActionResult> CreateFromEntry([FromBody] CreateArticleFromEntryDto request) =>
+            this.ToActionResult(await _fromEntry.CreateAsync(request, HttpContext?.RequestAborted ?? default));
 
         // Waar het artikel aan hangt; canDelete = false met de reden in gewone taal.
         [HttpGet("{id:int}/usage")]

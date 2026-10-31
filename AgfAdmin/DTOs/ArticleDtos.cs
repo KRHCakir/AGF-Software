@@ -49,6 +49,30 @@ namespace AgfAdmin.DTOs
         public int Count { get; set; }
     }
 
+    // POST api/articles/from-entry: "Artikel aanmaken en doorgaan" vanuit Aanvoer plannen of Pallet ontvangen. Het artikel
+    // (productsoort + ras) bestaat al als sjabloonvariant; nieuw is de combinatie van herkomst, maat, verpakking, klasse en merk zoals
+    // de gebruiker die typte (leeg = bewust "geen"). Idempotent via RequestId.
+    public sealed class CreateArticleFromEntryDto
+    {
+        public Guid RequestId { get; set; }
+        public string Source { get; set; }               // "Supply" (aanvoer plannen) of "Receipt" (ontvangst)
+        public int TemplateVariantId { get; set; }       // bestaande variant van hetzelfde artikel (bij ontvangst de bestelde)
+        public string OriginCountryCode { get; set; }    // verplicht, uit de vaste landenlijst
+        public string SizeCategory { get; set; }
+        public string Packaging { get; set; }
+        public string TradeClass { get; set; }
+        public string Brand { get; set; }
+        public decimal? NetKgPerPackage { get; set; }    // ingevuld kg per verpakking; anders de standaard van de sjabloonvariant
+        public string ActorReference { get; set; }
+    }
+
+    // 201 nieuw of 200 bij een herhaald verzoek; 409 "article-exists" met het bestaande artikel als de combinatie al bestaat.
+    public sealed class ArticleFromEntryResultDto
+    {
+        public ArticleDto Article { get; set; }
+        public bool Replayed { get; set; }
+    }
+
     // Archiveren, terugzetten en verwijderen: wie het deed (vrije tekst tot er gebruikersaccounts zijn).
     public sealed class ArticleActionDto
     {
