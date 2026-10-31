@@ -387,6 +387,9 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         setProducts((current) => withArticle(current ?? [], article));
     };
 
+    // Tijdens "Artikel aanmaken en doorgaan" liggen de kenmerken en het kg per colli vast: het artikel komt overeen met wat er staat.
+    const creating = (id: number) => creation[id]?.busy ?? false;
+
     // Kies een bestaande variant uit "Bedoel je dit?": de invoer wordt die variant, daarna gewoon registreren.
     const chooseSimilar = (id: number, entered: EnteredAttributes) => {
         editLine(id, 'entered', entered);
@@ -879,7 +882,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     return article === null || countries === null
                                         ? <p className="col-span-2 text-xs text-gray-600 md:col-span-7">{products === null ? t('supply_open_loading') : t('receipt_lists_unavailable')}</p>
                                         : <ReceivedAttributes lineId={id} variants={article.variants} countries={countries} value={draft.entered}
-                                            onChange={(patch) => editLine(id, 'entered', { ...draft.entered, ...patch })} disabled={!editable} errors={e}
+                                            onChange={(patch) => editLine(id, 'entered', { ...draft.entered, ...patch })} disabled={!editable || creating(id)} errors={e}
                                             combination={combinations[id] ?? null}
                                             missingPrompt={combinations[id] === 'missing' && draft.entered.origin !== null ? (
                                                 <NewArticlePrompt articleName={`${entry.line.productName} ${entry.line.productVariantName}`}
@@ -925,7 +928,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     {draft.method === 'Calculated' ? (
                                         <div className="mt-1">
                                             <label htmlFor={`${key('netKgPerPackage')}-input`} className="text-xs font-medium text-gray-700">{t('supply_kg_per_package')} *</label>
-                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable}
+                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable || creating(id)}
                                                 onChange={(event) => editLine(id, 'kgPerPackage', event.target.value)} className={inputClass} />
                                             <span className="block text-xs text-gray-500">{t('supply_kg_per_package_hint')}</span>
                                             <span className="block text-xs font-medium text-amber-900" data-testid={`calculated-total-${id}`}>

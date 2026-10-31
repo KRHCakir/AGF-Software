@@ -43,6 +43,7 @@ export function articleKinds(products: readonly ProductOption[]): ArticleKind[] 
 // Aanvoer plannen: een artikel dat nog niet bestaat meteen aanmaken met wat de gebruiker typt. De gebruiker kiest het artikel
 // (productsoort en ras) en vult herkomst (verplicht) en zo nodig maat, verpakking, klasse, merk en kg per colli in; daarna dezelfde
 // melding als bij ontvangst ("Nieuw artikel: …", "Bedoel je dit?", "Artikel aanmaken en doorgaan"). Het artikel komt op de regel.
+// Tijdens het aanmaken liggen alle velden vast, zodat het artikel overeenkomt met wat er staat.
 export default function NewSupplyArticle({ index, products, currentVariantId, onUse, onClose }: {
     index: number;
     products: readonly ProductOption[];
@@ -109,7 +110,7 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
             </div>
             <label className="block font-medium text-gray-700">
                 {t('supply_new_article_kind')} *
-                <select value={kindKey} onChange={(event) => { setKindKey(event.target.value); setError(null); }} className={inputClass} data-tour="supply-new-article-kind" data-tour-key={index}>
+                <select value={kindKey} disabled={busy} onChange={(event) => { setKindKey(event.target.value); setError(null); }} className={inputClass} data-tour="supply-new-article-kind" data-tour-key={index}>
                     <option value="">{t('supply_new_article_kind_choose')}</option>
                     {kinds.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.label}</option>)}
                 </select>
@@ -120,18 +121,18 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
                     <label htmlFor={`${prefix}.origin-input`} className="font-medium text-gray-700">{t('receipt_attr_origin')} *</label>
                     {countries === null
                         ? <p className="text-gray-600">{t('supply_open_loading')}</p>
-                        : <CountryPicker id={`${prefix}.origin`} dataTour="supply-new-article-origin" dataTourKey={index} countries={countries} value={entered.origin} onChange={(origin) => edit({ origin })} />}
+                        : <CountryPicker id={`${prefix}.origin`} dataTour="supply-new-article-origin" dataTourKey={index} countries={countries} value={entered.origin} onChange={(origin) => edit({ origin })} disabled={busy} />}
                 </div>
                 {RECEIPT_ATTRIBUTES.map((attribute) => (
                     <label key={attribute} className="font-medium text-gray-700">
                         {t(LABEL_KEYS[attribute])} {t('field_optional')}
-                        <input value={entered[attribute]} maxLength={attribute === 'tradeClass' ? 50 : 100} placeholder={t('receipt_attr_placeholder')} className={inputClass}
+                        <input value={entered[attribute]} disabled={busy} maxLength={attribute === 'tradeClass' ? 50 : 100} placeholder={t('receipt_attr_placeholder')} className={inputClass}
                             onChange={(event) => edit({ [attribute]: event.target.value } as Partial<EnteredAttributes>)} data-tour={`supply-new-article-${attribute}`} data-tour-key={index} />
                     </label>
                 ))}
                 <label className="font-medium text-gray-700">
                     {t('supply_new_article_kg')} {t('field_optional')}
-                    <input value={kg} inputMode="decimal" className={inputClass} aria-invalid={perPackage !== null && !perPackage.ok}
+                    <input value={kg} inputMode="decimal" disabled={busy} className={inputClass} aria-invalid={perPackage !== null && !perPackage.ok}
                         onChange={(event) => { setKg(event.target.value); setError(null); }} data-tour="supply-new-article-kg" data-tour-key={index} />
                 </label>
             </div>

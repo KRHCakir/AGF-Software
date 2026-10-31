@@ -305,7 +305,7 @@
   "supply_error_required_customer": "Choose the customer: direct trade is always customer-bound.",
   "supply_error_required_destination": "Enter the destination.",
   "supply_error_required_date": "Enter a valid date.",
-  "supply_error_incomplete_date": "Enter the complete date (dd-mm-yyyy).",
+  "supply_error_incomplete_date": "Enter a complete, existing date (dd-mm-yyyy).",
   "supply_error_required_unit": "Choose a unit.",
   "supply_error_too_long": "At most {max} characters.",
   "supply_error_lines_required": "Add at least one line.",

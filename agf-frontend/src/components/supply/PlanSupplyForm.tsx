@@ -162,8 +162,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         // laatst getypte cijfers pas bij het verlaten doorgeeft, gaf anders "Vul een geldige datum in" bij een goed ingevulde datum).
         // ISO (datumveld) en dd-mm-jjjj werken allebei; vandaag en eerder zijn geldig (een aanvoer kan achteraf worden vastgelegd).
         let expectedAt = '';
+        // Is het veld er, dan telt alleen wat erin staat, ook leeg: een gewiste of half getypte datum stuurt nooit de vorige waarde mee.
         const field = expectedInput.current;
-        const expectedText = field !== null && field.value !== '' ? field.value : header.expectedDate;
+        const expectedText = field !== null ? field.value : header.expectedDate;
         const expectedDate = parseDateInput(expectedText);
         const expectedIso = expectedDate === null ? null : toLocalMidnightIso(expectedDate);
         if (expectedIso === null) addError(found, 'expectedAt', t(field?.validity.badInput ? 'supply_error_incomplete_date' : 'supply_error_required_date'));
