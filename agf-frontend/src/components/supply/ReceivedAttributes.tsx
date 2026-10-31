@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { EnteredAttributes, ReceiptAttribute, optionsFor, requiredFields } from '../../lib/receiptBlindEntry';
+import { EnteredAttributes, RECEIPT_ATTRIBUTES, ReceiptAttribute, optionsFor } from '../../lib/receiptBlindEntry';
 import type { CountryReference } from '../../types/country';
 import type { VariantOption } from '../../types/referenceData';
 import CountryPicker from '../shared/CountryPicker';
@@ -17,13 +17,12 @@ const TOUR_NAMES: Record<ReceiptAttribute, string> = {
     size: 'receive-size', packaging: 'receive-packaging', tradeClass: 'receive-class', brand: 'receive-brand',
 };
 
-// Wat er werkelijk is aangekomen, per kenmerk en zonder voorinvulling: herkomst (landkiezer met snelkoppelingen), maat, verpakking en
-// zo nodig klasse en merk. Elk veld typt met suggesties uit de bestaande varianten van dit artikel, gefilterd op wat al is ingevuld;
-// Tab neemt de bovenste. Een combinatie die niet bestaat, wordt hier nooit aangemaakt (melding met link naar Artikelen).
-export default function ReceivedAttributes({ lineId, variants, shown, countries, value, onChange, disabled, errors, combination }: {
+// Wat er werkelijk is aangekomen, per kenmerk en zonder voorinvulling: herkomst (verplicht; landkiezer met snelkoppelingen) en
+// optioneel maat, verpakking, klasse en merk (leeg = bewust "geen"). Elk veld typt met suggesties uit de bestaande varianten van dit
+// artikel, gefilterd op wat al is ingevuld; Tab neemt de bovenste. Een combinatie die niet bestaat, wordt hier nooit aangemaakt.
+export default function ReceivedAttributes({ lineId, variants, countries, value, onChange, disabled, errors, combination }: {
     lineId: number;
     variants: readonly VariantOption[];
-    shown: readonly ReceiptAttribute[];
     countries: CountryReference;
     value: EnteredAttributes;
     onChange: (patch: Partial<EnteredAttributes>) => void;
@@ -35,19 +34,18 @@ export default function ReceivedAttributes({ lineId, variants, shown, countries,
     const { t } = useTranslation();
     const names = useMemo(() => new Map(countries.countries.map((country) => [country.code, country.nameNl])), [countries]);
     const key = (field: string) => `line.${lineId}.${field}`;
-    const required = useMemo(() => requiredFields(variants, shown), [variants, shown]);
 
     return (
         <div className="col-span-2 grid grid-cols-2 gap-3 md:col-span-7 md:grid-cols-5" data-tour="receive-attributes" data-tour-key={lineId}>
             <div className="col-span-2 md:col-span-1">
-                <label htmlFor={`${key('origin')}-input`} className="text-xs font-medium text-gray-700">{t('receipt_attr_origin')}{required.origin && ' *'}</label>
+                <label htmlFor={`${key('origin')}-input`} className="text-xs font-medium text-gray-700">{t('receipt_attr_origin')} *</label>
                 <CountryPicker id={key('origin')} dataTour="receive-origin" dataTourKey={lineId} countries={countries} value={value.origin}
                     onChange={(origin) => onChange({ origin })} disabled={disabled} invalid={errors(key('origin')) !== undefined} />
                 <FieldError id={key('origin')} messages={errors(key('origin'))} />
             </div>
-            {shown.map((attribute) => (
-                <AttributeField key={attribute} id={key(attribute)} label={`${t(LABEL_KEYS[attribute])}${required.attributes.includes(attribute) ? ' *' : ''}`} dataTour={TOUR_NAMES[attribute]} lineId={lineId}
-                    options={optionsFor(variants, value, shown, attribute, names)} value={value[attribute]} disabled={disabled}
+            {RECEIPT_ATTRIBUTES.map((attribute) => (
+                <AttributeField key={attribute} id={key(attribute)} label={`${t(LABEL_KEYS[attribute])} ${t('field_optional')}`} dataTour={TOUR_NAMES[attribute]} lineId={lineId}
+                    options={optionsFor(variants, value, attribute, names)} value={value[attribute]} disabled={disabled}
                     invalid={errors(key(attribute)) !== undefined} onChange={(text) => onChange({ [attribute]: text } as Partial<EnteredAttributes>)}
                     messages={errors(key(attribute))} />
             ))}

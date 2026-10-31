@@ -44,6 +44,32 @@ public sealed class ReceiptDeviationRulesTests
     public void Null_And_Empty_Are_The_Same_Value() =>
         Assert.Equal(new[] { KindOther }, DifferingKinds(Hass(brand: null), Hass(2, brand: "  ")));
 
+    // Leeg betekent bewust "geen" en is een echte waarde: elke combinatie van gevuld/leeg per kenmerk. Besteld gevuld en ontvangen
+    // leeg is een afwijking van dat kenmerk, en andersom; leeg tegen leeg (null, "" of spaties) niet.
+    [Theory]
+    [InlineData("Size")]
+    [InlineData("Packaging")]
+    [InlineData("TradeClass")]
+    [InlineData("Brand")]
+    public void Empty_Is_A_Real_Value_For_Every_Attribute(string attribute)
+    {
+        VariantFacts With(int id, string value) => attribute switch
+        {
+            "Size" => Hass(id) with { Size = value },
+            "Packaging" => Hass(id) with { Packaging = value },
+            "TradeClass" => Hass(id) with { TradeClass = value },
+            _ => Hass(id) with { Brand = value },
+        };
+        foreach (var (expected, received, kinds) in new[]
+        {
+            ("test", null, attribute), (null, "test", attribute), ("test", "", attribute), ("", "test", attribute),
+            (null, "", KindOther), ("", "  ", KindOther), ("test", "test", KindOther),
+        })
+        {
+            Assert.Equal(kinds, string.Join(",", DifferingKinds(With(1, expected), With(2, received))));
+        }
+    }
+
     [Theory]
     [InlineData("Hass", 1, true)]
     [InlineData(" Hass", 1, true)]

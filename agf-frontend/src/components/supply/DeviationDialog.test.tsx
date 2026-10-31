@@ -41,4 +41,14 @@ describe('DeviationDialog weight', () => {
         await act(async () => { dialog().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
         assert.deepEqual([no, yes], [1, 0]);
     });
+
+    test('an empty brand against an ordered brand is a red row with a dash, never an empty cell', async () => {
+        const brandOnly: DeviationPreview = { ...weightOnly, expected: { ...hass, brand: 'test' }, received: { ...hass, productVariantId: 11 }, kinds: ['Brand'] };
+        await mounted.render(<DeviationDialog preview={brandOnly} onNo={() => {}} onYes={() => {}} />);
+        const red = Array.from(dialog().querySelectorAll('[data-differs="true"]'));
+        assert.equal(red.length, 1);
+        const cells = Array.from(red[0].querySelectorAll('dd')).map((cell) => cell.lastChild?.textContent ?? '');
+        assert.deepEqual([red[0].querySelector('dt')?.textContent, ...cells], ['deviation_attr_brand', 'test', '–']);
+        assert.ok(red[0].querySelectorAll('dd')[1].className.includes('text-red-800'));
+    });
 });

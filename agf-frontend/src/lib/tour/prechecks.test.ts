@@ -14,13 +14,13 @@ const variant = (id: number, name: string, extra: Partial<ProductOption['variant
 const item = (id: number, status: string, supplierReference: string | null) => ({ id, orderNumber: `IO-2026-${String(id).padStart(4, '0')}`, status, supplierReference }) as PurchaseOrderListItem;
 
 describe('tour prechecks', () => {
-    test('blind entry: the tour fills in what the screen asks for this variant and the right kg field', () => {
+    test('blind entry: the tour fills in every attribute of this variant (empty ones are skipped) and the right kg field', () => {
         const pe = variant(10, 'Hass', { originCountryCode: 'PE', sizeCategory: '18', packaging: '4 kg doos', tradeClass: 'I', brand: 'Verita', weightMethod: 'Calculated' });
-        const za = variant(12, 'Hass', { origin: 'Zuid-Afrika', originCountryCode: 'ZA', sizeCategory: '18', packaging: '4 kg doos', tradeClass: 'I', brand: null, weightMethod: 'Calculated' });
-        assert.deepEqual(receiptVars(pe, [pe, za], 10, 4), {
-            originText: 'PE', originName: 'Peru', size: '18', packaging: '4 kg doos', tradeClass: '', brand: 'Verita', kgPerPackage: '4', netKg: '',
+        assert.deepEqual(receiptVars(pe, 10, 4), {
+            originText: 'PE', originName: 'Peru', size: '18', packaging: '4 kg doos', tradeClass: 'I', brand: 'Verita', kgPerPackage: '4', netKg: '',
         });
-        assert.deepEqual([receiptVars({ ...pe, weightMethod: 'Weighed' }, [pe], 10, 4).kgPerPackage, receiptVars({ ...pe, weightMethod: 'Weighed' }, [pe], 10, 4).netKg], ['', '40']);
+        assert.equal(receiptVars({ ...pe, brand: null }, 10, 4).brand, '');
+        assert.deepEqual([receiptVars({ ...pe, weightMethod: 'Weighed' }, 10, 4).kgPerPackage, receiptVars({ ...pe, weightMethod: 'Weighed' }, 10, 4).netKg], ['', '40']);
     });
 
     test('the deviation chapter prefers a variant that only differs in origin', () => {
