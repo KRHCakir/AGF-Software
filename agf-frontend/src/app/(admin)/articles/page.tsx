@@ -4,9 +4,12 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import ArticleForm from '../../../components/articles/ArticleForm';
+import ArticleLifecycle from '../../../components/articles/ArticleLifecycle';
+import EmptyProducts from '../../../components/articles/EmptyProducts';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import { visibleArticles } from '../../../lib/articleLifecycle';
 import { formatGoodsCode, searchArticles } from '../../../lib/articleRules';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../../lib/shortcuts';
 import { unitLabelKey } from '../../../lib/units';
@@ -27,6 +30,8 @@ export default function ArticlesPage() {
     const [state, setState] = useState<LoadState<Loaded>>({ status: 'loading' });
     const [reloadToken, setReloadToken] = useState(0);
     const [query, setQuery] = useState('');
+    const [showArchived, setShowArchived] = useState(false);
+    const [emptyProductsToken, setEmptyProductsToken] = useState(0);
     const [editing, setEditing] = useState<{ article: Article | null; key: number } | null>(null);
     const searchInput = useRef<HTMLInputElement | null>(null);
 
@@ -51,7 +56,9 @@ export default function ArticlesPage() {
         if (article) setEditing({ article, key: article.id });
     }, [state]);
 
-    const shown = useMemo(() => (state.status === 'ready' ? searchArticles(state.data.articles, query) : []), [state, query]);
+    // Gearchiveerde artikelen staan standaard niet in de lijst; "Toon gearchiveerde" laat ze zien (met label).
+    const shown = useMemo(() => (state.status === 'ready' ? searchArticles(visibleArticles(state.data.articles, showArchived), query) : []), [state, query, showArchived]);
+    const archivedCount = state.status === 'ready' ? state.data.articles.filter((article) => article.isArchived).length : 0;
 
     const openNew = () => setEditing({ article: null, key: Date.now() });
     const openArticle = (article: Article) => setEditing({ article, key: article.id });
@@ -81,6 +88,20 @@ export default function ArticlesPage() {
         setEditing((current) => ({ article: saved, key: current?.key ?? saved.id }));
     };
 
+    // Verwijderd: uit de lijst en het formulier dicht; een productsoort zonder artikelen verdwijnt uit de keuzelijst.
+    const onDeleted = (id: number) => {
+        setState((current) => {
+            if (current.status !== 'ready') return current;
+            const removed = current.data.articles.find((a) => a.id === id);
+            const articles = current.data.articles.filter((a) => a.id !== id);
+            const productNames = removed && !articles.some((a) => a.productId === removed.productId)
+                ? current.data.reference.productNames.filter((name) => name !== removed.productName) : current.data.reference.productNames;
+            return { status: 'ready', data: { ...current.data, articles, reference: { ...current.data.reference, productNames } } };
+        });
+        setEditing(null);
+        setEmptyProductsToken((n) => n + 1);
+    };
+
     const number = (value: number | null) => (value === null ? '–' : new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { maximumFractionDigits: 3 }).format(value));
 
     return (
@@ -104,11 +125,18 @@ export default function ArticlesPage() {
                     {editing !== null && (
                         <ArticleForm key={editing.key} article={editing.article} reference={state.data.reference} countries={state.data.countries} onSaved={onSaved} onClose={() => setEditing(null)} />
                     )}
+                    {editing?.article && <ArticleLifecycle article={editing.article} onChanged={(saved) => onSaved(saved, false)} onDeleted={onDeleted} />}
                     <div className="flex flex-wrap items-center gap-2">
                         <label htmlFor="article-search" className="sr-only">{t('articles_search_label')}</label>
                         <input id="article-search" ref={searchInput} type="search" value={query} onChange={(event) => setQuery(event.target.value)}
                             placeholder={t('articles_search_placeholder')} className={`${inputClass} mt-0 max-w-xl`}
                             onKeyDown={(event) => { if (event.key === 'Enter' && shown.length === 1) { event.preventDefault(); openArticle(shown[0]); } }} />
+                        {archivedCount > 0 && (
+                            <label className="flex items-center gap-1 text-xs text-gray-700">
+                                <input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} data-testid="articles-show-archived" />
+                                {t('articles_show_archived', { count: String(archivedCount) })}
+                            </label>
+                        )}
                         <span className="text-xs text-gray-600">{t('articles_count', { count: String(shown.length) })} · {t('articles_shortcut_hint', { search: shortcutLabel('focusSearch', isMac), new: shortcutLabel('newDocument', isMac), save: shortcutLabel('save', isMac) })}</span>
                     </div>
                     <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
@@ -130,7 +158,7 @@ export default function ArticlesPage() {
                                 {shown.map((article) => (
                                     <tr key={article.id} className={`cursor-pointer hover:bg-blue-50 ${editing?.article?.id === article.id ? 'bg-blue-50' : ''}`} onClick={() => openArticle(article)} data-testid={`article-row-${article.id}`}>
                                         <td className="px-3 py-2 font-mono">{article.shortcutCode ?? <span className="text-gray-400">–</span>}</td>
-                                        <td className="px-3 py-2 text-gray-900">{article.description}{article.brand ? <span className="ml-1 text-xs text-gray-500">· {article.brand}</span> : null}</td>
+                                        <td className="px-3 py-2 text-gray-900">{article.description}{article.brand ? <span className="ml-1 text-xs text-gray-500">· {article.brand}</span> : null}{article.isArchived && <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-700">{t('articles_archived_badge')}</span>}</td>
                                         <td className="px-3 py-2">{article.packagingUnit ? t(unitLabelKey(article.packagingUnit)) : '–'}</td>
                                         <td className="px-3 py-2 text-right font-mono">{number(article.defaultNetKgPerPackage)}{article.weightMethod === 'Calculated' ? '' : article.defaultNetKgPerPackage === null ? '' : ' ⚖'}</td>
                                         <td className="px-3 py-2 text-right font-mono">{number(article.defaultPackagesPerPallet)}</td>
@@ -144,6 +172,8 @@ export default function ArticlesPage() {
                             </tbody>
                         </table>
                     </div>
+                    <EmptyProducts reloadToken={reloadToken + emptyProductsToken} onDeleted={(name) => setState((current) => (current.status === 'ready'
+                        ? { status: 'ready', data: { ...current.data, reference: { ...current.data.reference, productNames: current.data.reference.productNames.filter((n) => n !== name) } } } : current))} />
                     <OriginSettings countries={state.data.countries} cleanupToken={reloadToken}
                         onCountriesChanged={(countries) => setState((current) => (current.status === 'ready' ? { status: 'ready', data: { ...current.data, countries } } : current))}
                         onArticleChanged={(saved) => setState((current) => (current.status === 'ready'

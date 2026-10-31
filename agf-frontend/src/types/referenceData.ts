@@ -59,7 +59,7 @@ export interface VariantOption {
     origin: string | null;
     // Land van herkomst (ISO-code) als de variant er een heeft; zoeken op "PE" vindt Peru.
     originCountryCode?: string | null;
-    // Handelsklasse en merk (bij ontvangst alleen gevraagd als de varianten van een artikel daarin verschillen).
+    // Handelsklasse en merk (bij ontvangst altijd gevraagd, optioneel).
     tradeClass?: string | null;
     brand?: string | null;
     // Gewichtsmethode van de variant (Weighed of Calculated): de rondleiding vult daarmee het juiste kg-veld in.
@@ -68,6 +68,8 @@ export interface VariantOption {
     sizeCategory: string | null;
     // Bestaande snelcode van de variant (beheer via Producten); kiest alleen een variant, nooit hoeveelheid of gewicht.
     shortcutCode: string | null;
+    // Gearchiveerd artikel: niet meer in suggesties en keuzelijsten voor nieuwe invoer (bestaande regels tonen het nog wel).
+    isArchived?: boolean;
     // Standaard verpakkingen per pallet (invoerhulp bij "Pallet"-invoer; aanpasbaar per regel).
     defaultPackagesPerPallet: number | null;
     // Verpakkingseenheid uit de artikelstamgegevens: vult een lege eenheid op een nieuwe regel voor; nooit een overschrijving.
@@ -140,6 +142,8 @@ export function toVariantOption(value: Named): VariantOption {
         packagingUnit: isPackageUnit(value.packagingUnit) ? value.packagingUnit : null,
         defaultNetKgPerPackage: typeof value.defaultNetKgPerPackage === 'number' ? value.defaultNetKgPerPackage : null,
         defaultGrossKgPerPackage: typeof value.defaultGrossKgPerPackage === 'number' ? value.defaultGrossKgPerPackage : null,
+        // Alleen true telt: een ontbrekend veld (oudere backend) is een actief artikel.
+        isArchived: value.isArchived === true,
     };
 }
 

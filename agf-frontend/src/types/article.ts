@@ -35,6 +35,34 @@ export interface Article {
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
     defaultPrice: number;
+    // Gearchiveerd (inactief): niet meer in keuzelijsten en suggesties; terugzetten kan altijd. Optioneel voor oudere antwoorden.
+    isArchived?: boolean;
+    archivedAt?: string | null;
+    archivedBy?: string | null;
+}
+
+// GET api/articles/{id}/usage: waar het artikel aan hangt; verwijderen kan alleen zonder gebruik (anders archiveren).
+export const ARTICLE_USAGE_KINDS = ['purchaseOrderLines', 'receipts', 'receiptDeviations', 'salesOrderLines', 'purchaseInvoiceLines', 'invoiceLines',
+    'legacyOrderLines', 'inventory', 'wasteLogs'] as const;
+export type ArticleUsageKind = (typeof ARTICLE_USAGE_KINDS)[number];
+
+export interface ArticleUsage {
+    articleId: number;
+    canDelete: boolean;
+    usages: { kind: string; count: number }[];
+    message: string | null;
+}
+
+export function isArticleUsage(value: unknown): value is ArticleUsage {
+    return isObject(value) && isNumber(value.articleId) && typeof value.canDelete === 'boolean' && isNullableString(value.message)
+        && isArrayOf(value.usages, (usage): usage is { kind: string; count: number } => isObject(usage) && isString(usage.kind) && isNumber(usage.count));
+}
+
+// Productsoort zonder artikelen (mag worden verwijderd).
+export interface EmptyProduct { id: number; name: string }
+
+export function isEmptyProductList(value: unknown): value is EmptyProduct[] {
+    return isArrayOf(value, (item): item is EmptyProduct => isObject(item) && isNumber(item.id) && isString(item.name));
 }
 
 export interface SaveArticleRequest {

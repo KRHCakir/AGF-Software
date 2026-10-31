@@ -19,6 +19,13 @@ const products: SearchableProduct[] = [
 ];
 
 describe('searchVariants', () => {
+    test('an archived article is never suggested, but an existing line still finds it', () => {
+        const archived: SearchableProduct[] = [{ id: 1, name: 'Avocado', variants: [variant(1, 'Hass', 'Peru', '4kg Box', '22', 'avo22'), { ...variant(2, 'Hass', 'Peru', '4kg Box', '24', 'avo24'), isArchived: true }] }];
+        assert.deepEqual(searchVariants(archived, 'hass').map((m) => m.variantId), [1]);
+        assert.deepEqual(searchVariants(archived, 'avo24'), []);
+        assert.equal(findVariant(archived, 2)?.variantId, 2);
+    });
+
     test('the country code of the origin finds the variant too ("PE" -> Peru)', () => {
         const withCountry: SearchableProduct[] = [{ id: 1, name: 'Avocado', variants: [{ ...variant(1, 'Hass', 'Peru', '4 kg doos', '18', null), originCountryCode: 'PE' }, { ...variant(2, 'Hass', 'Chili', '4 kg doos', '18', null), originCountryCode: 'CL' }] }];
         assert.deepEqual(searchVariants(withCountry, 'hass pe').map((m) => m.variantId), [1]);

@@ -11,6 +11,8 @@ export interface SearchableVariant {
     packaging: string | null;
     sizeCategory: string | null;
     shortcutCode: string | null;
+    // Gearchiveerd: nooit meer als suggestie; een bestaande regel met dit artikel vindt het wel terug (findVariant).
+    isArchived?: boolean;
 }
 
 export interface SearchableProduct {
@@ -53,6 +55,7 @@ export function searchVariants(products: readonly SearchableProduct[], query: st
     const matches: VariantMatch[] = [];
     for (const product of products) {
         for (const variant of product.variants) {
+            if (variant.isArchived) continue;
             const exactShortcut = variant.shortcutCode !== null && normalize(variant.shortcutCode) === term;
             const text = haystack(product.name, variant);
             if (exactShortcut || words.every((word) => text.includes(word))) {
