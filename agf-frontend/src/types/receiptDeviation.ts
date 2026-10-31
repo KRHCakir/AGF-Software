@@ -15,14 +15,6 @@ export interface DeviationVariant {
     brand: string | null;
 }
 
-// Andere variant van hetzelfde product; otherArticle = ander ras of naam (nooit een afwijking, wel een nieuwe aanvoerregel).
-export interface DeviationCandidate {
-    variant: DeviationVariant;
-    shortcutCode: string | null;
-    otherArticle: boolean;
-    kinds: string[];
-}
-
 export type DeviationStatus = 'Exact' | 'Deviation' | 'OtherArticle' | 'BlockedAssigned';
 
 export interface DeviationPreview {
@@ -77,11 +69,6 @@ export function isDeviationVariant(value: unknown): value is DeviationVariant {
     return isObject(value) && isNumber(value.productVariantId) && isNumber(value.productId) && isNullableString(value.productName)
         && isNullableString(value.variantName) && isNullableString(value.origin) && isNullableString(value.size) && isNullableString(value.packaging)
         && isNullableString(value.packagingUnit) && isNullableString(value.tradeClass) && isNullableString(value.brand);
-}
-
-export function isDeviationCandidateList(value: unknown): value is DeviationCandidate[] {
-    return isArrayOf(value, (item): item is DeviationCandidate => isObject(item) && isDeviationVariant(item.variant)
-        && isNullableString(item.shortcutCode) && typeof item.otherArticle === 'boolean' && isStringArray(item.kinds));
 }
 
 export function isDeviationPreview(value: unknown): value is DeviationPreview {

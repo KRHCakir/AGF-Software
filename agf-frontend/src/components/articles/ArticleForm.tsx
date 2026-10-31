@@ -145,7 +145,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     <label htmlFor="originCountryCode-input" className="text-xs font-medium text-gray-700">{t('articles_field_origin')} *</label>
                     <CountryPicker id="originCountryCode" dataTour="article-origin" countries={countries} value={draft.originCountryCode === '' ? null : draft.originCountryCode}
                         onChange={(code) => update({ originCountryCode: code ?? '' })} disabled={submitting} invalid={e('originCountryCode') !== undefined} describedBy="originCountryCode-error" />
-                    {article !== null && !article.originCountryCode && article.origin && (
+                    {article !== null && !article.originCountryCode && article.origin && draft.originCountryCode === '' && (
                         <span className="block text-xs text-amber-900">{t('articles_origin_old_text', { origin: article.origin })}</span>
                     )}
                     <FieldError id="originCountryCode" messages={e('originCountryCode')} />

@@ -1,7 +1,7 @@
-// Hoofdstuk 1 (Inkopen bestellen) en 2 (Ontvangen en keuren). Alleen data-tour-namen en vaste teksten; de voorcontrole
+// Hoofdstuk 1 (Inkopen bestellen), 2 (Ontvangen en keuren) en Afwijking bij ontvangst. Alleen data-tour-namen en vaste teksten; de voorcontrole
 // levert de waarden die per database verschillen (snelcode, de open demo-inkooporder).
 
-import { precheckPurchase, precheckReceive } from './prechecks';
+import { precheckDeviation, precheckPurchase, precheckReceive } from './prechecks';
 import type { TourAction, TourChapter, TourStep } from './types';
 
 const step = (prefix: string, id: string, route: string, actions: readonly TourAction[]): TourStep => ({
@@ -32,7 +32,6 @@ export const ORDER_CHAPTER: TourChapter = {
         order('reference', '/supply', [
             { kind: 'type', target: 'supply-reference', text: '{{tourRef}}' },
             { kind: 'highlight', target: 'supply-ordered-on' },
-            { kind: 'type', target: 'supply-origin', text: 'Peru' },
             { kind: 'type', target: 'supply-expected', text: '{{expectedDate}}' },
         ]),
         order('article', '/supply', [
@@ -69,6 +68,20 @@ export const ORDER_CHAPTER: TourChapter = {
 
 const receive = (id: string, route: string, actions: readonly TourAction[]) => step('receive', id, route, actions);
 
+// Blinde invoer: wat er werkelijk is aangekomen, kenmerk voor kenmerk (lege kenmerken worden overgeslagen), daarna partij, aantal en kg.
+const enterReceipt = (lot: string): TourAction[] => [
+    { kind: 'click', target: 'receive-line:{{orderId}}-{{lineId}}' },
+    { kind: 'pick', target: 'receive-origin:{{lineId}}', text: '{{originText}}', expect: '{{originName}}', when: '{{originText}}' },
+    { kind: 'pick', target: 'receive-size:{{lineId}}', text: '{{size}}', when: '{{size}}' },
+    { kind: 'pick', target: 'receive-packaging:{{lineId}}', text: '{{packaging}}', when: '{{packaging}}' },
+    { kind: 'pick', target: 'receive-class:{{lineId}}', text: '{{tradeClass}}', when: '{{tradeClass}}' },
+    { kind: 'pick', target: 'receive-brand:{{lineId}}', text: '{{brand}}', when: '{{brand}}' },
+    { kind: 'type', target: 'receive-lot:{{lineId}}', text: lot },
+    { kind: 'type', target: 'receive-quantity:{{lineId}}', text: '{{quantity}}' },
+    { kind: 'type', target: 'receive-kg-per-package:{{lineId}}', text: '{{kgPerPackage}}', when: '{{kgPerPackage}}' },
+    { kind: 'type', target: 'receive-net-kg:{{lineId}}', text: '{{netKg}}', when: '{{netKg}}' },
+];
+
 export const RECEIVE_CHAPTER: TourChapter = {
     id: 'receive',
     titleKey: 'tour_ch_receive_title',
@@ -82,12 +95,7 @@ export const RECEIVE_CHAPTER: TourChapter = {
             { kind: 'click', target: 'supply-mode:receive' },
             { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
         ]),
-        receive('line', '/supply', [
-            { kind: 'click', target: 'receive-line:{{orderId}}-{{lineId}}' },
-            { kind: 'type', target: 'receive-lot:{{lineId}}', text: '{{tourRef}}' },
-            { kind: 'type', target: 'receive-quantity:{{lineId}}', text: '{{quantity}}' },
-            { kind: 'highlight', target: 'receive-weight:{{lineId}}' },
-        ]),
+        receive('line', '/supply', [...enterReceipt('{{tourRef}}'), { kind: 'highlight', target: 'receive-weight:{{lineId}}' }]),
         receive('register', '/supply', [
             { kind: 'click', target: 'receive-save' },
             { kind: 'wait', target: 'receive-to-inspection' },
@@ -115,6 +123,39 @@ export const RECEIVE_CHAPTER: TourChapter = {
         ]),
         receive('availability', '/availability?productVariantId={{variantId}}', [
             { kind: 'highlight', target: 'availability-available:{{variantId}}' },
+        ]),
+    ],
+};
+
+const deviation = (id: string, route: string, actions: readonly TourAction[]) => step('deviation', id, route, actions);
+
+export const DEVIATION_CHAPTER: TourChapter = {
+    id: 'deviation',
+    titleKey: 'tour_ch_deviation_title',
+    summaryKey: 'tour_ch_deviation_summary',
+    doneKey: 'tour_ch_deviation_done',
+    writes: true,
+    precheck: precheckDeviation,
+    steps: [
+        deviation('open', '/supply', [
+            { kind: 'click', target: 'supply-destination:Warehouse' },
+            { kind: 'click', target: 'supply-mode:receive' },
+            { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
+        ]),
+        deviation('enter', '/supply', enterReceipt('{{tourRef}}')),
+        deviation('check', '/supply', [
+            { kind: 'click', target: 'receive-save' },
+            { kind: 'wait', target: 'deviation-dialog' },
+            { kind: 'highlight', target: 'deviation-dialog' },
+        ]),
+        deviation('confirm', '/supply', [
+            { kind: 'select', target: 'deviation-reason', value: 'SupplierDeliveredDifferently' },
+            { kind: 'click', target: 'deviation-yes' },
+            { kind: 'wait', target: 'receive-to-inspection' },
+        ]),
+        deviation('order', '/purchase-orders?id={{orderId}}', [
+            { kind: 'wait', target: 'po-deviations' },
+            { kind: 'highlight', target: 'po-deviations' },
         ]),
     ],
 };

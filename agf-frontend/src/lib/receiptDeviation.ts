@@ -1,4 +1,4 @@
-import type { DeviationCandidate, DeviationPreview, DeviationVariant } from '../types/receiptDeviation';
+import type { DeviationPreview, DeviationVariant } from '../types/receiptDeviation';
 import { UNIT_LABEL_KEYS } from './units.ts';
 
 // Afwijkende ontvangst in het scherm: welke kenmerken het venster toont, wat er rood is en hoe "Ander artikel ontvangen" zoekt.
@@ -96,14 +96,4 @@ export function deviationConflict(body: unknown): { code: string; deviation: unk
     const record = body as Record<string, unknown>;
     const code = record.code;
     return typeof code === 'string' && (Object.values(DEVIATION_CODES) as string[]).includes(code) ? { code, deviation: record.deviation } : null;
-}
-
-// Zoeken in de kandidaten: snelcode exact eerst, dan op omschrijving (bevat, zonder hoofdletters); hooguit `max` treffers.
-export function searchCandidates(candidates: readonly DeviationCandidate[], query: string, max = 12): DeviationCandidate[] {
-    const term = query.trim().toLowerCase();
-    if (term === '') return candidates.slice(0, max);
-    const exact = candidates.filter((candidate) => candidate.shortcutCode !== null && candidate.shortcutCode.toLowerCase() === term);
-    const rest = candidates.filter((candidate) => !exact.includes(candidate)
-        && `${variantLabel(candidate.variant)} ${candidate.shortcutCode ?? ''}`.toLowerCase().includes(term));
-    return [...exact, ...rest].slice(0, max);
 }

@@ -11,9 +11,10 @@ geven), niet voor klanten.
 het script in `lib/tour/`, de `data-tour`-attributen op de schermelementen en de test.** Al gepland: inkoop-afwijkingen
 en mixpallets, verkoopfactuur, creditfactuur en periodeafsluiting.
 
-Afwijkende ontvangst ("Klopt dit?"): de `data-tour`-attributen staan er al (`receive-deviation-toggle`,
-`receive-deviation-search`, `deviation-dialog`, `deviation-reason`, `deviation-no`, `deviation-yes`, `po-deviations`,
-`po-line-replacement`, `po-deviation-badge`); het hoofdstuk zelf volgt in een vervolg-PR.
+Hoofdstuk **Afwijking bij ontvangst** (na Ontvangen en keuren): een deel van een open demo-inkooporder wordt blind ingevuld als
+een andere variant van hetzelfde artikel (bij voorkeur alleen een andere herkomst), het venster "Klopt dit?" verschijnt, de
+rondleiding kiest een reden en Ja, en toont de afwijking op de order. Nodig: een open DEMO-TOUR-order (hoofdstuk 1) en een tweede
+variant van het rondleidingsartikel; de e2e-test maakt die zo nodig via de gewone artikel-API aan.
 
 ## Aanzetten
 
@@ -84,6 +85,8 @@ minuten.
   `whyKey` ("Waarom") en acties: `navigate`, `highlight`, `type`, `pick` (typen en de suggestie met Tab nemen), `select`,
   `click`, `wait`, `assert` en `remember` (een tekst onthouden, zoals het nieuwe ordernummer).
 - Teksten mogen `{{tourRef}}`, `{{actor}}`, `{{today}}` en zelf onthouden variabelen bevatten.
+- Een actie met `when` wordt overgeslagen als die tekst na invullen leeg is, bijv. Klasse of Merk die het scherm bij dit artikel
+  niet vraagt (blinde invoer bij ontvangst). Een `data-tour`-naam zelf komt nooit uit een variabele, alleen de sleutel.
 - Een `assert` die niet klopt, stopt de rondleiding met "Deze stap kon niet uitgevoerd worden" in plaats van door te gaan.
 - De voorcontrole (`precheck`) leest met gewone GET-aanroepen of alles klaarstaat en noemt anders wat er ontbreekt; zo
   is elk hoofdstuk los te starten.
