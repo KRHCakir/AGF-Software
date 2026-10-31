@@ -4,7 +4,11 @@ import { KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
-import { DEVIATION_REASONS, DEVIATION_REASON_LABEL_KEYS, DeviationReason, articleName, deviationRows, isWeightOnly, shortNames, unitText } from '../../lib/receiptDeviation';
+import { AttributeKind, DEVIATION_REASONS, DEVIATION_REASON_LABEL_KEYS, DeviationReason, articleName, deviationRows, isWeightOnly, shortNames, unitText } from '../../lib/receiptDeviation';
+
+const WITHOUT_KEYS: Record<AttributeKind, string> = {
+    Origin: 'deviation_without_origin', Size: 'deviation_without_size', Packaging: 'deviation_without_packaging', TradeClass: 'deviation_without_trade_class', Brand: 'deviation_without_brand',
+};
 import type { DeviationPreview } from '../../types/receiptDeviation';
 import { inputClass } from './FieldError';
 import { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
@@ -33,9 +37,9 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
 
     const unit = unitText(t, preview.unit);
     const qty = (value: number) => formatQuantity(value, locale);
-    const names = shortNames(preview);
-    // "Avocado Hass Peru" en "Zuid-Afrika"; zonder afwijkend kenmerk (Other) zijn de korte namen al de volledige omschrijving.
-    const expectedText = preview.kinds.includes('Other') ? names.expected : `${articleName(preview.expected)} ${names.expected}`;
+    const names = shortNames(preview, (kind) => t(WITHOUT_KEYS[kind]));
+    // "Avocado Hass Peru" en "Zuid-Afrika"; zonder afwijkend kenmerk (alleen Other of gewicht) zijn de korte namen al de volledige omschrijving.
+    const expectedText = !preview.kinds.some((kind) => kind !== 'Other' && kind !== 'Weight') ? names.expected : `${articleName(preview.expected)} ${names.expected}`;
     // Gewicht (netto) als extra rij: "4 kg per colli (40 kg)"; rood alleen als de server het als afwijking noemt.
     const kg = (value: number | null | undefined) => (value === null || value === undefined ? '–' : formatKg(value, locale));
     const weightText = (perPackage: number | null | undefined, total: number | null | undefined) =>

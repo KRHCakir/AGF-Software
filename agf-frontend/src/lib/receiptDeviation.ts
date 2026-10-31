@@ -70,15 +70,26 @@ export function deviationRows(expected: DeviationVariant, received: DeviationVar
     ];
 }
 
-// Korte naam van de verwachte en ontvangen regel in de gevolgen ("Peru", "Zuid-Afrika"): het eerste afwijkende kenmerk, anders het artikel.
-export function shortNames(preview: Pick<DeviationPreview, 'expected' | 'received' | 'kinds'>): { expected: string; received: string } {
+export type AttributeKind = 'Origin' | 'Size' | 'Packaging' | 'TradeClass' | 'Brand';
+const ATTRIBUTE_KINDS: readonly AttributeKind[] = ['Origin', 'Size', 'Packaging', 'TradeClass', 'Brand'];
+const valueOf = (variant: DeviationVariant, kind: AttributeKind): string | null => {
+    switch (kind) {
+        case 'Origin': return variant.origin;
+        case 'Size': return variant.size;
+        case 'Packaging': return variant.packaging;
+        case 'TradeClass': return variant.tradeClass;
+        case 'Brand': return variant.brand;
+    }
+};
+
+// Korte naam van de verwachte en ontvangen regel in de gevolgen ("Peru", "Zuid-Afrika"): het eerste afwijkende kenmerk, aan beide
+// kanten hetzelfde kenmerk; is het aan één kant leeg, dan `without(kind)` ("zonder merk"). Zonder afwijkend kenmerk: het hele artikel.
+export function shortNames(preview: Pick<DeviationPreview, 'expected' | 'received' | 'kinds'>, without: (kind: AttributeKind) => string): { expected: string; received: string } {
+    const kind = ATTRIBUTE_KINDS.find((candidate) => preview.kinds.includes(candidate));
+    if (kind === undefined) return { expected: variantLabel(preview.expected), received: variantLabel(preview.received) };
     const pick = (variant: DeviationVariant) => {
-        if (preview.kinds.includes('Origin') && variant.origin) return variant.origin;
-        if (preview.kinds.includes('Size') && variant.size) return variant.size;
-        if (preview.kinds.includes('Packaging') && variant.packaging) return variant.packaging;
-        if (preview.kinds.includes('TradeClass') && variant.tradeClass) return variant.tradeClass;
-        if (preview.kinds.includes('Brand') && variant.brand) return variant.brand;
-        return variantLabel(variant);
+        const value = valueOf(variant, kind);
+        return value === null || value.trim() === '' ? without(kind) : value.trim();
     };
     return { expected: pick(preview.expected), received: pick(preview.received) };
 }

@@ -1,9 +1,10 @@
 import type { VariantOption, ProductOption } from '../types/referenceData';
 import { countryKey } from './countries.ts';
 
-// Blinde invoer bij ontvangst: de gebruiker vult zelf in wat er is aangekomen (herkomst, maat, verpakking en zo nodig klasse en merk);
-// pas bij registreren zoekt het scherm de variant van hetzelfde artikel die daar precies bij hoort. Er wordt nooit iets "bijna
-// gelijks" gekozen en nooit een artikel aangemaakt; de server vergelijkt daarna op variant-id en gewicht (afwijkingsvenster).
+// Blinde invoer bij ontvangst: de gebruiker vult zelf in wat er is aangekomen (herkomst, maat, verpakking, klasse en merk);
+// pas bij registreren zoekt het scherm de variant van hetzelfde artikel die daar precies bij hoort. Alleen herkomst is verplicht;
+// een leeg kenmerk betekent bewust "geen" en is een echte waarde (leeg past alleen op een variant zonder die waarde). Er wordt
+// nooit iets "bijna gelijks" gekozen; de server vergelijkt daarna op variant-id en gewicht (afwijkingsvenster).
 
 export type ReceiptAttribute = 'size' | 'packaging' | 'tradeClass' | 'brand';
 export const RECEIPT_ATTRIBUTES: readonly ReceiptAttribute[] = ['size', 'packaging', 'tradeClass', 'brand'];
@@ -41,20 +42,6 @@ export function articleVariants(products: readonly ProductOption[], orderedVaria
     return [];
 }
 
-// Klasse en merk alleen tonen als de varianten van dit artikel daarin verschillen; herkomst, maat en verpakking altijd.
-export function shownAttributes(variants: readonly VariantOption[]): ReceiptAttribute[] {
-    return RECEIPT_ATTRIBUTES.filter((attribute) => attribute === 'size' || attribute === 'packaging'
-        || new Set(variants.map((variant) => key(attributeOf(variant, attribute)))).size > 1);
-}
-
-// Een veld is verplicht als minstens één variant er een waarde voor heeft; leeg past dan nooit.
-export function requiredFields(variants: readonly VariantOption[], shown: readonly ReceiptAttribute[]): { origin: boolean; attributes: ReceiptAttribute[] } {
-    return {
-        origin: variants.some((variant) => variant.originCountryCode || variant.origin),
-        attributes: shown.filter((attribute) => variants.some((variant) => attributeOf(variant, attribute).trim() !== '')),
-    };
-}
-
 function originMatches(variant: VariantOption, origin: string | null, countryNames: ReadonlyMap<string, string>): boolean {
     if (origin === null) return !variant.originCountryCode && !variant.origin;
     if (variant.originCountryCode) return variant.originCountryCode === origin;
@@ -62,14 +49,14 @@ function originMatches(variant: VariantOption, origin: string | null, countryNam
     return key(variant.origin) !== '' && key(variant.origin) === key(countryNames.get(origin) ?? origin);
 }
 
-function attributesMatch(variant: VariantOption, entered: EnteredAttributes, shown: readonly ReceiptAttribute[], skip: ReceiptAttribute | null): boolean {
-    return shown.every((attribute) => attribute === skip || key(attributeOf(variant, attribute)) === key(entered[attribute]));
+function attributesMatch(variant: VariantOption, entered: EnteredAttributes): boolean {
+    return RECEIPT_ATTRIBUTES.every((attribute) => key(attributeOf(variant, attribute)) === key(entered[attribute]));
 }
 
 // Suggesties voor een veld: de waarden van de varianten die passen bij wat er al in de andere velden staat (lege velden tellen niet).
-export function optionsFor(variants: readonly VariantOption[], entered: EnteredAttributes, shown: readonly ReceiptAttribute[], attribute: ReceiptAttribute,
+export function optionsFor(variants: readonly VariantOption[], entered: EnteredAttributes, attribute: ReceiptAttribute,
     countryNames: ReadonlyMap<string, string>): string[] {
-    const filled = shown.filter((other) => other !== attribute && entered[other].trim() !== '');
+    const filled = RECEIPT_ATTRIBUTES.filter((other) => other !== attribute && entered[other].trim() !== '');
     const values = variants
         .filter((variant) => entered.origin === null || originMatches(variant, entered.origin, countryNames))
         .filter((variant) => filled.every((other) => key(attributeOf(variant, other)) === key(entered[other])))
@@ -79,9 +66,9 @@ export function optionsFor(variants: readonly VariantOption[], entered: EnteredA
 }
 
 // De variant die precies bij de invoer hoort. Passen er meer (gelijke kenmerken), dan de bestelde als die erbij zit; anders nooit raden.
-export function matchVariant(variants: readonly VariantOption[], entered: EnteredAttributes, shown: readonly ReceiptAttribute[], orderedVariantId: number,
+export function matchVariant(variants: readonly VariantOption[], entered: EnteredAttributes, orderedVariantId: number,
     countryNames: ReadonlyMap<string, string>): VariantMatch {
-    const matches = variants.filter((variant) => originMatches(variant, entered.origin, countryNames) && attributesMatch(variant, entered, shown, null));
+    const matches = variants.filter((variant) => originMatches(variant, entered.origin, countryNames) && attributesMatch(variant, entered));
     if (matches.length === 0) return { kind: 'none' };
     if (matches.some((variant) => variant.id === orderedVariantId)) return { kind: 'match', variantId: orderedVariantId };
     return matches.length === 1 ? { kind: 'match', variantId: matches[0].id } : { kind: 'ambiguous' };

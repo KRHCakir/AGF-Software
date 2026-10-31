@@ -116,9 +116,10 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
         setTimeout(() => document.getElementById('goodsCode-input')?.focus(), 0);
     };
 
-    const textField = (field: keyof ArticleDraft & string, labelKey: string, options: { ref?: boolean; hintKey?: string; list?: string; mono?: boolean; maxLength?: number; span?: string } = {}) => (
+    // optional: maat, verpakking, klasse en merk zijn uitdrukkelijk optioneel (leeg = bewust "geen"); alleen product en herkomst zijn verplicht.
+    const textField = (field: keyof ArticleDraft & string, labelKey: string, options: { ref?: boolean; hintKey?: string; list?: string; mono?: boolean; maxLength?: number; span?: string; optional?: boolean } = {}) => (
         <div className={options.span ?? ''}>
-            <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{field === 'productName' ? ' *' : ''}</label>
+            <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{field === 'productName' ? ' *' : ''}{options.optional ? ` ${t('field_optional')}` : ''}</label>
             <input {...fieldProps(field, e(field))} ref={options.ref ? firstInput : undefined} value={draft[field]} list={options.list} maxLength={options.maxLength ?? 100} disabled={submitting}
                 onChange={(event) => update({ [field]: event.target.value } as Partial<ArticleDraft>)} className={`${inputClass}${options.mono ? ' font-mono' : ''}`} />
             {options.hintKey && <span className="block text-xs text-gray-500">{t(options.hintKey)}</span>}
@@ -150,8 +151,8 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     )}
                     <FieldError id="originCountryCode" messages={e('originCountryCode')} />
                 </div>
-                {textField('brand', 'articles_field_brand')}
-                {textField('sizeCategory', 'articles_field_size')}
+                {textField('brand', 'articles_field_brand', { optional: true })}
+                {textField('sizeCategory', 'articles_field_size', { optional: true })}
                 <div>
                     <label htmlFor="packagingUnit-input" className="text-xs font-medium text-gray-700">{t('articles_field_packaging_unit')}</label>
                     <select {...fieldProps('packagingUnit', e('packagingUnit'))} value={draft.packagingUnit} disabled={submitting} className={inputClass}
@@ -161,7 +162,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     </select>
                     <FieldError id="packagingUnit" messages={e('packagingUnit')} />
                 </div>
-                {textField('packaging', 'articles_field_packaging')}
+                {textField('packaging', 'articles_field_packaging', { optional: true })}
             </fieldset>
 
             <fieldset className="grid grid-cols-2 gap-3 md:grid-cols-4" disabled={submitting}>
@@ -223,7 +224,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                             <FieldError id="goodsCode" messages={e('goodsCode')} />
                         </div>
                         <div>
-                            <label htmlFor="tradeClass-input" className="text-xs font-medium text-gray-700">{t('articles_field_trade_class')}</label>
+                            <label htmlFor="tradeClass-input" className="text-xs font-medium text-gray-700">{t('articles_field_trade_class')} {t('field_optional')}</label>
                             <input {...fieldProps('tradeClass', e('tradeClass'))} value={draft.tradeClass} list="article-trade-classes" maxLength={50} disabled={submitting}
                                 onChange={(event) => update({ tradeClass: event.target.value })} className={inputClass} />
                             <datalist id="article-trade-classes">{reference.tradeClassSuggestions.map((option) => <option key={option} value={option} />)}</datalist>

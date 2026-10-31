@@ -4,7 +4,7 @@
 
 import { todayInAmsterdam } from '../calendarDate';
 import { formatDecimalInput } from '../decimal';
-import { articleVariants, shownAttributes } from '../receiptBlindEntry';
+import { articleVariants } from '../receiptBlindEntry';
 import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
@@ -81,16 +81,15 @@ export async function precheckPurchase(signal: AbortSignal): Promise<TourPrechec
 
 // Blinde invoer: wat de rondleiding bij ontvangst invult voor deze variant (alleen de kenmerken die het scherm vraagt; een lege waarde
 // slaat de actie over via `when`) en het juiste kg-veld met het kg per verpakking.
-export function receiptVars(variant: VariantOption, variants: readonly VariantOption[], quantity: number, kgPerPackage: number): Record<string, string> {
-    const shown = shownAttributes(variants);
+export function receiptVars(variant: VariantOption, quantity: number, kgPerPackage: number): Record<string, string> {
     const calculated = variant.weightMethod === 'Calculated';
     return {
         originText: variant.originCountryCode ?? variant.origin ?? '',
         originName: variant.origin ?? '',
         size: variant.sizeCategory ?? '',
         packaging: variant.packaging ?? '',
-        tradeClass: shown.includes('tradeClass') ? variant.tradeClass ?? '' : '',
-        brand: shown.includes('brand') ? variant.brand ?? '' : '',
+        tradeClass: variant.tradeClass ?? '',
+        brand: variant.brand ?? '',
         // Berekend: kg per verpakking (etiket); gewogen: het totaal. Het andere veld blijft leeg en de actie wordt overgeslagen.
         kgPerPackage: calculated ? formatDecimalInput(kgPerPackage) : '',
         netKg: calculated ? '' : formatDecimalInput(Math.round(quantity * kgPerPackage * 1000) / 1000),
@@ -134,7 +133,7 @@ export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck
             variantId: String(line.productVariantId),
             quantity: String(line.expectedQuantity),
             rejectQuantity: String(Math.max(1, Math.floor(line.expectedQuantity / 4))),
-            ...receiptVars(variant, variants, line.expectedQuantity, kg),
+            ...receiptVars(variant, line.expectedQuantity, kg),
         },
     };
 }
@@ -158,7 +157,7 @@ export async function precheckDeviation(signal: AbortSignal): Promise<TourPreche
             lineId: String(line.id),
             quantity: String(quantity),
             expectedOrigin: ordered.origin ?? '',
-            ...receiptVars(other, variants, quantity, kg),
+            ...receiptVars(other, quantity, kg),
         },
     };
 }

@@ -72,6 +72,7 @@ async function fill(origin: string, size: string, kgPerColli = '4') {
     await pick('line.501.origin', origin);
     await pick('line.501.size', size);
     await pick('line.501.packaging', '4');
+    await pick('line.501.tradeClass', 'I');
     await type(input('line.501.lotNumber'), 'TEST-001');
     await type(input('line.501.quantity'), '10');
     await type(input('line.501.netKgPerPackage'), kgPerColli);
@@ -109,14 +110,17 @@ describe('ReceivePalletForm blind entry', () => {
         const text = mounted.container.textContent ?? '';
         assert.equal(text.includes('Peru'), false, 'no ordered origin');
         assert.equal(text.includes('40 kg'), false, 'no ordered kg');
-        // Klasse en merk zijn bij dit artikel overal gelijk: niet gevraagd.
-        assert.equal(mounted.container.querySelector('[id="line.501.tradeClass-input"]'), null);
+        // Klasse en merk worden altijd gevraagd, leeg en als optioneel; alleen herkomst heeft een sterretje.
+        for (const field of ['line.501.tradeClass', 'line.501.brand']) assert.equal(input(field).value, '', field);
+        const label = (field: string) => mounted.container.querySelector(`label[for="${field}-input"]`)?.textContent ?? '';
+        assert.equal(label('line.501.origin'), 'receipt_attr_origin *');
+        for (const field of ['size', 'packaging', 'tradeClass', 'brand']) assert.ok(label(`line.501.${field}`).endsWith('field_optional') && !label(`line.501.${field}`).includes('*'), field);
     });
 
-    test('keyboard order: origin, size, packaging, lot, quantity, kg', async () => {
+    test('keyboard order: origin, size, packaging, class, brand, lot, quantity, kg', async () => {
         await arrange();
         const order = Array.from(mounted.container.querySelectorAll<HTMLInputElement>('input')).map((element) => element.id);
-        const wanted = ['line.501.origin-input', 'line.501.size-input', 'line.501.packaging-input', 'line.501.lotNumber-input', 'line.501.quantity-input', 'line.501.netKgPerPackage-input'];
+        const wanted = ['line.501.origin-input', 'line.501.size-input', 'line.501.packaging-input', 'line.501.tradeClass-input', 'line.501.brand-input', 'line.501.lotNumber-input', 'line.501.quantity-input', 'line.501.netKgPerPackage-input'];
         assert.deepEqual(order.filter((id) => wanted.includes(id)), wanted);
     });
 
@@ -198,14 +202,14 @@ describe('ReceivePalletForm blind entry', () => {
         assert.equal(posts().length, 0);
     });
 
-    test('origin and size are required before anything is checked', async () => {
+    test('only origin is required before anything is checked; size, packaging, class and brand may stay empty', async () => {
         await arrange();
         await type(input('line.501.lotNumber'), 'TEST-001');
         await type(input('line.501.quantity'), '10');
         await type(input('line.501.netKgPerPackage'), '4');
         await submit();
         assert.equal(input('line.501.origin').getAttribute('aria-invalid'), 'true');
-        assert.equal(input('line.501.size').getAttribute('aria-invalid'), 'true');
+        for (const field of ['size', 'packaging', 'tradeClass', 'brand']) assert.notEqual(input(`line.501.${field}`).getAttribute('aria-invalid'), 'true', field);
         assert.equal(previews().length, 0);
     });
 

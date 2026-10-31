@@ -19,10 +19,11 @@ const commitment: SupplyCommitment = {
     ],
 };
 
-// Artikelen zonder herkomst, maat of verpakking: bij blinde invoer is dan niets verplicht en past de bestelde variant exact.
+// Artikelen met alleen een herkomst (Peru): bij blinde invoer is alleen de herkomst verplicht en past de bestelde variant exact
+// als de overige kenmerken leeg blijven (leeg = bewust "geen").
 const products = [
-    { id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: null, originCountryCode: null, packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
-    { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: null, originCountryCode: null, packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
+    { id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: 'Peru', originCountryCode: 'PE', packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
+    { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: 'Peru', originCountryCode: 'PE', packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
 ];
 const countries = { countries: [{ code: 'PE', nameNl: 'Peru', nameEn: 'Peru' }], aliases: [] };
 const exactPreview = (url: string) => ({
@@ -40,6 +41,8 @@ const input = (id: string) => mounted.container.querySelector<HTMLInputElement>(
 const type = async (element: HTMLInputElement, value: string) => { await act(async () => { setValue(element, value); }); };
 const text = () => mounted.container.textContent ?? '';
 const state = (id: number) => mounted.container.querySelector(`[data-testid="ggn-state-${id}"]`)!.textContent ?? '';
+const key = async (element: HTMLElement, name: string) => { await act(async () => { element.dispatchEvent(new window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); }); };
+const pick = async (id: string, value: string) => { await type(input(id), value); await key(input(id), 'Tab'); await act(async () => { input(id).dispatchEvent(new window.FocusEvent('blur')); input(id).dispatchEvent(new window.FocusEvent('focusout', { bubbles: true })); }); };
 const submit = async () => { await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); }); };
 const selectSource = async (lineId: number) => { await act(async () => { mounted.container.querySelector<HTMLInputElement>(`#source-${lineId}`)!.click(); }); };
 
@@ -133,6 +136,8 @@ describe('ReceivePalletForm GGN', () => {
         assert.ok(state(501).includes('supply_ggn_cleared'), 'deliberately cleared');
 
         // Ongeldig blokkeert inline; niets verstuurd.
+        await pick('line.501.origin', 'PE');
+        await pick('line.502.origin', 'PE');
         await type(input('line.501.lotNumber'), 'LOT-A');
         await type(input('line.501.quantity'), '40');
         await type(input('line.501.netWeightKg'), '160');

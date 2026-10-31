@@ -10,7 +10,7 @@ import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
 import { DEVIATION_CODES, deviationConflict } from '../../lib/receiptDeviation';
-import { EnteredAttributes, ReceiptAttribute, articleVariants, emptyEntered, matchVariant, requiredFields, shownAttributes } from '../../lib/receiptBlindEntry';
+import { EnteredAttributes, articleVariants, emptyEntered, matchVariant } from '../../lib/receiptBlindEntry';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
@@ -318,21 +318,17 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 addError(found, 'general', t('receipt_lists_unavailable'));
                 continue;
             }
-            const required = requiredFields(article.variants, article.shown);
-            if (required.origin && draft.entered.origin === null) addError(found, `line.${id}.origin`, t('supply_error_required'));
-            for (const attribute of required.attributes) {
-                if (draft.entered[attribute].trim() === '') addError(found, `line.${id}.${attribute}`, t('supply_error_required'));
-            }
+            // Alleen herkomst is verplicht; maat, verpakking, klasse en merk mogen leeg (= bewust "geen").
+            if (draft.entered.origin === null) addError(found, `line.${id}.origin`, t('supply_error_required'));
         }
         return found;
     };
 
-    // Varianten van hetzelfde artikel als de bronregel en welke kenmerken gevraagd worden; null zolang de lijsten niet geladen zijn.
-    const articleOf = (id: number): { variants: ReturnType<typeof articleVariants>; shown: ReceiptAttribute[] } | null => {
+    // Varianten van hetzelfde artikel als de bronregel; null zolang de lijsten niet geladen zijn.
+    const articleOf = (id: number): { variants: ReturnType<typeof articleVariants> } | null => {
         const entry = index.get(id);
         if (!entry || products === null || countries === null) return null;
-        const variants = articleVariants(products, entry.line.productVariantId);
-        return { variants, shown: shownAttributes(variants) };
+        return { variants: articleVariants(products, entry.line.productVariantId) };
     };
     const countryNames = useMemo(() => new Map((countries?.countries ?? []).map((country) => [country.code, country.nameNl])), [countries]);
 
@@ -454,7 +450,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         const article = articleOf(id);
         const entry = index.get(id);
         if (!quantity.ok || article === null || entry === undefined) return;
-        const match = matchVariant(article.variants, draft.entered, article.shown, entry.line.productVariantId, countryNames);
+        const match = matchVariant(article.variants, draft.entered, entry.line.productVariantId, countryNames);
         if (match.kind !== 'match') {
             setCombinations((current) => ({ ...current, [id]: match.kind === 'none' ? 'missing' : 'ambiguous' }));
             return;
@@ -803,7 +799,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                     const article = articleOf(id);
                                     return article === null || countries === null
                                         ? <p className="col-span-2 text-xs text-gray-600 md:col-span-7">{products === null ? t('supply_open_loading') : t('receipt_lists_unavailable')}</p>
-                                        : <ReceivedAttributes lineId={id} variants={article.variants} shown={article.shown} countries={countries} value={draft.entered}
+                                        : <ReceivedAttributes lineId={id} variants={article.variants} countries={countries} value={draft.entered}
                                             onChange={(patch) => editLine(id, 'entered', { ...draft.entered, ...patch })} disabled={!editable} errors={e}
                                             combination={combinations[id] ?? null} />;
                                 })()}
