@@ -247,6 +247,16 @@ describe('ReceivePalletForm blind entry', () => {
         assert.equal(ids[0], ids[1]);
     });
 
+    test('while the article is being created, the attributes and kg per colli cannot change', async () => {
+        await missingCombination();
+        let release: () => void = () => {};
+        articleAnswers.push((() => new Promise<Response>((resolve) => { release = () => resolve(json(201, { article: created, replayed: false })); })) as unknown as () => Response);
+        await click(createButton());
+        for (const field of ['line.501.size', 'line.501.packaging', 'line.501.tradeClass', 'line.501.brand', 'line.501.netKgPerPackage']) assert.equal(input(field).disabled, true, field);
+        await act(async () => { release(); });
+        await mounted.waitFor(() => dialog() !== null, 'dialog after creating');
+    });
+
     test('"Choose this" takes the existing variant and continues with the normal check', async () => {
         await missingCombination();
         const choose = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('[data-tour="new-article-choose"]')).find((button) => button.dataset.tourKey === '501-12')!;
