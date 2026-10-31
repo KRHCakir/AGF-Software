@@ -8,7 +8,7 @@ import { formatDateTime, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { type LineWeightDraft, lineKgRows, resolveLineWeight, weightPayload } from '../../lib/lineWeight';
 import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
-import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
+import { isDateOnly, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from '../../lib/calendarDate';
 import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -86,6 +86,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     const [errors, setErrors] = useState<FieldErrors>({});
     const [result, setResult] = useState<SaveResult<SupplyCommitment> | null>(null);
     const inFlight = useRef(false);
+    const expectedInput = useRef<HTMLInputElement | null>(null);
 
     // Na een onbekende uitkomst of na succes is het formulier vergrendeld (geen dubbele aanvoer door een gewijzigde retry).
     const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
@@ -152,14 +153,17 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         if (isDirect && destination === '') addError(found, 'destination', t('supply_error_required_destination'));
         else if (destination.length > 200) addError(found, 'destination', t('supply_error_too_long', { max: '200' }));
 
+        // Verwacht op: wat de browser in het datumveld heeft vastgelegd telt, niet een eerdere stand van de state (een browser die de
+        // laatst getypte cijfers pas bij het verlaten doorgeeft, gaf anders "Vul een geldige datum in" bij een goed ingevulde datum).
+        // ISO (datumveld) en dd-mm-jjjj werken allebei; vandaag en eerder zijn geldig (een aanvoer kan achteraf worden vastgelegd).
         let expectedAt = '';
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(header.expectedDate)) {
-            addError(found, 'expectedAt', t('supply_error_required_date'));
-        } else {
-            const local = new Date(`${header.expectedDate}T00:00:00`);
-            if (Number.isNaN(local.getTime())) addError(found, 'expectedAt', t('supply_error_required_date'));
-            else expectedAt = local.toISOString();
-        }
+        // Is het veld er, dan telt alleen wat erin staat, ook leeg: een gewiste of half getypte datum stuurt nooit de vorige waarde mee.
+        const field = expectedInput.current;
+        const expectedText = field !== null ? field.value : header.expectedDate;
+        const expectedDate = parseDateInput(expectedText);
+        const expectedIso = expectedDate === null ? null : toLocalMidnightIso(expectedDate);
+        if (expectedIso === null) addError(found, 'expectedAt', t(field?.validity.badInput ? 'supply_error_incomplete_date' : 'supply_error_required_date'));
+        else expectedAt = expectedIso;
 
         const supplierReference = header.supplierReference.trim();
         if (supplierReference.length > MAX_SUPPLIER_REFERENCE_LENGTH) addError(found, 'supplierReference', t('supply_error_too_long', { max: String(MAX_SUPPLIER_REFERENCE_LENGTH) }));
@@ -362,8 +366,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 </div>
                 <div>
                     <label htmlFor="expectedAt-input" className="text-xs font-medium text-gray-700">{t('supply_expected_date')} *</label>
-                    <input {...fieldProps('expectedAt', e('expectedAt'))} data-tour="supply-expected" type="date" value={header.expectedDate} disabled={locked}
-                        onChange={(event) => updateHeader('expectedDate', event.target.value)} className={inputClass} />
+                    <input {...fieldProps('expectedAt', e('expectedAt'))} ref={expectedInput} data-tour="supply-expected" type="date" value={header.expectedDate} disabled={locked}
+                        onChange={(event) => updateHeader('expectedDate', event.target.value)}
+                        onBlur={(event) => { if (event.target.value !== header.expectedDate) updateHeader('expectedDate', event.target.value); }} className={inputClass} />
                     <FieldError id="expectedAt" messages={e('expectedAt')} />
                 </div>
             </div>

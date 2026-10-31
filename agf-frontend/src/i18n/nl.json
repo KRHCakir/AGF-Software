@@ -282,6 +282,7 @@
   "supply_error_required_customer": "Kies de klant: directe handel is altijd klantgebonden.",
   "supply_error_required_destination": "Vul de bestemming in.",
   "supply_error_required_date": "Vul een geldige datum in.",
+  "supply_error_incomplete_date": "Vul een volledige, bestaande datum in (dd-mm-jjjj).",
   "supply_error_required_unit": "Kies een eenheid.",
   "supply_error_too_long": "Maximaal {max} tekens.",
   "supply_error_lines_required": "Voeg minstens één regel toe.",

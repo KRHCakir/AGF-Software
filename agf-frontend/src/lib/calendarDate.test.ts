@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { amsterdamDateOf, formatCalendarDate, formatDateOnly, isDateOnly, isoToDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
+import { amsterdamDateOf, formatCalendarDate, formatDateOnly, isDateOnly, isoToDateInput, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
 
 // Rondreis van de gevraagde leverdatum in Europe/Amsterdam, zomer- en wintertijd: de kalenderdag die de gebruiker koos
 // moet na UTC-normalisatie door de server exact zo worden teruggetoond. node:test draait elk bestand in een eigen proces.
@@ -77,5 +77,18 @@ describe('shipping date of a UTC instant in Europe/Amsterdam', () => {
         assert.equal(amsterdamDateOf('2026-12-31T23:00:00Z'), '2027-01-01');
         assert.equal(amsterdamDateOf('not a date'), null);
     });
-});
 
+    test('typed dates: the ISO value of a date field and the Dutch notation both work; incomplete or impossible dates never do', () => {
+        assert.equal(parseDateInput('2026-10-31'), '2026-10-31');
+        assert.equal(parseDateInput('31-10-2026'), '2026-10-31');
+        assert.equal(parseDateInput(' 31/10/2026 '), '2026-10-31');
+        assert.equal(parseDateInput('1.9.2026'), '2026-09-01');
+        assert.equal(parseDateInput('31-02-2026'), null, 'never rolls over to March');
+        assert.equal(parseDateInput('2026-02-31'), null);
+        assert.equal(parseDateInput('0026-10-31'), null, 'a half-typed year');
+        assert.equal(parseDateInput('31-10-26'), null);
+        assert.equal(parseDateInput('2026-10-3'), null);
+        assert.equal(parseDateInput(''), null);
+        assert.equal(parseDateInput('morgen'), null);
+    });
+});
