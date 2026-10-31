@@ -35,6 +35,7 @@ describe('articleFromEntry', () => {
         assert.equal(newArticleText(t, 'Avocado Hass', 'Zuid-Afrika', typed({ packaging: ' test  krat ', brand: '' })),
             'Avocado Hass · Zuid-Afrika · maat 12 · verpakking test krat · klasse I · merk geen');
         assert.deepEqual(enteredFrom(variant(1, { brand: null })), { origin: 'ZA', size: '12', packaging: 'Test Doos', tradeClass: 'I', brand: '' });
+        assert.equal(enteredFrom(variant(1, { originCountryCode: null, origin: 'zuid-afrika' }), new Map([['ZA', 'Zuid-Afrika']])).origin, 'ZA');
     });
 
     test('the created article joins the lists of this screen (existing product kind, or a new one)', () => {

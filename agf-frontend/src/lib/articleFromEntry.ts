@@ -49,9 +49,12 @@ export function similarVariants(variants: readonly VariantOption[], entered: Ent
 }
 
 // De kenmerken van een bestaande variant als invoer (bij "Kies dit").
-export function enteredFrom(variant: VariantOption): EnteredAttributes {
+// Heeft de variant alleen een landnaam (oudere data), dan wordt de code via de landnamen opgezocht zodat de herkomst niet leeg raakt.
+export function enteredFrom(variant: VariantOption, countryNames: ReadonlyMap<string, string> = new Map()): EnteredAttributes {
+    const nameKey = key(variant.origin);
+    const codeByName = nameKey === '' ? undefined : [...countryNames].find(([code, name]) => key(name) === nameKey || key(code) === nameKey)?.[0];
     return {
-        origin: variant.originCountryCode ?? null,
+        origin: variant.originCountryCode || codeByName || null,
         size: variant.sizeCategory ?? '',
         packaging: variant.packaging ?? '',
         tradeClass: variant.tradeClass ?? '',
