@@ -266,17 +266,20 @@ public class InventoryAvailabilityModelTests : IDisposable
             await db.SaveChangesAsync();
         }
 
-        await AssertSaveIsRejectedAsync(db =>
+        await using (var db = _factory.CreateContext())
         {
             if (principal == "orderLine")
             {
                 db.OrderLines.Remove(new OrderLine { Id = graph.OrderLineId });
+                await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             }
             else
             {
+                // Een gebruikt artikel houdt guard-regel 19 al vóór de database tegen (de foreign key blijft het vangnet).
                 db.ProductVariants.Remove(new ProductVariant { Id = graph.ProductVariantId });
+                await Assert.ThrowsAsync<AgfAdmin.Data.TraceabilityViolationException>(() => db.SaveChangesAsync());
             }
-        });
+        }
 
         await using var verify = _factory.CreateContext();
         Assert.Equal(1, await verify.StockReservations.CountAsync());

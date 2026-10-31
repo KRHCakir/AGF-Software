@@ -10,11 +10,13 @@ namespace AgfAdmin.Controllers
     public class ArticlesController : ControllerBase
     {
         private readonly ArticleService _service;
+        private readonly ArticleLifecycleService _lifecycle;
         private readonly GoodsCodeCatalog _goodsCodes;
 
-        public ArticlesController(ArticleService service, GoodsCodeCatalog goodsCodes)
+        public ArticlesController(ArticleService service, ArticleLifecycleService lifecycle, GoodsCodeCatalog goodsCodes)
         {
             _service = service;
+            _lifecycle = lifecycle;
             _goodsCodes = goodsCodes;
         }
 
@@ -60,5 +62,36 @@ namespace AgfAdmin.Controllers
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] SaveArticleDto request) =>
             this.ToActionResult(await _service.UpdateAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // Waar het artikel aan hangt; canDelete = false met de reden in gewone taal.
+        [HttpGet("{id:int}/usage")]
+        public async Task<IActionResult> Usage(int id) => this.ToActionResult(await _lifecycle.UsageAsync(id, HttpContext?.RequestAborted ?? default));
+
+        // 204 verwijderd; 409 { message, code: "article-in-use", usages } als er iets aan hangt (dan archiveren).
+        [HttpPost("{id:int}/delete")]
+        public async Task<IActionResult> Delete(int id, [FromBody] ArticleActionDto request)
+        {
+            var result = await _lifecycle.DeleteAsync(id, request, HttpContext?.RequestAborted ?? default);
+            return result.Status == ServiceResultStatus.Ok ? NoContent() : this.ToActionResult(result);
+        }
+
+        [HttpPost("{id:int}/archive")]
+        public async Task<IActionResult> Archive(int id, [FromBody] ArticleActionDto request) =>
+            this.ToActionResult(await _lifecycle.ArchiveAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        [HttpPost("{id:int}/restore")]
+        public async Task<IActionResult> Restore(int id, [FromBody] ArticleActionDto request) =>
+            this.ToActionResult(await _lifecycle.RestoreAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // Productsoorten zonder artikelen, en zo'n soort verwijderen (409 "product-has-articles" zolang er artikelen onder hangen).
+        [HttpGet("products/empty")]
+        public async Task<IActionResult> EmptyProducts() => Ok(await _lifecycle.EmptyProductsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPost("products/{productId:int}/delete")]
+        public async Task<IActionResult> DeleteProduct(int productId, [FromBody] ArticleActionDto request)
+        {
+            var result = await _lifecycle.DeleteProductAsync(productId, request, HttpContext?.RequestAborted ?? default);
+            return result.Status == ServiceResultStatus.Ok ? NoContent() : this.ToActionResult(result);
+        }
     }
 }

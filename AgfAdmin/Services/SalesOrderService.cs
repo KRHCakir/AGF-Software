@@ -65,11 +65,17 @@ namespace AgfAdmin.Services
             }
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
             var known = await _db.ProductVariants.Where(v => variantIds.Contains(v.Id))
-                .Select(v => new { v.Id, v.DefaultNetKgPerPackage, v.DefaultGrossKgPerPackage }).ToDictionaryAsync(v => v.Id, cancellationToken);
+                .Select(v => new { v.Id, v.DefaultNetKgPerPackage, v.DefaultGrossKgPerPackage, v.IsArchived }).ToDictionaryAsync(v => v.Id, cancellationToken);
             var missing = variantIds.Except(known.Keys).Cast<int?>().FirstOrDefault();
             if (missing != null)
             {
                 return ServiceResult<SalesOrderDto>.NotFound($"Product variant {missing} does not exist.");
+            }
+            var archived = known.Values.FirstOrDefault(v => v.IsArchived);
+            if (archived != null)
+            {
+                var index = lines.FindIndex(l => l.ProductVariantId == archived.Id);
+                return ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { [$"lines[{index}].productVariantId"] = new[] { ArticleRules.ArchivedMessage(archived.Id) } });
             }
 
             // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).

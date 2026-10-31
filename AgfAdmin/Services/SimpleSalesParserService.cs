@@ -23,9 +23,10 @@ namespace AgfAdmin.Services
             using var scope = _scopeFactory.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // 1. Fetch all variants for matching (cache this in production!)
+            // 1. Fetch all variants for matching (cache this in production!); gearchiveerde artikelen doen niet meer mee.
             var variants = await context.ProductVariants
                 .Include(v => v.Product)
+                .Where(v => !v.IsArchived)
                 .ToListAsync();
 
             // Fetch aggregate stock levels

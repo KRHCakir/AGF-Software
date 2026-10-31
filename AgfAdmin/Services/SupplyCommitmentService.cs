@@ -400,13 +400,17 @@ namespace AgfAdmin.Services
             }
 
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
-            var existingVariantIds = await _db.ProductVariants
+            var existingVariants = await _db.ProductVariants
                 .Where(v => variantIds.Contains(v.Id))
-                .Select(v => v.Id)
+                .Select(v => new { v.Id, v.IsArchived })
                 .ToListAsync(cancellationToken);
-            var missingVariantId = variantIds.Except(existingVariantIds).Cast<int?>().FirstOrDefault();
-
-            return missingVariantId == null ? null : $"Product variant {missingVariantId} does not exist.";
+            var missingVariantId = variantIds.Except(existingVariants.Select(v => v.Id)).Cast<int?>().FirstOrDefault();
+            if (missingVariantId != null)
+            {
+                return $"Product variant {missingVariantId} does not exist.";
+            }
+            var archived = existingVariants.FirstOrDefault(v => v.IsArchived);
+            return archived == null ? null : ArticleRules.ArchivedMessage(archived.Id);
         }
 
         private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken) =>

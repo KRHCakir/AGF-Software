@@ -11,6 +11,35 @@ namespace AgfAdmin.Services
         public const int MaxShortcutLength = 32;
         public const int MaxNotesLength = 500;
         public const int MaxTradeClassLength = 50;
+        public const int MaxActorLength = 100;
+
+        // Artikelhistorie (ArticleAuditEvents.EventType).
+        public const string EventCreatedFromSupply = "CreatedFromSupply";
+        public const string EventCreatedFromReceipt = "CreatedFromReceipt";
+        public const string EventArchived = "Archived";
+        public const string EventRestored = "Restored";
+        public const string EventDeleted = "Deleted";
+        public const string EventProductDeleted = "ProductDeleted";
+
+        // Een gearchiveerd artikel komt niet meer op nieuwe regels (guard-regel 19); dezelfde melding in elke service.
+        public static string ArchivedMessage(int id) => $"Article {id} is archived; restore it in Articles before using it on a new line.";
+
+        // Volledige naam voor bevestigingen en de historie: product · ras · herkomst · maat · verpakking · klasse · merk; een leeg
+        // kenmerk wordt "geen" (nooit lege tekst), zodat twee artikelen die alleen in een leeg kenmerk verschillen herkenbaar blijven.
+        public static string FullName(string productName, string variantName, string origin, string size, string packaging, string tradeClass, string brand)
+        {
+            static string Part(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            var article = string.Join(" ", new[] { Part(productName), Part(variantName) }.Where(p => p != null));
+            return string.Join(" · ", new[]
+            {
+                article,
+                Part(origin) ?? "herkomst geen",
+                "maat " + (Part(size) ?? "geen"),
+                "verpakking " + (Part(packaging) ?? "geen"),
+                "klasse " + (Part(tradeClass) ?? "geen"),
+                "merk " + (Part(brand) ?? "geen"),
+            });
+        }
 
         // Codestelsels voor goederencodes: HS (WCO, 6 cijfers), CN/GN (EU gecombineerde nomenclatuur, 8 cijfers),
         // TARIC (EU geïntegreerd tarief, 10 cijfers). Een code wordt als tekst bewaard, zodat voorloopnullen blijven.
