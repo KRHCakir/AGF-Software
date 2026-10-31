@@ -128,6 +128,10 @@ namespace AgfAdmin.DTOs
         public string QualityReason { get; set; }
         public string Origin { get; set; }
         public DateTime ReceivedAt { get; set; }
+        // Verwachte kenmerken vóór het invullen getoond (blinde invoer), met tijdstip en medewerker.
+        public bool ExpectedShownBeforeEntry { get; set; }
+        public DateTime? ExpectedShownAt { get; set; }
+        public string ExpectedShownBy { get; set; }
         // Afkeurbaar = voorraad minus actieve verkoopreserveringen, alleen op een Received pallet en nog niet Rejected.
         public bool Rejectable { get; set; }
         public decimal RejectableQuantity { get; set; }

@@ -485,6 +485,22 @@ namespace AgfAdmin.Services
             reason = OptionalReason(request.Reason, errors);
             ValidateDeviationFields(request, errors);
 
+            // Verwachte kenmerken vooraf getoond: alleen samen met het moment, en dat ligt niet in de toekomst (een paar minuten klokverschil mag).
+            var shown = request.ExpectedShownBeforeEntry == true;
+            DateTime? shownAt = null;
+            if (shown && request.ExpectedShownAt == null)
+            {
+                AddError(errors, "expectedShownAt", "When the expected attributes were shown, the moment is required.");
+            }
+            else if (shown && request.ExpectedShownAt.Value.UtcDateTime > DateTime.UtcNow.AddMinutes(5))
+            {
+                AddError(errors, "expectedShownAt", "The moment the expected attributes were shown cannot be in the future.");
+            }
+            else if (shown)
+            {
+                shownAt = UtcPrecision.ToStoredUtc(request.ExpectedShownAt.Value);
+            }
+
             if (errors.Count > 0)
             {
                 return null;
@@ -502,6 +518,9 @@ namespace AgfAdmin.Services
                 WeightMethod = weightMethod,
                 NetKgPerPackage = netKgPerPackage,
                 Ggn = ggn,
+                ExpectedShownBeforeEntry = shown,
+                ExpectedShownAt = shownAt,
+                ExpectedShownBy = shown ? actor : null,
                 QualityStatus = PalletRules.QualityQuarantine,
                 CreatedAt = DateTime.UtcNow
             };
@@ -1171,6 +1190,9 @@ namespace AgfAdmin.Services
             WeightMethod = line.WeightMethod,
             NetKgPerPackage = line.NetKgPerPackage,
             Ggn = line.Ggn,
+            ExpectedShownBeforeEntry = line.ExpectedShownBeforeEntry,
+            ExpectedShownAt = line.ExpectedShownAt == null ? null : DateTime.SpecifyKind(line.ExpectedShownAt.Value, DateTimeKind.Utc),
+            ExpectedShownBy = line.ExpectedShownBy,
             DispatchedQuantity = line.DispatchedQuantity,
             DispatchedNetWeightKg = line.DispatchedNetWeightKg,
             OnHandQuantity = ReservationRules.OnHandQuantity(line.Quantity, line.DispatchedQuantity, line.SplitOffQuantity),

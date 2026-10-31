@@ -44,6 +44,10 @@ namespace AgfAdmin.DTOs
         public bool? ConfirmDeviation { get; set; }
         public string DeviationReason { get; set; }
         public string DeviationReasonNote { get; set; }
+        // Blinde invoer: de gebruiker liet vóór het invullen de verwachte kenmerken van de bestelling zien ("Toon verwachte kenmerken").
+        // Dan true met het tijdstip waarop dat gebeurde (niet in de toekomst); de medewerker is ActorReference. Leeg/false = niet getoond.
+        public bool? ExpectedShownBeforeEntry { get; set; }
+        public DateTimeOffset? ExpectedShownAt { get; set; }
     }
 
     public sealed class PalletDto
@@ -92,6 +96,10 @@ namespace AgfAdmin.DTOs
         public decimal? NetKgPerPackage { get; set; }
         // GGN zoals bij ontvangst vastgelegd (null = niet vastgelegd); zoals opgegeven, certificeringsstatus niet gecontroleerd.
         public string Ggn { get; set; }
+        // Verwachte kenmerken vóór het invullen getoond (blinde invoer), met tijdstip en medewerker.
+        public bool ExpectedShownBeforeEntry { get; set; }
+        public DateTime? ExpectedShownAt { get; set; }
+        public string ExpectedShownBy { get; set; }
         // Afgeboekt door verzendingen en de huidige voorraad; uitgeput als voorraad en kg allebei 0 zijn.
         public decimal DispatchedQuantity { get; set; }
         public decimal DispatchedNetWeightKg { get; set; }

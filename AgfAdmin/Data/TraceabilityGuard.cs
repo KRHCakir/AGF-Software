@@ -86,6 +86,8 @@ namespace AgfAdmin.Data
     //    ontvangsten via hun orderregel, afwijkingen, facturen, oude voorraad, oude bestellingen of afval), een productsoort alleen zonder
     //    artikelen; een nieuwe inkooporder-, verkooporder- of inkoopfactuurregel wijst nooit naar een gearchiveerd artikel; de
     //    artikelhistorie is append-only.
+    // 20. of de verwachte kenmerken van de bestelling vóór het invullen van een ontvangst zijn getoond (met tijdstip en medewerker) wordt
+    //    bij het aanmaken van de inhoudsregel vastgelegd en verandert daarna nooit (zie TraceabilityGuard.ExpectedShown.cs).
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -199,6 +201,7 @@ namespace AgfAdmin.Data
             await CheckRejectionLedgerAsync(db, async, cancellationToken);
             await CheckReceiptDeviationsAsync(db, async, cancellationToken);
             await CheckArticlesAsync(db, async, cancellationToken);
+            CheckExpectedShown(db);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

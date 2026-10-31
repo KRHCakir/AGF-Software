@@ -83,6 +83,10 @@ export interface PurchaseOrderReceiptLine {
     qualityReason: string | null;
     origin: string;
     receivedAt: string;
+    // "Toon verwachte kenmerken" vóór het invullen gebruikt (blinde invoer); optioneel voor oudere antwoorden.
+    expectedShownBeforeEntry?: boolean;
+    expectedShownAt?: string | null;
+    expectedShownBy?: string | null;
     rejectable: boolean;
     rejectableQuantity: number;
     rejectableNetWeightKg: number;

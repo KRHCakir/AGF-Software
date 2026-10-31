@@ -29,7 +29,7 @@ const preview = (status: DeviationPreview['status'], received: DeviationVariant,
 
 const commitment: SupplyCommitment = {
     id: 46, requestId: 'r-46', vendorId: 1, vendorName: "Nature's Pride", customerId: null, customerName: null, route: 'Warehouse', status: 'Expected',
-    origin: 'Peru', destination: null, expectedAt: null, vendorGgns: [],
+    origin: 'Peru', destination: null, expectedAt: null, vendorGgns: [], orderNumber: 'IO-2026-0046', supplierReference: 'NP-778', orderedOn: '2026-10-28',
     lines: [{ id: 501, productVariantId: 10, productName: 'Avocado', productVariantName: 'Hass', lotNumber: 'TEST-001', expectedQuantity: 10, expectedUnit: 'colli',
         expectedNetWeightKg: 40, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null }],
 };
@@ -255,6 +255,41 @@ describe('ReceivePalletForm blind entry', () => {
         assert.equal(previews().at(-1)!.get('receivedProductVariantId'), '12');
         assert.equal(articlePosts().length, 0);
         assert.equal(input('line.501.size').value, '18');
+    });
+
+    test('the order header shows order number, supplier, supplier reference and order date, never the attributes to check', async () => {
+        await arrange();
+        const header = mounted.container.querySelector('[data-testid="receive-order-46"]')!.textContent ?? '';
+        assert.ok(header.includes('IO-2026-0046') && header.includes("Nature's Pride") && header.includes('receive_order_reference') && header.includes('receive_order_ordered_on'), header);
+        assert.equal(header.includes('Peru'), false);
+    });
+
+    test('"Show expected attributes" is closed by default; opening shows the order and the moment goes along with the receipt', async () => {
+        await arrange();
+        const show = mounted.container.querySelector<HTMLButtonElement>('[data-tour="receive-show-expected"]')!;
+        assert.equal(show.getAttribute('aria-expanded'), 'false');
+        assert.equal(mounted.container.querySelector('[data-testid="expected-attributes-501"]'), null);
+        assert.equal((mounted.container.textContent ?? '').includes('Peru'), false);
+
+        await click(show);
+        const panel = mounted.container.querySelector('[data-testid="expected-attributes-501"]')!.textContent ?? '';
+        for (const expected of ['Peru', '18', '4 kg doos', 'I', 'articles_value_none']) assert.ok(panel.includes(expected), expected);
+        await click(show);
+        assert.ok(mounted.container.querySelector('[data-testid="expected-shown-501"]'), 'recorded note after closing');
+
+        await fill('PE', '18');
+        await submit();
+        await mounted.waitFor(() => contentPosts().length === 1, 'content line posted');
+        assert.equal(contentPosts()[0].expectedShownBeforeEntry, true);
+        assert.equal(typeof contentPosts()[0].expectedShownAt, 'string');
+    });
+
+    test('without showing, the receipt carries nothing about it (blind as before)', async () => {
+        await arrange();
+        await fill('PE', '18');
+        await submit();
+        await mounted.waitFor(() => contentPosts().length === 1, 'content line posted');
+        assert.equal('expectedShownBeforeEntry' in contentPosts()[0], false);
     });
 
     test('only origin is required before anything is checked; size, packaging, class and brand may stay empty', async () => {
