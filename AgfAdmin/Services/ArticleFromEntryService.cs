@@ -16,6 +16,8 @@ namespace AgfAdmin.Services
         public const string ExistsCode = "article-exists";
         public const string RequestReusedCode = "article-request-reused";
 
+        private const int AdvisoryLockClass = 0x41524645; // eigen lockruimte voor dit gebruik
+
         private readonly AppDbContext _db;
 
         public ArticleFromEntryService(AppDbContext db) => _db = db;
@@ -35,22 +37,13 @@ namespace AgfAdmin.Services
             var replay = await _db.ProductVariants.Include(v => v.Product).SingleOrDefaultAsync(v => v.RequestId == request.RequestId, cancellationToken);
             if (replay != null)
             {
-                return ResultForReplay(replay, request);
+                return await ResultForReplayAsync(replay, request, cancellationToken);
             }
 
             var entry = await ValidateAsync(request, errors, cancellationToken);
             if (errors.Count > 0)
             {
                 return ServiceResult<ArticleFromEntryResultDto>.Validation(ValidationErrors.ToArrays(errors));
-            }
-
-            var existing = await FindSameAsync(entry, cancellationToken);
-            if (existing != null)
-            {
-                var message = existing.IsArchived
-                    ? $"Dit artikel bestaat al (#{existing.Id}) maar is gearchiveerd; zet het terug in Artikelen."
-                    : $"Dit artikel bestaat al (#{existing.Id}); kies dat artikel.";
-                return ServiceResult<ArticleFromEntryResultDto>.Conflict(message, new { message, code = ExistsCode, article = ArticleService.ToDto(existing) });
             }
 
             var template = entry.Template;
@@ -78,11 +71,24 @@ namespace AgfAdmin.Services
             };
 
             var strategy = _db.Database.CreateExecutionStrategy();
+            ProductVariant existing = null;
             try
             {
                 await strategy.ExecuteAsync(async () =>
                 {
+                    existing = null;
                     await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+                    // Gelijktijdige verzoeken voor dezelfde productsoort achter elkaar zetten: een lock tot het einde van de transactie en pas
+                    // daarna de dubbel-controle, zodat de tweede de eerste ziet (de normalisatie zit in code, niet in een unieke index).
+                    if (_db.Database.IsNpgsql())
+                    {
+                        await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({AdvisoryLockClass}, {entry.Template.ProductId})", cancellationToken);
+                    }
+                    existing = await FindSameAsync(entry, cancellationToken);
+                    if (existing != null)
+                    {
+                        return;
+                    }
                     _db.ProductVariants.Add(variant);
                     await _db.SaveChangesAsync(cancellationToken);
                     var type = entry.Source == ArticleRules.SourceReceipt ? ArticleRules.EventCreatedFromReceipt : ArticleRules.EventCreatedFromSupply;
@@ -100,7 +106,14 @@ namespace AgfAdmin.Services
                 {
                     throw;
                 }
-                return ResultForReplay(stored, request);
+                return await ResultForReplayAsync(stored, request, cancellationToken);
+            }
+            if (existing != null)
+            {
+                var message = existing.IsArchived
+                    ? $"Dit artikel bestaat al (#{existing.Id}) maar is gearchiveerd; zet het terug in Artikelen."
+                    : $"Dit artikel bestaat al (#{existing.Id}); kies dat artikel.";
+                return ServiceResult<ArticleFromEntryResultDto>.Conflict(message, new { message, code = ExistsCode, article = ArticleService.ToDto(existing) });
             }
             return ServiceResult<ArticleFromEntryResultDto>.Created(new ArticleFromEntryResultDto { Article = ArticleService.ToDto(variant), Replayed = false });
         }
@@ -160,11 +173,22 @@ namespace AgfAdmin.Services
             && ArticleRules.AttributeKey(variant.TradeClass) == ArticleRules.AttributeKey(entry.TradeClass)
             && ArticleRules.AttributeKey(variant.Brand) == ArticleRules.AttributeKey(entry.Brand);
 
-        // Herhaald verzoek: hetzelfde artikel terug (200). Een RequestId die voor een andere combinatie of een ander artikel werd gebruikt: 409.
-        private static ServiceResult<ArticleFromEntryResultDto> ResultForReplay(ProductVariant stored, CreateArticleFromEntryDto request)
+        // Herhaald verzoek: hetzelfde artikel terug (200). Een RequestId die voor een andere combinatie, een ander artikel (productsoort + ras)
+        // of een andere bron werd gebruikt: 409.
+        private async Task<ServiceResult<ArticleFromEntryResultDto>> ResultForReplayAsync(ProductVariant stored, CreateArticleFromEntryDto request, CancellationToken cancellationToken)
         {
             var country = string.IsNullOrWhiteSpace(request.OriginCountryCode) ? null : request.OriginCountryCode.Trim().ToUpperInvariant();
-            var same = stored.OriginCountryCode == country
+            var template = await _db.ProductVariants.AsNoTracking().Where(v => v.Id == request.TemplateVariantId)
+                .Select(v => new { v.ProductId, v.Name }).SingleOrDefaultAsync(cancellationToken);
+            var source = request.Source?.Trim();
+            var storedType = await _db.ArticleAuditEvents.Where(e => e.RequestId == request.RequestId).Select(e => e.EventType).FirstOrDefaultAsync(cancellationToken);
+            var expectedType = source == ArticleRules.SourceReceipt ? ArticleRules.EventCreatedFromReceipt : ArticleRules.EventCreatedFromSupply;
+            var same = template != null
+                && stored.ProductId == template.ProductId
+                && ArticleRules.AttributeKey(stored.Name) == ArticleRules.AttributeKey(template.Name)
+                && (source == ArticleRules.SourceSupply || source == ArticleRules.SourceReceipt)
+                && (storedType == null || storedType == expectedType)
+                && stored.OriginCountryCode == country
                 && ArticleRules.AttributeKey(stored.SizeCategory) == ArticleRules.AttributeKey(request.SizeCategory)
                 && ArticleRules.AttributeKey(stored.Packaging) == ArticleRules.AttributeKey(request.Packaging)
                 && ArticleRules.AttributeKey(stored.TradeClass) == ArticleRules.AttributeKey(request.TradeClass)
