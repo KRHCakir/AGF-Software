@@ -108,6 +108,11 @@ namespace AgfAdmin.Services
                 }
                 return await ResultForReplayAsync(stored, request, cancellationToken);
             }
+            if (existing != null && existing.RequestId == request.RequestId)
+            {
+                // Gelijktijdige identieke herhaling: de eerste was net klaar onder de lock; dat is een replay (200), geen dubbel artikel (409).
+                return await ResultForReplayAsync(existing, request, cancellationToken);
+            }
             if (existing != null)
             {
                 var message = existing.IsArchived
@@ -192,7 +197,9 @@ namespace AgfAdmin.Services
                 && ArticleRules.AttributeKey(stored.SizeCategory) == ArticleRules.AttributeKey(request.SizeCategory)
                 && ArticleRules.AttributeKey(stored.Packaging) == ArticleRules.AttributeKey(request.Packaging)
                 && ArticleRules.AttributeKey(stored.TradeClass) == ArticleRules.AttributeKey(request.TradeClass)
-                && ArticleRules.AttributeKey(stored.Brand) == ArticleRules.AttributeKey(request.Brand);
+                && ArticleRules.AttributeKey(stored.Brand) == ArticleRules.AttributeKey(request.Brand)
+                // Een expliciet kg per verpakking moet gelijk zijn aan het opgeslagen artikel; zonder waarde viel het terug op het sjabloon.
+                && (request.NetKgPerPackage == null || stored.DefaultNetKgPerPackage == request.NetKgPerPackage);
             if (!same)
             {
                 const string message = "This request id was already used for another article; send a new request id.";
