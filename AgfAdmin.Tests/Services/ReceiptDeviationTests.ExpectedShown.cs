@@ -1,4 +1,5 @@
 using AgfAdmin.Data;
+using AgfAdmin.Models;
 using AgfAdmin.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,5 +60,32 @@ public sealed partial class ReceiptDeviationTests
         line.ExpectedShownAt = DateTime.UtcNow;
         line.ExpectedShownBy = "Piet";
         await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+    }
+
+    // Een losgekoppelde Update markeert alle kolommen als gewijzigd: met dezelfde waarden mag dat, met andere nooit.
+    [Fact]
+    public async Task A_Detached_Update_Is_Compared_With_The_Stored_Values()
+    {
+        await ArrangeAsync();
+        var created = await AddAsync(Receive(_lineId, 10m));
+        PalletContentLine stored;
+        await using (var read = _factory.CreateContext())
+        {
+            stored = await read.PalletContentLines.AsNoTracking().SingleAsync(c => c.Id == created.Value.Id);
+        }
+        await using (var same = _factory.CreateContext())
+        {
+            same.PalletContentLines.Update(stored);
+            await same.SaveChangesAsync();
+        }
+        await using (var read = _factory.CreateContext())
+        {
+            stored = await read.PalletContentLines.AsNoTracking().SingleAsync(c => c.Id == created.Value.Id);
+        }
+        stored.ExpectedShownBeforeEntry = true;
+        stored.ExpectedShownAt = DateTime.UtcNow;
+        await using var changed = _factory.CreateContext();
+        changed.PalletContentLines.Update(stored);
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => changed.SaveChangesAsync());
     }
 }

@@ -201,7 +201,7 @@ namespace AgfAdmin.Data
             await CheckRejectionLedgerAsync(db, async, cancellationToken);
             await CheckReceiptDeviationsAsync(db, async, cancellationToken);
             await CheckArticlesAsync(db, async, cancellationToken);
-            CheckExpectedShown(db);
+            await CheckExpectedShownAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
