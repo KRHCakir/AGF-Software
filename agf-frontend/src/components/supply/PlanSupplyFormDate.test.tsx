@@ -91,6 +91,16 @@ describe('PlanSupplyForm: expected date with a fixed clock around midnight', () 
         assert.ok(mounted.hasText('supply_error_required_date'));
     });
 
+    test('a cleared field never sends the previous date, even when the state still has it', async () => {
+        await fillAllButDate();
+        await type('expectedAt-input', '2026-11-01');
+        // Zoals een browser die het leegmaken (of een half getypte datum) nog niet als input-event doorgaf.
+        await act(async () => { field('expectedAt-input').value = ''; });
+        await submit();
+        assert.equal(posted.length, 0);
+        assert.ok(mounted.hasText('supply_error_required_date'));
+    });
+
     test('what the browser holds in the date field counts, also when no input event reached the form yet', async () => {
         await fillAllButDate();
         // Zoals een browser die de laatst getypte cijfers pas later doorgeeft: de waarde staat in het veld, de state is nog leeg.
