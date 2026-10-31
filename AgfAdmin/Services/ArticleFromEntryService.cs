@@ -80,6 +80,8 @@ namespace AgfAdmin.Services
                     await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
                     // Gelijktijdige verzoeken voor dezelfde productsoort achter elkaar zetten: een lock tot het einde van de transactie en pas
                     // daarna de dubbel-controle, zodat de tweede de eerste ziet (de normalisatie zit in code, niet in een unieke index).
+                    // Alleen PostgreSQL (productie) kent deze lock; andere providers (SQLite in tests) serialiseren schrijvers zelf op
+                    // databaseniveau, en bij een herhaalde RequestId houdt de unieke index op RequestId de tweede alsnog tegen.
                     if (_db.Database.IsNpgsql())
                     {
                         await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({AdvisoryLockClass}, {entry.Template.ProductId})", cancellationToken);
