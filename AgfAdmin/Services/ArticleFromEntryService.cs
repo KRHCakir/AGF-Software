@@ -186,7 +186,7 @@ namespace AgfAdmin.Services
         {
             var country = string.IsNullOrWhiteSpace(request.OriginCountryCode) ? null : request.OriginCountryCode.Trim().ToUpperInvariant();
             var template = await _db.ProductVariants.AsNoTracking().Where(v => v.Id == request.TemplateVariantId)
-                .Select(v => new { v.ProductId, v.Name }).SingleOrDefaultAsync(cancellationToken);
+                .Select(v => new { v.ProductId, v.Name, v.DefaultNetKgPerPackage }).SingleOrDefaultAsync(cancellationToken);
             var source = request.Source?.Trim();
             var storedType = await _db.ArticleAuditEvents.Where(e => e.RequestId == request.RequestId).Select(e => e.EventType).FirstOrDefaultAsync(cancellationToken);
             var expectedType = source == ArticleRules.SourceReceipt ? ArticleRules.EventCreatedFromReceipt : ArticleRules.EventCreatedFromSupply;
@@ -200,8 +200,8 @@ namespace AgfAdmin.Services
                 && ArticleRules.AttributeKey(stored.Packaging) == ArticleRules.AttributeKey(request.Packaging)
                 && ArticleRules.AttributeKey(stored.TradeClass) == ArticleRules.AttributeKey(request.TradeClass)
                 && ArticleRules.AttributeKey(stored.Brand) == ArticleRules.AttributeKey(request.Brand)
-                // Een expliciet kg per verpakking moet gelijk zijn aan het opgeslagen artikel; zonder waarde viel het terug op het sjabloon.
-                && (request.NetKgPerPackage == null || stored.DefaultNetKgPerPackage == request.NetKgPerPackage);
+                // Kg per verpakking zoals het eerste verzoek het opgaf; zonder waarde de standaard van het sjabloon (zo werd het aangemaakt).
+                && stored.DefaultNetKgPerPackage == (request.NetKgPerPackage ?? template.DefaultNetKgPerPackage);
             if (!same)
             {
                 const string message = "This request id was already used for another article; send a new request id.";

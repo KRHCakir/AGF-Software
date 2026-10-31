@@ -123,6 +123,24 @@ public sealed class ArticleFromEntryServiceTests : IDisposable
         Assert.Equal(4, await VariantCountAsync());
     }
 
+    // Kg per colli hoort bij het verzoek: een herhaling zonder kg (dus de standaard van het artikel, 4) is iets anders dan het eerste
+    // verzoek met 4,25; dezelfde herhaling met 4,25 of een eerste verzoek zonder kg en een herhaling zonder kg is wel hetzelfde.
+    [Fact]
+    public async Task A_Repeated_Request_Must_Carry_The_Same_Kg_Per_Package()
+    {
+        await ArrangeAsync();
+        var explicitKg = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(Entry(explicitKg, size: "30", kg: 4.25m))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(Entry(explicitKg, size: "30", kg: 4.25m))).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(Entry(explicitKg, size: "30"))).Status);
+
+        var templateKg = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(Entry(templateKg, size: "32"))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(Entry(templateKg, size: "32"))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(Entry(templateKg, size: "32", kg: 4m))).Status);
+        Assert.Equal(4, await VariantCountAsync());
+    }
+
     // "Test" en "test", dubbele spaties en null tegen leeg zijn hetzelfde: het bestaande artikel komt terug, er komt geen tweede.
     [Theory]
     [InlineData("12", "test doos", "I", "test")]
