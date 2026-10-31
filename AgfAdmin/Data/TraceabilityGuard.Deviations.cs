@@ -29,7 +29,7 @@ namespace AgfAdmin.Data
                 return;
             }
 
-            int NewLineOf(EntityEntry<SupplyReceiptDeviation> d) => d.Property(x => x.NewLineId).CurrentValue ?? 0;
+            int? NewLineOf(EntityEntry<SupplyReceiptDeviation> d) => d.Property(x => x.NewLineId).CurrentValue;
             int OriginalOf(EntityEntry<SupplyReceiptDeviation> d) => d.Property(x => x.OriginalLineId).CurrentValue;
 
             var storedIds = lines.Where(e => e.State == EntityState.Modified).Select(e => e.Entity.Id)
@@ -63,7 +63,7 @@ namespace AgfAdmin.Data
                 }
             }
 
-            var newLineIds = deviations.Select(NewLineOf).ToHashSet();
+            var newLineIds = deviations.Select(NewLineOf).Where(id => id != null).Select(id => id!.Value).ToHashSet();
             foreach (var entry in lines.Where(e => e.State == EntityState.Added && e.Entity.ReplacesLineId != null))
             {
                 if (!newLineIds.Contains(entry.Property(l => l.Id).CurrentValue))
@@ -98,7 +98,12 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException("A receipt deviation refers to a stored supply commitment line as its original line.");
                 }
-                if (!trackedLines.TryGetValue(NewLineOf(entry), out var replacementEntry) || replacementEntry.State != EntityState.Added)
+                if (NewLineOf(entry) == null)
+                {
+                    CheckWeightOnlyDeviation(entry, original, trackedLines, contents);
+                    continue;
+                }
+                if (!trackedLines.TryGetValue(NewLineOf(entry)!.Value, out var replacementEntry) || replacementEntry.State != EntityState.Added)
                 {
                     throw new TraceabilityViolationException("A receipt deviation creates its replacement supply commitment line in the same save.");
                 }
@@ -144,6 +149,31 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException("A receipt deviation belongs to exactly one new received content line on its replacement line, with the same quantity, unit and request.");
                 }
+            }
+        }
+            // Alleen een gewichtsafwijking: dezelfde variant, geen vervangende regel en geen verlaging; het aantal van de regel blijft gelijk en
+        // de ontvangen inhoud staat in dezelfde save op de bestelde regel zelf.
+        private static void CheckWeightOnlyDeviation(EntityEntry<SupplyReceiptDeviation> entry, StoredSupplyLine original,
+            Dictionary<int, EntityEntry<SupplyCommitmentLine>> trackedLines, Dictionary<int, EntityEntry<PalletContentLine>> contents)
+        {
+            var deviation = entry.Entity;
+            if (deviation.ExpectedProductVariantId != deviation.ReceivedProductVariantId || original.ProductVariantId != deviation.ExpectedProductVariantId
+                || deviation.ReducedQuantity != 0m || deviation.Kinds != ReceiptDeviationRules.KindWeight)
+            {
+                throw new TraceabilityViolationException("A receipt deviation without a replacement line is a weight deviation only: same variant, nothing reduced.");
+            }
+            var current = trackedLines.TryGetValue(original.Id, out var originalEntry) ? originalEntry.Entity.ExpectedQuantity : original.ExpectedQuantity;
+            if (current != original.ExpectedQuantity)
+            {
+                throw new TraceabilityViolationException($"A weight deviation never changes the expected quantity of supply commitment line {original.Id}.");
+            }
+            if (!contents.TryGetValue(entry.Property(d => d.PalletContentLineId).CurrentValue, out var contentEntry)
+                || contentEntry.Property(c => c.SupplyCommitmentLineId).CurrentValue != original.Id
+                || contentEntry.Entity.Quantity != deviation.Quantity || !string.Equals(contentEntry.Entity.Unit, deviation.Unit, StringComparison.Ordinal)
+                || contentEntry.Entity.RequestId != deviation.RequestId
+                || contentEntry.Entity.OriginCorrectionLineId != null || contentEntry.Entity.OriginRejectionLineId != null)
+            {
+                throw new TraceabilityViolationException("A weight deviation belongs to exactly one new received content line on the ordered line, with the same quantity, unit and request.");
             }
         }
     }

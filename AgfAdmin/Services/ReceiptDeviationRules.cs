@@ -16,7 +16,13 @@ namespace AgfAdmin.Services
         public const string KindBrand = "Brand";
         // Alle kenmerken gelijk, toch een andere variant (bijv. twee bijna gelijke artikelen): nooit stilzwijgend gelijkgesteld.
         public const string KindOther = "Other";
-        public static readonly IReadOnlyList<string> Kinds = new[] { KindOrigin, KindSize, KindPackaging, KindTradeClass, KindBrand, KindOther };
+        // Netto kg per verpakking wijkt meer dan WeightTolerance af van wat de bronregel verwachtte (ook bij dezelfde variant).
+        public const string KindWeight = "Weight";
+        public static readonly IReadOnlyList<string> Kinds = new[] { KindOrigin, KindSize, KindPackaging, KindTradeClass, KindBrand, KindOther, KindWeight };
+
+        // Tolerantie voor het netto kg per verpakking: meer dan 2% verschil (relatief aan de verwachting) is een afwijking.
+        // Precies 2% niet. Een deellevering of meer colli dan besteld is nooit een gewichtsafwijking: er wordt per verpakking vergeleken.
+        public const decimal WeightTolerance = 0.02m;
 
         public const string ReasonSupplierDeliveredDifferently = "SupplierDeliveredDifferently";
         public const string ReasonOtherLotLoaded = "OtherLotLoaded";
@@ -64,6 +70,35 @@ namespace AgfAdmin.Services
             if (!Same(expected.Brand, received.Brand)) kinds.Add(KindBrand);
             if (kinds.Count == 0) kinds.Add(KindOther);
             return kinds;
+        }
+
+        // Verwacht netto kg per verpakking: het verwachte kg van de bronregel gedeeld door haar aantal, anders de artikelstandaard
+        // van de bestelde variant; null als er geen verwachting is (dan geen gewichtscontrole). Bruto telt hier nooit mee.
+        public static decimal? ExpectedKgPerPackage(decimal expectedQuantity, decimal? expectedNetKg, decimal? defaultNetKgPerPackage)
+        {
+            if (expectedNetKg is > 0m && expectedQuantity > 0m) return expectedNetKg.Value / expectedQuantity;
+            return defaultNetKgPerPackage is > 0m ? defaultNetKgPerPackage : null;
+        }
+
+        // Ontvangen kg per verpakking: het netto totaal (gewogen of etiket × aantal) gedeeld door het aantal.
+        public static decimal ReceivedKgPerPackage(decimal quantity, decimal netKg) => quantity > 0m ? netKg / quantity : 0m;
+
+        public static bool IsWeightDeviation(decimal? expectedKgPerPackage, decimal quantity, decimal receivedNetKg)
+        {
+            if (expectedKgPerPackage is not > 0m || quantity <= 0m) return false;
+            var received = ReceivedKgPerPackage(quantity, receivedNetKg);
+            return Math.Abs(received - expectedKgPerPackage.Value) / expectedKgPerPackage.Value > WeightTolerance;
+        }
+
+        // Na "Ja" bij een gewichtsafwijking: de hele regel verwacht voortaan het ontvangen kg per verpakking (opgegeven, 3 decimalen).
+        // Aantal en palletweergave blijven; bruto blijft alleen staan als het niet onder het nieuwe netto komt (nooit bruto verzinnen).
+        public static LineShape Reweigh(LineShape line, decimal receivedKgPerPackage)
+        {
+            if (line.ExpectedQuantity <= 0m) return line;
+            var net = decimal.Round(line.ExpectedQuantity * receivedKgPerPackage, 3, MidpointRounding.AwayFromZero);
+            if (net <= 0m) return line;
+            var gross = line.GrossKg is { } kg && kg >= net ? line.GrossKg : null;
+            return line with { NetKg = net, GrossKg = gross, WeightSource = LineWeightRules.Entered };
         }
 
         // Hoeveel de oorspronkelijke regel omlaag gaat: de ontvangen hoeveelheid, maar nooit onder wat er al op die regel is ontvangen.

@@ -50,6 +50,14 @@ namespace AgfAdmin.DTOs
         public decimal ExcessQuantity { get; set; }
         // Alleen DirectTrade: al aan een klant toegewezen (actief of verzonden) op de oorspronkelijke regel.
         public decimal? AssignedQuantity { get; set; }
+        // Gewicht (netto, nooit bruto): verwacht en ontvangen per verpakking en voor deze hoeveelheid, en het verwachte kg van de
+        // oorspronkelijke regel vóór en na Ja. Null zonder verwachting of zonder opgegeven kg.
+        public decimal? ExpectedKgPerPackage { get; set; }
+        public decimal? ReceivedKgPerPackage { get; set; }
+        public decimal? ExpectedNetKg { get; set; }
+        public decimal? ReceivedNetKg { get; set; }
+        public decimal? OriginalExpectedNetKg { get; set; }
+        public decimal? OriginalExpectedNetKgAfter { get; set; }
     }
 
     // 409-antwoord bij een afwijking zonder (geldige) bevestiging: code + het verschil, zodat de client het venster kan tonen.
@@ -75,6 +83,8 @@ namespace AgfAdmin.DTOs
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
         public decimal ReducedQuantity { get; set; }
+        public decimal? ExpectedKgPerPackage { get; set; }
+        public decimal? ReceivedKgPerPackage { get; set; }
         public string Reason { get; set; }
         public string ReasonNote { get; set; }
         public string ActorReference { get; set; }

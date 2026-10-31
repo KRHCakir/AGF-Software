@@ -20,7 +20,7 @@ namespace AgfAdmin.Controllers
             this.ToActionResult(await _service.CandidatesAsync(lineId, HttpContext?.RequestAborted ?? default));
 
         [HttpGet("deviation-preview")]
-        public async Task<IActionResult> Preview(int lineId, [FromQuery] int? receivedProductVariantId, [FromQuery] decimal? quantity) =>
-            this.ToActionResult(await _service.PreviewAsync(lineId, receivedProductVariantId, quantity, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> Preview(int lineId, [FromQuery] int? receivedProductVariantId, [FromQuery] decimal? quantity, [FromQuery] decimal? netWeightKg) =>
+            this.ToActionResult(await _service.PreviewAsync(lineId, receivedProductVariantId, quantity, netWeightKg, HttpContext?.RequestAborted ?? default));
     }
 }
