@@ -99,6 +99,30 @@ public sealed class ArticleFromEntryServiceTests : IDisposable
         Assert.Equal(3, await VariantCountAsync());
     }
 
+    [Fact]
+    public async Task A_Reused_Request_Id_For_Another_Source_Or_Another_Article_Is_A_Conflict()
+    {
+        await ArrangeAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(Entry(requestId))).Status);
+
+        var otherSource = await CreateAsync(Entry(requestId, source: "Supply"));
+        Assert.Equal(ServiceResultStatus.Conflict, otherSource.Status);
+
+        int otherTemplate;
+        await using (var db = _factory.CreateContext())
+        {
+            var banana = new ProductVariant { Product = new Product { Name = "Banaan" }, Name = "Cavendish", Origin = "Peru", OriginCountryCode = "PE", DefaultPrice = 0m };
+            db.Add(banana);
+            await db.SaveChangesAsync();
+            otherTemplate = banana.Id;
+        }
+        var request = Entry(requestId);
+        request.TemplateVariantId = otherTemplate;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(request)).Status);
+        Assert.Equal(4, await VariantCountAsync());
+    }
+
     // "Test" en "test", dubbele spaties en null tegen leeg zijn hetzelfde: het bestaande artikel komt terug, er komt geen tweede.
     [Theory]
     [InlineData("12", "test doos", "I", "test")]
