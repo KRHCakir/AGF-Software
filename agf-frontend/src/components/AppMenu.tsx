@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from '../i18n/LanguageContext';
 import { LEGACY_GROUP, NAV_GROUPS, NavGroup, NavItem, SETTINGS_ITEMS, START_ITEM, activeNav } from '../lib/navigation';
 
@@ -17,7 +17,10 @@ export default function AppMenu({ pathname, onNavigate, idPrefix }: {
 }) {
     const { t } = useTranslation();
     const active = activeNav(pathname);
-    const [legacyOpen, setLegacyOpen] = useState(active?.groupId === 'legacy');
+    const onLegacy = active?.groupId === 'legacy';
+    const [legacyOpen, setLegacyOpen] = useState(onLegacy);
+    // Het menu blijft staan tussen pagina's: kom je (via een link of terug-knop) op een oud scherm, dan gaat "Oud" open.
+    useEffect(() => { if (onLegacy) setLegacyOpen(true); }, [onLegacy, pathname]);
     const legacyId = `${idPrefix}-legacy`;
 
     const link = (item: NavItem, small = false) => {
@@ -51,12 +54,11 @@ export default function AppMenu({ pathname, onNavigate, idPrefix }: {
                     <span>{t(LEGACY_GROUP.labelKey)}</span>
                     <span aria-hidden="true">{legacyOpen ? '▾' : '▸'}</span>
                 </button>
-                {legacyOpen && (
-                    <div id={legacyId} className="mt-1 flex flex-col gap-0.5">
-                        <p className="px-2 text-xs text-gray-600">{t('nav_legacy_hint')}</p>
-                        {LEGACY_GROUP.items.map((item) => link(item, true))}
-                    </div>
-                )}
+                {/* Altijd in de DOM (hidden als dicht), zodat aria-controls naar een bestaand element wijst. */}
+                <div id={legacyId} hidden={!legacyOpen} className={`mt-1 flex-col gap-0.5 ${legacyOpen ? 'flex' : 'hidden'}`}>
+                    <p className="px-2 text-xs text-gray-600">{t('nav_legacy_hint')}</p>
+                    {LEGACY_GROUP.items.map((item) => link(item, true))}
+                </div>
             </div>
         </nav>
     );
