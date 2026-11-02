@@ -12,6 +12,8 @@ import { PACKAGE_UNITS } from '../../types/availability';
 import type { Article, ArticleReference, GoodsCodeSystem } from '../../types/article';
 import type { CountryReference } from '../../types/country';
 import CountryPicker from '../shared/CountryPicker';
+import TradeClassPicker from '../shared/TradeClassPicker';
+import { isTradeClass } from '../../lib/tradeClass';
 import { GOODS_CODE_SYSTEMS, isGoodsCodeSystem } from '../../types/article';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
@@ -27,7 +29,7 @@ import GoodsCodeLookup from './GoodsCodeLookup';
 const codeKey = (code: string) => `articles_error_${code}`;
 
 function hasTradeValues(draft: ArticleDraft): boolean {
-    return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.tradeClass !== '' || draft.season !== '' || draft.notes !== '';
+    return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.season !== '' || draft.notes !== '';
 }
 
 export default function ArticleForm({ article, reference, countries, onSaved, onClose }: {
@@ -66,7 +68,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
         if (!built.ok) {
             const grouped = groupArticleErrors(built.errors);
             setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
-            if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'tradeClass', 'season', 'notes'].includes(field))) setTradeOpen(true);
+            if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'season', 'notes'].includes(field))) setTradeOpen(true);
             const first = Object.keys(grouped)[0];
             setTimeout(() => document.getElementById(`${first}-input`)?.focus(), 0);
             return;
@@ -83,7 +85,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
             const apiError = toApiError(caught);
             setServerError(apiError);
             setErrors(apiError.fieldErrors);
-            if (Object.keys(apiError.fieldErrors).some((field) => ['goodsCode', 'goodsCodeSystem', 'tradeClass'].includes(field))) setTradeOpen(true);
+            if (Object.keys(apiError.fieldErrors).some((field) => ['goodsCode', 'goodsCodeSystem'].includes(field))) setTradeOpen(true);
         } finally {
             inFlight.current = false;
             setSubmitting(false);
@@ -116,10 +118,10 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
         setTimeout(() => document.getElementById('goodsCode-input')?.focus(), 0);
     };
 
-    // optional: maat, verpakking, klasse en merk zijn uitdrukkelijk optioneel (leeg = bewust "geen"); alleen product en herkomst zijn verplicht.
-    const textField = (field: keyof ArticleDraft & string, labelKey: string, options: { ref?: boolean; hintKey?: string; list?: string; mono?: boolean; maxLength?: number; span?: string; optional?: boolean } = {}) => (
+    // Verplicht: product, herkomst, maat en klasse. optional: merk en verpakking zijn uitdrukkelijk optioneel (leeg = bewust "geen").
+    const textField = (field: keyof ArticleDraft & string, labelKey: string, options: { ref?: boolean; hintKey?: string; list?: string; mono?: boolean; maxLength?: number; span?: string; optional?: boolean; required?: boolean } = {}) => (
         <div className={options.span ?? ''}>
-            <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{field === 'productName' ? ' *' : ''}{options.optional ? ` ${t('field_optional')}` : ''}</label>
+            <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{field === 'productName' || options.required ? ' *' : ''}{options.optional ? ` ${t('field_optional')}` : ''}</label>
             <input {...fieldProps(field, e(field))} ref={options.ref ? firstInput : undefined} value={draft[field]} list={options.list} maxLength={options.maxLength ?? 100} disabled={submitting}
                 onChange={(event) => update({ [field]: event.target.value } as Partial<ArticleDraft>)} className={`${inputClass}${options.mono ? ' font-mono' : ''}`} />
             {options.hintKey && <span className="block text-xs text-gray-500">{t(options.hintKey)}</span>}
@@ -151,8 +153,17 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     )}
                     <FieldError id="originCountryCode" messages={e('originCountryCode')} />
                 </div>
+                {textField('sizeCategory', 'articles_field_size', { required: true, hintKey: 'articles_hint_size' })}
+                <div>
+                    <label htmlFor="tradeClass-input" className="text-xs font-medium text-gray-700">{t('articles_field_trade_class')} *</label>
+                    <TradeClassPicker id="tradeClass" dataTour="article-class" value={draft.tradeClass} onChange={(tradeClass) => update({ tradeClass })} disabled={submitting}
+                        invalid={e('tradeClass') !== undefined} describedBy="tradeClass" />
+                    {article !== null && article.tradeClass && !isTradeClass(article.tradeClass) && !isTradeClass(draft.tradeClass) && (
+                        <span className="block text-xs text-amber-900">{t('articles_class_old_text', { tradeClass: article.tradeClass })}</span>
+                    )}
+                    <FieldError id="tradeClass" messages={e('tradeClass')} />
+                </div>
                 {textField('brand', 'articles_field_brand', { optional: true })}
-                {textField('sizeCategory', 'articles_field_size', { optional: true })}
                 <div>
                     <label htmlFor="packagingUnit-input" className="text-xs font-medium text-gray-700">{t('articles_field_packaging_unit')}</label>
                     <select {...fieldProps('packagingUnit', e('packagingUnit'))} value={draft.packagingUnit} disabled={submitting} className={inputClass}
@@ -199,7 +210,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
             <section className="rounded-md border border-gray-200">
                 <button type="button" aria-expanded={tradeOpen} aria-controls="article-trade" onClick={() => setTradeOpen((open) => !open)}
                     className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold text-gray-900">
-                    <span>{tradeOpen ? '▾' : '▸'} {t('articles_section_trade')}{!tradeOpen && hasTradeValues(draft) ? ` · ${[draft.goodsCode && `${draft.goodsCodeSystem} ${formatGoodsCode(draft.goodsCode)}`, draft.tradeClass].filter(Boolean).join(' · ')}` : ''}</span>
+                    <span>{tradeOpen ? '▾' : '▸'} {t('articles_section_trade')}{!tradeOpen && hasTradeValues(draft) ? ` · ${[draft.goodsCode && `${draft.goodsCodeSystem} ${formatGoodsCode(draft.goodsCode)}`].filter(Boolean).join(' · ')}` : ''}</span>
                     <kbd className="text-xs font-normal text-gray-500">{shortcutLabel('toggleExtra', isMac)}</kbd>
                 </button>
                 {tradeOpen && (
@@ -222,14 +233,6 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                             </div>
                             <span className="block text-xs text-gray-500">{t('articles_hint_goods_code')}</span>
                             <FieldError id="goodsCode" messages={e('goodsCode')} />
-                        </div>
-                        <div>
-                            <label htmlFor="tradeClass-input" className="text-xs font-medium text-gray-700">{t('articles_field_trade_class')} {t('field_optional')}</label>
-                            <input {...fieldProps('tradeClass', e('tradeClass'))} value={draft.tradeClass} list="article-trade-classes" maxLength={50} disabled={submitting}
-                                onChange={(event) => update({ tradeClass: event.target.value })} className={inputClass} />
-                            <datalist id="article-trade-classes">{reference.tradeClassSuggestions.map((option) => <option key={option} value={option} />)}</datalist>
-                            <span className="block text-xs text-gray-500">{t('articles_hint_trade_class')}</span>
-                            <FieldError id="tradeClass" messages={e('tradeClass')} />
                         </div>
                         {textField('season', 'articles_field_season')}
                         {lookupOpen && (

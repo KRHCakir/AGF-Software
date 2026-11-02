@@ -19,6 +19,7 @@ import { getCountries } from '../../../services/countryService';
 import type { Article, ArticleReference } from '../../../types/article';
 import type { CountryReference } from '../../../types/country';
 import OriginSettings from '../../../components/articles/OriginSettings';
+import SizeClassCleanup from '../../../components/articles/SizeClassCleanup';
 
 interface Loaded { articles: Article[]; reference: ArticleReference; countries: CountryReference }
 
@@ -174,6 +175,8 @@ export default function ArticlesPage() {
                     </div>
                     <EmptyProducts reloadToken={reloadToken + emptyProductsToken} onDeleted={(name) => setState((current) => (current.status === 'ready'
                         ? { status: 'ready', data: { ...current.data, reference: { ...current.data.reference, productNames: current.data.reference.productNames.filter((n) => n !== name) } } } : current))} />
+                    <SizeClassCleanup reloadToken={reloadToken} onArticleChanged={(saved) => setState((current) => (current.status === 'ready'
+                        ? { status: 'ready', data: { ...current.data, articles: current.data.articles.map((a) => (a.id === saved.id ? saved : a)) } } : current))} />
                     <OriginSettings countries={state.data.countries} cleanupToken={reloadToken}
                         onCountriesChanged={(countries) => setState((current) => (current.status === 'ready' ? { status: 'ready', data: { ...current.data, countries } } : current))}
                         onArticleChanged={(saved) => setState((current) => (current.status === 'ready'

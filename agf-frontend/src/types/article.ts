@@ -61,6 +61,14 @@ export function isArticleUsage(value: unknown): value is ArticleUsage {
 // Productsoort zonder artikelen (mag worden verwijderd).
 export interface EmptyProduct { id: number; name: string }
 
+// "Maat en klasse opschonen" (api/articles/size-class-cleanup): artikelen zonder maat, zonder klasse of met een klasse buiten de lijst.
+export interface SizeClassCleanupItem { id: number; description: string; shortcutCode: string | null; sizeCategory: string | null; tradeClass: string | null }
+
+export function isSizeClassCleanupList(value: unknown): value is SizeClassCleanupItem[] {
+    return isArrayOf(value, (item): item is SizeClassCleanupItem => isObject(item) && isNumber(item.id) && isString(item.description)
+        && isNullableString(item.shortcutCode) && isNullableString(item.sizeCategory) && isNullableString(item.tradeClass));
+}
+
 export function isEmptyProductList(value: unknown): value is EmptyProduct[] {
     return isArrayOf(value, (item): item is EmptyProduct => isObject(item) && isNumber(item.id) && isString(item.name));
 }

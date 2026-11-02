@@ -1,5 +1,5 @@
 import { ApiError, getJson, postJson, putJson } from './apiClient';
-import { Article, ArticleReference, ArticleUsage, EmptyProduct, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, isArticle, isArticleList, isArticleReference, isArticleUsage, isEmptyProductList, isGoodsCodeSearch } from '../types/article';
+import { Article, ArticleReference, ArticleUsage, EmptyProduct, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, SizeClassCleanupItem, isArticle, isArticleList, isArticleReference, isArticleUsage, isEmptyProductList, isGoodsCodeSearch, isSizeClassCleanupList } from '../types/article';
 
 // Artikelwerkplek via api/articles: beheer van productsoorten en artikelen (ProductVariants). Raakt nooit documenten of voorraad.
 
@@ -64,6 +64,18 @@ export async function deleteProduct(id: number, actorReference: string | null, s
 }
 
 // "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst (idempotent via requestId).
+export async function getSizeClassCleanup(signal?: AbortSignal): Promise<SizeClassCleanupItem[]> {
+    const json = await getJson('/articles/size-class-cleanup', signal);
+    if (!isSizeClassCleanupList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij Maat en klasse opschonen.');
+    return json;
+}
+
+export async function setArticleSizeClass(id: number, sizeCategory: string, tradeClass: string, signal?: AbortSignal): Promise<Article> {
+    const { json } = await postJson(`/articles/${id}/size-class`, { sizeCategory, tradeClass }, signal);
+    if (!isArticle(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het opslaan van maat en klasse.');
+    return json;
+}
+
 export interface ArticleFromEntryRequest {
     requestId: string;
     source: 'Supply' | 'Receipt';
