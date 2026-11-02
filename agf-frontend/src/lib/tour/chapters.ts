@@ -21,8 +21,8 @@ export const SCREENS_CHAPTER: TourChapter = {
     summaryKey: 'tour_ch_screens_summary',
     writes: false,
     steps: [
-        screen('supply', '/supply'),
         screen('purchase', '/purchase-orders'),
+        screen('supply', '/purchase-orders/new'),
         screen('inspection', '/inspection'),
         screen('availability', '/availability'),
         screen('sales', '/sales-orders'),

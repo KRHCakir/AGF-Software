@@ -6,7 +6,6 @@ import '../globals.css';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
 import DemoAssistant from '../../components/demo/DemoAssistant';
 import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
-import { requestSupplyMode, supplyShortcutHref } from '../../lib/supplyShortcut';
 
 function AdminLayoutContent({
     children,
@@ -27,7 +26,7 @@ function AdminLayoutContent({
                     <NavLink href="/sales-orders" label={t('sales')} />
                     <NavLink href="/purchase-invoices" label={t('purchase')} />
                     <NavLink href="/purchase-orders" label={t('purchase_orders')} />
-                    <NavLink href="/supply" label={t('supply')} />
+                    <NavLink href="/purchase-orders/new" label={t('supply')} />
                     <NavLink href="/inspection" label={t('inspection')} />
                     <NavLink href="/availability" label={t('availability')} />
                     <NavLink href="/articles" label={t('articles')} />
@@ -70,8 +69,8 @@ function AdminLayoutContent({
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('workspaces')}</h3>
                         <nav className="flex flex-col space-y-1" aria-label={t('workspaces')}>
                             <SidebarLink href="/sales-orders" label={t('sidebar_new_sales_order')} icon="🧾" />
-                            <SidebarLink href={supplyShortcutHref('plan')} label={t('sidebar_plan_supply')} icon="📅" onClick={() => requestSupplyMode('plan')} />
-                            <SidebarLink href={supplyShortcutHref('receive')} label={t('sidebar_receive_pallet')} icon="📦" onClick={() => requestSupplyMode('receive')} />
+                            <SidebarLink href="/purchase-orders/new" label={t('sidebar_plan_supply')} icon="📅" />
+                            <SidebarLink href="/receipts" label={t('sidebar_receive_pallet')} icon="📦" />
                             <SidebarLink href="/inspection" label={t('sidebar_inspection')} icon="🔍" />
                             <SidebarLink href="/availability" label={t('sidebar_availability')} icon="📊" />
                         </nav>
