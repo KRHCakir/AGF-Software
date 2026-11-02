@@ -65,11 +65,10 @@ function AdminLayoutContent({
                 </div>
             </header>
 
-            {menuOpen && (
-                <div id="app-menu-mobile" className="border-b border-gray-300 bg-gray-100 p-2 md:hidden">
-                    <AppMenu pathname={pathname} idPrefix="menu-mobile" onNavigate={() => setMenuOpen(false)} />
-                </div>
-            )}
+            {/* Altijd in de DOM (hidden als dicht), zodat aria-controls van de menuknop naar een bestaand element wijst. */}
+            <div id="app-menu-mobile" hidden={!menuOpen} className="border-b border-gray-300 bg-gray-100 p-2 md:hidden">
+                <AppMenu pathname={pathname} idPrefix="menu-mobile" onNavigate={() => setMenuOpen(false)} />
+            </div>
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Het menu per proces; onder 768 px verborgen en via de menuknop bereikbaar. */}
