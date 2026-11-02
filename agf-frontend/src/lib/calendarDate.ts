@@ -13,19 +13,38 @@ export function toLocalMidnightIso(dateText: string): string | null {
     return local.toISOString();
 }
 
-// Een ingetypte kalenderdatum naar de ISO-vorm (2026-10-31): de waarde van een <input type="date"> (ISO) of de Nederlandse notatie
-// dd-mm-jjjj (ook met / of . en zonder voorloopnul, 1-9-2026). null bij lege, onvolledige of niet-bestaande datums (31-02 schuift
-// nooit stil door naar maart). Vandaag en datums in het verleden zijn gewoon geldig: dit is alleen de notatie.
+// Een ingetypte kalenderdatum naar de ISO-vorm (2026-10-31): de ISO-vorm zelf of de Nederlandse volgorde dag-maand-jaar, altijd in
+// die volgorde, ongeacht de browsertaal: dd-mm-jjjj, dd/mm/jjjj, d.m.jjjj, ddmmjjjj en d-m (dan het jaar van `today`, de lokale
+// kalenderdag). null bij lege, onvolledige of niet-bestaande datums (31-02 schuift nooit stil door naar maart). Vandaag en datums
+// in het verleden zijn gewoon geldig: dit is alleen de notatie.
 const DUTCH_DATE = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/;
-export function parseDateInput(text: string): string | null {
+const DUTCH_DAY_MONTH = /^(\d{1,2})[-/.](\d{1,2})$/;
+const DUTCH_DIGITS = /^(\d{2})(\d{2})(\d{4})$/;
+export function parseDateInput(text: string, today: string = localToday()): string | null {
     const trimmed = text.trim();
     const iso = DATE_INPUT.exec(trimmed);
-    const dutch = iso === null ? DUTCH_DATE.exec(trimmed) : null;
-    if (iso === null && dutch === null) return null;
-    const [year, month, day] = iso !== null ? [iso[1], iso[2], iso[3]].map(Number) : [dutch![3], dutch![2], dutch![1]].map(Number);
+    const dutch = iso === null ? DUTCH_DATE.exec(trimmed) ?? DUTCH_DIGITS.exec(trimmed) : null;
+    const short = iso === null && dutch === null ? DUTCH_DAY_MONTH.exec(trimmed) : null;
+    let parts: number[];
+    if (iso !== null) parts = [iso[1], iso[2], iso[3]].map(Number);
+    else if (dutch !== null) parts = [dutch[3], dutch[2], dutch[1]].map(Number);
+    else if (short !== null && isDateOnly(today)) parts = [Number(today.slice(0, 4)), Number(short[2]), Number(short[1])];
+    else return null;
+    const [year, month, day] = parts;
     const pad = (value: number, length = 2) => String(value).padStart(length, '0');
     const value = `${pad(year, 4)}-${pad(month)}-${pad(day)}`;
     return year >= 1900 && isDateOnly(value) ? value : null;
+}
+
+// Een ISO-kalenderdatum zoals het datumveld hem toont: dd-mm-jjjj, in elke taal en tijdzone; anders de tekst ongewijzigd.
+export function formatDateInput(value: string): string {
+    return isDateOnly(value) ? `${value.slice(8, 10)}-${value.slice(5, 7)}-${value.slice(0, 4)}` : value;
+}
+
+// Vandaag als kalenderdatum in de lokale tijdzone van de browser (niet UTC: om 00:30 is het hier al de nieuwe dag).
+export function localToday(now: Date = new Date()): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 // Terug naar de waarde van een <input type="date"> (lokale kalenderdag); null bij een ongeldige datum.

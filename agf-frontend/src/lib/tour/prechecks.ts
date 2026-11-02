@@ -2,7 +2,7 @@
 // het script nodig heeft (snelcode, eenheid, de open demo-inkooporder). Zo is elk hoofdstuk los te starten en zegt het
 // anders precies wat er ontbreekt. De zoekregels zijn die van de schermen zelf (searchVendors), zodat Tab dezelfde keuze maakt.
 
-import { todayInAmsterdam } from '../calendarDate';
+import { formatDateInput, todayInAmsterdam } from '../calendarDate';
 import { formatDecimalInput } from '../decimal';
 import { articleVariants } from '../receiptBlindEntry';
 import { searchCustomers } from '../customerSearch';
@@ -74,7 +74,8 @@ export async function precheckPurchase(signal: AbortSignal): Promise<TourPrechec
             productCode: article.code,
             productUnit: article.unit,
             quantity: String(TOUR_ORDER_QUANTITY),
-            expectedDate: addDays(today, 2) ?? today,
+            // Zoals een gebruiker typt (dd-mm-jjjj); het datumveld leest altijd dag-maand-jaar.
+            expectedDate: formatDateInput(addDays(today, 2) ?? today),
         },
     };
 }
@@ -190,7 +191,7 @@ export async function precheckSales(signal: AbortSignal): Promise<TourPrecheck> 
             customerName: customer.name,
             productCode: article.code,
             quantity: String(TOUR_SALES_QUANTITY),
-            deliveryDate: addDays(today, 3) ?? today,
+            deliveryDate: formatDateInput(addDays(today, 3) ?? today),
         },
     };
 }

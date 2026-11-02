@@ -17,6 +17,7 @@ import { PACKAGE_UNITS } from '../../types/availability';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
+import DateField from '../shared/DateField';
 import KgTotals from '../shared/KgTotals';
 import { LineKgFields } from '../shared/LineKgInput';
 import { lineKgLabel } from '../shared/lineKgLabel';
@@ -294,10 +295,10 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         </div>
                     )}
                 </div>
-                <div>
+                <div className="col-span-2">
                     <label htmlFor="requestedDeliveryDate-input" className="text-xs font-medium text-gray-700">{t('sales_delivery_date')} *</label>
-                    <input {...fieldProps('requestedDeliveryDate', e('requestedDeliveryDate'))} data-tour="sales-delivery" type="date" value={draft.requestedDeliveryDate} disabled={locked}
-                        onChange={(event) => updateHeader('requestedDeliveryDate', event.target.value)} className={inputClass} />
+                    <DateField {...fieldProps('requestedDeliveryDate', e('requestedDeliveryDate'))} dataTour="sales-delivery" value={draft.requestedDeliveryDate} disabled={locked}
+                        onChange={(value) => updateHeader('requestedDeliveryDate', value)} />
                     <FieldError id="requestedDeliveryDate" messages={e('requestedDeliveryDate')} />
                 </div>
                 <div>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { amsterdamDateOf, formatCalendarDate, formatDateOnly, isDateOnly, isoToDateInput, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
+import { amsterdamDateOf, formatCalendarDate, formatDateInput, formatDateOnly, isDateOnly, isoToDateInput, localToday, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
 
 // Rondreis van de gevraagde leverdatum in Europe/Amsterdam, zomer- en wintertijd: de kalenderdag die de gebruiker koos
 // moet na UTC-normalisatie door de server exact zo worden teruggetoond. node:test draait elk bestand in een eigen proces.
@@ -90,5 +90,39 @@ describe('shipping date of a UTC instant in Europe/Amsterdam', () => {
         assert.equal(parseDateInput('2026-10-3'), null);
         assert.equal(parseDateInput(''), null);
         assert.equal(parseDateInput('morgen'), null);
+    });
+
+    test('day-month order always, in every notation the date field accepts; d-m takes the year of today', () => {
+        const today = '2026-11-02';
+        for (const text of ['02-11-2026', '2-11-2026', '02/11/2026', '2/11/2026', '2.11.2026', '02112026', '2026-11-02', '2-11', '02/11', '2.11']) {
+            assert.equal(parseDateInput(text, today), '2026-11-02', text);
+        }
+        assert.equal(parseDateInput('31-12', today), '2026-12-31', 'd-m is always this year, also later in the year');
+        assert.equal(parseDateInput('29-2', '2028-01-10'), '2028-02-29');
+        assert.equal(parseDateInput('29-2', today), null, 'no leap day in 2026');
+        assert.equal(parseDateInput('31-02', today), null);
+        assert.equal(parseDateInput('11/02/2026', today), '2026-02-11', 'never the American month/day order');
+        assert.equal(parseDateInput('13-13', today), null);
+        assert.equal(parseDateInput('2-11-', today), null);
+        assert.equal(parseDateInput('211', today), null);
+        assert.equal(parseDateInput('0211202', today), null);
+    });
+
+    test('the field shows dd-mm-jjjj for every ISO date and leaves other text alone', () => {
+        assert.equal(formatDateInput('2026-11-02'), '02-11-2026');
+        assert.equal(formatDateInput('2026-02-31'), '2026-02-31');
+        assert.equal(formatDateInput('31-02'), '31-02');
+        assert.equal(formatDateInput(''), '');
+    });
+});
+
+describe('today in the local time zone', () => {
+    before(() => { process.env.TZ = 'Europe/Amsterdam'; });
+    test('00:30 in Amsterdam is already the new day, while UTC is still on the old one', () => {
+        const now = new Date(Date.UTC(2026, 10, 1, 23, 30));
+        assert.equal(now.toISOString().slice(0, 10), '2026-11-01');
+        assert.equal(localToday(now), '2026-11-02');
+        assert.equal(localToday(new Date(Date.UTC(2026, 10, 2, 22, 59))), '2026-11-02');
+        assert.equal(localToday(new Date(Date.UTC(2026, 10, 2, 23, 0))), '2026-11-03');
     });
 });

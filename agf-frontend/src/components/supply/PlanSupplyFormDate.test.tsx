@@ -7,8 +7,8 @@ import { Mounted, json, setSelectValue, setValue, stubFetch } from '../../test/r
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
 // "Verwacht op" bij Aanvoer plannen met een vaste klok rond middernacht in Europe/Amsterdam: vandaag geeft nooit een fout, gisteren en
-// morgen zijn geldig, een niet-bestaande datum niet. De controle gebruikt wat de browser in het datumveld heeft vastgelegd, ook als die
-// waarde (nog) niet via een input-event in de state staat. node:test draait elk bestand in een eigen proces.
+// morgen zijn geldig, een niet-bestaande datum niet. Het gedeelde datumveld (DateField) leest altijd dag-maand-jaar, ook bij een
+// Engelstalige browser. node:test draait elk bestand in een eigen proces.
 
 const reference: ReferenceData = {
     vendors: [{ id: 3, name: 'Supplier B', searchCode: 'SUPB', vatNumber: null, isActive: true }],
@@ -80,33 +80,44 @@ describe('PlanSupplyForm: expected date with a fixed clock around midnight', () 
         });
     }
 
-    test('an empty or impossible date is refused before sending, with the plain message', async () => {
+    test('an empty or impossible date is refused before sending, with a plain message for each', async () => {
         await fillAllButDate();
         await submit();
         assert.equal(posted.length, 0);
         assert.ok(mounted.hasText('supply_error_required_date'));
-        await type('expectedAt-input', '2026-02-31');
+        await type('expectedAt-input', '31-02-2026');
+        await submit();
+        assert.equal(posted.length, 0);
+        assert.ok(mounted.hasText('supply_error_incomplete_date'));
+    });
+
+    test('a cleared field never sends the previous date', async () => {
+        await fillAllButDate();
+        await type('expectedAt-input', '01-11-2026');
+        await type('expectedAt-input', '');
         await submit();
         assert.equal(posted.length, 0);
         assert.ok(mounted.hasText('supply_error_required_date'));
     });
 
-    test('a cleared field never sends the previous date, even when the state still has it', async () => {
-        await fillAllButDate();
-        await type('expectedAt-input', '2026-11-01');
-        // Zoals een browser die het leegmaken (of een half getypte datum) nog niet als input-event doorgaf.
-        await act(async () => { field('expectedAt-input').value = ''; });
-        await submit();
-        assert.equal(posted.length, 0);
-        assert.ok(mounted.hasText('supply_error_required_date'));
-    });
+    for (const text of ['01-11-2026', '1-11-2026', '01/11/2026', '01112026', '1-11']) {
+        test(`today typed as "${text}" (day-month order, whatever the browser language) is sent as local midnight`, async () => {
+            await fillAllButDate();
+            await type('expectedAt-input', text);
+            await submit();
+            assert.equal(mounted.hasText('supply_error_required_date') || mounted.hasText('supply_error_incomplete_date'), false);
+            await mounted.waitFor(() => posted.length > 0, 'POST');
+            assert.equal(JSON.parse(posted[0].body).expectedAt, '2026-10-31T23:00:00.000Z');
+        });
+    }
 
-    test('what the browser holds in the date field counts, also when no input event reached the form yet', async () => {
+    test('"Today" fills in the local day (already 1 November at 00:30, still 31 October in UTC) and shows it as dd-mm-jjjj', async () => {
         await fillAllButDate();
-        // Zoals een browser die de laatst getypte cijfers pas later doorgeeft: de waarde staat in het veld, de state is nog leeg.
-        await act(async () => { field('expectedAt-input').value = '2026-11-01'; });
+        const today = mounted.buttons().find((button) => button.getAttribute('aria-label') === 'date_field_today_label' && button.closest('div')?.contains(field('expectedAt-input')));
+        assert.ok(today);
+        await act(async () => { today!.click(); });
+        assert.equal(field('expectedAt-input').value, '01-11-2026');
         await submit();
-        assert.equal(mounted.hasText('supply_error_required_date'), false, 'no "enter a valid date" for a filled-in date');
         await mounted.waitFor(() => posted.length > 0, 'POST');
         assert.equal(JSON.parse(posted[0].body).expectedAt, '2026-10-31T23:00:00.000Z');
     });
