@@ -66,9 +66,9 @@ export default function PalletGroup({ context, actor, statusFilter, search, read
                                 kg: formatKg(notice.availableNow.netWeightKg, locale),
                             })}
                     </p>
-                    <Link href={availabilityHref({ route: 'Warehouse', focus: 'available', productVariantId: notice.productVariantId })}
-                        className="mt-1 inline-block font-medium text-blue-800 underline underline-offset-2">
-                        {t('supply_view_availability')}
+                    <Link href={availabilityHref({ route: 'Warehouse', focus: 'available', productVariantId: notice.productVariantId })} data-tour="inspection-view-stock"
+                        className="mt-2 inline-flex items-center rounded bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+                        {t('inspection_view_stock')}
                     </Link>
                 </div>
             )}

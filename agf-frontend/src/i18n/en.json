@@ -362,7 +362,7 @@
   "supply_no_bin": "none",
   "supply_another_pallet": "Another pallet",
   "availability_focus_available": "Available now (before reservations)",
-  "supply_to_inspection": "Go to inspection for this pallet",
+  "supply_to_inspection": "To inspection",
   "inspection": "Inspection",
   "inspection_subtitle": "You inspect the received pallets: approve, block or reject. Approved stock then shows under Availability.",
   "inspection_loading": "Loading inspection data…",
@@ -2004,5 +2004,14 @@
   "tour_chain_sold_why": "Each block is a link: click and you are on that sales order.",
   "tour_chain_origin_title": "Where it came from",
   "tour_chain_origin_what": "On the sales order the bar points back: the purchase order and the lot the reserved stock comes from.",
-  "tour_chain_origin_why": "So the origin stays visible, from sale back to purchase."
+  "tour_chain_origin_why": "So the origin stays visible, from sale back to purchase.",
+  "po_receive": "Receive",
+  "inspection_view_stock": "View stock",
+  "sales_step_reserve": "Reserve",
+  "sales_step_dispatch": "Dispatch",
+  "sales_step_confirm": "Confirm delivery",
+  "sales_next_reserve": "Next step: reserve approved stock per line (\"Choose stock and reserve\"), or allocate customer-bound supply.",
+  "sales_next_dispatch": "Next step: dispatch the reserved stock (\"Dispatch\" at the top).",
+  "sales_next_confirm": "Next step: everything is dispatched; confirm delivery on the dispatch.",
+  "sales_next_done": "Everything is dispatched and delivered. The invoice comes in a later version."
 }

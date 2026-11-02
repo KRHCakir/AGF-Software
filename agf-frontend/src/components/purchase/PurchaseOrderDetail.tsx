@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
@@ -7,6 +8,7 @@ import { purchaseOrderChain } from '../../lib/chain';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import ChainStrip from '../shared/ChainStrip';
+import { primaryButtonClass } from '../supply/SuccessPanel';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
@@ -24,6 +26,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     invoices?: React.ReactNode;
 }) {
     const { t, locale } = useTranslation();
+    // Volgende stap: ontvangen, zolang er van een inkooporder voor het eigen magazijn nog iets openstaat.
+    const receivable = order.route === 'Warehouse' && order.status !== 'Cancelled' && order.storedStatus !== 'Cancelled' && order.receivedQuantity < order.expectedQuantity;
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
     const qty = (value: number) => formatQuantity(value, locale);
     // Herkenbare naam van een andere regel van deze order: het onderscheidende kenmerk (herkomst, maat of verpakking).
@@ -35,6 +39,9 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
             <header className={section}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h2 id="po-detail-title" data-tour="po-detail-number" className="font-mono text-2xl font-bold text-gray-900">{order.orderNumber}</h2>
+                    {receivable && (
+                        <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={`${primaryButtonClass} ml-auto`}>{t('po_receive')}</Link>
+                    )}
                     <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><span data-tour="po-invoice-indicator" data-tour-key={order.invoiceIndicator}><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span></span>
                 </div>
                 <p className="mt-1 break-words text-sm text-gray-900">

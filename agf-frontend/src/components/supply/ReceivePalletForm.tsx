@@ -685,10 +685,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 note={replayed ? t('supply_saved_before') : undefined}
                 actions={(
                     <>
-                        <Link href={href} className={primaryButtonClass}>{t('supply_view_availability')}</Link>
                         {frozen.pallet.result && (
-                            <Link href={`/inspection?palletId=${frozen.pallet.result.id}`} data-tour="receive-to-inspection" className={secondaryButtonClass}>{t('supply_to_inspection')}</Link>
+                            <Link href={`/inspection?palletId=${frozen.pallet.result.id}`} data-tour="receive-to-inspection" className={primaryButtonClass}>{t('supply_to_inspection')}</Link>
                         )}
+                        <Link href={href} className={secondaryButtonClass}>{t('supply_view_availability')}</Link>
                         <button type="button" className={secondaryButtonClass} onClick={() => reset(null)}>{t('supply_another_pallet')}</button>
                     </>
                 )}
