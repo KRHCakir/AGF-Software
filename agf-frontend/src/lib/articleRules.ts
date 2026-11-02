@@ -5,6 +5,7 @@ import { GOODS_CODE_SYSTEMS, isGoodsCodeSystem } from '../types/article';
 import { formatDecimalInput, parsePositiveDecimal } from './decimal.ts';
 import type { WeightMethod } from './weight.ts';
 import { isWeightMethod } from './weight.ts';
+import { normalizeTradeClass } from './tradeClass.ts';
 
 // Pure regels van de artikelwerkplek, los van React en i18n (node:test). Spiegelt ArticleService/ArticleRules:
 // alleen de productsoort is verplicht; leeg = niet vastgelegd; goederencodes zijn tekst (voorloopnullen blijven) met een
@@ -31,7 +32,7 @@ export interface ArticleDraft {
     tradeClass: string;
 }
 
-export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length';
+export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length' | 'size_required' | 'class_required' | 'class_invalid';
 export interface ArticleRuleError { field: string; code: ArticleRuleCode }
 export type ArticleBuildResult = { ok: true; value: SaveArticleRequest } | { ok: false; errors: ArticleRuleError[] };
 
@@ -59,7 +60,7 @@ export function draftFromArticle(article: Article): ArticleDraft {
         brand: article.brand ?? '', sizeCategory: article.sizeCategory ?? '', packaging: article.packaging ?? '', packagingUnit: article.packagingUnit ?? '',
         season: article.season ?? '', notes: article.notes ?? '', weightMethod: article.weightMethod,
         defaultNetKgPerPackage: num(article.defaultNetKgPerPackage), defaultGrossKgPerPackage: num(article.defaultGrossKgPerPackage), defaultPackagesPerPallet: num(article.defaultPackagesPerPallet),
-        goodsCode: article.goodsCode ?? '', goodsCodeSystem: article.goodsCodeSystem ?? '', tradeClass: article.tradeClass ?? '',
+        goodsCode: article.goodsCode ?? '', goodsCodeSystem: article.goodsCodeSystem ?? '', tradeClass: normalizeTradeClass(article.tradeClass) ?? article.tradeClass ?? '',
     };
 }
 
@@ -104,7 +105,9 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     const originCountryCode = draft.originCountryCode.trim();
     if (originCountryCode === '') errors.push({ field: 'originCountryCode', code: 'required' });
     const brand = text(draft.brand, MAX_NAME_LENGTH, 'brand', errors);
+    // Maat en klasse zijn verplicht (geen maat: "n.v.t."); klasse uit de vaste lijst, bewaard als de vaste waarde.
     const sizeCategory = text(draft.sizeCategory, MAX_NAME_LENGTH, 'sizeCategory', errors);
+    if (draft.sizeCategory.trim() === '') errors.push({ field: 'sizeCategory', code: 'size_required' });
     const packaging = text(draft.packaging, MAX_NAME_LENGTH, 'packaging', errors);
     const packagingUnit = draft.packagingUnit === '' ? null : draft.packagingUnit;
     if (packagingUnit !== null && !(PACKAGE_UNITS as readonly string[]).includes(packagingUnit)) errors.push({ field: 'packagingUnit', code: 'invalid' });
@@ -129,7 +132,8 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     } else {
         goodsCodeSystem = null; // een stelsel zonder code wordt niet vastgelegd
     }
-    const tradeClass = text(draft.tradeClass, MAX_TRADE_CLASS_LENGTH, 'tradeClass', errors);
+    const tradeClass = normalizeTradeClass(draft.tradeClass);
+    if (tradeClass === null) errors.push({ field: 'tradeClass', code: draft.tradeClass.trim() === '' ? 'class_required' : 'class_invalid' });
 
     if (errors.length > 0) return { ok: false, errors };
     return {
