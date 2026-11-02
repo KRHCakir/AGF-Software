@@ -34,6 +34,7 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
     const [referenceToken, setReferenceToken] = useState(0);
     const [preselected, setPreselected] = useState<SupplyCommitment | null>(null);
     const [orderError, setOrderError] = useState<string | null>(null);
+    const [orderLoading, setOrderLoading] = useState(false);
 
     useEffect(() => {
         if (task === 'receipt') return;
@@ -49,12 +50,19 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
     }, [task, referenceToken]);
 
     useEffect(() => {
-        if (task !== 'receipt' || orderId === null) return;
-        const controller = new AbortController();
+        // Een andere order in de link: nooit de vorige order laten staan, ook niet als het laden van de nieuwe mislukt.
+        setPreselected(null);
         setOrderError(null);
+        if (task !== 'receipt' || orderId === null) { setOrderLoading(false); return; }
+        const controller = new AbortController();
+        setOrderLoading(true);
         getSupplyCommitment(orderId, controller.signal)
-            .then(setPreselected)
-            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setOrderError(toApiError(caught).message); });
+            .then((commitment) => { setPreselected(commitment); setOrderLoading(false); })
+            .catch((caught: unknown) => {
+                if (toApiError(caught).kind === 'aborted') return;
+                setOrderError(toApiError(caught).message);
+                setOrderLoading(false);
+            });
         return () => controller.abort();
     }, [task, orderId]);
 
@@ -88,7 +96,10 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
             {task === 'receipt' && (
                 <>
                     {orderError && <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">{orderError}</p>}
-                    <ReceivePalletForm actor={actor} preselected={preselected} onPreselectedConsumed={consumePreselected} />
+                    {orderLoading
+                        ? <LoadingRows rows={3} label={t('supply_loading_sources')} />
+                        // Per order een vers formulier: een keuze voor de vorige order blijft nooit hangen.
+                        : <ReceivePalletForm key={orderId ?? 'none'} actor={actor} preselected={preselected} onPreselectedConsumed={consumePreselected} />}
                 </>
             )}
         </div>

@@ -40,3 +40,33 @@ describe('SupplyWorkspace', () => {
         assert.equal(mounted.container.querySelector('[data-testid="page-intro"]')?.textContent, 'intro_receipts');
     });
 });
+
+describe('SupplyWorkspace: another order in the link', () => {
+    beforeEach(() => {
+        window.localStorage.setItem('agf_actor_reference', 'wh-1');
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('a failed load of the new order never keeps the previous one chosen', async () => {
+        const order = (id: number) => ({
+            id, requestId: `r-${id}`, vendorId: 1, vendorName: `Leverancier ${id}`, customerId: null, customerName: null, route: 'Warehouse', status: 'Expected',
+            origin: 'Peru', destination: null, expectedAt: '2026-11-04T06:00:00.000Z', vendorGgns: [],
+            lines: [{ id: id * 10, productVariantId: 1, productName: 'Avocado', productVariantName: 'Hass', lotNumber: null, expectedQuantity: 10, expectedUnit: 'box',
+                expectedNetWeightKg: 40, weightMethod: 'Weighed', defaultNetKgPerPackage: null, palletCount: null, packagesPerPallet: null, defaultPackagesPerPallet: null }],
+        });
+        stubFetch({
+            // Beide orders staan open; order 2 laden mislukt.
+            onGet: (url) => url.endsWith('/supply-commitments/1') ? json(200, order(1)) : url.endsWith('/supply-commitments/2') ? json(500, { message: 'kapot' })
+                : url.includes('/supply-commitments') ? json(200, [order(1), order(2)]) : json(200, []),
+            nextPost: async () => json(500, {}),
+        });
+        await mounted.render(<SupplyWorkspace task="receipt" orderId={1} />);
+        const checked = () => Array.from(mounted.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).filter((box) => box.checked).length;
+        await mounted.waitFor(() => checked() === 1, 'the line of order 1 chosen');
+        await mounted.render(<SupplyWorkspace task="receipt" orderId={2} />);
+        await mounted.waitFor(() => mounted.container.querySelector('[role="alert"]'), 'error for order 2');
+        await mounted.waitFor(() => mounted.hasText('Leverancier 2'), 'open orders listed');
+        assert.equal(checked(), 0, 'nothing of order 1 stays chosen');
+    });
+});
