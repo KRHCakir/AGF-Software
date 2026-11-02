@@ -169,6 +169,17 @@ export interface PurchaseOrderDetail {
     rejections: PurchaseOrderRejection[];
     deviations?: PurchaseOrderDeviation[];
     history: PurchaseOrderHistoryEvent[];
+    // Keten-strip: verkooporders die van deze order reserveren of verzonden hebben (per eenheid opgeteld).
+    salesOrders?: PurchaseOrderSalesLink[];
+}
+
+export interface PurchaseOrderSalesLink {
+    salesOrderId: number;
+    customerName: string | null;
+    status: string;
+    unit: string | null;
+    reservedQuantity: number;
+    shippedQuantity: number;
 }
 
 export interface PurchaseOrderInvoiceMatch {
@@ -225,7 +236,9 @@ export function isPurchaseOrderDetail(value: unknown): value is PurchaseOrderDet
         && isArrayOf(value.invoiceRefs, (ref): ref is PurchaseOrderInvoiceRef => isObject(ref) && isNumber(ref.id) && isString(ref.kind) && isString(ref.invoiceNumber) && isNullableString(ref.invoiceDate) && isNullableNumber(ref.amountExclVat))
         && isArrayOf(value.rejections, (rejection): rejection is PurchaseOrderRejection => isObject(rejection) && isString(rejection.reason) && isString(rejection.decision) && Array.isArray(rejection.lines))
         && isArrayOf(value.history, (event): event is PurchaseOrderHistoryEvent => isObject(event) && isString(event.occurredAt) && isString(event.type))
-        && (value.deviations === undefined || isArrayOf(value.deviations, isPurchaseOrderDeviation));
+        && (value.deviations === undefined || isArrayOf(value.deviations, isPurchaseOrderDeviation))
+        && (value.salesOrders === undefined || isArrayOf(value.salesOrders, (link): link is PurchaseOrderSalesLink => isObject(link) && isNumber(link.salesOrderId)
+            && isNullableString(link.customerName) && isString(link.status) && isNullableString(link.unit) && isNumber(link.reservedQuantity) && isNumber(link.shippedQuantity)));
 }
 
 export function isInvoiceMatchList(value: unknown): value is PurchaseOrderInvoiceMatch[] {

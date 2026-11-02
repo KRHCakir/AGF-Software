@@ -169,6 +169,22 @@ namespace AgfAdmin.Services
                 .OrderBy(d => d.Deviation.CreatedAt).ThenBy(d => d.Deviation.Id)
                 .ToListAsync(cancellationToken);
 
+            // Keten-strip: verkooporders die van deze order reserveren (Active) of verzonden hebben (Consumed), ook klantgebonden toewijzingen.
+            var salesLinks = (await _db.StockReservations.AsNoTracking()
+                    .Where(r => r.SupplyCommitmentLine.SupplyCommitmentId == id && r.SalesOrderLineId != null
+                        && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
+                    .Select(r => new { r.SalesOrderLine.SalesOrderId, Customer = r.SalesOrderLine.SalesOrder.Customer.Name, OrderStatus = r.SalesOrderLine.SalesOrder.Status, r.Status, r.Quantity, r.Unit })
+                    .ToListAsync(cancellationToken))
+                .GroupBy(r => new { r.SalesOrderId, r.Unit })
+                .Select(g => new PurchaseOrderSalesLinkDto
+                {
+                    SalesOrderId = g.Key.SalesOrderId, CustomerName = g.First().Customer, Status = g.First().OrderStatus, Unit = g.Key.Unit,
+                    ReservedQuantity = g.Where(r => r.Status == ReservationRules.StatusActive).Sum(r => r.Quantity),
+                    ShippedQuantity = g.Where(r => r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity),
+                })
+                .OrderBy(l => l.SalesOrderId).ThenBy(l => l.Unit)
+                .ToList();
+
             var wholeRejected = rejections.SelectMany(r => r.Lines).Where(l => !l.SplitOff).Select(l => l.PalletContentLineId).ToHashSet();
             var receipts = contents.Select(c =>
             {
@@ -319,7 +335,8 @@ namespace AgfAdmin.Services
                     ExpectedKgPerPackage = d.Deviation.ExpectedKgPerPackage, ReceivedKgPerPackage = d.Deviation.ReceivedKgPerPackage,
                     Reason = d.Deviation.Reason, ReasonNote = d.Deviation.ReasonNote, ActorReference = d.Deviation.ActorReference, CreatedAt = Utc(d.Deviation.CreatedAt)
                 }).ToList(),
-                History = history.OrderBy(h => h.OccurredAt).ToList()
+                History = history.OrderBy(h => h.OccurredAt).ToList(),
+                SalesOrders = salesLinks
             });
         }
 

@@ -223,6 +223,8 @@ export interface StockReservation {
     // Bron (toezegging); bij DirectTrade met leverancier, herkomst, bestemming en verwachte leverdatum.
     supplyCommitmentLineId: number;
     supplyCommitmentId: number;
+    // Nummer van die inkooporder (IO-jjjj-nnnn), voor de herkomst in de keten-strip.
+    supplyOrderNumber?: string | null;
     vendorName: string | null;
     origin: string | null;
     destination: string | null;
@@ -383,6 +385,7 @@ export function isStockReservation(value: unknown): value is StockReservation {
         && isString(value.source)
         && isNumber(value.supplyCommitmentLineId)
         && isNumber(value.supplyCommitmentId)
+        && (value.supplyOrderNumber === undefined || isNullableString(value.supplyOrderNumber))
         && isNullableString(value.vendorName)
         && isNullableString(value.origin)
         && isNullableString(value.destination)
