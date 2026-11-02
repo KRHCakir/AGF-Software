@@ -30,8 +30,16 @@ describe('PurchaseOrderDetail next step', () => {
         assert.equal(mounted.container.querySelector('[data-chain-step="order"]')?.getAttribute('aria-current'), 'step', 'the chain strip sits on top');
     });
 
+    test('per order line: one line received too much and another too little still shows "Ontvangen"', async () => {
+        const line = order().lines[0];
+        const lines = [{ ...line, receivedQuantity: 25 }, { ...line, id: 32, receivedQuantity: 15 }];
+        await mounted.render(<PurchaseOrderDetail order={order({ expectedQuantity: 40, receivedQuantity: 40, lines })} onChanged={() => {}} />);
+        assert.equal(receive()?.getAttribute('href'), '/receipts?order=3', 'the order total matches, but line 32 still lacks 5');
+    });
+
     test('no "Ontvangen" when everything is received, for customer-bound supply or a cancelled order', async () => {
-        for (const over of [{ receivedQuantity: 20 }, { route: 'DirectTrade' }, { status: 'Cancelled', storedStatus: 'Cancelled' }]) {
+        const fullyReceived = { receivedQuantity: 20, lines: order().lines.map((line) => ({ ...line, receivedQuantity: 20 })) };
+        for (const over of [fullyReceived, { route: 'DirectTrade' }, { status: 'Cancelled', storedStatus: 'Cancelled' }]) {
             await mounted.render(<PurchaseOrderDetail order={order(over)} onChanged={() => {}} />);
             assert.equal(receive(), null, JSON.stringify(over));
         }
