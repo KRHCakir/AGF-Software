@@ -51,6 +51,13 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> SetOriginCountry(int id, [FromBody] SetOriginCountryDto request) =>
             this.ToActionResult(await _service.SetOriginCountryAsync(id, request, HttpContext?.RequestAborted ?? default));
 
+        [HttpGet("size-class-cleanup")]
+        public async Task<IActionResult> SizeClassCleanup() => Ok(await _service.SizeClassCleanupAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPost("{id:int}/size-class")]
+        public async Task<IActionResult> SetSizeClass(int id, [FromBody] SetSizeClassDto request) =>
+            this.ToActionResult(await _service.SetSizeClassAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
 
