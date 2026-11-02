@@ -16,8 +16,8 @@ export default function PurchaseOrderChain({ orderIds, current, reloadKey }: { o
         const controller = new AbortController();
         const wanted = ids === '' ? [] : ids.split(',').map(Number);
         Promise.all(wanted.map((id) => getPurchaseOrder(id, controller.signal).catch(() => null)))
-            .then((loaded) => setOrders(loaded.filter((order): order is PurchaseOrderDetail => order !== null)))
-            .catch(() => setOrders([]));
+            .then((loaded) => { if (!controller.signal.aborted) setOrders(loaded.filter((order): order is PurchaseOrderDetail => order !== null)); })
+            .catch(() => { if (!controller.signal.aborted) setOrders([]); });
         return () => controller.abort();
     }, [ids, reloadKey]);
 

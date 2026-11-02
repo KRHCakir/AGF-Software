@@ -29,6 +29,9 @@ const singleUnit = (units: (string | null | undefined)[]) => {
     const all = unique(units.filter((unit): unit is string => !!unit));
     return all.length === 1 ? all[0] : '';
 };
+const hasMixedUnits = (units: (string | null | undefined)[]) => unique(units.filter((unit): unit is string => !!unit)).length > 1;
+// Bij gemengde eenheden (kg en colli) zou een som zonder eenheid misleiden: toon dan geen totaal maar "meerdere eenheden".
+const qty = (mixed: boolean, part: ChainPart): ChainPart => (mixed ? { key: 'chain_mixed_units' } : part);
 
 function availabilityHref(variantIds: number[]): string {
     const ids = unique(variantIds);
@@ -44,6 +47,7 @@ const invoiceStep = (): Omit<ChainStep, 'current'> => ({ key: 'invoice', state: 
 export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' | 'receipt'): ChainStep[] {
     const direct = order.route === 'DirectTrade';
     const unit = singleUnit(order.lines.map((line) => line.unit));
+    const mixed = hasMixedUnits(order.lines.map((line) => line.unit));
     const receipts = order.receipts;
     const pallets = unique(receipts.map((receipt) => receipt.palletId)).map((id) => ({ id, reference: receipts.find((r) => r.palletId === id)!.palletReference }));
     const sales = order.salesOrders ?? [];
@@ -57,13 +61,13 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
         for (const key of ['receipt', 'inspection', 'stock'] as const) steps.push({ key, state: 'unavailable', parts: [{ key: 'chain_direct_trade' }], links: [] });
     } else {
         const received = order.receivedQuantity;
-        const receiptState: ChainState = received <= 0 ? 'open' : received >= order.expectedQuantity ? 'done' : 'partial';
+        const receiptState: ChainState = received <= 0 ? (order.status === 'Cancelled' ? 'empty' : 'open') : received >= order.expectedQuantity ? 'done' : 'partial';
         const receiptLinks: ChainLink[] = pallets.slice(0, MAX_LINKS).map((pallet) => ({ label: pallet.reference, href: `/inspection?palletId=${pallet.id}` }));
         if (receiptState !== 'done' && order.status !== 'Cancelled') receiptLinks.unshift({ label: '', key: 'chain_receive_action', href: `/receipts?order=${order.id}` });
         steps.push({
             key: 'receipt', state: receiptState, links: receiptLinks,
             parts: [
-                { key: 'chain_received_of', params: { received, expected: order.expectedQuantity, unit } },
+                qty(mixed, { key: 'chain_received_of', params: { received, expected: order.expectedQuantity, unit } }),
                 ...(pallets.length > 0 ? [{ key: 'chain_pallets', params: { count: pallets.length } }] : []),
             ],
         });
@@ -88,7 +92,7 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
         const inStock = sum(receipts.filter((receipt) => receipt.qualityStatus === 'Approved').map((receipt) => receipt.onHandQuantity - receipt.reservedQuantity));
         steps.push({
             key: 'stock', state: inStock > 0 ? 'done' : 'empty',
-            parts: [{ key: inStock > 0 ? 'chain_stock_available' : 'chain_stock_none', params: { quantity: inStock, unit } }],
+            parts: [inStock > 0 ? qty(mixed, { key: 'chain_stock_available', params: { quantity: inStock, unit } }) : { key: 'chain_stock_none' }],
             links: [{ label: '', key: 'chain_to_availability', href: availabilityHref(order.lines.map((line) => line.productVariantId)) }],
         });
     }
@@ -101,16 +105,17 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
     const reserved = sum(sales.map((link) => link.reservedQuantity));
     const shipped = sum(sales.map((link) => link.shippedQuantity));
     const salesUnit = singleUnit(sales.map((link) => link.unit));
+    const salesMixed = hasMixedUnits(sales.map((link) => link.unit));
     steps.push({
         key: 'sales', state: salesIds.length === 0 ? 'empty' : 'done', links: salesLinks,
         parts: salesIds.length === 0 ? [{ key: 'chain_nothing_yet' }] : [
             { key: 'chain_sales_orders', params: { count: salesIds.length } },
-            ...(reserved > 0 ? [{ key: 'chain_reserved', params: { quantity: reserved, unit: salesUnit } }] : []),
+            ...(reserved > 0 ? [qty(salesMixed, { key: 'chain_reserved', params: { quantity: reserved, unit: salesUnit } })] : []),
         ],
     });
     steps.push({
         key: 'delivery', state: shipped > 0 ? (reserved > 0 ? 'partial' : 'done') : 'empty',
-        parts: [shipped > 0 ? { key: 'chain_shipped', params: { quantity: shipped, unit: salesUnit } } : { key: 'chain_nothing_yet' }],
+        parts: [shipped > 0 ? qty(salesMixed, { key: 'chain_shipped', params: { quantity: shipped, unit: salesUnit } }) :{ key: 'chain_nothing_yet' }],
         // Eerst de verkooporders die verzonden hebben, dan pas afkappen: een verzonden order na de eerste drie mist nooit.
         links: unique(sales.filter((link) => link.shippedQuantity > 0).map((link) => link.salesOrderId)).slice(0, MAX_LINKS)
             .map((id) => salesLinks.find((link) => link.href === `/sales-orders?orderId=${id}`) ?? { label: `#${id}`, href: `/sales-orders?orderId=${id}` }),
@@ -125,6 +130,7 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const reservations = order.lines.flatMap((line) => line.reservations).filter((r) => r.status === 'Active' || r.status === 'Consumed');
     const physical = reservations.filter((r) => r.source !== 'DirectTrade');
     const unit = singleUnit(order.lines.map((line) => line.unit));
+    const mixed = hasMixedUnits(order.lines.map((line) => line.unit));
     const purchaseOrders = unique(reservations.map((r) => r.supplyCommitmentId)).map((id) => ({ id, number: reservations.find((r) => r.supplyCommitmentId === id)?.supplyOrderNumber ?? `#${id}` }));
     const lots = unique(reservations.map((r) => r.lotNumber).filter((lot): lot is string => !!lot));
     const pallets = unique(physical.filter((r) => r.palletId !== null).map((r) => r.palletId!)).map((id) => ({ id, reference: physical.find((r) => r.palletId === id)?.palletReference ?? `#${id}` }));
@@ -158,21 +164,21 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
             // nooit in ons magazijn: dan is deze stap niet van toepassing, zonder link naar Beschikbaarheid.
             key: 'stock',
             state: stockReserved + stockShipped > 0 ? 'done' : physical.length === 0 && reservations.length > 0 ? 'unavailable' : 'empty',
-            parts: [stockReserved > 0 ? { key: 'chain_reserved', params: { quantity: stockReserved, unit } }
-                : stockShipped > 0 ? { key: 'chain_from_stock', params: { quantity: stockShipped, unit } }
+            parts: [stockReserved > 0 ? qty(mixed, { key: 'chain_reserved', params: { quantity: stockReserved, unit } })
+                : stockShipped > 0 ? qty(mixed, { key: 'chain_from_stock', params: { quantity: stockShipped, unit } })
                 : physical.length === 0 && reservations.length > 0 ? { key: 'chain_direct_trade' } : { key: 'chain_nothing_reserved' }],
             links: physical.length === 0 && reservations.length > 0 ? [] : [{ label: '', key: 'chain_to_availability', href: availabilityHref(order.lines.map((line) => line.productVariantId)) }],
         },
         {
             key: 'sales', state: order.status === 'Cancelled' ? 'empty' : shipped >= demand && demand > 0 ? 'done' : 'partial',
-            parts: [{ key: order.status === 'Cancelled' ? 'chain_cancelled' : 'chain_demand', params: { quantity: demand, unit } }],
+            parts: [order.status === 'Cancelled' ? { key: 'chain_cancelled' } : qty(mixed, { key: 'chain_demand', params: { quantity: demand, unit } })],
             links: [{ label: `#${order.id}`, href: `/sales-orders?orderId=${order.id}` }],
         },
         {
             key: 'delivery', state: shipped <= 0 ? 'empty' : delivered >= demand ? 'done' : 'partial',
             parts: shipped <= 0 ? [{ key: 'chain_nothing_yet' }] : [
-                { key: 'chain_shipped', params: { quantity: shipped, unit } },
-                ...(delivered > 0 ? [{ key: 'chain_delivered', params: { quantity: delivered, unit } }] : []),
+                qty(mixed, { key: 'chain_shipped', params: { quantity: shipped, unit } }),
+                ...(delivered > 0 && !mixed ? [{ key: 'chain_delivered', params: { quantity: delivered, unit } }] : []),
             ],
             links: [],
         },

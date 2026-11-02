@@ -1988,6 +1988,7 @@
   "chain_inspection_all_approved": "goedgekeurd",
   "chain_demand": "{quantity} {unit} gevraagd",
   "chain_cancelled": "geannuleerd",
+  "chain_mixed_units": "meerdere eenheden",
   "chain_from_stock": "{quantity} {unit} uit voorraad",
   "tour_ch_chain_title": "De keten van een order",
   "tour_ch_chain_summary": "Van inkooporder tot levering in één balk: waar staat de order, waar ging het heen en waar komt het vandaan.",

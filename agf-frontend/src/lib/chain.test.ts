@@ -38,6 +38,18 @@ describe('purchase order chain', () => {
         assert.deepEqual(step(steps, 'invoice'), { key: 'invoice', state: 'unavailable', parts: [{ key: 'chain_not_yet' }], links: [], current: false });
     });
 
+    test('mixed units on one order: no unitless total, a "multiple units" part instead', () => {
+        const base = order();
+        const steps = purchaseOrderChain(order({ receivedQuantity: 15, lines: [base.lines[0], { ...base.lines[0], id: 32, unit: 'kg' }] }), 'order');
+        assert.deepEqual(step(steps, 'receipt').parts, [{ key: 'chain_mixed_units' }]);
+    });
+
+    test('a cancelled order with nothing received: the receipt step is not "open" and has no receive action', () => {
+        const steps = purchaseOrderChain(order({ status: 'Cancelled' }), 'order');
+        assert.equal(step(steps, 'receipt').state, 'empty');
+        assert.deepEqual(hrefs(step(steps, 'receipt')), []);
+    });
+
     test('partly received and partly inspected: counts, pallet links, the open pallet in Keuring and stock for this article', () => {
         const steps = purchaseOrderChain(order({
             receivedQuantity: 15,
