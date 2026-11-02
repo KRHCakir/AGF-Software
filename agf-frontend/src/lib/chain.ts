@@ -109,7 +109,9 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
     steps.push({
         key: 'delivery', state: shipped > 0 ? (reserved > 0 ? 'partial' : 'done') : 'empty',
         parts: [shipped > 0 ? { key: 'chain_shipped', params: { quantity: shipped, unit: salesUnit } } : { key: 'chain_nothing_yet' }],
-        links: shipped > 0 ? salesLinks.filter((link) => sales.some((s) => `/sales-orders?orderId=${s.salesOrderId}` === link.href && s.shippedQuantity > 0)) : [],
+        // Eerst de verkooporders die verzonden hebben, dan pas afkappen: een verzonden order na de eerste drie mist nooit.
+        links: unique(sales.filter((link) => link.shippedQuantity > 0).map((link) => link.salesOrderId)).slice(0, MAX_LINKS)
+            .map((id) => salesLinks.find((link) => link.href === `/sales-orders?orderId=${id}`) ?? { label: `#${id}`, href: `/sales-orders?orderId=${id}` }),
     });
     steps.push(invoiceStep());
     const at: ChainStepKey = current === 'order' ? 'order' : 'receipt';
@@ -129,6 +131,8 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const reserved = sum(order.lines.map((line) => line.reservedQuantity + line.allocatedQuantity));
     const shipped = sum(order.lines.map((line) => line.dispatchedQuantity));
     const delivered = sum(order.lines.map((line) => line.deliveredQuantity));
+    const stockReserved = sum(physical.filter((r) => r.status === 'Active').map((r) => r.quantity));
+    const stockShipped = sum(physical.filter((r) => r.status === 'Consumed').map((r) => r.quantity));
     const nothing: ChainPart[] = [{ key: 'chain_nothing_reserved' }];
 
     const steps: Omit<ChainStep, 'current'>[] = [
@@ -149,11 +153,14 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
             links: [],
         },
         {
-            // Gereserveerd, of (na verzending) al uit voorraad gehaald; anders nog niets.
-            key: 'stock', state: reserved + shipped > 0 ? 'done' : 'empty',
-            parts: [reserved > 0 ? { key: 'chain_reserved', params: { quantity: reserved, unit } }
-                : shipped > 0 ? { key: 'chain_from_stock', params: { quantity: shipped, unit } } : { key: 'chain_nothing_reserved' }],
-            links: [{ label: '', key: 'chain_to_availability', href: availabilityHref(order.lines.map((line) => line.productVariantId)) }],
+            // Alleen magazijnvoorraad (Physical): gereserveerd, of (na verzending) al uit voorraad gehaald. Klantgebonden aanvoer komt
+            // nooit in ons magazijn: dan is deze stap niet van toepassing, zonder link naar Beschikbaarheid.
+            key: 'stock',
+            state: stockReserved + stockShipped > 0 ? 'done' : physical.length === 0 && reservations.length > 0 ? 'unavailable' : 'empty',
+            parts: [stockReserved > 0 ? { key: 'chain_reserved', params: { quantity: stockReserved, unit } }
+                : stockShipped > 0 ? { key: 'chain_from_stock', params: { quantity: stockShipped, unit } }
+                : physical.length === 0 && reservations.length > 0 ? { key: 'chain_direct_trade' } : { key: 'chain_nothing_reserved' }],
+            links: physical.length === 0 && reservations.length > 0 ? [] : [{ label: '', key: 'chain_to_availability', href: availabilityHref(order.lines.map((line) => line.productVariantId)) }],
         },
         {
             key: 'sales', state: order.status === 'Cancelled' ? 'empty' : shipped >= demand && demand > 0 ? 'done' : 'partial',

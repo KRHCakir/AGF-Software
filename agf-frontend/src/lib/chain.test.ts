@@ -71,6 +71,13 @@ describe('purchase order chain', () => {
         assert.deepEqual(hrefs(step(steps, 'delivery')), ['/sales-orders?orderId=1'], 'only the order that shipped');
     });
 
+    test('delivery links: every shipped sales order counts, also after the first three sales orders', () => {
+        const link = (id: number, shipped: number) => ({ salesOrderId: id, customerName: null, status: 'Open', unit: 'colli', reservedQuantity: shipped ? 0 : 2, shippedQuantity: shipped });
+        const steps = purchaseOrderChain(order({ salesOrders: [link(1, 0), link(2, 0), link(3, 0), link(4, 5)] }), 'order');
+        assert.deepEqual(hrefs(step(steps, 'sales')), ['/sales-orders?orderId=1', '/sales-orders?orderId=2', '/sales-orders?orderId=3']);
+        assert.deepEqual(hrefs(step(steps, 'delivery')), ['/sales-orders?orderId=4']);
+    });
+
     test('customer-bound supply (DirectTrade) never passes our warehouse: receipt, inspection and stock are not part of it', () => {
         const steps = purchaseOrderChain(order({ route: 'DirectTrade' }), 'order');
         for (const key of ['receipt', 'inspection', 'stock'] as const) {
@@ -121,6 +128,20 @@ describe('sales order chain', () => {
         assert.deepEqual(step(steps, 'stock').parts, [{ key: 'chain_from_stock', params: { quantity: 10, unit: 'colli' } }]);
         assert.equal(step(steps, 'sales').state, 'done');
         assert.equal(step(steps, 'delivery').state, 'done');
+    });
+
+    test('customer-bound supply only (DirectTrade): stock does not apply, no link to Availability', () => {
+        const allocated = salesLine({ reservedQuantity: 0, allocatedQuantity: 10, reservations: [reservation({ source: 'DirectTrade', palletId: null, palletContentLineId: null, palletReference: null, quantity: 10, contentQualityStatus: null })] });
+        const steps = salesOrderChain(salesOrder([allocated]));
+        assert.equal(step(steps, 'stock').state, 'unavailable');
+        assert.deepEqual(step(steps, 'stock').parts, [{ key: 'chain_direct_trade' }]);
+        assert.deepEqual(step(steps, 'stock').links, []);
+        assert.deepEqual(step(steps, 'order').links.map((l) => l.label), ['IO-2026-0003'], 'the purchase order is still the origin');
+    });
+
+    test('mixed: stock counts only the warehouse part', () => {
+        const mixed = salesLine({ reservedQuantity: 4, allocatedQuantity: 6, reservations: [reservation({ quantity: 4 }), reservation({ id: 2, source: 'DirectTrade', palletId: null, palletReference: null, quantity: 6 })] });
+        assert.deepEqual(step(salesOrderChain(salesOrder([mixed])), 'stock').parts, [{ key: 'chain_reserved', params: { quantity: 4, unit: 'colli' } }]);
     });
 
     test('nothing reserved yet: no origin links; the sales order and stock link remain', () => {
