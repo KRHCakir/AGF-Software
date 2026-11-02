@@ -69,9 +69,11 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
         });
 
         const inspectable = receipts.filter((receipt) => receipt.onHandQuantity > 0 || receipt.qualityStatus === 'Rejected');
-        const open = inspectable.filter((receipt) => receipt.qualityStatus === 'Quarantine' || receipt.qualityStatus === 'Blocked').length;
-        const approved = receipts.filter((receipt) => receipt.qualityStatus === 'Approved').length;
-        const rejected = receipts.filter((receipt) => receipt.qualityStatus === 'Rejected').length;
+        // Pallets tellen, geen regels: een pallet met meerdere productregels telt één keer per status.
+        const palletCount = (list: typeof receipts) => unique(list.map((receipt) => receipt.palletId)).length;
+        const open = palletCount(inspectable.filter((receipt) => receipt.qualityStatus === 'Quarantine' || receipt.qualityStatus === 'Blocked'));
+        const approved = palletCount(receipts.filter((receipt) => receipt.qualityStatus === 'Approved'));
+        const rejected = palletCount(receipts.filter((receipt) => receipt.qualityStatus === 'Rejected'));
         const firstOpen = receipts.find((receipt) => receipt.qualityStatus === 'Quarantine' || receipt.qualityStatus === 'Blocked');
         steps.push({
             key: 'inspection', state: receipts.length === 0 ? 'empty' : open > 0 ? 'partial' : 'done',
