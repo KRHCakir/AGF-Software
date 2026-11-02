@@ -2,7 +2,7 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { todayInAmsterdam } from '../../lib/calendarDate.ts';
+import { formatDateInput, todayInAmsterdam } from '../../lib/calendarDate.ts';
 import { Mounted, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
@@ -125,7 +125,7 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
 
     test('order: supplier reference and order date (today) are sent, no order channel; the own order number is shown large', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
-        assert.equal(field('orderedOn-input').value, todayInAmsterdam());
+        assert.equal(field('orderedOn-input').value, formatDateInput(todayInAmsterdam()), 'shown as dd-mm-jjjj');
         await type('supplierReference-input', '  NP-88123 ');
         assert.equal(mounted.button('po_channel_phone'), null);
         await chooseVendor('supb');

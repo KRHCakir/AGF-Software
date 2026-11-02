@@ -35,7 +35,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
                 : error.field === 'lines' ? t('supply_error_lines_required')
                 : error.field.endsWith('.unit') ? t('supply_error_required_unit')
                 : t('supply_error_required');
-        case 'invalid_date': return t('supply_error_required_date');
+        case 'invalid_date': return t('supply_error_incomplete_date');
         case 'too_long': return t('supply_error_too_long', { max: String(MAX_LENGTHS[error.field] ?? MAX_LENGTHS[error.field.split('.').pop() ?? ''] ?? 100) });
         case 'too_many_lines': return t('sales_error_too_many_lines', { max: String(MAX_ORDER_LINES) });
         case 'duplicate_line': return t('sales_error_duplicate_line');

@@ -18,6 +18,7 @@ import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from '../../types/availabilit
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
+import DateField from '../shared/DateField';
 import KgTotals from '../shared/KgTotals';
 import VendorPicker from '../purchase/VendorPicker';
 import CustomerPicker from '../sales/CustomerPicker';
@@ -88,7 +89,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     const [errors, setErrors] = useState<FieldErrors>({});
     const [result, setResult] = useState<SaveResult<SupplyCommitment> | null>(null);
     const inFlight = useRef(false);
-    const expectedInput = useRef<HTMLInputElement | null>(null);
     // Artikelen van dit formulier: de referentielijst plus wat hier met "Nieuw artikel" is aangemaakt; per regel het open blok.
     const [products, setProducts] = useState(reference.products);
     const [newArticleFor, setNewArticleFor] = useState<string | null>(null);
@@ -158,16 +158,12 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         if (isDirect && destination === '') addError(found, 'destination', t('supply_error_required_destination'));
         else if (destination.length > 200) addError(found, 'destination', t('supply_error_too_long', { max: '200' }));
 
-        // Verwacht op: wat de browser in het datumveld heeft vastgelegd telt, niet een eerdere stand van de state (een browser die de
-        // laatst getypte cijfers pas bij het verlaten doorgeeft, gaf anders "Vul een geldige datum in" bij een goed ingevulde datum).
-        // ISO (datumveld) en dd-mm-jjjj werken allebei; vandaag en eerder zijn geldig (een aanvoer kan achteraf worden vastgelegd).
+        // Verwacht op: het datumveld geeft de ISO-datum, of de getypte tekst als dat (nog) geen datum is. Vandaag en eerder zijn
+        // geldig (een aanvoer kan achteraf worden vastgelegd); naar de server als lokale middernacht.
         let expectedAt = '';
-        // Is het veld er, dan telt alleen wat erin staat, ook leeg: een gewiste of half getypte datum stuurt nooit de vorige waarde mee.
-        const field = expectedInput.current;
-        const expectedText = field !== null ? field.value : header.expectedDate;
-        const expectedDate = parseDateInput(expectedText);
+        const expectedDate = parseDateInput(header.expectedDate);
         const expectedIso = expectedDate === null ? null : toLocalMidnightIso(expectedDate);
-        if (expectedIso === null) addError(found, 'expectedAt', t(field?.validity.badInput ? 'supply_error_incomplete_date' : 'supply_error_required_date'));
+        if (expectedIso === null) addError(found, 'expectedAt', t(header.expectedDate.trim() === '' ? 'supply_error_required_date' : 'supply_error_incomplete_date'));
         else expectedAt = expectedIso;
 
         const supplierReference = header.supplierReference.trim();
@@ -348,8 +344,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 </div>
                 <div>
                     <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
-                    <input {...fieldProps('orderedOn', e('orderedOn'))} data-tour="supply-ordered-on" type="date" value={header.orderedOn} disabled={locked}
-                        onChange={(event) => updateHeader('orderedOn', event.target.value)} className={inputClass} />
+                    <DateField {...fieldProps('orderedOn', e('orderedOn'))} dataTour="supply-ordered-on" value={header.orderedOn} disabled={locked}
+                        onChange={(value) => updateHeader('orderedOn', value)} />
                     <FieldError id="orderedOn" messages={e('orderedOn')} />
                 </div>
             </div>
@@ -371,9 +367,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 </div>
                 <div>
                     <label htmlFor="expectedAt-input" className="text-xs font-medium text-gray-700">{t('supply_expected_date')} *</label>
-                    <input {...fieldProps('expectedAt', e('expectedAt'))} ref={expectedInput} data-tour="supply-expected" type="date" value={header.expectedDate} disabled={locked}
-                        onChange={(event) => updateHeader('expectedDate', event.target.value)}
-                        onBlur={(event) => { if (event.target.value !== header.expectedDate) updateHeader('expectedDate', event.target.value); }} className={inputClass} />
+                    <DateField {...fieldProps('expectedAt', e('expectedAt'))} dataTour="supply-expected" value={header.expectedDate} disabled={locked}
+                        onChange={(value) => updateHeader('expectedDate', value)} />
                     <FieldError id="expectedAt" messages={e('expectedAt')} />
                 </div>
             </div>
