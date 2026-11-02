@@ -169,4 +169,21 @@ namespace AgfAdmin.DTOs
     {
         public string OriginCountryCode { get; set; }
     }
+
+    // "Maat en klasse opschonen": een artikel zonder maat, zonder klasse of met een klasse die niet in de vaste lijst staat.
+    public sealed class SizeClassCleanupItemDto
+    {
+        public int Id { get; set; }
+        public string Description { get; set; }
+        public string ShortcutCode { get; set; }
+        public string SizeCategory { get; set; }
+        // De klasse zoals die nu bewaard is (oude schrijfwijze of leeg).
+        public string TradeClass { get; set; }
+    }
+
+    public sealed class SetSizeClassDto
+    {
+        public string SizeCategory { get; set; }
+        public string TradeClass { get; set; }
+    }
 }

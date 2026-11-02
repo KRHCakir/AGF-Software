@@ -151,9 +151,9 @@ namespace AgfAdmin.Services
                 }
                 return text;
             }
-            var size = Text(request.SizeCategory, ArticleRules.MaxTextLength, "sizeCategory");
+            // Zelfde regels als in Artikelen: maat en klasse verplicht, klasse uit de vaste lijst; verpakking en merk optioneel (leeg = "geen").
+            var (size, tradeClass) = ArticleRules.RequiredSizeAndClass(request.SizeCategory, request.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
             var packaging = Text(request.Packaging, ArticleRules.MaxTextLength, "packaging");
-            var tradeClass = Text(request.TradeClass, ArticleRules.MaxTradeClassLength, "tradeClass");
             var brand = Text(request.Brand, ArticleRules.MaxTextLength, "brand");
             if (request.NetKgPerPackage != null && !SupplyRules.IsPositiveDecimal18_3(request.NetKgPerPackage.Value))
             {
@@ -177,7 +177,7 @@ namespace AgfAdmin.Services
                 : ArticleRules.AttributeKey(variant.Origin) == ArticleRules.AttributeKey(entry.CountryName))
             && ArticleRules.AttributeKey(variant.SizeCategory) == ArticleRules.AttributeKey(entry.Size)
             && ArticleRules.AttributeKey(variant.Packaging) == ArticleRules.AttributeKey(entry.Packaging)
-            && ArticleRules.AttributeKey(variant.TradeClass) == ArticleRules.AttributeKey(entry.TradeClass)
+            && ArticleRules.TradeClassKey(variant.TradeClass) == ArticleRules.TradeClassKey(entry.TradeClass)
             && ArticleRules.AttributeKey(variant.Brand) == ArticleRules.AttributeKey(entry.Brand);
 
         // Herhaald verzoek: hetzelfde artikel terug (200). Een RequestId die voor een andere combinatie, een ander artikel (productsoort + ras)
@@ -198,7 +198,7 @@ namespace AgfAdmin.Services
                 && stored.OriginCountryCode == country
                 && ArticleRules.AttributeKey(stored.SizeCategory) == ArticleRules.AttributeKey(request.SizeCategory)
                 && ArticleRules.AttributeKey(stored.Packaging) == ArticleRules.AttributeKey(request.Packaging)
-                && ArticleRules.AttributeKey(stored.TradeClass) == ArticleRules.AttributeKey(request.TradeClass)
+                && ArticleRules.TradeClassKey(stored.TradeClass) == ArticleRules.TradeClassKey(request.TradeClass)
                 && ArticleRules.AttributeKey(stored.Brand) == ArticleRules.AttributeKey(request.Brand)
                 // Kg per verpakking zoals het eerste verzoek het opgaf; zonder waarde de standaard van het sjabloon (zo werd het aangemaakt).
                 && stored.DefaultNetKgPerPackage == (request.NetKgPerPackage ?? template.DefaultNetKgPerPackage);

@@ -34,7 +34,7 @@ public sealed class CountryOriginTests : IDisposable
     [InlineData(" PE ")]
     public async Task The_country_is_stored_never_the_abbreviation_or_a_free_text(string code)
     {
-        var created = await CreateAsync(new SaveArticleDto { ProductName = "Avocado", VariantName = "Hass", OriginCountryCode = code, Origin = "PE (vrij)" });
+        var created = await CreateAsync(new SaveArticleDto { SizeCategory = "18", TradeClass = "I", ProductName = "Avocado", VariantName = "Hass", OriginCountryCode = code, Origin = "PE (vrij)" });
 
         Assert.Equal(ServiceResultStatus.Created, created.Status);
         Assert.Equal(("PE", "Peru"), (created.Value.OriginCountryCode, created.Value.Origin));
@@ -50,7 +50,7 @@ public sealed class CountryOriginTests : IDisposable
     [InlineData("Peru")]
     public async Task A_new_article_needs_a_country_from_the_list(string code)
     {
-        var created = await CreateAsync(new SaveArticleDto { ProductName = "Avocado", OriginCountryCode = code });
+        var created = await CreateAsync(new SaveArticleDto { SizeCategory = "18", TradeClass = "I", ProductName = "Avocado", OriginCountryCode = code });
 
         Assert.Equal(ServiceResultStatus.Validation, created.Status);
         Assert.Contains("originCountryCode", created.Errors.Keys);
@@ -61,7 +61,7 @@ public sealed class CountryOriginTests : IDisposable
     {
         var demo = await OldVariantAsync("Peru (DEMO)");
         var plain = await OldVariantAsync("Peru");
-        await CreateAsync(new SaveArticleDto { ProductName = "Mango", OriginCountryCode = "BR" });
+        await CreateAsync(new SaveArticleDto { SizeCategory = "18", TradeClass = "I", ProductName = "Mango", OriginCountryCode = "BR" });
 
         await using (var db = _factory.CreateContext())
         {

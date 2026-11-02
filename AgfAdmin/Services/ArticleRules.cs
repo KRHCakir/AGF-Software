@@ -99,9 +99,73 @@ namespace AgfAdmin.Services
 
         public static bool IsGgn(string normalized) => normalized != null && normalized.Length == GgnLength && IsDigitsOnly(normalized);
 
-        // Handelsklasse volgens de EU-handelsnormen voor groenten en fruit (Extra, I, II) als suggestie; vrije tekst blijft
-        // mogelijk. "Industrie" is een handelsbestemming, geen klasse, en staat daarom niet in de lijst.
-        public static readonly IReadOnlyList<string> TradeClassSuggestions = new[] { "Extra", "I", "II" };
+        // Handelsklasse: een vaste lijst met de drie EU-klassen voor groenten en fruit. Bewaard wordt altijd de vaste waarde, nooit de
+        // getypte schrijfwijze. "Industrie" is een handelsbestemming, geen klasse, en staat daarom niet in de lijst.
+        public const string ClassExtra = "Extra";
+        public const string ClassI = "I";
+        public const string ClassII = "II";
+        public static readonly IReadOnlyList<string> TradeClasses = new[] { ClassExtra, ClassI, ClassII };
+        public static readonly IReadOnlyList<string> TradeClassSuggestions = TradeClasses;
+
+        // Voorvoegsels die niet meetellen ("klasse 1", "class I", "cat. 1", "Kl. II"); daarna tellen spaties, punten, dubbele punten,
+        // streepjes en liggende streepjes niet. Dezelfde regels staan in de frontend (lib/tradeClass.ts) en in de migratie
+        // NormalizeTradeClasses; een test houdt die drie gelijk.
+        public const string TradeClassPrefixPattern = @"^(handelsklasse|klasse|klas|kl|class|categorie|category|cat)[\s.:]*";
+        public const string TradeClassSeparatorPattern = @"[\s.:_-]";
+
+        // De vaste klasse bij een getypte waarde: "1", "i", "I", "klasse 1", "class I", "cat. 1" = I; "2", "ii", "klasse 2" = II;
+        // "extra", "0", "e", "klasse extra" = Extra. null bij leeg en bij alles wat niet eenduidig één klasse is (nooit raden).
+        public static string NormalizeTradeClass(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+            var key = Regex.Replace(value.Trim().ToLowerInvariant(), TradeClassPrefixPattern, "");
+            key = Regex.Replace(key, TradeClassSeparatorPattern, "");
+            return key switch
+            {
+                "extra" or "e" or "0" => ClassExtra,
+                "i" or "1" => ClassI,
+                "ii" or "2" => ClassII,
+                _ => null
+            };
+        }
+
+        public static bool IsTradeClass(string value) => value != null && TradeClasses.Contains(value, StringComparer.Ordinal);
+
+        // Vergelijksleutel voor een klasse: de vaste klasse als die herkend wordt ("1" en "I" zijn hetzelfde), anders de tekst zelf
+        // (een oude, niet herkende waarde is alleen gelijk aan dezelfde tekst); leeg = "".
+        public static string TradeClassKey(string value) => NormalizeTradeClass(value) ?? AttributeKey(value);
+
+        // Maat is verplicht; heeft een product echt geen maat, dan is "n.v.t." een gewone waarde die ook vergeleken wordt.
+        public const string SizeNotApplicable = "n.v.t.";
+
+        // Maat en klasse van een nieuw of gewijzigd artikel: allebei verplicht; de klasse wordt de vaste waarde (Extra, I, II).
+        // Bestaande artikelen zonder maat of klasse blijven bruikbaar (en staan in "Opschonen"); pas bij bewerken moeten ze gevuld.
+        public static (string Size, string TradeClass) RequiredSizeAndClass(string size, string tradeClass, Action<string, string> addError)
+        {
+            var typedSize = TypedText(size);
+            if (typedSize == null)
+            {
+                addError("sizeCategory", $"Enter the size; use \"{SizeNotApplicable}\" when the product really has no size.");
+            }
+            else if (typedSize.Length > MaxTextLength)
+            {
+                addError("sizeCategory", $"This field may contain at most {MaxTextLength} characters.");
+                typedSize = null;
+            }
+            var normalized = NormalizeTradeClass(tradeClass);
+            if (string.IsNullOrWhiteSpace(tradeClass))
+            {
+                addError("tradeClass", "Choose the class: Extra, I or II.");
+            }
+            else if (normalized == null)
+            {
+                addError("tradeClass", $"Class '{tradeClass.Trim()}' is not in the list; choose Extra, I or II.");
+            }
+            return (typedSize, normalized);
+        }
 
         private static readonly Regex Shortcut = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$", RegexOptions.Compiled);
 

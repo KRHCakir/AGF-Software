@@ -69,6 +69,42 @@ namespace AgfAdmin.Services
             return ServiceResult<ArticleDto>.Ok(ToDto(variant));
         }
 
+        // "Maat en klasse opschonen": artikelen (niet gearchiveerd) zonder maat, zonder klasse of met een klasse buiten de vaste lijst.
+        // Ze blijven bruikbaar; hier vult de gebruiker maat en klasse aan. Er wordt nooit automatisch gekozen.
+        public async Task<IReadOnlyList<SizeClassCleanupItemDto>> SizeClassCleanupAsync(CancellationToken cancellationToken = default) =>
+            (await _db.ProductVariants.AsNoTracking().Include(v => v.Product).Where(v => !v.IsArchived).ToListAsync(cancellationToken))
+                .Where(v => string.IsNullOrWhiteSpace(v.SizeCategory) || !ArticleRules.IsTradeClass(v.TradeClass))
+                .Select(v => new SizeClassCleanupItemDto
+                {
+                    Id = v.Id,
+                    Description = Describe(v),
+                    ShortcutCode = Blank(v.ShortcutCode),
+                    SizeCategory = Blank(v.SizeCategory),
+                    TradeClass = Blank(v.TradeClass)
+                })
+                .OrderBy(i => i.Description, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+        // Alleen maat en klasse van een artikel zetten (vanuit "Opschonen"); allebei verplicht, de rest blijft zoals het is.
+        public async Task<ServiceResult<ArticleDto>> SetSizeClassAsync(int id, SetSizeClassDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            var (size, tradeClass) = ArticleRules.RequiredSizeAndClass(request?.SizeCategory, request?.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
+            if (errors.Count > 0)
+            {
+                return ServiceResult<ArticleDto>.Validation(ValidationErrors.ToArrays(errors));
+            }
+            var variant = await _db.ProductVariants.Include(v => v.Product).SingleOrDefaultAsync(v => v.Id == id, cancellationToken);
+            if (variant == null)
+            {
+                return ServiceResult<ArticleDto>.NotFound($"Article {id} does not exist.");
+            }
+            variant.SizeCategory = size;
+            variant.TradeClass = tradeClass;
+            await _db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<ArticleDto>.Ok(ToDto(variant));
+        }
+
         public async Task<ServiceResult<ArticleDto>> CreateAsync(SaveArticleDto request, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, List<string>>();
@@ -179,7 +215,7 @@ namespace AgfAdmin.Services
                     : $"Country '{request.OriginCountryCode}' is not in the country list.");
             }
             var brand = ValidationErrors.OptionalText(request.Brand, ArticleRules.MaxTextLength, "brand", errors);
-            var size = ValidationErrors.OptionalText(request.SizeCategory, ArticleRules.MaxTextLength, "sizeCategory", errors);
+            var (size, tradeClass) = ArticleRules.RequiredSizeAndClass(request.SizeCategory, request.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
             var packaging = ValidationErrors.OptionalText(request.Packaging, ArticleRules.MaxTextLength, "packaging", errors);
             var packagingUnit = string.IsNullOrWhiteSpace(request.PackagingUnit) ? null : request.PackagingUnit.Trim();
             if (packagingUnit != null && !SupplyRules.IsPackageUnit(packagingUnit))
@@ -241,7 +277,6 @@ namespace AgfAdmin.Services
             {
                 system = null; // een stelsel zonder code wordt niet vastgelegd
             }
-            var tradeClass = ValidationErrors.OptionalText(request.TradeClass, ArticleRules.MaxTradeClassLength, "tradeClass", errors);
 
             // GGN is geen artikelstandaard meer (leveranciers beheren hun GGN's in de relatiewerkplek). Een oude waarde in
             // ProductVariant.DefaultGgn blijft staan en wordt via api/relations/reference gerapporteerd voor handmatige toewijzing.

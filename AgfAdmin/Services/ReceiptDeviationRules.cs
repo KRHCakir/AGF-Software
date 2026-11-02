@@ -66,7 +66,8 @@ namespace AgfAdmin.Services
             if (!SameOrigin(expected, received)) kinds.Add(KindOrigin);
             if (!Same(expected.Size, received.Size)) kinds.Add(KindSize);
             if (!Same(expected.Packaging, received.Packaging) || !Same(expected.PackagingUnit, received.PackagingUnit)) kinds.Add(KindPackaging);
-            if (!Same(expected.TradeClass, received.TradeClass)) kinds.Add(KindTradeClass);
+            // Klasse uit de vaste lijst: "1" en "I" (oude schrijfwijzen) zijn dezelfde klasse.
+            if (ArticleRules.TradeClassKey(expected.TradeClass) != ArticleRules.TradeClassKey(received.TradeClass)) kinds.Add(KindTradeClass);
             if (!Same(expected.Brand, received.Brand)) kinds.Add(KindBrand);
             if (kinds.Count == 0) kinds.Add(KindOther);
             return kinds;
