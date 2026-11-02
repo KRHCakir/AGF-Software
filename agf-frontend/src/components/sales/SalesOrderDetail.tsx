@@ -24,6 +24,8 @@ import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
+import ChainStrip from '../shared/ChainStrip';
+import { salesOrderChain } from '../../lib/chain';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
 export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false }: {
@@ -276,6 +278,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
 
     return (
         <div className="space-y-3">
+            <ChainStrip steps={salesOrderChain(order)} />
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: String(order.id) })} · {order.customerName ?? t('availability_unknown')}</h2>

@@ -1,0 +1,174 @@
+import type { PurchaseOrderDetail } from '../types/purchaseOrder';
+import type { SalesOrder } from '../types/salesOrder';
+
+// De keten-strip: Inkooporder > Ontvangst > Keuring > Voorraad > Verkooporder > Levering > Factuur, met per stap een status, aantallen
+// en links naar het juiste scherm met het juiste filter. Alles afgeleid uit wat de API al geeft (lezen, nooit opslaan). Een stap die
+// nog niet bestaat (factuur) is grijs "nog niet beschikbaar", zonder link. Geen React en geen vertalingen: met node:test te toetsen.
+
+export type ChainStepKey = 'order' | 'receipt' | 'inspection' | 'stock' | 'sales' | 'delivery' | 'invoice';
+// done = afgerond; partial = deels; open = nog te doen; empty = (nog) niets; unavailable = bestaat (nog) niet of hoort niet bij deze route.
+export type ChainState = 'done' | 'partial' | 'open' | 'empty' | 'unavailable';
+
+export interface ChainPart { key: string; params?: Record<string, string | number> }
+export interface ChainLink { label: string; href: string; key?: string }
+
+export interface ChainStep {
+    key: ChainStepKey;
+    state: ChainState;
+    parts: ChainPart[];
+    links: ChainLink[];
+    current: boolean;
+}
+
+export const CHAIN_STEPS: readonly ChainStepKey[] = ['order', 'receipt', 'inspection', 'stock', 'sales', 'delivery', 'invoice'];
+const MAX_LINKS = 3;
+
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+const unique = <T,>(values: T[]) => [...new Set(values)];
+const singleUnit = (units: (string | null | undefined)[]) => {
+    const all = unique(units.filter((unit): unit is string => !!unit));
+    return all.length === 1 ? all[0] : '';
+};
+
+function availabilityHref(variantIds: number[]): string {
+    const ids = unique(variantIds);
+    const params = new URLSearchParams({ route: 'Warehouse' });
+    if (ids.length === 1) params.set('productVariantId', String(ids[0]));
+    params.set('focus', 'available');
+    return `/availability?${params.toString()}`;
+}
+
+const invoiceStep = (): Omit<ChainStep, 'current'> => ({ key: 'invoice', state: 'unavailable', parts: [{ key: 'chain_not_yet' }], links: [] });
+
+// Vanaf de inkooporder (detail) of vanaf een ontvangst van die order.
+export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' | 'receipt'): ChainStep[] {
+    const direct = order.route === 'DirectTrade';
+    const unit = singleUnit(order.lines.map((line) => line.unit));
+    const receipts = order.receipts;
+    const pallets = unique(receipts.map((receipt) => receipt.palletId)).map((id) => ({ id, reference: receipts.find((r) => r.palletId === id)!.palletReference }));
+    const sales = order.salesOrders ?? [];
+    const steps: Omit<ChainStep, 'current'>[] = [];
+
+    steps.push({ key: 'order', state: 'done', parts: [{ key: 'chain_order_vendor', params: { vendor: order.vendorName ?? '–' } }],
+        links: [{ label: order.orderNumber, href: `/purchase-orders?id=${order.id}` }] });
+
+    if (direct) {
+        // Klantgebonden aanvoer gaat rechtstreeks naar de klant: geen ontvangst, keuring of voorraad bij ons.
+        for (const key of ['receipt', 'inspection', 'stock'] as const) steps.push({ key, state: 'unavailable', parts: [{ key: 'chain_direct_trade' }], links: [] });
+    } else {
+        const received = order.receivedQuantity;
+        const receiptState: ChainState = received <= 0 ? 'open' : received >= order.expectedQuantity ? 'done' : 'partial';
+        const receiptLinks: ChainLink[] = pallets.slice(0, MAX_LINKS).map((pallet) => ({ label: pallet.reference, href: `/inspection?palletId=${pallet.id}` }));
+        if (receiptState !== 'done' && order.status !== 'Cancelled') receiptLinks.unshift({ label: '', key: 'chain_receive_action', href: `/receipts?order=${order.id}` });
+        steps.push({
+            key: 'receipt', state: receiptState, links: receiptLinks,
+            parts: [
+                { key: 'chain_received_of', params: { received, expected: order.expectedQuantity, unit } },
+                ...(pallets.length > 0 ? [{ key: 'chain_pallets', params: { count: pallets.length } }] : []),
+            ],
+        });
+
+        const inspectable = receipts.filter((receipt) => receipt.onHandQuantity > 0 || receipt.qualityStatus === 'Rejected');
+        const open = inspectable.filter((receipt) => receipt.qualityStatus === 'Quarantine' || receipt.qualityStatus === 'Blocked').length;
+        const approved = receipts.filter((receipt) => receipt.qualityStatus === 'Approved').length;
+        const rejected = receipts.filter((receipt) => receipt.qualityStatus === 'Rejected').length;
+        const firstOpen = receipts.find((receipt) => receipt.qualityStatus === 'Quarantine' || receipt.qualityStatus === 'Blocked');
+        steps.push({
+            key: 'inspection', state: receipts.length === 0 ? 'empty' : open > 0 ? 'partial' : 'done',
+            parts: receipts.length === 0 ? [{ key: 'chain_nothing_yet' }] : [
+                ...(open > 0 ? [{ key: 'chain_inspection_open', params: { count: open } }] : []),
+                ...(approved > 0 ? [{ key: 'chain_inspection_approved', params: { count: approved } }] : []),
+                ...(rejected > 0 ? [{ key: 'chain_inspection_rejected', params: { count: rejected } }] : []),
+            ],
+            links: receipts.length === 0 ? [] : [{ label: '', key: 'chain_to_inspection', href: firstOpen ? `/inspection?palletId=${firstOpen.palletId}` : `/inspection?palletId=${receipts[0].palletId}` }],
+        });
+
+        const inStock = sum(receipts.filter((receipt) => receipt.qualityStatus === 'Approved').map((receipt) => receipt.onHandQuantity - receipt.reservedQuantity));
+        steps.push({
+            key: 'stock', state: inStock > 0 ? 'done' : 'empty',
+            parts: [{ key: inStock > 0 ? 'chain_stock_available' : 'chain_stock_none', params: { quantity: inStock, unit } }],
+            links: [{ label: '', key: 'chain_to_availability', href: availabilityHref(order.lines.map((line) => line.productVariantId)) }],
+        });
+    }
+
+    const salesIds = unique(sales.map((link) => link.salesOrderId));
+    const salesLinks = salesIds.slice(0, MAX_LINKS).map((id) => {
+        const customer = sales.find((link) => link.salesOrderId === id)?.customerName;
+        return { label: `#${id}${customer ? ` · ${customer}` : ''}`, href: `/sales-orders?orderId=${id}` };
+    });
+    const reserved = sum(sales.map((link) => link.reservedQuantity));
+    const shipped = sum(sales.map((link) => link.shippedQuantity));
+    const salesUnit = singleUnit(sales.map((link) => link.unit));
+    steps.push({
+        key: 'sales', state: salesIds.length === 0 ? 'empty' : 'done', links: salesLinks,
+        parts: salesIds.length === 0 ? [{ key: 'chain_nothing_yet' }] : [
+            { key: 'chain_sales_orders', params: { count: salesIds.length } },
+            ...(reserved > 0 ? [{ key: 'chain_reserved', params: { quantity: reserved, unit: salesUnit } }] : []),
+        ],
+    });
+    steps.push({
+        key: 'delivery', state: shipped > 0 ? (reserved > 0 ? 'partial' : 'done') : 'empty',
+        parts: [shipped > 0 ? { key: 'chain_shipped', params: { quantity: shipped, unit: salesUnit } } : { key: 'chain_nothing_yet' }],
+        links: shipped > 0 ? salesLinks.filter((link) => sales.some((s) => `/sales-orders?orderId=${s.salesOrderId}` === link.href && s.shippedQuantity > 0)) : [],
+    });
+    steps.push(invoiceStep());
+    const at: ChainStepKey = current === 'order' ? 'order' : 'receipt';
+    return steps.map((step) => ({ ...step, current: step.key === at }));
+}
+
+// Vanaf de verkooporder: de herkomst (inkooporder en partij) uit de reserveringen, dan de order zelf en de levering.
+export function salesOrderChain(order: SalesOrder): ChainStep[] {
+    const reservations = order.lines.flatMap((line) => line.reservations).filter((r) => r.status === 'Active' || r.status === 'Consumed');
+    const physical = reservations.filter((r) => r.source !== 'DirectTrade');
+    const unit = singleUnit(order.lines.map((line) => line.unit));
+    const purchaseOrders = unique(reservations.map((r) => r.supplyCommitmentId)).map((id) => ({ id, number: reservations.find((r) => r.supplyCommitmentId === id)?.supplyOrderNumber ?? `#${id}` }));
+    const lots = unique(reservations.map((r) => r.lotNumber).filter((lot): lot is string => !!lot));
+    const pallets = unique(physical.filter((r) => r.palletId !== null).map((r) => r.palletId!)).map((id) => ({ id, reference: physical.find((r) => r.palletId === id)?.palletReference ?? `#${id}` }));
+    const notApproved = physical.filter((r) => r.status === 'Active' && r.contentQualityStatus !== null && r.contentQualityStatus !== 'Approved').length;
+    const demand = sum(order.lines.map((line) => line.quantity));
+    const reserved = sum(order.lines.map((line) => line.reservedQuantity + line.allocatedQuantity));
+    const shipped = sum(order.lines.map((line) => line.dispatchedQuantity));
+    const delivered = sum(order.lines.map((line) => line.deliveredQuantity));
+    const nothing: ChainPart[] = [{ key: 'chain_nothing_reserved' }];
+
+    const steps: Omit<ChainStep, 'current'>[] = [
+        {
+            key: 'order', state: purchaseOrders.length > 0 ? 'done' : 'empty',
+            parts: purchaseOrders.length > 0 ? (lots.length > 0 ? [{ key: 'chain_lots', params: { lots: lots.slice(0, MAX_LINKS).join(', ') } }] : []) : nothing,
+            links: purchaseOrders.slice(0, MAX_LINKS).map((po) => ({ label: po.number, href: `/purchase-orders?id=${po.id}` })),
+        },
+        {
+            key: 'receipt', state: pallets.length > 0 ? 'done' : physical.length === 0 && reservations.length > 0 ? 'unavailable' : 'empty',
+            parts: pallets.length > 0 ? [{ key: 'chain_pallets', params: { count: pallets.length } }] : reservations.length > 0 ? [{ key: 'chain_direct_trade' }] : nothing,
+            links: pallets.slice(0, MAX_LINKS).map((pallet) => ({ label: pallet.reference, href: `/inspection?palletId=${pallet.id}` })),
+        },
+        {
+            key: 'inspection', state: physical.length === 0 ? (reservations.length > 0 ? 'unavailable' : 'empty') : notApproved > 0 ? 'partial' : 'done',
+            parts: physical.length === 0 ? (reservations.length > 0 ? [{ key: 'chain_direct_trade' }] : nothing)
+                : [notApproved > 0 ? { key: 'chain_inspection_not_approved', params: { count: notApproved } } : { key: 'chain_inspection_all_approved' }],
+            links: [],
+        },
+        {
+            // Gereserveerd, of (na verzending) al uit voorraad gehaald; anders nog niets.
+            key: 'stock', state: reserved + shipped > 0 ? 'done' : 'empty',
+            parts: [reserved > 0 ? { key: 'chain_reserved', params: { quantity: reserved, unit } }
+                : shipped > 0 ? { key: 'chain_from_stock', params: { quantity: shipped, unit } } : { key: 'chain_nothing_reserved' }],
+            links: [{ label: '', key: 'chain_to_availability', href: availabilityHref(order.lines.map((line) => line.productVariantId)) }],
+        },
+        {
+            key: 'sales', state: order.status === 'Cancelled' ? 'empty' : shipped >= demand && demand > 0 ? 'done' : 'partial',
+            parts: [{ key: order.status === 'Cancelled' ? 'chain_cancelled' : 'chain_demand', params: { quantity: demand, unit } }],
+            links: [{ label: `#${order.id}`, href: `/sales-orders?orderId=${order.id}` }],
+        },
+        {
+            key: 'delivery', state: shipped <= 0 ? 'empty' : delivered >= demand ? 'done' : 'partial',
+            parts: shipped <= 0 ? [{ key: 'chain_nothing_yet' }] : [
+                { key: 'chain_shipped', params: { quantity: shipped, unit } },
+                ...(delivered > 0 ? [{ key: 'chain_delivered', params: { quantity: delivered, unit } }] : []),
+            ],
+            links: [],
+        },
+        invoiceStep(),
+    ];
+    return steps.map((step) => ({ ...step, current: step.key === 'sales' }));
+}

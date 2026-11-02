@@ -3,8 +3,10 @@
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
+import { purchaseOrderChain } from '../../lib/chain';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
+import ChainStrip from '../shared/ChainStrip';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
@@ -29,6 +31,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
 
     return (
         <article className="space-y-3" aria-labelledby="po-detail-title">
+            <ChainStrip steps={purchaseOrderChain(order, 'order')} />
             <header className={section}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <h2 id="po-detail-title" data-tour="po-detail-number" className="font-mono text-2xl font-bold text-gray-900">{order.orderNumber}</h2>

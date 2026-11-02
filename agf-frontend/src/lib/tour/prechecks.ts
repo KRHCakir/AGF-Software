@@ -199,3 +199,16 @@ export async function precheckSales(signal: AbortSignal): Promise<TourPrecheck> 
         },
     };
 }
+
+// Keten-strip: een demo-inkooporder waaruit al verkocht is (hoofdstuk 1 t/m 3), met een van die verkooporders. Alleen lezen.
+export async function precheckChain(signal: AbortSignal): Promise<TourPrecheck> {
+    const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'all', vendorId: null, page: 1, pageSize: 50 }, signal);
+    for (const item of [...list.items].sort((a, b) => b.id - a.id)) {
+        if (item.receivedQuantity <= 0) continue;
+        const detail = await getPurchaseOrder(item.id, signal);
+        const sale = (detail.salesOrders ?? [])[0];
+        if (sale) return { missing: [], vars: { orderId: String(detail.id), orderNumber: detail.orderNumber, salesOrderId: String(sale.salesOrderId) } };
+    }
+    return { missing: [{ key: 'tour_missing_chain' }] };
+}
+

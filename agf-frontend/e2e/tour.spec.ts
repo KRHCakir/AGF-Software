@@ -154,6 +154,18 @@ test('hoofdstuk 3, Verkopen en reserveren: order gereserveerd op een pallet en v
     await page.close();
 });
 
+test('hoofdstuk De keten van een order: de strip op de inkooporder en op de verkooporder, zonder schrijfactie', async () => {
+    const page = await context.newPage();
+    const writes: string[] = [];
+    page.on('request', (request) => { if (request.url().startsWith(API) && request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`); });
+    const result = await play(page, 'chain');
+    expectAllSteps(result);
+    expect(writes).toEqual([]);
+    // Eindigt op de verkooporder; de strip wijst terug naar een inkooporder.
+    await expect(page.locator('[data-tour="chain-step"][data-tour-key="order"] a').first()).toHaveText(/IO-\d{4}-\d+/);
+    await page.close();
+});
+
 test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" maakt de stap af', async () => {
     const page = await context.newPage();
     await page.goto('/dashboard');
