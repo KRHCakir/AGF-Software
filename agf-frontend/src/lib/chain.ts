@@ -128,7 +128,6 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const pallets = unique(physical.filter((r) => r.palletId !== null).map((r) => r.palletId!)).map((id) => ({ id, reference: physical.find((r) => r.palletId === id)?.palletReference ?? `#${id}` }));
     const notApproved = physical.filter((r) => r.status === 'Active' && r.contentQualityStatus !== null && r.contentQualityStatus !== 'Approved').length;
     const demand = sum(order.lines.map((line) => line.quantity));
-    const reserved = sum(order.lines.map((line) => line.reservedQuantity + line.allocatedQuantity));
     const shipped = sum(order.lines.map((line) => line.dispatchedQuantity));
     const delivered = sum(order.lines.map((line) => line.deliveredQuantity));
     const stockReserved = sum(physical.filter((r) => r.status === 'Active').map((r) => r.quantity));
