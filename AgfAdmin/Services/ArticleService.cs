@@ -72,8 +72,10 @@ namespace AgfAdmin.Services
         // "Maat en klasse opschonen": artikelen (niet gearchiveerd) zonder maat, zonder klasse of met een klasse buiten de vaste lijst.
         // Ze blijven bruikbaar; hier vult de gebruiker maat en klasse aan. Er wordt nooit automatisch gekozen.
         public async Task<IReadOnlyList<SizeClassCleanupItemDto>> SizeClassCleanupAsync(CancellationToken cancellationToken = default) =>
-            (await _db.ProductVariants.AsNoTracking().Include(v => v.Product).Where(v => !v.IsArchived).ToListAsync(cancellationToken))
-                .Where(v => string.IsNullOrWhiteSpace(v.SizeCategory) || !ArticleRules.IsTradeClass(v.TradeClass))
+            (await _db.ProductVariants.AsNoTracking().Include(v => v.Product)
+                    .Where(v => !v.IsArchived && (v.SizeCategory == null || v.SizeCategory.Trim() == "" || v.TradeClass == null
+                        || (v.TradeClass != ArticleRules.ClassExtra && v.TradeClass != ArticleRules.ClassI && v.TradeClass != ArticleRules.ClassII)))
+                    .ToListAsync(cancellationToken))
                 .Select(v => new SizeClassCleanupItemDto
                 {
                     Id = v.Id,
