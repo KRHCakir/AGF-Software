@@ -143,7 +143,9 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const purchaseOrders = unique(reservations.map((r) => r.supplyCommitmentId)).map((id) => ({ id, number: reservations.find((r) => r.supplyCommitmentId === id)?.supplyOrderNumber ?? `#${id}` }));
     const lots = unique(reservations.map((r) => r.lotNumber).filter((lot): lot is string => !!lot));
     const pallets = unique(physical.filter((r) => r.palletId !== null).map((r) => r.palletId!)).map((id) => ({ id, reference: physical.find((r) => r.palletId === id)?.palletReference ?? `#${id}` }));
-    const notApproved = physical.filter((r) => r.status === 'Active' && r.contentQualityStatus !== null && r.contentQualityStatus !== 'Approved').length;
+    // Pallets tellen, geen reserveringen: meerdere verkoopregels op dezelfde pallet tellen één keer.
+    const notApproved = unique(physical.filter((r) => r.status === 'Active' && r.contentQualityStatus !== null && r.contentQualityStatus !== 'Approved')
+        .map((r) => r.palletId ?? r.palletContentLineId ?? r.id)).length;
     const demand = sum(order.lines.map((line) => line.quantity));
     const shipped = sum(order.lines.map((line) => line.dispatchedQuantity));
     const delivered = sum(order.lines.map((line) => line.deliveredQuantity));

@@ -171,6 +171,11 @@ describe('sales order chain', () => {
         assert.deepEqual(step(salesOrderChain(salesOrder([mixed])), 'stock').parts, [{ key: 'chain_reserved', params: { quantity: 4, unit: 'colli' } }]);
     });
 
+    test('not approved counts pallets: two reservations on one blocked pallet are one pallet', () => {
+        const blocked = salesLine({ reservations: [reservation({ contentQualityStatus: 'Blocked' }), reservation({ id: 2, salesOrderLineId: 12, contentQualityStatus: 'Blocked' })] });
+        assert.deepEqual(step(salesOrderChain(salesOrder([blocked])), 'inspection').parts, [{ key: 'chain_inspection_not_approved', params: { count: 1 } }]);
+    });
+
     test('nothing reserved yet: no origin links; the sales order and stock link remain', () => {
         const steps = salesOrderChain(salesOrder([salesLine({ reservedQuantity: 0, reservations: [] })]));
         assert.equal(step(steps, 'order').state, 'empty');
