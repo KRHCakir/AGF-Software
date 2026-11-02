@@ -1,8 +1,35 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { supplyRedirect } from './navigation.ts';
+import { LEGACY_GROUP, NAV_GROUPS, activeNav, supplyRedirect } from './navigation.ts';
 
-describe('old supply addresses', () => {
+describe('process menu', () => {
+    test('four process groups in order, with only screens that exist', () => {
+        assert.deepEqual(NAV_GROUPS.map((group) => group.id), ['purchase', 'stock', 'sales', 'master']);
+        assert.deepEqual(NAV_GROUPS[0].items.map((item) => item.href), ['/purchase-orders', '/purchase-orders/new', '/receipts', '/inspection', '/purchase-invoices']);
+        assert.deepEqual(NAV_GROUPS[1].items.map((item) => item.href), ['/availability']);
+        assert.deepEqual(NAV_GROUPS[2].items.map((item) => item.href), ['/sales-orders', '/direct-trade']);
+        assert.deepEqual(NAV_GROUPS[3].items.map((item) => item.href), ['/relations', '/articles']);
+        const all = [...NAV_GROUPS, LEGACY_GROUP].flatMap((group) => group.items.map((item) => item.href));
+        for (const missing of ['/lots', '/deliveries', '/sales-invoices']) assert.equal(all.includes(missing), false, `${missing} has no page yet`);
+    });
+
+    test('the old order flow stays reachable, under "Oud"', () => {
+        assert.ok(LEGACY_GROUP.items.some((item) => item.href === '/orders'));
+        assert.ok(LEGACY_GROUP.items.some((item) => item.href === '/incoming-invoices'));
+    });
+
+    test('the active page and its group are found, also on detail routes; "Inkooporder aanmaken" is not "Inkooporders"', () => {
+        assert.deepEqual(activeNav('/purchase-orders'), { itemId: 'purchase-orders', groupId: 'purchase' });
+        assert.deepEqual(activeNav('/purchase-orders/new'), { itemId: 'purchase-order-new', groupId: 'purchase' });
+        assert.deepEqual(activeNav('/purchase-invoices/new'), { itemId: 'purchase-invoices', groupId: 'purchase' });
+        assert.deepEqual(activeNav('/availability'), { itemId: 'availability', groupId: 'stock' });
+        assert.deepEqual(activeNav('/direct-trade'), { itemId: 'direct-trade', groupId: 'sales' });
+        assert.deepEqual(activeNav('/orders'), { itemId: 'orders', groupId: 'legacy' });
+        assert.deepEqual(activeNav('/dashboard'), { itemId: 'start', groupId: null });
+        assert.deepEqual(activeNav('/settings'), { itemId: 'settings', groupId: null });
+        assert.equal(activeNav('/sales-orders-archive'), null, 'a prefix of another word is not a match');
+    });
+
     test('old /supply addresses go to the screen with the new name', () => {
         assert.equal(supplyRedirect(''), '/purchase-orders/new');
         assert.equal(supplyRedirect('#plan'), '/purchase-orders/new');
