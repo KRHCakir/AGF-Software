@@ -6,6 +6,7 @@ import { freeTermsPreview, validateFreeTerms } from '../../lib/paymentCondition'
 import type { RoleTermsDraft } from '../../lib/roleTermsRules';
 import type { PaymentConditionSummary } from '../../types/paymentCondition';
 import type { RelationReference } from '../../types/relation';
+import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 
@@ -54,8 +55,11 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
     const input = (field: Exclude<keyof RoleTermsDraft, 'paymentTermsEndOfMonth'>, labelKey: string, options: { maxLength?: number; type?: string; required?: boolean; mono?: boolean; list?: string; errorField?: string; span?: string } = {}) => (
         <div className={options.span ?? ''}>
             <label htmlFor={`${k(options.errorField ?? field)}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{options.required ? ' *' : ''}</label>
-            <input {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} type={options.type ?? 'text'} value={terms[field]} maxLength={options.maxLength ?? 200} list={options.list} disabled={locked}
-                onChange={(event) => onChange({ [field]: event.target.value } as Partial<RoleTermsDraft>)} className={`${inputClass}${options.mono ? ' font-mono uppercase' : ''}`} />
+            {options.type === 'date'
+                ? <DateField {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} value={terms[field]} disabled={locked}
+                    onChange={(value) => onChange({ [field]: value } as Partial<RoleTermsDraft>)} />
+                : <input {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} type={options.type ?? 'text'} value={terms[field]} maxLength={options.maxLength ?? 200} list={options.list} disabled={locked}
+                    onChange={(event) => onChange({ [field]: event.target.value } as Partial<RoleTermsDraft>)} className={`${inputClass}${options.mono ? ' font-mono uppercase' : ''}`} />}
             <FieldError id={k(options.errorField ?? field)} messages={e(options.errorField ?? field)} />
         </div>
     );

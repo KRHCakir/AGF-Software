@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { IncomingInvoice } from '../../../../../types/incomingInvoice';
 import { IncomingInvoiceService } from '../../../../../services/incomingInvoiceService';
+import DateField from '../../../../../components/shared/DateField';
 
 export default function InvoiceReviewPage({ params }: { params: Promise<{ id: string }> }) {
     // Unwrap params in Next.js 15
@@ -181,13 +182,10 @@ export default function InvoiceReviewPage({ params }: { params: Promise<{ id: st
                             </div>
 
                             <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-700">Invoice Date</label>
-                                <input
-                                    type="date"
-                                    value={formData.invoiceDate ? new Date(formData.invoiceDate).toISOString().split('T')[0] : ''}
-                                    onChange={(e) => handleChange('invoiceDate', e.target.value)}
-                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-                                />
+                                <label htmlFor="review-invoice-date" className="block text-sm font-medium text-gray-700">Invoice Date</label>
+                                {/* De kalenderdag zelf (eerste tien tekens), nooit via een tijdzone omgerekend; getypte tekst blijft tekst. */}
+                                <DateField id="review-invoice-date" value={/^\d{4}-\d{2}-\d{2}T/.test(formData.invoiceDate ?? '') ? String(formData.invoiceDate).slice(0, 10) : (formData.invoiceDate ?? '')}
+                                    onChange={(value) => handleChange('invoiceDate', value)} />
                             </div>
 
                             <div className="space-y-2">

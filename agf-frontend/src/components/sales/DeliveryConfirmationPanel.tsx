@@ -13,6 +13,7 @@ import { SaveResult } from '../../services/supplyService';
 import { PackageUnit } from '../../types/availability';
 import { DeliveryConfirmation, SalesOrder, ShipmentKind } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
+import DateField from '../shared/DateField';
 import FieldError, { inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
@@ -167,8 +168,8 @@ export default function DeliveryConfirmationPanel({ order, shipment, actor, onCo
             <div className="grid grid-cols-2 gap-3">
                 <div>
                     <label htmlFor={`${idPrefix}-date`} className="text-xs font-medium text-gray-700">{t('sales_delivery_confirmed_date')} *</label>
-                    <input id={`${idPrefix}-date`} type="date" value={deliveredOn} min={shipment.shippedOn ?? undefined} max={today} disabled={locked}
-                        onChange={(event) => { if (!locked) { setDeliveredOn(event.target.value); clear(); } }} aria-invalid={fieldErrors.deliveredOn !== undefined} className={inputClass} />
+                    <DateField id={`${idPrefix}-date`} value={deliveredOn} min={shipment.shippedOn ?? undefined} max={today} disabled={locked}
+                        onChange={(value) => { if (!locked) { setDeliveredOn(value); clear(); } }} aria-invalid={fieldErrors.deliveredOn !== undefined} />
                     <span className="block text-xs text-gray-500">{t('sales_delivery_date_hint')}</span>
                     <FieldError id={`${idPrefix}-date-error`} messages={fieldErrors.deliveredOn} />
                 </div>

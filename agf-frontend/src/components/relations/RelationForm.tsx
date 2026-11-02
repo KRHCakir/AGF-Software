@@ -13,6 +13,7 @@ import { addRelationRole, confirmBankAccount, createRelation, updateRelation } f
 import type { AddressPurpose, ChannelKind, Relation, RelationReference, SaveRelationRequest, SimilarRelation } from '../../types/relation';
 import { ADDRESS_PURPOSES } from '../../types/relation';
 import ErrorNotice from '../supply/ErrorNotice';
+import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { outcomeUnknown } from '../supply/messages';
@@ -628,7 +629,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-5">
                                                     <div>
                                                         <label htmlFor={`${k('checkedOn')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_checked_on')}</label>
-                                                        <input {...fieldProps(k('checkedOn'), e(k('checkedOn')))} type="date" max={today} value={ggn.checkedOn} disabled={locked} className={inputClass} onChange={(event) => editGgn(ggn.key, { checkedOn: event.target.value })} />
+                                                        <DateField {...fieldProps(k('checkedOn'), e(k('checkedOn')))} max={today} value={ggn.checkedOn} disabled={locked} onChange={(value) => editGgn(ggn.key, { checkedOn: value })} />
                                                         <FieldError id={k('checkedOn')} messages={e(k('checkedOn'))} />
                                                     </div>
                                                     <div>
@@ -638,7 +639,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                                     </div>
                                                     <div>
                                                         <label htmlFor={`${k('certificateValidUntil')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_valid_until')}</label>
-                                                        <input {...fieldProps(k('certificateValidUntil'), e(k('certificateValidUntil')))} type="date" value={ggn.certificateValidUntil} disabled={locked} className={inputClass} onChange={(event) => editGgn(ggn.key, { certificateValidUntil: event.target.value })} />
+                                                        <DateField {...fieldProps(k('certificateValidUntil'), e(k('certificateValidUntil')))} value={ggn.certificateValidUntil} disabled={locked} onChange={(value) => editGgn(ggn.key, { certificateValidUntil: value })} />
                                                         {ggn.certificateValidUntil !== '' && ggn.certificateValidUntil < today && <span className="block text-xs font-medium text-red-800">{t('relations_ggn_expired')}</span>}
                                                     </div>
                                                     <label className="flex items-end gap-1 pb-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.hasGgnLabel} disabled={locked} onChange={(event) => editGgn(ggn.key, { hasGgnLabel: event.target.checked })} />{t('relations_ggn_label')}</label>

@@ -1930,5 +1930,6 @@
   "date_field_placeholder": "dd-mm-jjjj",
   "date_field_today": "Vandaag",
   "date_field_today_label": "Datum van vandaag invullen",
-  "date_field_calendar": "Kalender openen"
+  "date_field_calendar": "Kalender openen",
+  "relations_error_invalid_date": "Vul een volledige, bestaande datum in (dd-mm-jjjj)."
 }

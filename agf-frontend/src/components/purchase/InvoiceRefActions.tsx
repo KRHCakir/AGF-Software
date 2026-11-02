@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
+import { isDateOnly } from '../../lib/calendarDate';
 import { formatDecimalInput, parseLocaleDecimal } from '../../lib/decimal';
 import { InvoiceRefCommand, invoiceRefKey, withAttempt } from '../../lib/pendingCommands';
 import { MAX_INVOICE_NUMBER_LENGTH, normalizeInvoiceNumber } from '../../lib/purchaseOrderRules';
@@ -12,6 +13,7 @@ import type { AddInvoiceRefRequest, PurchaseOrderDetail } from '../../types/purc
 import { PendingNotice } from '../sales/PendingCommandsBanner';
 import { usePendingCommand, usePendingCommands } from '../sales/PendingCommandsContext';
 import ErrorNotice from '../supply/ErrorNotice';
+import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
@@ -72,6 +74,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
             if (invoiceNumber === null) addError(found, 'invoiceNumber', t('supply_error_required'));
             const parsed = amount.trim() === '' ? null : parseLocaleDecimal(amount, undefined, { maxDecimals: 2, allowNegative: true });
             if (parsed !== null && !parsed.ok) addError(found, 'amountExclVat', t(decimalErrorKey(parsed.error)));
+            if (date !== '' && !isDateOnly(date)) addError(found, 'invoiceDate', t('supply_error_incomplete_date'));
             setErrors(found);
             if (Object.keys(found).length > 0 || invoiceNumber === null || (parsed !== null && !parsed.ok)) return;
             const requestId = newRequestId();
@@ -127,7 +130,8 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
                 </div>
                 <div>
                     <label htmlFor={`invoiceRef-${kind}-date`} className="text-xs font-medium text-gray-700">{t('invoice_date')}</label>
-                    <input id={`invoiceRef-${kind}-date`} type="date" value={date} disabled={locked} onChange={(event) => edit(() => setDate(event.target.value))} className={inputClass} />
+                    <DateField {...fieldProps('invoiceDate', e('invoiceDate'))} id={`invoiceRef-${kind}-date`} value={date} disabled={locked} onChange={(value) => edit(() => setDate(value))} />
+                    <FieldError id="invoiceDate" messages={e('invoiceDate')} />
                 </div>
                 <div>
                     <label htmlFor={`invoiceRef-${kind}-amount`} className="text-xs font-medium text-gray-700">{t('po_amount_excl_vat')}</label>

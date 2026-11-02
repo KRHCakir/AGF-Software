@@ -20,6 +20,7 @@ import type { PurchaseInvoice, PurchaseInvoiceSettings, PurchaseOptionalField, P
 import NumberEcho from '../shared/NumberEcho';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import ErrorNotice from '../supply/ErrorNotice';
+import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
@@ -316,7 +317,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 </div>
                 <div>
                     <label htmlFor="invoiceDate-input" className="text-xs font-medium text-gray-700">{t('invoice_date')} *</label>
-                    <input {...fieldProps('invoiceDate', e('invoiceDate'))} type="date" value={draft.header.invoiceDate} onChange={(event) => update(changeInvoiceDate(draft, event.target.value))} className={inputClass} />
+                    <DateField {...fieldProps('invoiceDate', e('invoiceDate'))} value={draft.header.invoiceDate} onChange={(value) => update(changeInvoiceDate(draft, value))} />
                     <FieldError id="invoiceDate" messages={e('invoiceDate')} />
                 </div>
                 <div>
@@ -327,7 +328,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 </div>
                 <div>
                     <label htmlFor="dueDate-input" className="text-xs font-medium text-gray-700">{t('purchase_due_date')} *</label>
-                    <input {...fieldProps('dueDate', e('dueDate'))} type="date" value={draft.header.dueDate} onChange={(event) => update(changeDueDate(draft, event.target.value))} className={inputClass} />
+                    <DateField {...fieldProps('dueDate', e('dueDate'))} value={draft.header.dueDate} onChange={(value) => update(changeDueDate(draft, value))} />
                     {draft.touched.dueDate && (
                         <span className="block text-xs text-gray-600">
                             {deviation === null ? t('purchase_due_manual') : t('purchase_due_deviation', { days: String(deviation) })}{' '}
