@@ -25,10 +25,12 @@ describe('AppMenu', () => {
 
     test('"Oud" is closed by default, opens with a button (keyboard: Enter/Space on a button) and says it is no longer updated', async () => {
         await mounted.render(<AppMenu pathname="/sales-orders" idPrefix="menu" />);
-        assert.equal(links().some((a) => a.getAttribute('href') === '/orders'), false);
+        const legacy = () => mounted.container.querySelector<HTMLElement>('#menu-legacy')!;
+        assert.equal(legacy().hidden, true, 'present (aria-controls points at it) but hidden');
         assert.equal(legacyToggle().getAttribute('aria-expanded'), 'false');
         await act(async () => { legacyToggle().click(); });
         assert.equal(legacyToggle().getAttribute('aria-expanded'), 'true');
+        assert.equal(legacy().hidden, false);
         assert.ok(links().some((a) => a.getAttribute('href') === '/orders'));
         assert.ok(mounted.hasText('nav_legacy_hint'));
     });
@@ -37,6 +39,14 @@ describe('AppMenu', () => {
         await mounted.render(<AppMenu pathname="/orders" idPrefix="menu" />);
         assert.equal(legacyToggle().getAttribute('aria-expanded'), 'true');
         assert.equal(links().find((a) => a.getAttribute('aria-current') === 'page')?.getAttribute('href'), '/orders');
+    });
+
+    test('navigating to an old screen later (link, back button) opens "Oud" so the current page stays visible', async () => {
+        await mounted.render(<AppMenu pathname="/dashboard" idPrefix="menu" />);
+        assert.equal(legacyToggle().getAttribute('aria-expanded'), 'false');
+        await mounted.render(<AppMenu pathname="/inventory" idPrefix="menu" />);
+        assert.equal(legacyToggle().getAttribute('aria-expanded'), 'true');
+        assert.equal(mounted.container.querySelector<HTMLElement>('#menu-legacy')!.hidden, false);
     });
 
     test('the mobile menu closes after choosing a page', async () => {
