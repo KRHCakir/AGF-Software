@@ -8,6 +8,7 @@
 //   - krediet (alleen klant, EUR): limiet leeg of >= 0 met hooguit 2 decimalen; verzekerd -> verzekeraar (Other + naam) en
 //     verzekerde limiet verplicht; niet verzekerd -> alle verzekeringsvelden leeg. Verlopen verzekering = waarschuwing, geen fout.
 
+import { isDateOnly } from './calendarDate.ts';
 import { parseLocaleDecimal } from './decimal.ts';
 import { validateFreeTerms } from './paymentCondition.ts';
 import type { FreeTermsRuleCode } from './paymentCondition.ts';
@@ -33,7 +34,7 @@ export const INSURANCE_EXPIRY_WARNING_DAYS = 30;
 export const DEFAULT_PAYMENT_TERMS_DAYS = 30;
 
 export type TermsRuleCode = 'required' | 'too_long' | 'invalid' | 'currency' | 'mandate_required' | 'mandate_date_required' | 'mandate_future' | 'incoterm' | 'incoterm_place'
-    | 'delivery_text' | 'trade_text' | 'amount' | 'insurer' | 'insurer_text' | 'insured_limit' | FreeTermsRuleCode;
+    | 'delivery_text' | 'trade_text' | 'amount' | 'insurer' | 'insurer_text' | 'insured_limit' | 'invalid_date' | FreeTermsRuleCode;
 export interface TermsRuleError { field: string; code: TermsRuleCode }
 // Foutenlijst van de aanroeper (ook een bredere lijst, zoals die van de relatieregels).
 export interface TermsErrorSink { push(error: TermsRuleError): number; readonly length: number }
@@ -133,6 +134,7 @@ export function normalizeTerms(draft: RoleTermsDraft, prefix: string, today: str
         if (mandateReference === null && errors.length === before) errors.push({ field: `${prefix}.mandateReference`, code: 'mandate_required' });
         mandateSignedOn = blank(draft.mandateSignedOn);
         if (mandateSignedOn === null) errors.push({ field: `${prefix}.mandateSignedOn`, code: 'mandate_date_required' });
+        else if (!isDateOnly(mandateSignedOn)) errors.push({ field: `${prefix}.mandateSignedOn`, code: 'invalid_date' });
         else if (mandateSignedOn > today) errors.push({ field: `${prefix}.mandateSignedOn`, code: 'mandate_future' });
     }
 
@@ -196,9 +198,11 @@ export function normalizeCredit(draft: CreditDraft, prefix: string, errors: Term
     const insuredLimit = parseAmount(draft.insuredLimit);
     if (insuredLimit === null || insuredLimit === undefined) errors.push({ field: `${prefix}.insuredLimit`, code: 'insured_limit' });
     const insurerReference = optionalText(draft.insurerReference, MAX_INSURER_REFERENCE_LENGTH, `${prefix}.insurerReference`, errors);
+    const insuredUntil = blank(draft.insuredUntil);
+    if (insuredUntil !== null && !isDateOnly(insuredUntil)) errors.push({ field: `${prefix}.insuredUntil`, code: 'invalid_date' });
     return {
         creditLimit: creditLimit ?? null, isInsured: true, insurer: oneOf(CREDIT_INSURERS, insurerValue) ? insurerValue : null, insurerText,
-        insuredLimit: insuredLimit ?? null, insurerReference, insuredUntil: blank(draft.insuredUntil),
+        insuredLimit: insuredLimit ?? null, insurerReference, insuredUntil,
     };
 }
 

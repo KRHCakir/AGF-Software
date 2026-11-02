@@ -4,13 +4,15 @@
 import { useState, useEffect } from 'react';
 import { IncomingInvoiceService } from '../services/incomingInvoiceService';
 import { useTranslation } from '../i18n/LanguageContext';
+import { isDateOnly, localToday } from '../lib/calendarDate';
+import DateField from './shared/DateField';
 
 export default function ManualInvoiceModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
     const { t } = useTranslation();
     const [vendors, setVendors] = useState<any[]>([]);
     const [vendorId, setVendorId] = useState(0);
     const [invoiceNumber, setInvoiceNumber] = useState('');
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [invoiceDate, setInvoiceDate] = useState(localToday());
     const [lines, setLines] = useState([{ description: '', quantity: 1, unitPrice: 0, vatPercentage: 21, productVariantId: null as number | null }]);
     const [loading, setLoading] = useState(false);
 
@@ -41,6 +43,10 @@ export default function ManualInvoiceModal({ isOpen, onClose, onSuccess }: { isO
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!isDateOnly(invoiceDate)) {
+            alert(t('supply_error_incomplete_date'));
+            return;
+        }
         setLoading(true);
         try {
             await IncomingInvoiceService.createManual({
@@ -84,8 +90,8 @@ export default function ManualInvoiceModal({ isOpen, onClose, onSuccess }: { isO
                             <input type="text" value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md p-2" required placeholder="INV-2024-..." />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">{t('invoice_date')}</label>
-                            <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md p-2" required />
+                            <label htmlFor="manual-invoice-date" className="block text-sm font-medium text-gray-700">{t('invoice_date')}</label>
+                            <DateField id="manual-invoice-date" value={invoiceDate} onChange={setInvoiceDate} />
                         </div>
                     </div>
 

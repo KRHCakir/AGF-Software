@@ -1930,5 +1930,6 @@
   "date_field_placeholder": "dd-mm-yyyy",
   "date_field_today": "Today",
   "date_field_today_label": "Fill in today's date",
-  "date_field_calendar": "Open calendar"
+  "date_field_calendar": "Open calendar",
+  "relations_error_invalid_date": "Enter a complete, existing date (dd-mm-yyyy)."
 }

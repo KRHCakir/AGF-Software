@@ -23,6 +23,12 @@ describe('role terms', () => {
         const future: TermsRuleError[] = [];
         normalizeTerms({ ...emptyTermsDraft(), paymentMethod: 'DirectDebit', mandateReference: 'X'.repeat(36), mandateSignedOn: '2026-10-27' }, 'vendor', today, future);
         assert.deepEqual(codes(future), ['vendor.mandateReference:too_long', 'vendor.mandateSignedOn:mandate_future']);
+        const typed: TermsRuleError[] = [];
+        normalizeTerms({ ...emptyTermsDraft(), paymentMethod: 'DirectDebit', mandateReference: 'M-1', mandateSignedOn: '31-02' }, 'vendor', today, typed);
+        assert.deepEqual(codes(typed), ['vendor.mandateSignedOn:invalid_date'], 'text that is not a date is never compared as a date');
+        const credit: TermsRuleError[] = [];
+        normalizeCredit({ ...emptyCreditDraft(), isInsured: true, insurer: 'Atradius', insuredLimit: '100', insuredUntil: '2026-13-01' }, 'customer', credit);
+        assert.deepEqual(codes(credit), ['customer.insuredUntil:invalid_date']);
         const ok: TermsRuleError[] = [];
         const values = normalizeTerms({ ...emptyTermsDraft(), paymentMethod: 'DirectDebit', mandateReference: ' SEPA-1 ', mandateSignedOn: today }, 'vendor', today, ok);
         assert.deepEqual([ok, values.mandateReference, values.mandateSignedOn], [[], 'SEPA-1', today]);

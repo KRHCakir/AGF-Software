@@ -7,6 +7,7 @@ import { CreditDraft, insuranceExpired, insuranceExpiresSoon, insuranceGap, pars
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getCustomerCredit } from '../../services/relationService';
 import type { CreditExposure, RelationReference } from '../../types/relation';
+import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
@@ -93,7 +94,7 @@ export default function CustomerCreditSection({ customerId, credit, onChange, re
                         </div>
                         <div>
                             <label htmlFor="customer.insuredUntil-input" className="text-xs font-medium text-gray-700">{t('relations_credit_insured_until')}</label>
-                            <input {...fieldProps('customer.insuredUntil', e('insuredUntil'))} type="date" value={credit.insuredUntil} disabled={locked} className={inputClass} onChange={(event) => onChange({ insuredUntil: event.target.value })} />
+                            <DateField {...fieldProps('customer.insuredUntil', e('insuredUntil'))} value={credit.insuredUntil} disabled={locked} onChange={(value) => onChange({ insuredUntil: value })} />
                             {expired && <span className="block text-xs font-medium text-red-800" data-testid="credit-insurance-expired">{t('relations_credit_insurance_expired')}</span>}
                             {soon && <span className="block text-xs font-medium text-amber-800" data-testid="credit-insurance-expires-soon">{t('relations_credit_insurance_expires_soon')}</span>}
                         </div>

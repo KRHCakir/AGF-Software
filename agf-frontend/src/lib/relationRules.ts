@@ -1,5 +1,5 @@
 import type { AddressPurpose, ChannelKind, ContactChannel, CustomerRole, Relation, RelationAddress, RelationBankAccount, RelationContact, RoleTerms, SaveBankAccount, SaveRelationRequest, SaveRoleTerms, VendorGgn } from '../types/relation';
-import { todayInAmsterdam } from './calendarDate.ts';
+import { isDateOnly, todayInAmsterdam } from './calendarDate.ts';
 import { formatDecimalInput } from './decimal.ts';
 import { emailTypoSuggestion, isStrictEmail } from './emailRules.ts';
 import { resolveGgn } from './ggn.ts';
@@ -109,7 +109,7 @@ export interface RelationDraft {
 }
 
 export type RelationRuleCode = TermsRuleCode | 'invalid_email' | 'vat_shape' | 'vat_country' | 'vat_greece' | 'country_required' | 'address_empty' | 'two_defaults' | 'two_primary'
-    | 'ggn_13_digits' | 'ggn_duplicate' | 'ggn_check_future' | 'ggn_check_pair' | 'iban_shape' | 'iban_country' | 'iban_length' | 'iban_checksum' | 'bic' | 'account_one_of'
+    | 'ggn_13_digits' | 'ggn_duplicate' | 'ggn_check_future' | 'invalid_date' | 'ggn_check_pair' | 'iban_shape' | 'iban_country' | 'iban_length' | 'iban_checksum' | 'bic' | 'account_one_of'
     | 'account_duplicate' | 'two_default_accounts' | 'inactive_default' | 'too_many_accounts' | 'actor_required';
 export interface RelationRuleError { field: string; code: RelationRuleCode; params?: Record<string, string> }
 export type RelationBuildResult = { ok: true; value: SaveRelationRequest } | { ok: false; errors: RelationRuleError[] };
@@ -313,11 +313,14 @@ export function buildRelationPayload(draft: RelationDraft, options: { requestId?
             // Certificaatcontrole: datum niet in de toekomst; datum en naam van wie controleerde beide of geen van beide.
             const checkedOn = blankToNull(g.checkedOn);
             const checkedBy = optional(g.checkedBy, 100, `ggns.${g.key}.checkedBy`, errors);
-            if (checkedOn !== null && checkedOn > today) errors.push({ field: `ggns.${g.key}.checkedOn`, code: 'ggn_check_future' });
+            if (checkedOn !== null && !isDateOnly(checkedOn)) errors.push({ field: `ggns.${g.key}.checkedOn`, code: 'invalid_date' });
+            else if (checkedOn !== null && checkedOn > today) errors.push({ field: `ggns.${g.key}.checkedOn`, code: 'ggn_check_future' });
+            const validUntil = blankToNull(g.certificateValidUntil);
+            if (validUntil !== null && !isDateOnly(validUntil)) errors.push({ field: `ggns.${g.key}.certificateValidUntil`, code: 'invalid_date' });
             if ((checkedOn === null) !== (checkedBy === null)) errors.push({ field: `ggns.${g.key}.${checkedOn === null ? 'checkedOn' : 'checkedBy'}`, code: 'ggn_check_pair' });
             ggns.push({
                 id: g.id, ggn: resolved.value, producerName: optional(g.producerName, 200, `ggns.${g.key}.producerName`, errors), isActive: g.isActive, checkedOn, checkedBy,
-                certificateValidUntil: blankToNull(g.certificateValidUntil), hasGgnLabel: g.hasGgnLabel,
+                certificateValidUntil: validUntil, hasGgnLabel: g.hasGgnLabel,
             });
             void index;
         });

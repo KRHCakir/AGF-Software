@@ -69,10 +69,10 @@ describe('PurchaseInvoiceForm', () => {
         assert.equal(input('currency').value, 'EUR', 'untouched currency follows the new vendor');
         assert.ok(text().includes('purchase_manual_vs_default'));
         await type(input('invoiceDate'), '2026-10-01');
-        assert.equal(input('dueDate').value, '2026-11-30');
+        assert.equal(input('dueDate').value, '30-11-2026');
         await type(input('dueDate'), '2026-12-15');
         await type(input('paymentTermsDays'), '30');
-        assert.equal(input('dueDate').value, '2026-12-15', 'manual due date is never reset silently');
+        assert.equal(input('dueDate').value, '2026-12-15', 'manual due date is never reset silently (typed text stays until the field is left)');
         assert.ok(text().includes('purchase_due_deviation'));
     });
 
@@ -86,7 +86,7 @@ describe('PurchaseInvoiceForm', () => {
         assert.ok(mounted.container.querySelector('[data-testid="purchase-bank-unconfirmed"]'), 'warning shown');
         assert.ok(text().includes('purchase_condition_end_of_month'));
         await type(input('invoiceDate'), '2026-10-15');
-        assert.equal(input('dueDate').value, '2026-11-30', 'end of October + 30 days');
+        assert.equal(input('dueDate').value, '30-11-2026', 'end of October + 30 days');
     });
 
     test('three lines entered with the keyboard only: item, quantity, unit, price, discount, VAT, Enter adds the next line; totals live; no save on item choice', async () => {

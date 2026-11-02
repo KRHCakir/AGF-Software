@@ -122,6 +122,16 @@ describe('relation payload', () => {
         assert.deepEqual(ok.value.vendor?.ggns, [{ id: null, ggn: '4049929000001', producerName: 'Finca Uno', isActive: true, checkedOn: null, checkedBy: null, certificateValidUntil: null, hasGgnLabel: false }]);
     });
 
+    test('a typed date that is not a date (the shared date field passes the text on) is refused, never sent', () => {
+        const draft = emptyRelationDraft();
+        draft.name = 'X'; draft.vendorRole = true;
+        const g = emptyGgnDraft(); g.ggn = '4049929000001'; g.checkedOn = '31-02-2026'; g.checkedBy = 'Anja'; g.certificateValidUntil = '2027-02-30';
+        draft.ggns = [g];
+        const bad = buildRelationPayload(draft, { today });
+        assert.equal(bad.ok, false);
+        if (!bad.ok) assert.deepEqual(groupRelationErrors(bad.errors), { [`ggns.${g.key}.checkedOn`]: ['invalid_date'], [`ggns.${g.key}.certificateValidUntil`]: ['invalid_date'] });
+    });
+
     test('a GGN check has a date that is not in the future and a name, both or neither', () => {
         const draft = emptyRelationDraft();
         draft.name = 'X'; draft.vendorRole = true;
