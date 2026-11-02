@@ -27,7 +27,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
 }) {
     const { t, locale } = useTranslation();
     // Volgende stap: ontvangen, zolang er van een inkooporder voor het eigen magazijn nog iets openstaat.
-    const receivable = order.route === 'Warehouse' && order.status !== 'Cancelled' && order.storedStatus !== 'Cancelled' && order.receivedQuantity < order.expectedQuantity;
+    const receivable = order.route === 'Warehouse' && order.status !== 'Cancelled' && order.storedStatus !== 'Cancelled' && order.lines.some((line) => line.receivedQuantity < line.expectedQuantity);
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
     const qty = (value: number) => formatQuantity(value, locale);
     // Herkenbare naam van een andere regel van deze order: het onderscheidende kenmerk (herkomst, maat of verpakking).
