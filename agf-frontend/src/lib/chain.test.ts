@@ -44,6 +44,13 @@ describe('purchase order chain', () => {
         assert.deepEqual(step(steps, 'receipt').parts, [{ key: 'chain_mixed_units' }]);
     });
 
+    test('mixed units: receipt state is judged per unit, not on a raw sum', () => {
+        const base = order().lines[0];
+        const lines = [{ ...base, expectedQuantity: 10, receivedQuantity: 30 }, { ...base, id: 32, unit: 'kg', expectedQuantity: 20, receivedQuantity: 0 }];
+        const steps = purchaseOrderChain(order({ expectedQuantity: 30, receivedQuantity: 30, lines }), 'order');
+        assert.equal(step(steps, 'receipt').state, 'partial');
+    });
+
     test('a cancelled order with nothing received: the receipt step is not "open" and has no receive action', () => {
         const steps = purchaseOrderChain(order({ status: 'Cancelled' }), 'order');
         assert.equal(step(steps, 'receipt').state, 'empty');
@@ -149,6 +156,14 @@ describe('sales order chain', () => {
         assert.deepEqual(step(steps, 'stock').parts, [{ key: 'chain_direct_trade' }]);
         assert.deepEqual(step(steps, 'stock').links, []);
         assert.deepEqual(step(steps, 'order').links.map((l) => l.label), ['IO-2026-0003'], 'the purchase order is still the origin');
+    });
+
+    test('mixed units: sales and delivery states are judged per unit, not on a raw sum', () => {
+        const kg = salesLine({ id: 12, unit: 'box', quantity: 20, dispatchedQuantity: 0, deliveredQuantity: 0, reservations: [] });
+        const colli = salesLine({ quantity: 10, dispatchedQuantity: 30, deliveredQuantity: 30 });
+        const steps = salesOrderChain(salesOrder([colli, kg]));
+        assert.equal(step(steps, 'sales').state, 'partial');
+        assert.equal(step(steps, 'delivery').state, 'partial');
     });
 
     test('mixed: stock counts only the warehouse part', () => {
