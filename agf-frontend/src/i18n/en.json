@@ -1987,6 +1987,7 @@
   "chain_inspection_not_approved": "{count} not approved",
   "chain_inspection_all_approved": "approved",
   "chain_demand": "{quantity} {unit} requested",
+  "chain_mixed_units": "multiple units",
   "chain_cancelled": "cancelled",
   "chain_from_stock": "{quantity} {unit} from stock",
   "tour_ch_chain_title": "The chain of an order",
