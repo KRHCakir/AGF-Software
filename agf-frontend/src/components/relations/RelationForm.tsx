@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, bankAccountsNeedActor, buildRelationPayload, creditDraftFromRole, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
-import { todayInAmsterdam } from '../../lib/calendarDate';
+import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { emptyTermsDraft } from '../../lib/roleTermsRules';
 import { newRequestId } from '../../lib/requestId';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
@@ -640,7 +640,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                                     <div>
                                                         <label htmlFor={`${k('certificateValidUntil')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_valid_until')}</label>
                                                         <DateField {...fieldProps(k('certificateValidUntil'), e(k('certificateValidUntil')))} value={ggn.certificateValidUntil} disabled={locked} onChange={(value) => editGgn(ggn.key, { certificateValidUntil: value })} />
-                                                        {ggn.certificateValidUntil !== '' && ggn.certificateValidUntil < today && <span className="block text-xs font-medium text-red-800">{t('relations_ggn_expired')}</span>}
+                                                        {isDateOnly(ggn.certificateValidUntil) && ggn.certificateValidUntil < today && <span className="block text-xs font-medium text-red-800">{t('relations_ggn_expired')}</span>}
                                                     </div>
                                                     <label className="flex items-end gap-1 pb-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.hasGgnLabel} disabled={locked} onChange={(event) => editGgn(ggn.key, { hasGgnLabel: event.target.checked })} />{t('relations_ggn_label')}</label>
                                                     <div className="flex items-end pb-1">

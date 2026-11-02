@@ -3,11 +3,12 @@
 import { ReactNode, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { EnteredAttributes, RECEIPT_ATTRIBUTES, ReceiptAttribute, optionsFor } from '../../lib/receiptBlindEntry';
+import { EnteredAttributes, RECEIPT_ATTRIBUTES, REQUIRED_ATTRIBUTES, ReceiptAttribute, optionsFor } from '../../lib/receiptBlindEntry';
 import type { CountryReference } from '../../types/country';
 import type { VariantOption } from '../../types/referenceData';
 import CountryPicker from '../shared/CountryPicker';
 import LookupField, { LookupMatch } from '../shared/LookupField';
+import TradeClassPicker from '../shared/TradeClassPicker';
 import FieldError from './FieldError';
 
 const LABEL_KEYS: Record<ReceiptAttribute, string> = {
@@ -17,9 +18,9 @@ const TOUR_NAMES: Record<ReceiptAttribute, string> = {
     size: 'receive-size', packaging: 'receive-packaging', tradeClass: 'receive-class', brand: 'receive-brand',
 };
 
-// Wat er werkelijk is aangekomen, per kenmerk en zonder voorinvulling: herkomst (verplicht; landkiezer met snelkoppelingen) en
-// optioneel maat, verpakking, klasse en merk (leeg = bewust "geen"). Elk veld typt met suggesties uit de bestaande varianten van dit
-// artikel, gefilterd op wat al is ingevuld; Tab neemt de bovenste. Een combinatie die niet bestaat: de melding "Nieuw artikel" met
+// Wat er werkelijk is aangekomen, per kenmerk en zonder voorinvulling: herkomst (landkiezer met snelkoppelingen), maat en klasse
+// (vaste lijst Extra, I, II) zijn verplicht; verpakking en merk optioneel (leeg = bewust "geen"). Maat, verpakking en merk typen met
+// suggesties uit de bestaande varianten van dit artikel, gefilterd op wat al is ingevuld; Tab neemt de bovenste. Een combinatie die niet bestaat: de melding "Nieuw artikel" met
 // "Artikel aanmaken en doorgaan" (missingPrompt); hier zelf wordt nooit iets aangemaakt.
 export default function ReceivedAttributes({ lineId, variants, countries, value, onChange, disabled, errors, combination, missingPrompt }: {
     lineId: number;
@@ -45,12 +46,22 @@ export default function ReceivedAttributes({ lineId, variants, countries, value,
                     onChange={(origin) => onChange({ origin })} disabled={disabled} invalid={errors(key('origin')) !== undefined} />
                 <FieldError id={key('origin')} messages={errors(key('origin'))} />
             </div>
-            {RECEIPT_ATTRIBUTES.map((attribute) => (
-                <AttributeField key={attribute} id={key(attribute)} label={`${t(LABEL_KEYS[attribute])} ${t('field_optional')}`} dataTour={TOUR_NAMES[attribute]} lineId={lineId}
-                    options={optionsFor(variants, value, attribute, names)} value={value[attribute]} disabled={disabled}
-                    invalid={errors(key(attribute)) !== undefined} onChange={(text) => onChange({ [attribute]: text } as Partial<EnteredAttributes>)}
-                    messages={errors(key(attribute))} />
-            ))}
+            {RECEIPT_ATTRIBUTES.map((attribute) => {
+                const label = `${t(LABEL_KEYS[attribute])} ${REQUIRED_ATTRIBUTES.includes(attribute) ? '*' : t('field_optional')}`;
+                return attribute === 'tradeClass' ? (
+                    <div key={attribute}>
+                        <label htmlFor={`${key(attribute)}-input`} className="text-xs font-medium text-gray-700">{label}</label>
+                        <TradeClassPicker id={key(attribute)} dataTour={TOUR_NAMES[attribute]} dataTourKey={lineId} ariaLabel={label} value={value.tradeClass} disabled={disabled}
+                            invalid={errors(key(attribute)) !== undefined} onChange={(tradeClass) => onChange({ tradeClass })} />
+                        <FieldError id={key(attribute)} messages={errors(key(attribute))} />
+                    </div>
+                ) : (
+                    <AttributeField key={attribute} id={key(attribute)} label={label} dataTour={TOUR_NAMES[attribute]} lineId={lineId}
+                        options={optionsFor(variants, value, attribute, names)} value={value[attribute]} disabled={disabled}
+                        invalid={errors(key(attribute)) !== undefined} onChange={(text) => onChange({ [attribute]: text } as Partial<EnteredAttributes>)}
+                        messages={errors(key(attribute))} hintKey={attribute === 'size' ? 'articles_hint_size' : undefined} />
+                );
+            })}
             {combination === 'missing' && missingPrompt !== undefined && <div className="col-span-2 md:col-span-5">{missingPrompt}</div>}
             {combination !== null && (combination === 'ambiguous' || missingPrompt === undefined) && (
                 <p role="alert" className="col-span-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900 md:col-span-5"
@@ -64,7 +75,7 @@ export default function ReceivedAttributes({ lineId, variants, countries, value,
 }
 
 // Eén kenmerk: getypte tekst blijft staan (vrij), suggesties uit de bestaande varianten; Tab neemt de bovenste.
-function AttributeField({ id, label, dataTour, lineId, options, value, disabled, invalid, onChange, messages }: {
+function AttributeField({ id, label, dataTour, lineId, options, value, disabled, invalid, onChange, messages, hintKey }: {
     id: string;
     label: string;
     dataTour: string;
@@ -75,7 +86,9 @@ function AttributeField({ id, label, dataTour, lineId, options, value, disabled,
     invalid: boolean;
     onChange: (value: string) => void;
     messages: string[] | undefined;
+    hintKey?: string;
 }) {
+    const { t } = useTranslation();
     const search = useCallback((query: string): LookupMatch<string>[] => {
         const term = query.trim().toLowerCase();
         return options
@@ -108,6 +121,7 @@ function AttributeField({ id, label, dataTour, lineId, options, value, disabled,
                 moreKey="product_picker_more"
                 changeKey="receipt_attr_change"
             />
+            {hintKey && <span className="block text-xs text-gray-500">{t(hintKey)}</span>}
             <FieldError id={id} messages={messages} />
         </div>
     );

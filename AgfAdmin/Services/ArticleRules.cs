@@ -155,10 +155,16 @@ namespace AgfAdmin.Services
                 addError("sizeCategory", $"This field may contain at most {MaxTextLength} characters.");
                 typedSize = null;
             }
-            var normalized = NormalizeTradeClass(tradeClass);
+            // Eerst de lengte: een lange tekst wordt nooit genormaliseerd (ook niet "I" gevolgd door duizenden spaties).
+            var tooLong = tradeClass != null && tradeClass.Length > MaxTradeClassLength;
+            var normalized = tooLong ? null : NormalizeTradeClass(tradeClass);
             if (string.IsNullOrWhiteSpace(tradeClass))
             {
                 addError("tradeClass", "Choose the class: Extra, I or II.");
+            }
+            else if (tooLong)
+            {
+                addError("tradeClass", $"This field may contain at most {MaxTradeClassLength} characters.");
             }
             else if (normalized == null)
             {

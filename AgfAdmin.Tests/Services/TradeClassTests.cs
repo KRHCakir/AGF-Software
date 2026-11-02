@@ -147,6 +147,15 @@ public sealed class TradeClassTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Class_Longer_Than_The_Column_Is_Refused_Before_It_Is_Normalised()
+    {
+        await using var db = _factory.CreateContext();
+        var result = await new ArticleService(db).CreateAsync(Article("18", "I" + new string(' ', 60), null, null));
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.Contains("at most 50", result.Errors["tradeClass"].Single());
+    }
+
+    [Fact]
     public async Task A_New_Article_Without_Size_Or_Class_Gets_A_400_With_A_Clear_Message_And_N_V_T_Is_A_Real_Size()
     {
         await using var controllerDb = _factory.CreateContext();

@@ -25,6 +25,12 @@ describe('articleFromEntry', () => {
         assert.deepEqual(similarVariants([variant(1, { isArchived: true })], typed(), names), []);
     });
 
+    test('"Bedoel je dit?" compares the class through the fixed list: an old "1" is the same as I; "Choose this" brings the fixed class', () => {
+        assert.deepEqual(similarVariants([variant(1, { tradeClass: '1' })], typed(), names).map((s) => [s.variant.id, s.differs]), [[1, null]]);
+        assert.deepEqual(similarVariants([variant(1, { tradeClass: 'II' })], typed(), names).map((s) => s.differs), ['tradeClass']);
+        assert.equal(enteredFrom(variant(1, { tradeClass: 'klasse 1' }), names).tradeClass, 'I');
+    });
+
     test('empty against filled is one difference, never the same', () => {
         assert.deepEqual(similarVariants([variant(1)], typed({ brand: '' }), names).map((s) => s.differs), ['brand']);
         assert.deepEqual(similarVariants([variant(1, { brand: null })], typed(), names).map((s) => s.differs), ['brand']);

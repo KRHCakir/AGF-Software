@@ -22,8 +22,8 @@ const commitment: SupplyCommitment = {
 // Artikelen met alleen een herkomst (Peru): bij blinde invoer is alleen de herkomst verplicht en past de bestelde variant exact
 // als de overige kenmerken leeg blijven (leeg = bewust "geen").
 const products = [
-    { id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: 'Peru', originCountryCode: 'PE', packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
-    { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: 'Peru', originCountryCode: 'PE', packaging: null, sizeCategory: null, shortcutCode: null, packagingUnit: 'box' }] },
+    { id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: 'Peru', originCountryCode: 'PE', packaging: null, sizeCategory: '18', tradeClass: 'I', shortcutCode: null, packagingUnit: 'box' }] },
+    { id: 2, name: 'Mango', variants: [{ id: 3, name: 'Kent', origin: 'Peru', originCountryCode: 'PE', packaging: null, sizeCategory: '18', tradeClass: 'I', shortcutCode: null, packagingUnit: 'box' }] },
 ];
 const countries = { countries: [{ code: 'PE', nameNl: 'Peru', nameEn: 'Peru' }], aliases: [] };
 const exactPreview = (url: string) => ({
@@ -138,6 +138,10 @@ describe('ReceivePalletForm GGN', () => {
         // Ongeldig blokkeert inline; niets verstuurd.
         await pick('line.501.origin', 'PE');
         await pick('line.502.origin', 'PE');
+        for (const line of [501, 502]) {
+            await pick(`line.${line}.size`, '18');
+            await pick(`line.${line}.tradeClass`, 'I');
+        }
         await type(input('line.501.lotNumber'), 'LOT-A');
         await type(input('line.501.quantity'), '40');
         await type(input('line.501.netWeightKg'), '160');

@@ -47,7 +47,9 @@ async function openNewArticle() {
     await enter(tour('supply-new-article-origin'));
     await type(tour<HTMLInputElement>('supply-new-article-size'), '12');
     await type(tour<HTMLInputElement>('supply-new-article-packaging'), 'test');
-    await type(tour<HTMLInputElement>('supply-new-article-tradeClass'), 'I');
+    // Klasse uit de vaste lijst: "1" wordt I (Enter neemt de bovenste suggestie).
+    await type(tour<HTMLInputElement>('supply-new-article-tradeClass'), '1');
+    await enter(tour('supply-new-article-tradeClass'));
 }
 
 describe('PlanSupplyForm: new article on a supply line', () => {
@@ -91,6 +93,14 @@ describe('PlanSupplyForm: new article on a supply line', () => {
         await submit();
         await mounted.waitFor(() => posted.length === 2, 'supply POST');
         assert.equal(JSON.parse(posted[1].body).lines[0].productVariantId, 50);
+    });
+
+    test('origin, size and class are required: without them nothing can be created yet', async () => {
+        await openNewArticle();
+        assert.ok(mounted.container.querySelector('[data-testid="new-article-text"]'));
+        await type(tour<HTMLInputElement>('supply-new-article-size'), '');
+        assert.equal(mounted.container.querySelector('[data-testid="new-article-text"]'), null, 'no size: no "create" yet');
+        assert.ok(mounted.hasText('supply_new_article_required'));
     });
 
     test('while the article is being created, every field of the block is locked', async () => {
