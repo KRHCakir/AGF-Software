@@ -1941,9 +1941,13 @@
   "articles_error_size_required": "Vul de maat in (geen maat: n.v.t.).",
   "articles_error_class_required": "Kies de klasse: Extra, I of II.",
   "articles_error_class_invalid": "Deze klasse staat niet in de lijst: kies Extra, I of II.",
+  "new_article_incomplete": "Dit artikel mist nog maat of klasse.",
+  "new_article_incomplete_link": "Aanvullen in Artikelen",
+  "supply_new_article_required": "Vul herkomst, maat en klasse in (geen maat: n.v.t.).",
   "size_class_cleanup_title": "Maat en klasse opschonen",
   "size_class_cleanup_hint": "Artikelen zonder maat, zonder klasse of met een klasse die niet in de lijst staat (Extra, I, II). Ze blijven bruikbaar; bij ontvangst zijn maat en klasse verplicht, dus vul ze hier aan. Geen maat: n.v.t.",
   "size_class_cleanup_empty": "Alle artikelen hebben een maat en een klasse uit de lijst.",
   "size_class_cleanup_now": "Nu: maat {size} · klasse {tradeClass}",
-  "size_class_cleanup_save": "Opslaan"
+  "size_class_cleanup_save": "Opslaan",
+  "tour_missing_complete_article": "Het artikel {article} heeft nog geen maat of klasse uit de lijst. Vul die aan in Artikelen bij \"Maat en klasse opschonen\"."
 }

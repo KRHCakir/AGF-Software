@@ -1941,9 +1941,13 @@
   "articles_error_size_required": "Enter the size (no size: n.v.t.).",
   "articles_error_class_required": "Choose the class: Extra, I or II.",
   "articles_error_class_invalid": "This class is not in the list: choose Extra, I or II.",
+  "new_article_incomplete": "This article has no size or class yet.",
+  "new_article_incomplete_link": "Complete it in Articles",
+  "supply_new_article_required": "Fill in origin, size and class (no size: n.v.t.).",
   "size_class_cleanup_title": "Clean up size and class",
   "size_class_cleanup_hint": "Articles without a size, without a class or with a class that is not in the list (Extra, I, II). They stay usable; size and class are required on receipt, so complete them here. No size: n.v.t.",
   "size_class_cleanup_empty": "Every article has a size and a class from the list.",
   "size_class_cleanup_now": "Now: size {size} · class {tradeClass}",
-  "size_class_cleanup_save": "Save"
+  "size_class_cleanup_save": "Save",
+  "tour_missing_complete_article": "The article {article} has no size or no class from the list yet. Complete it in Articles under \"Clean up size and class\"."
 }

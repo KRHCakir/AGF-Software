@@ -1,13 +1,16 @@
 import type { VariantOption, ProductOption } from '../types/referenceData';
 import { countryKey } from './countries.ts';
+import { normalizeTradeClass, tradeClassKey } from './tradeClass.ts';
 
 // Blinde invoer bij ontvangst: de gebruiker vult zelf in wat er is aangekomen (herkomst, maat, verpakking, klasse en merk);
-// pas bij registreren zoekt het scherm de variant van hetzelfde artikel die daar precies bij hoort. Alleen herkomst is verplicht;
-// een leeg kenmerk betekent bewust "geen" en is een echte waarde (leeg past alleen op een variant zonder die waarde). Er wordt
-// nooit iets "bijna gelijks" gekozen; de server vergelijkt daarna op variant-id en gewicht (afwijkingsvenster).
+// pas bij registreren zoekt het scherm de variant van hetzelfde artikel die daar precies bij hoort. Herkomst, maat en klasse zijn
+// verplicht (klasse uit de vaste lijst: "1" en "I" zijn dezelfde klasse); verpakking en merk mogen leeg, en leeg betekent dan bewust
+// "geen" en is een echte waarde (leeg past alleen op een variant zonder die waarde). Er wordt nooit iets "bijna gelijks" gekozen;
+// de server vergelijkt daarna op variant-id en gewicht (afwijkingsvenster).
 
 export type ReceiptAttribute = 'size' | 'packaging' | 'tradeClass' | 'brand';
 export const RECEIPT_ATTRIBUTES: readonly ReceiptAttribute[] = ['size', 'packaging', 'tradeClass', 'brand'];
+export const REQUIRED_ATTRIBUTES: readonly ReceiptAttribute[] = ['size', 'tradeClass'];
 
 export interface EnteredAttributes {
     // Land (ISO-code) uit de landkiezer; null = nog niet gekozen.
@@ -23,6 +26,14 @@ export const emptyEntered = (): EnteredAttributes => ({ origin: null, size: '', 
 export type VariantMatch = { kind: 'match'; variantId: number } | { kind: 'none' } | { kind: 'ambiguous' };
 
 const key = (value: string | null | undefined) => countryKey(value ?? '');
+
+// Vergelijksleutel per kenmerk: klasse via de vaste lijst ("1" = "I"), de rest zonder hoofdletters, accenten en dubbele spaties.
+export const attributeKey = (attribute: ReceiptAttribute, value: string | null | undefined): string =>
+    attribute === 'tradeClass' ? tradeClassKey(value) : key(value);
+
+// Een artikel met maat en een klasse uit de vaste lijst. Oudere artikelen zonder die gegevens blijven bruikbaar, maar passen nooit op
+// een volledige blinde invoer; ze staan in Artikelen bij "Maat en klasse opschonen".
+export const isCompleteVariant = (variant: VariantOption): boolean => key(variant.sizeCategory) !== '' && normalizeTradeClass(variant.tradeClass) !== null;
 
 const attributeOf = (variant: VariantOption, attribute: ReceiptAttribute): string => {
     switch (attribute) {
@@ -51,7 +62,7 @@ function originMatches(variant: VariantOption, origin: string | null, countryNam
 }
 
 function attributesMatch(variant: VariantOption, entered: EnteredAttributes): boolean {
-    return RECEIPT_ATTRIBUTES.every((attribute) => key(attributeOf(variant, attribute)) === key(entered[attribute]));
+    return RECEIPT_ATTRIBUTES.every((attribute) => attributeKey(attribute, attributeOf(variant, attribute)) === attributeKey(attribute, entered[attribute]));
 }
 
 // Suggesties voor een veld: de waarden van de varianten die passen bij wat er al in de andere velden staat (lege velden tellen niet).
@@ -60,7 +71,7 @@ export function optionsFor(variants: readonly VariantOption[], entered: EnteredA
     const filled = RECEIPT_ATTRIBUTES.filter((other) => other !== attribute && entered[other].trim() !== '');
     const values = variants
         .filter((variant) => entered.origin === null || originMatches(variant, entered.origin, countryNames))
-        .filter((variant) => filled.every((other) => key(attributeOf(variant, other)) === key(entered[other])))
+        .filter((variant) => filled.every((other) => attributeKey(other, attributeOf(variant, other)) === attributeKey(other, entered[other])))
         .map((variant) => attributeOf(variant, attribute).trim())
         .filter((value) => value !== '');
     return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'nl', { numeric: true }));

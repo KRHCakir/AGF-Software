@@ -1,11 +1,13 @@
 import type { Article } from '../types/article';
 import type { ProductOption, VariantOption } from '../types/referenceData';
 import { countryKey } from './countries.ts';
+import { attributeKey } from './receiptBlindEntry.ts';
 import type { EnteredAttributes, ReceiptAttribute } from './receiptBlindEntry';
+import { normalizeTradeClass } from './tradeClass.ts';
 
 // "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst: wat er precies wordt aangemaakt, welke bestaande varianten er sterk op
 // lijken ("Bedoel je dit?") en het aangemaakte artikel als keuzelijst-variant. Vergelijken gaat zoals de server (ArticleRules.AttributeKey):
-// hoofdletters, accenten en dubbele spaties tellen niet, leeg is "geen" en een echte waarde.
+// hoofdletters, accenten en dubbele spaties tellen niet, klasse via de vaste lijst ("1" = "I"), leeg is "geen" en een echte waarde.
 
 export type SimilarAttribute = 'origin' | ReceiptAttribute;
 
@@ -42,7 +44,7 @@ export function similarVariants(variants: readonly VariantOption[], entered: Ent
         if (variant.isArchived) continue;
         const different: SimilarAttribute[] = [];
         if (!sameOrigin(variant, entered.origin, countryNames)) different.push('origin');
-        for (const attribute of ATTRIBUTES) if (key(valueOf(variant, attribute)) !== key(entered[attribute])) different.push(attribute);
+        for (const attribute of ATTRIBUTES) if (attributeKey(attribute, valueOf(variant, attribute)) !== attributeKey(attribute, entered[attribute])) different.push(attribute);
         if (different.length <= 1) result.push({ variant, differs: different[0] ?? null });
     }
     return result.sort((a, b) => Number(a.differs !== null) - Number(b.differs !== null) || a.variant.id - b.variant.id);
@@ -57,7 +59,7 @@ export function enteredFrom(variant: VariantOption, countryNames: ReadonlyMap<st
         origin: variant.originCountryCode || codeByName || null,
         size: variant.sizeCategory ?? '',
         packaging: variant.packaging ?? '',
-        tradeClass: variant.tradeClass ?? '',
+        tradeClass: normalizeTradeClass(variant.tradeClass) ?? variant.tradeClass ?? '',
         brand: variant.brand ?? '',
     };
 }

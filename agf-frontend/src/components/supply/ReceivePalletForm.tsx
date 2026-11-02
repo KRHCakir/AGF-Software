@@ -11,6 +11,7 @@ import { parsePositiveDecimal } from '../../lib/decimal';
 import { normalizeGgn, resolveGgn } from '../../lib/ggn';
 import { DEVIATION_CODES, deviationConflict } from '../../lib/receiptDeviation';
 import { enteredFrom, similarVariants, withArticle } from '../../lib/articleFromEntry';
+import { normalizeTradeClass } from '../../lib/tradeClass';
 import { lineOrdinals, orderListGroups } from '../../lib/receiptOrderList';
 import { EnteredAttributes, articleVariants, emptyEntered, matchVariant } from '../../lib/receiptBlindEntry';
 import { newRequestId } from '../../lib/requestId';
@@ -332,8 +333,12 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 addError(found, 'general', t('receipt_lists_unavailable'));
                 continue;
             }
-            // Alleen herkomst is verplicht; maat, verpakking, klasse en merk mogen leeg (= bewust "geen").
+            // Herkomst, maat en klasse zijn verplicht (klasse uit de vaste lijst); verpakking en merk mogen leeg (= bewust "geen").
             if (draft.entered.origin === null) addError(found, `line.${id}.origin`, t('supply_error_required'));
+            if (draft.entered.size.trim() === '') addError(found, `line.${id}.size`, t('articles_error_size_required'));
+            if (normalizeTradeClass(draft.entered.tradeClass) === null) {
+                addError(found, `line.${id}.tradeClass`, t(draft.entered.tradeClass.trim() === '' ? 'articles_error_class_required' : 'articles_error_class_invalid'));
+            }
         }
         return found;
     };
@@ -891,7 +896,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                                                     countryName={countryNames.get(draft.entered.origin) ?? null} entered={draft.entered}
                                                     similar={similarVariants(article.variants, draft.entered, countryNames)}
                                                     onChoose={(variant) => chooseSimilar(id, enteredFrom(variant, countryNames))} onCreate={() => void createArticle(id)}
-                                                    busy={creation[id]?.busy ?? false} error={creation[id]?.error ?? null} dataTourKey={id} />
+                                                    busy={creation[id]?.busy ?? false} error={creation[id]?.error ?? null} dataTourKey={id} chooseIncomplete={false} />
                                             ) : undefined} />;
                                 })()}
                                 <div className="col-span-2">

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { ProductOption, VariantOption } from '../types/referenceData';
-import { RECEIPT_ATTRIBUTES, articleVariants, emptyEntered, matchVariant, optionsFor } from './receiptBlindEntry.ts';
+import { RECEIPT_ATTRIBUTES, articleVariants, emptyEntered, isCompleteVariant, matchVariant, optionsFor } from './receiptBlindEntry.ts';
 import type { EnteredAttributes, ReceiptAttribute } from './receiptBlindEntry.ts';
 
 const variant = (id: number, origin: string, code: string | null, size: string, packaging = '4 kg doos', extra: Partial<VariantOption> = {}): VariantOption => ({
@@ -58,6 +58,23 @@ describe('receiptBlindEntry', () => {
         const unbranded = [variant(21, 'Peru', 'PE', '18', '4 kg doos', { brand: '' })];
         assert.deepEqual(matchVariant(unbranded, { ...entered('PE', '18'), brand: 'test' }, 21, names), { kind: 'none' });
         assert.deepEqual(matchVariant(unbranded, entered('PE', '18'), 21, names), { kind: 'match', variantId: 21 });
+    });
+
+    test('the class is a fixed list: I and 1 (an old spelling) give the same variant; II never does', () => {
+        const old = [variant(1, 'Peru', 'PE', '18', '4 kg doos', { tradeClass: '1' }), variant(2, 'Peru', 'PE', '18', '4 kg doos', { tradeClass: 'II' })];
+        assert.deepEqual(matchVariant(old, { ...entered('PE', '18'), tradeClass: 'I' }, 1, names), { kind: 'match', variantId: 1 });
+        assert.deepEqual(matchVariant(old, { ...entered('PE', '18'), tradeClass: 'klasse 1' }, 2, names), { kind: 'match', variantId: 1 });
+        assert.deepEqual(matchVariant(old, { ...entered('PE', '18'), tradeClass: '2' }, 1, names), { kind: 'match', variantId: 2 });
+        assert.deepEqual(matchVariant(old, { ...entered('PE', '18'), tradeClass: 'Extra' }, 1, names), { kind: 'none' });
+        assert.deepEqual(optionsFor(old, { ...entered('PE', ''), tradeClass: 'I' }, 'size', names), ['18'], 'filtering on class uses the fixed list too');
+    });
+
+    test('an old article without size or class stays in the list but never matches a complete blind entry', () => {
+        const old = variant(7, 'Peru', 'PE', '', '4 kg doos', { tradeClass: null });
+        assert.equal(isCompleteVariant(old), false);
+        assert.equal(isCompleteVariant(variant(8, 'Peru', 'PE', '18', '4 kg doos', { tradeClass: '1' })), true, 'an old spelling of a class still counts');
+        assert.equal(isCompleteVariant(variant(9, 'Peru', 'PE', '18', '4 kg doos', { tradeClass: 'klasse A' })), false);
+        assert.deepEqual(matchVariant([old], entered('PE', '18'), 7, names), { kind: 'none' });
     });
 
     test('spelling: case and double spaces do not matter ("Test" and "test" are the same)', () => {

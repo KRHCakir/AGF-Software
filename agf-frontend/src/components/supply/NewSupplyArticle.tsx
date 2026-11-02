@@ -5,7 +5,8 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { similarVariants } from '../../lib/articleFromEntry';
 import { countryKey } from '../../lib/countries';
 import { parsePositiveDecimal } from '../../lib/decimal';
-import { EnteredAttributes, RECEIPT_ATTRIBUTES, ReceiptAttribute, emptyEntered } from '../../lib/receiptBlindEntry';
+import { EnteredAttributes, RECEIPT_ATTRIBUTES, REQUIRED_ATTRIBUTES, ReceiptAttribute, emptyEntered } from '../../lib/receiptBlindEntry';
+import { normalizeTradeClass } from '../../lib/tradeClass';
 import { newRequestId } from '../../lib/requestId';
 import { toApiError } from '../../services/apiClient';
 import { createArticleFromEntry, existingArticle } from '../../services/articleService';
@@ -15,6 +16,7 @@ import type { CountryReference } from '../../types/country';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
 import CountryPicker from '../shared/CountryPicker';
 import NewArticlePrompt from '../shared/NewArticlePrompt';
+import TradeClassPicker from '../shared/TradeClassPicker';
 import { inputClass } from './FieldError';
 import { secondaryButtonClass } from './SuccessPanel';
 import { useActorReference } from './useActorReference';
@@ -41,7 +43,7 @@ export function articleKinds(products: readonly ProductOption[]): ArticleKind[] 
 }
 
 // Aanvoer plannen: een artikel dat nog niet bestaat meteen aanmaken met wat de gebruiker typt. De gebruiker kiest het artikel
-// (productsoort en ras) en vult herkomst (verplicht) en zo nodig maat, verpakking, klasse, merk en kg per colli in; daarna dezelfde
+// (productsoort en ras) en vult herkomst, maat en klasse (verplicht) en zo nodig verpakking, merk en kg per colli in; daarna dezelfde
 // melding als bij ontvangst ("Nieuw artikel: …", "Bedoel je dit?", "Artikel aanmaken en doorgaan"). Het artikel komt op de regel.
 // Tijdens het aanmaken liggen alle velden vast, zodat het artikel overeenkomt met wat er staat.
 export default function NewSupplyArticle({ index, products, currentVariantId, onUse, onClose }: {
@@ -79,8 +81,11 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
         setError(null);
     };
 
+    // Zelfde regels als in Artikelen en bij ontvangst: herkomst, maat en klasse (vaste lijst) verplicht.
+    const complete = entered.origin !== null && entered.size.trim() !== '' && normalizeTradeClass(entered.tradeClass) !== null;
+
     const create = async () => {
-        if (kind === null || entered.origin === null || (perPackage !== null && !perPackage.ok)) return;
+        if (kind === null || !complete || entered.origin === null || (perPackage !== null && !perPackage.ok)) return;
         const snapshot = JSON.stringify([kind.key, entered, kg]);
         if (request.current === null || request.current.key !== snapshot) request.current = { key: snapshot, requestId: newRequestId() };
         const text = (value: string) => (value.trim() === '' ? null : value.trim());
@@ -123,10 +128,16 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
                         ? <p className="text-gray-600">{t('supply_open_loading')}</p>
                         : <CountryPicker id={`${prefix}.origin`} dataTour="supply-new-article-origin" dataTourKey={index} countries={countries} value={entered.origin} onChange={(origin) => edit({ origin })} disabled={busy} />}
                 </div>
-                {RECEIPT_ATTRIBUTES.map((attribute) => (
+                {RECEIPT_ATTRIBUTES.map((attribute) => attribute === 'tradeClass' ? (
+                    <div key={attribute}>
+                        <label htmlFor={`${prefix}.tradeClass-input`} className="font-medium text-gray-700">{t(LABEL_KEYS[attribute])} *</label>
+                        <TradeClassPicker id={`${prefix}.tradeClass`} dataTour="supply-new-article-tradeClass" dataTourKey={index} value={entered.tradeClass} disabled={busy}
+                            onChange={(tradeClass) => edit({ tradeClass })} />
+                    </div>
+                ) : (
                     <label key={attribute} className="font-medium text-gray-700">
-                        {t(LABEL_KEYS[attribute])} {t('field_optional')}
-                        <input value={entered[attribute]} disabled={busy} maxLength={attribute === 'tradeClass' ? 50 : 100} placeholder={t('receipt_attr_placeholder')} className={inputClass}
+                        {t(LABEL_KEYS[attribute])} {REQUIRED_ATTRIBUTES.includes(attribute) ? '*' : t('field_optional')}
+                        <input value={entered[attribute]} disabled={busy} maxLength={100} placeholder={attribute === 'size' ? t('articles_hint_size') : t('receipt_attr_placeholder')} className={inputClass}
                             onChange={(event) => edit({ [attribute]: event.target.value } as Partial<EnteredAttributes>)} data-tour={`supply-new-article-${attribute}`} data-tour-key={index} />
                     </label>
                 ))}
@@ -136,7 +147,8 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
                         onChange={(event) => { setKg(event.target.value); setError(null); }} data-tour="supply-new-article-kg" data-tour-key={index} />
                 </label>
             </div>
-            {kind !== null && entered.origin !== null && (
+            {kind !== null && !complete && <p className="text-gray-700" data-testid="supply-new-article-incomplete">{t('supply_new_article_required')}</p>}
+            {kind !== null && complete && entered.origin !== null && (
                 <NewArticlePrompt articleName={kind.label} countryName={names.get(entered.origin) ?? null} entered={entered}
                     similar={similarVariants(kind.variants, entered, names)} onChoose={(variant) => onUse(variant.id, null)}
                     onCreate={() => void create()} busy={busy || (perPackage !== null && !perPackage.ok)} error={error} dataTourKey={`supply-${index}`} />

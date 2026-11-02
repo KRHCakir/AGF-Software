@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { SimilarAttribute, SimilarVariant, enteredFrom, newArticleText } from '../../lib/articleFromEntry';
-import type { EnteredAttributes } from '../../lib/receiptBlindEntry';
+import { type EnteredAttributes, isCompleteVariant } from '../../lib/receiptBlindEntry';
 import type { VariantOption } from '../../types/referenceData';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 
@@ -14,7 +15,9 @@ const DIFFERS_KEYS: Record<SimilarAttribute, string> = {
 // De ingetypte combinatie bestaat nog niet: precies wat er wordt aangemaakt ("Nieuw artikel: Avocado Hass · Zuid-Afrika · maat 12 …"),
 // eerst de bestaande varianten die er sterk op lijken ("Bedoel je dit?", met een knop om die te kiezen) en dan één knop
 // "Artikel aanmaken en doorgaan". Daarna loopt het gewone pad verder (bij ontvangst de controle "Klopt dit?").
-export default function NewArticlePrompt({ articleName, countryName, entered, similar, onChoose, onCreate, busy, error, dataTourKey }: {
+// Bij ontvangst (chooseIncomplete = false) kan een ouder artikel zonder maat of klasse niet gekozen worden: blinde invoer vraagt die
+// altijd, dus eerst aanvullen in Artikelen ("Maat en klasse opschonen"). Bij aanvoer plannen mag het wel: het blijft bruikbaar.
+export default function NewArticlePrompt({ articleName, countryName, entered, similar, onChoose, onCreate, busy, error, dataTourKey, chooseIncomplete = true }: {
     articleName: string;
     countryName: string | null;
     entered: EnteredAttributes;
@@ -24,6 +27,7 @@ export default function NewArticlePrompt({ articleName, countryName, entered, si
     busy: boolean;
     error: string | null;
     dataTourKey: string | number;
+    chooseIncomplete?: boolean;
 }) {
     const { t } = useTranslation();
     return (
@@ -42,8 +46,14 @@ export default function NewArticlePrompt({ articleName, countryName, entered, si
                                     {newArticleText(t, articleName, variant.origin, enteredFrom(variant))}
                                     <span className="ml-1 text-gray-600">({t(differs === null ? 'new_article_same_spelling' : DIFFERS_KEYS[differs])})</span>
                                 </span>
-                                <button type="button" className={`${secondaryButtonClass} shrink-0 px-2 py-0.5 text-xs`} disabled={busy}
-                                    onClick={() => onChoose(variant)} data-tour="new-article-choose" data-tour-key={`${dataTourKey}-${variant.id}`}>{t('new_article_choose')}</button>
+                                {chooseIncomplete || isCompleteVariant(variant) ? (
+                                    <button type="button" className={`${secondaryButtonClass} shrink-0 px-2 py-0.5 text-xs`} disabled={busy}
+                                        onClick={() => onChoose(variant)} data-tour="new-article-choose" data-tour-key={`${dataTourKey}-${variant.id}`}>{t('new_article_choose')}</button>
+                                ) : (
+                                    <span className="shrink-0 text-amber-900" data-testid="new-article-incomplete">
+                                        {t('new_article_incomplete')} <Link href="/articles" className="underline">{t('new_article_incomplete_link')}</Link>
+                                    </span>
+                                )}
                             </li>
                         ))}
                     </ul>

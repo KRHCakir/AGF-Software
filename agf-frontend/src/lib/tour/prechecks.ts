@@ -4,7 +4,8 @@
 
 import { formatDateInput, todayInAmsterdam } from '../calendarDate';
 import { formatDecimalInput } from '../decimal';
-import { articleVariants } from '../receiptBlindEntry';
+import { articleVariants, isCompleteVariant } from '../receiptBlindEntry';
+import { normalizeTradeClass } from '../tradeClass';
 import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
@@ -89,7 +90,7 @@ export function receiptVars(variant: VariantOption, quantity: number, kgPerPacka
         originName: variant.origin ?? '',
         size: variant.sizeCategory ?? '',
         packaging: variant.packaging ?? '',
-        tradeClass: variant.tradeClass ?? '',
+        tradeClass: normalizeTradeClass(variant.tradeClass) ?? variant.tradeClass ?? '',
         brand: variant.brand ?? '',
         // Berekend: kg per verpakking (etiket); gewogen: het totaal. Het andere veld blijft leeg en de actie wordt overgeslagen.
         kgPerPackage: calculated ? formatDecimalInput(kgPerPackage) : '',
@@ -125,6 +126,8 @@ export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck
     const variant = variants.find((candidate) => candidate.id === line.productVariantId);
     const kg = variant ? kgPerPackageOf(line, variant) : null;
     if (!variant || kg === null) return { missing: [{ key: 'tour_missing_open_order' }] };
+    // Bij ontvangst zijn maat en klasse verplicht: een ouder artikel zonder die gegevens eerst aanvullen (Artikelen, Opschonen).
+    if (!isCompleteVariant(variant)) return { missing: [{ key: 'tour_missing_complete_article', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
     return {
         missing: [],
         vars: {
@@ -149,6 +152,7 @@ export async function precheckDeviation(signal: AbortSignal): Promise<TourPreche
     const other = ordered ? findDeviationVariant(ordered, variants) : null;
     const kg = ordered ? kgPerPackageOf(line, ordered) : null;
     if (!ordered || !other || kg === null) return { missing: [{ key: 'tour_missing_deviation_variant', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
+    if (!isCompleteVariant(ordered) || !isCompleteVariant(other)) return { missing: [{ key: 'tour_missing_complete_article', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
     const quantity = Math.max(1, Math.floor(line.expectedQuantity / 2));
     return {
         missing: [],
