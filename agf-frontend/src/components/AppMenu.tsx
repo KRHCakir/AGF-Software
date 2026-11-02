@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from '../i18n/LanguageContext';
 import { LEGACY_GROUP, NAV_GROUPS, NavGroup, NavItem, SETTINGS_ITEMS, START_ITEM, activeNav } from '../lib/navigation';
 
@@ -19,6 +19,9 @@ export default function AppMenu({ pathname, onNavigate, idPrefix }: {
     const active = activeNav(pathname);
     const [legacyOpen, setLegacyOpen] = useState(active?.groupId === 'legacy');
     const legacyId = `${idPrefix}-legacy`;
+    // Navigeer je (link, terugknop) naar een oud scherm, dan klapt "Oud" open; handmatig open- en dichtklappen blijft verder vrij.
+    const inLegacy = active?.groupId === 'legacy';
+    useEffect(() => { if (inLegacy) setLegacyOpen(true); }, [inLegacy, pathname]);
 
     const link = (item: NavItem, small = false) => {
         const current = active?.itemId === item.id;
@@ -46,7 +49,7 @@ export default function AppMenu({ pathname, onNavigate, idPrefix }: {
             {NAV_GROUPS.map(group)}
             <div className="flex flex-col gap-0.5 border-t border-gray-300 pt-2">{SETTINGS_ITEMS.map((item) => link(item))}</div>
             <div className="border-t border-gray-300 pt-2">
-                <button type="button" aria-expanded={legacyOpen} aria-controls={legacyId} onClick={() => setLegacyOpen((open) => !open)}
+                <button type="button" aria-expanded={legacyOpen} aria-controls={legacyOpen ? legacyId : undefined} onClick={() => setLegacyOpen((open) => !open)}
                     className="flex w-full items-center justify-between rounded px-2 py-1 text-xs font-bold uppercase text-gray-500 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <span>{t(LEGACY_GROUP.labelKey)}</span>
                     <span aria-hidden="true">{legacyOpen ? '▾' : '▸'}</span>

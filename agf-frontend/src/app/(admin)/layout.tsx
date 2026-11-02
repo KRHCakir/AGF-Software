@@ -35,7 +35,7 @@ function AdminLayoutContent({
             {/* KOP: logo (naar Start), menuknop op smalle schermen, taal en gebruiker. Het menu zelf staat links (zie AppMenu). */}
             <header className="bg-white border-b border-gray-300 h-12 flex items-center px-4 shadow-sm z-20">
                 <button ref={menuButton} type="button" className="mr-3 rounded border border-gray-300 px-2 py-1 text-sm font-medium text-gray-800 md:hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    aria-expanded={menuOpen} aria-controls="app-menu-mobile" onClick={() => setMenuOpen((open) => !open)}>
+                    aria-expanded={menuOpen} aria-controls={menuOpen ? 'app-menu-mobile' : undefined} onClick={() => setMenuOpen((open) => !open)}>
                     {menuOpen ? '✕' : '☰'} {t('nav_menu')}
                 </button>
                 <Link href="/dashboard" className="font-bold text-xl text-blue-800 mr-4 md:mr-8 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></Link>

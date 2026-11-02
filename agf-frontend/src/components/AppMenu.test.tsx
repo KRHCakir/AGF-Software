@@ -9,7 +9,7 @@ import AppMenu from './AppMenu';
 let mounted: Mounted;
 const links = () => Array.from(mounted.container.querySelectorAll<HTMLAnchorElement>('a'));
 const groupTitles = () => Array.from(mounted.container.querySelectorAll('h3')).map((h) => h.textContent);
-const legacyToggle = () => mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="menu-legacy"]')!;
+const legacyToggle = () => mounted.container.querySelector<HTMLButtonElement>('nav button[aria-expanded]')!;
 
 describe('AppMenu', () => {
     beforeEach(() => { mounted = new Mounted(); });
@@ -37,6 +37,14 @@ describe('AppMenu', () => {
         await mounted.render(<AppMenu pathname="/orders" idPrefix="menu" />);
         assert.equal(legacyToggle().getAttribute('aria-expanded'), 'true');
         assert.equal(links().find((a) => a.getAttribute('aria-current') === 'page')?.getAttribute('href'), '/orders');
+    });
+
+    test('navigating to an old screen later opens "Oud", and aria-controls only points at an element that exists', async () => {
+        await mounted.render(<AppMenu pathname="/sales-orders" idPrefix="menu" />);
+        assert.equal(legacyToggle().getAttribute('aria-controls'), null);
+        await mounted.render(<AppMenu pathname="/orders" idPrefix="menu" />);
+        assert.equal(legacyToggle().getAttribute('aria-expanded'), 'true');
+        assert.ok(mounted.container.querySelector(`#${legacyToggle().getAttribute('aria-controls')}`));
     });
 
     test('the mobile menu closes after choosing a page', async () => {
