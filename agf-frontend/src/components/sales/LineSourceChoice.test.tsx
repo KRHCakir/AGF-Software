@@ -54,7 +54,7 @@ describe('CreateSalesOrderForm: source per line', () => {
         assert.equal(field('lines[0].quantity-input').value, '50');
         assert.ok(text('lines[0].balance').includes('sales_balance_line'));
         assert.ok(text('lines[0].pallets').includes('sales_pallet_equivalent'), '= 2,5 pallets as information');
-        assert.equal(source(0), 'Stock');
+        assert.equal(source(0), null, 'only partly free: no source chosen yet, the proposal is shown (the server never gets a 409 for this)');
         assert.ok(text('lines[0].split-proposal').includes('sales_stock_not_enough'));
         assert.equal(mounted.container.querySelector('[data-testid="lines[0].shortage"]'), null, '50 fits in 60: no shortage');
 
@@ -84,6 +84,17 @@ describe('CreateSalesOrderForm: source per line', () => {
         assert.equal(mounted.container.querySelector('[data-testid="lines[0].split-proposal"]'), null);
         assert.ok(text('lines[0].shortage').includes('sales_shortage_warning'), 'still a warning, nothing disabled');
         assert.equal(mounted.container.querySelector<HTMLButtonElement>('[data-tour="sales-save"]')?.disabled, false);
+    });
+
+    test('saving 50 without choosing: no source is sent, the server decides (from stock only if it fits), never a 409', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => text('lines[0].balance') !== '', 'balance');
+        await type('customerId-input', 'Groot');
+        await act(async () => { field('customerId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
+        await type('requestedDeliveryDate-input', '2026-11-06');
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        assert.equal('supplySource' in JSON.parse(posted[0].body).lines[0], false);
     });
 
     test('30 fits in the free stock: from stock without a proposal', async () => {

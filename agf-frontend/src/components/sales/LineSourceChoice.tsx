@@ -26,7 +26,8 @@ export default function LineSourceChoice({ name, quantity, unitText, state, sour
     const pallets = quantity === null ? null : palletEquivalent(quantity, packagesPerPallet);
     const freeStock = balance === null ? null : Math.max(0, balance.freeStock);
     const split = quantity !== null && freeStock !== null ? proposeSplit(quantity, freeStock) : null;
-    const tooMuchFromStock = source === 'Stock' && split !== null && split.expected > 0;
+    // Ook zonder eigen keuze (null): past het maar deels, dan het splitsvoorstel. Expliciet "Uit voorraad" met te veel geeft anders een 409.
+    const tooMuchFromStock = source !== 'Expected' && split !== null && split.expected > 0 && split.stock > 0;
     // Na deze regel: vrij - aantal; onder nul is het tekort van deze variant (zoals de waarschuwing van de server na opslaan).
     const shortage = balance !== null && quantity !== null ? Math.max(0, quantity - balance.free) : 0;
 

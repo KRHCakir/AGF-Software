@@ -139,18 +139,18 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
     const { rows: lineKg, totals } = lineKgRows(draft.lines, (variantId) => variants.get(variantId));
 
     // Stand per gekozen variant + eenheid (Voorraad · Verwacht · Vrij) en de bron per regel. Zolang de gebruiker niet zelf kiest, volgt de
-    // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan blijft "Uit voorraad"
-    // staan met het splitsvoorstel erbij (de server weigert anders met 409).
+    // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan het splitsvoorstel.
     const balancePairs = useMemo(() => draft.lines.filter((line) => /^[1-9]\d*$/.test(line.productVariantId) && line.unit !== '')
         .map((line) => ({ productVariantId: Number(line.productVariantId), unit: line.unit as Exclude<OrderLineDraft['unit'], ''> })), [draft.lines]);
     const balanceOf = useSalesBalances(balancePairs);
     const stateOf = (line: OrderLineDraft) => (/^[1-9]\d*$/.test(line.productVariantId) && line.unit !== '' ? balanceOf(Number(line.productVariantId), line.unit) : null);
-    // null: geen eigen keuze en de stand is (nog) niet bekend; dan gaat er geen bron mee en kiest de server (uit voorraad als het past).
+    // null: geen eigen keuze en de stand is (nog) niet bekend, of het past maar deels in de vrije voorraad (dan staat het splitsvoorstel
+    // erbij). Er gaat dan geen bron mee en de server kiest: uit voorraad als het past, anders uit verwachte aanvoer (nooit een 409).
     const effectiveSource = (line: OrderLineDraft, quantity: number | null): SupplySource | null => {
         if (line.sourceTouched && line.supplySource) return line.supplySource;
         const state = stateOf(line);
         if (state?.status !== 'ready' || quantity === null) return null;
-        return singleSource(quantity, Math.max(0, state.balance.freeStock)) ?? 'Stock';
+        return singleSource(quantity, Math.max(0, state.balance.freeStock));
     };
 
     const chooseSource = (key: string, source: SupplySource) => {
