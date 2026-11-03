@@ -9,7 +9,7 @@ import { BalanceState } from './useSalesBalances';
 // Per regel van een nieuwe verkooporder: de stand van precies deze variant en eenheid, de keuze Uit voorraad / Uit verwachte aanvoer en
 // het voorstel van het systeem. Past het aantal niet in de vrije voorraad, dan kan de regel met één klik gesplitst worden (deel uit voorraad,
 // rest uit verwachte aanvoer). Meer dan voorraad + verwacht is een korte waarschuwing, nooit een blokkade. "= x pallets" alleen ter info.
-export default function LineSourceChoice({ name, quantity, unitText, state, source, packagesPerPallet, locked, onSource, onSplit }: {
+export default function LineSourceChoice({ name, quantity, unitText, state, source, packagesPerPallet, locked, canSplit, onSource, onSplit }: {
     name: string;
     quantity: number | null;
     unitText: string;
@@ -17,6 +17,7 @@ export default function LineSourceChoice({ name, quantity, unitText, state, sour
     source: SupplySource | null;
     packagesPerPallet: number | null;
     locked: boolean;
+    canSplit: boolean;
     onSource: (source: SupplySource) => void;
     onSplit: (stock: number, expected: number) => void;
 }) {
@@ -54,7 +55,7 @@ export default function LineSourceChoice({ name, quantity, unitText, state, sour
             {tooMuchFromStock && split !== null && (
                 <div role="status" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-950" data-testid={`${name}.split-proposal`}>
                     <p>{t('sales_stock_not_enough', { free: q(freeStock ?? 0), unit: unitText })}</p>
-                    {split.stock > 0 && !locked && (
+                    {split.stock > 0 && !locked && canSplit && (
                         <button type="button" className="mt-1 rounded border border-amber-400 bg-white px-2 py-0.5 font-medium text-amber-950 hover:bg-amber-100"
                             data-tour="sales-line-split" onClick={() => onSplit(split.stock, split.expected)}>
                             {t('sales_split_line', { stock: q(split.stock), expected: q(split.expected), unit: unitText })}
