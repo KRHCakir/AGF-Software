@@ -18,7 +18,7 @@ export default function CoverageText({ parts, reserved = 0, testId }: { parts: C
         const order = (number: string | null, id: number) => (
             <Link href={`/purchase-orders?id=${id}`} className="font-medium text-blue-800 underline underline-offset-2">{number ?? `#${id}`}</Link>
         );
-        if (part.kind === 'stock') items.push(<span key="stock" className="text-emerald-800">{t('sales_cover_stock', { quantity: q(part.quantity) })}</span>);
+        if (part.kind === 'stock') items.push(<span key={`s${index}`} className="text-emerald-800">{t('sales_cover_stock', { quantity: q(part.quantity) })}</span>);
         if (part.kind === 'inspection') items.push(<span key={`i${index}`}>{t('sales_cover_inspection', { quantity: q(part.quantity) })} {order(part.orderNumber, part.supplyCommitmentId)}</span>);
         if (part.kind === 'expected') items.push(
             <span key={`e${index}`}>
@@ -26,7 +26,7 @@ export default function CoverageText({ parts, reserved = 0, testId }: { parts: C
                 {part.expectedAt && <> ({t('sales_cover_expected_on', { date: dayMonth(part.expectedAt) })})</>}
             </span>,
         );
-        if (part.kind === 'shortage') items.push(<span key="shortage" className="font-semibold text-red-800">{t('sales_cover_shortage', { quantity: q(part.quantity) })}</span>);
+        if (part.kind === 'shortage') items.push(<span key={`t${index}`} className="font-semibold text-red-800">{t('sales_cover_shortage', { quantity: q(part.quantity) })}</span>);
     });
     if (items.length === 0) return null;
     return (
