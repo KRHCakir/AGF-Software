@@ -197,7 +197,7 @@ export async function precheckPresell(signal: AbortSignal): Promise<TourPrecheck
     if (unit === null || !variant?.shortcutCode) return { missing: [{ key: 'tour_missing_open_order' }] };
     const overview = await getAvailabilityOverview({ productVariantId: variantId, route: 'Warehouse' }, signal);
     const sales = overview.variants.filter((row) => row.productVariantId === variantId).flatMap((row) => row.warehouseSupply).find((row) => row.unit === unit)?.sales ?? null;
-    const free = sales === null ? 0 : Math.max(0, Math.floor(sales.free));
+    const free = sales === null || !Number.isFinite(sales.free) ? 0 : Math.max(0, Math.floor(sales.free));
     const today = todayInAmsterdam();
     return {
         missing: [],
