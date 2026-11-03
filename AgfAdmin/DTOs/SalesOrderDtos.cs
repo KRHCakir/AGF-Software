@@ -142,6 +142,8 @@ namespace AgfAdmin.DTOs
         // Bron van de reservering of toewijzing; bij DirectTrade ook de toezegging met leverancier, herkomst, bestemming en verwachte datum.
         public int SupplyCommitmentLineId { get; set; }
         public int SupplyCommitmentId { get; set; }
+        // Het nummer van die inkooporder (IO-jjjj-nnnn), voor de herkomst in de keten-strip van de verkooporder.
+        public string SupplyOrderNumber { get; set; }
         public string VendorName { get; set; }
         public string Origin { get; set; }
         public string Destination { get; set; }

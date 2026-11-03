@@ -483,6 +483,7 @@ namespace AgfAdmin.Services
             Source = reservation.Source,
             SupplyCommitmentLineId = reservation.SupplyCommitmentLineId,
             SupplyCommitmentId = reservation.SupplyCommitmentLine?.SupplyCommitmentId ?? 0,
+            SupplyOrderNumber = reservation.SupplyCommitmentLine?.SupplyCommitment?.OrderNumber,
             VendorName = reservation.SupplyCommitmentLine?.SupplyCommitment?.Vendor?.Name,
             Origin = reservation.SupplyCommitmentLine?.SupplyCommitment?.Origin,
             Destination = reservation.SupplyCommitmentLine?.SupplyCommitment?.Destination,

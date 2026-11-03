@@ -45,6 +45,18 @@ namespace AgfAdmin.DTOs
         public bool HasDeviation { get; set; }
     }
 
+    // Een verkooporder die van deze inkooporder reserveert (Active) of verzonden heeft (Consumed), per eenheid opgeteld.
+    // Vrijgegeven en teruggenomen reserveringen tellen niet. Afgeleid uit StockReservation.SupplyCommitmentLineId; niets opgeslagen.
+    public sealed class PurchaseOrderSalesLinkDto
+    {
+        public int SalesOrderId { get; set; }
+        public string CustomerName { get; set; }
+        public string Status { get; set; }
+        public string Unit { get; set; }
+        public decimal ReservedQuantity { get; set; }
+        public decimal ShippedQuantity { get; set; }
+    }
+
     public sealed class PurchaseOrderDetailDto
     {
         public int Id { get; set; }
@@ -78,6 +90,8 @@ namespace AgfAdmin.DTOs
         public List<PurchaseOrderRejectionDto> Rejections { get; set; } = new();
         public List<PurchaseOrderDeviationDto> Deviations { get; set; } = new();
         public List<PurchaseOrderHistoryEventDto> History { get; set; } = new();
+        // Keten-strip: de verkooporders die van deze inkooporder reserveren of verzonden hebben (alleen lezen, uit de reserveringen).
+        public List<PurchaseOrderSalesLinkDto> SalesOrders { get; set; } = new();
     }
 
     public sealed class PurchaseOrderLineDto
