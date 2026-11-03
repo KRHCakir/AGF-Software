@@ -156,7 +156,7 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     // Verkocht vóór aankomst: het niet gereserveerde deel wacht op een verwachte inkooporder (vroegst verwacht eerst; oudste verkoop eerst
     // gedekt) of is tekort. Alleen bij een open order en alleen uit de dekking die de server meestuurt.
     const open = order.status === 'Open';
-    const covers = open ? order.lines.flatMap((line) => line.coverage?.expected ?? []).filter((cover) => cover.quantity > 0 && !cover.inInspection) : [];
+    const covers = open ? order.lines.flatMap((line) => line.coverage?.expected ?? []).filter((cover) => cover.quantity > 0) : [];
     const waiting = unique(covers.map((cover) => cover.supplyCommitmentId)).map((id) => {
         const of = covers.filter((cover) => cover.supplyCommitmentId === id);
         const dates = of.map((cover) => cover.expectedAt).filter((date): date is string => date !== null).sort();
