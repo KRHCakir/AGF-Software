@@ -2094,5 +2094,6 @@
   "tour_presell_reserve_why": "Elke reservering blijft op een exacte pallet en partij: zo is altijd te zien uit welke inkooporder het komt.",
   "tour_presell_chain_title": "De keten van deze order",
   "tour_presell_chain_what": "Bovenaan de order zie je de inkooporders waar het vandaan komt, en wat nog wacht op een inkooporder.",
-  "tour_presell_chain_why": "Het tekort loopt weer naar nul zodra er inkoop bij komt; dan kun je de rest ook reserveren."
+  "tour_presell_chain_why": "Het tekort loopt weer naar nul zodra er inkoop bij komt; dan kun je de rest ook reserveren.",
+  "chain_waiting_inspection": "in keuring op inkooporder {number}"
 }

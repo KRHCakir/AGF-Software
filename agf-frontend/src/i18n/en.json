@@ -2094,5 +2094,6 @@
   "tour_presell_reserve_why": "Each reservation stays on an exact pallet and lot: you can always see which purchase order it came from.",
   "tour_presell_chain_title": "The chain of this order",
   "tour_presell_chain_what": "At the top of the order you see the purchase orders it comes from, and what still waits for a purchase order.",
-  "tour_presell_chain_why": "The shortage goes back to zero as soon as purchases arrive; then you can reserve the rest too."
+  "tour_presell_chain_why": "The shortage goes back to zero as soon as purchases arrive; then you can reserve the rest too.",
+  "chain_waiting_inspection": "in inspection on purchase order {number}"
 }

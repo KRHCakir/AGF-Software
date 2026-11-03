@@ -160,7 +160,8 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const waiting = unique(covers.map((cover) => cover.supplyCommitmentId)).map((id) => {
         const of = covers.filter((cover) => cover.supplyCommitmentId === id);
         const dates = of.map((cover) => cover.expectedAt).filter((date): date is string => date !== null).sort();
-        return { id, number: of[0].supplyOrderNumber ?? `#${id}`, expectedAt: dates[0] ?? null };
+        // Al ontvangen maar nog in keuring: wacht nog op die inkooporder, maar niet meer op een leverdatum.
+        return { id, number: of[0].supplyOrderNumber ?? `#${id}`, expectedAt: dates[0] ?? null, inInspection: of.every((cover) => cover.inInspection) };
     });
     const shortage = open ? sum(order.lines.map((line) => line.coverage?.shortage ?? 0)) : 0;
 
@@ -169,7 +170,9 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
             key: 'order', state: waiting.length > 0 ? (purchaseOrders.length > 0 ? 'partial' : 'open') : purchaseOrders.length > 0 ? 'done' : 'empty',
             parts: [
                 ...(purchaseOrders.length > 0 ? (lots.length > 0 ? [{ key: 'chain_lots', params: { lots: lots.slice(0, MAX_LINKS).join(', ') } }] : []) : waiting.length > 0 ? [] : nothing),
-                ...waiting.slice(0, MAX_LINKS).map((po): ChainPart => (po.expectedAt
+                ...waiting.slice(0, MAX_LINKS).map((po): ChainPart => (po.inInspection
+                    ? { key: 'chain_waiting_inspection', params: { number: po.number } }
+                    : po.expectedAt
                     ? { key: 'chain_waiting_for_po', params: { number: po.number, date: dayMonth(po.expectedAt) } }
                     : { key: 'chain_waiting_for_po_no_date', params: { number: po.number } })),
             ],

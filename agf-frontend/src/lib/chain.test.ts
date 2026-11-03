@@ -201,6 +201,13 @@ describe('sales order chain: sold before arrival', () => {
         assert.equal(sales.links[0].label, 'VO-2026-0005');
     });
 
+    test('goods already received but still in inspection keep the purchase order, without an expected date', () => {
+        const line = salesLine({ reservations: [], coverage: { fromStock: 0, shortage: 0, expected: [{ supplyCommitmentId: 3, supplyOrderNumber: 'IO-2026-0003', expectedAt: '2026-11-01T12:00:00', quantity: 5, inInspection: true }] } });
+        const po = step(salesOrderChain(salesOrder([line])), 'order');
+        assert.deepEqual(po.parts, [{ key: 'chain_waiting_inspection', params: { number: 'IO-2026-0003' } }]);
+        assert.deepEqual(hrefs(po), ['/purchase-orders?id=3']);
+    });
+
     test('a cancelled order waits for nothing and has no shortage', () => {
         const line = salesLine({ reservations: [], coverage: { fromStock: 0, shortage: 5, expected: [{ supplyCommitmentId: 2, supplyOrderNumber: 'IO-2026-0002', expectedAt: null, quantity: 5, inInspection: false }] } });
         const steps = salesOrderChain(salesOrder([line], { status: 'Cancelled' }));
