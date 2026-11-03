@@ -40,7 +40,7 @@ export default function SalesBreakdown({ productVariantId, unit }: { productVari
     const q = (value: number) => formatQuantity(value, locale);
     const lots = data.contentLines.filter((line) => line.category === 'warehouse' && line.unit === unit
         && (line.qualityStatus === 'Approved' || line.qualityStatus === 'Quarantine') && line.onHandQuantity > 0);
-    const purchases = (data.expectedSupplies ?? []).filter((supply) => supply.unit === unit && supply.notReceived > 0);
+    const purchases = (data.expectedSupplies ?? []).filter((supply) => supply.unit === unit && supply.notReceived + supply.inInspection > 0);
     const sales = (data.salesLines ?? []).filter((line) => line.unit === unit && line.openQuantity > 0);
 
     return (
@@ -70,7 +70,8 @@ export default function SalesBreakdown({ productVariantId, unit }: { productVari
                                     {supply.supplyOrderNumber ?? `#${supply.supplyCommitmentId}`}
                                 </Link>
                                 {supply.expectedAt && <span className="text-gray-600">{t('sales_expected_on', { date: formatCalendarDate(supply.expectedAt, locale) })}</span>}
-                                <span className="ml-auto font-medium">{q(supply.notReceived)}</span>
+                                {supply.inInspection > 0 && <span className="text-xs text-gray-500">{t('sales_breakdown_in_inspection', { quantity: q(supply.inInspection) })}</span>}
+                                <span className="ml-auto font-medium">{q(supply.notReceived + supply.inInspection)}</span>
                             </li>
                         ))}
                     </ul>

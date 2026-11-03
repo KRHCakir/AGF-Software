@@ -2038,6 +2038,7 @@
   "sales_breakdown_sales": "By sales order (sold)",
   "sales_breakdown_none": "None.",
   "sales_expected_on": "expected {date}",
+  "sales_breakdown_in_inspection": "{quantity} in inspection",
   "sales_source_stock": "From stock",
   "sales_source_expected": "From expected supply",
   "sales_cover_reserved": "{quantity} reserved",

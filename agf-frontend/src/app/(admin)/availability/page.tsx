@@ -52,7 +52,7 @@ function AvailabilityWorkspace() {
             const stored = localStorage.getItem(VIEW_STORAGE_KEY);
             if (stored === 'detailed' || stored === 'compact') setViewState(stored);
         } catch {
-            // Opslag niet beschikbaar: compact blijft de standaard.
+            // Opslag niet beschikbaar: verkoop blijft de standaard.
         }
     }, []);
     const setView = (next: AvailabilityView) => {

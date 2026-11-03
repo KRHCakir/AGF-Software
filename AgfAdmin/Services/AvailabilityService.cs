@@ -87,8 +87,14 @@ namespace AgfAdmin.Services
             query.ProductVariantId = productVariantId;
             var (sources, contents) = await LoadFactsAsync(_db, new[] { productVariantId }, cancellationToken);
             var (sourceLines, contentLines) = AvailabilityCalculator.BuildDrillDown(sources, contents, query);
-            var salesLines = await SalesBalanceLoader.LoadSalesLinesAsync(_db, new[] { productVariantId }, cancellationToken);
-            var balances = SalesBalanceCalculator.Build(sources, contents, salesLines).Values
+            // Verkoopgegevens horen bij de eigen magazijnvoorraad; bij Route=DirectTrade blijven ze leeg (zoals in het overzicht).
+            var balances = new List<SalesBalance>();
+            if (query.Route != SupplyRules.RouteDirectTrade)
+            {
+                var salesLines = await SalesBalanceLoader.LoadSalesLinesAsync(_db, new[] { productVariantId }, cancellationToken);
+                balances = SalesBalanceCalculator.Build(sources, contents, salesLines).Values.ToList();
+            }
+            balances = balances
                 .Where(b => query.Unit == null || b.Unit == query.Unit)
                 .OrderBy(b => AvailabilityRules.UnitOrder(b.Unit)).ThenBy(b => b.Unit, StringComparer.Ordinal)
                 .ToList();
