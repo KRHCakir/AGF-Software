@@ -55,7 +55,7 @@ namespace AgfAdmin.Services
             var existing = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return (await WithCreditWarningAsync(ResultForRetry(existing, candidate), cancellationToken), false);
+                return (await WithWarningsAsync(await ResultForRetryAsync(existing, candidate, cancellationToken), cancellationToken), false);
             }
 
             // Nieuwe invoer: hele pallets (na de replaycontrole, zodat een eerder opgeslagen opdracht nog steeds herkend wordt).
@@ -106,11 +106,18 @@ namespace AgfAdmin.Services
                 return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
             }
 
-            // Bron per regel: weggelaten is uit voorraad (zoals alle bestaande regels).
-            ResolveSources(lines, errors);
+            // Bron per regel tegen de vrije voorraad van precies deze variant en eenheid (vóór deze order). "Uit voorraad" met meer dan er
+            // vrij op voorraad is wordt geweigerd; weggelaten wordt uit voorraad als het past en anders uit verwachte aanvoer (nooit stil
+            // gesplitst). Een tekort op Voorraad + Verwacht blokkeert nooit: dat volgt als waarschuwing in het antwoord.
+            var balances = await SalesBalanceLoader.LoadAsync(_db, variantIds, cancellationToken);
+            var sourceConflict = ResolveSources(lines, balances, errors);
             if (errors.Count > 0)
             {
                 return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
+            }
+            if (sourceConflict != null)
+            {
+                return (ServiceResult<SalesOrderDto>.Conflict(sourceConflict), false);
             }
 
             // Het ordernummer kent AppDbContext bij opslaan toe (volgende vrije in het jaar). Een gelijktijdige aanmaak kan hetzelfde
@@ -127,7 +134,7 @@ namespace AgfAdmin.Services
                 var concurrent = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
                 if (concurrent != null)
                 {
-                    return (await WithCreditWarningAsync(ResultForRetry(concurrent, candidate), cancellationToken), false);
+                    return (await WithWarningsAsync(await ResultForRetryAsync(concurrent, candidate, cancellationToken), cancellationToken), false);
                 }
                 // Anders bezette het nummer een gelijktijdige andere order: opnieuw met het volgende nummer.
                 if (DbErrors.IsUniqueViolation(exception))
@@ -138,31 +145,51 @@ namespace AgfAdmin.Services
             }
 
             var created = await OrderQuery().SingleAsync(o => o.Id == candidate.Id, cancellationToken);
-            return (await WithCreditWarningAsync(ServiceResult<SalesOrderDto>.Created(ToDto(created)), cancellationToken), false);
+            return (await WithWarningsAsync(ServiceResult<SalesOrderDto>.Created(await ToDtoWithBalancesAsync(created, null, cancellationToken)), cancellationToken), false);
         }
 
-        // Vult een weggelaten bron in (uit voorraad). Daarna mag dezelfde variant + eenheid + bron maar één keer voorkomen.
-        private static void ResolveSources(List<SalesOrderLine> lines, Dictionary<string, List<string>> errors)
+        // Vult de bron van elke regel in en geeft een 409-reden als een regel "Uit voorraad" niet in de vrije voorraad past. Daarna mag
+        // dezelfde variant + eenheid + bron maar één keer voorkomen (ook na het invullen van een weggelaten bron).
+        private static string ResolveSources(List<SalesOrderLine> lines, IReadOnlyDictionary<(int ProductVariantId, string Unit), SalesBalance> balances, Dictionary<string, List<string>> errors)
         {
             var seen = new HashSet<(int, string, string)>();
             for (var i = 0; i < lines.Count; i++)
             {
                 var line = lines[i];
-                line.SupplySource ??= SalesSupplyRules.SourceStock;
+                var freeStock = balances.TryGetValue((line.ProductVariantId, line.Unit), out var balance) ? Math.Max(0m, balance.FreeStock) : 0m;
+                line.SupplySource = SalesSupplyRules.Resolve(line.SupplySource, line.Quantity, freeStock);
                 if (!seen.Add((line.ProductVariantId, line.Unit, line.SupplySource)))
                 {
                     ValidationErrors.Add(errors, $"lines[{i}]", "The same product variant, unit and source occur more than once.");
+                    continue;
+                }
+                if (line.SupplySource == SalesSupplyRules.SourceStock && line.Quantity > freeStock)
+                {
+                    var (stock, expected) = SalesSupplyRules.Propose(line.Quantity, freeStock);
+                    static string N(decimal value) => value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+                    return $"lines[{i}]: only {N(freeStock)} {line.Unit} of this article are free in stock, not {N(line.Quantity)}. "
+                        + (stock > 0m
+                            ? $"Split the line ({N(stock)} {line.Unit} from stock, {N(expected)} {line.Unit} from expected supply) or sell it all from expected supply."
+                            : "Sell it from expected supply.");
                 }
             }
+            return null;
         }
 
-        // Kredietsignaal bij aanmaken: openstaand bedrag boven de kredietlimiet van de klant -> waarschuwing in het antwoord, nooit blokkeren.
-        private async Task<ServiceResult<SalesOrderDto>> WithCreditWarningAsync(ServiceResult<SalesOrderDto> result, CancellationToken cancellationToken)
+        // Signalen bij aanmaken, nooit blokkerend: openstaand bedrag boven de kredietlimiet van de klant, en per variant + eenheid van deze
+        // order een tekort (meer verkocht dan voorraad en verwachte aanvoer samen; de stand staat al in de regels van het antwoord).
+        private async Task<ServiceResult<SalesOrderDto>> WithWarningsAsync(ServiceResult<SalesOrderDto> result, CancellationToken cancellationToken)
         {
             if (result.Status is ServiceResultStatus.Created or ServiceResultStatus.Ok && result.Value != null)
             {
                 var exposure = await new CreditExposureService(_db).GetExposureAsync(result.Value.CustomerId, _db.BusinessCalendar.Today(), cancellationToken);
                 result.Value.CreditWarning = CreditExposureService.WarningFor(exposure);
+                result.Value.ShortageWarnings = result.Value.Lines
+                    .Where(l => l.Balance != null && l.Balance.Shortage)
+                    .GroupBy(l => (l.ProductVariantId, l.Unit))
+                    .Select(g => g.First())
+                    .Select(l => new SalesShortageWarningDto { ProductVariantId = l.ProductVariantId, ProductName = l.ProductName, VariantName = l.ProductVariantName, Unit = l.Unit, ShortageQuantity = l.Balance.ShortageQuantity })
+                    .ToList();
             }
             return result;
         }
@@ -278,7 +305,7 @@ namespace AgfAdmin.Services
 
         // Strikt: klant, genormaliseerde referentie, leverdatum (UTC, microseconden), actor en de regels in volgorde (met kg en bron;
         // een oudere opdracht zonder kg komt overeen met een regel zonder kg; zonder opgegeven verkoopbron telt elke opgeslagen bron).
-        private static ServiceResult<SalesOrderDto> ResultForRetry(SalesOrder existing, SalesOrder candidate)
+        private async Task<ServiceResult<SalesOrderDto>> ResultForRetryAsync(SalesOrder existing, SalesOrder candidate, CancellationToken cancellationToken)
         {
             var existingLines = existing.Lines.OrderBy(l => l.Id).ToList();
             var candidateLines = candidate.Lines.ToList();
@@ -301,7 +328,7 @@ namespace AgfAdmin.Services
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
             return same
-                ? ServiceResult<SalesOrderDto>.Ok(ToDto(existing))
+                ? ServiceResult<SalesOrderDto>.Ok(await ToDtoWithBalancesAsync(existing, null, cancellationToken))
                 : ServiceResult<SalesOrderDto>.Conflict($"RequestId {candidate.RequestId} was already used for a different sales order.");
         }
 
@@ -318,7 +345,16 @@ namespace AgfAdmin.Services
         {
             var actors = await CancelledByAsync(new List<int> { order.Id }, cancellationToken);
             var corrections = await CorrectionIdsAsync(new List<int> { order.Id }, cancellationToken);
-            return ToDto(order, actors.GetValueOrDefault(order.Id), corrections);
+            return await ToDtoWithBalancesAsync(order, actors.GetValueOrDefault(order.Id), cancellationToken, corrections);
+        }
+
+        // Met de verkoopstand van de varianten van deze order (alleen bij een open order: een geannuleerde order vraagt niets meer).
+        private async Task<SalesOrderDto> ToDtoWithBalancesAsync(SalesOrder order, string cancelledBy, CancellationToken cancellationToken, IReadOnlyDictionary<int, int> correctionIds = null)
+        {
+            var balances = order.Status == ReservationRules.OrderStatusOpen
+                ? await SalesBalanceLoader.LoadAsync(_db, order.Lines.Select(l => l.ProductVariantId).Distinct().ToList(), cancellationToken)
+                : null;
+            return ToDto(order, cancelledBy, correctionIds, balances);
         }
 
         // Reservering -> correctie-id voor Corrected reserveringen (één leesactie per aanroep).
@@ -373,7 +409,10 @@ namespace AgfAdmin.Services
             var orders = await query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id).Take(ReservationRules.MaxListResults).ToListAsync(cancellationToken);
             var actors = await CancelledByAsync(orders.Where(o => o.Status == ReservationRules.OrderStatusCancelled).Select(o => o.Id).ToList(), cancellationToken);
             var corrections = await CorrectionIdsAsync(orders.Select(o => o.Id).ToList(), cancellationToken);
-            return ServiceResult<IReadOnlyList<SalesOrderDto>>.Ok(orders.Select(o => ToDto(o, actors.GetValueOrDefault(o.Id), corrections)).ToList());
+            // Eén stand voor alle varianten van de open orders in de lijst (de dekking hangt van alle open orders af, niet alleen van deze).
+            var openVariants = orders.Where(o => o.Status == ReservationRules.OrderStatusOpen).SelectMany(o => o.Lines).Select(l => l.ProductVariantId).Distinct().ToList();
+            var balances = await SalesBalanceLoader.LoadAsync(_db, openVariants, cancellationToken);
+            return ServiceResult<IReadOnlyList<SalesOrderDto>>.Ok(orders.Select(o => ToDto(o, actors.GetValueOrDefault(o.Id), corrections, balances)).ToList());
         }
 
         // ======================== Annuleren ========================
@@ -740,7 +779,17 @@ namespace AgfAdmin.Services
         internal static decimal DeliveredQuantity(SalesOrderLine line) =>
             line.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed && StockReservationService.DeliveryOf(r) != null).Sum(r => r.Quantity);
 
-        internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null, IReadOnlyDictionary<int, int> correctionIds = null) => new()
+        internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null, IReadOnlyDictionary<int, int> correctionIds = null,
+            IReadOnlyDictionary<(int ProductVariantId, string Unit), SalesBalance> balances = null)
+        {
+            var dto = ToDtoCore(order, cancelledBy, correctionIds, order.Status == ReservationRules.OrderStatusOpen ? balances : null);
+            dto.Shortage = dto.Lines.Any(l => l.Coverage != null && l.Coverage.Shortage > 0m);
+            dto.AwaitingStock = dto.Lines.Any(l => l.AwaitingStock);
+            return dto;
+        }
+
+        private static SalesOrderDto ToDtoCore(SalesOrder order, string cancelledBy, IReadOnlyDictionary<int, int> correctionIds,
+            IReadOnlyDictionary<(int ProductVariantId, string Unit), SalesBalance> balances) => new()
         {
             Id = order.Id,
             OrderNumber = order.OrderNumber,
@@ -769,6 +818,8 @@ namespace AgfAdmin.Services
                 var reservedQuantity = active.Sum(r => r.Quantity);
                 var allocatedQuantity = allocated.Sum(r => r.Quantity);
                 var dispatchedQuantity = consumed.Sum(r => r.Quantity);
+                var balance = balances != null && balances.TryGetValue((line.ProductVariantId, line.Unit), out var found) ? found : null;
+                var coverage = balance != null && balance.Coverage.TryGetValue(line.Id, out var covered) ? covered : null;
                 return new SalesOrderLineDto
                 {
                     Id = line.Id,
@@ -784,6 +835,10 @@ namespace AgfAdmin.Services
                     GrossWeightKg = line.GrossWeightKg,
                     WeightSource = line.WeightSource,
                     SupplySource = line.SupplySource,
+                    Balance = balance == null ? null : SalesBalanceLoader.ToBalanceDto(balance),
+                    Coverage = coverage == null ? null : SalesBalanceLoader.ToCoverageDto(coverage),
+                    AwaitingStock = line.SupplySource == SalesSupplyRules.SourceExpected && coverage != null
+                        && coverage.FromStock + coverage.FromExpected + coverage.Shortage > 0m,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
                     AllocatedQuantity = allocatedQuantity,

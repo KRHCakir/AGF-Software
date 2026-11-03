@@ -43,4 +43,14 @@ namespace AgfAdmin.DTOs
         public List<ExpectedCoverDto> Expected { get; set; } = new();
         public decimal Shortage { get; set; }
     }
+
+    // In het antwoord op aanmaken: deze variant en eenheid zijn na deze order meer verkocht dan voorraad en verwachte aanvoer samen.
+    public sealed class SalesShortageWarningDto
+    {
+        public int ProductVariantId { get; set; }
+        public string ProductName { get; set; }
+        public string VariantName { get; set; }
+        public string Unit { get; set; }
+        public decimal ShortageQuantity { get; set; }
+    }
 }
