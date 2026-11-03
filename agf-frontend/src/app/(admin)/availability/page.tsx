@@ -233,7 +233,7 @@ function AvailabilityWorkspace() {
                                     action={filtersActive ? clearFilters : undefined} />
                                 : effectiveView === 'sales'
                                     ? <SalesSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} />
-                                    : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} view={effectiveView} />}
+                                    : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} view={effectiveView === 'detailed' ? 'detailed' : 'compact'} />}
                         </section>
                     )}
 

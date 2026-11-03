@@ -54,7 +54,9 @@ export default function SalesBreakdown({ productVariantId, unit }: { productVari
                                 <span className="font-mono">{line.lotNumber}</span>
                                 <span className="text-gray-600">{line.palletReference}</span>
                                 <QualityBadge status={line.qualityStatus} />
-                                <span className="ml-auto font-medium">{q(line.qualityStatus === 'Approved' ? line.availableQuantity : line.onHandQuantity)}</span>
+                                {/* Voorraad van de partij (telt op tot de kolom Voorraad); wat daarvan al gereserveerd is, staat erbij. */}
+                                {line.reservedQuantity > 0 && <span className="text-xs text-gray-500">{t('sales_of_which_reserved', { quantity: q(line.reservedQuantity) })}</span>}
+                                <span className="ml-auto font-medium">{q(line.onHandQuantity)}</span>
                             </li>
                         ))}
                     </ul>
