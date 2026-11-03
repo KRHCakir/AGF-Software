@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// De datum van vandaag in de twee schermen waar "Vul een geldige datum in." verscheen (Nieuwe verkooporder en Aanvoer plannen),
+// De datum van vandaag in de twee schermen waar "Vul een geldige datum in." verscheen (Nieuwe verkooporder en Inkooporder aanmaken, vroeger Aanvoer plannen),
 // in Chrome met een Engelse (en-US) en een Nederlandse (nl-NL) browsertaal. Het veld is een gewoon tekstveld met dd-mm-jjjj,
 // dus de browsertaal verandert niets aan de volgorde. Er wordt niets opgeslagen: de overige verplichte velden blijven leeg, zodat
 // verzenden alleen de controle laat zien. Draait mee met `npm run test:tour` (zelfde frontend en API, zie docs/demo-tour.md).
@@ -23,8 +23,8 @@ async function openSalesOrder(page: Page) {
 }
 
 async function openPlanSupply(page: Page) {
-    await page.goto('/supply');
-    await page.locator('input[name="supply-destination"][value="Warehouse"]').check({ timeout: 30_000 });
+    await page.goto('/purchase-orders/new');
+    await page.locator('[id="expectedAt-input"]').waitFor({ timeout: 30_000 });
     return { field: page.locator('[id="expectedAt-input"]'), error: page.locator('[id="expectedAt"]'), other: page.locator('[id="vendorId"]') };
 }
 
@@ -39,7 +39,7 @@ for (const locale of ['en-US', 'nl-NL']) {
             }, ACTOR);
         });
 
-        for (const [screen, open] of [['Nieuwe verkooporder', openSalesOrder], ['Aanvoer plannen', openPlanSupply]] as const) {
+        for (const [screen, open] of [['Nieuwe verkooporder', openSalesOrder], ['Inkooporder aanmaken', openPlanSupply]] as const) {
             test(`${screen}: vandaag getypt en via "Vandaag" wordt nooit afgekeurd`, async ({ page }) => {
                 const today = todayInAmsterdam();
                 const { field, error, other } = await open(page);

@@ -23,24 +23,22 @@ export const ORDER_CHAPTER: TourChapter = {
     writes: true,
     precheck: precheckPurchase,
     steps: [
-        order('open', '/supply', [
-            { kind: 'click', target: 'supply-destination:Warehouse' },
-            { kind: 'click', target: 'supply-mode:plan' },
+        order('open', '/purchase-orders/new', [
             { kind: 'highlight', target: 'supply-vendor' },
         ]),
-        order('vendor', '/supply', [{ kind: 'pick', target: 'supply-vendor', text: '{{vendorSearch}}', expect: '{{vendorSearch}}' }]),
-        order('reference', '/supply', [
+        order('vendor', '/purchase-orders/new', [{ kind: 'pick', target: 'supply-vendor', text: '{{vendorSearch}}', expect: '{{vendorSearch}}' }]),
+        order('reference', '/purchase-orders/new', [
             { kind: 'type', target: 'supply-reference', text: '{{tourRef}}' },
             { kind: 'highlight', target: 'supply-ordered-on' },
             { kind: 'type', target: 'supply-expected', text: '{{expectedDate}}' },
         ]),
-        order('article', '/supply', [
+        order('article', '/purchase-orders/new', [
             { kind: 'pick', target: 'supply-line-product-0', text: '{{productCode}}' },
             { kind: 'select', target: 'supply-line-unit:0', value: '{{productUnit}}' },
             { kind: 'type', target: 'supply-line-quantity:0', text: '{{quantity}}' },
             { kind: 'highlight', target: 'supply-line-kg:0' },
         ]),
-        order('save', '/supply', [
+        order('save', '/purchase-orders/new', [
             { kind: 'click', target: 'supply-save' },
             { kind: 'wait', target: 'supply-order-number' },
             { kind: 'remember', target: 'supply-order-number', name: 'orderNumber', pattern: /(IO-\d{4}-\d+)/ },
@@ -90,18 +88,16 @@ export const RECEIVE_CHAPTER: TourChapter = {
     writes: true,
     precheck: precheckReceive,
     steps: [
-        receive('open', '/supply', [
-            { kind: 'click', target: 'supply-destination:Warehouse' },
-            { kind: 'click', target: 'supply-mode:receive' },
+        receive('open', '/receipts', [
             { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
         ]),
-        receive('line', '/supply', [...enterReceipt('{{tourRef}}'), { kind: 'highlight', target: 'receive-weight:{{lineId}}' }]),
-        receive('register', '/supply', [
+        receive('line', '/receipts', [...enterReceipt('{{tourRef}}'), { kind: 'highlight', target: 'receive-weight:{{lineId}}' }]),
+        receive('register', '/receipts', [
             { kind: 'click', target: 'receive-save' },
             { kind: 'wait', target: 'receive-to-inspection' },
             { kind: 'highlight', target: 'receive-to-inspection' },
         ]),
-        receive('inspector', '/supply', [
+        receive('inspector', '/receipts', [
             { kind: 'click', target: 'receive-to-inspection' },
             { kind: 'select', target: 'inspection-actor', value: 'other' },
             { kind: 'type', target: 'inspection-actor-other', text: '{{actor}}' },
@@ -137,18 +133,16 @@ export const DEVIATION_CHAPTER: TourChapter = {
     writes: true,
     precheck: precheckDeviation,
     steps: [
-        deviation('open', '/supply', [
-            { kind: 'click', target: 'supply-destination:Warehouse' },
-            { kind: 'click', target: 'supply-mode:receive' },
+        deviation('open', '/receipts', [
             { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
         ]),
-        deviation('enter', '/supply', enterReceipt('{{tourRef}}')),
-        deviation('check', '/supply', [
+        deviation('enter', '/receipts', enterReceipt('{{tourRef}}')),
+        deviation('check', '/receipts', [
             { kind: 'click', target: 'receive-save' },
             { kind: 'wait', target: 'deviation-dialog' },
             { kind: 'highlight', target: 'deviation-dialog' },
         ]),
-        deviation('confirm', '/supply', [
+        deviation('confirm', '/receipts', [
             { kind: 'select', target: 'deviation-reason', value: 'SupplierDeliveredDifferently' },
             { kind: 'click', target: 'deviation-yes' },
             { kind: 'wait', target: 'receive-to-inspection' },

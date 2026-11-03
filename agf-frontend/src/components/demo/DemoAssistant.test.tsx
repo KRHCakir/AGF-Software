@@ -63,7 +63,7 @@ describe('DemoAssistant', () => {
         await mounted.render(<DemoAssistant />);
         await open();
         await click(mounted.button('demo_tour_start')!);
-        assert.equal(currentUrl(), '/supply');
+        assert.equal(currentUrl(), '/purchase-orders/new');
         assert.ok(mounted.hasText('demo_step_supply_body'));
         await click(mounted.button('demo_next')!);
         assert.equal(currentUrl(), '/inspection?search=DEMO');
@@ -129,10 +129,10 @@ describe('DemoAssistant', () => {
         await searchFor('demo klant b');
         await click(mounted.button('demo_tab_tour')!);
         await click(mounted.button('demo_tour_start')!);
-        assert.equal(currentUrl(), '/supply');
+        assert.equal(currentUrl(), '/purchase-orders/new');
         late.resolve(lateList());
         await flush(); await flush();
-        assert.equal(currentUrl(), '/supply');
+        assert.equal(currentUrl(), '/purchase-orders/new');
         assert.ok(mounted.hasText('demo_step_supply_body'));
         await click(mounted.button('demo_tab_search')!);
         assert.equal(mounted.hasText('demo_search_choose'), false);
@@ -168,8 +168,8 @@ const QUICK = () => ({ charMs: 1, actionMs: 1, readMs: 5, cursorMs: 0, pollMs: 2
 const writing: TourChapter = {
     id: 'write', titleKey: 'ch_write', summaryKey: 'ch_write_summary', writes: true, doneKey: 'ch_write_done',
     steps: [
-        { id: 'ref', route: '/supply', titleKey: 'st_ref', whatKey: 'what_ref', whyKey: 'why_ref', actions: [{ kind: 'type', target: 'supply-reference', text: '{{tourRef}}' }] },
-        { id: 'wait', route: '/supply', titleKey: 'st_wait', whatKey: 'what_wait', whyKey: 'why_wait', actions: [{ kind: 'wait', target: 'tour-gate' }] },
+        { id: 'ref', route: '/purchase-orders/new', titleKey: 'st_ref', whatKey: 'what_ref', whyKey: 'why_ref', actions: [{ kind: 'type', target: 'supply-reference', text: '{{tourRef}}' }] },
+        { id: 'wait', route: '/purchase-orders/new', titleKey: 'st_wait', whatKey: 'what_wait', whyKey: 'why_wait', actions: [{ kind: 'wait', target: 'tour-gate' }] },
     ],
 };
 const blocked: TourChapter = {
@@ -212,7 +212,7 @@ describe('DemoAssistant autopilot', () => {
 
         await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="tour-chapter-write"] button')!);
         await until(() => mounted.hasText('what_wait'), 'second step');
-        assert.equal(currentUrl(), '/supply');
+        assert.equal(currentUrl(), '/purchase-orders/new');
         assert.equal(mounted.container.querySelector<HTMLInputElement>('[data-tour="supply-reference"]')!.value, 'DEMO-TOUR-001');
         assert.equal(localStorage.getItem('agf_actor_reference'), 'Demo-assistent');
         assert.ok(mounted.hasText('demo_step_counter'));

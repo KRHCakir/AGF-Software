@@ -14,7 +14,6 @@ import { primaryButtonClass, secondaryButtonClass } from '../../../components/su
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { PURCHASE_COMMANDS_STORAGE_KEY, isPurchaseCommand } from '../../../lib/pendingCommands';
 import { ORDER_STATUS_LABEL_KEYS, PURCHASE_ORDER_STATUSES } from '../../../lib/purchaseOrderRules';
-import { supplyShortcutHref } from '../../../lib/supplyShortcut';
 import { toApiError } from '../../../services/apiClient';
 import { getPurchaseOrder, listPurchaseOrders } from '../../../services/purchaseOrderService';
 import { getVendors } from '../../../services/referenceDataService';
@@ -123,7 +122,7 @@ function PurchaseOrdersWorkspace() {
                 <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('po_title')}</h1>
                 <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setReloadToken((n) => n + 1)} className={secondaryButtonClass}>↻ {t('availability_refresh')}</button>
-                    <Link href={supplyShortcutHref('plan')} className={primaryButtonClass}>+ {t('po_new')}</Link>
+                    <Link href="/purchase-orders/new" data-tour="po-new" className={primaryButtonClass}>+ {t('po_new')}</Link>
                 </div>
             </div>
 

@@ -163,12 +163,14 @@ test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" ma
     await page.getByTestId('tour-chapter-order').getByRole('button').click();
     const panel = page.locator('section[aria-label="Demo-assistent"]');
     await expect(panel).toContainText('Jouw beurt', { timeout: 30_000 });
-    // De assistent wacht echt: zonder actie blijft het bij stap 1.
+    // Stap 1 wijst alleen aan (Inkooporder aanmaken heeft geen bestemmingskeuze meer); bij stap 2 wacht de assistent echt.
     await page.waitForTimeout(1500);
-    await expect(panel).toContainText('Stap 1 van');
+    await expect(panel).toContainText('Stap 2 van');
     await expect(page.getByTestId('tour-blocker')).toHaveCount(0);
-    // De gebruiker kiest zelf de bestemming; daarna laat hij de rest doen.
-    await page.locator('[data-tour="supply-destination"][data-tour-key="Warehouse"]').click();
+    // De gebruiker kiest zelf de leverancier; daarna laat hij de rest doen.
+    const vendor = page.locator('[data-tour="supply-vendor"]');
+    await vendor.fill('Nature');
+    await vendor.press('Tab');
     await expect.poll(async () => {
         const text = (await panel.innerText()).replace(/\s+/g, ' ');
         if (/kon niet uitgevoerd/.test(text)) throw new Error(text);

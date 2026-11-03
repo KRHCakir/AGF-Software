@@ -2,7 +2,7 @@
 // De assistent navigeert alleen naar vaste routes. De vaste rondleiding en het orderzoeken wijzigen nooit iets; de autopilot
 // (lib/tour, alleen met NEXT_PUBLIC_DEMO_TOUR=true) vult schermen in via dezelfde routes. Er is geen AI.
 
-export const DEMO_ROUTES = ['/supply', '/inspection', '/availability', '/sales-orders', '/purchase-orders'] as const;
+export const DEMO_ROUTES = ['/purchase-orders/new', '/receipts', '/inspection', '/availability', '/sales-orders', '/purchase-orders'] as const;
 export type DemoRoute = (typeof DEMO_ROUTES)[number];
 
 export interface TourStep {
@@ -14,7 +14,7 @@ export interface TourStep {
 }
 
 export const TOUR_STEPS: readonly TourStep[] = [
-    { id: 'supply', href: '/supply', titleKey: 'demo_step_supply_title', bodyKey: 'demo_step_supply_body' },
+    { id: 'supply', href: '/purchase-orders/new', titleKey: 'demo_step_supply_title', bodyKey: 'demo_step_supply_body' },
     { id: 'inspection', href: '/inspection?search=DEMO', titleKey: 'demo_step_inspection_title', bodyKey: 'demo_step_inspection_body' },
     { id: 'availability', href: '/availability', titleKey: 'demo_step_availability_title', bodyKey: 'demo_step_availability_body' },
     { id: 'sales', href: '/sales-orders', titleKey: 'demo_step_sales_title', bodyKey: 'demo_step_sales_body' },
