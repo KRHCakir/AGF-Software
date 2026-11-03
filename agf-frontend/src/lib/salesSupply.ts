@@ -1,10 +1,9 @@
-import type { PackageUnit } from '../types/availability';
+import { PACKAGE_UNITS, type PackageUnit } from '../types/availability';
 import type { SalesBalance, SalesLineCoverage, SupplySource } from '../types/salesSupply';
 
 // Verkopen vóór aankomst: pure regels zonder React of i18n (spiegel van SalesSupplyRules in de backend; de server blijft leidend).
 // Vrij te verkopen = Voorraad + Verwacht - Verkocht en mag negatief zijn (tekort: waarschuwing, geen blokkade). Een regel "Uit voorraad"
 // past altijd in de vrije voorraad; anders stelt het systeem voor te splitsen (deel uit voorraad, rest uit verwachte aanvoer).
-// Let op: imports met .ts-extensie zijn niet nodig; dit bestand importeert alleen types.
 
 export interface SourceSplit {
     stock: number;
@@ -49,7 +48,6 @@ export interface SellPrefill {
     quantity: number;
 }
 
-const UNITS: readonly string[] = ['box', 'colli', 'tray', 'piece', 'dozen'];
 
 // De parameters van de voorinvulling; de werkplek haalt ze weg zodra een order gekozen of het formulier gesloten wordt.
 export const SELL_PARAMS: readonly string[] = ['new', 'variantId', 'unit', 'quantity'];
@@ -61,9 +59,11 @@ export function parseSellPrefill(params: { get(name: string): string | null }): 
     const unit = params.get('unit');
     const quantityText = params.get('quantity');
     if (variant === null || !/^[1-9][0-9]{0,9}$/.test(variant) || Number(variant) > 2147483647) return null;
-    if (unit === null || !UNITS.includes(unit)) return null;
-    const quantity = quantityText === null ? NaN : Number(quantityText);
-    if (!Number.isFinite(quantity) || quantity <= 0 || Math.round(quantity * 1000) !== quantity * 1000) return null;
+    if (unit === null || !(PACKAGE_UNITS as readonly string[]).includes(unit)) return null;
+    // Op de tekst gecontroleerd (hooguit 3 decimalen, zoals de server), niet met een kommagetal-afronding: 1.005 is geldig.
+    if (quantityText === null || !/^\d{1,9}(\.\d{1,3})?$/.test(quantityText)) return null;
+    const quantity = Number(quantityText);
+    if (quantity <= 0) return null;
     return { productVariantId: Number(variant), unit: unit as PackageUnit, quantity };
 }
 
