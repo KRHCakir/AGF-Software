@@ -172,10 +172,44 @@ export function findTourCustomer(customers: readonly CustomerOption[], search: s
     return searchCustomers(customers, search)[0] ?? { key: 'tour_missing_customer', params: { search } };
 }
 
-// Reserveren kan alleen op goedgekeurde magazijnvoorraad in dezelfde eenheid, na bestaande reserveringen.
+// Reserveren kan alleen op goedgekeurde magazijnvoorraad in dezelfde eenheid, na bestaande reserveringen. Met de verkoopstand ook na de
+// verkoop uit voorraad die nog niet gereserveerd is (vrij op voorraad), anders stelt de order splitsen voor.
 export function hasSellableStock(overview: AvailabilityOverview, variantId: number, unit: string, quantity: number): boolean {
     return overview.variants.some((variant) => variant.productVariantId === variantId
-        && variant.warehouseSupply.some((supply) => supply.unit === unit && supply.availableAfterReservations.quantity >= quantity));
+        && variant.warehouseSupply.some((supply) => supply.unit === unit && supply.availableAfterReservations.quantity >= quantity
+            && (supply.sales === undefined || supply.sales === null || supply.sales.freeStock >= quantity)));
+}
+
+// Hoeveel meer dan vrij te verkopen het hoofdstuk "Verkopen voor aankomst" verkoopt: zo ontstaat altijd een (klein) tekort.
+export const TOUR_PRESELL_SHORTAGE = 5;
+
+// Verkopen voor aankomst: de open demo-inkooporder (zoals bij Ontvangen en keuren), een klant en het artikel van die regel. Er wordt
+// vrij te verkopen + 5 verkocht uit verwachte aanvoer (tekort 5), daarna die order ontvangen en goedgekeurd, daarna oudste partij eerst gereserveerd.
+export async function precheckPresell(signal: AbortSignal): Promise<TourPrecheck> {
+    const receive = await precheckReceive(signal);
+    if (receive.missing.length > 0 || !receive.vars) return receive;
+    const variantId = Number(receive.vars.variantId);
+    const [customers, products, open] = await Promise.all([getCustomers(signal), getProductsWithVariants(signal), openTourLine(signal, 2)]);
+    const customer = findTourCustomer(customers, TOUR_CUSTOMER_SEARCH);
+    if (isMissing(customer)) return { missing: [customer] };
+    const unit = open?.line.unit ?? null;
+    const variant = products.flatMap((product) => product.variants).find((candidate) => candidate.id === variantId);
+    if (unit === null || !variant?.shortcutCode) return { missing: [{ key: 'tour_missing_open_order' }] };
+    const overview = await getAvailabilityOverview({ productVariantId: variantId, route: 'Warehouse' }, signal);
+    const sales = overview.variants.filter((row) => row.productVariantId === variantId).flatMap((row) => row.warehouseSupply).find((row) => row.unit === unit)?.sales ?? null;
+    const free = sales === null ? 0 : Math.max(0, Math.floor(sales.free));
+    const today = todayInAmsterdam();
+    return {
+        missing: [],
+        vars: {
+            ...receive.vars,
+            unit,
+            customerSearch: TOUR_CUSTOMER_SEARCH,
+            customerName: customer.name,
+            sellQuantity: String(free + TOUR_PRESELL_SHORTAGE),
+            deliveryDate: formatDateInput(addDays(today, 3) ?? today),
+        },
+    };
 }
 
 export async function precheckSales(signal: AbortSignal): Promise<TourPrecheck> {

@@ -28,13 +28,15 @@ const ORDER_LINK = /^\/sales-orders\?orderId=[1-9]\d{0,9}$/;
 const INSPECTION_SEARCH_LINK = /^\/inspection\?search=[A-Za-z0-9-]{1,40}$/;
 const PURCHASE_ORDER_LINK = /^\/purchase-orders\?(id=[1-9]\d{0,9}|query=[A-Za-z0-9-]{1,40})$/;
 const AVAILABILITY_VARIANT_LINK = /^\/availability\?productVariantId=[1-9]\d{0,9}$/;
+// "Verkopen" vanuit Beschikbaarheid: een nieuwe verkooporder met één artikel, eenheid en aantal ingevuld (zie lib/salesSupply.sellHref).
+const SELL_LINK = /^\/sales-orders\?new=1&variantId=[1-9]\d{0,9}&unit=(box|colli|tray|piece|dozen)&quantity=[1-9]\d{0,8}(\.\d{1,3})?$/;
 
 // Alleen een vaste route, een keuringszoekterm, een link naar één verkoop- of inkooporder (of een inkoopzoekterm) of de
-// beschikbaarheid van één variant;
+// beschikbaarheid van één variant (of een verkooporder vanuit "Verkopen" daar);
 // nooit externe URL's, scripts of andere paden.
 export function isAllowedDemoHref(href: string): boolean {
     return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href)
-        || AVAILABILITY_VARIANT_LINK.test(href);
+        || AVAILABILITY_VARIANT_LINK.test(href) || SELL_LINK.test(href);
 }
 
 export function orderHref(id: number): string {

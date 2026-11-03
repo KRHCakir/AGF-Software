@@ -1,5 +1,6 @@
 import type { PurchaseOrderDetail } from '../types/purchaseOrder';
 import type { SalesOrder } from '../types/salesOrder';
+import { dayMonth, orderLabel } from './salesSupply.ts';
 
 // De keten-strip: Inkooporder > Ontvangst > Keuring > Voorraad > Verkooporder > Levering > Factuur, met per stap een status, aantallen
 // en links naar het juiste scherm met het juiste filter. Alles afgeleid uit wat de API al geeft (lezen, nooit opslaan). Een stap die
@@ -152,12 +153,28 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const stockReserved = sum(physical.filter((r) => r.status === 'Active').map((r) => r.quantity));
     const stockShipped = sum(physical.filter((r) => r.status === 'Consumed').map((r) => r.quantity));
     const nothing: ChainPart[] = [{ key: 'chain_nothing_reserved' }];
+    // Verkocht vóór aankomst: het niet gereserveerde deel wacht op een verwachte inkooporder (vroegst verwacht eerst; oudste verkoop eerst
+    // gedekt) of is tekort. Alleen bij een open order en alleen uit de dekking die de server meestuurt.
+    const open = order.status === 'Open';
+    const covers = open ? order.lines.flatMap((line) => line.coverage?.expected ?? []).filter((cover) => cover.quantity > 0 && !cover.inInspection) : [];
+    const waiting = unique(covers.map((cover) => cover.supplyCommitmentId)).map((id) => {
+        const of = covers.filter((cover) => cover.supplyCommitmentId === id);
+        const dates = of.map((cover) => cover.expectedAt).filter((date): date is string => date !== null).sort();
+        return { id, number: of[0].supplyOrderNumber ?? `#${id}`, expectedAt: dates[0] ?? null };
+    });
+    const shortage = open ? sum(order.lines.map((line) => line.coverage?.shortage ?? 0)) : 0;
 
     const steps: Omit<ChainStep, 'current'>[] = [
         {
-            key: 'order', state: purchaseOrders.length > 0 ? 'done' : 'empty',
-            parts: purchaseOrders.length > 0 ? (lots.length > 0 ? [{ key: 'chain_lots', params: { lots: lots.slice(0, MAX_LINKS).join(', ') } }] : []) : nothing,
-            links: purchaseOrders.slice(0, MAX_LINKS).map((po) => ({ label: po.number, href: `/purchase-orders?id=${po.id}` })),
+            key: 'order', state: waiting.length > 0 ? (purchaseOrders.length > 0 ? 'partial' : 'open') : purchaseOrders.length > 0 ? 'done' : 'empty',
+            parts: [
+                ...(purchaseOrders.length > 0 ? (lots.length > 0 ? [{ key: 'chain_lots', params: { lots: lots.slice(0, MAX_LINKS).join(', ') } }] : []) : waiting.length > 0 ? [] : nothing),
+                ...waiting.slice(0, MAX_LINKS).map((po): ChainPart => (po.expectedAt
+                    ? { key: 'chain_waiting_for_po', params: { number: po.number, date: dayMonth(po.expectedAt) } }
+                    : { key: 'chain_waiting_for_po_no_date', params: { number: po.number } })),
+            ],
+            links: [...purchaseOrders, ...waiting.filter((po) => !purchaseOrders.some((known) => known.id === po.id))]
+                .slice(0, MAX_LINKS).map((po) => ({ label: po.number, href: `/purchase-orders?id=${po.id}` })),
         },
         {
             key: 'receipt', state: pallets.length > 0 ? 'done' : physical.length === 0 && reservations.length > 0 ? 'unavailable' : 'empty',
@@ -182,8 +199,11 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
         },
         {
             key: 'sales', state: order.status === 'Cancelled' ? 'empty' : demand > 0 && (mixed ? metPerUnit(order.lines, (line) => line.quantity, (line) => line.dispatchedQuantity) : shipped >= demand) ? 'done' : 'partial',
-            parts: [order.status === 'Cancelled' ? { key: 'chain_cancelled' } : qty(mixed, { key: 'chain_demand', params: { quantity: demand, unit } })],
-            links: [{ label: `#${order.id}`, href: `/sales-orders?orderId=${order.id}` }],
+            parts: [
+                order.status === 'Cancelled' ? { key: 'chain_cancelled' } : qty(mixed, { key: 'chain_demand', params: { quantity: demand, unit } }),
+                ...(shortage > 0 ? [qty(mixed, { key: 'chain_shortage', params: { quantity: shortage, unit } })] : []),
+            ],
+            links: [{ label: orderLabel(order), href: `/sales-orders?orderId=${order.id}` }],
         },
         {
             key: 'delivery', state: shipped <= 0 ? 'empty' : (mixed ? metPerUnit(order.lines, (line) => line.quantity, (line) => line.deliveredQuantity) : delivered >= demand) ? 'done' : 'partial',
