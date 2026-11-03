@@ -1,5 +1,6 @@
 import type { PackageUnit } from '../types/availability';
 import type { CreateSalesOrderRequest } from '../types/salesOrder';
+import type { SupplySource } from '../types/salesSupply';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { resolveLineWeight, weightPayload, type LineWeightDraft } from './lineWeight.ts';
@@ -24,6 +25,7 @@ export type RuleCode =
     | 'too_long'
     | 'too_many_lines'
     | 'duplicate_line'
+    | 'invalid_source'
     | 'exceeds_available'
     | 'exceeds_demand'
     | 'remainder_mismatch'
@@ -48,6 +50,9 @@ export interface OrderLineDraft extends LineWeightDraft {
     palletCount: string;
     packagesPerPallet: string;
     loosePackages?: string;
+    // Uit voorraad of uit verwachte aanvoer; leeg = de server kiest (uit voorraad als het past). sourceTouched: door de gebruiker gekozen.
+    supplySource?: SupplySource | '';
+    sourceTouched?: boolean;
 }
 
 export interface OrderDraft {
@@ -117,9 +122,10 @@ export function buildOrderPayload(draft: OrderDraft, actor: string, kgDefaults: 
         // Kg optioneel: berekend uit het artikel of ingevuld; bruto nooit onder netto (zelfde regels als LineWeightRules).
         const weight = resolveLineWeight(line, amounts.ok ? amounts.value.quantity : null, kgDefaults(Number(line.productVariantId)));
         if (!weight.ok) for (const error of weight.errors) errors.push({ field: `${prefix}.${error.field === 'net' ? 'netWeightKg' : 'grossWeightKg'}`, code: error.code });
-        // Eén regel per variant + eenheid, net als de databank-index: anders worden reserveringen dubbelzinnig.
+        // Eén regel per variant + eenheid + bron, net als de databank-index: anders worden reserveringen dubbelzinnig. Een gesplitste
+        // regel (deel uit voorraad, rest uit verwachte aanvoer) zijn dus twee regels met elk een eigen bron.
         if (errors.length === before) {
-            const key = `${line.productVariantId}|${line.unit}`;
+            const key = `${line.productVariantId}|${line.unit}|${line.supplySource ?? ''}`;
             if (seen.has(key)) errors.push({ field: prefix, code: 'duplicate_line' });
             seen.add(key);
         }
@@ -133,6 +139,8 @@ export function buildOrderPayload(draft: OrderDraft, actor: string, kgDefaults: 
             ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
             // Kg en bron alleen als er kg is: een regel zonder kg blijft dezelfde opdracht als vóór deze velden.
             ...(weight.ok ? weightPayload(weight.value, 'netWeightKg', 'grossWeightKg') : {}),
+            // Bron alleen als die gekozen is: zonder bron blijft het dezelfde opdracht als vóór dit veld.
+            ...(line.supplySource ? { supplySource: line.supplySource } : {}),
         };
     });
 
@@ -354,12 +362,13 @@ function normalizeSearch(value: string): string {
     return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
-// Zoeken op klant, referentie, ordernummer en productnamen; lege zoekterm laat alles door.
+// Zoeken op VO-nummer, klant, klantreferentie, ordernummer, productnamen en partij (van een reservering); lege zoekterm laat alles door.
 export interface SearchableOrder {
     id: number;
+    orderNumber?: string;
     customerName: string | null;
     customerReference: string | null;
-    lines: { productName: string | null; productVariantName: string | null }[];
+    lines: { productName: string | null; productVariantName: string | null; reservations?: object[] }[];
 }
 
 export function matchesOrderSearch(order: SearchableOrder, search: string): boolean {
@@ -368,9 +377,11 @@ export function matchesOrderSearch(order: SearchableOrder, search: string): bool
     const haystack = [
         `#${order.id}`,
         String(order.id),
+        order.orderNumber ?? '',
         order.customerName ?? '',
         order.customerReference ?? '',
         ...order.lines.map((line) => `${line.productName ?? ''} ${line.productVariantName ?? ''}`),
+        ...order.lines.flatMap((line) => (line.reservations ?? []).map((reservation) => (reservation as { lotNumber?: string | null }).lotNumber ?? '')),
     ].join(' ');
     return normalizeSearch(haystack).includes(term);
 }

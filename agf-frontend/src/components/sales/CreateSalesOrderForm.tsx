@@ -10,7 +10,10 @@ import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrd
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
 import { MAX_ORDER_LINES, OrderDraft, OrderLineDraft, buildOrderPayload } from '../../lib/salesOrderRules';
-import type { SellPrefill } from '../../lib/salesSupply';
+import { type SellPrefill, orderLabel, singleSource } from '../../lib/salesSupply';
+import type { SupplySource } from '../../types/salesSupply';
+import LineSourceChoice from './LineSourceChoice';
+import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -52,6 +55,7 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
         mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
         loosePackages: line.loosePackages == null ? '' : formatDecimalInput(line.loosePackages),
+        supplySource: line.supplySource ?? '', sourceTouched: line.supplySource !== undefined,
         // Ingevulde kg als ingevuld terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
         ...(line.weightSource === 'Entered' ? {
             netKg: line.netWeightKg == null ? '' : formatDecimalInput(line.netWeightKg), netKgEntered: line.netWeightKg != null,
@@ -134,6 +138,40 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
     // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
     const { rows: lineKg, totals } = lineKgRows(draft.lines, (variantId) => variants.get(variantId));
 
+    // Stand per gekozen variant + eenheid (Voorraad · Verwacht · Vrij) en de bron per regel. Zolang de gebruiker niet zelf kiest, volgt de
+    // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan blijft "Uit voorraad"
+    // staan met het splitsvoorstel erbij (de server weigert anders met 409).
+    const balancePairs = useMemo(() => draft.lines.filter((line) => /^[1-9]\d*$/.test(line.productVariantId) && line.unit !== '')
+        .map((line) => ({ productVariantId: Number(line.productVariantId), unit: line.unit as Exclude<OrderLineDraft['unit'], ''> })), [draft.lines]);
+    const balanceOf = useSalesBalances(balancePairs);
+    const stateOf = (line: OrderLineDraft) => (/^[1-9]\d*$/.test(line.productVariantId) && line.unit !== '' ? balanceOf(Number(line.productVariantId), line.unit) : null);
+    // null: geen eigen keuze en de stand is (nog) niet bekend; dan gaat er geen bron mee en kiest de server (uit voorraad als het past).
+    const effectiveSource = (line: OrderLineDraft, quantity: number | null): SupplySource | null => {
+        if (line.sourceTouched && line.supplySource) return line.supplySource;
+        const state = stateOf(line);
+        if (state?.status !== 'ready' || quantity === null) return null;
+        return singleSource(quantity, Math.max(0, state.balance.freeStock)) ?? 'Stock';
+    };
+
+    const chooseSource = (key: string, source: SupplySource) => {
+        if (locked) return;
+        setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, supplySource: source, sourceTouched: true } : line)) }));
+        edited();
+    };
+
+    // Splitsen: deze regel wordt het deel uit voorraad, direct eronder een regel met dezelfde variant en eenheid voor de rest uit verwachte aanvoer.
+    const splitLine = (key: string, stock: number, expected: number) => {
+        if (locked || draft.lines.length >= MAX_ORDER_LINES) return;
+        setDraft((current) => ({
+            ...current,
+            lines: current.lines.flatMap((line) => (line.key !== key ? [line] : [
+                { ...line, mode: 'packages' as const, quantity: formatDecimalInput(stock), palletCount: '', packagesPerPallet: '', loosePackages: '', supplySource: 'Stock' as const, sourceTouched: true },
+                { ...emptyLine(), productVariantId: line.productVariantId, unit: line.unit, quantity: formatDecimalInput(expected), supplySource: 'Expected' as const, sourceTouched: true },
+            ])),
+        }));
+        edited();
+    };
+
     const addLine = () => {
         if (locked || draft.lines.length >= MAX_ORDER_LINES) return;
         setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }));
@@ -150,7 +188,8 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         if (inFlight.current || result !== null) return;
         let command = pending;
         if (command === null) {
-            const built = buildOrderPayload(draft, actor, (variantId) => variants.get(variantId));
+            const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, lineKg[index].quantity) ?? '' })) };
+            const built = buildOrderPayload(withSources, actor, (variantId) => variants.get(variantId));
             if (!built.ok) {
                 setErrors(ruleErrorsToFieldErrors(built.errors, t));
                 return;
@@ -227,7 +266,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         const order = result.value;
         return (
             <SuccessPanel
-                title={t('sales_create_success', { id: String(order.id), customer: order.customerName ?? '' })}
+                title={t('sales_create_success', { id: orderLabel(order), customer: order.customerName ?? '' })}
                 note={result.replayed ? t('supply_saved_before') : undefined}
                 actions={(
                     <>
@@ -240,6 +279,12 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                     {t('sales_delivery_on', { date: formatCalendarDate(order.requestedDeliveryDate, locale) })}
                     {order.customerReference && <> · {t('sales_reference_short')} {order.customerReference}</>}
                 </p>
+                {/* Meer verkocht dan voorraad + verwachte aanvoer: toegestaan, met deze korte waarschuwing per artikel; de order is vastgelegd. */}
+                {(order.shortageWarnings ?? []).map((warning) => (
+                    <p key={`${warning.productVariantId}:${warning.unit}`} role="alert" className="mt-2 rounded border border-red-300 bg-red-50 px-3 py-2 font-medium text-red-900" data-testid="sales-shortage-warning">
+                        ⚠ {t('sales_shortage_saved', { quantity: formatQuantity(warning.shortageQuantity, locale), unit: t(unitLabelKey(warning.unit)).toLowerCase(), name: `${warning.productName ?? ''} · ${warning.variantName ?? ''}` })}
+                    </p>
+                ))}
                 {/* Kredietlimiet overschreden: waarschuwing met limiet, openstaand en verschil; de order is gewoon vastgelegd. */}
                 {order.creditWarning && (
                     <div role="alert" className="mt-2 rounded border border-amber-400 bg-amber-50 px-3 py-2 text-amber-950" data-testid="sales-credit-warning">
@@ -364,6 +409,10 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                                 <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
                                                     locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
                                             </div>
+                                            <LineSourceChoice name={prefix} quantity={lineKg[index].quantity} unitText={unitText} state={stateOf(line)}
+                                                source={effectiveSource(line, lineKg[index].quantity)} packagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
+                                                locked={locked} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
+                                            <FieldError id={`${prefix}.supplySource`} messages={e(`${prefix}.supplySource`)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>

@@ -22,6 +22,7 @@ import ReleaseReservationForm from './ReleaseReservationForm';
 import { DirectTradeCorrectedBadge, DirectTradeShippedBadge, ExpectedAllocationBadge, OnHoldBadge, ReservationStatusBadge } from './ReservationBadges';
 import ReservableStockTable from './ReservableStockTable';
 import ReserveForm from './ReserveForm';
+import LineSupplyInfo from './LineSupplyInfo';
 
 const th = 'px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
 const td = 'px-2 py-1.5 align-top';
@@ -198,6 +199,8 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                 </div>
             </header>
 
+            <LineSupplyInfo line={line} />
+
             {reloadFailed && (
                 <p role="alert" className="mx-3 mt-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-900">{t('sales_reload_failed')}</p>
             )}
@@ -239,6 +242,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                 <tr>
                                     <th scope="col" className={th}>{t('availability_col_pallet')}</th>
                                     <th scope="col" className={th}>{t('availability_col_lot')}</th>
+                                    <th scope="col" className={th}>{t('sales_col_purchase_order')}</th>
                                     <th scope="col" className={th}>{t('sales_col_bin')}</th>
                                     <th scope="col" className={`${th} text-right`}>{t('supply_quantity')}</th>
                                     <th scope="col" className={`${th} text-right`}>{t('supply_actual_net_kg')}</th>
@@ -262,6 +266,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                         <span className="mt-1 block text-xs text-gray-800">{sourceLabel(reservation, t('availability_unknown'))}</span>
                                                     </td>
                                                     <td className={td}>{(reservation.status === 'Consumed' || reservation.status === 'Corrected') && reservation.shippedLotNumber ? reservation.shippedLotNumber : reservation.lotNumber ?? t('availability_unknown')}</td>
+                                                    <td className={`${td} font-mono text-xs`} data-testid="reservation-purchase-order">{reservation.supplyOrderNumber ?? t('availability_unknown')}</td>
                                                     <td className={`${td} text-xs text-violet-900`}>
                                                         {reservation.status === 'Corrected' && reservation.shippedOn
                                                             ? t('sales_dt_corrected_was_shipped', { date: formatDateOnly(reservation.shippedOn, locale) })
@@ -280,6 +285,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 <>
                                                     <td className={`${td} font-mono`}>{reservation.palletReference ?? t('availability_unknown')}</td>
                                                     <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
+                                                    <td className={`${td} font-mono text-xs`} data-testid="reservation-purchase-order">{reservation.supplyOrderNumber ?? t('availability_unknown')}</td>
                                                     <td className={`${td} font-mono text-xs`}>{reservation.warehouseLocation ?? t('supply_no_bin')}</td>
                                                     <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>
                                                     <td className={`${td} text-right`}>{reservation.netWeightKg === null ? '—' : formatKg(reservation.netWeightKg, locale)}</td>

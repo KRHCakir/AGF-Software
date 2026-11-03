@@ -7,6 +7,7 @@ import { formatCalendarDate } from '../../lib/calendarDate';
 import { blockedBy, cancelKey, correctDispatchKey, correctDtShipmentKey, dispatchKey, shipDirectTradeKey } from '../../lib/pendingCommands';
 import { amsterdamDateOf } from '../../lib/calendarDate';
 import { isCorrectedAllocation, isDispatchable, isShippableAllocation, isShippedAllocation, orderProgress } from '../../lib/salesOrderRules';
+import { orderLabel } from '../../lib/salesSupply';
 import { SaveResult } from '../../services/supplyService';
 import { DeliveryConfirmation, DeliveryRetraction, DirectTradeShipment, DirectTradeShipmentCorrection, SalesDispatch, SalesDispatchCorrection, SalesOrder, ShipmentKind } from '../../types/salesOrder';
 import DeliveryConfirmationPanel, { DeliverableShipment } from './DeliveryConfirmationPanel';
@@ -282,10 +283,12 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             <ChainStrip steps={salesOrderChain(order)} />
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: String(order.id) })} · {order.customerName ?? t('availability_unknown')}</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: orderLabel(order) })} · {order.customerName ?? t('availability_unknown')}</h2>
                     <OrderStatusBadge status={order.status} />
                     {progress.onHoldCount > 0 && <OnHoldBadge />}
                     {progress.allocatedLines > 0 && <ExpectedAllocationBadge />}
+                    {!cancelled && order.shortage && <span className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-800" data-testid="order-shortage">{t('sales_shortage')}</span>}
+                    {!cancelled && order.awaitingStock && <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900" data-testid="order-awaiting-stock">{t('sales_awaiting_stock')}</span>}
                     <div className="ml-auto flex flex-wrap gap-2">
                         <button type="button" className={secondaryButtonClass} onClick={() => void refresh()} disabled={busy} aria-busy={busy}>
                             <span aria-hidden="true">↻ </span>{busy ? t('sales_refreshing') : t('sales_refresh')}
