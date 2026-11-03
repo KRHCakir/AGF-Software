@@ -9,7 +9,7 @@ import { interpolate, targetSelector } from './dom.ts';
 // Elk hoofdstuk blijft binnen de vaste routes, gebruikt alleen geldige data-tour-namen en heeft al zijn teksten in
 // het Nederlands en het Engels.
 
-const sample = { tourRef: 'DEMO-TOUR-001', orderNumber: 'IO-2026-0001', actor: 'Demo-assistent', today: '2026-10-29', orderId: '47', lineId: '52', variantId: '10' };
+const sample = { tourRef: 'DEMO-TOUR-001', orderNumber: 'IO-2026-0001', actor: 'Demo-assistent', today: '2026-10-29', orderId: '47', lineId: '52', variantId: '10', salesOrderId: '5' };
 
 describe('tour chapters', () => {
     test('every chapter has a unique id, its texts in nl and en, and only allowed routes and valid targets', () => {

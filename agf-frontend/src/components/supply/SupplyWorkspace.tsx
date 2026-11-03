@@ -13,6 +13,7 @@ import { inputClass } from './FieldError';
 import PlanSupplyForm, { ReferenceData } from './PlanSupplyForm';
 import ReceivePalletForm from './ReceivePalletForm';
 import { useActorReference } from './useActorReference';
+import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 
 export type SupplyTask = 'purchase-order' | 'receipt' | 'direct-trade';
 
@@ -95,6 +96,7 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
 
             {task === 'receipt' && (
                 <>
+                    {orderId !== null && <PurchaseOrderChain orderIds={[orderId]} current="receipt" />}
                     {orderError && <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">{orderError}</p>}
                     {orderLoading
                         ? <LoadingRows rows={3} label={t('supply_loading_sources')} />

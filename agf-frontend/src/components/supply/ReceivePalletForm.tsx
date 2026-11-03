@@ -41,6 +41,7 @@ import { UnitBadge } from '../availability/QuantityCell';
 import { LoadState, LoadingRows } from '../availability/StateViews';
 import GgnBadge from '../shared/GgnBadge';
 import NewArticlePrompt from '../shared/NewArticlePrompt';
+import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 import NumberEcho from '../shared/NumberEcho';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import DeviationDialog, { DeviationChoice } from './DeviationDialog';
@@ -675,7 +676,10 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             focus: 'quarantine',
             productVariantId: singleVariantId(savedLines.map((line) => line.result?.productVariantId ?? 0).filter((id) => id > 0)),
         });
+        const orderIds = [...new Set(savedLines.map((line) => index.get(line.payload.supplyCommitmentLineId)?.commitment.id).filter((id): id is number => id !== undefined))];
         return (
+            <>
+            <PurchaseOrderChain orderIds={orderIds} current="receipt" reloadKey={frozen.pallet.result?.id} />
             <SuccessPanel
                 title={t('supply_receive_success', { reference: palletLabel(frozen) })}
                 note={replayed ? t('supply_saved_before') : undefined}
@@ -708,6 +712,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                     })}
                 </ul>
             </SuccessPanel>
+            </>
         );
     }
 
