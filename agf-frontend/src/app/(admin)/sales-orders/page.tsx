@@ -14,6 +14,7 @@ import { useActorReference } from '../../../components/supply/useActorReference'
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { CREATE_ORDER_KEY, PendingCommand } from '../../../lib/pendingCommands';
 import { matchesOrderSearch } from '../../../lib/salesOrderRules';
+import { SELL_PARAMS, parseSellPrefill } from '../../../lib/salesSupply';
 import { fillHeight, splitLayoutMedia } from '../../../lib/viewportFill';
 import { toApiError } from '../../../services/apiClient';
 import { getCustomers, getProductsWithVariants } from '../../../services/referenceDataService';
@@ -95,6 +96,9 @@ function SalesWorkspace() {
     const beginDetailRequest = () => ++detailRequest.current;
     const isCurrentDetailRequest = (token: number) => token === detailRequest.current;
     const [creating, setCreating] = useState(false);
+    // "Verkopen" vanuit Beschikbaarheid: het formulier opent met dit artikel en aantal ingevuld (alleen een voorinvulling).
+    const sellPrefill = useMemo(() => parseSellPrefill(searchParams), [searchParams]);
+    useEffect(() => { if (sellPrefill !== null) setCreating(true); }, [sellPrefill]);
     const [search, setSearch] = useState('');
     const [customerFilter, setCustomerFilter] = useState('');
     // Standaard alleen Open orders; geannuleerde orders blijven met reden en historie opvraagbaar.
@@ -152,6 +156,7 @@ function SalesWorkspace() {
 
     const select = useCallback((id: number | null) => {
         const params = new URLSearchParams(searchParams.toString());
+        for (const name of SELL_PARAMS) params.delete(name);
         if (id === null) params.delete('orderId');
         else params.set('orderId', String(id));
         const query = params.toString();
@@ -324,7 +329,7 @@ function SalesWorkspace() {
                     {creating && reference.status === 'ready' && (
                         <HydratedGate>
                             <CreateSalesOrderForm actor={actor} customers={reference.data.customers} products={reference.data.products}
-                                onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => setCreating(false)}
+                                prefill={sellPrefill} onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => { setCreating(false); if (sellPrefill !== null) select(selectedId); }}
                                 onCustomerCreated={() => setReferenceToken((n) => n + 1)} />
                         </HydratedGate>
                     )}

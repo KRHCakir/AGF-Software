@@ -16,7 +16,8 @@ const focusClass = 'bg-amber-50 ring-2 ring-inset ring-amber-400';
 // Kolommen die alleen in de uitgebreide weergave staan; een contextlink die daarop focust, dwingt de uitgebreide weergave af.
 export const DETAILED_ONLY_FOCUS: readonly AvailabilityFocus[] = ['available', 'inTransit'];
 
-export type AvailabilityView = 'compact' | 'detailed';
+// 'sales' (standaard) staat in SalesSupplyTable; deze tabel toont 'compact' en 'detailed'.
+export type AvailabilityView = 'sales' | 'compact' | 'detailed';
 
 // Magazijnaanbod: één rij per variant + eenheid. Compact toont fysiek in magazijn, gereserveerd, beschikbaar na reserveringen,
 // quarantaine en verwachte aanvoer; "Alle kolommen" toont de volledige uitsplitsing. Aantal en kg staan altijd apart.

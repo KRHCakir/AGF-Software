@@ -7,6 +7,7 @@ import AvailabilityDrawer, { DrillDownSelection } from '../../../components/avai
 import DataBasisNote from '../../../components/availability/DataBasisNote';
 import DirectTradeSupplyTable from '../../../components/availability/DirectTradeSupplyTable';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import SalesSupplyTable from '../../../components/availability/SalesSupplyTable';
 import WarehouseSupplyTable, { AvailabilityView, DETAILED_ONLY_FOCUS } from '../../../components/availability/WarehouseSupplyTable';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { DirectTradeRow, UnitFilter, WarehouseRow, directTradeRows, formatTime, warehouseRows } from '../../../lib/availability';
@@ -43,12 +44,13 @@ function AvailabilityWorkspace() {
     const [showWarehouse, setShowWarehouse] = useState(true);
     const [showDirectTrade, setShowDirectTrade] = useState(true);
     const [selection, setSelection] = useState<DrillDownSelection | null>(null);
-    // Compact is de standaard; de keuze wordt per browser onthouden. Een contextlink die een kolom markeert die alleen in
-    // de uitgebreide weergave staat, toont die weergave altijd.
-    const [view, setViewState] = useState<AvailabilityView>('compact');
+    // Verkoop (Voorraad, Verwacht, Verkocht, Vrij) is de standaard; de keuze wordt per browser onthouden. Een contextlink die een kolom
+    // markeert die alleen in de uitgebreide weergave staat, toont die weergave altijd.
+    const [view, setViewState] = useState<AvailabilityView>('sales');
     useEffect(() => {
         try {
-            if (localStorage.getItem(VIEW_STORAGE_KEY) === 'detailed') setViewState('detailed');
+            const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+            if (stored === 'detailed' || stored === 'compact') setViewState(stored);
         } catch {
             // Opslag niet beschikbaar: compact blijft de standaard.
         }
@@ -210,8 +212,12 @@ function AvailabilityWorkspace() {
                                     <p className="text-sm text-gray-600">{t('availability_warehouse_hint')}</p>
                                 </div>
                                 <div role="group" aria-label={t('availability_sections_label')} className="inline-flex rounded border border-gray-300 bg-white text-sm">
+                                    <button type="button" onClick={() => setView('sales')} aria-pressed={effectiveView === 'sales'} disabled={forcedDetailed} data-tour="availability-view-sales"
+                                        className={`rounded-l px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${effectiveView === 'sales' ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
+                                        {t('availability_view_sales')}
+                                    </button>
                                     <button type="button" onClick={() => setView('compact')} aria-pressed={effectiveView === 'compact'} disabled={forcedDetailed}
-                                        className={`rounded-l px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${effectiveView === 'compact' ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
+                                        className={`border-l border-gray-300 px-3 py-1 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${effectiveView === 'compact' ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
                                         {t('availability_view_compact')}
                                     </button>
                                     <button type="button" onClick={() => setView('detailed')} aria-pressed={effectiveView === 'detailed'}
@@ -221,10 +227,13 @@ function AvailabilityWorkspace() {
                                 </div>
                             </div>
                             {effectiveView === 'compact' && <p className="text-xs text-gray-600">{t('availability_view_hint_compact')}</p>}
+                            {effectiveView === 'sales' && <p className="text-xs text-gray-600">{t('availability_view_hint_sales')}</p>}
                             {warehouse.length === 0
                                 ? <EmptyState title={filtersActive ? t('availability_no_results', { search: search.trim() }) : t('availability_warehouse_empty')}
                                     action={filtersActive ? clearFilters : undefined} />
-                                : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} view={effectiveView} />}
+                                : effectiveView === 'sales'
+                                    ? <SalesSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} />
+                                    : <WarehouseSupplyTable rows={warehouse} onOpen={openWarehouse} focus={focus} view={effectiveView} />}
                         </section>
                     )}
 

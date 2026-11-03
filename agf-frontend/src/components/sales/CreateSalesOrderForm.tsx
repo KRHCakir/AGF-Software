@@ -10,6 +10,7 @@ import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrd
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
 import { MAX_ORDER_LINES, OrderDraft, OrderLineDraft, buildOrderPayload } from '../../lib/salesOrderRules';
+import type { SellPrefill } from '../../lib/salesSupply';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -35,6 +36,11 @@ import { ruleErrorsToFieldErrors } from './ruleMessages';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()] });
+// Voorinvulling vanuit "Verkopen" in Beschikbaarheid: één regel met dit artikel, deze eenheid en dit aantal; de rest kiest de gebruiker.
+const prefilledDraft = (prefill: SellPrefill): OrderDraft => ({
+    ...emptyDraft(),
+    lines: [{ ...emptyLine(), productVariantId: String(prefill.productVariantId), unit: prefill.unit, quantity: formatDecimalInput(prefill.quantity) }],
+});
 
 // Een onafgerond commando wordt als (vergrendeld) concept getoond; verstuurd wordt altijd de bevroren payload zelf.
 const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
@@ -57,8 +63,9 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
 // geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren en boven dit formulier bewaard:
 // bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
-export default function CreateSalesOrderForm({ actor, customers: knownCustomers, products, onSaved, onOpen, onCancel, onCustomerCreated }: {
+export default function CreateSalesOrderForm({ actor, customers: knownCustomers, products, prefill = null, onSaved, onOpen, onCancel, onCustomerCreated }: {
     actor: string;
+    prefill?: SellPrefill | null;
     customers: CustomerOption[];
     products: ProductOption[];
     onSaved: (order: SalesOrder) => void;
@@ -83,7 +90,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         const extra = createdCustomers.filter((created) => !knownCustomers.some((known) => known.id === created.id));
         return extra.length === 0 ? knownCustomers : [...knownCustomers, ...extra].sort((a, b) => a.name.localeCompare(b.name));
     }, [knownCustomers, createdCustomers]);
-    const [draft, setDraft] = useState<OrderDraft>(() => (pending === null ? emptyDraft() : draftFromCommand(pending)));
+    const [draft, setDraft] = useState<OrderDraft>(() => (pending !== null ? draftFromCommand(pending) : prefill !== null ? prefilledDraft(prefill) : emptyDraft()));
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
