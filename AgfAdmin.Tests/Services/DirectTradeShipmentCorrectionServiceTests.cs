@@ -226,15 +226,20 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         var a = await AllocateAsync(_factory, _orderA, _lineA, _seed.DirectTradeSourceLine, 20m);
         var shipment = await ShipAsync(_factory, _orderA, (a, 81.4m, "LOT-DT-SRC"));
         string overview, reservable;
+        decimal sold;
         await using (var db = _factory.CreateContext())
         {
-            overview = JsonSerializer.Serialize((await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants);
+            var variants = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants;
+            (overview, sold) = (AvailabilitySnapshot.WithoutSales(variants), AvailabilitySnapshot.Sold(variants, "box"));
             reservable = JsonSerializer.Serialize((await new SalesOrderService(db).GetReservableStockAsync(_orderA, _lineA)).Value);
         }
         Assert.Equal(ServiceResultStatus.Created, (await CorrectAsync(_orderA, shipment.Id, Correction(await OrderVersionAsync(_factory, _orderA), shipment))).Status);
         await using (var db = _factory.CreateContext())
         {
-            Assert.Equal(overview, JsonSerializer.Serialize((await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants));
+            var variants = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants;
+            Assert.Equal(overview, AvailabilitySnapshot.WithoutSales(variants));
+            // Teruggenomen verzending: de 20 box zijn weer open vraag (verkocht, nog niet geleverd).
+            Assert.Equal(sold + 20m, AvailabilitySnapshot.Sold(variants, "box"));
             Assert.Equal(reservable, JsonSerializer.Serialize((await new SalesOrderService(db).GetReservableStockAsync(_orderA, _lineA)).Value));
             Assert.Empty(await db.StockReceipts.ToListAsync());
         }
