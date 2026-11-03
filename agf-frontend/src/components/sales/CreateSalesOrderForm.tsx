@@ -159,13 +159,14 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         edited();
     };
 
-    // Splitsen: deze regel wordt het deel uit voorraad, direct eronder een regel met dezelfde variant en eenheid voor de rest uit verwachte aanvoer.
+    // Splitsen: de kg-velden worden gewist (opnieuw berekend uit het nieuwe aantal; een getypt totaal klopt na het splitsen niet meer).
+    // Deze regel wordt het deel uit voorraad, direct eronder een regel met dezelfde variant en eenheid voor de rest uit verwachte aanvoer.
     const splitLine = (key: string, stock: number, expected: number) => {
         if (locked || draft.lines.length >= MAX_ORDER_LINES) return;
         setDraft((current) => ({
             ...current,
             lines: current.lines.flatMap((line) => (line.key !== key ? [line] : [
-                { ...line, mode: 'packages' as const, quantity: formatDecimalInput(stock), palletCount: '', packagesPerPallet: '', loosePackages: '', supplySource: 'Stock' as const, sourceTouched: true },
+                { ...line, mode: 'packages' as const, quantity: formatDecimalInput(stock), palletCount: '', packagesPerPallet: '', loosePackages: '', netKg: '', grossKg: '', netKgEntered: false, grossKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
                 { ...emptyLine(), productVariantId: line.productVariantId, unit: line.unit, quantity: formatDecimalInput(expected), supplySource: 'Expected' as const, sourceTouched: true },
             ])),
         }));
@@ -411,7 +412,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             </div>
                                             <LineSourceChoice name={prefix} quantity={lineKg[index].quantity} unitText={unitText} state={stateOf(line)}
                                                 source={effectiveSource(line, lineKg[index].quantity)} packagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
-                                                locked={locked} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
+                                                locked={locked} canSplit={draft.lines.length < MAX_ORDER_LINES} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
                                             <FieldError id={`${prefix}.supplySource`} messages={e(`${prefix}.supplySource`)} />
                                         </td>
                                         <td className="w-32 px-2 py-1.5">
