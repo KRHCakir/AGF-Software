@@ -25,7 +25,8 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
     rows: WarehouseRow[];
     onOpen: (row: WarehouseRow) => void;
     focus?: AvailabilityFocus | null;
-    view?: AvailabilityView;
+    // 'sales' staat in SalesSupplyTable; deze tabel kent alleen de magazijnweergaven.
+    view?: Exclude<AvailabilityView, 'sales'>;
 }) {
     const { t } = useTranslation();
     const detailed = view === 'detailed';
