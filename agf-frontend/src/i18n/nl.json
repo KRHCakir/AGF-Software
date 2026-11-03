@@ -346,7 +346,7 @@
   "supply_no_bin": "geen",
   "supply_another_pallet": "Nog een pallet",
   "availability_focus_available": "Nu beschikbaar (vóór reserveringen)",
-  "supply_to_inspection": "Naar keuring voor deze pallet",
+  "supply_to_inspection": "Naar keuring",
   "inspection": "Keuring",
   "inspection_subtitle": "Je keurt de ontvangen pallets: goedkeuren, blokkeren of afkeuren. Goedgekeurde voorraad staat daarna bij Beschikbaarheid.",
   "inspection_loading": "Keuringsgegevens worden geladen…",
@@ -2005,5 +2005,14 @@
   "tour_chain_sold_why": "Elk blokje is een link: klik en je staat op die verkooporder.",
   "tour_chain_origin_title": "Waar komt het vandaan",
   "tour_chain_origin_what": "Op de verkooporder wijst de strip terug: de inkooporder en de partij waar de gereserveerde voorraad vandaan komt.",
-  "tour_chain_origin_why": "Zo blijft de herkomst zichtbaar, van verkoop terug naar inkoop."
+  "tour_chain_origin_why": "Zo blijft de herkomst zichtbaar, van verkoop terug naar inkoop.",
+  "po_receive": "Ontvangen",
+  "inspection_view_stock": "Bekijk voorraad",
+  "sales_step_reserve": "Reserveren",
+  "sales_step_dispatch": "Verzenden",
+  "sales_step_confirm": "Aflevering bevestigen",
+  "sales_next_reserve": "Volgende stap: per regel goedgekeurde voorraad reserveren (\"Voorraad kiezen en reserveren\"), of klantgebonden aanvoer toewijzen.",
+  "sales_next_dispatch": "Volgende stap: de gereserveerde voorraad verzenden (\"Verzenden\" bovenaan).",
+  "sales_next_confirm": "Volgende stap: alles is verzonden; bevestig de aflevering bij de verzending.",
+  "sales_next_done": "Alles is verzonden en afgeleverd. De factuur komt in een volgende versie."
 }

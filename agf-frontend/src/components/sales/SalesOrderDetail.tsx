@@ -25,6 +25,7 @@ import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
+import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
@@ -374,6 +375,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
                     </div>
                 )}
             </header>
+            <SalesStepBar order={order} />
 
             {dispatchNotice && (
                 <div role="status" data-tour="sales-dispatch-done" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
