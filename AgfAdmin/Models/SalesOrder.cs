@@ -13,7 +13,13 @@ namespace AgfAdmin.Models
         public Customer Customer { get; set; }
 
         public string Status { get; set; }               // Open, Cancelled
-        public string CustomerReference { get; set; }    // optioneel; getrimd, leeg = null
+
+        // Eigen verkoopordernummer "VO-2026-0001": doorlopend per jaar (Europe/Amsterdam) en uniek, bij aanmaak toegekend (zoals IO-nummers).
+        // OrderYear + OrderSequence zijn de bron (uniek samen); OrderNumber is de vaste weergave daarvan en verandert nooit (guard-regel 22).
+        public string OrderNumber { get; set; }
+        public int OrderYear { get; set; }
+        public int OrderSequence { get; set; }
+        public string CustomerReference { get; set; }    // ordernummer van de klant; optioneel, getrimd, leeg = null; doorzoekbaar
         // Interne opmerking bij deze order: alleen voor interne werkplekken, nooit in klantdocumenten, mails of exports;
         // telt mee in de replayvergelijking en wordt niet naar volgende orders overgenomen.
         public string InternalNote { get; set; }

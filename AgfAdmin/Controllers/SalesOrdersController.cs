@@ -44,8 +44,8 @@ namespace AgfAdmin.Controllers
             this.ToActionResult(await _orders.GetAsync(id, HttpContext?.RequestAborted ?? default));
 
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] int? customerId, [FromQuery] string status) =>
-            this.ToActionResult(await _orders.ListAsync(new SalesOrderFilter { CustomerId = customerId, Status = status }, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> List([FromQuery] int? customerId, [FromQuery] string status, [FromQuery] string q = null) =>
+            this.ToActionResult(await _orders.ListAsync(new SalesOrderFilter { CustomerId = customerId, Status = status, Q = q }, HttpContext?.RequestAborted ?? default));
 
         [HttpGet("{id:int}/lines/{lineId:int}/reservable-stock")]
         public async Task<IActionResult> GetReservableStock(int id, int lineId) =>

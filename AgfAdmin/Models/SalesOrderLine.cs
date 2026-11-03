@@ -1,6 +1,6 @@
 namespace AgfAdmin.Models
 {
-    // Klantvraag per variant + eenheid (uniek per order). Reserveringen hangen aan deze regel.
+    // Klantvraag per variant + eenheid + bron (uniek per order). Reserveringen hangen aan deze regel.
     public sealed class SalesOrderLine
     {
         public int Id { get; set; }
@@ -13,6 +13,9 @@ namespace AgfAdmin.Models
 
         public decimal Quantity { get; set; } // > 0, decimal(18,3)
         public string Unit { get; set; }      // box, colli, tray, piece of dozen; nooit omgerekend
+        // Bron: Stock (uit voorraad) of Expected (uit verwachte aanvoer, verkocht vóór aankomst); zie SalesSupplyRules. Oudere regels: Stock.
+        // Per order één regel per variant + eenheid + bron, zodat een regel gesplitst kan worden (deel uit voorraad, rest verwacht).
+        public string SupplySource { get; set; } = Services.SalesSupplyRules.SourceStock;
         // Oorspronkelijke palletinvoer (optioneel, beide of geen): Quantity = PalletCount × PackagesPerPallet + LoosePackages.
         // Quantity blijft de bron voor vraag, reservering en verzending; resterend wordt nooit naar hele pallets afgerond.
         // Nieuwe invoer heeft hele pallets; oudere regels kunnen een gebroken palletaantal hebben (blijft leesbaar).

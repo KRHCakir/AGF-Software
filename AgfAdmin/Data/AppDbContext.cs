@@ -178,6 +178,26 @@ namespace AgfAdmin.Data
                 commitment.OrderSequence = sequence;
                 commitment.OrderNumber = Services.PurchaseOrderRules.FormatNumber(year, sequence);
             }
+
+            // Verkoopordernummer (VO-jjjj-nnnn) op dezelfde manier; SalesOrderService probeert opnieuw bij een gelijktijdig gekozen nummer.
+            var addedSales = ChangeTracker.Entries<SalesOrder>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+            var nextSales = new Dictionary<int, int>();
+            foreach (var order in addedSales.Where(o => o.OrderNumber == null).OrderBy(o => o.CreatedAt))
+            {
+                var year = BusinessCalendar.DateOf(order.CreatedAt).Year;
+                if (!nextSales.TryGetValue(year, out var sequence))
+                {
+                    var query = SalesOrders.AsNoTracking().Where(o => o.OrderYear == year).Select(o => (int?)o.OrderSequence);
+                    var stored = (async ? await query.MaxAsync(cancellationToken) : query.Max()) ?? 0;
+                    var tracked = addedSales.Where(o => o.OrderNumber != null && o.OrderYear == year).Select(o => o.OrderSequence).DefaultIfEmpty(0).Max();
+                    sequence = Math.Max(stored, tracked);
+                }
+                sequence++;
+                nextSales[year] = sequence;
+                order.OrderYear = year;
+                order.OrderSequence = sequence;
+                order.OrderNumber = Services.SalesSupplyRules.FormatNumber(year, sequence);
+            }
         }
 
         // Vergelijkingssleutel van een factuurnummer, ongeacht de schrijver: getrimd en in kleine letters (PurchaseOrderRules.InvoiceNumberKey).
@@ -843,6 +863,9 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<SalesOrder>(b =>
             {
                 b.Property(o => o.Status).IsRequired().HasMaxLength(32);
+                b.Property(o => o.OrderNumber).IsRequired().HasMaxLength(20);
+                b.HasIndex(o => o.OrderNumber).IsUnique();
+                b.HasIndex(o => new { o.OrderYear, o.OrderSequence }).IsUnique();
                 b.Property(o => o.CustomerReference).HasMaxLength(100);
                 b.Property(o => o.InternalNote).HasMaxLength(1000);
                 b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
@@ -855,6 +878,7 @@ namespace AgfAdmin.Data
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')");
+                    t.HasCheckConstraint("CK_SalesOrders_OrderSequence_Positive", "\"OrderSequence\" > 0");
                     // Expliciet IS NOT NULL: een CHECK laat UNKNOWN door, dus NULL-reden of -tijdstip moet apart worden geweigerd.
                     t.HasCheckConstraint("CK_SalesOrders_CancelledConsistent",
                         "\"Status\" <> 'Cancelled' OR (\"CancelledAt\" IS NOT NULL AND \"CancelReason\" IS NOT NULL AND length(trim(\"CancelReason\")) > 0)");
@@ -876,15 +900,18 @@ namespace AgfAdmin.Data
                 b.Property(l => l.NetWeightKg).HasPrecision(18, 3);
                 b.Property(l => l.GrossWeightKg).HasPrecision(18, 3);
                 b.Property(l => l.WeightSource).HasMaxLength(16);
+                b.Property(l => l.SupplySource).IsRequired().HasMaxLength(16).HasDefaultValue(Services.SalesSupplyRules.SourceStock);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
-                // Eén regel per variant + eenheid per order: anders worden reserveringen dubbelzinnig.
-                b.HasIndex(l => new { l.SalesOrderId, l.ProductVariantId, l.Unit }).IsUnique();
+                // Eén regel per variant + eenheid + bron per order: een gesplitste regel (deel uit voorraad, rest verwacht) zijn twee regels;
+                // reserveringen hangen aan precies één regel en blijven dus eenduidig.
+                b.HasIndex(l => new { l.SalesOrderId, l.ProductVariantId, l.Unit, l.SupplySource }).IsUnique();
 
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
+                    t.HasCheckConstraint("CK_SalesOrderLines_SupplySource_Allowed", "\"SupplySource\" IN ('Stock', 'Expected')");
                     // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en Quantity
                     // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
                     t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", PalletInputCheck("Quantity"));

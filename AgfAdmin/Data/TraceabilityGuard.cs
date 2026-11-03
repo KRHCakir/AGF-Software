@@ -90,6 +90,8 @@ namespace AgfAdmin.Data
     //    bij het aanmaken van de inhoudsregel vastgelegd en verandert daarna nooit (zie TraceabilityGuard.ExpectedShown.cs).
     // 21. de handelsklasse van een nieuw artikel, of een gewijzigde klasse, komt uit de vaste lijst (Extra, I, II) of is leeg; een oude,
     //    niet herkende waarde blijft alleen staan zolang de klasse niet wijzigt (zie TraceabilityGuard.TradeClass.cs).
+    // 22. een nieuwe verkooporder heeft het VO-nummer dat bij haar jaar en volgnummer hoort; het nummer van een opgeslagen order verandert
+    //    nooit (zie TraceabilityGuard.SalesOrderNumber.cs).
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -205,6 +207,7 @@ namespace AgfAdmin.Data
             await CheckArticlesAsync(db, async, cancellationToken);
             await CheckExpectedShownAsync(db, async, cancellationToken);
             await CheckTradeClassAsync(db, async, cancellationToken);
+            await CheckSalesOrderNumbersAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

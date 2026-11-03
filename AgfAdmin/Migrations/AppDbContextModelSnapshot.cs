@@ -3730,6 +3730,17 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("OrderSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("OrderYear")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uuid");
 
@@ -3755,12 +3766,20 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("OrderNumber")
+                        .IsUnique();
+
                     b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("OrderYear", "OrderSequence")
                         .IsUnique();
 
                     b.ToTable("SalesOrders", t =>
                         {
                             t.HasCheckConstraint("CK_SalesOrders_CancelledConsistent", "\"Status\" <> 'Cancelled' OR (\"CancelledAt\" IS NOT NULL AND \"CancelReason\" IS NOT NULL AND length(trim(\"CancelReason\")) > 0)");
+
+                            t.HasCheckConstraint("CK_SalesOrders_OrderSequence_Positive", "\"OrderSequence\" > 0");
 
                             t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')");
                         });
@@ -3855,6 +3874,13 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("SalesOrderId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SupplySource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Stock");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -3872,7 +3898,7 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("ProductVariantId");
 
-                    b.HasIndex("SalesOrderId", "ProductVariantId", "Unit")
+                    b.HasIndex("SalesOrderId", "ProductVariantId", "Unit", "SupplySource")
                         .IsUnique();
 
                     b.ToTable("SalesOrderLines", t =>
@@ -3880,6 +3906,8 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) AND abs(CAST(\"Quantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)");
 
                             t.HasCheckConstraint("CK_SalesOrderLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_SalesOrderLines_SupplySource_Allowed", "\"SupplySource\" IN ('Stock', 'Expected')");
 
                             t.HasCheckConstraint("CK_SalesOrderLines_Unit_Allowed", "\"Unit\" IN ('box', 'colli', 'tray', 'piece', 'dozen')");
 
