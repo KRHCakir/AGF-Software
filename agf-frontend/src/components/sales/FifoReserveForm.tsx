@@ -47,7 +47,9 @@ export default function FifoReserveForm({ orderId, line, actor, onSucceeded, onR
     const [error, setError] = useState<ApiError | null>(null);
     const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
     const inFlight = useRef(false);
+    // Altijd de huidige bevroren opdracht (na een 409 is die weg en geldt weer het verse voorstel), zonder het voorstel opnieuw te laden.
     const pendingItems = useRef(pending?.payload.items ?? null);
+    pendingItems.current = pending?.payload.items ?? null;
 
     useEffect(() => {
         const controller = new AbortController();
@@ -128,7 +130,10 @@ export default function FifoReserveForm({ orderId, line, actor, onSucceeded, onR
     };
 
     const q = (value: number) => formatQuantity(value, locale);
-    const total = sumQuantities(rows);
+    // Alleen de pallets die in beeld staan tellen mee (een bevroren regel van een pallet die niet meer in het voorstel staat, niet).
+    const total = proposal.status === 'ready'
+        ? sumQuantities(Object.fromEntries(proposal.data.candidates.filter((c) => rows[c.palletContentLineId]).map((c) => [c.palletContentLineId, rows[c.palletContentLineId]])))
+        : 0;
 
     return (
         <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }}
