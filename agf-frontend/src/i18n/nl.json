@@ -2038,6 +2038,7 @@
   "sales_breakdown_sales": "Per verkooporder (verkocht)",
   "sales_breakdown_none": "Geen.",
   "sales_expected_on": "verwacht {date}",
+  "sales_breakdown_in_inspection": "{quantity} in keuring",
   "sales_source_stock": "Uit voorraad",
   "sales_source_expected": "Uit verwachte aanvoer",
   "sales_cover_reserved": "{quantity} gereserveerd",
