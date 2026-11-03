@@ -6,30 +6,30 @@ import { useTranslation } from '../../../i18n/LanguageContext';
 import { formatMoney } from '../../../lib/availability';
 import { DashboardData, DashboardService } from '../../../services/dashboardService';
 import { showLegacyDemoChrome } from '../../../lib/featureFlags';
+import { NAV_GROUPS } from '../../../lib/navigation';
 
-// Startpagina: ingang naar de werkplekken. De oude kengetallen (deels vaste voorbeeldwaarden) staan standaard uit.
+// Startpagina: ingang naar de schermen, per procesgroep zoals het menu. De oude kengetallen (deels vaste voorbeeldwaarden) staan standaard uit.
 export default function Home() {
   const { t } = useTranslation();
-  const workspaces = [
-    { href: '/sales-orders', title: t('sales'), description: t('start_sales_desc'), icon: '🧾' },
-    { href: '/supply', title: t('supply'), description: t('start_supply_desc'), icon: '📦' },
-    { href: '/inspection', title: t('inspection'), description: t('start_inspection_desc'), icon: '🔍' },
-    { href: '/availability', title: t('availability'), description: t('start_availability_desc'), icon: '📊' },
-  ];
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">{t('start_title')}</h1>
         <p className="text-sm text-gray-600">{t('start_subtitle')}</p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {workspaces.map((workspace) => (
-          <Link key={workspace.href} href={workspace.href}
-            className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:border-blue-300 hover:bg-blue-50/40 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <div className="text-2xl" aria-hidden="true">{workspace.icon}</div>
-            <h2 className="mt-2 text-base font-semibold text-gray-900">{workspace.title}</h2>
-            <p className="mt-1 text-sm text-gray-600">{workspace.description}</p>
-          </Link>
+      {/* Dezelfde vier procesgroepen als het menu, in de volgorde van de keten: inkopen, voorraad, verkopen; stamgegevens apart. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {NAV_GROUPS.map((group) => (
+          <section key={group.id} aria-labelledby={`start-${group.id}`} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <h2 id={`start-${group.id}`} className="text-base font-semibold text-gray-900">{t(group.labelKey)}</h2>
+            <ul className="mt-2 space-y-1 text-sm">
+              {group.items.map((item) => (
+                <li key={item.id}>
+                  <Link href={item.href} className="font-medium text-blue-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500">{t(item.labelKey)}</Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         ))}
       </div>
       <section aria-labelledby="start-legacy" className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">

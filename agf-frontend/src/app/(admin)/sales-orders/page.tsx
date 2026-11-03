@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
@@ -262,7 +261,6 @@ function SalesWorkspace() {
 
             <p className="flex flex-wrap items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-900">
                 <span aria-hidden="true">🔒</span>{t('sales_direct_trade_note')}
-                <Link href="/orders" className="ml-auto text-xs font-medium underline underline-offset-2">{t('sales_legacy_link')}</Link>
             </p>
             </div>
 

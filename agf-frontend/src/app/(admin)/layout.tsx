@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import '../globals.css';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
+import AppMenu from '../../components/AppMenu';
 import DemoAssistant from '../../components/demo/DemoAssistant';
 import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
 
@@ -13,28 +15,30 @@ function AdminLayoutContent({
     children: React.ReactNode;
 }) {
     const { t, locale, setLocale } = useTranslation();
+    const pathname = usePathname();
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuButton = useRef<HTMLButtonElement>(null);
+    // Escape sluit het mobiele menu, ook als de focus nog op de menuknop staat; de focus gaat terug naar de knop.
+    useEffect(() => {
+        if (!menuOpen) return;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setMenuOpen(false);
+            menuButton.current?.focus();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [menuOpen]);
 
     return (
         <div className="flex flex-col min-h-dvh">
-            {/* TOP HEADER */}
+            {/* KOP: logo (naar Start), menuknop op smalle schermen, taal en gebruiker. Het menu zelf staat links (zie AppMenu). */}
             <header className="bg-white border-b border-gray-300 h-12 flex items-center px-4 shadow-sm z-20">
-                <div className="font-bold text-xl text-blue-800 mr-4 md:mr-8 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></div>
-
-                {/* Smalle schermen: de navigatie scrolt horizontaal in plaats van de pagina te verbreden. */}
-                <nav className="flex min-w-0 space-x-1 h-full items-center overflow-x-auto">
-                    <NavLink href="/dashboard" label={t('home')} />
-                    <NavLink href="/sales-orders" label={t('sales')} />
-                    <NavLink href="/purchase-invoices" label={t('purchase')} />
-                    <NavLink href="/purchase-orders" label={t('purchase_orders')} />
-                    <NavLink href="/purchase-orders/new" label={t('supply')} />
-                    <NavLink href="/inspection" label={t('inspection')} />
-                    <NavLink href="/availability" label={t('availability')} />
-                    <NavLink href="/articles" label={t('articles')} />
-                    <NavLink href="/relations" label={t('relations')} />
-                    <NavLink href="/reports" label={t('reports')} />
-                    <NavLink href="/settings" label={t('settings')} />
-                    <NavLink href="/help" label={t('help')} />
-                </nav>
+                <button ref={menuButton} type="button" className="mr-3 rounded border border-gray-300 px-2 py-1 text-sm font-medium text-gray-800 md:hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-expanded={menuOpen} aria-controls="app-menu-mobile" onClick={() => setMenuOpen((open) => !open)}>
+                    {menuOpen ? '✕' : '☰'} {t('nav_menu')}
+                </button>
+                <Link href="/dashboard" className="font-bold text-xl text-blue-800 mr-4 md:mr-8 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></Link>
 
                 <div className="ml-auto flex shrink-0 items-center space-x-4 pl-2 text-gray-500">
                     <div className="flex items-center space-x-1 border border-gray-200 rounded p-1">
@@ -61,34 +65,18 @@ function AdminLayoutContent({
                 </div>
             </header>
 
-            <div className="flex flex-1 overflow-hidden">
-                {/* LEFT SIDEBAR: snelkoppelingen naar de nieuwe werkplekken; geen oude modals meer. */}
-                {/* Onder 768 px verborgen: de zijbalk zou anders het grootste deel van een telefoonscherm innemen. */}
-                <aside className="hidden md:flex w-56 shrink-0 bg-gray-100 border-r border-gray-300 flex-col p-2 space-y-4">
-                    <div>
-                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('workspaces')}</h3>
-                        <nav className="flex flex-col space-y-1" aria-label={t('workspaces')}>
-                            <SidebarLink href="/sales-orders" label={t('sidebar_new_sales_order')} icon="🧾" />
-                            <SidebarLink href="/purchase-orders/new" label={t('sidebar_plan_supply')} icon="📅" />
-                            <SidebarLink href="/receipts" label={t('sidebar_receive_pallet')} icon="📦" />
-                            <SidebarLink href="/inspection" label={t('sidebar_inspection')} icon="🔍" />
-                            <SidebarLink href="/availability" label={t('sidebar_availability')} icon="📊" />
-                        </nav>
-                    </div>
+            {/* Altijd in de DOM (hidden als dicht), zodat aria-controls van de menuknop naar een bestaand element wijst. */}
+            <div id="app-menu-mobile" hidden={!menuOpen} className="border-b border-gray-300 bg-gray-100 p-2 md:hidden">
+                <AppMenu pathname={pathname} idPrefix="menu-mobile" onNavigate={() => setMenuOpen(false)} />
+            </div>
 
-                    {/* Oude flows: duidelijk apart gezet; niets wordt gesynchroniseerd. Tracking is een niet-actieve placeholder. */}
-                    <div>
-                        <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('legacy_flows')}</h3>
-                        <nav className="flex flex-col space-y-1 text-sm" aria-label={t('legacy_flows')}>
-                            <SidebarLink href="/orders" label={t('orders_legacy_nav')} icon="🗂️" />
-                            <SidebarLink href="/inventory" label={t('inventory_legacy_nav')} icon="🗂️" />
-                            <SidebarLink href="/incoming-invoices" label={t('invoices_legacy_nav')} icon="🗂️" />
-                            <SidebarLink href="/tracking" label={t('tracking_nav')} icon="⏸️" />
-                        </nav>
-                    </div>
+            <div className="flex flex-1 overflow-hidden">
+                {/* Het menu per proces; onder 768 px verborgen en via de menuknop bereikbaar. */}
+                <aside className="hidden md:flex w-56 shrink-0 bg-gray-100 border-r border-gray-300 flex-col overflow-y-auto p-2">
+                    <AppMenu pathname={pathname} idPrefix="menu" />
 
                     {showLegacyDemoChrome && (
-                        <div>
+                        <div className="mt-4">
                             <h3 className="text-xs font-bold text-gray-500 uppercase mb-2 px-2">{t('notifications')}</h3>
                             <div className="bg-white border border-gray-300 p-2 rounded text-xs shadow-sm">
                                 <div className="font-bold text-blue-600 mb-1">{t('incoming_shipment')}</div>
@@ -117,24 +105,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <LanguageProvider>
             <AdminLayoutContent>{children}</AdminLayoutContent>
         </LanguageProvider>
-    );
-}
-
-function NavLink({ href, label }: { href: string; label: string }) {
-    const pathname = usePathname();
-    const active = pathname === href || pathname.startsWith(href + '/');
-    return (
-        <Link href={href} aria-current={active ? 'page' : undefined} className={`px-3 h-8 flex shrink-0 items-center whitespace-nowrap rounded-md text-sm font-medium transition-colors ${active ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}>
-            {label}
-        </Link>
-    );
-}
-
-function SidebarLink({ href, label, icon, onClick }: { href: string; label: string; icon: string; onClick?: () => void }) {
-    return (
-        <Link href={href} onClick={onClick} className="flex items-center w-full px-2 py-1.5 text-left text-sm text-gray-700 hover:bg-white hover:shadow-sm rounded transition-all">
-            <span className="mr-2" aria-hidden="true">{icon}</span>
-            {label}
-        </Link>
     );
 }
