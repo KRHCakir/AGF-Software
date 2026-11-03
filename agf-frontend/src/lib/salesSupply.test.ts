@@ -45,6 +45,8 @@ describe('Verkopen from availability', () => {
         const href = sellHref(7, 'colli', 60);
         assert.equal(href, '/sales-orders?new=1&variantId=7&unit=colli&quantity=60');
         assert.deepEqual(parseSellPrefill(new URL(`http://x${href}`).searchParams), { productVariantId: 7, unit: 'colli', quantity: 60 });
+        assert.deepEqual(parseSellPrefill(new URLSearchParams('new=1&variantId=7&unit=colli&quantity=1.005')), { productVariantId: 7, unit: 'colli', quantity: 1.005 }, 'three decimals stay valid');
+        assert.equal(parseSellPrefill(new URLSearchParams('new=1&variantId=7&unit=colli&quantity=0')), null);
         for (const query of ['variantId=7&unit=colli&quantity=60', 'new=1&variantId=0&unit=colli&quantity=6', 'new=1&variantId=7&unit=kist&quantity=6',
             'new=1&variantId=7&unit=colli&quantity=-1', 'new=1&variantId=7&unit=colli&quantity=1.2345', 'new=1&variantId=99999999999&unit=colli&quantity=1']) {
             assert.equal(parseSellPrefill(new URLSearchParams(query)), null, query);
