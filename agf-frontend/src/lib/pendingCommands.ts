@@ -1,7 +1,7 @@
 import { PACKAGE_UNITS, type PackageUnit } from '../types/availability.ts';
 import type { CreateCustomerRequest } from '../types/referenceData';
 import type { AddInvoiceRefRequest, RejectRequest } from '../types/purchaseOrder';
-import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, RetractDeliveryRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
+import type { CancelSalesOrderRequest, ConfirmDeliveryRequest, CorrectDirectTradeShipmentRequest, RetractDeliveryRequest, CorrectSalesDispatchRequest, CreateDirectTradeAllocationRequest, CreateDirectTradeShipmentRequest, CreateSalesDispatchRequest, CreateSalesOrderRequest, CreateStockReservationBatchRequest, CreateStockReservationRequest, ReleaseStockReservationRequest } from '../types/salesOrder';
 
 // Onafgeronde commando's: een bevroren payload met zijn requestId waarvan de uitkomst onbekend is (netwerk, ongeldige
 // JSON, 5xx). Ze blijven boven de formulieren bewaard (per tabblad), zodat weg- en terugnavigeren exact dezelfde
@@ -29,6 +29,16 @@ export interface ReserveCommand extends CommandMeta {
     lineId: number;
     payload: CreateStockReservationRequest;
     display: { palletReference: string; lotNumber: string; productLabel: string };
+}
+
+// Reserveren (oudste partij eerst) over meerdere pallets in één keer: regelcommando, net als een enkele reservering.
+export interface ReserveBatchCommand extends CommandMeta {
+    kind: 'reserve-batch';
+    key: string;
+    orderId: number;
+    lineId: number;
+    payload: CreateStockReservationBatchRequest;
+    display: { productLabel: string; palletCount: number; quantity: number };
 }
 
 // Toewijzing van verwachte, klantgebonden DirectTrade-aanvoer aan een orderregel: regelcommando, net als reserveren.
@@ -150,7 +160,7 @@ export interface InvoiceRefCommand extends CommandMeta {
 
 export type PurchaseCommand = RejectReceiptCommand | InvoiceRefCommand;
 
-export type PendingCommand = CreateOrderCommand | ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | RetractDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand | PurchaseCommand;
+export type PendingCommand = CreateOrderCommand | ReserveCommand | ReserveBatchCommand | AllocateDirectTradeCommand | ReleaseCommand | CancelOrderCommand | DispatchCommand | ShipDirectTradeCommand | CorrectDtShipmentCommand | ConfirmDeliveryCommand | RetractDeliveryCommand | CorrectDispatchCommand | CreateCustomerCommand | PurchaseCommand;
 
 const PURCHASE_KINDS: readonly PendingCommand['kind'][] = ['reject-receipt', 'invoice-ref'];
 
@@ -169,9 +179,9 @@ export function rejectReceiptKey(orderId: number, palletContentLineId: number): 
 }
 
 // Regelcommando's: horen bij één orderregel en blokkeren elkaar daar.
-const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'allocate-direct-trade', 'release'];
+const LINE_KINDS: readonly PendingCommand['kind'][] = ['reserve', 'reserve-batch', 'allocate-direct-trade', 'release'];
 
-function isLineCommand(command: PendingCommand): command is ReserveCommand | AllocateDirectTradeCommand | ReleaseCommand {
+function isLineCommand(command: PendingCommand): command is ReserveCommand | ReserveBatchCommand | AllocateDirectTradeCommand | ReleaseCommand {
     return LINE_KINDS.includes(command.kind);
 }
 
@@ -182,6 +192,10 @@ export const CREATE_CUSTOMER_KEY = 'create-customer';
 
 export function reserveKey(orderId: number, lineId: number): string {
     return `reserve:${orderId}:${lineId}`;
+}
+
+export function reserveBatchKey(orderId: number, lineId: number): string {
+    return `reserve-batch:${orderId}:${lineId}`;
 }
 
 export function allocateKey(orderId: number, lineId: number): string {
@@ -326,6 +340,15 @@ function isReservePayload(value: unknown, requestId: string): value is CreateSto
         && isPositiveAmount(value.netWeightKg)
         && isText(value.actorReference)
         && isNullableText(value.reason);
+}
+
+// Elke inhoudsregel hooguit één keer, elk aantal en elk kg positief (de server controleert alles opnieuw).
+function isReserveBatchPayload(value: unknown, requestId: string): value is CreateStockReservationBatchRequest {
+    if (!isRecord(value) || value.requestId !== requestId || !isUnit(value.unit) || !isText(value.actorReference) || !isNullableText(value.reason)) return false;
+    if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 50) return false;
+    const ids = new Set<number>();
+    return value.items.every((item: unknown) => isRecord(item) && isPositiveInt(item.palletContentLineId) && !ids.has(item.palletContentLineId)
+        && ids.add(item.palletContentLineId) !== undefined && isPositiveAmount(item.quantity) && isPositiveAmount(item.netWeightKg));
 }
 
 // De bevestiging moet letterlijk true zijn: zonder bevestiging bestaat er geen geldig toewijzingscommando.
@@ -504,6 +527,12 @@ export function isPendingCommand(value: unknown): value is PendingCommand {
                 && value.key === reserveKey(value.orderId, value.lineId)
                 && isReservePayload(value.payload, value.requestId)
                 && isLineDisplay(value.display);
+        case 'reserve-batch':
+            return isPositiveInt(value.orderId) && isPositiveInt(value.lineId)
+                && value.key === reserveBatchKey(value.orderId, value.lineId)
+                && isReserveBatchPayload(value.payload, value.requestId)
+                && isRecord(value.display) && typeof value.display.productLabel === 'string'
+                && isPositiveInt(value.display.palletCount) && isPositiveAmount(value.display.quantity);
         case 'allocate-direct-trade':
             return isPositiveInt(value.orderId) && isPositiveInt(value.lineId)
                 && value.key === allocateKey(value.orderId, value.lineId)

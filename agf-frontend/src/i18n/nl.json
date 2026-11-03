@@ -2056,5 +2056,18 @@
   "sales_stock_not_enough": "Er is maar {free} {unit} vrij op voorraad.",
   "sales_split_line": "Splitsen: {stock} uit voorraad, {expected} uit verwachte aanvoer",
   "sales_shortage_warning": "Je verkoopt {quantity} {unit} meer dan voorraad en verwachte aanvoer. Dat mag; het staat als tekort bij de order.",
-  "sales_shortage_saved": "Je verkoopt {quantity} {unit} meer dan voorraad en verwachte aanvoer ({name}). De order staat op Tekort tot er inkoop bij komt."
+  "sales_shortage_saved": "Je verkoopt {quantity} {unit} meer dan voorraad en verwachte aanvoer ({name}). De order staat op Tekort tot er inkoop bij komt.",
+  "sales_fifo_start": "Reserveren (oudste partij eerst)",
+  "sales_fifo_title": "Reserveren: oudste partij eerst",
+  "sales_fifo_hint": "Voorstel op ontvangstdatum, daarna partijnummer. Pas de aantallen aan als je een andere partij wilt; je bevestigt zelf.",
+  "sales_fifo_loading": "Voorstel laden…",
+  "sales_fifo_no_stock": "Er is nu geen goedgekeurde voorraad van dit artikel vrij. De regel blijft wachten op voorraad.",
+  "sales_fifo_received": "Ontvangen",
+  "sales_fifo_total": "Samen {total} van {needed} {unit} die deze regel nog nodig heeft.",
+  "sales_fifo_confirm": "Reservering bevestigen",
+  "sales_pending_reserve_batch": "Reserveren op {count} pallets ({quantity}) voor order #{id} · {product}",
+  "sales_awaiting_title": "Verkocht, wacht op voorraad ({count})",
+  "sales_awaiting_show": "Tonen",
+  "sales_awaiting_empty": "Geen regels die vóór aankomst verkocht zijn en nu gereserveerd kunnen worden.",
+  "sales_awaiting_line": "{reservable} van {open} {unit} nu te reserveren"
 }

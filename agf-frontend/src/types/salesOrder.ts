@@ -598,6 +598,42 @@ export function isReservableStockLine(value: unknown): value is ReservableStockL
         && isNumber(value.contentLineVersion);
 }
 
+// "Reserveren (oudste partij eerst)": alle te reserveren inhoudsregels in FIFO-volgorde en de voorgestelde verdeling (alleen lezen).
+export interface FifoReservationProposal {
+    salesOrderId: number;
+    salesOrderLineId: number;
+    unit: PackageUnit;
+    neededQuantity: number;
+    proposedQuantity: number;
+    candidates: ReservableStockLine[];
+    items: { palletContentLineId: number; quantity: number; netWeightKg: number }[];
+}
+
+// Reserveren over meerdere pallets in één keer: alles of niets, idempotent via requestId.
+export interface CreateStockReservationBatchRequest {
+    requestId: string;
+    unit: PackageUnit;
+    actorReference: string;
+    reason: string | null;
+    items: { palletContentLineId: number; quantity: number; netWeightKg: number }[];
+}
+
+export function isFifoReservationProposal(value: unknown): value is FifoReservationProposal {
+    return isObject(value)
+        && isNumber(value.salesOrderId)
+        && isNumber(value.salesOrderLineId)
+        && isUnit(value.unit)
+        && isNumber(value.neededQuantity)
+        && isNumber(value.proposedQuantity)
+        && isArrayOf(value.candidates, isReservableStockLine)
+        && isArrayOf(value.items, (item: unknown): item is FifoReservationProposal['items'][number] =>
+            isObject(item) && isNumber(item.palletContentLineId) && isNumber(item.quantity) && isNumber(item.netWeightKg));
+}
+
+export function isStockReservationList(value: unknown): value is StockReservation[] {
+    return isArrayOf(value, isStockReservation);
+}
+
 export function isReservableStockList(value: unknown): value is ReservableStockLine[] {
     return isArrayOf(value, isReservableStockLine);
 }

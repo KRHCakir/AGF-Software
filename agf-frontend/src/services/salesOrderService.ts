@@ -39,10 +39,42 @@ import {
     isSalesOrderAuditEventList,
     isSalesOrderList,
     isStockReservation,
+    isFifoReservationProposal,
+    isStockReservationList,
+    type CreateStockReservationBatchRequest,
+    type FifoReservationProposal,
 } from '../types/salesOrder';
+import { type AwaitingStockLine, isAwaitingStockList } from '../types/salesSupply';
 
 // Getypeerde client voor de verkoopflow. Elke POST is idempotent via requestId: 201 = nieuw, 200 = exact dezelfde
 // opdracht was al verwerkt. Een 409 betekent altijd: herladen en opnieuw beslissen, nooit stil opnieuw versturen.
+
+// Voorstel "Reserveren (oudste partij eerst)" voor één orderregel; alleen lezen.
+export async function getFifoProposal(orderId: number, lineId: number, signal?: AbortSignal): Promise<FifoReservationProposal> {
+    const json = await getJson(`/sales-orders/${orderId}/lines/${lineId}/fifo-proposal`, signal);
+    if (!isFifoReservationProposal(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het voorstel oudste partij eerst.');
+    }
+    return json;
+}
+
+// Bevestigd voorstel: één batch gewone exacte reserveringen (alles of niets); 201 nieuw, 200 dezelfde opdracht was al verwerkt.
+export async function reserveBatch(orderId: number, lineId: number, request: CreateStockReservationBatchRequest, signal?: AbortSignal): Promise<SaveResult<StockReservation[]>> {
+    const { status, json } = await postJson(`/sales-orders/${orderId}/lines/${lineId}/reservations/batch`, request, signal);
+    if (!isStockReservationList(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het reserveren.');
+    }
+    return { value: json, replayed: status === 200 };
+}
+
+// Werklijst "Verkocht, wacht op voorraad": regels uit verwachte aanvoer waarvoor nu goedgekeurde voorraad vrij is.
+export async function getAwaitingStock(signal?: AbortSignal): Promise<AwaitingStockLine[]> {
+    const json = await getJson('/sales-orders/awaiting-stock', signal);
+    if (!isAwaitingStockList(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de werklijst.');
+    }
+    return json;
+}
 
 export interface SalesOrderListFilter {
     customerId?: number;

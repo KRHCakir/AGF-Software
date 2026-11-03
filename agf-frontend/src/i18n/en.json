@@ -2056,5 +2056,18 @@
   "sales_stock_not_enough": "Only {free} {unit} are free in stock.",
   "sales_split_line": "Split: {stock} from stock, {expected} from expected supply",
   "sales_shortage_warning": "You sell {quantity} {unit} more than stock and expected supply. That is allowed; the order shows a shortage.",
-  "sales_shortage_saved": "You sell {quantity} {unit} more than stock and expected supply ({name}). The order shows a shortage until purchases arrive."
+  "sales_shortage_saved": "You sell {quantity} {unit} more than stock and expected supply ({name}). The order shows a shortage until purchases arrive.",
+  "sales_fifo_start": "Reserve (oldest lot first)",
+  "sales_fifo_title": "Reserve: oldest lot first",
+  "sales_fifo_hint": "Proposal by receipt date, then lot number. Change the quantities if you want another lot; you confirm yourself.",
+  "sales_fifo_loading": "Loading proposal…",
+  "sales_fifo_no_stock": "No approved stock of this article is free right now. The line keeps waiting for stock.",
+  "sales_fifo_received": "Received",
+  "sales_fifo_total": "Together {total} of the {needed} {unit} this line still needs.",
+  "sales_fifo_confirm": "Confirm reservation",
+  "sales_pending_reserve_batch": "Reserve on {count} pallets ({quantity}) for order #{id} · {product}",
+  "sales_awaiting_title": "Sold, awaiting stock ({count})",
+  "sales_awaiting_show": "Show",
+  "sales_awaiting_empty": "No lines sold before arrival that can be reserved now.",
+  "sales_awaiting_line": "{reservable} of {open} {unit} can be reserved now"
 }
