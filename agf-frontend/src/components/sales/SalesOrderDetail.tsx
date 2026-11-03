@@ -30,8 +30,10 @@ import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
-export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false }: {
+export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false, fifoLineId = null }: {
     order: SalesOrder;
+    // Vanuit de werklijst: deze regel opent meteen met "Reserveren (oudste partij eerst)".
+    fifoLineId?: number | null;
     actor: string;
     onOrderChanged: () => Promise<boolean>;
     // Expliciet vernieuwen (alleen lezen). Zonder onRefresh wordt onOrderChanged gebruikt.
@@ -488,7 +490,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {order.lines.map((line) => (
-                <OrderLinePanel key={line.id} order={order} line={line} actor={actor} readOnly={readOnly} onOrderChanged={onOrderChanged} />
+                <OrderLinePanel key={line.id} order={order} line={line} actor={actor} readOnly={readOnly} onOrderChanged={onOrderChanged} openFifo={line.id === fifoLineId} />
             ))}
         </div>
     );

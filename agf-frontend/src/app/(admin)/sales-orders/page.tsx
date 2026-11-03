@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import AwaitingStockList from '../../../components/sales/AwaitingStockList';
 import CreateSalesOrderForm from '../../../components/sales/CreateSalesOrderForm';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
 import { HydratedGate, PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
@@ -77,6 +78,8 @@ function SalesWorkspace() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const selectedId = parseOrderId(searchParams.get('orderId'));
+    // Vanuit de werklijst: deze regel van de gekozen order opent met "Reserveren (oudste partij eerst)".
+    const fifoLineId = parseOrderId(searchParams.get('fifoLine'));
     const { hydrated, commands } = usePendingCommands();
     const [actor, setActor] = useActorReference();
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
@@ -157,6 +160,7 @@ function SalesWorkspace() {
     const select = useCallback((id: number | null) => {
         const params = new URLSearchParams(searchParams.toString());
         for (const name of SELL_PARAMS) params.delete(name);
+        params.delete('fifoLine');
         if (id === null) params.delete('orderId');
         else params.set('orderId', String(id));
         const query = params.toString();
@@ -180,6 +184,19 @@ function SalesWorkspace() {
             : current));
         setOrdersToken((n) => n + 1);
     }, []);
+
+    // Werklijst "Verkocht, wacht op voorraad": de order openen met het FIFO-voorstel van deze regel.
+    const openFifo = (orderId: number, lineId: number) => {
+        setCreating(false);
+        const params = new URLSearchParams(searchParams.toString());
+        for (const name of SELL_PARAMS) params.delete(name);
+        params.set('orderId', String(orderId));
+        params.set('fifoLine', String(lineId));
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        if (splitLayoutMedia()?.matches === false) {
+            requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'start' }));
+        }
+    };
 
     // Vanuit de lijst met onafgeronde commando's terug naar de plek waar de identieke opdracht wordt getoond.
     const goToCommand = (command: PendingCommand) => {
@@ -267,6 +284,7 @@ function SalesWorkspace() {
             <p className="flex flex-wrap items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm text-violet-900">
                 <span aria-hidden="true">🔒</span>{t('sales_direct_trade_note')}
             </p>
+            <AwaitingStockList token={ordersToken} onReserve={openFifo} />
             </div>
 
             {/* Desktop: twee kolommen op vensterhoogte, elk met een eigen scrollgebied. Smal: gestapeld, lijst begrensd. */}
@@ -340,7 +358,7 @@ function SalesWorkspace() {
                     {!creating && detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => void reloadOrder()} />}
                     {!creating && detail?.status === 'ready' && (
                         <HydratedGate fallback={<LoadingRows rows={4} label={t('sales_loading_order')} />}>
-                            <SalesOrderDetail order={detail.data} actor={actor} onOrderChanged={reloadOrder}
+                            <SalesOrderDetail key={`${detail.data.id}:${fifoLineId ?? ''}`} order={detail.data} actor={actor} onOrderChanged={reloadOrder} fifoLineId={fifoLineId}
                                 onRefresh={refreshOrder} refreshing={detailRefreshing} refreshFailed={detailRefreshFailed} />
                         </HydratedGate>
                     )}
