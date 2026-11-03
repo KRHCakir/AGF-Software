@@ -1,4 +1,5 @@
 import { isWeightBasis, isWeightMethod, type WeightBasis, type WeightMethod } from '../lib/weight';
+import { type AvailabilityExpectedSupply, type AvailabilitySalesLine, type SalesBalance, isAvailabilityExpectedSupply, isAvailabilitySalesLine, isSalesBalance } from './salesSupply';
 // Types die exact overeenkomen met de alleen-lezen Availability API (backend: AgfAdmin/DTOs/AvailabilityDtos.cs).
 // Getallen zijn decimals uit de backend; de frontend rekent er niet mee, behalve optellen voor weergave.
 
@@ -73,6 +74,9 @@ export interface WarehouseSupply {
     expectedOnPallets: QualityBreakdown;
     expectedUnregistered: ExpectedUnregistered;
     warnings: AvailabilityWarning[];
+    // Verkoopstand van deze variant en eenheid (Voorraad, Verwacht, Verkocht, Vrij); ontbreekt in oudere antwoorden. Een variant die
+    // alleen verkocht is, heeft een rij met nullen en alleen deze stand.
+    sales?: SalesBalance | null;
 }
 
 // Klantgebonden aanvoer: bewust zonder availableBeforeReservations, warehouse of reserved.
@@ -166,6 +170,10 @@ export interface AvailabilityDrillDown {
     variantName: string;
     sourceLines: SourceLineAvailability[];
     contentLines: ContentLineAvailability[];
+    // Verkoopstand per eenheid en de uitsplitsing per verkooporder en per inkooporder (ontbreekt in oudere antwoorden).
+    sales?: SalesBalance[];
+    salesLines?: AvailabilitySalesLine[];
+    expectedSupplies?: AvailabilityExpectedSupply[];
 }
 
 // ---- Type-guards: controleren de vorm van het antwoord, zodat een onverwacht antwoord nooit stil verkeerde getallen toont ----
@@ -248,7 +256,8 @@ function isWarehouseSupply(value: unknown): value is WarehouseSupply {
         && isBreakdown(value.inTransit)
         && isBreakdown(value.expectedOnPallets)
         && isExpectedUnregistered(value.expectedUnregistered)
-        && isArrayOf(value.warnings, isWarning);
+        && isArrayOf(value.warnings, isWarning)
+        && (value.sales === undefined || value.sales === null || isSalesBalance(value.sales));
 }
 
 function isDirectTradeSupply(value: unknown): value is DirectTradeSupply {
@@ -343,5 +352,8 @@ export function isAvailabilityDrillDown(value: unknown): value is AvailabilityDr
         && typeof value.productName === 'string'
         && typeof value.variantName === 'string'
         && isArrayOf(value.sourceLines, isSourceLine)
-        && isArrayOf(value.contentLines, isContentLine);
+        && isArrayOf(value.contentLines, isContentLine)
+        && (value.sales === undefined || isArrayOf(value.sales, isSalesBalance))
+        && (value.salesLines === undefined || isArrayOf(value.salesLines, isAvailabilitySalesLine))
+        && (value.expectedSupplies === undefined || isArrayOf(value.expectedSupplies, isAvailabilityExpectedSupply));
 }
