@@ -133,6 +133,21 @@ public sealed class SalesBalanceTests : IDisposable
     }
 
     [Fact]
+    public async Task With_Route_DirectTrade_There_Is_No_Sales_Balance_In_The_Overview_Or_The_Drill_Down()
+    {
+        await _s.ArrangeAsync();
+        Assert.Equal(ServiceResultStatus.Created, (await _s.CreateAsync(_s.Order((10m, "Stock")))).Status);
+        await using var db = _s.Factory.CreateContext();
+        var service = new AvailabilityService(db);
+        var overview = (await service.GetOverviewAsync(new AvailabilityQuery { Route = "DirectTrade" })).Value;
+        Assert.All(overview.Variants.SelectMany(v => v.WarehouseSupply), row => Assert.Null(row.Sales));
+        var drill = (await service.GetVariantAsync(_s.TomatoId, new AvailabilityQuery { Route = "DirectTrade" })).Value;
+        Assert.Empty(drill.Sales);
+        Assert.Empty(drill.SalesLines);
+        Assert.Empty(drill.ExpectedSupplies);
+    }
+
+    [Fact]
     public void Coverage_Takes_Stock_Lines_First_Then_Inspection_Then_The_Earliest_Purchase_Order()
     {
         var early = new DateTime(2026, 11, 5, 0, 0, 0, DateTimeKind.Utc);
