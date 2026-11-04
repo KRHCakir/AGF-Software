@@ -61,7 +61,11 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                         {order.supplierLotReference && <p className="text-sm text-gray-900">{t('partij_supplier_lot')} <span className="font-mono">{order.supplierLotReference}</span></p>}
                         {order.storedStatus !== 'Cancelled' && (
                             <PartijLinkPanel orderId={order.id} orderNumber={order.orderNumber} dataTourKey={order.id}
-                                onLinked={() => { void getPurchaseOrder(order.id).then(onChanged).catch(() => undefined); }} />
+                                onLinked={(partij) => {
+                                    // Direct zichtbaar maken; daarna op de achtergrond verversen (mislukt dat, dan blijft de gekoppelde partij staan).
+                                    onChanged({ ...order, partijId: partij.id, partijNumber: partij.number });
+                                    void getPurchaseOrder(order.id).then(onChanged).catch(() => undefined);
+                                }} />
                         )}
                     </div>
                 )}

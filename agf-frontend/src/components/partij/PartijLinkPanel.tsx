@@ -31,7 +31,8 @@ export default function PartijLinkPanel({ orderId, orderNumber, onLinked, dataTo
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     // Eén nieuwe partij per keer openen: een herhaling na een mislukte koppeling maakt geen tweede aan.
-    const created = useRef<PartijSummary | null>(null);
+    // `wanted` is de keuze waarmee ze is aangemaakt (null = voorstel), zodat een andere keuze haar niet hergebruikt.
+    const created = useRef<{ partij: PartijSummary; wanted: string | null } | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -47,10 +48,12 @@ export default function PartijLinkPanel({ orderId, orderNumber, onLinked, dataTo
     const partijId = async (): Promise<number | null> => {
         if (choice.kind === 'existing') return choice.partij.id;
         const wanted = choice.kind === 'suggested' ? null : choice.number.trim();
-        if (created.current !== null && (wanted === null || partijNumberKey(created.current.number) === partijNumberKey(wanted))) return created.current.id;
+        const previous = created.current;
+        if (previous !== null && (previous.wanted === null ? wanted === null : wanted !== null && partijNumberKey(previous.wanted) === partijNumberKey(wanted))) return previous.partij.id;
         try {
-            created.current = (await createPartij({ requestId: newRequestId(), number: wanted })).value;
-            return created.current.id;
+            const partij = (await createPartij({ requestId: newRequestId(), number: wanted })).value;
+            created.current = { partij, wanted };
+            return partij.id;
         } catch (caught) {
             const apiError = toApiError(caught);
             if (!isPartijExistsConflict(apiError.body)) throw caught;
