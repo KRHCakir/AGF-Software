@@ -72,7 +72,7 @@ namespace AgfAdmin.Services
                 Mode = settings.PartijNumberMode,
                 Format = effectiveFormat,
                 SequenceReset = effectiveReset,
-                Suggestion = settings.PartijNumberMode == PartijRules.ModeAuto || !string.IsNullOrWhiteSpace(format) ? next.Number : null
+                Suggestion = settings.PartijNumberMode == PartijRules.ModeAuto ? next.Number : null
             });
         }
 
