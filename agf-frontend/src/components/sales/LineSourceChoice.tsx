@@ -47,7 +47,7 @@ export default function LineSourceChoice({ name, quantity, unitText, state, sour
                 {(['Stock', 'Expected'] as const).map((option) => (
                     <label key={option} className="inline-flex items-center gap-1 text-gray-900">
                         <input type="radio" name={`${name}.supplySource`} value={option} checked={source === option} onChange={() => onSource(option)}
-                            data-tour={`sales-line-source-${option}`} />
+                            data-tour="sales-line-source" data-tour-key={option} />
                         {t(option === 'Stock' ? 'sales_source_stock' : 'sales_source_expected')}
                     </label>
                 ))}
@@ -64,7 +64,7 @@ export default function LineSourceChoice({ name, quantity, unitText, state, sour
                 </div>
             )}
             {shortage > 0 && (
-                <p role="status" className="font-medium text-red-800" data-testid={`${name}.shortage`}>
+                <p role="status" className="font-medium text-red-800" data-testid={`${name}.shortage`} data-tour="sales-line-shortage" data-tour-key={name.replace(/^lines\[(\d+)\]$/, '$1')}>
                     {t('sales_shortage_warning', { quantity: q(shortage), unit: unitText })}
                 </p>
             )}

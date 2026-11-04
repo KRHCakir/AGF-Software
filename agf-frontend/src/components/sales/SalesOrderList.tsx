@@ -66,7 +66,7 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                     <button type="button" onClick={() => onSelect(order.id)}
                                         className="text-left font-medium text-blue-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         aria-label={t('sales_open_order', { id: orderLabel(order), customer: order.customerName ?? '' })}
-                                        aria-current={selected ? 'true' : undefined}>
+                                        aria-current={selected ? 'true' : undefined} data-tour="sales-open-order" data-tour-key={orderLabel(order)}>
                                         {orderLabel(order)} · {order.customerName ?? t('availability_unknown')}
                                     </button>
                                     <span className="block text-xs text-gray-600">

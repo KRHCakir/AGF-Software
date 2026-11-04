@@ -277,12 +277,13 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                 )}
             >
                 <p>
+                    <span className="font-mono font-semibold" data-tour="sales-saved-number">{orderLabel(order)}</span> ·{' '}
                     {t('sales_delivery_on', { date: formatCalendarDate(order.requestedDeliveryDate, locale) })}
                     {order.customerReference && <> · {t('sales_reference_short')} {order.customerReference}</>}
                 </p>
                 {/* Meer verkocht dan voorraad + verwachte aanvoer: toegestaan, met deze korte waarschuwing per artikel; de order is vastgelegd. */}
                 {(order.shortageWarnings ?? []).map((warning) => (
-                    <p key={`${warning.productVariantId}:${warning.unit}`} role="alert" className="mt-2 rounded border border-red-300 bg-red-50 px-3 py-2 font-medium text-red-900" data-testid="sales-shortage-warning">
+                    <p key={`${warning.productVariantId}:${warning.unit}`} role="alert" className="mt-2 rounded border border-red-300 bg-red-50 px-3 py-2 font-medium text-red-900" data-testid="sales-shortage-warning" data-tour="sales-shortage-warning">
                         ⚠ {t('sales_shortage_saved', { quantity: formatQuantity(warning.shortageQuantity, locale), unit: t(unitLabelKey(warning.unit)).toLowerCase(), name: `${warning.productName ?? ''} · ${warning.variantName ?? ''}` })}
                     </p>
                 ))}

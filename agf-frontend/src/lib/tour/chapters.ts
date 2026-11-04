@@ -4,6 +4,7 @@
 import { DEVIATION_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER } from './purchaseChapters.ts';
 import { precheckChain } from './prechecks.ts';
 import { INVOICE_CHAPTER, SALES_CHAPTER } from './salesChapters.ts';
+import { PRESELL_CHAPTER } from './presellChapter.ts';
 import type { TourChapter, TourStep } from './types.ts';
 
 const screen = (id: string, route: string): TourStep => ({
@@ -51,4 +52,4 @@ export const CHAIN_CHAPTER: TourChapter = {
     ],
 };
 
-export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER, DEVIATION_CHAPTER, SALES_CHAPTER, CHAIN_CHAPTER, INVOICE_CHAPTER];
+export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER, DEVIATION_CHAPTER, SALES_CHAPTER, PRESELL_CHAPTER, CHAIN_CHAPTER, INVOICE_CHAPTER];

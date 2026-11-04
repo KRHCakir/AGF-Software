@@ -208,6 +208,26 @@ test('Afwijking bij ontvangst: blind ingevuld, "Klopt dit?" en de afwijking op d
     await page.close();
 });
 
+test('hoofdstuk Verkopen voor aankomst: verkocht met tekort, ontvangen en goedgekeurd, daarna oudste partij eerst gereserveerd', async ({ request }) => {
+    const page = await context.newPage();
+    // Een verse open demo-inkooporder (hoofdstuk 1) om te verkopen vóór aankomst.
+    expectAllSteps(await play(page, 'order'));
+    const result = await play(page, 'presell');
+    expectAllSteps(result);
+    const number = /Verkooporder (VO-\d{4}-\d+)/.exec(result.done)?.[1];
+    expect(number, result.done).toBeTruthy();
+    const orders = await json<{ orderNumber: string; actorReference: string; shortage: boolean; lines: { supplySource: string; quantity: number; reservedQuantity: number; reservations: { supplyOrderNumber: string | null; lotNumber: string | null }[] }[] }[]>(request, `/sales-orders?q=${number}`);
+    const order = orders.find((candidate) => candidate.orderNumber === number)!;
+    expect(order.actorReference).toBe('Demo-assistent');
+    expect(order.lines.map((line) => line.supplySource)).toEqual(['Expected']);
+    // Er is meer verkocht dan er is en komt (tekort 5); wat er nu is, is gereserveerd op exacte pallets met inkooporder en partij.
+    expect(order.shortage).toBe(true);
+    expect(order.lines[0].reservedQuantity).toBeGreaterThan(0);
+    expect(order.lines[0].reservations.every((reservation) => /IO-\d{4}-\d+/.test(reservation.supplyOrderNumber ?? '') && !!reservation.lotNumber)).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    await page.close();
+});
+
 test('hoofdstuk 4, Factureren: alleen een plek in de lijst', async () => {
     const page = await context.newPage();
     await page.goto('/dashboard');

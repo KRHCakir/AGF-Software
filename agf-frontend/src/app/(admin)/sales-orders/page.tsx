@@ -318,7 +318,7 @@ function SalesWorkspace() {
                         </label>
                         <label className="text-xs font-medium text-gray-700">
                             {t('supply_receive_search')}
-                            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('sales_search_placeholder')} className={inputClass} />
+                            <input type="search" data-tour="sales-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('sales_search_placeholder')} className={inputClass} />
                         </label>
                         <label className="text-xs font-medium text-gray-700">
                             {t('sales_customer')}
