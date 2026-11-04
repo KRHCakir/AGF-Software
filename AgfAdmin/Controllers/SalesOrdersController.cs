@@ -47,6 +47,16 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> List([FromQuery] int? customerId, [FromQuery] string status, [FromQuery] string q = null) =>
             this.ToActionResult(await _orders.ListAsync(new SalesOrderFilter { CustomerId = customerId, Status = status, Q = q }, HttpContext?.RequestAborted ?? default));
 
+        // Werklijst "Verkocht, wacht op voorraad": regels uit verwachte aanvoer waarvoor nu vrije, goedgekeurde voorraad is.
+        [HttpGet("awaiting-stock")]
+        public async Task<IActionResult> AwaitingStock() =>
+            this.ToActionResult(await _orders.GetAwaitingStockAsync(HttpContext?.RequestAborted ?? default));
+
+        // Voorstel "Reserveren (oudste partij eerst)": alleen lezen; bevestigen via reservations/batch.
+        [HttpGet("{id:int}/lines/{lineId:int}/fifo-proposal")]
+        public async Task<IActionResult> FifoProposal(int id, int lineId) =>
+            this.ToActionResult(await _orders.GetFifoProposalAsync(id, lineId, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("{id:int}/lines/{lineId:int}/reservable-stock")]
         public async Task<IActionResult> GetReservableStock(int id, int lineId) =>
             this.ToActionResult(await _orders.GetReservableStockAsync(id, lineId, HttpContext?.RequestAborted ?? default));
@@ -149,6 +159,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Reserve(int id, int lineId, [FromBody] CreateStockReservationDto request)
         {
             var result = await _reservations.ReserveAsync(id, lineId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        // Reserveren over meerdere pallets in één keer (bijvoorbeeld het aangepaste FIFO-voorstel): alles of niets, idempotent via requestId.
+        [HttpPost("{id:int}/lines/{lineId:int}/reservations/batch")]
+        public async Task<IActionResult> ReserveBatch(int id, int lineId, [FromBody] CreateStockReservationBatchDto request)
+        {
+            var result = await _reservations.ReserveBatchAsync(id, lineId, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
     }

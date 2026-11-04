@@ -10,6 +10,7 @@ namespace AgfAdmin.Services
     {
         Task<ServiceResult<StockReservationDto>> ReserveAsync(int salesOrderId, int salesOrderLineId, CreateStockReservationDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<StockReservationDto>> ReleaseAsync(int reservationId, ReleaseStockReservationDto request, CancellationToken cancellationToken = default);
+        Task<ServiceResult<IReadOnlyList<StockReservationDto>>> ReserveBatchAsync(int salesOrderId, int salesOrderLineId, CreateStockReservationBatchDto request, CancellationToken cancellationToken = default);
     }
 
     // Reserveren op precies één PalletContentLine (Warehouse-route, Received + Warehouse, Approved) en weer vrijgeven.
@@ -69,7 +70,34 @@ namespace AgfAdmin.Services
                 return ServiceResult<StockReservationDto>.Conflict(conflict);
             }
 
-            var now = DateTime.UtcNow;
+            var reservation = AddReservation(line, content, command, DateTime.UtcNow);
+
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception)
+            {
+                _db.ChangeTracker.Clear();
+                var concurrent = await ReplayReserveAsync(command, cancellationToken);
+                if (concurrent != null)
+                {
+                    return concurrent;
+                }
+                if (exception is DbUpdateConcurrencyException)
+                {
+                    return ServiceResult<StockReservationDto>.Conflict("The stock or order line was changed concurrently; reload and try again with a new requestId.");
+                }
+                throw;
+            }
+
+            return ServiceResult<StockReservationDto>.Created(await LoadDtoAsync(reservation.Id, cancellationToken));
+        }
+
+        // Eén exacte reservering met audit; raakt inhoudsregel, orderregel en pallet aan (versie +1): twee gelijktijdige reserveringen op
+        // dezelfde inhoud, orderregel of pallet kunnen nooit allebei slagen. Slaat niet zelf op.
+        private StockReservation AddReservation(SalesOrderLine line, PalletContentLine content, ReserveCommand command, DateTime now)
+        {
             var reservation = new StockReservation
             {
                 RequestId = command.RequestId,
@@ -86,7 +114,6 @@ namespace AgfAdmin.Services
             };
             _db.StockReservations.Add(reservation);
 
-            // Aanraken (versie +1): twee gelijktijdige reserveringen op dezelfde inhoud, orderregel of pallet kunnen nooit allebei slagen.
             _db.Entry(content).Property(c => c.Version).IsModified = true;
             _db.Entry(line).Property(l => l.Version).IsModified = true;
             _db.Entry(content.Pallet).Property(p => p.Version).IsModified = true;
@@ -110,6 +137,74 @@ namespace AgfAdmin.Services
                 OccurredAt = now,
                 RequestId = command.RequestId
             });
+            return reservation;
+        }
+
+        // ======================== Reserveren over meerdere pallets (oudste partij eerst) ========================
+
+        public const int MaxBatchItems = 50;
+
+        // Elk item krijgt een eigen, vaste RequestId afgeleid van de batch-RequestId en zijn plaats: een herhaling vindt dezelfde reserveringen terug.
+        internal static Guid ItemRequestId(Guid batchRequestId, int index)
+        {
+            var bytes = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes($"{batchRequestId:N}/{index}"));
+            bytes[6] = (byte)((bytes[6] & 0x0F) | 0x30);
+            bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+            return new Guid(bytes);
+        }
+
+        // Alles of niets: elk item is een gewone exacte reservering (zelfde controles als ReserveAsync, opgeteld binnen de batch), in één
+        // transactie. Gelijktijdige schrijvers botsen op de versie van inhoudsregel, orderregel of pallet: precies één wint, de ander krijgt 409.
+        public async Task<ServiceResult<IReadOnlyList<StockReservationDto>>> ReserveBatchAsync(int salesOrderId, int salesOrderLineId, CreateStockReservationBatchDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            var commands = BuildBatch(salesOrderId, salesOrderLineId, request, errors);
+            if (errors.Count > 0)
+            {
+                return ServiceResult<IReadOnlyList<StockReservationDto>>.Validation(ValidationErrors.ToArrays(errors));
+            }
+
+            var replay = await ReplayBatchAsync(request.RequestId!.Value, commands, cancellationToken);
+            if (replay != null)
+            {
+                return replay;
+            }
+
+            var line = await _db.SalesOrderLines.Include(l => l.SalesOrder)
+                .SingleOrDefaultAsync(l => l.Id == salesOrderLineId && l.SalesOrderId == salesOrderId, cancellationToken);
+            if (line == null)
+            {
+                return ServiceResult<IReadOnlyList<StockReservationDto>>.NotFound($"Sales order line {salesOrderLineId} does not exist on sales order {salesOrderId}.");
+            }
+            var contentIds = commands.Select(c => c.PalletContentLineId).ToList();
+            var contents = await _db.PalletContentLines
+                .Include(c => c.Pallet)
+                .Include(c => c.SupplyCommitmentLine).ThenInclude(l => l.SupplyCommitment)
+                .Where(c => contentIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, cancellationToken);
+            var missing = contentIds.FirstOrDefault(id => !contents.ContainsKey(id));
+            if (missing != 0)
+            {
+                return ServiceResult<IReadOnlyList<StockReservationDto>>.NotFound($"Pallet content line {missing} does not exist.");
+            }
+
+            var reservedOnContent = await SalesOrderService.ReservedByContentLineAsync(_db, contentIds, cancellationToken);
+            var reservedOnLine = await SalesOrderService.CommittedOnOrderLineAsync(_db, line.Id, cancellationToken);
+            var now = DateTime.UtcNow;
+            var created = new List<StockReservation>();
+            for (var i = 0; i < commands.Count; i++)
+            {
+                var command = commands[i];
+                var content = contents[command.PalletContentLineId];
+                var conflict = FindReserveConflict(line, content, command, reservedOnContent.GetValueOrDefault(content.Id), reservedOnLine);
+                if (conflict != null)
+                {
+                    _db.ChangeTracker.Clear();
+                    return ServiceResult<IReadOnlyList<StockReservationDto>>.Conflict($"items[{i}]: {conflict}");
+                }
+                created.Add(AddReservation(line, content, command, now));
+                reservedOnLine += command.Quantity;
+            }
 
             try
             {
@@ -118,19 +213,108 @@ namespace AgfAdmin.Services
             catch (DbUpdateException exception)
             {
                 _db.ChangeTracker.Clear();
-                var concurrent = await ReplayReserveAsync(command, cancellationToken);
+                var concurrent = await ReplayBatchAsync(request.RequestId!.Value, commands, cancellationToken);
                 if (concurrent != null)
                 {
                     return concurrent;
                 }
                 if (exception is DbUpdateConcurrencyException)
                 {
-                    return ServiceResult<StockReservationDto>.Conflict("The stock or order line was changed concurrently; reload and try again with a new requestId.");
+                    return ServiceResult<IReadOnlyList<StockReservationDto>>.Conflict("The stock or order line was changed concurrently; reload the proposal and try again with a new requestId.");
                 }
                 throw;
             }
 
-            return ServiceResult<StockReservationDto>.Created(await LoadDtoAsync(reservation.Id, cancellationToken));
+            var dtos = new List<StockReservationDto>();
+            foreach (var reservation in created)
+            {
+                dtos.Add(await LoadDtoAsync(reservation.Id, cancellationToken));
+            }
+            return ServiceResult<IReadOnlyList<StockReservationDto>>.Created(dtos);
+        }
+
+        private static List<ReserveCommand> BuildBatch(int salesOrderId, int salesOrderLineId, CreateStockReservationBatchDto request, Dictionary<string, List<string>> errors)
+        {
+            if (request == null)
+            {
+                ValidationErrors.Add(errors, "request", "A request body is required.");
+                return null;
+            }
+            if (request.RequestId == null || request.RequestId == Guid.Empty)
+            {
+                ValidationErrors.Add(errors, "requestId", "A client-generated, non-empty requestId is required.");
+            }
+            if (!SupplyRules.IsPackageUnit(request.Unit))
+            {
+                ValidationErrors.Add(errors, "unit", $"Unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}.");
+            }
+            var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+            var reason = ValidationErrors.OptionalText(request.Reason, ReservationRules.MaxReasonLength, "reason", errors);
+            if (request.Items == null || request.Items.Count == 0)
+            {
+                ValidationErrors.Add(errors, "items", "At least one pallet content line is required.");
+            }
+            else if (request.Items.Count > MaxBatchItems)
+            {
+                ValidationErrors.Add(errors, "items", $"At most {MaxBatchItems} pallet content lines are allowed.");
+            }
+            else
+            {
+                var seen = new HashSet<int>();
+                for (var i = 0; i < request.Items.Count; i++)
+                {
+                    var item = request.Items[i];
+                    if (item == null)
+                    {
+                        ValidationErrors.Add(errors, $"items[{i}]", "An item is required.");
+                        continue;
+                    }
+                    if (!seen.Add(item.PalletContentLineId))
+                    {
+                        ValidationErrors.Add(errors, $"items[{i}].palletContentLineId", "Each pallet content line occurs at most once.");
+                    }
+                    if (!SupplyRules.IsPositiveDecimal18_3(item.Quantity))
+                    {
+                        ValidationErrors.Add(errors, $"items[{i}].quantity", "Quantity must be positive and may have at most 3 decimals.");
+                    }
+                    if (!SupplyRules.IsPositiveDecimal18_3(item.NetWeightKg))
+                    {
+                        ValidationErrors.Add(errors, $"items[{i}].netWeightKg", "Net weight in kg must be positive and may have at most 3 decimals; it is never derived.");
+                    }
+                }
+            }
+            if (errors.Count > 0)
+            {
+                return null;
+            }
+            return request.Items.Select((item, index) => new ReserveCommand(ItemRequestId(request.RequestId!.Value, index), salesOrderId, salesOrderLineId,
+                item.PalletContentLineId, item.Quantity, request.Unit, item.NetWeightKg, actor, reason)).ToList();
+        }
+
+        // Replay: bestaat de eerste afgeleide RequestId, dan moet de hele batch exact overeenkomen (atomair opgeslagen, dus nooit half).
+        private async Task<ServiceResult<IReadOnlyList<StockReservationDto>>> ReplayBatchAsync(Guid batchRequestId, List<ReserveCommand> commands, CancellationToken cancellationToken)
+        {
+            if (!await _db.StockReservations.AsNoTracking().AnyAsync(r => r.RequestId == commands[0].RequestId, cancellationToken))
+            {
+                return null;
+            }
+            var dtos = new List<StockReservationDto>();
+            foreach (var command in commands)
+            {
+                var single = await ReplayReserveAsync(command, cancellationToken);
+                if (single == null || single.Status != ServiceResultStatus.Ok)
+                {
+                    return ServiceResult<IReadOnlyList<StockReservationDto>>.Conflict("This requestId was already used for a different set of reservations.");
+                }
+                dtos.Add(single.Value);
+            }
+            // Een eerdere batch met meer items onder dezelfde sleutel is ook een andere opdracht.
+            var derivedNext = ItemRequestId(batchRequestId, commands.Count);
+            if (await _db.StockReservations.AsNoTracking().AnyAsync(r => r.RequestId == derivedNext, cancellationToken))
+            {
+                return ServiceResult<IReadOnlyList<StockReservationDto>>.Conflict("This requestId was already used for a different set of reservations.");
+            }
+            return ServiceResult<IReadOnlyList<StockReservationDto>>.Ok(dtos);
         }
 
         private static ReserveCommand BuildReserve(int salesOrderId, int salesOrderLineId, CreateStockReservationDto request, Dictionary<string, List<string>> errors)

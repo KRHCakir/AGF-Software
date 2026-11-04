@@ -228,6 +228,10 @@ namespace AgfAdmin.DTOs
         public decimal AvailableNetWeightKg { get; set; }
         public string QualityStatus { get; set; }
         public int ContentLineVersion { get; set; }
+        // Herkomst voor "oudste partij eerst": registratie van de inhoudsregel (ontvangstmoment) en de inkooporder van de partij.
+        public DateTime ReceivedAt { get; set; }
+        public int SupplyCommitmentId { get; set; }
+        public string SupplyOrderNumber { get; set; }
     }
 
     // Verzenden: gekozen Active reserveringen in hun geheel verbruiken; hoeveelheid, eenheid en kg komen uit de reservering.

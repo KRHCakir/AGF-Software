@@ -14,6 +14,8 @@ namespace AgfAdmin.Services
         Task<ServiceResult<IReadOnlyList<ReservableStockLineDto>>> GetReservableStockAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default);
         Task<ServiceResult<SalesOrderDto>> CancelAsync(int salesOrderId, CancelSalesOrderDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>> GetAuditEventsAsync(int salesOrderId, CancellationToken cancellationToken = default);
+        Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default);
+        Task<ServiceResult<IReadOnlyList<AwaitingStockLineDto>>> GetAwaitingStockAsync(CancellationToken cancellationToken = default);
     }
 
     // Schone verkooporders voor het nieuwe domein. Raakt nooit legacy Order/OrderLine/OrderLineAllocation/Inventory.
@@ -694,7 +696,8 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Ggn, c.Unit,
-                    c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt
+                    c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt,
+                    c.CreatedAt, c.SupplyCommitmentLine.SupplyCommitmentId, SupplyOrderNumber = c.SupplyCommitmentLine.SupplyCommitment.OrderNumber
                 })
                 .ToListAsync(cancellationToken);
 
@@ -728,7 +731,10 @@ namespace AgfAdmin.Services
                         AvailableQuantity = Math.Max(0m, onHandQuantity - quantity),
                         AvailableNetWeightKg = Math.Max(0m, onHandKg - kg),
                         QualityStatus = c.QualityStatus,
-                        ContentLineVersion = c.Version
+                        ContentLineVersion = c.Version,
+                        ReceivedAt = DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc),
+                        SupplyCommitmentId = c.SupplyCommitmentId,
+                        SupplyOrderNumber = c.SupplyOrderNumber
                     };
                 })
                 .Where(c => c.AvailableQuantity > 0m)
@@ -736,6 +742,104 @@ namespace AgfAdmin.Services
                 .ThenBy(c => c.PalletContentLineId)
                 .ToList();
             return ServiceResult<IReadOnlyList<ReservableStockLineDto>>.Ok(result);
+        }
+
+        // ======================== Verkopen vóór aankomst: oudste partij eerst en de werklijst ========================
+
+        // Oudste partij eerst (FIFO): op ontvangstmoment (registratie van de inhoudsregel; er is geen apart ontvangstveld), dan partijnummer,
+        // dan inhoudsregel. Verdeelt wat de regel nog nodig heeft over zoveel pallets als nodig; niets wordt opgeslagen.
+        public async Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default)
+        {
+            var reservable = await GetReservableStockAsync(salesOrderId, salesOrderLineId, cancellationToken);
+            if (reservable.Status != ServiceResultStatus.Ok)
+            {
+                return ServiceResult<FifoReservationProposalDto>.NotFound(reservable.Message);
+            }
+            var line = await _db.SalesOrderLines.AsNoTracking().SingleAsync(l => l.Id == salesOrderLineId, cancellationToken);
+            var needed = Math.Max(0m, line.Quantity - await CommittedOnOrderLineAsync(_db, line.Id, cancellationToken));
+            var candidates = FifoOrder(reservable.Value).ToList();
+            var items = ProposeFifo(candidates, needed);
+            return ServiceResult<FifoReservationProposalDto>.Ok(new FifoReservationProposalDto
+            {
+                SalesOrderId = salesOrderId,
+                SalesOrderLineId = salesOrderLineId,
+                Unit = line.Unit,
+                NeededQuantity = needed,
+                ProposedQuantity = items.Sum(i => i.Quantity),
+                Candidates = candidates,
+                Items = items
+            });
+        }
+
+        internal static IEnumerable<ReservableStockLineDto> FifoOrder(IEnumerable<ReservableStockLineDto> candidates) =>
+            candidates
+                .OrderBy(c => c.ReceivedAt)
+                .ThenBy(c => c.LotNumber, StringComparer.Ordinal)
+                .ThenBy(c => c.PalletContentLineId);
+
+        // De hele rest van een inhoudsregel neemt exact de resterende kg; een deel van berekend gewicht exact aantal × kg per verpakking;
+        // een deel van gewogen inhoud naar verhouding (3 decimalen, altijd onder de rest zodat de "geen gestrande rest"-regel klopt).
+        internal static List<FifoReservationItemDto> ProposeFifo(IReadOnlyList<ReservableStockLineDto> candidates, decimal needed)
+        {
+            var items = new List<FifoReservationItemDto>();
+            foreach (var candidate in candidates)
+            {
+                if (needed <= 0m) break;
+                var quantity = Math.Min(needed, candidate.AvailableQuantity);
+                if (quantity <= 0m) continue;
+                decimal kg;
+                if (quantity == candidate.AvailableQuantity)
+                {
+                    kg = candidate.AvailableNetWeightKg;
+                }
+                else if (candidate.WeightMethod == WeightRules.Calculated && candidate.NetKgPerPackage != null
+                    && WeightRules.TryExpectedReservationKg(quantity, candidate.NetKgPerPackage.Value, candidate.AvailableQuantity, candidate.AvailableNetWeightKg, out var calculated))
+                {
+                    kg = calculated;
+                }
+                else
+                {
+                    kg = Math.Round(candidate.AvailableNetWeightKg * quantity / candidate.AvailableQuantity, 3, MidpointRounding.AwayFromZero);
+                    if (kg >= candidate.AvailableNetWeightKg) kg = candidate.AvailableNetWeightKg - 0.001m;
+                }
+                if (kg <= 0m) continue;
+                items.Add(new FifoReservationItemDto { PalletContentLineId = candidate.PalletContentLineId, Quantity = quantity, NetWeightKg = kg });
+                needed -= quantity;
+            }
+            return items;
+        }
+
+        // Werklijst "Verkocht, wacht op voorraad": open regels uit verwachte aanvoer waarvoor nu vrije, goedgekeurde voorraad is, met de
+        // dekking oudste verkoop eerst (eerst de regels uit voorraad). Vroegste leverdatum bovenaan. Reserveert nooit zelf.
+        public async Task<ServiceResult<IReadOnlyList<AwaitingStockLineDto>>> GetAwaitingStockAsync(CancellationToken cancellationToken = default)
+        {
+            var variants = await _db.SalesOrderLines.AsNoTracking()
+                .Where(l => l.SupplySource == SalesSupplyRules.SourceExpected && l.SalesOrder.Status == ReservationRules.OrderStatusOpen)
+                .Select(l => l.ProductVariantId).Distinct().ToListAsync(cancellationToken);
+            var balances = await SalesBalanceLoader.LoadAsync(_db, variants, cancellationToken);
+            var result = balances.Values
+                .SelectMany(b => b.Lines.Where(l => l.SupplySource == SalesSupplyRules.SourceExpected).Select(l => (Balance: b, Line: l, Coverage: b.Coverage[l.SalesOrderLineId])))
+                .Where(x => x.Coverage.FromStock > 0m)
+                .OrderBy(x => x.Line.RequestedDeliveryDate).ThenBy(x => x.Line.OrderCreatedAt).ThenBy(x => x.Line.SalesOrderLineId)
+                .Select(x => new AwaitingStockLineDto
+                {
+                    SalesOrderId = x.Line.SalesOrderId,
+                    OrderNumber = x.Line.OrderNumber,
+                    CustomerId = x.Line.CustomerId,
+                    CustomerName = x.Line.CustomerName,
+                    CustomerReference = x.Line.CustomerReference,
+                    RequestedDeliveryDate = x.Line.RequestedDeliveryDate,
+                    SalesOrderLineId = x.Line.SalesOrderLineId,
+                    ProductVariantId = x.Line.ProductVariantId,
+                    ProductName = x.Line.ProductName,
+                    VariantName = x.Line.VariantName,
+                    Unit = x.Line.Unit,
+                    UnreservedQuantity = x.Line.Unreserved,
+                    ReservableNow = x.Coverage.FromStock,
+                    Coverage = SalesBalanceLoader.ToCoverageDto(x.Coverage)
+                })
+                .ToList();
+            return ServiceResult<IReadOnlyList<AwaitingStockLineDto>>.Ok(result);
         }
 
         // Vastgelegde klantvraag op een orderregel: Active (Physical én DirectTrade) + Consumed; alleen Released komt terug als open vraag.
