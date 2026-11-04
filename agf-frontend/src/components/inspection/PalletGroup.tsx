@@ -21,9 +21,8 @@ export interface InspectionNotice {
 }
 
 // Context per pallet; elke actie hoort bij één regel. Alleen Warehouse-regels die nog te beoordelen zijn.
-export default function PalletGroup({ context, actor, statusFilter, search, readOnly, notice, error, reloadToken, onSucceeded, onReload }: {
+export default function PalletGroup({ context, statusFilter, search, readOnly, notice, error, reloadToken, onSucceeded, onReload }: {
     context: InspectionPallet;
-    actor: string;
     statusFilter: Record<QualityStatus, boolean>;
     search: string;
     readOnly: boolean;
@@ -92,7 +91,7 @@ export default function PalletGroup({ context, actor, statusFilter, search, read
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {lines.map((line) => (
-                                <InspectionLineRow key={`${line.id}:${line.version}:${reloadToken}`} context={context} line={line} actor={actor}
+                                <InspectionLineRow key={`${line.id}:${line.version}:${reloadToken}`} context={context} line={line}
                                     readOnly={readOnly} onSucceeded={onSucceeded} onReload={onReload} />
                             ))}
                         </tbody>

@@ -65,8 +65,10 @@ const events = [
 describe('history', () => {
     test('quality decisions only, newest first; last inspection carries the real actor, time and result', () => {
         assert.deepEqual(qualityDecisions(events).map((e) => e.id), [4, 2]);
-        assert.deepEqual(lastInspection(events), { actor: null, occurredAt: '2026-10-20T13:00:00Z', toStatus: 'Blocked' });
-        assert.deepEqual(lastInspection(events.slice(0, 3)), { actor: 'Jan', occurredAt: '2026-10-20T11:00:00Z', toStatus: 'Approved' });
+        assert.deepEqual(lastInspection(events), { actor: null, signedInAs: null, occurredAt: '2026-10-20T13:00:00Z', toStatus: 'Blocked' });
+        assert.deepEqual(lastInspection(events.slice(0, 3)), { actor: 'Jan', signedInAs: null, occurredAt: '2026-10-20T11:00:00Z', toStatus: 'Approved' }, 'an older inspection: the chosen name was the actor');
+        const withInspector = events.slice(0, 3).map((e) => (e.id === 2 ? { ...e, actorReference: 'Admin', inspectedBy: 'Jan' } : e));
+        assert.deepEqual(lastInspection(withInspector), { actor: 'Jan', signedInAs: 'Admin', occurredAt: '2026-10-20T11:00:00Z', toStatus: 'Approved' }, 'inspector and signed-in user both kept');
         assert.equal(lastInspection([events[0], events[2]]), null);
         assert.equal(HISTORY_STEP, 5);
     });

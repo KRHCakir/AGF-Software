@@ -90,12 +90,22 @@ export function qualityDecisions(events: readonly PalletAuditEvent[]): PalletAud
 }
 
 export interface LastInspection {
+    // Wie keurde: de gekozen beoordelaar; bij keuringen van vóór dat veld de actor (toen was dat de gekozen naam).
     actor: string | null;
+    // Het account waarmee het gebeurde, alleen als dat naast de beoordelaar is vastgelegd.
+    signedInAs: string | null;
     occurredAt: string;
     toStatus: string | null;
 }
 
 export function lastInspection(events: readonly PalletAuditEvent[]): LastInspection | null {
     const latest = qualityDecisions(events)[0];
-    return latest ? { actor: latest.actorReference, occurredAt: latest.occurredAt, toStatus: qualityFromEvent(latest.newValue) } : null;
+    if (!latest) return null;
+    const inspector = latest.inspectedBy ?? null;
+    return {
+        actor: inspector ?? latest.actorReference,
+        signedInAs: inspector !== null ? latest.actorReference : null,
+        occurredAt: latest.occurredAt,
+        toStatus: qualityFromEvent(latest.newValue),
+    };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import {
@@ -26,12 +26,12 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 import { WeightBadge } from '../shared/WeightBadge';
 import LineHistory from './LineHistory';
 import TechnicalDetails from '../supply/TechnicalDetails';
+import { KNOWN_INSPECTORS, onRememberedInspectorChange, readRememberedInspector, rememberInspector } from './inspectorMemory';
 
 // Eén inhoudsregel met zijn eigen, losse kwaliteitsacties. Nooit voor de hele pallet en nooit in bulk.
-export default function InspectionLineRow({ context, line, actor, readOnly, onSucceeded, onReload }: {
+export default function InspectionLineRow({ context, line, readOnly, onSucceeded, onReload }: {
     context: InspectionPallet;
     line: PalletDetailLine;
-    actor: string;
     readOnly: boolean;
     onSucceeded: (line: PalletDetailLine, toStatus: QualityStatus) => Promise<void>;
     onReload: () => void;
@@ -39,6 +39,8 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
     const { t, locale } = useTranslation();
     const [action, setAction] = useState<QualityStatus | null>(null);
     const [reason, setReason] = useState('');
+    // Wie beoordeelt hoort bij deze keuring: voorgevuld met de laatste keuze op dit apparaat, altijd zichtbaar en aanpasbaar.
+    const [inspector, setInspector] = useState('');
     // Bevroren actie: alleen bij een onbekende uitkomst wordt exact deze (zelfde requestId) bewust opnieuw verstuurd.
     const [pending, setPending] = useState<ChangeQualityStatusRequest | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -57,10 +59,14 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
     const reasonRequired = action !== null && qualityReasonRequired(line.qualityStatus, action);
     const idPrefix = `line-${line.id}`;
 
+    // De rondleiding (of een ander tabblad) zet een nieuwe keuze: een open paneel zonder eigen invoer volgt die.
+    useEffect(() => onRememberedInspectorChange(() => { if (pending === null) setInspector(readRememberedInspector() ?? ''); }), [pending]);
+
     const open = (to: QualityStatus) => {
         if (locked) return;
         setAction(to);
         setReason('');
+        setInspector(readRememberedInspector() ?? '');
         setPending(null);
         setError(null);
         setFieldErrors({});
@@ -83,25 +89,37 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
         setFieldErrors({});
     };
 
+    const editInspector = (value: string) => {
+        if (locked) return;
+        setInspector(value);
+        setPending(null);
+        setError(null);
+        setFieldErrors({});
+    };
+
     const submit = async () => {
         if (inFlight.current || action === null) return;
         let request = pending;
         if (request === null) {
             const found: Record<string, string[]> = {};
-            const actorReference = actor.trim();
-            if (actorReference === '') found.actorReference = [t('supply_error_actor_required')];
-            else if (actorReference.length > 100) found.actorReference = [t('supply_error_too_long', { max: '100' })];
+            const inspectedBy = inspector.trim();
+            if (inspectedBy === '') found.inspectedBy = [t('inspection_error_inspector_required')];
+            else if (inspectedBy.length > 100) found.inspectedBy = [t('supply_error_too_long', { max: '100' })];
             const normalized = normalizeReason(reason, reasonRequired);
             if (!normalized.ok) {
                 found.reason = [normalized.error === 'required' ? t('inspection_error_reason_required') : t('supply_error_too_long', { max: String(MAX_REASON_LENGTH) })];
             }
             setFieldErrors(found);
-            if (Object.keys(found).length > 0 || !normalized.ok) return;
+            if (Object.keys(found).length > 0 || !normalized.ok) {
+                // Naar het eerste veld met een fout, nooit naar iets buiten beeld.
+                document.getElementById(found.reason ? `${idPrefix}-reason` : `${idPrefix}-inspector`)?.focus();
+                return;
+            }
             request = {
                 requestId: newRequestId(),
                 expectedContentLineVersion: line.version,
                 toStatus: action,
-                actorReference,
+                inspectedBy,
                 reason: normalized.value,
             };
             setPending(request);
@@ -112,6 +130,7 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
         setError(null);
         try {
             await changeQualityStatus(line.palletId, line.id, request);
+            rememberInspector(request.inspectedBy);
             // Eerst echte data herladen; daarna toont de groep de beschikbaarheidsmelding. Deze rij wordt dan opnieuw opgebouwd.
             await onSucceeded(line, request.toStatus);
         } catch (caught) {
@@ -154,7 +173,9 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
                 {line.qualityReason && <span className="mt-1 block text-xs italic text-gray-700">“{line.qualityReason}”</span>}
                 {inspected && (
                     <span className="mt-1 block text-xs text-gray-800" data-testid="inspected-by">
-                        {t('inspection_inspected_by', { actor: inspected.actor ?? t('inspection_actor_not_given'), time: formatDateTime(inspected.occurredAt, locale) })}
+                        {inspected.signedInAs !== null
+                            ? t('inspection_inspected_by_signed_in', { actor: inspected.actor ?? t('inspection_actor_not_given'), user: inspected.signedInAs, time: formatDateTime(inspected.occurredAt, locale) })
+                            : t('inspection_inspected_by', { actor: inspected.actor ?? t('inspection_actor_not_given'), time: formatDateTime(inspected.occurredAt, locale) })}
                     </span>
                 )}
                 <span className="mt-1 block text-xs text-gray-600">
@@ -193,7 +214,19 @@ export default function InspectionLineRow({ context, line, actor, readOnly, onSu
                                 className={inputClass} />
                             <span id={`${idPrefix}-reason-count`} className="block text-right text-xs text-gray-500">{reason.trim().length}/{MAX_REASON_LENGTH}</span>
                             <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                            <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
+                        </div>
+                        <div>
+                            <label htmlFor={`${idPrefix}-inspector`} className="text-xs font-medium text-gray-700">{t('inspection_actor_label')} *</label>
+                            <input id={`${idPrefix}-inspector`} list={`${idPrefix}-inspectors`} value={inspector} maxLength={100} disabled={locked} autoComplete="off"
+                                data-tour="inspection-inspector" data-tour-key={line.lotNumber} onChange={(event) => editInspector(event.target.value)}
+                                aria-invalid={fieldErrors.inspectedBy !== undefined}
+                                aria-describedby={fieldErrors.inspectedBy ? `${idPrefix}-inspector-error` : `${idPrefix}-inspector-hint`}
+                                className={inputClass} />
+                            <datalist id={`${idPrefix}-inspectors`}>
+                                {KNOWN_INSPECTORS.map((name) => <option key={name} value={name} />)}
+                            </datalist>
+                            <span id={`${idPrefix}-inspector-hint`} className="block text-xs text-gray-500">{t('inspection_inspector_hint')}</span>
+                            <FieldError id={`${idPrefix}-inspector-error`} messages={fieldErrors.inspectedBy} />
                         </div>
 
                         {error && (
