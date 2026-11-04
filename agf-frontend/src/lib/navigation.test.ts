@@ -6,7 +6,7 @@ describe('process menu', () => {
     test('four process groups in order, with only screens that exist', () => {
         assert.deepEqual(NAV_GROUPS.map((group) => group.id), ['purchase', 'stock', 'sales', 'master']);
         assert.deepEqual(NAV_GROUPS[0].items.map((item) => item.href), ['/purchase-orders', '/purchase-orders/new', '/receipts', '/inspection', '/purchase-invoices']);
-        assert.deepEqual(NAV_GROUPS[1].items.map((item) => item.href), ['/availability']);
+        assert.deepEqual(NAV_GROUPS[1].items.map((item) => item.href), ['/availability', '/partijen']);
         assert.deepEqual(NAV_GROUPS[2].items.map((item) => item.href), ['/sales-orders', '/direct-trade']);
         assert.deepEqual(NAV_GROUPS[3].items.map((item) => item.href), ['/relations', '/articles']);
         const all = [...NAV_GROUPS, LEGACY_GROUP].flatMap((group) => group.items.map((item) => item.href));
@@ -23,6 +23,7 @@ describe('process menu', () => {
         assert.deepEqual(activeNav('/purchase-orders/new'), { itemId: 'purchase-order-new', groupId: 'purchase' });
         assert.deepEqual(activeNav('/purchase-invoices/new'), { itemId: 'purchase-invoices', groupId: 'purchase' });
         assert.deepEqual(activeNav('/availability'), { itemId: 'availability', groupId: 'stock' });
+        assert.deepEqual(activeNav('/partijen'), { itemId: 'partijen', groupId: 'stock' });
         assert.deepEqual(activeNav('/direct-trade'), { itemId: 'direct-trade', groupId: 'sales' });
         assert.deepEqual(activeNav('/orders'), { itemId: 'orders', groupId: 'legacy' });
         assert.deepEqual(activeNav('/dashboard'), { itemId: 'start', groupId: null });
