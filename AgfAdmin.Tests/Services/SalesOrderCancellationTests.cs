@@ -76,7 +76,7 @@ public class SalesOrderCancellationTests : IDisposable
         await using var service = _factory.CreateContext();
         return (await new PalletService(service).ChangeQualityStatusAsync(line.PalletId, line.Id, new ChangeQualityStatusDto
         {
-            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Blocked", ActorReference = "qc-1", Reason = "Claim"
+            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Blocked", InspectedBy = "qc-1", Reason = "Claim"
         })).Status;
     }
 

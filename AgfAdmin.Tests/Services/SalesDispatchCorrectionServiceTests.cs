@@ -277,7 +277,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         var pallets = new PalletService(db);
         var approve = await pallets.ChangeQualityStatusAsync(_seed.WarehousePalletId, restored.PalletContentLineId, new ChangeQualityStatusDto
         {
-            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = 0, ToStatus = "Approved", ActorReference = "qc-1"
+            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = 0, ToStatus = "Approved", InspectedBy = "qc-1"
         });
         Assert.Equal(ServiceResultStatus.Ok, approve.Status);
         var afterInspection = (await availability.GetOverviewAsync(Query())).Value.Variants.Single().WarehouseSupply.Single();
@@ -299,7 +299,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         {
             Assert.Equal(ServiceResultStatus.Ok, (await new PalletService(db).ChangeQualityStatusAsync(_seed.WarehousePalletId, restored1, new ChangeQualityStatusDto
             {
-                RequestId = Guid.NewGuid(), ExpectedContentLineVersion = 0, ToStatus = "Approved", ActorReference = "qc-1"
+                RequestId = Guid.NewGuid(), ExpectedContentLineVersion = 0, ToStatus = "Approved", InspectedBy = "qc-1"
             })).Status);
         }
         var r2 = await ReservedAsync(restored1, 15m, 60m);
@@ -364,7 +364,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         var add = await new PalletService(verify).AddContentLineAsync(_seed.SecondWarehousePalletId, new AddPalletContentLineDto
         {
             RequestId = Guid.NewGuid(), SupplyCommitmentLineId = await SalesTestData.SupplyLineOfAsync(verify, _seed.SecondPalletApprovedBox), LotNumber = "LOT-NEW",
-            Quantity = 1m, Unit = "box", NetWeightKg = 1m, ActorReference = "wh-1"
+            Quantity = 1m, Unit = "box", NetWeightKg = 1m
         });
         Assert.Equal(ServiceResultStatus.Conflict, add.Status);
         Assert.Contains("on-hand", add.Message);
@@ -456,7 +456,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
                 var pallet = await db.Pallets.SingleAsync(p => p.Id == _seed.SecondWarehousePalletId);
                 var change = await new PalletService(db).ChangeLogisticsStatusAsync(pallet.Id, new ChangeLogisticsStatusDto
                 {
-                    RequestId = Guid.NewGuid(), ExpectedPalletVersion = pallet.Version, ToStatus = "Dispatched", LocationContext = "InTransit", ActorReference = "wh-1"
+                    RequestId = Guid.NewGuid(), ExpectedPalletVersion = pallet.Version, ToStatus = "Dispatched", LocationContext = "InTransit"
                 });
                 Assert.Equal(ServiceResultStatus.Ok, change.Status);
                 request = Correct(await OrderAsync(), d);
@@ -617,7 +617,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
             await using var db = _factory.CreateContext(interceptors);
             return (await new PalletService(db).ChangeQualityStatusAsync(line.PalletId, line.Id, new ChangeQualityStatusDto
             {
-                RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Blocked", ActorReference = "qc-1", Reason = "Claim"
+                RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Blocked", InspectedBy = "qc-1", Reason = "Claim"
             })).Status;
         }
         ServiceResultStatus inner = default, outer;

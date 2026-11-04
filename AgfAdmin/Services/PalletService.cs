@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -27,9 +28,12 @@ namespace AgfAdmin.Services
         private static readonly JsonSerializerOptions SnapshotJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public PalletService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public PalletService(AppDbContext db, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
         }
 
@@ -163,7 +167,7 @@ namespace AgfAdmin.Services
                 : null;
         }
 
-        private static Pallet BuildPallet(CreatePalletDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
+        private Pallet BuildPallet(CreatePalletDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
         {
             actor = null;
             reason = null;
@@ -237,7 +241,7 @@ namespace AgfAdmin.Services
             }
 
             // Medewerker is optioneel bij ontvangst: leeg blijft leeg in de audit (geen verzonnen naam).
-            actor = OptionalActor(request.ActorReference, errors);
+            actor = _user.Actor(MaxActorLength);
             reason = OptionalReason(request.Reason, errors);
 
             if (errors.Count > 0)
@@ -399,7 +403,7 @@ namespace AgfAdmin.Services
             return ServiceResult<PalletContentLineDto>.Created(ToDto(created));
         }
 
-        private static PalletContentLine BuildContentLine(int palletId, AddPalletContentLineDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
+        private PalletContentLine BuildContentLine(int palletId, AddPalletContentLineDto request, Dictionary<string, List<string>> errors, out string actor, out string reason)
         {
             actor = null;
             reason = null;
@@ -481,7 +485,7 @@ namespace AgfAdmin.Services
             }
 
             // Medewerker is optioneel bij ontvangst (zie BuildPallet); keuring en statuswijzigingen blijven hem eisen.
-            actor = OptionalActor(request.ActorReference, errors);
+            actor = _user.Actor(MaxActorLength);
             reason = OptionalReason(request.Reason, errors);
             ValidateDeviationFields(request, errors);
 
@@ -634,7 +638,9 @@ namespace AgfAdmin.Services
             string Actor,
             string Reason,
             string NewValue,
-            int ExpectedVersion);
+            int ExpectedVersion,
+            // Alleen bij een keuring: de beoordelaar naast de ingelogde gebruiker (Actor).
+            string InspectedBy = null);
 
         public async Task<ServiceResult<PalletDto>> ChangeLogisticsStatusAsync(int palletId, ChangeLogisticsStatusDto request, CancellationToken cancellationToken = default)
         {
@@ -661,7 +667,7 @@ namespace AgfAdmin.Services
                 AddError(errors, "locationContext", $"Location context must be one of: {string.Join(", ", PalletRules.LocationContexts)}.");
             }
             var bin = NormalizeCommandBin(request.WarehouseLocation, request.LocationContext, errors);
-            var actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(MaxActorLength);
             var reason = OptionalReason(request.Reason, errors);
             if (reason == null && !errors.ContainsKey("reason") && PalletRules.LogisticsTransitionRequiresReason(null, request.ToStatus))
             {
@@ -804,7 +810,7 @@ namespace AgfAdmin.Services
                 AddError(errors, "locationContext", $"Location context must be one of: {string.Join(", ", PalletRules.LocationContexts)}.");
             }
             var bin = NormalizeCommandBin(request.WarehouseLocation, request.LocationContext, errors);
-            var actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(MaxActorLength);
             var reason = OptionalReason(request.Reason, errors);
             if (errors.Count > 0)
             {
@@ -890,7 +896,9 @@ namespace AgfAdmin.Services
             {
                 AddError(errors, "toStatus", $"Quality status must be one of: {string.Join(", ", PalletRules.QualityStatuses)}.");
             }
-            var actor = RequiredText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(MaxActorLength);
+            // Wie het product fysiek keurde (gekozen per keuring; op een gedeelde tablet niet altijd de ingelogde gebruiker).
+            var inspectedBy = RequiredText(request.InspectedBy, MaxActorLength, "inspectedBy", errors);
             var reason = OptionalReason(request.Reason, errors);
             if (errors.Count > 0)
             {
@@ -905,7 +913,8 @@ namespace AgfAdmin.Services
                 actor,
                 reason,
                 Snapshot(new { qualityStatus = request.ToStatus, qualityReason = reason }),
-                request.ExpectedContentLineVersion!.Value);
+                request.ExpectedContentLineVersion!.Value,
+                inspectedBy);
 
             var replay = await ReplayAsync(command, () => GetContentLineAsync(contentLineId, cancellationToken), cancellationToken);
             if (replay != null)
@@ -981,6 +990,7 @@ namespace AgfAdmin.Services
                 NewValue = e.NewValue,
                 Reason = e.Reason,
                 ActorReference = e.ActorReference,
+                InspectedBy = e.InspectedBy,
                 OccurredAt = DateTime.SpecifyKind(e.OccurredAt, DateTimeKind.Utc),
                 RequestId = e.RequestId
             }).ToList());
@@ -1006,6 +1016,7 @@ namespace AgfAdmin.Services
             && existing.PalletId == command.PalletId
             && existing.PalletContentLineId == command.ContentLineId
             && string.Equals(existing.ActorReference, command.Actor, StringComparison.Ordinal)
+            && string.Equals(existing.InspectedBy, command.InspectedBy, StringComparison.Ordinal)
             && string.Equals(existing.Reason, command.Reason, StringComparison.Ordinal)
             && string.Equals(existing.NewValue, command.NewValue, StringComparison.Ordinal)
             && RecordedVersion(existing.OldValue) == command.ExpectedVersion;
@@ -1037,6 +1048,7 @@ namespace AgfAdmin.Services
                 NewValue = command.NewValue,
                 Reason = command.Reason,
                 ActorReference = command.Actor,
+                InspectedBy = command.InspectedBy,
                 OccurredAt = DateTime.UtcNow,
                 RequestId = command.RequestId
             });
@@ -1229,22 +1241,6 @@ namespace AgfAdmin.Services
             }
 
             return WithinLength(value.Trim(), maxLength, key, errors);
-        }
-
-        // Ontbrekend is toegestaan; ingevuld betekent niet-leeg en binnen de maximale lengte.
-        // Leeg of alleen spaties = niet opgegeven (null); anders getrimd en op lengte gecontroleerd.
-        private static string OptionalActor(string value, Dictionary<string, List<string>> errors)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return null;
-            }
-            var trimmed = value.Trim();
-            if (trimmed.Length > MaxActorLength)
-            {
-                AddError(errors, "actorReference", $"This field may contain at most {MaxActorLength} characters.");
-            }
-            return trimmed;
         }
 
         private static string OptionalNonBlankText(string value, int maxLength, string key, Dictionary<string, List<string>> errors)

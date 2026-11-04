@@ -28,8 +28,7 @@ public class PalletsControllerTests : IDisposable
     {
         Reference = "PAL-001",
         LogisticsStatus = "Received",
-        LocationContext = "Warehouse",
-        ActorReference = "office-1"
+        LocationContext = "Warehouse"
     };
 
     private static AddPalletContentLineDto ContentRequest(int sourceLineId, Guid requestId) => new()
@@ -39,8 +38,7 @@ public class PalletsControllerTests : IDisposable
         LotNumber = "LOT-1",
         Quantity = 4m,
         Unit = "box",
-        NetWeightKg = 16m,
-        ActorReference = "warehouse-1"
+        NetWeightKg = 16m
     };
 
     private async Task<IActionResult> Run(Func<PalletsController, Task<IActionResult>> action)
@@ -142,8 +140,7 @@ public class PalletsControllerTests : IDisposable
         RequestId = Guid.NewGuid(),
         ExpectedPalletVersion = version,
         ToStatus = "Dispatched",
-        LocationContext = "InTransit",
-        ActorReference = "warehouse-1"
+        LocationContext = "InTransit"
     };
 
     [Fact]
@@ -154,7 +151,7 @@ public class PalletsControllerTests : IDisposable
         // Inhoud nog in Quarantine: dispatch is een conflict met de huidige toestand.
         Assert.IsType<ConflictObjectResult>(await Run(c => c.ChangeLogisticsStatus(pallet.Id, DispatchCommand(pallet.Version))));
 
-        var approve = new ChangeQualityStatusDto { RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Approved", ActorReference = "qc-1" };
+        var approve = new ChangeQualityStatusDto { RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Approved", InspectedBy = "qc-1" };
         var approved = Assert.IsType<PalletContentLineDto>(Assert.IsType<OkObjectResult>(await Run(c => c.ChangeQualityStatus(pallet.Id, line.Id, approve))).Value);
         // De kwaliteitswijziging verhoogt ook de palletversie; een client gebruikt de teruggegeven palletVersion.
         Assert.Equal(pallet.Version + 1, approved.PalletVersion);
@@ -180,8 +177,7 @@ public class PalletsControllerTests : IDisposable
             RequestId = Guid.NewGuid(),
             ExpectedPalletVersion = version,
             LocationContext = location,
-            WarehouseLocation = bin,
-            ActorReference = "warehouse-1"
+            WarehouseLocation = bin
         };
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(await Run(c => c.ChangeLocation(pallet.Id, Command("Supplier", "COLD-01", pallet.Version))));
@@ -202,7 +198,7 @@ public class PalletsControllerTests : IDisposable
             RequestId = Guid.NewGuid(),
             ExpectedContentLineVersion = version,
             ToStatus = to,
-            ActorReference = "qc-1",
+            InspectedBy = "qc-1",
             Reason = reason
         };
 

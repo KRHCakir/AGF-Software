@@ -740,7 +740,7 @@ public class SalesOrderServiceTests : IDisposable
             RequestId = Guid.NewGuid(),
             ExpectedContentLineVersion = line.Version,
             ToStatus = "Blocked",
-            ActorReference = "qc-1",
+            InspectedBy = "qc-1",
             Reason = "Claim"
         })).Status;
     }

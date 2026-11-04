@@ -15,7 +15,6 @@ namespace AgfAdmin.DTOs
         public string LogisticsStatus { get; set; }
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 
@@ -35,7 +34,6 @@ namespace AgfAdmin.DTOs
         // GGN van de partij (optioneel, 13 cijfers als tekst): het voorstel uit het artikel is al door de client overgenomen of
         // bewust aangepast/leeggemaakt; de server bewaart wat hier staat.
         public string Ggn { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
         // Afwijkende ontvangst: de werkelijk ontvangen variant als die anders is dan die van de bronregel. Leeg of gelijk = gewone
         // ontvangst. Anders weigert de server met 409 DEVIATION_CONFIRMATION_REQUIRED (met het verschil) tot dezelfde aanvraag
@@ -45,7 +43,7 @@ namespace AgfAdmin.DTOs
         public string DeviationReason { get; set; }
         public string DeviationReasonNote { get; set; }
         // Blinde invoer: de gebruiker liet vóór het invullen de verwachte kenmerken van de bestelling zien ("Toon verwachte kenmerken").
-        // Dan true met het tijdstip waarop dat gebeurde (niet in de toekomst); de medewerker is ActorReference. Leeg/false = niet getoond.
+        // Dan true met het tijdstip waarop dat gebeurde (niet in de toekomst); wie het zag, is de ingelogde gebruiker. Leeg/false = niet getoond.
         public bool? ExpectedShownBeforeEntry { get; set; }
         public DateTimeOffset? ExpectedShownAt { get; set; }
     }
@@ -130,7 +128,6 @@ namespace AgfAdmin.DTOs
         // Optioneel: een nieuwe locatie die tegelijk met de status ingaat (bijvoorbeeld bij dispatch uit het magazijn).
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 
@@ -140,7 +137,6 @@ namespace AgfAdmin.DTOs
         public int? ExpectedPalletVersion { get; set; }
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 
@@ -149,7 +145,8 @@ namespace AgfAdmin.DTOs
         public Guid? RequestId { get; set; }
         public int? ExpectedContentLineVersion { get; set; }
         public string ToStatus { get; set; }
-        public string ActorReference { get; set; }
+        // Wie het product fysiek keurde (verplicht). Wie het vastlegt, is de ingelogde gebruiker.
+        public string InspectedBy { get; set; }
         public string Reason { get; set; }
     }
 
@@ -163,6 +160,7 @@ namespace AgfAdmin.DTOs
         public string NewValue { get; set; }
         public string Reason { get; set; }
         public string ActorReference { get; set; }
+        public string InspectedBy { get; set; }
         public DateTime OccurredAt { get; set; }
         public Guid? RequestId { get; set; }
     }

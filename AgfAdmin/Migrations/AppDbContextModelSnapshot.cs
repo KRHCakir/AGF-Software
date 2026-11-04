@@ -2669,6 +2669,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("InspectedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("NewValue")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");

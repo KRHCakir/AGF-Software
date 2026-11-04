@@ -20,10 +20,10 @@ public sealed partial class ReceiptDeviationTests
         var result = await AddAsync(request);
 
         Assert.Equal(ServiceResultStatus.Created, result.Status);
-        Assert.Equal((true, shownAt.UtcDateTime, "Kees"), (result.Value.ExpectedShownBeforeEntry, result.Value.ExpectedShownAt.Value, result.Value.ExpectedShownBy));
+        Assert.Equal((true, shownAt.UtcDateTime, "Admin"), (result.Value.ExpectedShownBeforeEntry, result.Value.ExpectedShownAt.Value, result.Value.ExpectedShownBy));
         await using var db = _factory.CreateContext();
         var receipt = (await new PurchaseOrderService(db).GetAsync(_orderId)).Value.Receipts.Single();
-        Assert.Equal((true, shownAt.UtcDateTime, "Kees"), (receipt.ExpectedShownBeforeEntry, receipt.ExpectedShownAt.Value, receipt.ExpectedShownBy));
+        Assert.Equal((true, shownAt.UtcDateTime, "Admin"), (receipt.ExpectedShownBeforeEntry, receipt.ExpectedShownAt.Value, receipt.ExpectedShownBy));
     }
 
     [Fact]

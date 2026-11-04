@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ namespace AgfAdmin.Tests.Services;
 
 public class PalletStateChangeServiceTests : IDisposable
 {
+    // De beoordelaar bij keuringen; de actor van elk commando is de ingelogde (standaard)gebruiker.
     private const string Actor = "warehouse-1";
 
     private readonly SqliteAppDbContextFactory _factory = new();
@@ -73,8 +75,7 @@ public class PalletStateChangeServiceTests : IDisposable
             Reference = $"PAL-{Guid.NewGuid():N}"[..24],
             LogisticsStatus = status,
             LocationContext = location,
-            WarehouseLocation = bin,
-            ActorReference = "office-1"
+            WarehouseLocation = bin
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value.Id;
@@ -90,8 +91,7 @@ public class PalletStateChangeServiceTests : IDisposable
             LotNumber = lot,
             Quantity = 4m,
             Unit = "box",
-            NetWeightKg = 16m,
-            ActorReference = "office-1"
+            NetWeightKg = 16m
         });
     }
 
@@ -139,7 +139,6 @@ public class PalletStateChangeServiceTests : IDisposable
         ToStatus = to,
         LocationContext = location,
         WarehouseLocation = bin,
-        ActorReference = Actor,
         Reason = reason
     };
 
@@ -149,7 +148,6 @@ public class PalletStateChangeServiceTests : IDisposable
         ExpectedPalletVersion = await PalletVersionAsync(palletId),
         LocationContext = location,
         WarehouseLocation = bin,
-        ActorReference = Actor,
         Reason = reason
     };
 
@@ -158,7 +156,7 @@ public class PalletStateChangeServiceTests : IDisposable
         RequestId = Guid.NewGuid(),
         ExpectedContentLineVersion = await LineVersionAsync(lineId),
         ToStatus = to,
-        ActorReference = Actor,
+        InspectedBy = Actor,
         Reason = reason
     };
 
@@ -284,7 +282,7 @@ public class PalletStateChangeServiceTests : IDisposable
         Assert.Equal(palletId, auditEvent.PalletId);
         Assert.Null(auditEvent.PalletContentLineId);
         Assert.Equal(command.RequestId, auditEvent.RequestId);
-        Assert.Equal(Actor, auditEvent.ActorReference);
+        Assert.Equal(CurrentUser.Default.DisplayName, auditEvent.ActorReference);
         Assert.Equal("Planned move", auditEvent.Reason);
         Assert.True((DateTime.UtcNow - auditEvent.OccurredAt).Duration() < TimeSpan.FromMinutes(1));
 
@@ -502,9 +500,6 @@ public class PalletStateChangeServiceTests : IDisposable
     [InlineData("to-missing", "toStatus")]
     [InlineData("to-unknown", "toStatus")]
     [InlineData("to-lowercase", "toStatus")]
-    [InlineData("actor-missing", "actorReference")]
-    [InlineData("actor-blank", "actorReference")]
-    [InlineData("actor-too-long", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     [InlineData("location-unknown", "locationContext")]
     [InlineData("bin-without-location", "warehouseLocation")]
@@ -522,9 +517,6 @@ public class PalletStateChangeServiceTests : IDisposable
             case "to-missing": command.ToStatus = null; break;
             case "to-unknown": command.ToStatus = "Shipped"; break;
             case "to-lowercase": command.ToStatus = "received"; break;
-            case "actor-missing": command.ActorReference = null; break;
-            case "actor-blank": command.ActorReference = "  "; break;
-            case "actor-too-long": command.ActorReference = new string('A', 101); break;
             case "reason-too-long": command.Reason = new string('x', 501); break;
             case "location-unknown": command.LocationContext = "Truck"; break;
             case "bin-without-location": command.WarehouseLocation = "COLD-01"; break;
@@ -608,7 +600,7 @@ public class PalletStateChangeServiceTests : IDisposable
         Assert.Equal(palletId, auditEvent.PalletId);
         Assert.Equal(command.RequestId, auditEvent.RequestId);
         Assert.Equal("Rearranged", auditEvent.Reason);
-        Assert.Equal(Actor, auditEvent.ActorReference);
+        Assert.Equal(CurrentUser.Default.DisplayName, auditEvent.ActorReference);
         var oldValue = Json(auditEvent.OldValue);
         Assert.Equal("Warehouse", Prop(oldValue, "locationContext"));
         Assert.Equal("COLD-01", Prop(oldValue, "warehouseLocation"));
@@ -685,7 +677,6 @@ public class PalletStateChangeServiceTests : IDisposable
     [InlineData("location-missing", "locationContext")]
     [InlineData("location-unknown", "locationContext")]
     [InlineData("bin-outside-warehouse", "warehouseLocation")]
-    [InlineData("actor-missing", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Location_Command_Rejects_Invalid_Input(string invalidCase, string expectedErrorKey)
     {
@@ -698,7 +689,6 @@ public class PalletStateChangeServiceTests : IDisposable
             case "location-missing": command.LocationContext = null; command.WarehouseLocation = null; break;
             case "location-unknown": command.LocationContext = "Truck"; command.WarehouseLocation = null; break;
             case "bin-outside-warehouse": command.LocationContext = "Supplier"; break;
-            case "actor-missing": command.ActorReference = null; break;
             case "reason-too-long": command.Reason = new string('x', 501); break;
         }
 
@@ -749,7 +739,7 @@ public class PalletStateChangeServiceTests : IDisposable
         Assert.Equal(palletId, auditEvent.PalletId);
         Assert.Equal(lineId, auditEvent.PalletContentLineId);
         Assert.Equal(command.RequestId, auditEvent.RequestId);
-        Assert.Equal(Actor, auditEvent.ActorReference);
+        Assert.Equal((Actor, CurrentUser.Default.DisplayName), (auditEvent.InspectedBy, auditEvent.ActorReference));
         Assert.Equal(reason, auditEvent.Reason);
         var oldValue = Json(auditEvent.OldValue);
         Assert.Equal(from, Prop(oldValue, "qualityStatus"));
@@ -848,7 +838,7 @@ public class PalletStateChangeServiceTests : IDisposable
     [InlineData("to-missing", "toStatus")]
     [InlineData("to-partial", "toStatus")]
     [InlineData("to-lowercase", "toStatus")]
-    [InlineData("actor-missing", "actorReference")]
+    [InlineData("inspector-missing", "inspectedBy")]
     [InlineData("reason-too-long", "reason")]
     public async Task Quality_Command_Rejects_Invalid_Input(string invalidCase, string expectedErrorKey)
     {
@@ -861,7 +851,7 @@ public class PalletStateChangeServiceTests : IDisposable
             case "to-missing": command.ToStatus = null; break;
             case "to-partial": command.ToStatus = "PartiallyApproved"; break;
             case "to-lowercase": command.ToStatus = "approved"; break;
-            case "actor-missing": command.ActorReference = null; break;
+            case "inspector-missing": command.InspectedBy = null; break;
             case "reason-too-long": command.Reason = new string('x', 501); break;
         }
 
@@ -888,7 +878,6 @@ public class PalletStateChangeServiceTests : IDisposable
             ExpectedPalletVersion = command.ExpectedPalletVersion,
             ToStatus = "InTransit",
             LocationContext = "InTransit",
-            ActorReference = " warehouse-1 ",
             Reason = " Truck left "
         };
         var result = await ChangeStatusAsync(palletId, retry);
@@ -933,7 +922,6 @@ public class PalletStateChangeServiceTests : IDisposable
 
     [Theory]
     [InlineData("to")]
-    [InlineData("actor")]
     [InlineData("reason")]
     [InlineData("reason-removed")]
     [InlineData("location-changed")]
@@ -957,14 +945,12 @@ public class PalletStateChangeServiceTests : IDisposable
             ToStatus = command.ToStatus,
             LocationContext = command.LocationContext,
             WarehouseLocation = command.WarehouseLocation,
-            ActorReference = command.ActorReference,
             Reason = command.Reason
         };
         var target = palletId;
         switch (change)
         {
             case "to": retry.ToStatus = "Delivered"; break;
-            case "actor": retry.ActorReference = "someone-else"; break;
             case "reason": retry.Reason = "Different reason"; break;
             case "reason-removed": retry.Reason = null; break;
             case "location-changed": retry.LocationContext = "Warehouse"; break;
@@ -984,7 +970,6 @@ public class PalletStateChangeServiceTests : IDisposable
     [Theory]
     [InlineData("location")]
     [InlineData("bin")]
-    [InlineData("actor")]
     [InlineData("reason")]
     [InlineData("version")]
     public async Task Reused_Location_RequestId_With_Different_Command_Is_Conflict(string change)
@@ -999,14 +984,12 @@ public class PalletStateChangeServiceTests : IDisposable
             ExpectedPalletVersion = command.ExpectedPalletVersion,
             LocationContext = command.LocationContext,
             WarehouseLocation = command.WarehouseLocation,
-            ActorReference = command.ActorReference,
             Reason = command.Reason
         };
         switch (change)
         {
             case "location": retry.LocationContext = "Crossdock"; retry.WarehouseLocation = null; break;
             case "bin": retry.WarehouseLocation = "COLD-03"; break;
-            case "actor": retry.ActorReference = "someone-else"; break;
             case "reason": retry.Reason = null; break;
             case "version": retry.ExpectedPalletVersion = command.ExpectedPalletVersion - 1; break;
         }
@@ -1017,7 +1000,7 @@ public class PalletStateChangeServiceTests : IDisposable
 
     [Theory]
     [InlineData("to")]
-    [InlineData("actor")]
+    [InlineData("inspector")]
     [InlineData("reason")]
     [InlineData("other-line")]
     [InlineData("version")]
@@ -1033,14 +1016,14 @@ public class PalletStateChangeServiceTests : IDisposable
             RequestId = command.RequestId,
             ExpectedContentLineVersion = command.ExpectedContentLineVersion,
             ToStatus = command.ToStatus,
-            ActorReference = command.ActorReference,
+            InspectedBy = command.InspectedBy,
             Reason = command.Reason
         };
         var targetLine = lineId;
         switch (change)
         {
             case "to": retry.ToStatus = "Rejected"; break;
-            case "actor": retry.ActorReference = "someone-else"; break;
+            case "inspector": retry.InspectedBy = "someone-else"; break;
             case "reason": retry.Reason = "Other claim"; break;
             case "other-line": targetLine = otherLineId; break;
             case "version": retry.ExpectedContentLineVersion = command.ExpectedContentLineVersion + 1; break;
@@ -1174,8 +1157,7 @@ public class PalletStateChangeServiceTests : IDisposable
             RequestId = Guid.NewGuid(),
             ExpectedPalletVersion = result.Value.PalletVersion,
             ToStatus = "Dispatched",
-            LocationContext = "InTransit",
-            ActorReference = Actor
+            LocationContext = "InTransit"
         });
         Assert.Equal(ServiceResultStatus.Conflict, block.Status); // regel is Blocked: geen dispatch
         Assert.DoesNotContain("version", block.Message, StringComparison.OrdinalIgnoreCase);
@@ -1218,15 +1200,14 @@ public class PalletStateChangeServiceTests : IDisposable
             RequestId = Guid.NewGuid(),
             ExpectedPalletVersion = 0,
             ToStatus = "Dispatched",
-            LocationContext = "InTransit",
-            ActorReference = "warehouse-1"
+            LocationContext = "InTransit"
         };
         var block = new ChangeQualityStatusDto
         {
             RequestId = Guid.NewGuid(),
             ExpectedContentLineVersion = 0,
             ToStatus = "Blocked",
-            ActorReference = "qc-1",
+            InspectedBy = "qc-1",
             Reason = "Recall"
         };
 
@@ -1348,8 +1329,7 @@ public class PalletStateChangeServiceTests : IDisposable
             LotNumber = "LOT-RACE",
             Quantity = 1m,
             Unit = "box",
-            NetWeightKg = 4m,
-            ActorReference = Actor
+            NetWeightKg = 4m
         });
 
         Assert.Equal(ServiceResultStatus.Conflict, result.Status);

@@ -69,7 +69,7 @@ public sealed partial class ReceiptWeightDeviationTests : IDisposable
     {
         RequestId = requestId ?? Guid.NewGuid(), SupplyCommitmentLineId = lineId, LotNumber = "TEST-001", Quantity = quantity, Unit = "colli",
         WeightMethod = weighed ? "Weighed" : "Calculated", NetKgPerPackage = weighed ? null : kgPerColli, NetWeightKg = weighed ? quantity * kgPerColli : null,
-        ActorReference = "Kees", ReceivedProductVariantId = variant, ConfirmDeviation = confirm
+        ReceivedProductVariantId = variant, ConfirmDeviation = confirm
     };
 
     private async Task<ServiceResult<PalletContentLineDto>> AddAsync(AddPalletContentLineDto request)

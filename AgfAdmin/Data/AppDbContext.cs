@@ -1321,6 +1321,7 @@ namespace AgfAdmin.Data
                 b.Property(e => e.NewValue).HasMaxLength(2000);
                 b.Property(e => e.Reason).HasMaxLength(500);
                 b.Property(e => e.ActorReference).HasMaxLength(100);
+                b.Property(e => e.InspectedBy).HasMaxLength(100);
 
                 b.ToTable(t => t.HasCheckConstraint(
                     "CK_PalletAuditEvents_HasTarget",

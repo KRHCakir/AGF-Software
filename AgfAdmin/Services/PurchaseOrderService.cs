@@ -154,7 +154,7 @@ namespace AgfAdmin.Services
             var reserved = await ReservedByContentAsync(contentIds, cancellationToken);
             var qualityEvents = await _db.PalletAuditEvents.AsNoTracking()
                 .Where(e => e.PalletContentLineId != null && contentIds.Contains(e.PalletContentLineId.Value) && e.EventType == PalletService.QualityStatusChangedEvent)
-                .Select(e => new { e.PalletContentLineId, e.OldValue, e.NewValue, e.ActorReference, e.OccurredAt })
+                .Select(e => new { e.PalletContentLineId, e.OldValue, e.NewValue, e.ActorReference, e.InspectedBy, e.OccurredAt })
                 .ToListAsync(cancellationToken);
             var rejections = await _db.SupplyRejections.AsNoTracking()
                 .Where(r => r.SupplyCommitmentId == id)
@@ -236,7 +236,7 @@ namespace AgfAdmin.Services
             }));
             history.AddRange(qualityEvents.Select(e => new PurchaseOrderHistoryEventDto
             {
-                OccurredAt = Utc(e.OccurredAt), Type = "QualityChanged", ActorReference = e.ActorReference,
+                OccurredAt = Utc(e.OccurredAt), Type = "QualityChanged", ActorReference = e.ActorReference, InspectedBy = e.InspectedBy,
                 Reference = contents.FirstOrDefault(c => c.Id == e.PalletContentLineId)?.PalletReference,
                 FromStatus = SnapshotStatus(e.OldValue), ToStatus = SnapshotStatus(e.NewValue)
             }));

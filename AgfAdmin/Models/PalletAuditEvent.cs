@@ -16,7 +16,11 @@ namespace AgfAdmin.Models
         public string OldValue { get; set; }
         public string NewValue { get; set; }
         public string Reason { get; set; }
-        public string ActorReference { get; set; } // expliciete actor tot authenticatie beschikbaar is
+        // De ingelogde gebruiker (weergavenaam van het account) die het commando gaf.
+        public string ActorReference { get; set; }
+        // Alleen bij een keuring: wie het product fysiek keurde, per keuring gekozen. Leeg bij andere events en bij keuringen van
+        // vóór deze kolom (daar staat de beoordelaar in ActorReference).
+        public string InspectedBy { get; set; }
 
         public DateTime OccurredAt { get; set; }
 
