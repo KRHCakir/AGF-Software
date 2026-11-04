@@ -290,13 +290,12 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<PartijSummaryDto>.NotFound($"Purchase order {request.SupplyCommitmentId} does not exist.");
             }
-            if (order.PartijId == partij.Id && order.Lines.All(l => l.PartijId == partij.Id))
+            var lineIds = order.Lines.Select(l => l.Id).ToList();
+            var contents = await _db.PalletContentLines.Where(c => lineIds.Contains(c.SupplyCommitmentLineId)).ToListAsync(cancellationToken);
+            if (order.PartijId == partij.Id && order.Lines.All(l => l.PartijId == partij.Id) && contents.All(c => c.PartijId != null))
             {
                 return ServiceResult<PartijSummaryDto>.Ok(await SummaryAsync(partij, cancellationToken));
             }
-
-            var lineIds = order.Lines.Select(l => l.Id).ToList();
-            var contents = await _db.PalletContentLines.Where(c => lineIds.Contains(c.SupplyCommitmentLineId)).ToListAsync(cancellationToken);
             var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
             if (reason != null && reason.Length > PartijRules.MaxReasonLength)
             {
