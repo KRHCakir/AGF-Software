@@ -15,6 +15,11 @@ namespace AgfAdmin.DTOs
         public DateOnly? OrderedOn { get; set; }
         public string OrderChannel { get; set; }
         public string Note { get; set; }
+        // Partij (optioneel, kop): een bestaande partij (PartijId) of een nieuwe (NewPartij; leeg nummer = het voorgestelde nummer),
+        // niet allebei. De regels erven haar. Partij van de leverancier: diens eigen lotnummer, vrije tekst.
+        public int? PartijId { get; set; }
+        public NewPartijForOrderDto NewPartij { get; set; }
+        public string SupplierLotReference { get; set; }
         public List<CreateSupplyCommitmentLineDto> Lines { get; set; }
     }
 
@@ -66,6 +71,10 @@ namespace AgfAdmin.DTOs
         public DateOnly OrderedOn { get; set; }
         public string OrderChannel { get; set; }
         public string Note { get; set; }
+        // Partij van de order (null = geen partij) en de partij van de leverancier.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
+        public string SupplierLotReference { get; set; }
         // Actieve GGN's van de leverancier (met producentnaam): invoerhulp bij ontvangst; de gekozen waarde staat op de inhoudsregel.
         public List<VendorGgnOptionDto> VendorGgns { get; set; } = new();
         public List<SupplyCommitmentLineDto> Lines { get; set; } = new();
@@ -89,6 +98,9 @@ namespace AgfAdmin.DTOs
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
         public string LotNumber { get; set; }
+        // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public decimal ExpectedQuantity { get; set; }
         public string ExpectedUnit { get; set; }
         // Verwacht gewicht van de hele bronregel (nooit het gewicht van een deeltoewijzing); WeightSource zegt of het berekend
