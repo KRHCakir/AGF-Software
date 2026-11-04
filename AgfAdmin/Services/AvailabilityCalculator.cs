@@ -17,7 +17,9 @@ namespace AgfAdmin.Services
         string LotNumber,
         string Unit,
         decimal ExpectedQuantity,
-        decimal? DeclaredExpectedNetWeightKg);
+        decimal? DeclaredExpectedNetWeightKg,
+        // Inkoopordernummer (IO-jjjj-nnnn) van de toezegging, voor "wacht op inkooporder IO-…".
+        string SupplyOrderNumber = null);
 
     public sealed record ContentLineFact(
         int PalletContentLineId,
@@ -213,6 +215,7 @@ namespace AgfAdmin.Services
                     {
                         SupplyCommitmentLineId = s.SupplyCommitmentLineId,
                         SupplyCommitmentId = s.SupplyCommitmentId,
+                        SupplyOrderNumber = s.SupplyOrderNumber,
                         Route = s.Route,
                         CustomerId = s.CustomerId,
                         CustomerName = s.CustomerName,

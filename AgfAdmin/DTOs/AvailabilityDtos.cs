@@ -96,6 +96,9 @@ namespace AgfAdmin.DTOs
         public List<AvailabilityWarningDto> Warnings { get; set; } = new();
         // Herkomst van de kg op pallets in deze rij: "weighed", "calculated" of "mixed"; null zonder inhoud op pallets.
         public string WeightBasis { get; set; }
+        // Verkoopstand van deze variant en eenheid: Voorraad, Verwacht, Verkocht, Vrij te verkopen (mag negatief zijn: tekort).
+        // Een variant die alleen verkocht is (nog niets op voorraad of verwacht) heeft een rij met alleen deze stand.
+        public SalesBalanceDto Sales { get; set; }
     }
 
     // Klantgebonden aanvoer. Bewust zonder "available", "warehouse" of "reserved": nooit algemeen verkoopbaar.
@@ -121,12 +124,47 @@ namespace AgfAdmin.DTOs
         public string VariantName { get; set; }
         public List<SourceLineAvailabilityDto> SourceLines { get; set; } = new();
         public List<ContentLineAvailabilityDto> ContentLines { get; set; } = new();
+        // Verkoopstand per eenheid en de uitsplitsing per order: open verkooporderregels (met dekking, oudste verkoop eerst) en
+        // verwachte inkoop (route Warehouse) per inkooporderregel. Per partij: de inhoudsregels hierboven.
+        public List<SalesBalanceDto> Sales { get; set; } = new();
+        public List<AvailabilitySalesLineDto> SalesLines { get; set; } = new();
+        public List<AvailabilityExpectedSupplyDto> ExpectedSupplies { get; set; } = new();
+    }
+
+    public sealed class AvailabilitySalesLineDto
+    {
+        public int SalesOrderId { get; set; }
+        public string OrderNumber { get; set; }
+        public int CustomerId { get; set; }
+        public string CustomerName { get; set; }
+        public string CustomerReference { get; set; }
+        public DateTime RequestedDeliveryDate { get; set; }
+        public int SalesOrderLineId { get; set; }
+        public string Unit { get; set; }
+        public string SupplySource { get; set; }
+        // Besteld min verzonden (zonder klantgebonden aanvoer) en waarvan gereserveerd op goedgekeurde voorraad.
+        public decimal OpenQuantity { get; set; }
+        public decimal ReservedQuantity { get; set; }
+        public SalesLineCoverageDto Coverage { get; set; }
+    }
+
+    public sealed class AvailabilityExpectedSupplyDto
+    {
+        public int SupplyCommitmentId { get; set; }
+        public int SupplyCommitmentLineId { get; set; }
+        public string SupplyOrderNumber { get; set; }
+        public DateTime? ExpectedAt { get; set; }
+        public string LotNumber { get; set; }
+        public string Unit { get; set; }
+        public decimal NotReceived { get; set; }
+        public decimal InInspection { get; set; }
     }
 
     public sealed class SourceLineAvailabilityDto
     {
         public int SupplyCommitmentLineId { get; set; }
         public int SupplyCommitmentId { get; set; }
+        public string SupplyOrderNumber { get; set; }
         public string Route { get; set; }
         public int? CustomerId { get; set; }
         public string CustomerName { get; set; }

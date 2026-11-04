@@ -25,12 +25,20 @@ namespace AgfAdmin.Services
                 return ServiceResult<AvailabilityOverviewDto>.Validation(errors);
             }
 
-            var (sources, contents) = await LoadFactsAsync(query.ProductVariantId, cancellationToken);
+            var variantFilter = query.ProductVariantId == null ? null : new[] { query.ProductVariantId.Value };
+            var (sources, contents) = await LoadFactsAsync(_db, variantFilter, cancellationToken);
+            var variants = AvailabilityCalculator.BuildOverview(sources, contents, query);
+            // De verkoopstand hoort bij de eigen magazijnvoorraad; met het filter route=DirectTrade is er dus geen.
+            if (query.Route != SupplyRules.RouteDirectTrade)
+            {
+                var lines = await SalesBalanceLoader.LoadSalesLinesAsync(_db, variantFilter, cancellationToken);
+                variants = WithSales(variants, SalesBalanceCalculator.Build(sources, contents, lines), query);
+            }
             return ServiceResult<AvailabilityOverviewDto>.Ok(new AvailabilityOverviewDto
             {
                 GeneratedAt = DateTime.UtcNow,
                 Basis = new AvailabilityBasisDto { ReservationsApplied = true },
-                Variants = AvailabilityCalculator.BuildOverview(sources, contents, query)
+                Variants = variants
             });
         }
 
@@ -77,8 +85,19 @@ namespace AgfAdmin.Services
             }
 
             query.ProductVariantId = productVariantId;
-            var (sources, contents) = await LoadFactsAsync(productVariantId, cancellationToken);
+            var (sources, contents) = await LoadFactsAsync(_db, new[] { productVariantId }, cancellationToken);
             var (sourceLines, contentLines) = AvailabilityCalculator.BuildDrillDown(sources, contents, query);
+            // Verkoopgegevens horen bij de eigen magazijnvoorraad; bij Route=DirectTrade blijven ze leeg (zoals in het overzicht).
+            var balances = new List<SalesBalance>();
+            if (query.Route != SupplyRules.RouteDirectTrade)
+            {
+                var salesLines = await SalesBalanceLoader.LoadSalesLinesAsync(_db, new[] { productVariantId }, cancellationToken);
+                balances = SalesBalanceCalculator.Build(sources, contents, salesLines).Values.ToList();
+            }
+            balances = balances
+                .Where(b => query.Unit == null || b.Unit == query.Unit)
+                .OrderBy(b => AvailabilityRules.UnitOrder(b.Unit)).ThenBy(b => b.Unit, StringComparer.Ordinal)
+                .ToList();
 
             return ServiceResult<AvailabilityDrillDownDto>.Ok(new AvailabilityDrillDownDto
             {
@@ -88,8 +107,69 @@ namespace AgfAdmin.Services
                 ProductName = variant.ProductName,
                 VariantName = variant.VariantName,
                 SourceLines = sourceLines,
-                ContentLines = contentLines
+                ContentLines = contentLines,
+                Sales = balances.Select(SalesBalanceLoader.ToBalanceDto).ToList(),
+                SalesLines = balances.SelectMany(b => b.Lines
+                    .OrderBy(l => l.RequestedDeliveryDate).ThenBy(l => l.OrderCreatedAt).ThenBy(l => l.SalesOrderLineId)
+                    .Select(l => new AvailabilitySalesLineDto
+                    {
+                        SalesOrderId = l.SalesOrderId,
+                        OrderNumber = l.OrderNumber,
+                        CustomerId = l.CustomerId,
+                        CustomerName = l.CustomerName,
+                        CustomerReference = l.CustomerReference,
+                        RequestedDeliveryDate = l.RequestedDeliveryDate,
+                        SalesOrderLineId = l.SalesOrderLineId,
+                        Unit = l.Unit,
+                        SupplySource = l.SupplySource,
+                        OpenQuantity = l.OpenDemand,
+                        ReservedQuantity = l.Reserved,
+                        Coverage = SalesBalanceLoader.ToCoverageDto(b.Coverage[l.SalesOrderLineId])
+                    })).ToList(),
+                ExpectedSupplies = balances.SelectMany(b => b.Supplies
+                    .OrderBy(e => e.ExpectedAt == null).ThenBy(e => e.ExpectedAt).ThenBy(e => e.SupplyCommitmentLineId)
+                    .Select(e => new AvailabilityExpectedSupplyDto
+                    {
+                        SupplyCommitmentId = e.SupplyCommitmentId,
+                        SupplyCommitmentLineId = e.SupplyCommitmentLineId,
+                        SupplyOrderNumber = e.OrderNumber,
+                        ExpectedAt = e.ExpectedAt == null ? null : DateTime.SpecifyKind(e.ExpectedAt.Value, DateTimeKind.Utc),
+                        LotNumber = e.LotNumber,
+                        Unit = b.Unit,
+                        NotReceived = e.NotReceived,
+                        InInspection = e.InInspection
+                    })).ToList()
             });
+        }
+
+        // Zet de verkoopstand op elke magazijnrij (variant + eenheid). Een variant of eenheid die alleen verkocht is, krijgt een eigen rij
+        // met nullen en alleen deze stand, zodat een tekort nooit onzichtbaar is. Klantfilter beperkt alleen DirectTrade (zoals hierboven).
+        private static List<VariantAvailabilityDto> WithSales(List<VariantAvailabilityDto> variants, Dictionary<(int ProductVariantId, string Unit), SalesBalance> balances, AvailabilityQuery query)
+        {
+            var byId = variants.ToDictionary(v => v.ProductVariantId);
+            foreach (var balance in balances.Values.Where(b => query.Unit == null || b.Unit == query.Unit))
+            {
+                if (!byId.TryGetValue(balance.ProductVariantId, out var variant))
+                {
+                    variant = new VariantAvailabilityDto { ProductVariantId = balance.ProductVariantId, ProductName = balance.ProductName, VariantName = balance.VariantName };
+                    byId[balance.ProductVariantId] = variant;
+                    variants.Add(variant);
+                }
+                var row = variant.WarehouseSupply.FirstOrDefault(r => string.Equals(r.Unit, balance.Unit, StringComparison.Ordinal));
+                if (row == null)
+                {
+                    row = new WarehouseSupplyDto { Unit = balance.Unit };
+                    variant.WarehouseSupply.Add(row);
+                    variant.WarehouseSupply = variant.WarehouseSupply
+                        .OrderBy(r => AvailabilityRules.UnitOrder(r.Unit)).ThenBy(r => r.Unit == null).ThenBy(r => r.Unit, StringComparer.Ordinal).ToList();
+                }
+                row.Sales = SalesBalanceLoader.ToBalanceDto(balance);
+            }
+            return variants
+                .OrderBy(v => v.ProductName, StringComparer.Ordinal)
+                .ThenBy(v => v.VariantName, StringComparer.Ordinal)
+                .ThenBy(v => v.ProductVariantId)
+                .ToList();
         }
 
         private static Dictionary<string, string[]> ValidateCommonFilters(AvailabilityQuery query)
@@ -106,14 +186,15 @@ namespace AgfAdmin.Services
             return errors;
         }
 
-        private async Task<(List<SourceLineFact> Sources, List<ContentLineFact> Contents)> LoadFactsAsync(int? productVariantId, CancellationToken cancellationToken)
+        // Ook gebruikt door de verkoopstand (SalesBalanceLoader): één definitie van de feiten. variantIds null = alle varianten.
+        internal static async Task<(List<SourceLineFact> Sources, List<ContentLineFact> Contents)> LoadFactsAsync(AppDbContext db, IReadOnlyCollection<int> variantIds, CancellationToken cancellationToken)
         {
-            var sourceQuery = _db.SupplyCommitmentLines.AsNoTracking();
-            var contentQuery = _db.PalletContentLines.AsNoTracking();
-            if (productVariantId != null)
+            var sourceQuery = db.SupplyCommitmentLines.AsNoTracking();
+            var contentQuery = db.PalletContentLines.AsNoTracking();
+            if (variantIds != null)
             {
-                sourceQuery = sourceQuery.Where(l => l.ProductVariantId == productVariantId);
-                contentQuery = contentQuery.Where(c => c.SupplyCommitmentLine.ProductVariantId == productVariantId);
+                sourceQuery = sourceQuery.Where(l => variantIds.Contains(l.ProductVariantId));
+                contentQuery = contentQuery.Where(c => variantIds.Contains(c.SupplyCommitmentLine.ProductVariantId));
             }
 
             var sources = await sourceQuery
@@ -131,7 +212,8 @@ namespace AgfAdmin.Services
                     l.LotNumber,
                     l.ExpectedUnit,
                     l.ExpectedQuantity,
-                    l.ExpectedNetWeightKg))
+                    l.ExpectedNetWeightKg,
+                    l.SupplyCommitment.OrderNumber))
                 .ToListAsync(cancellationToken);
 
             var contents = await contentQuery
@@ -168,10 +250,14 @@ namespace AgfAdmin.Services
                 .ToListAsync(cancellationToken);
 
             // Alleen Active Physical verkoopreserveringen (SalesOrderLineId); legacy OrderLineId-reserveringen nooit.
-            var reservations = await _db.StockReservations.AsNoTracking()
+            var reservationQuery = db.StockReservations.AsNoTracking()
                 .Where(r => r.PalletContentLineId != null && r.SalesOrderLineId != null
-                    && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical
-                    && (productVariantId == null || r.PalletContentLine.SupplyCommitmentLine.ProductVariantId == productVariantId))
+                    && r.Status == ReservationRules.StatusActive && r.Source == ReservationRules.SourcePhysical);
+            if (variantIds != null)
+            {
+                reservationQuery = reservationQuery.Where(r => variantIds.Contains(r.PalletContentLine.SupplyCommitmentLine.ProductVariantId));
+            }
+            var reservations = await reservationQuery
                 .Select(r => new { ContentId = r.PalletContentLineId!.Value, r.Quantity, r.NetWeightKg })
                 .ToListAsync(cancellationToken);
             var reserved = reservations

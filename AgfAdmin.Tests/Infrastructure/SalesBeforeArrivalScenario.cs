@@ -54,6 +54,32 @@ public sealed class SalesBeforeArrivalScenario : IDisposable
         NetWeightKg = kg, QualityStatus = quality, CreatedAt = createdAt
     };
 
+    // Goederen op de open inkooporder ontvangen: een nieuwe pallet in het magazijn (6 kg per colli, gewogen).
+    public async Task<int> ReceiveAsync(int supplyLineId, decimal quantity, string quality, string lot, DateTime? at = null)
+    {
+        await using var db = Factory.CreateContext();
+        var source = await db.SupplyCommitmentLines.SingleAsync(l => l.Id == supplyLineId);
+        var pallet = new Pallet { Reference = $"P-{Guid.NewGuid():N}"[..12], LogisticsStatus = "Received", LocationContext = "Warehouse" };
+        var content = Content(pallet, source, quantity, quantity * 6m, quality, lot, at ?? Received.AddDays(2));
+        db.AddRange(pallet, content);
+        await db.SaveChangesAsync();
+        return content.Id;
+    }
+
+    public async Task<int> SecondPurchaseOrderAsync(decimal quantity, string route = "Warehouse", int? customerId = null)
+    {
+        await using var db = Factory.CreateContext();
+        var commitment = new SupplyCommitment
+        {
+            RequestId = Guid.NewGuid(), VendorId = VendorId, Route = route, CustomerId = customerId, Destination = customerId == null ? null : "Klant",
+            Status = "Expected", Origin = "NL", ExpectedAt = new DateTime(2026, 11, 9, 6, 0, 0, DateTimeKind.Utc)
+        };
+        var line = new SupplyCommitmentLine { SupplyCommitment = commitment, ProductVariantId = TomatoId, ExpectedQuantity = quantity, ExpectedUnit = "colli" };
+        db.AddRange(commitment, line);
+        await db.SaveChangesAsync();
+        return commitment.Id;
+    }
+
     public CreateSalesOrderDto Order(params (decimal Quantity, string Source)[] lines) => Order(TomatoId, lines);
 
     public CreateSalesOrderDto Order(int variantId, params (decimal Quantity, string Source)[] lines) => new()

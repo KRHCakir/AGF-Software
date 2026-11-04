@@ -214,9 +214,11 @@ public class DirectTradeAllocationServiceTests : IDisposable
     {
         await ArrangeAsync();
         string overviewBefore, reservableBefore;
+        decimal soldBefore;
         await using (var db = _factory.CreateContext())
         {
-            overviewBefore = JsonSerializer.Serialize((await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants);
+            var variants = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants;
+            (overviewBefore, soldBefore) = (AvailabilitySnapshot.WithoutSales(variants), AvailabilitySnapshot.Sold(variants, "box"));
             reservableBefore = JsonSerializer.Serialize((await new SalesOrderService(db).GetReservableStockAsync(_orderId, _boxLine)).Value);
         }
 
@@ -224,7 +226,10 @@ public class DirectTradeAllocationServiceTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            Assert.Equal(overviewBefore, JsonSerializer.Serialize((await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants));
+            var variants = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = _seed.AvocadoId })).Value.Variants;
+            Assert.Equal(overviewBefore, AvailabilitySnapshot.WithoutSales(variants));
+            // De toegewezen 25 box komen uit klantgebonden aanvoer: niet meer verkocht uit eigen voorraad of verwachte inkoop.
+            Assert.Equal(soldBefore - 25m, AvailabilitySnapshot.Sold(variants, "box"));
             Assert.Equal(reservableBefore, JsonSerializer.Serialize((await new SalesOrderService(db).GetReservableStockAsync(_orderId, _boxLine)).Value));
         }
     }
