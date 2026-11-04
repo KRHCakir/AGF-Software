@@ -62,6 +62,7 @@ namespace AgfAdmin.Services
             detail.Linked = await IsLinkedAsync(id, cancellationToken);
             detail.ReservedQuantity = facts.Sales.Where(s => s.Status == ReservationRules.StatusActive).Sum(s => s.Quantity);
             detail.ShippedQuantity = facts.Sales.Where(s => s.Status == ReservationRules.StatusConsumed).Sum(s => s.Quantity);
+            var orderStatuses = await OrderStatusesAsync(facts.Lines.Select(l => l.OrderId).Distinct().ToList(), cancellationToken);
             detail.Orders = facts.Lines.GroupBy(l => l.OrderId).Select(g =>
             {
                 var first = g.First();
@@ -72,7 +73,7 @@ namespace AgfAdmin.Services
                     Id = g.Key, OrderNumber = first.OrderNumber, VendorName = first.VendorName, OrderedOn = first.OrderedOn, SupplierLotReference = first.SupplierLotReference,
                     ExpectedAt = first.ExpectedAt == null ? null : DateTime.SpecifyKind(first.ExpectedAt.Value, DateTimeKind.Utc),
                     Unit = SingleUnit(g.Select(l => l.Unit)), ExpectedQuantity = expected, ReceivedQuantity = received,
-                    Status = OrderStatus(first.OrderStatus, expected, received)
+                    Status = orderStatuses.TryGetValue(g.Key, out var orderStatus) ? orderStatus : OrderStatus(first.OrderStatus, expected, received)
                 };
             }).OrderBy(o => o.OrderedOn).ThenBy(o => o.Id).ToList();
             detail.Receipts = facts.Contents.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).Select(c => new PartijReceiptDto
@@ -124,6 +125,35 @@ namespace AgfAdmin.Services
                     r.Status, r.Quantity, r.Unit))
                 .ToListAsync(cancellationToken);
             return new Facts(lines, contents, sales);
+        }
+
+        // Weergavestatus van de order als geheel (alle regels en ontvangsten, ook van andere partijen), met dezelfde regels als de inkooporderlijst.
+        private async Task<Dictionary<int, string>> OrderStatusesAsync(List<int> orderIds, CancellationToken cancellationToken)
+        {
+            var result = new Dictionary<int, string>();
+            if (orderIds.Count == 0) return result;
+            var orders = await _db.SupplyCommitments.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.Status }).ToListAsync(cancellationToken);
+            var lines = await _db.SupplyCommitmentLines.AsNoTracking().Where(l => orderIds.Contains(l.SupplyCommitmentId))
+                .Select(l => new { l.Id, l.SupplyCommitmentId, l.ExpectedQuantity, l.ExpectedUnit }).ToListAsync(cancellationToken);
+            var receipts = await _db.PalletContentLines.AsNoTracking()
+                .Where(c => orderIds.Contains(c.SupplyCommitmentLine.SupplyCommitmentId) && c.OriginCorrectionLineId == null && c.OriginRejectionLineId == null
+                    && c.Pallet.LogisticsStatus != PalletRules.StatusCancelled)
+                .Select(c => new { c.SupplyCommitmentLineId, c.Quantity, c.Unit }).ToListAsync(cancellationToken);
+            var removed = await _db.SupplyRejectionLines.AsNoTracking().Where(l => orderIds.Contains(l.SupplyRejection.SupplyCommitmentId))
+                .Select(l => new { l.SupplyCommitmentLineId, l.Quantity, l.SupplyRejection.Decision }).ToListAsync(cancellationToken);
+            foreach (var order in orders)
+            {
+                var orderLines = lines.Where(l => l.SupplyCommitmentId == order.Id).ToList();
+                var lineIds = orderLines.Select(l => l.Id).ToHashSet();
+                var perLine = orderLines.Select(l => (l.ExpectedQuantity, Received: receipts
+                    .Where(r => r.SupplyCommitmentLineId == l.Id && (l.ExpectedUnit == null || string.Equals(l.ExpectedUnit, r.Unit, StringComparison.Ordinal))).Sum(r => r.Quantity))).ToList();
+                var receivedAll = receipts.Where(r => lineIds.Contains(r.SupplyCommitmentLineId)).Sum(r => r.Quantity);
+                var removedQuantity = removed.Where(r => lineIds.Contains(r.SupplyCommitmentLineId) && !PurchaseOrderRules.KeepsGoods(r.Decision)).Sum(r => r.Quantity);
+                result[order.Id] = order.Status != SupplyRules.StatusCancelled && PurchaseOrderRules.IsFullyRejected(receivedAll, removedQuantity)
+                    ? PurchaseOrderRules.OrderRejected
+                    : PurchaseOrderRules.OrderStatus(order.Status, perLine);
+            }
+            return result;
         }
 
         private static T Totals<T>(Partij partij, Facts facts) where T : PartijTotalsDto, new()

@@ -54,6 +54,7 @@ namespace AgfAdmin.Services
                     || (c.SupplierReference != null && c.SupplierReference.ToLower().Contains(term))
                     || (c.SupplierLotReference != null && c.SupplierLotReference.ToLower().Contains(term))
                     || (partijKey != "" && c.Partij != null && c.Partij.NumberKey.Contains(partijKey))
+                    || (partijKey != "" && c.Lines.Any(l => l.Partij != null && l.Partij.NumberKey.Contains(partijKey)))
                     || (c.Vendor.Name != null && c.Vendor.Name.ToLower().Contains(term))
                     || _db.SupplyCommitmentInvoiceRefs.Any(r => r.SupplyCommitmentId == c.Id && r.InvoiceNumberKey.Contains(term)));
             }
