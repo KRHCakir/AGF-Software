@@ -59,13 +59,6 @@ WHERE (SELECT COUNT(DISTINCT l.""PartijId"") FROM ""SupplyCommitmentLines"" l WH
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
-                name: "RequestPartijKey",
-                table: "SupplyCommitments",
-                type: "character varying(200)",
-                maxLength: 200,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
                 name: "SupplierLotReference",
                 table: "SupplyCommitments",
                 type: "character varying(100)",
@@ -272,10 +265,6 @@ WHERE (SELECT COUNT(DISTINCT l.""PartijId"") FROM ""SupplyCommitmentLines"" l WH
 
             migrationBuilder.DropColumn(
                 name: "PartijId",
-                table: "SupplyCommitments");
-
-            migrationBuilder.DropColumn(
-                name: "RequestPartijKey",
                 table: "SupplyCommitments");
 
             migrationBuilder.DropColumn(
