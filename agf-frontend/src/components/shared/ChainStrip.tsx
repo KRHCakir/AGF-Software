@@ -48,7 +48,7 @@ export default function ChainStrip({ steps, dataTour = 'chain-strip' }: { steps:
                                 <span className="mt-0.5 flex flex-wrap gap-x-2">
                                     {step.links.map((link) => (
                                         <Link key={link.href} href={link.href} className="font-medium text-blue-800 underline underline-offset-2 hover:text-blue-900">
-                                            {link.key ? t(link.key) : link.label}
+                                            {link.key ? t(link.key, link.params) : link.label}
                                         </Link>
                                     ))}
                                 </span>

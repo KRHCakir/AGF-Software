@@ -210,6 +210,9 @@ export interface StockReservation {
     warehouseLocation: string | null;
     // Partij van de inhoudsregel (Physical) of van de bronregel (DirectTrade).
     lotNumber: string | null;
+    // De partij zelf (voor de link naar het partijdetail); het nummer alleen waar de server de partij meelaadt.
+    partijId?: number | null;
+    partijNumber?: string | null;
     quantity: number;
     unit: PackageUnit;
     // Gemeten netto kg; null bij een toewijzing: er is geen gemeten kg en de UI leidt er nooit een af.

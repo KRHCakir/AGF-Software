@@ -8,6 +8,7 @@ import { formatCalendarDate } from '../../lib/calendarDate';
 import { coverageParts } from '../../lib/salesSupply';
 import { getAvailabilityVariant, toAvailabilityError } from '../../services/availabilityService';
 import { AvailabilityDrillDown, PackageUnit } from '../../types/availability';
+import PartijNumberLink from '../partij/PartijNumberLink';
 import QualityBadge from './QualityBadge';
 import CoverageText from './CoverageText';
 import { ErrorState, LoadState, LoadingRows } from './StateViews';
@@ -51,7 +52,7 @@ export default function SalesBreakdown({ productVariantId, unit }: { productVari
                     <ul className="mt-1 space-y-1 text-sm">
                         {lots.map((line) => (
                             <li key={line.palletContentLineId} className="flex flex-wrap items-center gap-x-2">
-                                <span className="font-mono">{line.lotNumber}</span>
+                                <PartijNumberLink partijId={line.partijId} partijNumber={line.partijNumber} lotNumber={line.lotNumber} />
                                 <span className="text-gray-600">{line.palletReference}</span>
                                 <QualityBadge status={line.qualityStatus} />
                                 {/* Voorraad van de partij (telt op tot de kolom Voorraad); wat daarvan al gereserveerd is, staat erbij. */}

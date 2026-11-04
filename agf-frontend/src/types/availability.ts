@@ -116,6 +116,9 @@ export interface SourceLineAvailability {
     expectedAt: string | null;
     unit: PackageUnit | null;
     lotNumber: string | null;
+    // Partij van de regel (null = geen partij): het nummer uit de partij zelf, met link naar het partijdetail.
+    partijId?: number | null;
+    partijNumber?: string | null;
     expectedQuantity: number;
     declaredExpectedNetWeightKg: number | null;
     registeredQuantity: number | null;
@@ -136,6 +139,9 @@ export interface ContentLineAvailability {
     customerName: string | null;
     supplyCommitmentLineId: number;
     lotNumber: string;
+    // Partij van de regel (null = geen partij): het nummer uit de partij zelf, met link naar het partijdetail.
+    partijId?: number | null;
+    partijNumber?: string | null;
     unit: PackageUnit;
     // Historische ontvangst; voorraad = ontvangst - afgeboekt door verzendingen.
     quantity: number;

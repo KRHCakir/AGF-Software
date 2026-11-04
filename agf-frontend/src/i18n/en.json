@@ -2183,5 +2183,6 @@
   "partij_correct_exists": "Lot {number} already exists. Choose another number.",
   "partij_delete": "Delete lot",
   "partij_delete_confirm": "Yes, delete",
-  "partij_fixed_hint": "A purchase order or receipt is linked to this lot: the number only changes with a correction and a reason, and the lot can no longer be deleted."
+  "partij_fixed_hint": "A purchase order or receipt is linked to this lot: the number only changes with a correction and a reason, and the lot can no longer be deleted.",
+  "chain_partij_link": "Lot {number}"
 }

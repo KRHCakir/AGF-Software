@@ -14,6 +14,7 @@ import {
 import { getAvailabilityVariant, toAvailabilityError } from '../../services/availabilityService';
 import { AvailabilityDrillDown, ContentLineAvailability, PackageUnit, SupplyRoute } from '../../types/availability';
 import QualityBadge from './QualityBadge';
+import PartijNumberLink from '../partij/PartijNumberLink';
 import GgnBadge from '../shared/GgnBadge';
 import { UnitBadge } from './QuantityCell';
 import { WeightBadge } from '../shared/WeightBadge';
@@ -82,7 +83,7 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
                 )}
             </td>
             <td className={td}>
-                {line.lotNumber}
+                <PartijNumberLink partijId={line.partijId} partijNumber={line.partijNumber} lotNumber={line.lotNumber} className="" />
                 {line.ggn && <span className="ml-1"><GgnBadge ggn={line.ggn} /></span>}
                 {line.origin === 'DispatchCorrection' && (
                     <span className="ml-1 inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{t('sales_origin_correction')}</span>
@@ -215,7 +216,7 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
                                                             </td>
                                                             <td className={td}>{label(commitmentStatusKey(line.commitmentStatus), line.commitmentStatus)}</td>
                                                             <td className={td}>{line.expectedAt ? formatDateTime(line.expectedAt, locale) : '–'}</td>
-                                                            <td className={td}>{line.lotNumber ?? '–'}</td>
+                                                            <td className={td}><PartijNumberLink partijId={line.partijId} partijNumber={line.partijNumber} lotNumber={line.lotNumber} className="" /></td>
                                                             <td className={`${td} text-right`}>{formatQuantity(line.expectedQuantity, locale)}</td>
                                                             <td className={`${td} text-right`}>
                                                                 {line.declaredExpectedNetWeightKg === null ? '–' : formatKg(line.declaredExpectedNetWeightKg, locale)}
