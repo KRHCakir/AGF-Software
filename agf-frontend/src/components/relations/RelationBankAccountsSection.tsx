@@ -26,12 +26,9 @@ function changedSinceSave(account: BankAccountDraft): boolean {
     return iban !== s.iban || other !== s.otherAccountNumber || account.accountHolder.trim() !== s.accountHolder;
 }
 
-export default function RelationBankAccountsSection({ accounts, onChange, actorReference, onActorChange, actorRequired, events, errors, locked, onConfirm, confirming, canConfirm }: {
+export default function RelationBankAccountsSection({ accounts, onChange, events, errors, locked, onConfirm, confirming, canConfirm }: {
     accounts: BankAccountDraft[];
     onChange: (accounts: BankAccountDraft[]) => void;
-    actorReference: string;
-    onActorChange: (value: string) => void;
-    actorRequired: boolean;
     events: readonly RelationBankAccountEvent[];
     errors: FieldErrors;
     locked: boolean;
@@ -83,8 +80,8 @@ export default function RelationBankAccountsSection({ accounts, onChange, actorR
                             {account.isDefault && account.isActive && <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-900">{t('relations_bank_default')}</span>}
                             {!account.isActive && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-800">{t('relations_inactive')}</span>}
                             {confirmable && (
-                                <button type="button" className={`${secondaryButtonClass} border-amber-400 px-2 py-0.5 text-xs`} disabled={locked || confirming !== null || actorReference.trim() === ''}
-                                    title={actorReference.trim() === '' ? t('relations_bank_confirm_needs_actor') : undefined} onClick={() => onConfirm(account.id!)} data-testid={`bank-confirm-${account.id}`}>
+                                <button type="button" className={`${secondaryButtonClass} border-amber-400 px-2 py-0.5 text-xs`} disabled={locked || confirming !== null}
+                                    onClick={() => onConfirm(account.id!)} data-testid={`bank-confirm-${account.id}`}>
                                     {confirming === account.id ? t('supply_saving') : t('relations_bank_confirm')}
                                 </button>
                             )}
@@ -140,12 +137,6 @@ export default function RelationBankAccountsSection({ accounts, onChange, actorR
             })}
             <div className="flex flex-wrap items-end gap-3">
                 <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={add}>+ {t('relations_bank_add')}</button>
-                <div className="min-w-48 flex-1 sm:max-w-xs">
-                    <label htmlFor="actorReference-input" className="text-xs font-medium text-gray-700">{t('relations_bank_actor')}{actorRequired ? ' *' : ''}</label>
-                    <input {...fieldProps('actorReference', e('actorReference'))} value={actorReference} maxLength={100} disabled={locked} autoComplete="name" className={inputClass} onChange={(event) => onActorChange(event.target.value)} />
-                    <span className="block text-xs text-gray-500">{t(actorRequired ? 'relations_bank_actor_required_hint' : 'relations_bank_actor_hint')}</span>
-                    <FieldError id="actorReference" messages={e('actorReference')} />
-                </div>
             </div>
             <p className="text-xs text-gray-500">{t('relations_bank_hint')}</p>
             {events.length > 0 && (

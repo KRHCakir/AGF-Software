@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { CustomerRole, Relation, RelationBankAccount, RelationListItem, RoleTerms, VendorRole } from '../types/relation';
-import { bankAccountsNeedActor, buildRelationPayload, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyBankAccountDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, normalizeVat, relationRole } from './relationRules.ts';
+import { type RelationDraft, buildRelationPayload, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyBankAccountDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, normalizeVat, relationRole } from './relationRules.ts';
 
 // Relatieregels: alleen de naam verplicht, leeg = niet vastgelegd, zoekcode zonder spaties, land voor nieuwe/gewijzigde adressen,
 // één standaard per doel en één primair contact, GGN's van 13 cijfers, btw alleen op schrijfwijze.
@@ -40,7 +40,7 @@ describe('relation payload', () => {
         if (!result.ok) return;
         assert.equal(result.value.name, 'Nieuwe relatie');
         assert.equal(result.value.requestId, 'r-1');
-        assert.deepEqual([result.value.customer, result.value.vendor, result.value.addresses, result.value.contacts, result.value.searchCode, result.value.bankAccounts, result.value.actorReference], [null, null, [], [], null, [], null]);
+        assert.deepEqual([result.value.customer, result.value.vendor, result.value.addresses, result.value.contacts, result.value.searchCode, result.value.bankAccounts], [null, null, [], [], null, []]);
         const missing = buildRelationPayload(emptyRelationDraft());
         assert.equal(missing.ok, false);
         if (!missing.ok) assert.deepEqual(groupRelationErrors(missing.errors), { name: ['required'] });
@@ -178,7 +178,7 @@ describe('relation payload', () => {
 
     test('bank accounts: IBAN checks, BIC shape, holder required, one of IBAN or other number, inactive is never default, one active default', () => {
         const draft = emptyRelationDraft();
-        draft.name = 'X'; draft.actorReference = 'Anja';
+        draft.name = 'X';
         const a = emptyBankAccountDraft(); a.iban = 'nl91 abna 0417 1643 01'; a.bic = 'ABNA'; a.isDefault = true;
         const b = emptyBankAccountDraft(); b.iban = 'US12345678901234'; b.accountHolder = 'X';
         const c = emptyBankAccountDraft(); c.useOther = true; c.accountHolder = 'X'; c.isDefault = true; c.isActive = false;
@@ -208,35 +208,20 @@ describe('relation payload', () => {
         ]);
     });
 
-    test('"Wie" is required when an account is added, its IBAN, holder or number changes or it is (de)activated; not for BIC, currency or default', () => {
+    test('bank account changes need no name in the payload: who changes or confirms them is the signed-in user on the server', () => {
         const stored = relation();
-        const draft = draftFromRelation(stored);
-        assert.equal(draft.actorReference, '', 'never carried over from a previous save');
-        assert.equal(bankAccountsNeedActor(draft.bankAccounts), false);
-        draft.bankAccounts[0].bic = 'ABNANL2AXXX'; draft.bankAccounts[0].currency = 'USD';
-        assert.equal(bankAccountsNeedActor(draft.bankAccounts), false, 'BIC and currency need no actor');
-        assert.equal(buildRelationPayload(draft, { expectedVersion: 2, stored, today }).ok, true);
         for (const change of [
-            (d: typeof draft) => { d.bankAccounts[0].iban = 'DE89370400440532013000'; },
-            (d: typeof draft) => { d.bankAccounts[0].accountHolder = 'Ander'; },
-            (d: typeof draft) => { d.bankAccounts[0].isActive = false; d.bankAccounts[0].isDefault = false; },
-            (d: typeof draft) => { const extra = emptyBankAccountDraft(); extra.iban = 'BE68539007547034'; extra.accountHolder = 'X'; d.bankAccounts.push(extra); },
+            (d: RelationDraft) => { d.bankAccounts[0].iban = 'DE89370400440532013000'; },
+            (d: RelationDraft) => { d.bankAccounts[0].accountHolder = 'Ander'; },
+            (d: RelationDraft) => { d.bankAccounts[0].isActive = false; d.bankAccounts[0].isDefault = false; },
+            (d: RelationDraft) => { const extra = emptyBankAccountDraft(); extra.iban = 'BE68539007547034'; extra.accountHolder = 'X'; d.bankAccounts.push(extra); },
         ]) {
             const changed = draftFromRelation(stored);
             change(changed);
-            assert.equal(bankAccountsNeedActor(changed.bankAccounts), true);
             const result = buildRelationPayload(changed, { expectedVersion: 2, stored, today });
-            assert.equal(result.ok, false);
-            if (!result.ok) assert.deepEqual(groupRelationErrors(result.errors), { actorReference: ['actor_required'] });
-            changed.actorReference = ' Anja ';
-            const ok = buildRelationPayload(changed, { expectedVersion: 2, stored, today });
-            assert.equal(ok.ok, true);
-            if (ok.ok) assert.equal(ok.value.actorReference, 'Anja');
+            assert.equal(result.ok, true);
+            if (result.ok) assert.ok(!Object.keys(result.value).includes('actorReference'));
         }
-        // Spaties in een opgeslagen IBAN tellen niet als wijziging.
-        const spaced = draftFromRelation(stored);
-        spaced.bankAccounts[0].iban = 'nl91 abna 0417 1643 00';
-        assert.equal(bankAccountsNeedActor(spaced.bankAccounts), false);
     });
 
     test('a relation round-trips through a draft with ids kept and the expected version', () => {
@@ -247,7 +232,7 @@ describe('relation payload', () => {
         assert.equal(result.value.expectedVersion, 2);
         assert.deepEqual([result.value.customer?.paymentTermsDays, result.value.vendor?.paymentTermsDays, result.value.vendor?.ggns[0].id, result.value.addresses[0].id, result.value.contacts[0].channels.map((c) => c.id)], [21, 45, 1, 11, [31, 32]]);
         assert.deepEqual(result.value.vendor?.ggns[0], { id: 1, ggn: '4049929000001', producerName: 'Finca Uno', isActive: true, checkedOn: '2026-10-01', checkedBy: 'Anja', certificateValidUntil: '2027-03-31', hasGgnLabel: true });
-        assert.deepEqual([result.value.bankAccounts.map((a) => a.id), result.value.actorReference], [[41], null]);
+        assert.deepEqual(result.value.bankAccounts.map((a) => a.id), [41]);
     });
 });
 

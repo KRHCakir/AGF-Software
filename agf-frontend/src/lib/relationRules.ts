@@ -105,12 +105,11 @@ export interface RelationDraft {
     addresses: AddressDraft[];
     contacts: ContactDraft[];
     bankAccounts: BankAccountDraft[];
-    actorReference: string;
 }
 
 export type RelationRuleCode = TermsRuleCode | 'invalid_email' | 'vat_shape' | 'vat_country' | 'vat_greece' | 'country_required' | 'address_empty' | 'two_defaults' | 'two_primary'
     | 'ggn_13_digits' | 'ggn_duplicate' | 'ggn_check_future' | 'invalid_date' | 'ggn_check_pair' | 'iban_shape' | 'iban_country' | 'iban_length' | 'iban_checksum' | 'bic' | 'account_one_of'
-    | 'account_duplicate' | 'two_default_accounts' | 'inactive_default' | 'too_many_accounts' | 'actor_required';
+    | 'account_duplicate' | 'two_default_accounts' | 'inactive_default' | 'too_many_accounts';
 export interface RelationRuleError { field: string; code: RelationRuleCode; params?: Record<string, string> }
 export type RelationBuildResult = { ok: true; value: SaveRelationRequest } | { ok: false; errors: RelationRuleError[] };
 
@@ -141,7 +140,7 @@ export function emptyRelationDraft(): RelationDraft {
     return {
         searchCode: '', name: '', tradeName: '', preferredLanguage: '', website: '', email: '', phone: '', vatNumber: '', registrationNumber: '', registrationCountry: '', registrationType: '', legalForm: '',
         internalNote: '', isActive: true, customerRole: false, customerTerms: emptyTermsDraft(), credit: emptyCreditDraft(), vendorRole: false, vendorTerms: emptyTermsDraft(),
-        ggns: [], addresses: [], contacts: [], bankAccounts: [], actorReference: '',
+        ggns: [], addresses: [], contacts: [], bankAccounts: [],
     };
 }
 
@@ -190,8 +189,6 @@ export function draftFromRelation(relation: Relation): RelationDraft {
         addresses: relation.addresses.map((a) => ({ key: newKey(), id: a.id, purpose: a.purpose, label: text(a.label), line1: text(a.line1), line2: text(a.line2), postalCode: text(a.postalCode), city: text(a.city), region: text(a.region), countryCode: text(a.countryCode), isDefault: a.isDefault, isActive: a.isActive, stored: a })),
         contacts: relation.contacts.map((c) => ({ key: newKey(), id: c.id, name: c.name, department: text(c.department), jobTitle: text(c.jobTitle), isPrimary: c.isPrimary, isActive: c.isActive, note: text(c.note), channels: c.channels.map((ch) => ({ key: newKey(), id: ch.id, kind: ch.kind, label: text(ch.label), value: ch.value })) })),
         bankAccounts: relation.bankAccounts.map(bankAccountDraftFrom),
-        // "Wie" geldt per opslag en wordt nooit uit een vorige opslag overgenomen.
-        actorReference: '',
     };
 }
 
@@ -227,18 +224,6 @@ function emailOk(value: string, stored: string | null | undefined): boolean {
 export function emailSuggestion(value: string, stored: string | null | undefined): string | null {
     const trimmed = value.trim();
     return trimmed === '' || trimmed === stored ? null : emailTypoSuggestion(trimmed);
-}
-
-// "Wie" is verplicht als een rekening nieuw is, haar IBAN, houder of ander nummer wijzigt of zij (in)actief wordt.
-// BIC, valuta, standaard en volgorde vragen geen naam (zelfde regel als de server, die er dan ook geen auditregel voor schrijft).
-export function bankAccountsNeedActor(accounts: readonly BankAccountDraft[]): boolean {
-    return accounts.some((a) => {
-        const s = a.stored;
-        if (s === null || a.id === null) return true;
-        const iban = a.useOther ? null : normalizeIban(a.iban);
-        const other = a.useOther ? blankToNull(a.otherAccountNumber) : null;
-        return iban !== s.iban || other !== s.otherAccountNumber || a.accountHolder.trim() !== s.accountHolder || a.isActive !== s.isActive;
-    });
 }
 
 function saveTerms(values: ReturnType<typeof normalizeTerms>): SaveRoleTerms {
@@ -395,9 +380,6 @@ export function buildRelationPayload(draft: RelationDraft, options: { requestId?
         return { id: a.id, iban, otherAccountNumber, bic, accountHolder, currency, isDefault: a.isDefault, isActive: a.isActive };
     });
     if (draft.bankAccounts.filter((a) => a.isDefault && a.isActive).length > 1) errors.push({ field: 'bankAccounts', code: 'two_default_accounts' });
-    const actorReference = blankToNull(draft.actorReference);
-    if (actorReference !== null && actorReference.length > 100) errors.push({ field: 'actorReference', code: 'too_long' });
-    else if (actorReference === null && bankAccountsNeedActor(draft.bankAccounts)) errors.push({ field: 'actorReference', code: 'actor_required' });
 
     if (errors.length > 0) return { ok: false, errors };
     return {
@@ -406,7 +388,7 @@ export function buildRelationPayload(draft: RelationDraft, options: { requestId?
             ...(options.requestId ? { requestId: options.requestId } : {}),
             ...(options.expectedVersion !== undefined ? { expectedVersion: options.expectedVersion } : {}),
             searchCode, name, tradeName, preferredLanguage: blankToNull(draft.preferredLanguage), website, email, phone, vatNumber, registrationNumber, registrationCountry, registrationType, legalForm, internalNote,
-            isActive: draft.isActive, acknowledgeSimilarNames: options.acknowledgeSimilarNames ?? false, actorReference, customer, vendor, addresses, contacts, bankAccounts,
+            isActive: draft.isActive, acknowledgeSimilarNames: options.acknowledgeSimilarNames ?? false, customer, vendor, addresses, contacts, bankAccounts,
         },
     };
 }

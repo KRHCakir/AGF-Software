@@ -252,8 +252,6 @@ export interface SaveRelationRequest {
     internalNote: string | null;
     isActive: boolean;
     acknowledgeSimilarNames: boolean;
-    // "Wie": verplicht zodra een bankrekening wordt toegevoegd, haar IBAN/houder/nummer wijzigt of zij (in)actief wordt.
-    actorReference: string | null;
     customer: SaveCustomerRole | null;
     vendor: SaveVendorRole | null;
     addresses: RelationAddress[];
@@ -262,7 +260,7 @@ export interface SaveRelationRequest {
     bankAccounts: SaveBankAccount[];
 }
 
-export interface ConfirmBankAccountRequest { expectedVersion: number; actorReference: string }
+export interface ConfirmBankAccountRequest { expectedVersion: number }
 
 export interface RelationSettings { globalGapPortalUrl: string }
 

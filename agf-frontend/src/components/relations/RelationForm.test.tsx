@@ -420,7 +420,7 @@ describe('RelationForm', () => {
         assert.deepEqual([customer.creditLimit, customer.isInsured, customer.insurer, customer.insurerText, customer.insuredLimit, customer.insuredUntil], [1500.5, true, 'Other', 'Kredietpartner', 750, '2026-11-10']);
     });
 
-    test('bank accounts: IBAN checked inline, "Who" required for a new account, the full list is sent and saved accounts cannot be deleted', async () => {
+    test('bank accounts: IBAN checked inline, no "Who" field (the signed-in user is recorded), the full list is sent and saved accounts cannot be deleted', async () => {
         const stored = saved({ version: 2, bankAccounts: [bankAccount({ confirmationStatus: 'Confirmed', confirmedAt: '2026-10-20T08:00:00Z', confirmedBy: 'Anja' })] });
         respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 3, bankAccounts: [bankAccount({ confirmationStatus: 'Confirmed' }), bankAccount({ id: 42, iban: 'DE89370400440532013000', isDefault: false })] })) : json(404, {}));
         await mounted.render(<RelationForm relation={stored} reference={reference} onSaved={() => {}} onClose={() => {}} />);
@@ -435,19 +435,18 @@ describe('RelationForm', () => {
         await type(input(`bankAccounts.${key}.accountHolder`), 'Fruitimport Zuid');
         await press('s', { ctrlKey: true });
         assert.equal(calls.filter((call) => call.method === 'PUT').length, 0);
-        assert.ok(text().includes('relations_error_iban_checksum') && text().includes('relations_error_actor_required'));
+        assert.ok(text().includes('relations_error_iban_checksum'));
+        assert.equal(mounted.container.querySelector('[id="actorReference-input"]'), null, 'no name to type');
         await type(input(`bankAccounts.${key}.iban`), 'DE89 3704 0044 0532 0130 00');
         assert.ok(text().includes('relations_bank_iban_ok'));
-        await type(input('actorReference'), 'Pieter');
         await press('s', { ctrlKey: true });
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
         const body = calls.find((call) => call.method === 'PUT')!.body!;
-        assert.equal(body.actorReference, 'Pieter');
+        assert.equal(body.actorReference, undefined, 'who changes the account is the signed-in user on the server');
         assert.deepEqual((body.bankAccounts as { id: number | null; iban: string; isDefault: boolean }[]).map((a) => [a.id, a.iban, a.isDefault]), [[41, 'NL91ABNA0417164300', true], [null, 'DE89370400440532013000', false]]);
-        await mounted.waitFor(() => input('actorReference').value === '', '"Who" is cleared after saving');
     });
 
-    test('an unconfirmed default account is a prominent warning; confirming needs "Who" and sends the expected version', async () => {
+    test('an unconfirmed default account is a prominent warning; confirming sends only the expected version', async () => {
         const stored = saved({ version: 4, bankAccounts: [bankAccount()], warnings: [{ code: 'default-bank-account-unconfirmed', field: 'bankAccounts[0]', message: 'x', suggestion: null }] });
         respond = (call) => (call.url.endsWith('/bank-accounts/41/confirm')
             ? json(200, saved({ version: 5, bankAccounts: [bankAccount({ confirmationStatus: 'Confirmed', confirmedAt: '2026-10-26T09:00:00Z', confirmedBy: 'Anja' })], bankAccountEvents: [{ id: 1, bankAccountId: 41, kind: 'Confirmed', actorReference: 'Anja', occurredAt: '2026-10-26T09:00:00Z', oldIban: null, newIban: null, oldAccountHolder: null, newAccountHolder: null, oldOtherAccountNumber: null, newOtherAccountNumber: null }] }))
@@ -456,11 +455,10 @@ describe('RelationForm', () => {
         assert.ok(mounted.container.querySelector('[data-testid="warning-default-bank-account-unconfirmed"]'), 'prominent warning');
         await openSection('bank');
         const confirmButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="bank-confirm-41"]')!;
-        assert.ok(confirmButton.disabled, 'needs "Who" first');
-        await type(input('actorReference'), 'Anja');
-        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="bank-confirm-41"]')!);
+        assert.equal(confirmButton.disabled, false, 'no name needed first');
+        await click(confirmButton);
         await mounted.waitFor(() => calls.some((call) => call.url.endsWith('/confirm')), 'confirm posted');
-        assert.deepEqual(calls.find((call) => call.url.endsWith('/confirm'))!.body, { expectedVersion: 4, actorReference: 'Anja' });
+        assert.deepEqual(calls.find((call) => call.url.endsWith('/confirm'))!.body, { expectedVersion: 4 });
         await mounted.waitFor(() => text().includes('relations_bank_confirmed'), 'notice');
         assert.equal(mounted.container.querySelector('[data-testid="warning-default-bank-account-unconfirmed"]'), null, 'warning gone');
         assert.ok(mounted.container.querySelector('[data-testid="bank-account-events"]'), 'audit shown');
