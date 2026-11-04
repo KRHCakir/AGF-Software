@@ -66,7 +66,10 @@ export interface PalletAuditEvent {
     oldValue: string | null;
     newValue: string | null;
     reason: string | null;
+    // De ingelogde gebruiker die het commando gaf.
     actorReference: string | null;
+    // Alleen bij een keuring: wie het product fysiek keurde (ontbreekt bij een oudere server en bij keuringen van vóór dit veld).
+    inspectedBy?: string | null;
     occurredAt: string;
     requestId: string | null;
 }
@@ -75,7 +78,8 @@ export interface ChangeQualityStatusRequest {
     requestId: string;
     expectedContentLineVersion: number;
     toStatus: QualityStatus;
-    actorReference: string;
+    // Wie het product fysiek keurde (verplicht); wie het vastlegt, is de ingelogde gebruiker aan de serverkant.
+    inspectedBy: string;
     reason: string | null;
 }
 
@@ -140,6 +144,7 @@ function isAuditEvent(value: unknown): value is PalletAuditEvent {
         && isNullableString(value.newValue)
         && isNullableString(value.reason)
         && isNullableString(value.actorReference)
+        && (value.inspectedBy === undefined || isNullableString(value.inspectedBy))
         && isString(value.occurredAt)
         && isNullableString(value.requestId);
 }

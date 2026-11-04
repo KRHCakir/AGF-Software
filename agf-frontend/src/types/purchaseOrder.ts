@@ -128,6 +128,8 @@ export interface PurchaseOrderHistoryEvent {
     occurredAt: string;
     type: string;
     actorReference: string | null;
+    // QualityChanged: wie het product keurde, naast de ingelogde gebruiker (actorReference); leeg bij oudere keuringen.
+    inspectedBy?: string | null;
     reference: string | null;
     channel: string | null;
     quantity: number | null;

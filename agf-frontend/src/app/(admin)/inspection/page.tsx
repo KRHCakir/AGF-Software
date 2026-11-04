@@ -14,6 +14,7 @@ import { toApiError } from '../../../services/apiClient';
 import { InspectionPallet, getAvailableNow, isReceivedInWarehouse, loadInspectionQueue, loadPalletContext } from '../../../services/inspectionService';
 import { QualityStatus } from '../../../types/availability';
 import { PalletDetailLine } from '../../../types/inspection';
+import { SignedInAs } from '../../../components/shared/CurrentUserContext';
 
 // Kwaliteitswerkplek "Keuring": uitsluitend per PalletContentLine op een pallet die Received + Warehouse is.
 // Geen bulk, geen palletbrede goedkeuring, geen DirectTrade-keuring, geen foto's en geen voorraadmutaties.
@@ -28,9 +29,6 @@ export default function InspectionPage() {
 
 const FILTERABLE: QualityStatus[] = ['Quarantine', 'Blocked', 'Approved'];
 
-// Vaste demokeuzes voor wie beoordeelt; "Anders" laat een naam typen. Geen authenticatie.
-const DEMO_INSPECTORS = ['Jan', 'Steve'] as const;
-
 function parsePalletId(value: string | null): number | null | 'invalid' {
     if (value === null) return null;
     return /^[1-9][0-9]{0,9}$/.test(value) ? Number(value) : 'invalid';
@@ -40,10 +38,6 @@ function InspectionWorkspace() {
     const { t, locale } = useTranslation();
     const searchParams = useSearchParams();
     const palletParam = useMemo(() => parsePalletId(searchParams.get('palletId')), [searchParams]);
-    // Wie beoordeelt: bewust niet vooraf gekozen en niet uit de browseropslag; geen beveiligde accountidentiteit.
-    const [actorChoice, setActorChoice] = useState<'' | (typeof DEMO_INSPECTORS)[number] | 'other'>('');
-    const [actorOther, setActorOther] = useState('');
-    const actor = actorChoice === 'other' ? actorOther : actorChoice;
     const [state, setState] = useState<LoadState<InspectionPallet[]>>({ status: 'loading' });
     const [loadedAt, setLoadedAt] = useState<string | null>(null);
     const [reloadToken, setReloadToken] = useState(0);
@@ -140,20 +134,7 @@ function InspectionWorkspace() {
                     <p className="text-sm text-gray-600">{t('inspection_subtitle')}</p>
                 </div>
                 <div className="flex items-end gap-4">
-                    <div className="w-72">
-                        <label htmlFor="inspection-actor" className="text-xs font-medium text-gray-700">{t('inspection_actor_label')} *</label>
-                        <select id="inspection-actor" data-tour="inspection-actor" value={actorChoice} onChange={(event) => setActorChoice(event.target.value as typeof actorChoice)}
-                            className={inputClass} aria-describedby="inspection-actor-hint">
-                            <option value="">{t('inspection_actor_choose')}</option>
-                            {DEMO_INSPECTORS.map((name) => <option key={name} value={name}>{name}</option>)}
-                            <option value="other">{t('inspection_actor_other')}</option>
-                        </select>
-                        {actorChoice === 'other' && (
-                            <input id="inspection-actor-other" data-tour="inspection-actor-other" aria-label={t('inspection_actor_other')} value={actorOther} maxLength={100} onChange={(event) => setActorOther(event.target.value)}
-                                placeholder={t('supply_actor_placeholder')} className={inputClass} />
-                        )}
-                        <span id="inspection-actor-hint" className="block text-xs text-gray-500">{t('inspection_actor_hint')}</span>
-                    </div>
+                    <SignedInAs />
                     <div className="flex items-center gap-3 text-sm text-gray-600">
                         {loadedAt && <span>{t('availability_updated_at', { time: formatTime(loadedAt, locale) })}</span>}
                         <button type="button" onClick={() => setReloadToken((n) => n + 1)} disabled={state.status === 'loading' || palletParam === 'invalid'}
@@ -258,7 +239,6 @@ function InspectionWorkspace() {
                             )}
                             <PalletGroup
                                 context={context}
-                                actor={actor}
                                 statusFilter={single ? { Quarantine: true, Blocked: true, Approved: true, Rejected: false } : statusFilter}
                                 search={single ? '' : search}
                                 readOnly={readOnly}

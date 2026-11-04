@@ -129,7 +129,9 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     {order.history.map((event, index) => (
                         <li key={index} className="break-words text-gray-800">
                             <span className="text-gray-600">{formatDateTime(event.occurredAt, locale)}</span> · {historyText(event, t, label, qty)}
-                            {event.actorReference && <span className="text-gray-600"> · {event.actorReference}</span>}
+                            {event.inspectedBy
+                                ? <span className="text-gray-600"> · {t('inspection_event_by_signed_in', { actor: event.inspectedBy, user: event.actorReference ?? t('inspection_actor_not_given') })}</span>
+                                : event.actorReference && <span className="text-gray-600"> · {event.actorReference}</span>}
                         </li>
                     ))}
                 </ol>

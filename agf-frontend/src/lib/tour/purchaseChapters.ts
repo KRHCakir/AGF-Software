@@ -99,11 +99,10 @@ export const RECEIVE_CHAPTER: TourChapter = {
         ]),
         receive('inspector', '/receipts', [
             { kind: 'click', target: 'receive-to-inspection' },
-            { kind: 'select', target: 'inspection-actor', value: 'other' },
-            { kind: 'type', target: 'inspection-actor-other', text: '{{actor}}' },
         ]),
         receive('approve', '/inspection', [
             { kind: 'click', target: 'inspection-action:Approved-{{tourRef}}' },
+            { kind: 'type', target: 'inspection-inspector:{{tourRef}}', text: '{{actor}}' },
             { kind: 'click', target: 'inspection-confirm:{{tourRef}}' },
             { kind: 'wait', target: 'inspection-status:{{tourRef}}-Approved' },
             { kind: 'highlight', target: 'inspection-status:{{tourRef}}-Approved' },

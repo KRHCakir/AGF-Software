@@ -51,7 +51,11 @@ export default function LineHistory({ events }: { events: PalletAuditEvent[] }) 
                                 {quality && from && <QualityBadge status={from} />}
                                 {quality && to && <><span aria-hidden="true">→</span><QualityBadge status={to} /></>}
                                 {event.eventType === 'ContentLineAdded' && to && <QualityBadge status={to} />}
-                                <span>{t('inspection_event_by', { actor: event.actorReference ?? t('inspection_actor_not_given') })}</span>
+                                <span>
+                                    {quality && event.inspectedBy
+                                        ? t('inspection_event_by_signed_in', { actor: event.inspectedBy, user: event.actorReference ?? t('inspection_actor_not_given') })
+                                        : t('inspection_event_by', { actor: event.actorReference ?? t('inspection_actor_not_given') })}
+                                </span>
                                 {event.reason && <span className="italic">“{event.reason}”</span>}
                             </li>
                         );
