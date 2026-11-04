@@ -47,7 +47,7 @@ const correctionResponse: SalesDispatchCorrection = {
 
 const frozen: PendingCommand = {
     kind: 'correct-dispatch', key: correctDispatchKey(4, 9), orderId: 4, dispatchId: 9, requestId: 'c-lost', attempts: 1, lastError: 'network down', frozenAt: '2026-10-19T13:59:00.000Z',
-    payload: { requestId: 'c-lost', expectedOrderVersion: 2, actorReference: 'office-1', reason: 'Verkeerd gescand', goodsNeverLeftWarehouse: true, lines: [{ stockReservationId: 11, expectedReservationVersion: 1 }] },
+    payload: { requestId: 'c-lost', expectedOrderVersion: 2, reason: 'Verkeerd gescand', goodsNeverLeftWarehouse: true, lines: [{ stockReservationId: 11, expectedReservationVersion: 1 }] },
     display: { customerName: 'Local Market Stalls', lineCount: 1 },
 };
 

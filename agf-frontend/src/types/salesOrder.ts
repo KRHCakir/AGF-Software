@@ -114,7 +114,6 @@ export interface CreateSalesDispatchLineRequest {
 export interface CreateSalesDispatchRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     reference: string | null;
     lines: CreateSalesDispatchLineRequest[];
 }
@@ -141,7 +140,6 @@ export interface SalesDispatchLine {
 export interface CorrectSalesDispatchRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     reason: string;
     goodsNeverLeftWarehouse: true;
     lines: CreateSalesDispatchLineRequest[];
@@ -802,7 +800,6 @@ export type ShipmentKind = 'Warehouse' | 'DirectTrade';
 export interface ConfirmDeliveryRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     // Kalenderdatum yyyy-MM-dd: niet vóór de verzenddatum en niet na vandaag (Europe/Amsterdam).
     deliveredOn: string;
     receiptReference: string | null;
@@ -831,7 +828,6 @@ export interface DeliveryConfirmation {
 export interface RetractDeliveryRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     reason: string;
     recordedInError: true;
 }
