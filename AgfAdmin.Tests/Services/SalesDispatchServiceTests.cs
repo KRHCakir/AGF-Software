@@ -74,7 +74,7 @@ public class SalesDispatchServiceTests : IDisposable
     private async Task<ServiceResult<SalesOrderDto>> CancelAsync(int version, params IInterceptor[] interceptors)
     {
         await using var db = _factory.CreateContext(interceptors);
-        return await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "Afgezegd" });
+        return await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "Afgezegd" });
     }
 
     private async Task<ServiceResultStatus> BlockAsync(int contentLineId, params IInterceptor[] interceptors)

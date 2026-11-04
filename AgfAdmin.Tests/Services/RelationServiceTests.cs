@@ -320,7 +320,7 @@ public class RelationServiceTests : IDisposable
         int orderId;
         await using (var db = _factory.CreateContext())
         {
-            var order = await new SalesOrderService(db).CreateAsync(new CreateSalesOrderDto { RequestId = Guid.NewGuid(), CustomerId = created.Customer!.CustomerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 23, 8, 0, 0, TimeSpan.FromHours(2)), ActorReference = "office-1", Lines = new() { new() { ProductVariantId = variantId, Quantity = 10m, Unit = "box" } } });
+            var order = await new SalesOrderService(db).CreateAsync(new CreateSalesOrderDto { RequestId = Guid.NewGuid(), CustomerId = created.Customer!.CustomerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 23, 8, 0, 0, TimeSpan.FromHours(2)), Lines = new() { new() { ProductVariantId = variantId, Quantity = 10m, Unit = "box" } } });
             Assert.Equal(ServiceResultStatus.Created, order.Status);
             orderId = order.Value.Id;
         }
@@ -332,7 +332,7 @@ public class RelationServiceTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            var refusedOrder = await new SalesOrderService(db).CreateAsync(new CreateSalesOrderDto { RequestId = Guid.NewGuid(), CustomerId = created.Customer.CustomerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 23, 8, 0, 0, TimeSpan.FromHours(2)), ActorReference = "office-1", Lines = new() { new() { ProductVariantId = variantId, Quantity = 1m, Unit = "box" } } });
+            var refusedOrder = await new SalesOrderService(db).CreateAsync(new CreateSalesOrderDto { RequestId = Guid.NewGuid(), CustomerId = created.Customer.CustomerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 23, 8, 0, 0, TimeSpan.FromHours(2)), Lines = new() { new() { ProductVariantId = variantId, Quantity = 1m, Unit = "box" } } });
             Assert.Equal(ServiceResultStatus.Validation, refusedOrder.Status);
             Assert.Contains("inactive", refusedOrder.Errors["customerId"][0]);
             var refusedInvoice = await new PurchaseInvoiceService(db).CreateAsync(new CreatePurchaseInvoiceDto { RequestId = Guid.NewGuid(), VendorId = created.Vendor!.VendorId, InvoiceNumber = "X-1", InvoiceDate = new DateTime(2026, 10, 21, 0, 0, 0, DateTimeKind.Utc), Lines = new() { new() { Description = "A", Quantity = 1m, UnitPrice = 1m } } });

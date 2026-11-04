@@ -1,4 +1,6 @@
+using System.Text.Json;
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +24,6 @@ public class SalesOrderServiceTests : IDisposable
         CustomerId = _seed.CustomerId,
         CustomerReference = "PO-1",
         RequestedDeliveryDate = Delivery,
-        ActorReference = "office-1",
         Lines = new List<CreateSalesOrderLineDto>
         {
             new() { ProductVariantId = _seed.AvocadoId, Quantity = 30m, Unit = "box" },
@@ -94,7 +95,7 @@ public class SalesOrderServiceTests : IDisposable
         {
             var order = new AgfAdmin.Models.SalesOrder
             {
-                RequestId = requestId, CustomerId = _seed.CustomerId, Status = "Open", CustomerReference = "PO-1", ActorReference = "office-1",
+                RequestId = requestId, CustomerId = _seed.CustomerId, Status = "Open", CustomerReference = "PO-1", ActorReference = CurrentUser.Default.DisplayName,
                 RequestedDeliveryDate = UtcPrecision.ToStoredUtc(Delivery), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
                 Lines = new List<AgfAdmin.Models.SalesOrderLine> { new() { ProductVariantId = _seed.AvocadoId, Quantity = 420m, Unit = "box", PalletCount = 3.5m, PackagesPerPallet = 120m } }
             };
@@ -373,11 +374,13 @@ public class SalesOrderServiceTests : IDisposable
         }
     }
 
-    private async Task<ServiceResult<SalesOrderDto>> CreateAsync(CreateSalesOrderDto request)
+    private async Task<ServiceResult<SalesOrderDto>> CreateAsync(CreateSalesOrderDto request, ICurrentUser user = null)
     {
         await using var db = _factory.CreateContext();
-        return await new SalesOrderService(db).CreateAsync(request);
+        return await new SalesOrderService(db, user).CreateAsync(request);
     }
+
+    private static CurrentUser User(string name) => new($"id-{name}", name, new[] { "Medewerker" }, Permissions.All);
 
     private async Task<int> OrderCountAsync()
     {
@@ -407,9 +410,8 @@ public class SalesOrderServiceTests : IDisposable
         await SeedAsync();
         var request = Request();
         request.CustomerReference = "  PO-1 ";
-        request.ActorReference = " office-1 ";
 
-        var result = await CreateAsync(request);
+        var result = await CreateAsync(request, User(" office-1 "));
 
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         var order = result.Value;
@@ -450,9 +452,6 @@ public class SalesOrderServiceTests : IDisposable
     [InlineData("customer-missing", "customerId")]
     [InlineData("reference-too-long", "customerReference")]
     [InlineData("delivery-missing", "requestedDeliveryDate")]
-    [InlineData("actor-missing", "actorReference")]
-    [InlineData("actor-blank", "actorReference")]
-    [InlineData("actor-too-long", "actorReference")]
     [InlineData("lines-missing", "lines")]
     [InlineData("lines-empty", "lines")]
     [InlineData("lines-too-many", "lines")]
@@ -478,9 +477,6 @@ public class SalesOrderServiceTests : IDisposable
             case "customer-missing": request.CustomerId = null; break;
             case "reference-too-long": request.CustomerReference = new string('R', 101); break;
             case "delivery-missing": request.RequestedDeliveryDate = null; break;
-            case "actor-missing": request.ActorReference = null; break;
-            case "actor-blank": request.ActorReference = "  "; break;
-            case "actor-too-long": request.ActorReference = new string('A', 101); break;
             case "lines-missing": request.Lines = null; break;
             case "lines-empty": request.Lines = new List<CreateSalesOrderLineDto>(); break;
             case "lines-too-many":
@@ -536,7 +532,6 @@ public class SalesOrderServiceTests : IDisposable
     [Theory]
     [InlineData("identical")]
     [InlineData("reference-padded")]
-    [InlineData("actor-padded")]
     [InlineData("same-instant-other-offset")]
     [InlineData("sub-microsecond-ticks")]
     [InlineData("quantity-trailing-zero")]
@@ -555,7 +550,6 @@ public class SalesOrderServiceTests : IDisposable
         {
             case "reference-padded": retry.CustomerReference = "  PO-1  "; break;
             case "note-padded": retry.InternalNote = "  Klant komt morgen langs "; break;
-            case "actor-padded": retry.ActorReference = " office-1"; break;
             case "same-instant-other-offset": retry.RequestedDeliveryDate = Delivery.ToOffset(TimeSpan.Zero); break;
             case "sub-microsecond-ticks": retry.RequestedDeliveryDate = Delivery.AddTicks(7); break;
             case "quantity-trailing-zero": retry.Lines[0].Quantity = 30.000m; break;
@@ -588,7 +582,6 @@ public class SalesOrderServiceTests : IDisposable
     [InlineData("reference-removed")]
     [InlineData("delivery-day")]
     [InlineData("delivery-microsecond")]
-    [InlineData("actor")]
     [InlineData("quantity")]
     [InlineData("unit")]
     [InlineData("variant")]
@@ -609,7 +602,6 @@ public class SalesOrderServiceTests : IDisposable
             case "reference-removed": retry.CustomerReference = null; break;
             case "delivery-day": retry.RequestedDeliveryDate = Delivery.AddDays(1); break;
             case "delivery-microsecond": retry.RequestedDeliveryDate = Delivery.AddTicks(10); break;
-            case "actor": retry.ActorReference = "office-2"; break;
             case "quantity": retry.Lines[0].Quantity = 31m; break;
             case "unit": retry.Lines[1].Unit = "tray"; break;
             case "variant": retry.Lines[1].ProductVariantId = _seed.MangoId; break;
@@ -618,6 +610,46 @@ public class SalesOrderServiceTests : IDisposable
         }
 
         Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(retry)).Status);
+        Assert.Equal(1, await OrderCountAsync());
+    }
+
+    // ---- Wie het deed: altijd de ingelogde gebruiker ----
+
+    [Fact]
+    public async Task The_actor_is_the_signed_in_user_and_an_actor_sent_by_the_client_is_ignored()
+    {
+        await SeedAsync();
+        var json = JsonSerializer.Serialize(Request(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var withActor = json.Insert(1, "\"actorReference\":\"Iemand anders\",");
+        var request = JsonSerializer.Deserialize<CreateSalesOrderDto>(withActor, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        var result = await CreateAsync(request, User("Jan"));
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal("Jan", result.Value.ActorReference);
+        await using var db = _factory.CreateContext();
+        Assert.Equal("Jan", (await db.SalesOrders.SingleAsync(o => o.Id == result.Value.Id)).ActorReference);
+    }
+
+    [Fact]
+    public async Task Without_a_signed_in_user_the_standard_user_is_the_actor()
+    {
+        await SeedAsync();
+
+        var result = await CreateAsync(Request());
+
+        Assert.Equal(CurrentUser.Default.DisplayName, result.Value.ActorReference);
+    }
+
+    [Fact]
+    public async Task The_same_RequestId_from_another_user_is_a_conflict_and_never_shows_the_other_users_order()
+    {
+        await SeedAsync();
+        var requestId = Guid.NewGuid();
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(Request(requestId), User("Jan"))).Status);
+
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(Request(requestId), User("Steve"))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await CreateAsync(Request(requestId), User("Jan"))).Status);
         Assert.Equal(1, await OrderCountAsync());
     }
 

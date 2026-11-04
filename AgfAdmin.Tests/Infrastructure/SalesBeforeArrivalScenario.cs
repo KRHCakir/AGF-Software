@@ -88,7 +88,6 @@ public sealed class SalesBeforeArrivalScenario : IDisposable
         CustomerId = CustomerId,
         CustomerReference = "PO-778",
         RequestedDeliveryDate = new DateTimeOffset(2026, 11, 6, 6, 0, 0, TimeSpan.Zero),
-        ActorReference = "verkoop-1",
         Lines = lines.Select(l => new CreateSalesOrderLineDto { ProductVariantId = variantId, Quantity = l.Quantity, Unit = "colli", SupplySource = l.Source }).ToList()
     };
 

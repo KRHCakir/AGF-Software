@@ -8,7 +8,6 @@ namespace AgfAdmin.DTOs
         // Interne opmerking bij deze order (alleen intern; telt mee in de replayvergelijking).
         public string InternalNote { get; set; }
         public DateTimeOffset? RequestedDeliveryDate { get; set; }
-        public string ActorReference { get; set; }
         public List<CreateSalesOrderLineDto> Lines { get; set; }
     }
 
@@ -80,7 +79,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 

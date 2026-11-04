@@ -27,11 +27,10 @@ public class SalesOrderCancellationTests : IDisposable
         (_orderId, _boxLine, _colliLine) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity, colliQuantity);
     }
 
-    private static CancelSalesOrderDto Cancel(int? version = 0, string reason = "Klant heeft afgezegd", string actor = "office-1", Guid? requestId = null) => new()
+    private static CancelSalesOrderDto Cancel(int? version = 0, string reason = "Klant heeft afgezegd", Guid? requestId = null) => new()
     {
         RequestId = requestId ?? Guid.NewGuid(),
         ExpectedOrderVersion = version,
-        ActorReference = actor,
         Reason = reason
     };
 
@@ -115,7 +114,7 @@ public class SalesOrderCancellationTests : IDisposable
         var result = await CancelAsync(request);
 
         Assert.Equal(ServiceResultStatus.Ok, result.Status);
-        Assert.Equal(("Cancelled", "Klant heeft afgezegd", "office-1"), (result.Value.Status, result.Value.CancelReason, result.Value.CancelledBy));
+        Assert.Equal(("Cancelled", "Klant heeft afgezegd", "Admin"), (result.Value.Status, result.Value.CancelReason, result.Value.CancelledBy));
         Assert.NotNull(result.Value.CancelledAt);
         Assert.All(result.Value.Lines, l => Assert.Equal(0m, l.ReservedQuantity));
         Assert.All(result.Value.Lines.SelectMany(l => l.Reservations), r => Assert.False(r.OnHold));
@@ -141,7 +140,7 @@ public class SalesOrderCancellationTests : IDisposable
 
         // Eén orderevent met begrensde samenvatting; per vrijgegeven reservering één palletevent dat terugverwijst.
         var orderEvent = Assert.Single(after.OrderEvents);
-        Assert.Equal(("SalesOrderCancelled", "office-1", "Klant heeft afgezegd", request.RequestId), (orderEvent.EventType, orderEvent.ActorReference, orderEvent.Reason, orderEvent.RequestId));
+        Assert.Equal(("SalesOrderCancelled", "Admin", "Klant heeft afgezegd", request.RequestId), (orderEvent.EventType, orderEvent.ActorReference, orderEvent.Reason, orderEvent.RequestId));
         using var oldValue = JsonDocument.Parse(orderEvent.OldValue!);
         Assert.Equal(before.Order.Version, oldValue.RootElement.GetProperty("version").GetInt32());
         using var newValue = JsonDocument.Parse(orderEvent.NewValue!);
@@ -153,7 +152,7 @@ public class SalesOrderCancellationTests : IDisposable
         Assert.All(after.ReleaseEvents.Where(e => e.NewValue!.Contains("SalesOrderCancelled")), e =>
         {
             Assert.Null(e.RequestId);
-            Assert.Equal("office-1", e.ActorReference);
+            Assert.Equal("Admin", e.ActorReference);
             Assert.NotNull(e.PalletContentLineId);
             using var snapshot = JsonDocument.Parse(e.NewValue!);
             Assert.Equal(_orderId, snapshot.RootElement.GetProperty("salesOrderId").GetInt32());
@@ -244,22 +243,18 @@ public class SalesOrderCancellationTests : IDisposable
     [InlineData("reason-missing", "reason")]
     [InlineData("reason-blank", "reason")]
     [InlineData("reason-too-long", "reason")]
-    [InlineData("actor-missing", "actorReference")]
-    [InlineData("actor-too-long", "actorReference")]
     public async Task Cancel_Rejects_Invalid_Input_And_Changes_Nothing(string invalidCase, string key)
     {
         await ArrangeAsync();
         await ReservedAsync(_seed.ApprovedBox, 10m, 40m);
         var request = invalidCase switch
         {
-            "request-id-missing" => new CancelSalesOrderDto { RequestId = null, ExpectedOrderVersion = 0, ActorReference = "office-1", Reason = "Klant heeft afgezegd" },
+            "request-id-missing" => new CancelSalesOrderDto { RequestId = null, ExpectedOrderVersion = 0, Reason = "Klant heeft afgezegd" },
             "request-id-empty" => Cancel(requestId: Guid.Empty),
             "version-missing" => Cancel(version: null),
             "reason-missing" => Cancel(reason: null),
             "reason-blank" => Cancel(reason: "   "),
-            "reason-too-long" => Cancel(reason: new string('x', 501)),
-            "actor-missing" => Cancel(actor: " "),
-            _ => Cancel(actor: new string('a', 101))
+            _ => Cancel(reason: new string('x', 501)),
         };
 
         var result = await CancelAsync(request);
@@ -347,10 +342,10 @@ public class SalesOrderCancellationTests : IDisposable
         Assert.Equal(ServiceResultStatus.Ok, (await CancelAsync(request)).Status);
         var before = await StateAsync();
 
-        var retry = await CancelAsync(new CancelSalesOrderDto { RequestId = request.RequestId, ExpectedOrderVersion = 0, ActorReference = "office-1", Reason = "Klant heeft afgezegd" });
+        var retry = await CancelAsync(new CancelSalesOrderDto { RequestId = request.RequestId, ExpectedOrderVersion = 0, Reason = "Klant heeft afgezegd" });
 
         Assert.Equal(ServiceResultStatus.Ok, retry.Status);
-        Assert.Equal(("Cancelled", "office-1"), (retry.Value.Status, retry.Value.CancelledBy));
+        Assert.Equal(("Cancelled", "Admin"), (retry.Value.Status, retry.Value.CancelledBy));
         var after = await StateAsync();
         Assert.Equal(before.Order.Version, after.Order.Version);
         Assert.Equal(before.OrderEvents.Count, after.OrderEvents.Count);
@@ -360,7 +355,6 @@ public class SalesOrderCancellationTests : IDisposable
 
     [Theory]
     [InlineData("other-order")]
-    [InlineData("other-actor")]
     [InlineData("other-reason")]
     [InlineData("other-version")]
     public async Task Reused_Cancel_RequestId_With_Different_Payload_Is_Conflict(string change)
@@ -369,12 +363,11 @@ public class SalesOrderCancellationTests : IDisposable
         var request = Cancel();
         Assert.Equal(ServiceResultStatus.Ok, (await CancelAsync(request)).Status);
         var (otherOrder, _, _) = await SalesTestData.SeedOrderAsync(_factory, _seed);
-        var changed = new CancelSalesOrderDto { RequestId = request.RequestId, ExpectedOrderVersion = 0, ActorReference = "office-1", Reason = "Klant heeft afgezegd" };
+        var changed = new CancelSalesOrderDto { RequestId = request.RequestId, ExpectedOrderVersion = 0, Reason = "Klant heeft afgezegd" };
         var orderId = _orderId;
         switch (change)
         {
             case "other-order": orderId = otherOrder; break;
-            case "other-actor": changed.ActorReference = "office-2"; break;
             case "other-reason": changed.Reason = "Andere reden"; break;
             default: changed.ExpectedOrderVersion = 1; break;
         }
@@ -459,7 +452,7 @@ public class SalesOrderCancellationTests : IDisposable
         await ArrangeAsync();
         await ReservedAsync(_seed.ApprovedBox, 10m, 40m);
         var first = Cancel();
-        var second = sameRequestId ? new CancelSalesOrderDto { RequestId = first.RequestId, ExpectedOrderVersion = 0, ActorReference = "office-1", Reason = first.Reason } : Cancel();
+        var second = sameRequestId ? new CancelSalesOrderDto { RequestId = first.RequestId, ExpectedOrderVersion = 0, Reason = first.Reason } : Cancel();
         ServiceResultStatus innerStatus = default;
         var concurrent = new ConcurrentSaveInterceptor(async () => innerStatus = (await CancelAsync(second)).Status);
 
