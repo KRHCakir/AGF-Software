@@ -7,6 +7,7 @@ import { expect, test, type APIRequestContext, type BrowserContext, type Page } 
 
 const API = process.env.TOUR_API_URL ?? 'http://localhost:5198/api';
 const DATABASE = process.env.TOUR_TEST_DATABASE ?? '';
+// De eigen onthouden beoordelaar bij de keuring; de rondleiding keurt even als Demo-assistent en zet hem daarna terug.
 const ACTOR = 'E2E-tester';
 
 let context: BrowserContext;
@@ -15,6 +16,11 @@ async function json<T>(request: APIRequestContext, path: string): Promise<T> {
     const response = await request.get(`${API}${path}`);
     expect(response.ok(), `GET ${path}`).toBeTruthy();
     return (await response.json()) as T;
+}
+
+// Wie de rondleiding vastlegt, is de ingelogde gebruiker van de API (nu de standaardgebruiker), nooit een getypte naam.
+async function signedIn(request: APIRequestContext): Promise<string> {
+    return (await json<{ displayName: string }>(request, '/me')).displayName;
 }
 
 // Voorwaarden via de gewone API: leverancier "Nature's Pride" en een klant op "Lo" (alleen aanmaken als ze ontbreken).
@@ -86,7 +92,7 @@ test.beforeAll(async ({ browser, request }) => {
         if (sessionStorage.getItem('tour-e2e-init')) return;
         sessionStorage.setItem('tour-e2e-init', '1');
         localStorage.setItem('agf_locale', 'nl');
-        localStorage.setItem('agf_actor_reference', actor);
+        localStorage.setItem('agf_inspection_inspector', actor);
         if (!localStorage.getItem('agf_demo_tour_seq')) localStorage.setItem('agf_demo_tour_seq', start);
     }, [ACTOR, sequence]);
 });
@@ -119,7 +125,7 @@ test('hoofdstuk 1, Inkopen bestellen: order met ordernummer, leveranciersref en 
     expect(order.supplierReference).toBe(tourRef);
     expect(order.status).toBe('Ordered');
     expect(order.invoiceNumbers.map((ref) => ref.invoiceNumber)).toEqual([`F-${tourRef}`]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
     await page.close();
 });
 
@@ -129,7 +135,7 @@ test('hoofdstuk 2, Ontvangen en keuren: ontvangen, goedgekeurd, deel teruggestuu
     expectAllSteps(result);
     expect(result.done).toContain(orderNumber);
     const list = await json<{ items: { id: number; orderNumber: string }[] }>(request, `/purchase-orders?status=all&query=${orderNumber}`);
-    const detail = await json<{ receivedQuantity: number; rejectedQuantity: number; invoiceIndicator: string; receipts: { lotNumber: string; qualityStatus: string; origin: string }[] }>(
+    const detail = await json<{ receivedQuantity: number; rejectedQuantity: number; invoiceIndicator: string; receipts: { lotNumber: string; qualityStatus: string; origin: string }[]; history: { type: string; actorReference: string | null; inspectedBy?: string | null }[] }>(
         request, `/purchase-orders/${list.items.find((item) => item.orderNumber === orderNumber)!.id}`);
     expect(detail.receivedQuantity).toBe(20);
     expect(detail.rejectedQuantity).toBe(5);
@@ -137,7 +143,9 @@ test('hoofdstuk 2, Ontvangen en keuren: ontvangen, goedgekeurd, deel teruggestuu
     const lot = /Partij (DEMO-TOUR-\d+)/.exec(result.done)?.[1];
     expect(detail.receipts.filter((receipt) => receipt.lotNumber === lot).map((receipt) => [receipt.origin, receipt.qualityStatus]))
         .toEqual([['Receipt', 'Approved'], ['RejectionSplit', 'Rejected']]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    const approvals = detail.history.filter((event) => event.type === 'QualityChanged');
+    expect(approvals.map((event) => [event.inspectedBy, event.actorReference])).toContainEqual(['Demo-assistent', await signedIn(request)]);
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
     await page.close();
 });
 
@@ -148,9 +156,9 @@ test('hoofdstuk 3, Verkopen en reserveren: order gereserveerd op een pallet en v
     const reference = /Verkooporder (DEMO-TOUR-\d+)/.exec(result.done)?.[1];
     const orders = await json<{ customerReference: string | null; actorReference: string; lines: { quantity: number; dispatchedQuantity: number }[] }[]>(request, '/sales-orders');
     const order = orders.find((candidate) => candidate.customerReference === reference)!;
-    expect(order.actorReference).toBe('Demo-assistent');
+    expect(order.actorReference).toBe(await signedIn(request));
     expect(order.lines.map((line) => [line.quantity, line.dispatchedQuantity])).toEqual([[4, 4]]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
     await page.close();
 });
 
@@ -190,7 +198,7 @@ test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" ma
         if (await help.isVisible()) await help.click();
         return /Klaar:/.test(text);
     }, { timeout: 200_000, intervals: [300] }).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
     await page.close();
 });
 
@@ -203,8 +211,8 @@ test('Afwijking bij ontvangst: blind ingevuld, "Klopt dit?" en de afwijking op d
     const order = list.items.find((item) => item.orderNumber === number)!;
     expect(order.hasDeviation).toBe(true);
     const detail = await json<{ deviations: { kinds: string[]; actorReference: string; reason: string }[] }>(request, `/purchase-orders/${order.id}`);
-    expect(detail.deviations.map((deviation) => [deviation.actorReference, deviation.reason])).toEqual([['Demo-assistent', 'SupplierDeliveredDifferently']]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    expect(detail.deviations.map((deviation) => [deviation.actorReference, deviation.reason])).toEqual([[await signedIn(request), 'SupplierDeliveredDifferently']]);
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
     await page.close();
 });
 
@@ -218,13 +226,13 @@ test('hoofdstuk Verkopen voor aankomst: verkocht met tekort, ontvangen en goedge
     expect(number, result.done).toBeTruthy();
     const orders = await json<{ orderNumber: string; actorReference: string; shortage: boolean; lines: { supplySource: string; quantity: number; reservedQuantity: number; reservations: { supplyOrderNumber: string | null; lotNumber: string | null }[] }[] }[]>(request, `/sales-orders?q=${number}`);
     const order = orders.find((candidate) => candidate.orderNumber === number)!;
-    expect(order.actorReference).toBe('Demo-assistent');
+    expect(order.actorReference).toBe(await signedIn(request));
     expect(order.lines.map((line) => line.supplySource)).toEqual(['Expected']);
     // Er is meer verkocht dan er is en komt (tekort 5); wat er nu is, is gereserveerd op exacte pallets met inkooporder en partij.
     expect(order.shortage).toBe(true);
     expect(order.lines[0].reservedQuantity).toBeGreaterThan(0);
     expect(order.lines[0].reservations.every((reservation) => /IO-\d{4}-\d+/.test(reservation.supplyOrderNumber ?? '') && !!reservation.lotNumber)).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('agf_actor_reference'))).toBe(ACTOR);
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
     await page.close();
 });
 

@@ -20,7 +20,7 @@ export interface TourRunnerOptions {
     isAllowedHref: (href: string) => boolean;
     // Schrijvende hoofdstukken alleen met NEXT_PUBLIC_DEMO_TOUR=true.
     allowWrites: boolean;
-    // De onthouden gebruikersnaam (actorveld): tijdens de rondleiding "Demo-assistent", daarna terug.
+    // De onthouden beoordelaar bij de keuring: tijdens de rondleiding "Demo-assistent", daarna terug.
     actor: { get: () => string | null; set: (value: string | null) => void };
     // Vaste herkenbare referentie voor alles wat de rondleiding aanmaakt (DEMO-TOUR-…).
     nextRef: () => string;

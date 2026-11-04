@@ -5,7 +5,6 @@ import { expect, test, type Page } from '@playwright/test';
 // dus de browsertaal verandert niets aan de volgorde. Er wordt niets opgeslagen: de overige verplichte velden blijven leeg, zodat
 // verzenden alleen de controle laat zien. Draait mee met `npm run test:tour` (zelfde frontend en API, zie docs/demo-tour.md).
 
-const ACTOR = 'E2E-tester';
 
 // Vandaag in Europe/Amsterdam, zoals de browsercontext hieronder (timezoneId) hem ziet.
 function todayInAmsterdam(): { dutch: string; iso: string } {
@@ -33,10 +32,9 @@ for (const locale of ['en-US', 'nl-NL']) {
         test.use({ locale, timezoneId: 'Europe/Amsterdam' });
 
         test.beforeEach(async ({ context }) => {
-            await context.addInitScript((actor) => {
+            await context.addInitScript(() => {
                 localStorage.setItem('agf_locale', 'nl');
-                localStorage.setItem('agf_actor_reference', actor);
-            }, ACTOR);
+            });
         });
 
         for (const [screen, open] of [['Nieuwe verkooporder', openSalesOrder], ['Inkooporder aanmaken', openPlanSupply]] as const) {

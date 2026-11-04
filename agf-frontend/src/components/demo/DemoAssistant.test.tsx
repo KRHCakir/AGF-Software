@@ -189,7 +189,7 @@ async function until(condition: () => boolean, what: string) {
 describe('DemoAssistant autopilot', () => {
     beforeEach(() => {
         localStorage.clear();
-        localStorage.setItem('agf_actor_reference', 'Jan');
+        localStorage.setItem('agf_inspection_inspector', 'Jan');
         navigate('/dashboard');
         mounted = new Mounted();
     });
@@ -214,7 +214,7 @@ describe('DemoAssistant autopilot', () => {
         await until(() => mounted.hasText('what_wait'), 'second step');
         assert.equal(currentUrl(), '/purchase-orders/new');
         assert.equal(mounted.container.querySelector<HTMLInputElement>('[data-tour="supply-reference"]')!.value, 'DEMO-TOUR-001');
-        assert.equal(localStorage.getItem('agf_actor_reference'), 'Demo-assistent');
+        assert.equal(localStorage.getItem('agf_inspection_inspector'), 'Demo-assistent');
         assert.ok(mounted.hasText('demo_step_counter'));
         assert.ok(mounted.hasText('demo_tour_now') && mounted.hasText('demo_tour_why') && mounted.hasText('why_wait'));
         for (const key of ['demo_tour_pause', 'demo_tour_back', 'demo_tour_next', 'demo_tour_stop']) assert.ok(mounted.button(key), key);
@@ -232,15 +232,15 @@ describe('DemoAssistant autopilot', () => {
         await until(() => mounted.hasText('demo_tour_done'), 'done');
         assert.ok(mounted.hasText('ch_write_done'));
         assert.ok(mounted.hasText('demo_tour_chapter_done'));
-        assert.equal(localStorage.getItem('agf_actor_reference'), 'Jan');
+        assert.equal(localStorage.getItem('agf_inspection_inspector'), 'Jan');
         assert.equal(posted.length, 0);
     });
 
     test('a tab closed in the middle of a chapter: the next visit gives the own user name back', async () => {
-        localStorage.setItem('agf_actor_reference', 'Demo-assistent');
+        localStorage.setItem('agf_inspection_inspector', 'Demo-assistent');
         localStorage.setItem('agf_demo_tour_saved_actor', JSON.stringify('Jan'));
         await mounted.render(page);
-        assert.equal(localStorage.getItem('agf_actor_reference'), 'Jan');
+        assert.equal(localStorage.getItem('agf_inspection_inspector'), 'Jan');
         assert.equal(localStorage.getItem('agf_demo_tour_saved_actor'), null);
     });
 
@@ -262,7 +262,7 @@ describe('DemoAssistant autopilot', () => {
         await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="tour-chapter-write"] button')!);
         await until(() => mounted.hasText('what_wait'), 'second step');
         await click(mounted.container.querySelector<HTMLButtonElement>('button[aria-label="demo_close"]')!);
-        assert.equal(localStorage.getItem('agf_actor_reference'), 'Jan');
+        assert.equal(localStorage.getItem('agf_inspection_inspector'), 'Jan');
         assert.equal(window.document.querySelector('[data-testid="tour-highlight"]'), null);
     });
 });
