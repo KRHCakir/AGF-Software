@@ -54,7 +54,11 @@ function PartijenWorkspace() {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
         listPartijen({ query: debounced, status, page, pageSize: PAGE_SIZE }, controller.signal)
-            .then((data) => setList({ status: 'ready', data }))
+            .then((data) => {
+                // Lege pagina na verwijderen (of een kleiner totaal): spring naar de laatste pagina die nog bestaat.
+                if (data.items.length === 0 && data.total > 0 && page > 1) { setPage(Math.max(1, Math.ceil(data.total / PAGE_SIZE))); return; }
+                setList({ status: 'ready', data });
+            })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
     }, [debounced, status, page, reloadToken]);

@@ -64,9 +64,11 @@ export default function PartijList({ items, selectedId, onOpen }: { items: Parti
                             </span>
                             <span className="mt-1 block break-words font-medium text-gray-900">{item.products.join(', ') || '–'}</span>
                             <span className="block break-words text-gray-700">{item.vendors.join(', ') || '–'}</span>
+                            {item.supplierLotReferences.length > 0 && <span className="block break-words text-xs text-gray-600">{item.supplierLotReferences.join(', ')}</span>}
                             <span className="block font-mono text-gray-900">
                                 {t('partij_card_amounts', { purchased: qty(item.purchasedQuantity), received: qty(item.receivedQuantity), onHand: qty(item.onHandQuantity), sold: qty(item.soldQuantity) })} {unit(item)}
                             </span>
+                            {item.inInspectionQuantity > 0 && <span className="block text-xs text-gray-600">{t('partij_in_inspection', { quantity: qty(item.inInspectionQuantity) })}</span>}
                             <span className="block text-xs text-gray-600">{t('partij_created_on', { date: formatCalendarDate(item.createdAt, locale) })}</span>
                         </button>
                     </li>
