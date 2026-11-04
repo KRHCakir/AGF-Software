@@ -15,7 +15,6 @@ import type { PackageKgDefaults } from './quantityKg.ts';
 
 export const MAX_ORDER_LINES = 200;
 export const MAX_CUSTOMER_REFERENCE_LENGTH = 100;
-export const MAX_ACTOR_LENGTH = 100;
 export const MAX_REASON_LENGTH = 500;
 
 export type RuleCode =
@@ -71,13 +70,6 @@ export type OrderPayload = Omit<CreateSalesOrderRequest, 'requestId'>;
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; errors: RuleError[] };
 
 export { toLocalMidnightIso };
-
-export function normalizeActor(actor: string): BuildResult<string> {
-    const value = actor.trim();
-    if (value === '') return { ok: false, errors: [{ field: 'actorReference', code: 'required' }] };
-    if (value.length > MAX_ACTOR_LENGTH) return { ok: false, errors: [{ field: 'actorReference', code: 'too_long' }] };
-    return { ok: true, value };
-}
 
 // Getrimd; leeg wordt null; verplicht alleen als `required` waar is.
 export function normalizeReason(text: string, required: boolean): BuildResult<string | null> {

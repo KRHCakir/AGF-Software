@@ -30,11 +30,10 @@ import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
 
 // Detail van één verkooporder: kop, voortgang, annuleren (alleen Open) en per regel reserveren of vrijgeven.
-export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false, fifoLineId = null }: {
+export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, refreshing = false, refreshFailed = false, fifoLineId = null }: {
     order: SalesOrder;
     // Vanuit de werklijst: deze regel opent meteen met "Reserveren (oudste partij eerst)".
     fifoLineId?: number | null;
-    actor: string;
     onOrderChanged: () => Promise<boolean>;
     // Expliciet vernieuwen (alleen lezen). Zonder onRefresh wordt onOrderChanged gebruikt.
     onRefresh?: () => Promise<boolean>;
@@ -403,7 +402,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {showDtShipment && (
-                <DirectTradeShipmentPanel key={`${order.id}:${dtDecisionToken}`} order={order} actor={actor} onShipped={onDtShipped}
+                <DirectTradeShipmentPanel key={`${order.id}:${dtDecisionToken}`} order={order} onShipped={onDtShipped}
                     onReload={() => void reloadForNewDtDecision()} onClose={() => setShippingDt(false)} />
             )}
 
@@ -443,7 +442,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {dtCorrecting !== null && (
-                <DirectTradeShipmentCorrectionPanel key={`${dtCorrecting.id}:${dtCorrectionDecisionToken}`} order={order} shipment={dtCorrecting} actor={actor}
+                <DirectTradeShipmentCorrectionPanel key={`${dtCorrecting.id}:${dtCorrectionDecisionToken}`} order={order} shipment={dtCorrecting}
                     onCorrected={onDtCorrected} onReload={() => void reloadForNewDtCorrectionDecision()} onClose={() => setDtCorrectingId(null)} />
             )}
 
@@ -490,7 +489,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {order.lines.map((line) => (
-                <OrderLinePanel key={line.id} order={order} line={line} actor={actor} readOnly={readOnly} onOrderChanged={onOrderChanged} openFifo={line.id === fifoLineId} />
+                <OrderLinePanel key={line.id} order={order} line={line} readOnly={readOnly} onOrderChanged={onOrderChanged} openFifo={line.id === fifoLineId} />
             ))}
         </div>
     );

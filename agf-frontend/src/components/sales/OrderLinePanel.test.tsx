@@ -111,7 +111,7 @@ describe('ReserveForm identity through submission and outcome handling', () => {
             root.render(
                 <PendingCommandsProvider>
                     <HydratedGate>
-                        <OrderLinePanel order={order} line={line} actor="office-1" readOnly={false} onOrderChanged={async () => { orderChanged += 1; return true; }} />
+                        <OrderLinePanel order={order} line={line} readOnly={false} onOrderChanged={async () => { orderChanged += 1; return true; }} />
                     </HydratedGate>
                 </PendingCommandsProvider>,
             );

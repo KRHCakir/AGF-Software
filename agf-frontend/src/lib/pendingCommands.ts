@@ -283,7 +283,7 @@ export function withAttempt(command: PendingCommand, lastError: string | null): 
 }
 
 // ---- Opslag per tabblad: alleen wat volledig de verwachte vorm heeft, wordt teruggelezen ----
-// Elke payload wordt veld voor veld gecontroleerd (ids, hoeveelheden, kg, eenheid, actor, reden, versie, regels),
+// Elke payload wordt veld voor veld gecontroleerd (ids, hoeveelheden, kg, eenheid, reden, versie, regels),
 // zodat een verminkte of vreemde opslag nooit een onvolledig of fout commando kan herstellen.
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -357,7 +357,6 @@ function isAllocatePayload(value: unknown, requestId: string): value is CreateDi
         && isPositiveAmount(value.quantity)
         && isUnit(value.unit)
         && value.acknowledgeExpectedSupply === true
-        && isText(value.actorReference)
         && isNullableText(value.reason);
 }
 
@@ -393,7 +392,6 @@ function isShipDirectTradePayload(value: unknown, requestId: string): value is C
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && typeof value.shippedOn === 'string' && DATE_ONLY.test(value.shippedOn)
         && (value.reference === null || (typeof value.reference === 'string' && value.reference.length <= 100))
         && Array.isArray(value.lines)
@@ -411,7 +409,6 @@ function isCorrectDtShipmentPayload(value: unknown, requestId: string): value is
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && isText(value.reason) && (value.reason as string).length <= 500
         && value.shipmentDidNotTakePlace === true
         && Array.isArray(value.lines)

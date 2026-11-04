@@ -7,7 +7,7 @@ import { formatCalendarDate, todayInAmsterdam } from '../../lib/calendarDate';
 import { formatDecimalInput } from '../../lib/decimal';
 import { ShipDirectTradeCommand, blockedBy, shipDirectTradeKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { RuleError, isShippableAllocation, isShippedAllocation, lotDeviates, normalizeActor, normalizeDispatchReference, validateShipmentLine, validateShippedOn } from '../../lib/salesOrderRules';
+import { RuleError, isShippableAllocation, isShippedAllocation, lotDeviates, normalizeDispatchReference, validateShipmentLine, validateShippedOn } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createDirectTradeShipment } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -30,9 +30,8 @@ interface RowInput { netKg: string; lotNumber: string; lotDeviationReason: strin
 // en partij vastleggen; één verzenddatum (kalenderdatum, niet na vandaag in Europe/Amsterdam). Hoeveelheid en eenheid zijn die van de
 // toewijzing (alleen hele toewijzingen). De opdracht wordt bevroren en boven dit paneel bewaard; ook als een verse orderrespons de
 // toewijzingen al als verzonden toont, blijft alleen de identieke herhaling mogelijk. Magazijnvoorraad verandert niet.
-export default function DirectTradeShipmentPanel({ order, actor, onShipped, onReload, onClose, today = todayInAmsterdam() }: {
+export default function DirectTradeShipmentPanel({ order, onShipped, onReload, onClose, today = todayInAmsterdam() }: {
     order: SalesOrder;
-    actor: string;
     onShipped: (saved: SaveResult<DirectTradeShipment>) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -96,16 +95,14 @@ export default function DirectTradeShipmentPanel({ order, actor, onShipped, onRe
         if (command === null) {
             if (readOnlyOrder) return;
             const errors: RuleError[] = [];
-            const actorResult = normalizeActor(actor);
             const referenceResult = normalizeDispatchReference(reference);
             const dateResult = validateShippedOn(shippedOn, today);
-            if (!actorResult.ok) errors.push(...actorResult.errors);
             if (!referenceResult.ok) errors.push(...referenceResult.errors);
             if (!dateResult.ok) errors.push(...dateResult.errors);
             if (chosen.length === 0) errors.push({ field: 'lines', code: 'required' });
             const lines = chosen.map(({ reservation }, index) => ({ reservation, result: validateShipmentLine(index, inputOf(reservation), reservation.lotNumber) }));
             for (const { result } of lines) if (!result.ok) errors.push(...result.errors);
-            if (errors.length > 0 || !actorResult.ok || !referenceResult.ok || !dateResult.ok) {
+            if (errors.length > 0 || !referenceResult.ok || !dateResult.ok) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -119,7 +116,6 @@ export default function DirectTradeShipmentPanel({ order, actor, onShipped, onRe
                 payload: {
                     requestId,
                     expectedOrderVersion: order.version,
-                    actorReference: actorResult.value,
                     shippedOn: dateResult.value,
                     reference: referenceResult.value,
                     lines: lines.map(({ reservation, result }) => {
@@ -275,7 +271,6 @@ export default function DirectTradeShipmentPanel({ order, actor, onShipped, onRe
                     <input id={`${idPrefix}-reference`} value={reference} disabled={locked} maxLength={100} placeholder={t('sales_ship_reference_placeholder')}
                         onChange={(event) => { if (!locked) { setReference(event.target.value); clearFeedback(); } }} className={inputClass} />
                     <FieldError id={`${idPrefix}-reference-error`} messages={fieldErrors.reference} />
-                    <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                     <FieldError id={`${idPrefix}-version-error`} messages={fieldErrors.expectedOrderVersion} />
                 </div>
             </div>

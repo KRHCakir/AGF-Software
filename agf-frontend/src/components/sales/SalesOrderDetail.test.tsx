@@ -67,7 +67,7 @@ const refreshButton = (m: Mounted) => m.buttons().find((b) => (b.textContent ?? 
 const element = (order: SalesOrder) => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <SalesOrderDetail order={order} actor="office-1" onOrderChanged={() => onOrderChanged()} />
+            <SalesOrderDetail order={order} onOrderChanged={() => onOrderChanged()} />
         </HydratedGate>
     </PendingCommandsProvider>
 );
@@ -193,7 +193,7 @@ describe('SalesOrderDetail cancellation decisions', () => {
         await mounted.render(
             <PendingCommandsProvider>
                 <HydratedGate>
-                    <SalesOrderDetail order={current} actor="office-1" onOrderChanged={() => onOrderChanged()} onRefresh={onRefresh} />
+                    <SalesOrderDetail order={current} onOrderChanged={() => onOrderChanged()} onRefresh={onRefresh} />
                 </HydratedGate>
             </PendingCommandsProvider>,
         );

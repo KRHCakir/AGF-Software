@@ -11,7 +11,6 @@ import SalesOrderDetail from '../../../components/sales/SalesOrderDetail';
 import SalesOrderList from '../../../components/sales/SalesOrderList';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
-import { useActorReference } from '../../../components/supply/useActorReference';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { CREATE_ORDER_KEY, PendingCommand } from '../../../lib/pendingCommands';
 import { matchesOrderSearch } from '../../../lib/salesOrderRules';
@@ -22,6 +21,7 @@ import { getCustomers, getProductsWithVariants } from '../../../services/referen
 import { getSalesOrder, listSalesOrders } from '../../../services/salesOrderService';
 import { CustomerOption, ProductOption } from '../../../types/referenceData';
 import { SalesOrder } from '../../../types/salesOrder';
+import { SignedInAs } from '../../../components/shared/CurrentUserContext';
 
 // Kantoorwerkplek "Verkoop": verkooporder aanmaken, exacte goedgekeurde voorraad reserveren en weer vrijgeven.
 // Nieuwe flow naast de legacy-pagina Bestellingen (oud); er wordt niets gesynchroniseerd of gemigreerd.
@@ -81,7 +81,6 @@ function SalesWorkspace() {
     // Vanuit de werklijst: deze regel van de gekozen order opent met "Reserveren (oudste partij eerst)".
     const fifoLineId = parseOrderId(searchParams.get('fifoLine'));
     const { hydrated, commands } = usePendingCommands();
-    const [actor, setActor] = useActorReference();
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
     const [referenceToken, setReferenceToken] = useState(0);
     const [orders, setOrders] = useState<LoadState<SalesOrder[]>>({ status: 'loading' });
@@ -271,12 +270,7 @@ function SalesWorkspace() {
                     <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('sales')}</h1>
                     <p className="text-sm text-gray-600">{t('sales_subtitle')}</p>
                 </div>
-                <div className="w-full sm:w-64">
-                    <label htmlFor="actorReference-page" className="text-xs font-medium text-gray-700">{t('supply_actor')} *</label>
-                    <input id="actorReference-page" value={actor} maxLength={100} onChange={(event) => setActor(event.target.value)}
-                        placeholder={t('supply_actor_placeholder')} className={inputClass} aria-describedby="actorReference-hint" />
-                    <span id="actorReference-hint" className="block text-xs text-gray-500">{t('sales_actor_hint')}</span>
-                </div>
+                <SignedInAs className="sm:self-end" />
             </div>
 
             {hydrated && <PendingCommandsBanner commands={commands} onGoTo={goToCommand} />}
@@ -360,7 +354,7 @@ function SalesWorkspace() {
                     {!creating && detail?.status === 'error' && <ErrorState error={detail.error} onRetry={() => void reloadOrder()} />}
                     {!creating && detail?.status === 'ready' && (
                         <HydratedGate fallback={<LoadingRows rows={4} label={t('sales_loading_order')} />}>
-                            <SalesOrderDetail key={`${detail.data.id}:${fifoLineId ?? ''}`} order={detail.data} actor={actor} onOrderChanged={reloadOrder} fifoLineId={fifoLineId}
+                            <SalesOrderDetail key={`${detail.data.id}:${fifoLineId ?? ''}`} order={detail.data} onOrderChanged={reloadOrder} fifoLineId={fifoLineId}
                                 onRefresh={refreshOrder} refreshing={detailRefreshing} refreshFailed={detailRefreshFailed} />
                         </HydratedGate>
                     )}

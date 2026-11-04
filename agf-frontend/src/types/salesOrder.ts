@@ -67,7 +67,6 @@ export interface CreateDirectTradeAllocationRequest {
     quantity: number;
     unit: PackageUnit;
     acknowledgeExpectedSupply: boolean;
-    actorReference: string;
     reason: string | null;
 }
 
@@ -85,7 +84,6 @@ export interface CreateDirectTradeShipmentLineRequest {
 export interface CreateDirectTradeShipmentRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     // Kalenderdatum yyyy-MM-dd, niet na vandaag in Europe/Amsterdam (backend handhaaft).
     shippedOn: string;
     reference: string | null;
@@ -723,7 +721,6 @@ export interface DirectTradeShipment {
 export interface CorrectDirectTradeShipmentRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     reason: string;
     shipmentDidNotTakePlace: true;
     lines: CreateSalesDispatchLineRequest[];

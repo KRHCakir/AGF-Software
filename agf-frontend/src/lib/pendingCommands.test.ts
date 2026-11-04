@@ -317,7 +317,7 @@ describe('unresolved commands', () => {
 describe('direct trade allocation commands', () => {
     const allocate = (orderId: number, lineId: number, requestId = 'a-1'): PendingCommand => ({
         kind: 'allocate-direct-trade', key: allocateKey(orderId, lineId), orderId, lineId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T09:00:00.000Z',
-        payload: { requestId, supplyCommitmentLineId: 2, quantity: 10, unit: 'box', acknowledgeExpectedSupply: true, actorReference: 'office-1', reason: null },
+        payload: { requestId, supplyCommitmentLineId: 2, quantity: 10, unit: 'box', acknowledgeExpectedSupply: true, reason: null },
         display: { sourceLabel: 'Supplier B · Peru → Turkije', lotNumber: 'LOT-DT-SRC', productLabel: 'Avocado · Hass', expectedAt: '2026-10-27T22:00:00.000Z' },
     });
     const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
@@ -358,7 +358,6 @@ describe('direct trade allocation commands', () => {
             ['display incomplete', (copy) => { copy.display = { sourceLabel: 'x' }; }],
             ['expected date snapshot missing', (copy) => { delete (copy.display as Record<string, unknown>).expectedAt; }],
             ['expected date snapshot not a date', (copy) => { (copy.display as Record<string, unknown>).expectedAt = 'morgen'; }],
-            ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
         ];
         for (const [name, mutate] of rejected) {
             assert.deepEqual(parseStoredCommands(stored(command, mutate)), {}, name);
@@ -372,7 +371,7 @@ describe('direct trade allocation commands', () => {
 describe('DirectTrade shipment commands', () => {
     const ship = (orderId: number, requestId = 's-1'): PendingCommand => ({
         kind: 'ship-direct-trade', key: shipDirectTradeKey(orderId), orderId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T10:00:00.000Z',
-        payload: { requestId, expectedOrderVersion: 3, actorReference: 'office-1', shippedOn: '2026-10-19', reference: 'CMR-1',
+        payload: { requestId, expectedOrderVersion: 3, shippedOn: '2026-10-19', reference: 'CMR-1',
             lines: [{ stockReservationId: 21, expectedReservationVersion: 0, quantity: 20, unit: 'box', netWeightKg: 81.4, lotNumber: 'LOT-DT-SRC', lotDeviationReason: null }] },
         display: { customerName: 'Customer T', lineCount: 1 },
     });
@@ -415,7 +414,7 @@ describe('DirectTrade shipment commands', () => {
 describe('DirectTrade shipment correction commands', () => {
     const correctDt = (orderId: number, shipmentId: number, requestId = 'c-dt'): PendingCommand => ({
         kind: 'correct-dt-shipment', key: correctDtShipmentKey(orderId, shipmentId), orderId, shipmentId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T11:00:00.000Z',
-        payload: { requestId, expectedOrderVersion: 4, actorReference: 'office-1', reason: 'Vervoerder heeft niet geladen', shipmentDidNotTakePlace: true,
+        payload: { requestId, expectedOrderVersion: 4, reason: 'Vervoerder heeft niet geladen', shipmentDidNotTakePlace: true,
             lines: [{ stockReservationId: 21, expectedReservationVersion: 1 }, { stockReservationId: 22, expectedReservationVersion: 1 }] },
         display: { customerName: 'Customer T', lineCount: 2 },
     });
