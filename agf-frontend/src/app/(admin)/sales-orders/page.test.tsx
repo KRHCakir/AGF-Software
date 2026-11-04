@@ -33,7 +33,6 @@ const openOrder = (id: number) => mounted.buttons().find((b) => (b.getAttribute(
 describe('SalesWorkspace stale order responses', () => {
     beforeEach(() => {
         window.sessionStorage.clear();
-        window.localStorage.setItem('agf_actor_reference', 'office-1');
         answers = {};
         stubFetch({
             onGet: (url) => {

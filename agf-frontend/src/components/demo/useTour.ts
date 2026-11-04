@@ -7,7 +7,7 @@ import { todayInAmsterdam } from '../../lib/calendarDate';
 import { TourRunner } from '../../lib/tour/runner';
 import { TOUR_ACTOR, TOUR_REF_PREFIX, TOUR_SPEEDS } from '../../lib/tour/types';
 import type { TourChapter, TourMode, TourSpeed, TourState, TourTiming } from '../../lib/tour/types';
-import { readStoredActor, writeStoredActor } from '../supply/useActorReference';
+import { readRememberedInspector, rememberInspector } from '../inspection/inspectorMemory';
 
 // Koppelt de stapmotor aan Next (navigeren), de browser (onthouden gebruikersnaam) en het paneel. Instellingen,
 // voortgang en het DEMO-TOUR-volgnummer zijn per browser onthouden gemak; zonder localStorage werkt alles gewoon.
@@ -15,7 +15,7 @@ import { readStoredActor, writeStoredActor } from '../supply/useActorReference';
 const SEQUENCE_KEY = 'agf_demo_tour_seq';
 const DONE_KEY = 'agf_demo_tour_done';
 const SETTINGS_KEY = 'agf_demo_tour_settings';
-// De eigen gebruikersnaam tijdens een hoofdstuk: zo komt hij ook terug als het tabblad midden in de rondleiding sluit.
+// De eigen onthouden beoordelaar tijdens een hoofdstuk: zo komt hij ook terug als het tabblad midden in de rondleiding sluit.
 const SAVED_ACTOR_KEY = 'agf_demo_tour_saved_actor';
 
 function remove(key: string) {
@@ -26,23 +26,24 @@ function remove(key: string) {
     }
 }
 
-// Tijdens een hoofdstuk "Demo-assistent", met de eigen naam apart bewaard; daarna (of bij de volgende keer openen) terug.
+// Tijdens een hoofdstuk keurt "Demo-assistent" (de voorgevulde beoordelaar), met de eigen keuze apart bewaard; daarna (of bij de
+// volgende keer openen) terug. Wie er ingelogd is, verandert de rondleiding niet: dat bepaalt de server.
 const tourActor = {
-    get: readStoredActor,
+    get: readRememberedInspector,
     set: (value: string | null) => {
         if (value === TOUR_ACTOR) {
-            if (read(SAVED_ACTOR_KEY, (raw) => raw) === null) write(SAVED_ACTOR_KEY, JSON.stringify(readStoredActor()));
+            if (read(SAVED_ACTOR_KEY, (raw) => raw) === null) write(SAVED_ACTOR_KEY, JSON.stringify(readRememberedInspector()));
         } else {
             remove(SAVED_ACTOR_KEY);
         }
-        writeStoredActor(value);
+        rememberInspector(value);
     },
 };
 
 function restoreInterruptedActor() {
     const saved = read(SAVED_ACTOR_KEY, (raw) => { try { return { value: JSON.parse(raw) as string | null }; } catch { return { value: null }; } });
     if (saved === null) return;
-    if (readStoredActor() === TOUR_ACTOR) writeStoredActor(saved.value);
+    if (readRememberedInspector() === TOUR_ACTOR) rememberInspector(saved.value);
     remove(SAVED_ACTOR_KEY);
 }
 

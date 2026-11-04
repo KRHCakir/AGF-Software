@@ -7,7 +7,6 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 // frontend en API, zie docs/demo-tour.md) en schrijft echte orders met referentie E2E-KEYS-… in de testdatabase.
 
 const API = process.env.TOUR_API_URL ?? 'http://localhost:5198/api';
-const ACTOR = 'E2E-tester';
 const UNITS = ['box', 'colli', 'tray', 'piece', 'dozen'];
 
 type Variant = { id: number; name: string; shortcutCode: string | null; packagingUnit: string | null; defaultNetKgPerPackage: number | null; isArchived?: boolean };
@@ -51,10 +50,9 @@ test.describe('orderregel met alleen het toetsenbord', () => {
     test.use({ timezoneId: 'Europe/Amsterdam' });
 
     test.beforeEach(async ({ context }) => {
-        await context.addInitScript((actor) => {
+        await context.addInitScript(() => {
             localStorage.setItem('agf_locale', 'nl');
-            localStorage.setItem('agf_actor_reference', actor);
-        }, ACTOR);
+        });
     });
 
     test('Inkooporder aanmaken: artikel, aantal, eenheid met pijlen, kg en opslaan met Enter', async ({ page, request }) => {
