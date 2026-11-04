@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { DispatchCommand, blockedBy, dispatchKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { dispatchTotals, isDirectTradeAllocation, isDispatchable, normalizeActor, normalizeDispatchReference } from '../../lib/salesOrderRules';
+import { dispatchTotals, isDirectTradeAllocation, isDispatchable, normalizeDispatchReference } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesDispatch } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -23,9 +23,8 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 // Verzenden: hele Active reserveringen kiezen (on hold is zichtbaar maar niet kiesbaar), totalen per eenheid, optionele
 // referentie. De opdracht (met de versies van order en reserveringen) wordt bevroren en boven dit paneel bewaard; ook als
 // een verse orderrespons de gekozen reserveringen al als Consumed toont, blijft de identieke herhaling mogelijk (replay 200).
-export default function DispatchPanel({ order, actor, onDispatched, onReload, onClose }: {
+export default function DispatchPanel({ order, onDispatched, onReload, onClose }: {
     order: SalesOrder;
-    actor: string;
     onDispatched: (saved: SaveResult<SalesDispatch>) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -87,12 +86,11 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
         let command = pending;
         if (command === null) {
             if (readOnlyOrder) return;
-            const actorResult = normalizeActor(actor);
             const referenceResult = normalizeDispatchReference(reference);
             const chosen = dispatchable.filter(({ reservation }) => selectedIds.includes(reservation.id));
-            const errors = [...(actorResult.ok ? [] : actorResult.errors), ...(referenceResult.ok ? [] : referenceResult.errors)];
+            const errors = [...(referenceResult.ok ? [] : referenceResult.errors)];
             if (chosen.length === 0) errors.push({ field: 'lines', code: 'required' });
-            if (errors.length > 0 || !actorResult.ok || !referenceResult.ok) {
+            if (errors.length > 0 || !referenceResult.ok) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -106,7 +104,6 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
                 payload: {
                     requestId,
                     expectedOrderVersion: order.version,
-                    actorReference: actorResult.value,
                     reference: referenceResult.value,
                     lines: chosen.map(({ reservation }) => ({ stockReservationId: reservation.id, expectedReservationVersion: reservation.version })),
                 },
@@ -220,7 +217,6 @@ export default function DispatchPanel({ order, actor, onDispatched, onReload, on
                     onChange={(event) => editReference(event.target.value)} aria-invalid={fieldErrors.reference !== undefined}
                     aria-describedby={fieldErrors.reference ? `${idPrefix}-reference-error` : undefined} className={inputClass} />
                 <FieldError id={`${idPrefix}-reference-error`} messages={fieldErrors.reference} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 <FieldError id={`${idPrefix}-version-error`} messages={fieldErrors.expectedOrderVersion} />
             </div>
             <p className="text-xs text-gray-700">{t('sales_dispatch_based_on_version', { version: String(pending?.payload.expectedOrderVersion ?? order.version) })}</p>

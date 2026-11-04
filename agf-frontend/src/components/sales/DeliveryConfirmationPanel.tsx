@@ -6,7 +6,7 @@ import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { ConfirmDeliveryCommand, blockedBy, confirmDeliveryKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { RuleError, normalizeActor, normalizeDispatchReference, validateDeliveredOn } from '../../lib/salesOrderRules';
+import { RuleError, normalizeDispatchReference, validateDeliveredOn } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { confirmDelivery } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -36,10 +36,9 @@ export interface DeliverableShipment {
 // Afleverbevestiging van één volledige verzending (magazijn of DirectTrade). Toont alle regels, een afleverdatum (standaard vandaag in
 // Amsterdam, tussen verzenddatum en vandaag), een optionele referentie en de standaard niet-aangevinkte verklaring, met direct daaronder
 // de waarschuwing over tekort, schade, gedeeltelijke ontvangst en retour. Bevroren commando met herstel; replay-only na verversen.
-export default function DeliveryConfirmationPanel({ order, shipment, actor, onConfirmed, onReload, onClose, today = todayInAmsterdam() }: {
+export default function DeliveryConfirmationPanel({ order, shipment, onConfirmed, onReload, onClose, today = todayInAmsterdam() }: {
     order: SalesOrder;
     shipment: DeliverableShipment;
-    actor: string;
     onConfirmed: (saved: SaveResult<DeliveryConfirmation>) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -71,14 +70,12 @@ export default function DeliveryConfirmationPanel({ order, shipment, actor, onCo
         if (command === null) {
             if (shipment.delivered || order.status !== 'Open') return;
             const errors: RuleError[] = [];
-            const actorResult = normalizeActor(actor);
             const referenceResult = normalizeDispatchReference(reference);
             const dateResult = validateDeliveredOn(deliveredOn, shipment.shippedOn, today);
-            if (!actorResult.ok) errors.push(...actorResult.errors);
             if (!referenceResult.ok) errors.push(...referenceResult.errors.map((e) => ({ ...e, field: 'receiptReference' })));
             if (!dateResult.ok) errors.push(...dateResult.errors);
             if (!confirmed) errors.push({ field: 'deliveredInFull', code: 'required' });
-            if (errors.length > 0 || !actorResult.ok || !referenceResult.ok || !dateResult.ok) {
+            if (errors.length > 0 || !referenceResult.ok || !dateResult.ok) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -91,7 +88,7 @@ export default function DeliveryConfirmationPanel({ order, shipment, actor, onCo
                 shipmentKind: shipment.kind,
                 shipmentId: shipment.id,
                 requestId,
-                payload: { requestId, expectedOrderVersion: order.version, actorReference: actorResult.value, deliveredOn: dateResult.value, receiptReference: referenceResult.value, deliveredInFull: true },
+                payload: { requestId, expectedOrderVersion: order.version, deliveredOn: dateResult.value, receiptReference: referenceResult.value, deliveredInFull: true },
                 display: { customerName: shipment.customerName, lineCount: shipment.lines.length },
                 attempts: 0,
                 lastError: null,
@@ -178,7 +175,6 @@ export default function DeliveryConfirmationPanel({ order, shipment, actor, onCo
                     <input id={`${idPrefix}-reference`} value={reference} maxLength={100} disabled={locked} placeholder={t('sales_delivery_reference_placeholder')}
                         onChange={(event) => { if (!locked) { setReference(event.target.value); clear(); } }} className={inputClass} />
                     <FieldError id={`${idPrefix}-reference-error`} messages={fieldErrors.receiptReference} />
-                    <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 </div>
             </div>
 

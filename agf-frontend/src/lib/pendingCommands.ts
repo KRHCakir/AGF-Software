@@ -379,7 +379,6 @@ function isDispatchPayload(value: unknown, requestId: string): value is CreateSa
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && (value.reference === null || (typeof value.reference === 'string' && value.reference.length <= 100))
         && Array.isArray(value.lines)
         && value.lines.length > 0
@@ -426,7 +425,6 @@ function isConfirmDeliveryPayload(value: unknown, requestId: string): value is C
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && typeof value.deliveredOn === 'string' && DATE_ONLY.test(value.deliveredOn)
         && isBoundedNullableText(value.receiptReference, 100)
         && value.deliveredInFull === true;
@@ -437,7 +435,6 @@ function isRetractDeliveryPayload(value: unknown, requestId: string): value is R
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && typeof value.reason === 'string' && value.reason.trim() !== '' && value.reason.length <= 500
         && value.recordedInError === true;
 }
@@ -446,7 +443,6 @@ function isCorrectDispatchPayload(value: unknown, requestId: string): value is C
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && isText(value.reason)
         && value.goodsNeverLeftWarehouse === true
         && Array.isArray(value.lines)

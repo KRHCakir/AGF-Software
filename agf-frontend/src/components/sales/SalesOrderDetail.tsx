@@ -390,7 +390,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {showDispatch && (
-                <DispatchPanel key={`${order.id}:${dispatchDecisionToken}`} order={order} actor={actor} onDispatched={onDispatched}
+                <DispatchPanel key={`${order.id}:${dispatchDecisionToken}`} order={order} onDispatched={onDispatched}
                     onReload={() => void reloadForNewDispatchDecision()} onClose={() => setDispatching(false)} />
             )}
 
@@ -425,12 +425,12 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
 
             {retractTarget !== null && (
                 <RetractDeliveryPanel key={`${retractTarget.shipment.kind}:${retractTarget.shipment.id}:${retractTarget.confirmation.id}:${retractDecisionToken}`} order={order}
-                    shipment={retractTarget.shipment} confirmation={retractTarget.confirmation} actor={actor}
+                    shipment={retractTarget.shipment} confirmation={retractTarget.confirmation}
                     onRetracted={onDeliveryRetracted} onReload={() => void reloadForNewRetractDecision()} onClose={() => setRetracting(null)} />
             )}
 
             {deliveryTarget !== null && (
-                <DeliveryConfirmationPanel key={`${deliveryTarget.kind}:${deliveryTarget.id}:${deliveryDecisionToken}`} order={order} shipment={deliveryTarget} actor={actor}
+                <DeliveryConfirmationPanel key={`${deliveryTarget.kind}:${deliveryTarget.id}:${deliveryDecisionToken}`} order={order} shipment={deliveryTarget}
                     onConfirmed={onDeliveryConfirmed} onReload={() => void reloadForNewDeliveryDecision()} onClose={() => setConfirming(null)} />
             )}
 
@@ -473,7 +473,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {correctingDispatch !== null && (
-                <CorrectDispatchPanel key={`${correctingDispatch.id}:${correctionDecisionToken}`} order={order} dispatch={correctingDispatch} actor={actor}
+                <CorrectDispatchPanel key={`${correctingDispatch.id}:${correctionDecisionToken}`} order={order} dispatch={correctingDispatch}
                     onCorrected={onCorrected} onReload={() => void reloadForNewCorrectionDecision()} onClose={() => setCorrectingId(null)} />
             )}
 

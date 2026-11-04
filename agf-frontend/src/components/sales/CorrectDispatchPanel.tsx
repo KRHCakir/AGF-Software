@@ -6,7 +6,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { CorrectDispatchCommand, blockedBy, correctDispatchKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, normalizeReason } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { correctSalesDispatch } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -24,10 +24,9 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 // goederen het magazijn niet hebben verlaten; de software stelt dat niet vast. De oorspronkelijke verzending blijft bewaard;
 // per regel komt een nieuwe inhoudsregel in quarantaine op dezelfde pallet, de reservering wordt Corrected en de klantvraag
 // komt weer open. Er wordt geen reservering hersteld en de pallet verandert niet van status.
-export default function CorrectDispatchPanel({ order, dispatch, actor, onCorrected, onReload, onClose }: {
+export default function CorrectDispatchPanel({ order, dispatch, onCorrected, onReload, onClose }: {
     order: SalesOrder;
     dispatch: SalesDispatch;
-    actor: string;
     onCorrected: (saved: SaveResult<SalesDispatchCorrection>) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -65,11 +64,10 @@ export default function CorrectDispatchPanel({ order, dispatch, actor, onCorrect
         let command = pending;
         if (command === null) {
             if (alreadyCorrected || readOnlyOrder) return;
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
-            const errors = [...(actorResult.ok ? [] : actorResult.errors), ...(reasonResult.ok ? [] : reasonResult.errors)];
+            const errors = [...(reasonResult.ok ? [] : reasonResult.errors)];
             if (!confirmed) errors.push({ field: 'goodsNeverLeftWarehouse', code: 'required' });
-            if (errors.length > 0 || !actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
+            if (errors.length > 0 || !reasonResult.ok || reasonResult.value === null) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -84,7 +82,6 @@ export default function CorrectDispatchPanel({ order, dispatch, actor, onCorrect
                 payload: {
                     requestId,
                     expectedOrderVersion: order.version,
-                    actorReference: actorResult.value,
                     reason: reasonResult.value,
                     goodsNeverLeftWarehouse: true,
                     lines: dispatch.lines.map((line) => ({ stockReservationId: line.stockReservationId, expectedReservationVersion: reservations.get(line.stockReservationId)?.version ?? 0 })),
@@ -187,7 +184,6 @@ export default function CorrectDispatchPanel({ order, dispatch, actor, onCorrect
                     aria-describedby={fieldErrors.reason ? `${idPrefix}-reason-error` : `${idPrefix}-reason-count`} className={inputClass} />
                 <span id={`${idPrefix}-reason-count`} className="block text-right text-xs text-gray-500">{reason.trim().length}/{MAX_REASON_LENGTH}</span>
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 <FieldError id={`${idPrefix}-version-error`} messages={fieldErrors.expectedOrderVersion} />
             </div>
             <p className="text-xs text-gray-700">{t('sales_correct_based_on_version', { version: String(pending?.payload.expectedOrderVersion ?? order.version) })}</p>

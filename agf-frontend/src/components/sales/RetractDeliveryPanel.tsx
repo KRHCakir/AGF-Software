@@ -9,7 +9,7 @@ import { formatDateOnly } from '../../lib/calendarDate';
 import { isActiveConfirmation } from '../../lib/deliveryState';
 import { RetractDeliveryCommand, blockedBy, retractDeliveryKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, RuleError, normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, RuleError, normalizeReason } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { retractDelivery } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -27,11 +27,10 @@ import { ruleErrorsToFieldErrors } from './ruleMessages';
 // Intrekken van een administratief onjuiste afleverbevestiging (magazijn of DirectTrade). Toont vooraf de bevestiging, de regels en de
 // effecten; reden verplicht; de verklaring staat standaard uit met de waarschuwing (niet voor retour, schade of tekort) direct ernaast.
 // Bevroren commando met herstel; staat de bevestiging na verversen al als ingetrokken, dan blijft alleen de identieke herhaling.
-export default function RetractDeliveryPanel({ order, shipment, confirmation, actor, onRetracted, onReload, onClose }: {
+export default function RetractDeliveryPanel({ order, shipment, confirmation, onRetracted, onReload, onClose }: {
     order: SalesOrder;
     shipment: DeliverableShipment;
     confirmation: DeliveryConfirmation;
-    actor: string;
     onRetracted: (saved: SaveResult<DeliveryRetraction>) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -61,12 +60,10 @@ export default function RetractDeliveryPanel({ order, shipment, confirmation, ac
         if (command === null) {
             if (alreadyRetracted || order.status !== 'Open') return;
             const errors: RuleError[] = [];
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
-            if (!actorResult.ok) errors.push(...actorResult.errors);
             if (!reasonResult.ok) errors.push(...reasonResult.errors);
             if (!confirmed) errors.push({ field: 'recordedInError', code: 'required' });
-            if (errors.length > 0 || !actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
+            if (errors.length > 0 || !reasonResult.ok || reasonResult.value === null) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -80,7 +77,7 @@ export default function RetractDeliveryPanel({ order, shipment, confirmation, ac
                 shipmentId: shipment.id,
                 confirmationId: confirmation.id,
                 requestId,
-                payload: { requestId, expectedOrderVersion: order.version, actorReference: actorResult.value, reason: reasonResult.value, recordedInError: true },
+                payload: { requestId, expectedOrderVersion: order.version, reason: reasonResult.value, recordedInError: true },
                 display: { customerName: shipment.customerName, sequence: confirmation.sequence },
                 attempts: 0,
                 lastError: null,
@@ -172,7 +169,6 @@ export default function RetractDeliveryPanel({ order, shipment, confirmation, ac
                     onChange={(event) => { if (!locked) { setReason(event.target.value); setError(null); setFieldErrors({}); } }}
                     aria-invalid={fieldErrors.reason !== undefined} className={inputClass} />
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
             </div>
 
             <div className="rounded border-2 border-amber-400 bg-white px-2 py-1.5" data-testid={`${idPrefix}-statement`}>

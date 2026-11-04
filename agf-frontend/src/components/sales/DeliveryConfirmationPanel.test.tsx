@@ -164,7 +164,7 @@ describe('DeliveryConfirmationPanel through SalesOrderDetail', () => {
         assert.equal(posted.length, 1);
         assert.ok(posted[0].url.endsWith('/sales-orders/4/dispatches/5/delivery-confirmations'));
         const body = JSON.parse(posted[0].body);
-        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', expectedOrderVersion: 6, actorReference: 'office-1', deliveredOn: '2026-10-19', receiptReference: 'CMR-OK-1', deliveredInFull: true });
+        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', expectedOrderVersion: 6, deliveredOn: '2026-10-19', receiptReference: 'CMR-OK-1', deliveredInFull: true });
         assert.equal(reloads, 1);
         assert.deepEqual(storedCommands(), {});
     });

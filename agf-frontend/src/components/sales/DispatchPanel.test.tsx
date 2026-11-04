@@ -42,7 +42,7 @@ const dispatchResponse = { id: 9, requestId: 'd-lost', salesOrderId: 4, referenc
 
 const frozen: PendingCommand = {
     kind: 'dispatch', key: dispatchKey(4), orderId: 4, requestId: 'd-lost', attempts: 1, lastError: 'network down', frozenAt: '2026-10-19T12:59:00.000Z',
-    payload: { requestId: 'd-lost', expectedOrderVersion: 2, actorReference: 'office-1', reference: 'VRB-9', lines: [{ stockReservationId: 11, expectedReservationVersion: 0 }] },
+    payload: { requestId: 'd-lost', expectedOrderVersion: 2, reference: 'VRB-9', lines: [{ stockReservationId: 11, expectedReservationVersion: 0 }] },
     display: { customerName: 'Local Market Stalls', lineCount: 1 },
 };
 

@@ -50,13 +50,13 @@ const cancel = (orderId: number, requestId = 'k-1'): PendingCommand => ({
 
 const dispatch = (orderId: number, requestId = 'd-1'): PendingCommand => ({
     kind: 'dispatch', key: dispatchKey(orderId), orderId, requestId, attempts: 1, lastError: 'HTTP 502', frozenAt: '2026-10-19T12:00:00.000Z',
-    payload: { requestId, expectedOrderVersion: 1, actorReference: 'office-1', reference: 'VRB-1', lines: [{ stockReservationId: 11, expectedReservationVersion: 0 }, { stockReservationId: 12, expectedReservationVersion: 2 }] },
+    payload: { requestId, expectedOrderVersion: 1, reference: 'VRB-1', lines: [{ stockReservationId: 11, expectedReservationVersion: 0 }, { stockReservationId: 12, expectedReservationVersion: 2 }] },
     display: { customerName: 'Local Market Stalls', lineCount: 2 },
 });
 
 const correct = (orderId: number, dispatchId: number, requestId = 'x-1'): PendingCommand => ({
     kind: 'correct-dispatch', key: correctDispatchKey(orderId, dispatchId), orderId, dispatchId, requestId, attempts: 1, lastError: 'HTTP 504', frozenAt: '2026-10-19T13:00:00.000Z',
-    payload: { requestId, expectedOrderVersion: 4, actorReference: 'office-1', reason: 'Verkeerd gescand', goodsNeverLeftWarehouse: true, lines: [{ stockReservationId: 11, expectedReservationVersion: 1 }] },
+    payload: { requestId, expectedOrderVersion: 4, reason: 'Verkeerd gescand', goodsNeverLeftWarehouse: true, lines: [{ stockReservationId: 11, expectedReservationVersion: 1 }] },
     display: { customerName: 'Local Market Stalls', lineCount: 1 },
 });
 
@@ -139,15 +139,15 @@ describe('unresolved commands', () => {
         assert.deepEqual(commandsForOrder(toMap(dispatch(4), cancel(4)), 4).map((command) => command.kind).sort(), ['cancel-order', 'dispatch']);
     });
 
-    test('dispatch payload: version, actor, bounded reference and well-formed distinct lines', () => {
+    test('dispatch payload: version, bounded reference and well-formed distinct lines', () => {
         assert.equal(isPendingCommand(dispatch(4)), true);
         assert.deepEqual(parseStoredCommands(serializeCommands(toMap(dispatch(4)))), toMap(dispatch(4)));
         assert.deepEqual(parseStoredCommands(stored(dispatch(4), (c) => { c.payload = { requestId: 'd-1' }; })), {});
-        for (const field of ['expectedOrderVersion', 'actorReference', 'reference', 'lines']) {
+        for (const field of ['expectedOrderVersion', 'reference', 'lines']) {
             assert.deepEqual(parseStoredCommands(stored(dispatch(4), (c) => { delete payloadOf(c)[field]; })), {}, `dispatch without ${field}`);
         }
         const bad: [string, unknown][] = [
-            ['expectedOrderVersion', -1], ['actorReference', ''], ['reference', 'x'.repeat(101)], ['reference', 7],
+            ['expectedOrderVersion', -1], ['reference', 'x'.repeat(101)], ['reference', 7],
             ['lines', []], ['lines', [{ stockReservationId: 0, expectedReservationVersion: 0 }]], ['lines', [{ stockReservationId: 11 }]],
             ['lines', [{ stockReservationId: 11, expectedReservationVersion: -1 }]], ['lines', [{ stockReservationId: 11, expectedReservationVersion: 0 }, { stockReservationId: 11, expectedReservationVersion: 0 }]],
         ];
@@ -172,7 +172,7 @@ describe('unresolved commands', () => {
     test('correct-dispatch payload requires the explicit confirmation, a reason, versions and well-formed lines', () => {
         assert.equal(isPendingCommand(correct(4, 9)), true);
         assert.deepEqual(parseStoredCommands(serializeCommands(toMap(correct(4, 9)))), toMap(correct(4, 9)));
-        for (const field of ['expectedOrderVersion', 'actorReference', 'reason', 'goodsNeverLeftWarehouse', 'lines']) {
+        for (const field of ['expectedOrderVersion', 'reason', 'goodsNeverLeftWarehouse', 'lines']) {
             assert.deepEqual(parseStoredCommands(stored(correct(4, 9), (c) => { delete payloadOf(c)[field]; })), {}, `correction without ${field}`);
         }
         const bad: [string, unknown][] = [
@@ -455,7 +455,7 @@ describe('DirectTrade shipment correction commands', () => {
 describe('delivery confirmation commands', () => {
     const confirm = (orderId: number, kind: 'Warehouse' | 'DirectTrade', shipmentId: number, requestId = 'd-1'): PendingCommand => ({
         kind: 'confirm-delivery', key: confirmDeliveryKey(orderId, kind, shipmentId), orderId, shipmentKind: kind, shipmentId, requestId, attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T11:00:00.000Z',
-        payload: { requestId, expectedOrderVersion: 6, actorReference: 'office-1', deliveredOn: '2026-10-20', receiptReference: 'CMR-1', deliveredInFull: true },
+        payload: { requestId, expectedOrderVersion: 6, deliveredOn: '2026-10-20', receiptReference: 'CMR-1', deliveredInFull: true },
         display: { customerName: 'Customer T', lineCount: 1 },
     });
     const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
@@ -492,7 +492,6 @@ describe('delivery confirmation commands', () => {
             ['date missing', (copy) => { delete payloadOf(copy).deliveredOn; }],
             ['reference too long', (copy) => { payloadOf(copy).receiptReference = 'r'.repeat(101); }],
             ['reference blank', (copy) => { payloadOf(copy).receiptReference = ' '; }],
-            ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
             ['version missing', (copy) => { delete payloadOf(copy).expectedOrderVersion; }],
             ['unknown kind', (copy) => { copy.shipmentKind = 'Truck'; }],
             ['kind does not match key', (copy) => { copy.shipmentKind = 'Warehouse'; }],
@@ -506,7 +505,7 @@ describe('delivery retraction commands', () => {
     const retract = (orderId: number, kind: 'Warehouse' | 'DirectTrade', shipmentId: number, confirmationId: number, requestId = 'rt-1'): PendingCommand => ({
         kind: 'retract-delivery', key: retractDeliveryKey(orderId, kind, shipmentId, confirmationId), orderId, shipmentKind: kind, shipmentId, confirmationId, requestId,
         attempts: 1, lastError: 'network down', frozenAt: '2026-10-20T11:00:00.000Z',
-        payload: { requestId, expectedOrderVersion: 7, actorReference: 'office-1', reason: 'Verkeerde verzending aangeklikt', recordedInError: true },
+        payload: { requestId, expectedOrderVersion: 7, reason: 'Verkeerde verzending aangeklikt', recordedInError: true },
         display: { customerName: 'Customer T', sequence: 1 },
     });
     const stored = (command: PendingCommand, mutate: (copy: Record<string, unknown>) => void): string => {
@@ -537,7 +536,6 @@ describe('delivery retraction commands', () => {
             ['reason blank', (copy) => { payloadOf(copy).reason = '  '; }],
             ['reason too long', (copy) => { payloadOf(copy).reason = 'r'.repeat(501); }],
             ['reason missing', (copy) => { delete payloadOf(copy).reason; }],
-            ['actor blank', (copy) => { payloadOf(copy).actorReference = ' '; }],
             ['version missing', (copy) => { delete payloadOf(copy).expectedOrderVersion; }],
             ['confirmation id missing', (copy) => { delete copy.confirmationId; }],
             ['confirmation does not match key', (copy) => { copy.confirmationId = 4; }],

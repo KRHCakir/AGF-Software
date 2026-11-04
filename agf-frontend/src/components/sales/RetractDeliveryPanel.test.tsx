@@ -151,7 +151,7 @@ describe('RetractDeliveryPanel through SalesOrderDetail', () => {
         await mounted.waitFor(() => mounted.button('supply_retry_same'), 'retry after lost response');
         assert.ok(posted[0].url.endsWith('/sales-orders/4/direct-trade-shipments/5/delivery-confirmations/2/retractions'));
         const body = JSON.parse(posted[0].body);
-        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', expectedOrderVersion: 8, actorReference: 'office-1', reason: 'Verkeerde verzending aangeklikt', recordedInError: true });
+        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', expectedOrderVersion: 8, reason: 'Verkeerde verzending aangeklikt', recordedInError: true });
         const frozen = Object.values(storedCommands())[0];
         assert.equal(frozen.key, 'retract-delivery:4:direct-trade:5:2');
 
