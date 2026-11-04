@@ -325,7 +325,6 @@ function isCreateOrderPayload(value: unknown, requestId: string): value is Creat
         && isNullableText(value.customerReference)
         && (value.internalNote === undefined || isNullableText(value.internalNote)) // bevroren opdrachten van vóór de interne opmerking
         && isTimestamp(value.requestedDeliveryDate)
-        && isText(value.actorReference)
         && Array.isArray(value.lines)
         && value.lines.length > 0
         && value.lines.every((line: unknown) => isRecord(line) && isPositiveInt(line.productVariantId) && isPositiveAmount(line.quantity) && isUnit(line.unit));
@@ -375,7 +374,6 @@ function isCancelPayload(value: unknown, requestId: string): value is CancelSale
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedOrderVersion)
-        && isText(value.actorReference)
         && isText(value.reason);
 }
 

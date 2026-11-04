@@ -31,6 +31,7 @@
   "reports": "Rapporten",
   "help": "Help",
   "user": "Gebruiker",
+  "signed_in_as": "Ingelogd als {name}",
   "quick_actions": "Snelle Acties",
   "new_sale_quick": "Nieuwe Verkoop (Snel)",
   "new_order_std": "Nieuwe Order (Std)",

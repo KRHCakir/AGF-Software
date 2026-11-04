@@ -46,15 +46,15 @@ const codes = (result: BuildResult<unknown>) => (result.ok ? {} : groupErrors(re
 
 describe('buildOrderPayload', () => {
     test('a valid draft becomes the exact payload: trimmed reference, parsed decimals, explicit units', () => {
-        const result = buildOrderPayload(validDraft(), ' office-1 ');
+        const result = buildOrderPayload(validDraft());
         assert.equal(result.ok, true);
         if (!result.ok) return;
         assert.equal(result.value.customerId, 7);
         assert.equal(result.value.customerReference, 'PO-2026-1');
         assert.equal(result.value.internalNote, 'Klant komt morgen langs', 'internal note trimmed and sent with the order');
-        assert.equal(buildOrderPayload({ ...validDraft(), internalNote: '   ' }, 'office-1').ok && (buildOrderPayload({ ...validDraft(), internalNote: '   ' }, 'office-1') as { ok: true; value: { internalNote: string | null } }).value.internalNote, null, 'blank note becomes null');
-        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), internalNote: 'x'.repeat(1001) }, 'office-1')).internalNote, ['too_long']);
-        assert.equal(result.value.actorReference, 'office-1');
+        assert.equal(buildOrderPayload({ ...validDraft(), internalNote: '   ' }).ok && (buildOrderPayload({ ...validDraft(), internalNote: '   ' }) as { ok: true; value: { internalNote: string | null } }).value.internalNote, null, 'blank note becomes null');
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), internalNote: 'x'.repeat(1001) })).internalNote, ['too_long']);
+        assert.ok(!Object.keys(result.value).includes('actorReference'), 'who creates the order is the signed-in user on the server');
         assert.equal(result.value.requestedDeliveryDate, new Date(2026, 9, 23).toISOString());
         assert.deepEqual(result.value.lines, [
             { productVariantId: 1, quantity: 30, unit: 'box', palletCount: null, packagesPerPallet: null },
@@ -65,46 +65,45 @@ describe('buildOrderPayload', () => {
 
     test('kg: calculated from the article default with source Calculated, typed kg is Entered, no kg keeps the old payload shape', () => {
         const defaults = (variantId: number) => (variantId === 1 ? { defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 } : undefined);
-        const calculated = buildOrderPayload({ ...validDraft(), lines: [line('1', '1.560', 'colli'), line('3', '12,5')] }, 'office-1', defaults);
+        const calculated = buildOrderPayload({ ...validDraft(), lines: [line('1', '1.560', 'colli'), line('3', '12,5')] }, defaults);
         assert.equal(calculated.ok, true);
         if (!calculated.ok) return;
         assert.deepEqual(calculated.value.lines, [
             { productVariantId: 1, quantity: 1560, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 15600, grossWeightKg: 16068, weightSource: 'Calculated' },
             { productVariantId: 3, quantity: 12.5, unit: 'box', palletCount: null, packagesPerPallet: null },
         ]);
-        const entered = buildOrderPayload({ ...validDraft(), lines: [{ ...line('3', '221', 'colli'), netKg: '2.210', netKgEntered: true }] }, 'office-1', defaults);
+        const entered = buildOrderPayload({ ...validDraft(), lines: [{ ...line('3', '221', 'colli'), netKg: '2.210', netKgEntered: true }] }, defaults);
         assert.deepEqual(entered.ok && entered.value.lines[0], { productVariantId: 3, quantity: 221, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 2210, weightSource: 'Entered' });
-        const below = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '10', 'colli'), grossKg: '99', grossKgEntered: true }] }, 'office-1', defaults);
+        const below = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '10', 'colli'), grossKg: '99', grossKgEntered: true }] }, defaults);
         assert.deepEqual(codes(below), { 'lines[0].grossWeightKg': ['gross_below_net'] });
     });
 
     test('a line entered per pallet sends the computed total and keeps the ratio; missing pallet fields are reported', () => {
         const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '9', packagesPerPallet: '120' };
-        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] }, 'office-1');
+        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] });
         assert.equal(result.ok, true);
         if (!result.ok) return;
         assert.deepEqual(result.value.lines, [{ productVariantId: 1, quantity: 1080, unit: 'box', palletCount: 9, packagesPerPallet: 120 }]);
 
-        const missing = buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, packagesPerPallet: '' }] }, 'office-1');
+        const missing = buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, packagesPerPallet: '' }] });
         assert.deepEqual(codes(missing), { 'lines[0].packagesPerPallet': ['empty'] });
     });
 
     test('whole pallets + loose packages: loosePackages is sent only when filled in; 3,5 pallets is refused', () => {
         const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '3', packagesPerPallet: '120', loosePackages: '15' };
-        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] }, 'office-1');
+        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] });
         assert.deepEqual(result.ok && result.value.lines, [{ productVariantId: 1, quantity: 375, unit: 'box', palletCount: 3, packagesPerPallet: 120, loosePackages: 15 }]);
-        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, palletCount: '3,5' }] }, 'office-1')), { 'lines[0].palletCount': ['not_whole'] });
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, palletCount: '3,5' }] })), { 'lines[0].palletCount': ['not_whole'] });
     });
 
     test('a blank reference becomes null', () => {
-        const result = buildOrderPayload({ ...validDraft(), customerReference: '   ' }, 'office-1');
+        const result = buildOrderPayload({ ...validDraft(), customerReference: '   ' });
         assert.equal(result.ok && result.value.customerReference, null);
     });
 
-    test('customer, date, actor and at least one line are required', () => {
-        const result = buildOrderPayload({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [] }, '  ');
+    test('customer, date and at least one line are required', () => {
+        const result = buildOrderPayload({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [] });
         assert.deepEqual(codes(result), {
-            actorReference: ['required'],
             customerId: ['required'],
             requestedDeliveryDate: ['required'],
             lines: ['required'],
@@ -112,20 +111,20 @@ describe('buildOrderPayload', () => {
     });
 
     test('an impossible calendar date is rejected, a leap day is accepted', () => {
-        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), requestedDeliveryDate: '2026-02-30' }, 'office-1')), { requestedDeliveryDate: ['invalid_date'] });
-        assert.equal(buildOrderPayload({ ...validDraft(), requestedDeliveryDate: '2028-02-29' }, 'office-1').ok, true);
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), requestedDeliveryDate: '2026-02-30' })), { requestedDeliveryDate: ['invalid_date'] });
+        assert.equal(buildOrderPayload({ ...validDraft(), requestedDeliveryDate: '2028-02-29' }).ok, true);
         assert.equal(toLocalMidnightIso('2026-13-01'), null);
         assert.equal(toLocalMidnightIso('23-10-2026'), null);
     });
 
     test('the same variant and unit twice is a duplicate on the second line only; another unit is allowed', () => {
         const draft = { ...validDraft(), lines: [line('1', '30'), line('1', '5', 'colli'), line('1', '2')] };
-        assert.deepEqual(codes(buildOrderPayload(draft, 'office-1')), { 'lines[2]': ['duplicate_line'] });
+        assert.deepEqual(codes(buildOrderPayload(draft)), { 'lines[2]': ['duplicate_line'] });
     });
 
     test('line errors use the backend field keys and never mask a duplicate check on invalid lines', () => {
         const draft = { ...validDraft(), lines: [line('', '0'), line('2', 'abc', ''), line('2', '1,2345')] };
-        assert.deepEqual(codes(buildOrderPayload(draft, 'office-1')), {
+        assert.deepEqual(codes(buildOrderPayload(draft)), {
             'lines[0].productVariantId': ['required'],
             'lines[0].quantity': ['not_positive'],
             'lines[1].quantity': ['invalid'],
@@ -134,14 +133,13 @@ describe('buildOrderPayload', () => {
         });
     });
 
-    test('too long reference and actor, and more than the maximum number of lines', () => {
+    test('too long reference and more than the maximum number of lines', () => {
         const draft = { ...validDraft(), customerReference: 'x'.repeat(101), lines: Array.from({ length: MAX_ORDER_LINES + 1 }, (_, i) => line(String(i + 1), '1')) };
-        assert.deepEqual(codes(buildOrderPayload(draft, 'a'.repeat(101))), {
-            actorReference: ['too_long'],
+        assert.deepEqual(codes(buildOrderPayload(draft)), {
             customerReference: ['too_long'],
             lines: ['too_many_lines'],
         });
-        assert.equal(buildOrderPayload({ ...validDraft(), customerReference: 'x'.repeat(100) }, 'a'.repeat(100)).ok, true);
+        assert.equal(buildOrderPayload({ ...validDraft(), customerReference: 'x'.repeat(100) }).ok, true);
     });
 });
 

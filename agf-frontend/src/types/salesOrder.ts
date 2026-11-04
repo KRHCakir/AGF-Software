@@ -47,7 +47,6 @@ export interface CreateSalesOrderRequest {
     // Interne opmerking bij deze order: alleen intern zichtbaar, telt mee in de replayvergelijking.
     internalNote: string | null;
     requestedDeliveryDate: string;
-    actorReference: string;
     lines: CreateSalesOrderLineRequest[];
 }
 
@@ -105,7 +104,6 @@ export interface ReleaseStockReservationRequest {
 export interface CancelSalesOrderRequest {
     requestId: string;
     expectedOrderVersion: number;
-    actorReference: string;
     reason: string;
 }
 

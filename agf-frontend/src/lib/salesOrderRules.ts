@@ -89,10 +89,9 @@ export function normalizeReason(text: string, required: boolean): BuildResult<st
 
 // Volledige validatie van een nieuwe order; alle fouten tegelijk, met dezelfde veldsleutels als de backend.
 // `kgDefaults` geeft de standaard kg per verpakking van een variant (voor berekende kg); zonder blijft alleen ingevulde kg over.
-export function buildOrderPayload(draft: OrderDraft, actor: string, kgDefaults: (variantId: number) => PackageKgDefaults | undefined = () => undefined): BuildResult<OrderPayload> {
+// Wie de order maakt, stuurt de client niet mee: dat is de ingelogde gebruiker aan de serverkant.
+export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: number) => PackageKgDefaults | undefined = () => undefined): BuildResult<OrderPayload> {
     const errors: RuleError[] = [];
-    const actorResult = normalizeActor(actor);
-    if (!actorResult.ok) errors.push(...actorResult.errors);
 
     const customerId = Number(draft.customerId);
     if (!/^[1-9]\d*$/.test(draft.customerId)) errors.push({ field: 'customerId', code: 'required' });
@@ -144,7 +143,7 @@ export function buildOrderPayload(draft: OrderDraft, actor: string, kgDefaults: 
         };
     });
 
-    if (errors.length > 0 || !actorResult.ok || requestedDeliveryDate === null) {
+    if (errors.length > 0 || requestedDeliveryDate === null) {
         return { ok: false, errors };
     }
     return {
@@ -154,7 +153,6 @@ export function buildOrderPayload(draft: OrderDraft, actor: string, kgDefaults: 
             customerReference: reference === '' ? null : reference,
             internalNote: internalNote === '' ? null : internalNote,
             requestedDeliveryDate,
-            actorReference: actorResult.value,
             lines,
         },
     };

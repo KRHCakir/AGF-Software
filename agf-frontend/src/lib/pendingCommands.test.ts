@@ -38,13 +38,13 @@ const release = (orderId: number, lineId: number, reservationId: number, request
 
 const create = (requestId = 'c-1'): PendingCommand => ({
     kind: 'create-order', key: CREATE_ORDER_KEY, requestId, attempts: 2, lastError: 'HTTP 502', frozenAt: '2026-10-19T08:00:00.000Z',
-    payload: { requestId, customerId: 1, customerReference: null, internalNote: null, requestedDeliveryDate: '2026-10-29T22:00:00.000Z', actorReference: 'office-1', lines: [{ productVariantId: 2, quantity: 10, unit: 'box', palletCount: null, packagesPerPallet: null }] },
+    payload: { requestId, customerId: 1, customerReference: null, internalNote: null, requestedDeliveryDate: '2026-10-29T22:00:00.000Z', lines: [{ productVariantId: 2, quantity: 10, unit: 'box', palletCount: null, packagesPerPallet: null }] },
     display: { customerName: 'Local Market Stalls' },
 });
 
 const cancel = (orderId: number, requestId = 'k-1'): PendingCommand => ({
     kind: 'cancel-order', key: cancelKey(orderId), orderId, requestId, attempts: 1, lastError: 'HTTP 504', frozenAt: '2026-10-19T11:00:00.000Z',
-    payload: { requestId, expectedOrderVersion: 3, actorReference: 'office-1', reason: 'Klant heeft afgezegd' },
+    payload: { requestId, expectedOrderVersion: 3, reason: 'Klant heeft afgezegd' },
     display: { customerName: 'Local Market Stalls', activeReservationCount: 2 },
 });
 
@@ -108,16 +108,16 @@ describe('unresolved commands', () => {
         assert.deepEqual(commandsForOrder(toMap(cancel(4), reserve(4, 7), reserve(5, 1)), 4).map((command) => command.kind).sort(), ['cancel-order', 'reserve']);
     });
 
-    test('cancel-order payload: non-negative integer version, non-blank actor and reason, bounded display', () => {
+    test('cancel-order payload: non-negative integer version, non-blank reason, bounded display', () => {
         assert.equal(isPendingCommand(cancel(4)), true);
         assert.deepEqual(parseStoredCommands(serializeCommands(toMap(cancel(4)))), toMap(cancel(4)));
         assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { c.payload = { requestId: 'k-1' }; })), {});
-        for (const field of ['expectedOrderVersion', 'actorReference', 'reason']) {
+        for (const field of ['expectedOrderVersion', 'reason']) {
             assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { delete payloadOf(c)[field]; })), {}, `cancel without ${field}`);
         }
         const bad: [string, unknown][] = [
             ['expectedOrderVersion', -1], ['expectedOrderVersion', 1.5], ['expectedOrderVersion', '3'],
-            ['actorReference', ''], ['reason', ''], ['reason', '   '], ['reason', null], ['reason', 7],
+            ['reason', ''], ['reason', '   '], ['reason', null], ['reason', 7],
         ];
         for (const [field, value] of bad) {
             assert.deepEqual(parseStoredCommands(stored(cancel(4), (c) => { payloadOf(c)[field] = value; })), {}, `cancel ${field}=${String(value)}`);
@@ -240,7 +240,7 @@ describe('unresolved commands', () => {
         for (const field of ['palletContentLineId', 'quantity', 'unit', 'netWeightKg', 'actorReference', 'reason']) {
             assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { delete payloadOf(c)[field]; })), {}, `reserve without ${field}`);
         }
-        for (const field of ['customerId', 'customerReference', 'requestedDeliveryDate', 'actorReference', 'lines']) {
+        for (const field of ['customerId', 'customerReference', 'requestedDeliveryDate', 'lines']) {
             assert.deepEqual(parseStoredCommands(stored(create(), (c) => { delete payloadOf(c)[field]; })), {}, `create without ${field}`);
         }
         for (const field of ['expectedReservationVersion', 'actorReference', 'reason']) {
@@ -264,12 +264,11 @@ describe('unresolved commands', () => {
         assert.equal(Object.keys(parseStoredCommands(stored(reserve(4, 7), (c) => { payloadOf(c).quantity = 0.5; payloadOf(c).netWeightKg = 2.25; }))).length, 1);
     });
 
-    test('create-order payload: positive customer, nullable reference, valid date, actor and well-formed non-empty lines', () => {
+    test('create-order payload: positive customer, nullable reference, valid date and well-formed non-empty lines', () => {
         const bad: [string, unknown][] = [
             ['customerId', 0], ['customerId', '1'], ['customerId', 1.5],
             ['customerReference', 12], ['customerReference', undefined],
             ['requestedDeliveryDate', 'gisteren'], ['requestedDeliveryDate', 20261029],
-            ['actorReference', ''], ['actorReference', null],
             ['lines', []], ['lines', 'lines'], ['lines', [{ productVariantId: 2, quantity: 10 }]],
             ['lines', [{ productVariantId: 2, quantity: 10, unit: 'kg' }]], ['lines', [{ productVariantId: 0, quantity: 10, unit: 'box' }]],
             ['lines', [{ productVariantId: 2, quantity: 0, unit: 'box' }]], ['lines', [{ productVariantId: 2, quantity: '10', unit: 'box' }]],
