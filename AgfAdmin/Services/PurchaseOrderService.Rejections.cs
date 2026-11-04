@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -264,7 +265,7 @@ namespace AgfAdmin.Services
 
         private sealed record RejectionCommand(Guid RequestId, string Reason, string Explanation, string Decision, string Actor, List<RejectionLineCommand> Lines);
 
-        private static RejectionCommand ValidateRejection(RejectPurchaseOrderDto request, Dictionary<string, List<string>> errors)
+        private RejectionCommand ValidateRejection(RejectPurchaseOrderDto request, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {
@@ -292,16 +293,8 @@ namespace AgfAdmin.Services
             {
                 AddError(errors, "explanation", "An explanation is required for reason Other.");
             }
-            // Afkeuren is een kwaliteitsbesluit: net als bij de keuring is de medewerker verplicht.
-            var actor = string.IsNullOrWhiteSpace(request.ActorReference) ? null : request.ActorReference.Trim();
-            if (actor == null)
-            {
-                AddError(errors, "actorReference", "This field is required and must not be blank.");
-            }
-            else if (actor.Length > PurchaseOrderRules.MaxActorLength)
-            {
-                AddError(errors, "actorReference", $"This field may contain at most {PurchaseOrderRules.MaxActorLength} characters.");
-            }
+            // Afkeuren is een kwaliteitsbesluit: wie het doet, is de ingelogde gebruiker.
+            var actor = _user.Actor(PurchaseOrderRules.MaxActorLength);
 
             var lines = new List<RejectionLineCommand>();
             if (request.Lines == null || request.Lines.Count == 0)

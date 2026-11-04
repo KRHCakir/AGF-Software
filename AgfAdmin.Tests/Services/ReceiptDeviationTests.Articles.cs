@@ -19,7 +19,7 @@ public sealed partial class ReceiptDeviationTests
         Assert.Equal(new[] { "purchaseOrderLines", "receipts", "receiptDeviations" }, received.Usages.Select(u => u.Kind));
         var ordered = (await service.UsageAsync(_v.Peru)).Value;
         Assert.Equal(new[] { "purchaseOrderLines", "receiptDeviations" }, ordered.Usages.Select(u => u.Kind));
-        Assert.Equal(ServiceResultStatus.Conflict, (await service.DeleteAsync(_v.SouthAfrica, new ArticleActionDto { ActorReference = "Kees" })).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await service.DeleteAsync(_v.SouthAfrica, new ArticleActionDto {  })).Status);
         Assert.True((await service.UsageAsync(_v.Twin)).Value.CanDelete);
     }
 }

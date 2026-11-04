@@ -88,7 +88,7 @@ public sealed class CountryOriginTests : IDisposable
         await using var db = _factory.CreateContext();
         var service = new CountryService(db);
 
-        var created = await service.AddAliasAsync(new AddCountryAliasDto { Alias = " PER ", CountryCode = "pe", ActorReference = "Kees" });
+        var created = await service.AddAliasAsync(new AddCountryAliasDto { Alias = " PER ", CountryCode = "pe" });
         Assert.Equal(ServiceResultStatus.Created, created.Status);
         Assert.Equal(("PER", "PE"), (created.Value.Alias, created.Value.CountryCode));
         Assert.Equal(ServiceResultStatus.Ok, (await service.AddAliasAsync(new AddCountryAliasDto { Alias = "per", CountryCode = "PE" })).Status);

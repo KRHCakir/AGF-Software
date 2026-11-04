@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -41,11 +42,14 @@ namespace AgfAdmin.Services
 
         private readonly AppDbContext _db;
         private readonly IEmailDomainChecker _emailDomains;
+        private readonly ICurrentUser _user;
 
-        public RelationService(AppDbContext db, IEmailDomainChecker emailDomains = null)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public RelationService(AppDbContext db, IEmailDomainChecker emailDomains = null, ICurrentUser currentUser = null)
         {
             _db = db;
             _emailDomains = emailDomains ?? NullEmailDomainChecker.Instance;
+            _user = currentUser ?? CurrentUser.Default;
         }
 
         // Verzameling van niet-blokkerende signalen tijdens één opslag: waarschuwingen en te controleren e-maildomeinen (MX).
@@ -277,8 +281,7 @@ namespace AgfAdmin.Services
             }
             var errors = new Dictionary<string, List<string>>();
             if (request?.ExpectedVersion == null) ValidationErrors.Add(errors, "expectedVersion", "The relation version the change is based on is required.");
-            var actor = ValidationErrors.OptionalText(request?.ActorReference, MaxActorLength, "actorReference", errors);
-            if (actor == null && !errors.ContainsKey("actorReference")) ValidationErrors.Add(errors, "actorReference", "Vul in wie de bankrekening bevestigt.");
+            var actor = _user.Actor(MaxActorLength);
             if (!account.IsActive) ValidationErrors.Add(errors, "bankAccountId", "Een inactieve bankrekening kan niet worden bevestigd.");
             if (errors.Count > 0)
             {
@@ -662,13 +665,9 @@ namespace AgfAdmin.Services
 
             var addresses = NormalizeAddresses(request.Addresses, existing, errors);
             var contacts = NormalizeContacts(request.Contacts, existing, errors, signals);
-            var actor = ValidationErrors.OptionalText(request.ActorReference, MaxActorLength, "actorReference", errors);
+            // Elke wijziging van bankgegevens wordt geaudit met de ingelogde gebruiker.
+            var actor = _user.Actor(MaxActorLength);
             var bankAccounts = NormalizeBankAccounts(request.BankAccounts, existing, errors);
-            // Elke wijziging van bankgegevens wordt geaudit: dan is "wie" verplicht.
-            if (actor == null && !errors.ContainsKey("actorReference") && bankAccounts.Any(b => BankChange(b, existing) != null))
-            {
-                ValidationErrors.Add(errors, "actorReference", "Vul in wie de bankgegevens wijzigt (actorReference).");
-            }
 
             return errors.Count > 0 ? null : new RelationCommand(searchCode, name, tradeName, language, website, email, phone, vat,
                 registrationNumber, registrationCountry, registrationType, legalForm, note, isActive, customer, vendor, addresses, contacts, bankAccounts, actor);

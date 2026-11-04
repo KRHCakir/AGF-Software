@@ -244,7 +244,7 @@ public sealed class TradeClassTests : IDisposable
 
         CreateArticleFromEntryDto Entry(string size, string tradeClass) => new()
         {
-            RequestId = Guid.NewGuid(), Source = "Receipt", TemplateVariantId = hass, OriginCountryCode = "PE", SizeCategory = size, Packaging = "4 kg doos", TradeClass = tradeClass, ActorReference = "Kees",
+            RequestId = Guid.NewGuid(), Source = "Receipt", TemplateVariantId = hass, OriginCountryCode = "PE", SizeCategory = size, Packaging = "4 kg doos", TradeClass = tradeClass, 
         };
         await using (var db = _factory.CreateContext())
         {

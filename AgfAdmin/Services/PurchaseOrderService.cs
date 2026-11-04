@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -12,9 +13,12 @@ namespace AgfAdmin.Services
     public sealed partial class PurchaseOrderService
     {
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public PurchaseOrderService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public PurchaseOrderService(AppDbContext db, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
         }
 

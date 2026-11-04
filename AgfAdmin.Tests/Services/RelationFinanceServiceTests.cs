@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -29,22 +30,27 @@ public class RelationFinanceServiceTests : IDisposable
 
     private readonly FakeEmailDomainChecker _mx = new();
 
+    // Wie er ingelogd is bij het volgende commando (null = de standaardgebruiker); bankwijzigingen worden met die naam geaudit.
+    private string _signedIn;
+
+    private ICurrentUser SignedIn(string name = null) => (name ?? _signedIn) is { } user ? new CurrentUser($"id-{user}", user, new[] { "Medewerker" }, Permissions.All) : null;
+
     private async Task<ServiceResult<RelationDto>> CreateAsync(SaveRelationDto request)
     {
         await using var db = _factory.CreateContext();
-        return await new RelationService(db, _mx).CreateAsync(request);
+        return await new RelationService(db, _mx, SignedIn()).CreateAsync(request);
     }
 
     private async Task<ServiceResult<RelationDto>> UpdateAsync(int id, SaveRelationDto request)
     {
         await using var db = _factory.CreateContext();
-        return await new RelationService(db, _mx).UpdateAsync(id, request);
+        return await new RelationService(db, _mx, SignedIn()).UpdateAsync(id, request);
     }
 
-    private async Task<ServiceResult<RelationDto>> ConfirmAsync(int id, int bankId, int? version, string actor)
+    private async Task<ServiceResult<RelationDto>> ConfirmAsync(int id, int bankId, int? version, string signedIn)
     {
         await using var db = _factory.CreateContext();
-        return await new RelationService(db, _mx).ConfirmBankAccountAsync(id, bankId, new ConfirmBankAccountDto { ExpectedVersion = version, ActorReference = actor });
+        return await new RelationService(db, _mx, SignedIn(signedIn)).ConfirmBankAccountAsync(id, bankId, new ConfirmBankAccountDto { ExpectedVersion = version });
     }
 
     private async Task<T> WithDbAsync<T>(Func<AppDbContext, Task<T>> action)
@@ -405,14 +411,11 @@ public class RelationFinanceServiceTests : IDisposable
     // ---------------- Bankrekeningen ----------------
 
     [Fact]
-    public async Task Bank_Accounts_Start_Unconfirmed_With_Audit_Need_An_Actor_And_A_Change_Of_Iban_Or_Holder_Unconfirms_Again()
+    public async Task Bank_Accounts_Start_Unconfirmed_With_Audit_Of_The_Signed_In_User_And_A_Change_Of_Iban_Or_Holder_Unconfirms_Again()
     {
         var request = New();
         request.BankAccounts = new() { new() { Iban = "nl91 abna 0417 1643 00", Bic = "abnanl2a", AccountHolder = "Fruitimport Zuid BV" } };
-        var noActor = await CreateAsync(request);
-        Assert.Equal(ServiceResultStatus.Validation, noActor.Status);
-        Assert.Contains("actorReference", noActor.Errors.Keys);
-        request.ActorReference = "Jan";
+        _signedIn = "Jan";
         var created = (await CreateAsync(request)).Value;
         var account = Assert.Single(created.BankAccounts);
         Assert.Equal(("NL91ABNA0417164300", "ABNANL2A", "EUR", true, BankAccountConfirmation.Unconfirmed), (account.Iban, account.Bic, account.Currency, account.IsDefault, account.ConfirmationStatus));
@@ -420,8 +423,7 @@ public class RelationFinanceServiceTests : IDisposable
         Assert.Equal((BankAccountEventKind.Added, "Jan", (string)null, "NL91ABNA0417164300", "Fruitimport Zuid BV"), (added.Kind, added.ActorReference, added.OldIban, added.NewIban, added.NewAccountHolder));
         Assert.Contains(created.Warnings, w => w.Code == RelationService.WarningDefaultBankAccountUnconfirmed && w.Field == "bankAccounts[0]");
 
-        // Bevestigen: verwachte versie en wie verplicht; verouderde versie = 409; daarna geen waarschuwing meer en versie +1.
-        Assert.Equal(ServiceResultStatus.Validation, (await ConfirmAsync(created.Id, account.Id!.Value, created.Version, " ")).Status);
+        // Bevestigen: verwachte versie verplicht, wie is de ingelogde gebruiker; verouderde versie = 409; daarna geen waarschuwing meer en versie +1.
         Assert.Equal(ServiceResultStatus.Conflict, (await ConfirmAsync(created.Id, account.Id!.Value, created.Version + 1, "Piet")).Status);
         var confirmed = (await ConfirmAsync(created.Id, account.Id!.Value, created.Version, "Piet")).Value;
         Assert.Equal((BankAccountConfirmation.Confirmed, "Piet", created.Version + 1), (confirmed.BankAccounts[0].ConfirmationStatus, confirmed.BankAccounts[0].ConfirmedBy, confirmed.Version));
@@ -432,24 +434,22 @@ public class RelationFinanceServiceTests : IDisposable
         var again = (await ConfirmAsync(created.Id, account.Id!.Value, confirmed.Version, "Piet")).Value;
         Assert.Equal((confirmed.Version, 2), (again.Version, again.BankAccountEvents.Count));
 
-        // BIC of valuta wijzigen is geen identiteitswijziging: blijft bevestigd, geen audit, geen "wie" nodig.
+        // BIC of valuta wijzigen is geen identiteitswijziging: blijft bevestigd, geen audit.
         var bicOnly = From(again);
         bicOnly.BankAccounts[0].Bic = "ABNANL2AXXX";
         var bicSaved = (await UpdateAsync(created.Id, bicOnly)).Value;
         Assert.Equal((BankAccountConfirmation.Confirmed, 2), (bicSaved.BankAccounts[0].ConfirmationStatus, bicSaved.BankAccountEvents.Count));
 
-        // IBAN wijzigen: weer onbevestigd, Changed-audit met oud en nieuw, "wie" verplicht.
+        // IBAN wijzigen: weer onbevestigd, Changed-audit met oud en nieuw en de ingelogde gebruiker.
         var changeIban = From(bicSaved);
         changeIban.BankAccounts[0].Iban = "DE89370400440532013000";
-        Assert.Contains("actorReference", (await UpdateAsync(created.Id, changeIban)).Errors.Keys);
-        changeIban.ActorReference = "Kees";
+        _signedIn = "Kees";
         var changed = (await UpdateAsync(created.Id, changeIban)).Value;
         Assert.Equal((BankAccountConfirmation.Unconfirmed, (string)null), (changed.BankAccounts[0].ConfirmationStatus, changed.BankAccounts[0].ConfirmedBy));
         Assert.Equal((BankAccountEventKind.Changed, "Kees", "NL91ABNA0417164300", "DE89370400440532013000"), (changed.BankAccountEvents[0].Kind, changed.BankAccountEvents[0].ActorReference, changed.BankAccountEvents[0].OldIban, changed.BankAccountEvents[0].NewIban));
 
         // Rekeninghouder wijzigen telt ook.
         var holder = From(changed);
-        holder.ActorReference = "Kees";
         holder.BankAccounts[0].AccountHolder = "Fruitimport Zuid B.V.";
         var holderChanged = (await UpdateAsync(created.Id, holder)).Value;
         Assert.Equal((BankAccountEventKind.Changed, "Fruitimport Zuid BV", "Fruitimport Zuid B.V."), (holderChanged.BankAccountEvents[0].Kind, holderChanged.BankAccountEvents[0].OldAccountHolder, holderChanged.BankAccountEvents[0].NewAccountHolder));
@@ -459,7 +459,6 @@ public class RelationFinanceServiceTests : IDisposable
     public async Task Bank_Accounts_Are_Never_Deleted_Only_Deactivated_Have_One_Active_Default_And_Validate_Iban_Bic_And_Other_Numbers()
     {
         var request = New();
-        request.ActorReference = "Jan";
         request.BankAccounts = new()
         {
             new() { Iban = "NL91ABNA0417164300", AccountHolder = "Zuid" },
@@ -478,7 +477,6 @@ public class RelationFinanceServiceTests : IDisposable
 
         // Twee standaarden, beide nummers, geen nummer, foute IBAN/BIC, dubbele IBAN, inactieve standaard: allemaal fouten.
         var bad = From(created);
-        bad.ActorReference = "Jan";
         bad.BankAccounts[1].IsDefault = true;
         bad.BankAccounts.Add(new() { Iban = "NL91ABNA0417164301", OtherAccountNumber = "1", AccountHolder = "x" });
         bad.BankAccounts.Add(new() { AccountHolder = "x" });
@@ -496,7 +494,6 @@ public class RelationFinanceServiceTests : IDisposable
 
         // Standaard verhuizen naar een andere opgeslagen rekening (gefilterde unieke index) en de oude inactief zetten.
         var move = From(created);
-        move.ActorReference = "Jan";
         move.BankAccounts[0].IsDefault = false;
         move.BankAccounts[0].IsActive = false;
         move.BankAccounts[1].IsDefault = true;
@@ -509,7 +506,6 @@ public class RelationFinanceServiceTests : IDisposable
 
         // En terug, zonder iets te deactiveren (de oude standaard wordt eerst uitgezet).
         var back = From(moved.Value);
-        back.ActorReference = "Jan";
         back.BankAccounts[0].IsActive = true;
         back.BankAccounts[0].IsDefault = true;
         back.BankAccounts[1].IsDefault = false;
@@ -545,7 +541,6 @@ public class RelationFinanceServiceTests : IDisposable
     {
         var request = New("Leverancier X");
         request.Vendor = new SaveVendorRoleDto();
-        request.ActorReference = "Jan";
         request.BankAccounts = new() { new() { Iban = "NL91ABNA0417164300", AccountHolder = "X" } };
         var created = (await CreateAsync(request)).Value;
         var vendor = (await WithDbAsync(db => new PurchaseInvoiceService(db).VendorsAsync())).Single();

@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -44,7 +45,14 @@ namespace AgfAdmin.Services
 
         private readonly AppDbContext _db;
 
-        public ArticleLifecycleService(AppDbContext db) => _db = db;
+        private readonly ICurrentUser _user;
+
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public ArticleLifecycleService(AppDbContext db, ICurrentUser currentUser = null)
+        {
+            _db = db;
+            _user = currentUser ?? CurrentUser.Default;
+        }
 
         public async Task<ServiceResult<ArticleUsageDto>> UsageAsync(int id, CancellationToken cancellationToken = default)
         {
@@ -86,11 +94,7 @@ namespace AgfAdmin.Services
         // verdwijnt die soort mee (geen lege soorten achterlaten). De historie blijft met de naam van toen.
         public async Task<ServiceResult<bool>> DeleteAsync(int id, ArticleActionDto request, CancellationToken cancellationToken = default)
         {
-            var actor = Actor(request, out var actorError);
-            if (actorError != null)
-            {
-                return ServiceResult<bool>.Validation(actorError);
-            }
+            var actor = _user.Actor(ArticleRules.MaxActorLength);
             var variant = await _db.ProductVariants.Include(v => v.Product).SingleOrDefaultAsync(v => v.Id == id, cancellationToken);
             if (variant == null)
             {
@@ -137,11 +141,7 @@ namespace AgfAdmin.Services
 
         private async Task<ServiceResult<ArticleDto>> SetArchivedAsync(int id, bool archived, ArticleActionDto request, CancellationToken cancellationToken)
         {
-            var actor = Actor(request, out var actorError);
-            if (actorError != null)
-            {
-                return ServiceResult<ArticleDto>.Validation(actorError);
-            }
+            var actor = _user.Actor(ArticleRules.MaxActorLength);
             var variant = await _db.ProductVariants.Include(v => v.Product).SingleOrDefaultAsync(v => v.Id == id, cancellationToken);
             if (variant == null)
             {
@@ -167,11 +167,7 @@ namespace AgfAdmin.Services
         // Een productsoort verwijderen: alleen als er geen artikelen (varianten) meer onder hangen; de artikelen zelf volgen hun eigen controle.
         public async Task<ServiceResult<bool>> DeleteProductAsync(int productId, ArticleActionDto request, CancellationToken cancellationToken = default)
         {
-            var actor = Actor(request, out var actorError);
-            if (actorError != null)
-            {
-                return ServiceResult<bool>.Validation(actorError);
-            }
+            var actor = _user.Actor(ArticleRules.MaxActorLength);
             var product = await _db.Products.SingleOrDefaultAsync(p => p.Id == productId, cancellationToken);
             if (product == null)
             {
@@ -210,16 +206,5 @@ namespace AgfAdmin.Services
             OccurredAt = at,
             RequestId = requestId,
         };
-
-        private static string Actor(ArticleActionDto request, out IReadOnlyDictionary<string, string[]> error)
-        {
-            error = null;
-            var actor = string.IsNullOrWhiteSpace(request?.ActorReference) ? null : request.ActorReference.Trim();
-            if (actor != null && actor.Length > ArticleRules.MaxActorLength)
-            {
-                error = new Dictionary<string, string[]> { ["actorReference"] = new[] { $"Een naam is hoogstens {ArticleRules.MaxActorLength} tekens." } };
-            }
-            return actor;
-        }
     }
 }

@@ -7,7 +7,6 @@ namespace AgfAdmin.DTOs
         public string Reason { get; set; }
         public string Explanation { get; set; }
         public string Decision { get; set; }
-        public string ActorReference { get; set; }
         public List<RejectPurchaseOrderLineDto> Lines { get; set; }
     }
 

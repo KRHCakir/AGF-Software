@@ -25,6 +25,5 @@ namespace AgfAdmin.DTOs
     {
         public string Alias { get; set; }
         public string CountryCode { get; set; }
-        public string ActorReference { get; set; }
     }
 }

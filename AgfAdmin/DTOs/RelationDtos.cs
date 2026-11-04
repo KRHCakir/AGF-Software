@@ -194,7 +194,6 @@ namespace AgfAdmin.DTOs
     public sealed class ConfirmBankAccountDto
     {
         public int? ExpectedVersion { get; set; }
-        public string ActorReference { get; set; }
     }
 
     // GET/PUT api/relations/settings
@@ -270,8 +269,6 @@ namespace AgfAdmin.DTOs
         public string InternalNote { get; set; }
         public bool? IsActive { get; set; }
         public bool AcknowledgeSimilarNames { get; set; }
-        // Wie (vrije tekst, max 100): verplicht zodra bankgegevens wijzigen (toevoegen, IBAN/houder/nummer wijzigen, inactief zetten).
-        public string ActorReference { get; set; }
         public SaveCustomerRoleDto Customer { get; set; }
         public SaveVendorRoleDto Vendor { get; set; }
         public List<RelationAddressDto> Addresses { get; set; }

@@ -34,7 +34,7 @@ public sealed class ArticleFromEntryServiceTests : IDisposable
         string brand = "test", decimal? kg = null, string source = "Receipt") => new()
     {
         RequestId = requestId ?? Guid.NewGuid(), Source = source, TemplateVariantId = _hassPeru, OriginCountryCode = country, SizeCategory = size, Packaging = packaging,
-        TradeClass = tradeClass, Brand = brand, NetKgPerPackage = kg, ActorReference = "Kees",
+        TradeClass = tradeClass, Brand = brand, NetKgPerPackage = kg, 
     };
 
     private async Task<ServiceResult<ArticleFromEntryResultDto>> CreateAsync(CreateArticleFromEntryDto request)
@@ -66,7 +66,7 @@ public sealed class ArticleFromEntryServiceTests : IDisposable
         var stored = await db.ProductVariants.SingleAsync(v => v.Id == article.Id);
         Assert.Equal(requestId, stored.RequestId);
         var created = await db.ArticleAuditEvents.SingleAsync();
-        Assert.Equal(("CreatedFromReceipt", article.Id, "Kees", requestId), (created.EventType, created.ProductVariantId.Value, created.ActorReference, created.RequestId.Value));
+        Assert.Equal(("CreatedFromReceipt", article.Id, "Admin", requestId), (created.EventType, created.ProductVariantId.Value, created.ActorReference, created.RequestId.Value));
         Assert.Equal("Avocado Hass · Zuid-Afrika · maat 14 · verpakking test krat · klasse I · merk Verita", created.Description);
     }
 
