@@ -57,7 +57,6 @@ export interface CreateStockReservationRequest {
     quantity: number;
     unit: PackageUnit;
     netWeightKg: number;
-    actorReference: string;
     reason: string | null;
 }
 
@@ -96,7 +95,6 @@ export interface CreateDirectTradeShipmentRequest {
 export interface ReleaseStockReservationRequest {
     requestId: string;
     expectedReservationVersion: number;
-    actorReference: string;
     reason: string;
 }
 
@@ -611,7 +609,6 @@ export interface FifoReservationProposal {
 export interface CreateStockReservationBatchRequest {
     requestId: string;
     unit: PackageUnit;
-    actorReference: string;
     reason: string | null;
     items: { palletContentLineId: number; quantity: number; netWeightKg: number }[];
 }
