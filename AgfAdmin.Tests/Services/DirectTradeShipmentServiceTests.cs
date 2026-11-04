@@ -236,7 +236,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         {
             Assert.Equal(ServiceResultStatus.Created, (await new SalesDispatchService(db).DispatchAsync(_orderId, new CreateSalesDispatchDto
             {
-                RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, ActorReference = "office-1",
+                RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, 
                 Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = physical.Id, ExpectedReservationVersion = physical.Version } }
             })).Status);
         }
@@ -590,7 +590,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         var dispatch = await new SalesDispatchService(db).DispatchAsync(_orderId, new CreateSalesDispatchDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, ActorReference = "office-1",
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, 
             Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = reservation.Version } }
         });
         Assert.Equal(ServiceResultStatus.Conflict, dispatch.Status);
@@ -598,7 +598,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         Assert.Empty((await new SalesDispatchService(db).ListAsync(_orderId)).Value);
         var correction = await new SalesDispatchCorrectionService(db).CorrectAsync(_orderId, shipped.Value.Id, new CorrectSalesDispatchDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, ActorReference = "office-1", Reason = "poging", GoodsNeverLeftWarehouse = true,
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, Reason = "poging", GoodsNeverLeftWarehouse = true,
             Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = reservation.Version } }
         });
         Assert.Equal(ServiceResultStatus.NotFound, correction.Status);

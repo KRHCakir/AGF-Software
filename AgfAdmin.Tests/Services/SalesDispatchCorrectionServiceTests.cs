@@ -43,7 +43,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         var order = (await new SalesOrderService(db).GetAsync(_orderId)).Value;
         var result = await new SalesDispatchService(db).DispatchAsync(_orderId, new CreateSalesDispatchDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, ActorReference = "office-1", Reference = "VRB-1",
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, Reference = "VRB-1",
             Lines = reservations.Select(r => new CreateSalesDispatchLineDto { StockReservationId = r.Id, ExpectedReservationVersion = r.Version }).ToList()
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
@@ -144,7 +144,6 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
     {
         RequestId = Guid.NewGuid(),
         ExpectedOrderVersion = order.Version,
-        ActorReference = "office-1",
         Reason = reason,
         GoodsNeverLeftWarehouse = confirmed,
         Lines = dispatch.Lines.Select(l => new CreateSalesDispatchLineDto
@@ -376,7 +375,6 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
     [Theory]
     [InlineData("request-id-missing", "requestId")]
     [InlineData("version-missing", "expectedOrderVersion")]
-    [InlineData("actor-missing", "actorReference")]
     [InlineData("reason-missing", "reason")]
     [InlineData("reason-blank", "reason")]
     [InlineData("not-confirmed-false", "goodsNeverLeftWarehouse")]
@@ -393,7 +391,6 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         {
             case "request-id-missing": request.RequestId = null; break;
             case "version-missing": request.ExpectedOrderVersion = null; break;
-            case "actor-missing": request.ActorReference = ""; break;
             case "reason-missing": request.Reason = null; break;
             case "reason-blank": request.Reason = "   "; break;
             case "not-confirmed-false": request.GoodsNeverLeftWarehouse = false; break;
@@ -518,7 +515,6 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
     [Theory]
     [InlineData("other-order")]
     [InlineData("other-dispatch")]
-    [InlineData("other-actor")]
     [InlineData("other-reason")]
     [InlineData("other-order-version")]
     [InlineData("other-reservation-version")]
@@ -537,7 +533,6 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         {
             case "other-order": (orderId, _, _) = await SalesTestData.SeedOrderAsync(_factory, _seed); break;
             case "other-dispatch": dispatchId = d2.Id; break;
-            case "other-actor": request.ActorReference = "office-2"; break;
             case "other-reason": request.Reason = "Andere reden"; break;
             case "other-order-version": request.ExpectedOrderVersion += 1; break;
             default: request.Lines[0].ExpectedReservationVersion += 1; break;
@@ -585,7 +580,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         var current = await OrderAsync();
         CreateSalesDispatchDto Dispatch() => new()
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = current.Version, ActorReference = "office-1", Reference = "VRB-2",
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = current.Version, Reference = "VRB-2",
             Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = r2.Id, ExpectedReservationVersion = r2.Version } }
         };
         async Task<ServiceResultStatus> DispatchAsync(params IInterceptor[] interceptors)

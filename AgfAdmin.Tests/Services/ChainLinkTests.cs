@@ -45,7 +45,7 @@ public sealed class ChainLinkTests : IDisposable
             var version = (await new SalesOrderService(db).GetAsync(orderId)).Value.Version;
             var dispatch = await new SalesDispatchService(db).DispatchAsync(orderId, new CreateSalesDispatchDto
             {
-                RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reference = "VRB-1",
+                RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reference = "VRB-1",
                 Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = shipped.Id, ExpectedReservationVersion = shipped.Version } }
             });
             Assert.Equal(ServiceResultStatus.Created, dispatch.Status);

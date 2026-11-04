@@ -440,7 +440,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         {
             dispatch = (await new SalesDispatchService(db).DispatchAsync(_orderA, new CreateSalesDispatchDto
             {
-                RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), ActorReference = "office-1",
+                RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), 
                 Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = physical.Id, ExpectedReservationVersion = physical.Version } }
             })).Value;
         }
@@ -463,7 +463,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         {
             var warehouse = await new SalesDispatchCorrectionService(db).CorrectAsync(_orderA, dispatch.Id, new CorrectSalesDispatchDto
             {
-                RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "x", GoodsNeverLeftWarehouse = true,
+                RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "x", GoodsNeverLeftWarehouse = true,
                 Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = a.Id, ExpectedReservationVersion = 1 } }
             });
             Assert.Equal(ServiceResultStatus.Conflict, warehouse.Status);

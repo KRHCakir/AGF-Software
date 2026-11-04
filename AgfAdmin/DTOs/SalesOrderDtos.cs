@@ -237,7 +237,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         public string Reference { get; set; }
         public List<CreateSalesDispatchLineDto> Lines { get; set; }
     }
@@ -271,7 +270,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
         public bool? GoodsNeverLeftWarehouse { get; set; }
         public List<CreateSalesDispatchLineDto> Lines { get; set; }
@@ -494,7 +492,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         // Kalenderdatum (yyyy-MM-dd): niet vóór de verzenddatum en niet na vandaag, beide in Europe/Amsterdam.
         public DateOnly? DeliveredOn { get; set; }
         public string ReceiptReference { get; set; }
@@ -526,7 +523,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
         // Moet expliciet true zijn: "Deze afleverbevestiging is ten onrechte vastgelegd."
         public bool? RecordedInError { get; set; }
