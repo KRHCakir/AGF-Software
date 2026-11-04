@@ -26,5 +26,7 @@ namespace AgfAdmin.Security
         public const string MasterDataWrites = "Stamgegevens:wijzigen";
         // Beleid voor instellingen: lezen mag iedereen (standaarden in formulieren), wijzigen alleen met Beheer.
         public const string AdminWrites = "Beheer:wijzigen";
+        // Beleid voor partijen: lezen en aanmaken met Inkoop of met Voorraad (de inkoper maakt ze bij de order, de loods bij ontvangst).
+        public const string PurchaseOrStock = "Inkoop|Voorraad";
     }
 }

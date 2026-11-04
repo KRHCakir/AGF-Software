@@ -28,6 +28,7 @@ builder.Services.AddScoped<ArticleFromEntryService>();
 builder.Services.AddScoped<RelationService>();
 builder.Services.AddScoped<PaymentConditionService>();
 builder.Services.AddScoped<PurchaseOrderService>();
+builder.Services.AddScoped<PartijService>();
 builder.Services.AddScoped<ReceiptDeviationService>();
 builder.Services.AddScoped<CountryService>();
 builder.Services.AddSingleton<IEmailDomainChecker, DnsEmailDomainChecker>();

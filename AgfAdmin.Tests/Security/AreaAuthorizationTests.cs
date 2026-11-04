@@ -45,7 +45,11 @@ public sealed class AreaAuthorizationTests
         builder.Services.AddScoped<IDeliveryConfirmationService, DeliveryConfirmationService>();
         builder.Services.AddScoped<IDeliveryRetractionService, DeliveryRetractionService>();
         builder.Services.AddScoped<CountryService>();
+        builder.Services.AddScoped<PartijService>();
+        // SettingsController draagt [EnableCors("AllowFrontend")]; zonder CORS-middleware geeft ASP.NET dan een 500.
+        builder.Services.AddCors(options => options.AddPolicy("AllowFrontend", _ => { }));
         var app = builder.Build();
+        app.UseCors();
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
@@ -119,7 +123,33 @@ public sealed class AreaAuthorizationTests
         new object[] { typeof(RelationsController), Permissions.MasterDataWrites },
         new object[] { typeof(CountriesController), Permissions.MasterDataWrites },
         new object[] { typeof(SettingsController), Permissions.AdminWrites },
+        new object[] { typeof(PartijenController), Permissions.PurchaseOrStock },
     };
+
+    [Fact]
+    public async Task Lots_need_Purchase_or_Stock_and_the_numbering_setting_needs_Beheer_to_change()
+    {
+        var (app, client, db) = await StartAsync("Piet", Permissions.Sales);
+        try
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/partijen/next-number")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/settings/partij-numbering")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync("/api/settings/partij-numbering", new { mode = "Own", format = "{volgnr}", sequenceReset = "Never" })).StatusCode);
+        }
+        finally { await app.StopAsync(); await app.DisposeAsync(); db.Dispose(); }
+
+        foreach (var area in new[] { Permissions.Purchase, Permissions.Stock })
+        {
+            (app, client, db) = await StartAsync("Piet", area);
+            try
+            {
+                var created = await client.PostAsJsonAsync("/api/partijen", new { requestId = Guid.NewGuid() });
+                Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+                Assert.Equal("Piet", (await created.Content.ReadFromJsonAsync<AgfAdmin.DTOs.PartijSummaryDto>())!.CreatedBy);
+            }
+            finally { await app.StopAsync(); await app.DisposeAsync(); db.Dispose(); }
+        }
+    }
 
     [Theory]
     [MemberData(nameof(Areas))]

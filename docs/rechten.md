@@ -33,6 +33,7 @@ Elk gebied is een constante in `AgfAdmin/Security/Permissions.cs`. Het is ook ee
 | `Verkoop` | verkooporders, reserveringen, verzendingen, klanten, verkoop en facturen (oud), rapporten (oud) |
 | `Stamgegevens` | artikelen, producten, landen, relaties, betalingscondities. **Lezen mag iedereen**, want deze lijsten staan in elk formulier. Wijzigen vraagt `Stamgegevens`. |
 | `Beheer` | instellingen. **Lezen mag iedereen** (standaarden in formulieren). Wijzigen vraagt `Beheer`. |
+| `Inkoop` of `Voorraad` | partijen (`/api/partijen`): lezen, aanmaken, nummer corrigeren, verwijderen en een inkooporder koppelen. Eén van beide gebieden is genoeg: de inkoper maakt de partij bij de order, de loods bij de ontvangst. De partijnummering instellen staat bij de instellingen (`Beheer`). |
 | `Verkoopcijfers` | gevoelige verkoopgegevens; zie hieronder. Staat nog op geen enkel endpoint. |
 
 Een endpoint zonder eigen beleid, zoals het dashboard en `/api/me`, vraagt alleen een aangemelde gebruiker.
