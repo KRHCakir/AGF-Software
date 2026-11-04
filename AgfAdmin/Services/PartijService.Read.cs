@@ -17,7 +17,12 @@ namespace AgfAdmin.Services
             string ProductName, string VariantName, string LotNumber, decimal Quantity, decimal Dispatched, decimal SplitOff, string Unit, decimal NetWeightKg,
             string QualityStatus, bool FromCorrection, bool FromSplit, DateTime CreatedAt);
         private sealed record SaleFact(int PartijId, int SalesOrderId, string OrderNumber, string CustomerName, string OrderStatus, string Status, decimal Quantity, string Unit);
-        private sealed record Facts(List<LineFact> Lines, List<ContentFact> Contents, List<SaleFact> Sales);
+        private sealed record Facts(List<LineFact> Lines, List<ContentFact> Contents, List<SaleFact> Sales)
+        {
+            public ILookup<int, LineFact> LinesByPartij { get; } = Lines.ToLookup(l => l.PartijId);
+            public ILookup<int, ContentFact> ContentsByPartij { get; } = Contents.ToLookup(c => c.PartijId);
+            public ILookup<int, SaleFact> SalesByPartij { get; } = Sales.ToLookup(s => s.PartijId);
+        }
 
         // Zoeken op partijnummer (zonder spaties en streepjes), partij van de leverancier, product en leverancier; status Open of SoldOut.
         public async Task<ServiceResult<PartijListDto>> ListAsync(string query, string status, int page, int pageSize, CancellationToken cancellationToken = default)
@@ -31,21 +36,41 @@ namespace AgfAdmin.Services
             page = Math.Max(1, page);
             pageSize = pageSize <= 0 ? DefaultPageSize : Math.Min(pageSize, MaxPageSize);
 
-            var partijen = await _db.Partijen.AsNoTracking().ToListAsync(cancellationToken);
-            var facts = await LoadFactsAsync(partijen.Select(p => p.Id).ToList(), cancellationToken);
             var term = (query ?? "").Trim().ToLowerInvariant();
             var key = PartijRules.NumberKey(query);
-            var items = partijen
-                .Select(p => Totals<PartijListItemDto>(p, facts))
-                .Where(i => term == "" || (key != null && PartijRules.NumberKey(i.Number).Contains(key, StringComparison.Ordinal))
-                    || i.SupplierLotReferences.Concat(i.Products).Concat(i.Vendors).Any(text => text.ToLowerInvariant().Contains(term)))
-                .Where(i => statusFilter == null || i.Status == statusFilter)
-                .OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id)
-                .ToList();
-            return ServiceResult<PartijListDto>.Ok(new PartijListDto
+            // Zoeken in de database: alleen de passende partijen worden verder opgehaald.
+            var candidates = _db.Partijen.AsNoTracking().AsQueryable();
+            if (term != "")
             {
-                Total = items.Count, Page = page, PageSize = pageSize, Items = items.Skip((page - 1) * pageSize).Take(pageSize).ToList()
-            });
+                candidates = candidates.Where(p => (key != null && p.NumberKey.Contains(key))
+                    || _db.SupplyCommitmentLines.Any(l => l.PartijId == p.Id
+                        && ((l.SupplyCommitment.SupplierLotReference != null && l.SupplyCommitment.SupplierLotReference.ToLower().Contains(term))
+                            || (l.SupplyCommitment.Vendor.Name != null && l.SupplyCommitment.Vendor.Name.ToLower().Contains(term))
+                            || (l.ProductVariant.Product.Name + " " + l.ProductVariant.Name).ToLower().Contains(term)))
+                    || _db.PalletContentLines.Any(c => c.PartijId == p.Id
+                        && (c.SupplyCommitmentLine.ProductVariant.Product.Name + " " + c.SupplyCommitmentLine.ProductVariant.Name).ToLower().Contains(term)));
+            }
+            var ordered = candidates.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id);
+            List<PartijListItemDto> items;
+            int total;
+            if (statusFilter == null)
+            {
+                // Zonder statusfilter pagineren in de database en alleen de feiten van de gevraagde pagina laden.
+                total = await candidates.CountAsync(cancellationToken);
+                var pagePartijen = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
+                var pageFacts = await LoadFactsAsync(pagePartijen.Select(p => p.Id).ToList(), cancellationToken);
+                items = pagePartijen.Select(p => Totals<PartijListItemDto>(p, pageFacts)).ToList();
+            }
+            else
+            {
+                // De status is afgeleid uit de feiten; daarom eerst de (al door de zoekterm beperkte) kandidaten berekenen.
+                var partijen = await ordered.ToListAsync(cancellationToken);
+                var facts = await LoadFactsAsync(partijen.Select(p => p.Id).ToList(), cancellationToken);
+                var matching = partijen.Select(p => Totals<PartijListItemDto>(p, facts)).Where(i => i.Status == statusFilter).ToList();
+                total = matching.Count;
+                items = matching.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            }
+            return ServiceResult<PartijListDto>.Ok(new PartijListDto { Total = total, Page = page, PageSize = pageSize, Items = items });
         }
 
         public async Task<ServiceResult<PartijDetailDto>> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -158,9 +183,9 @@ namespace AgfAdmin.Services
 
         private static T Totals<T>(Partij partij, Facts facts) where T : PartijTotalsDto, new()
         {
-            var lines = facts.Lines.Where(l => l.PartijId == partij.Id).ToList();
-            var contents = facts.Contents.Where(c => c.PartijId == partij.Id).ToList();
-            var sales = facts.Sales.Where(s => s.PartijId == partij.Id).ToList();
+            var lines = facts.LinesByPartij[partij.Id].ToList();
+            var contents = facts.ContentsByPartij[partij.Id].ToList();
+            var sales = facts.SalesByPartij[partij.Id].ToList();
             var liveLines = lines.Where(l => l.OrderStatus != SupplyRules.StatusCancelled).ToList();
             var onHand = contents.Where(c => c.QualityStatus == PalletRules.QualityApproved && !PalletRules.IsTerminalLogisticsStatus(c.PalletStatus)).Sum(OnHand);
             var inInspection = contents.Where(c => c.QualityStatus == PalletRules.QualityQuarantine && !PalletRules.IsTerminalLogisticsStatus(c.PalletStatus)).Sum(OnHand);
