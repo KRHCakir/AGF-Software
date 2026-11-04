@@ -20,6 +20,8 @@
 //   MAX_DIFF_CHARS (standaard 60000), REVIEW_OUTPUT (standaard review-result.json)
 //   AI_TEMPERATURE (standaard 0.1; "none" = niet meesturen, voor modellen die geen
 //                  eigen temperature accepteren, zoals veel nieuwere OpenAI-modellen)
+//   AI_REASONING_EFFORT (standaard leeg = niet meesturen; bv. "low" voor OpenAI)
+//   AI_JSON_MODE   (standaard true; false als het model response_format weigert)
 //
 // Gegenereerde bestanden (EF-migratie-Designer, ModelSnapshot, lockfiles, afbeeldingen,
 // docs/) worden vóór het afkappen uit de diff gehaald. Het model krijgt een lijst van wat
@@ -54,7 +56,8 @@ if (temperature !== null && (!Number.isFinite(temperature) || temperature < 0 ||
   console.error('::error::AI_TEMPERATURE must be a number between 0 and 2, or "none".')
   process.exit(2)
 }
-const githubTimeoutMs =Number(env('GITHUB_REQUEST_TIMEOUT_MS', '30000'))
+const reasoningEffort = (process.env.AI_REASONING_EFFORT ?? '').trim()
+const githubTimeoutMs = Number(env('GITHUB_REQUEST_TIMEOUT_MS', '30000'))
 const aiTimeoutMs = Number(env('AI_REQUEST_TIMEOUT_MS', '300000'))
 const jsonModeSetting = env('AI_JSON_MODE', 'true').toLowerCase()
 if (!['true', 'false'].includes(jsonModeSetting)) {
@@ -104,6 +107,7 @@ async function askModel(system, user) {
   const requestBody = {
     model,
     ...(temperature !== null ? { temperature } : {}),
+    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
     messages: [
       { role: 'system', content: system },

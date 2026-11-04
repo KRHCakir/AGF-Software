@@ -14,6 +14,8 @@ name: AI PR Review
 #                             heten, zodat verplichte checks (branch protection) niet breken.
 #              DEEPSEEK_TEMPERATURE / QWEN_TEMPERATURE (standaard 0.1; "none" = niet meesturen,
 #                             nodig voor OpenAI-modellen die geen eigen temperature accepteren)
+#              QWEN_REASONING_EFFORT (standaard leeg) - bv. "low" voor OpenAI GPT-6.x
+#              QWEN_JSON_MODE (standaard true) - false als het model response_format weigert
 #              MAX_DIFF_CHARS (standaard 200000) - max. aantal tekens diff per review, nadat
 #                             gegenereerde bestanden (migratie-Designer, ModelSnapshot, lockfiles,
 #                             afbeeldingen, docs/) er al uit zijn gehaald
@@ -125,6 +127,8 @@ jobs:
           AI_MODEL: ${{ vars.QWEN_MODEL || 'qwen-plus' }}
           AI_API_KEY: ${{ secrets.QWEN_API_KEY }}
           AI_TEMPERATURE: ${{ vars.QWEN_TEMPERATURE || '0.1' }}
+          AI_REASONING_EFFORT: ${{ vars.QWEN_REASONING_EFFORT || '' }}
+          AI_JSON_MODE: ${{ vars.QWEN_JSON_MODE || 'true' }}
           REVIEW_OUTPUT: qwen-review.json
         run: node .github/scripts/ai-review.mjs
 
