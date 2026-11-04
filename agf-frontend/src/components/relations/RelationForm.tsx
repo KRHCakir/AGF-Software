@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, bankAccountsNeedActor, buildRelationPayload, creditDraftFromRole, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
+import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, buildRelationPayload, creditDraftFromRole, draftFromRelation, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
 import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { emptyTermsDraft } from '../../lib/roleTermsRules';
 import { newRequestId } from '../../lib/requestId';
@@ -123,7 +123,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     // focus (aria-invalid), met het eerste foutveld uit de lijst als terugval (bijv. een fout zonder eigen invoerveld).
     const sectionOf = (field: string): string | null =>
         field.startsWith('addresses') ? 'addresses' : field.startsWith('contacts') ? 'contacts' : field.startsWith('ggns') || field.startsWith('customer.') || field.startsWith('vendor.') ? 'defaults'
-            : field.startsWith('bankAccounts') || field === 'actorReference' ? 'bank'
+            : field.startsWith('bankAccounts') ? 'bank'
             : field === 'internalNote' ? 'note' : ['website', 'vatNumber', 'registrationNumber', 'registrationCountry', 'registrationType', 'legalForm', 'preferredLanguage'].includes(field) ? 'company' : null;
     const focusFirstError = (fields: string[]) => {
         const first = fields[0];
@@ -239,18 +239,16 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
         }
     };
 
-    // Bankrekening bevestigen (met "Wie", op de versie van het concept). De server verhoogt de versie; omdat zij de verwachte versie
+    // Bankrekening bevestigen (door de ingelogde gebruiker, op de versie van het concept). De server verhoogt de versie; omdat zij de verwachte versie
     // controleert, is er intussen niets anders gewijzigd en gaat het concept verder op de nieuwe versie. Alleen status en audit
     // komen uit het antwoord; onopgeslagen invoer in het concept blijft staan.
     const confirm = async (bankAccountId: number) => {
         if (current === null || inFlight.current) return;
-        const actor = draft.actorReference.trim();
-        if (actor === '') { setErrors({ actorReference: [t('relations_error_actor_required')] }); focusFirstError(['actorReference']); return; }
         inFlight.current = true;
         setConfirming(bankAccountId);
         setServerError(null);
         try {
-            const saved = await confirmBankAccount(current.id, bankAccountId, { expectedVersion: baseVersion ?? current.version, actorReference: actor });
+            const saved = await confirmBankAccount(current.id, bankAccountId, { expectedVersion: baseVersion ?? current.version });
             setCurrent(saved);
             setBaseVersion(saved.version);
             setDraft((draftNow) => ({
@@ -260,7 +258,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                     return stored ? { ...a, stored } : a;
                 }),
             }));
-            setNotice(t('relations_bank_confirmed', { name: actor }));
+            setNotice(t('relations_bank_confirmed', { name: saved.bankAccounts.find((b) => b.id === bankAccountId)?.confirmedBy ?? '' }));
             onSaved(saved, false);
         } catch (caught) {
             applyServerError(toApiError(caught));
@@ -681,8 +679,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 ].filter(Boolean).join(' · '))}
                 {open.bank && (
                     <div id="relation-bank" className="border-t border-gray-200 p-3">
-                        <RelationBankAccountsSection accounts={draft.bankAccounts} onChange={(bankAccounts) => update({ bankAccounts })} actorReference={draft.actorReference}
-                            onActorChange={(actorReference) => update({ actorReference })} actorRequired={bankAccountsNeedActor(draft.bankAccounts)} events={current?.bankAccountEvents ?? []}
+                        <RelationBankAccountsSection accounts={draft.bankAccounts} onChange={(bankAccounts) => update({ bankAccounts })} events={current?.bankAccountEvents ?? []}
                             errors={errors} locked={locked} onConfirm={(id) => void confirm(id)} confirming={confirming} canConfirm={current !== null && !stale} />
                     </div>
                 )}
