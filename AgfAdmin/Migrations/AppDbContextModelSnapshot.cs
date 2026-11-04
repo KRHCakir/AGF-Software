@@ -108,6 +108,27 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("LogoPath")
                         .HasColumnType("text");
 
+                    b.Property<string>("PartijNumberFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("{JJ}{MM}{volgnr}");
+
+                    b.Property<string>("PartijNumberMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Auto");
+
+                    b.Property<string>("PartijSequenceReset")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Yearly");
+
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
@@ -139,7 +160,12 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CompanySettings");
+                    b.ToTable("CompanySettings", t =>
+                        {
+                            t.HasCheckConstraint("CK_CompanySettings_PartijNumberMode_Allowed", "\"PartijNumberMode\" IN ('Auto', 'Own')");
+
+                            t.HasCheckConstraint("CK_CompanySettings_PartijSequenceReset_Allowed", "\"PartijSequenceReset\" IN ('Never', 'Yearly', 'Monthly')");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Country", b =>
@@ -2773,6 +2799,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("PalletId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("PartijId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("QualityReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2830,6 +2859,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("PalletId");
 
+                    b.HasIndex("PartijId");
+
                     b.HasIndex("RequestId")
                         .IsUnique();
 
@@ -2860,6 +2891,123 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_PalletContentLines_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
 
                             t.HasCheckConstraint("CK_PalletContentLines_Weight_Consistent", "(\"WeightMethod\" = 'Weighed' AND \"NetKgPerPackage\" IS NULL) OR (\"WeightMethod\" = 'Calculated' AND \"NetKgPerPackage\" IS NOT NULL AND CAST(\"NetKgPerPackage\" AS NUMERIC) > 0 AND (\"OriginCorrectionLineId\" IS NOT NULL OR abs(CAST(\"NetWeightKg\" AS NUMERIC) - CAST(\"Quantity\" AS NUMERIC) * CAST(\"NetKgPerPackage\" AS NUMERIC)) < 0.001))");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.Partij", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NumberKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SequencePeriod")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NumberKey")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SequencePeriod", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("Partijen", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
+
+                            t.HasCheckConstraint("CK_Partijen_Number_NotBlank", "length(trim(\"Number\")) > 0");
+
+                            t.HasCheckConstraint("CK_Partijen_Sequence_Consistent", "(\"Sequence\" IS NULL AND \"SequencePeriod\" IS NULL) OR (\"Sequence\" > 0 AND \"SequencePeriod\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Partijen_Status_Allowed", "\"Status\" IN ('Open')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PartijAuditEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("PartijId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartijId");
+
+                    b.ToTable("PartijAuditEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed", "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted')");
                         });
                 });
 
@@ -4369,6 +4517,9 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int?>("PartijId")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uuid");
 
@@ -4381,6 +4532,10 @@ namespace AgfAdmin.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SupplierLotReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("SupplierReference")
                         .HasMaxLength(100)
@@ -4398,6 +4553,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("OrderNumber")
                         .IsUnique();
+
+                    b.HasIndex("PartijId");
 
                     b.HasIndex("RequestId")
                         .IsUnique();
@@ -4528,6 +4685,9 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<int?>("PartijId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ProductVariantId")
                         .HasColumnType("integer");
 
@@ -4546,6 +4706,8 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PartijId");
 
                     b.HasIndex("ProductVariantId");
 
@@ -5283,6 +5445,11 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithMany()
+                        .HasForeignKey("PartijId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
                         .WithMany()
                         .HasForeignKey("SupplyCommitmentLineId")
@@ -5294,6 +5461,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("OriginRejectionLine");
 
                     b.Navigation("Pallet");
+
+                    b.Navigation("Partij");
 
                     b.Navigation("SupplyCommitmentLine");
                 });
@@ -5651,6 +5820,11 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithMany()
+                        .HasForeignKey("PartijId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.Vendor", "Vendor")
                         .WithMany()
                         .HasForeignKey("VendorId")
@@ -5658,6 +5832,8 @@ namespace AgfAdmin.Migrations
                         .IsRequired();
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Partij");
 
                     b.Navigation("Vendor");
                 });
@@ -5682,6 +5858,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SupplyCommitmentLine", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithMany()
+                        .HasForeignKey("PartijId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductVariantId")
@@ -5698,6 +5879,8 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("SupplyCommitmentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Partij");
 
                     b.Navigation("ProductVariant");
 

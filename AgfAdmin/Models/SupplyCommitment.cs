@@ -34,6 +34,12 @@ namespace AgfAdmin.Models
         public string OrderChannel { get; set; }
         public string Note { get; set; }
 
+        // Partij van deze order (kop): de regels erven haar, de ontvangen palletregels nemen haar over van de regel. Optioneel: oudere
+        // orders en orders zonder partij blijven geldig ("Geen partij"). Partij van de leverancier: diens eigen lotnummer, vrije tekst.
+        public int? PartijId { get; set; }
+        public Partij Partij { get; set; }
+        public string SupplierLotReference { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

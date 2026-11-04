@@ -17,7 +17,12 @@ namespace AgfAdmin.Models
         public int SupplyCommitmentLineId { get; set; }
         public SupplyCommitmentLine SupplyCommitmentLine { get; set; }
 
-        public string LotNumber { get; set; }      // verplicht, niet leeg
+        public string LotNumber { get; set; }      // verplicht, niet leeg; bij een regel met partij het partijnummer bij ontvangst
+
+        // Partij, overgenomen van de bronregel bij ontvangst (en van de oorspronkelijke inhoud bij correctie of afsplitsing). Null bij
+        // oudere ontvangsten zonder partij; koppelen kan later één keer, met een auditregel. LotNumber blijft daarnaast ongewijzigd staan.
+        public int? PartijId { get; set; }
+        public Partij Partij { get; set; }
         public decimal Quantity { get; set; }      // > 0
         public string Unit { get; set; }           // verplicht, niet leeg: box, colli, tray, piece of dozen
         public decimal NetWeightKg { get; set; }   // > 0, totaal netto kg; gewogen (Weighed) of aantal × kg per verpakking (Calculated)

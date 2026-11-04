@@ -28,6 +28,11 @@ namespace AgfAdmin.Models
         public decimal? LoosePackages { get; set; }
         public string LotNumber { get; set; } // optioneel
 
+        // Partij van de regel: bij een nieuwe order die van de kop; bij oudere regels alleen als al hun ontvangsten eenduidig bij één
+        // partij horen (migratie AddPartijen). Een vervangende regel na een afwijking erft de partij van de oorspronkelijke regel.
+        public int? PartijId { get; set; }
+        public Partij Partij { get; set; }
+
         // Vervangende regel na een bevestigde afwijkende ontvangst (SupplyReceiptDeviation): de oorspronkelijke regel. Onveranderlijk.
         public int? ReplacesLineId { get; set; }
         public SupplyCommitmentLine ReplacesLine { get; set; }
