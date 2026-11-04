@@ -9,12 +9,12 @@ import { inputClass } from '../supply/FieldError';
 // volgorde van de browsertaal (en-US: mm/dd/jjjj), laat het typen beginnen in het vakje waar je klikt en neemt in het jaarvakje tot
 // zes cijfers aan, terwijl een smal veld de rest afknipt. Zo stond er "11/02/2026" terwijl het veld leeg (onvolledig) was en de
 // controle terecht "Vul een geldige datum in" zei. Hier staat altijd dd-mm-jjjj, ongeacht de browsertaal; typen mag als dd-mm-jjjj,
-// dd/mm/jjjj, d-m-jjjj, ddmmjjjj, d-m (dit jaar) of ISO. "Vandaag" vult de lokale kalenderdag in (nooit UTC); de kalenderknop opent
-// de kiezer van de browser als die er is.
+// dd/mm/jjjj, d-m-jjjj, ddmmjjjj, dd-mm-jj (20jj), d-m (dit jaar) of ISO. "Vandaag" vult de lokale kalenderdag in (nooit UTC); de
+// kalenderknop opent de kiezer van de browser als die er is.
 //
 // `value` en `onChange` gaan over de ISO-datum (jjjj-mm-dd) zonder tijd en zonder tijdzone; wat (nog) geen datum is, gaat als de
 // getypte tekst door, zodat het formulier "ongeldige datum" kan melden in plaats van "leeg". Eigen getypte tekst blijft staan
-// tot het verlaten van het veld; daarna, en bij elke waarde van buiten (Vandaag, kalender, herstel, leegmaken), staat er dd-mm-jjjj.
+// tot het verlaten van het veld of Enter; daarna, en bij elke waarde van buiten (Vandaag, kalender, herstel, leegmaken), staat er dd-mm-jjjj.
 export default function DateField({ id, value, onChange, disabled = false, min, max, dataTour, dataTourKey, inputRef, ariaLabel, className = '', ...aria }: {
     id: string;
     value: string;
@@ -76,7 +76,7 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
         <div className={`relative flex flex-wrap items-stretch gap-x-1 ${className}`}>
             <input id={id} ref={inputRef} type="text" inputMode="text" autoComplete="off" spellCheck={false} value={text} disabled={disabled}
                 placeholder={t('date_field_placeholder')} aria-label={ariaLabel} data-tour={dataTour} data-tour-key={dataTourKey} {...aria}
-                onChange={(event) => type(event.target.value)} onBlur={settle} className={`${inputClass} min-w-0 flex-1 basis-[7.5rem] tabular-nums`} />
+                onChange={(event) => type(event.target.value)} onBlur={settle} onKeyDown={(event) => { if (event.key === 'Enter') settle(); }} className={`${inputClass} min-w-0 flex-1 basis-[7.5rem] tabular-nums`} />
             <button type="button" className={smallButton} disabled={disabled} onClick={() => choose(localToday())}
                 aria-label={t('date_field_today_label')}>{t('date_field_today')}</button>
             {canPick && (

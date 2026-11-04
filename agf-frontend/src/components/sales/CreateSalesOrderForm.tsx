@@ -17,7 +17,6 @@ import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
-import { PACKAGE_UNITS } from '../../types/availability';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
@@ -27,6 +26,7 @@ import { LineKgFields } from '../shared/LineKgInput';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import QuantityInput from '../shared/QuantityInput';
+import UnitSelect from '../shared/UnitSelect';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass, lineTableClass } from '../supply/FieldError';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
@@ -379,8 +379,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_quantity')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_unit')} *</th>
+                                <th scope="col" className="px-2 py-1.5">{t('supply_quantity_unit')} *</th>
                                 <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                             </tr>
                         </thead>
@@ -403,10 +402,13 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>
-                                        <td className="w-72 px-2 py-1.5">
+                                        <td className="w-96 px-2 py-1.5">
                                             <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} dataTour="sales-line-quantity"
                                                 defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
-                                                onChange={(field, value) => updateLine(line.key, field, value)} />
+                                                onChange={(field, value) => updateLine(line.key, field, value)}
+                                                unitSelect={<UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked}
+                                                    onChange={(unit) => updateLine(line.key, 'unit', unit)} />} />
+                                            <FieldError id={`${prefix}.unit`} messages={e(`${prefix}.unit`)} />
                                             <div data-tour="sales-line-kg" data-tour-key={index}>
                                                 <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
                                                     locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
@@ -415,15 +417,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                                                 source={effectiveSource(line, lineKg[index].quantity)} packagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
                                                 locked={locked} canSplit={draft.lines.length < MAX_ORDER_LINES} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
                                             <FieldError id={`${prefix}.supplySource`} messages={e(`${prefix}.supplySource`)} />
-                                        </td>
-                                        <td className="w-32 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
-                                            <select {...fieldProps(`${prefix}.unit`, e(`${prefix}.unit`))} value={line.unit} disabled={locked}
-                                                onChange={(event) => updateLine(line.key, 'unit', event.target.value)} className={inputClass}>
-                                                <option value="">{t('supply_choose')}</option>
-                                                {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
-                                            </select>
-                                            <FieldError id={`${prefix}.unit`} messages={e(`${prefix}.unit`)} />
                                         </td>
                                         <td className="px-2 py-1.5">
                                             <button type="button" onClick={() => removeLine(line.key)} disabled={locked || draft.lines.length <= 1}

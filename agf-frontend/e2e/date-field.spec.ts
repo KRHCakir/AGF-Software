@@ -63,6 +63,16 @@ for (const locale of ['en-US', 'nl-NL']) {
                 await field.press('Enter');
                 await expect(error).toHaveCount(0);
 
+                // Een jaar van twee cijfers (04-11-26) wordt bij Enter en bij verlaten dd-mm-20jj.
+                const shortYear = `${today.dutch.slice(0, 6)}${today.dutch.slice(8)}`;
+                await field.fill(shortYear);
+                await field.press('Enter');
+                await expect(field).toHaveValue(today.dutch);
+                await expect(error).toHaveCount(0);
+                await field.fill(`${Number(today.dutch.slice(0, 2))}/${Number(today.dutch.slice(3, 5))}/${today.dutch.slice(8)}`);
+                await field.blur();
+                await expect(field).toHaveValue(today.dutch);
+
                 // Korte vorm d-m (dit jaar) en een niet-bestaande datum.
                 await field.fill(`${Number(today.dutch.slice(0, 2))}-${Number(today.dutch.slice(3, 5))}`);
                 await field.press('Enter');

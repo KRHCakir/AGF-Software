@@ -267,6 +267,7 @@
   "supply_variant": "Product · variant",
   "supply_lot_optional": "Lot (if known)",
   "supply_quantity": "Quantity",
+  "supply_quantity_unit": "Quantity and unit",
   "supply_unit": "Unit",
   "supply_declared_kg": "Declared net kg",
   "supply_declared_kg_hint": "declared, not weighed (optional)",
