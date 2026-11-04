@@ -7,7 +7,7 @@ import { formatCalendarDate } from '../../lib/calendarDate';
 import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { AllocateDirectTradeCommand, allocateKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, expectedAfterRequested, fullAllocationRemainder, normalizeActor, normalizeReason, remainingAfter, validateAllocationInput } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, expectedAfterRequested, fullAllocationRemainder, normalizeReason, remainingAfter, validateAllocationInput } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { allocateDirectTrade } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -26,11 +26,10 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 // een zichtbare waarschuwing met de verwachte leverdatum en een expliciete, standaard niet-aangevinkte bevestiging. Zonder
 // bevestiging gaat er niets naar de server (die weigert dan ook met 400). De opdracht wordt bevroren en boven dit formulier
 // bewaard (zelfde requestId) tot de uitkomst bekend is; bij 409 wordt herladen en opnieuw beslist.
-export default function AllocateDirectTradeForm({ order, line, supply, actor, onSucceeded, onReload, onCancel }: {
+export default function AllocateDirectTradeForm({ order, line, supply, onSucceeded, onReload, onCancel }: {
     order: SalesOrder;
     line: SalesOrderLine;
     supply: DirectTradeSupplyLine | null;
-    actor: string;
     onSucceeded: (saved: SaveResult<StockReservation>) => Promise<void>;
     onReload: () => void;
     onCancel: () => void;
@@ -80,15 +79,13 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
         if (command === null) {
             if (supply === null || unitMismatch) return;
             const amounts = validateAllocationInput(quantity, supply.remainingQuantity, line.openQuantity);
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, false);
             const errors = [
                 ...(amounts.ok ? [] : amounts.errors),
-                ...(actorResult.ok ? [] : actorResult.errors),
                 ...(reasonResult.ok ? [] : reasonResult.errors),
             ];
             if (!acknowledged) errors.push({ field: 'acknowledgeExpectedSupply', code: 'required' });
-            if (errors.length > 0 || !amounts.ok || !actorResult.ok || !reasonResult.ok) {
+            if (errors.length > 0 || !amounts.ok || !reasonResult.ok) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -106,7 +103,6 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
                     quantity: amounts.value.quantity,
                     unit: line.unit,
                     acknowledgeExpectedSupply: true,
-                    actorReference: actorResult.value,
                     reason: reasonResult.value,
                 },
                 display: { sourceLabel: label, lotNumber, productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}`, expectedAt },
@@ -202,7 +198,6 @@ export default function AllocateDirectTradeForm({ order, line, supply, actor, on
                     onChange={(event) => edit(setReason)(event.target.value)} aria-invalid={fieldErrors.reason !== undefined}
                     aria-describedby={fieldErrors.reason ? `${idPrefix}-reason-error` : undefined} className={inputClass} />
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 <FieldError id={`${idPrefix}-source-error`} messages={fieldErrors.supplyCommitmentLineId} />
                 <FieldError id={`${idPrefix}-unit-error`} messages={fieldErrors.unit} />
             </div>

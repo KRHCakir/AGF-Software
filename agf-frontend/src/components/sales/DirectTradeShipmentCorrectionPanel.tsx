@@ -6,7 +6,7 @@ import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatDateOnly } from '../../lib/calendarDate';
 import { CorrectDtShipmentCommand, blockedBy, correctDtShipmentKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, RuleError, normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, RuleError, normalizeReason } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { correctDirectTradeShipment } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -24,10 +24,9 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 // standaard niet-aangevinkte verklaring; zonder die twee gaat er niets naar de server. De opdracht (orderversie en alle toewijzingen met
 // hun versies) wordt bevroren en boven dit paneel bewaard; staat de verzending na verversen al als teruggenomen, dan blijft alleen de
 // identieke herhaling mogelijk.
-export default function DirectTradeShipmentCorrectionPanel({ order, shipment, actor, onCorrected, onReload, onClose }: {
+export default function DirectTradeShipmentCorrectionPanel({ order, shipment, onCorrected, onReload, onClose }: {
     order: SalesOrder;
     shipment: DirectTradeShipment;
-    actor: string;
     onCorrected: (saved: SaveResult<DirectTradeShipmentCorrection>) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -56,12 +55,10 @@ export default function DirectTradeShipmentCorrectionPanel({ order, shipment, ac
         if (command === null) {
             if (alreadyCorrected || order.status !== 'Open') return;
             const errors: RuleError[] = [];
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
-            if (!actorResult.ok) errors.push(...actorResult.errors);
             if (!reasonResult.ok) errors.push(...reasonResult.errors);
             if (!confirmed) errors.push({ field: 'shipmentDidNotTakePlace', code: 'required' });
-            if (errors.length > 0 || !actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
+            if (errors.length > 0 || !reasonResult.ok || reasonResult.value === null) {
                 setFieldErrors(ruleErrorsToFieldErrors(errors, t));
                 return;
             }
@@ -76,7 +73,6 @@ export default function DirectTradeShipmentCorrectionPanel({ order, shipment, ac
                 payload: {
                     requestId,
                     expectedOrderVersion: order.version,
-                    actorReference: actorResult.value,
                     reason: reasonResult.value,
                     shipmentDidNotTakePlace: true,
                     lines: shipment.lines.map((line) => ({
@@ -171,7 +167,6 @@ export default function DirectTradeShipmentCorrectionPanel({ order, shipment, ac
                     onChange={(event) => { if (!locked) { setReason(event.target.value); setError(null); setFieldErrors({}); } }}
                     aria-invalid={fieldErrors.reason !== undefined} className={inputClass} />
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
             </div>
 
             <div className="rounded border-2 border-amber-400 bg-white px-2 py-1.5">

@@ -1,4 +1,4 @@
-import { MAX_ACTOR_LENGTH, MAX_CUSTOMER_REFERENCE_LENGTH, MAX_ORDER_LINES, MAX_REASON_LENGTH, RuleError } from '../../lib/salesOrderRules';
+import { MAX_CUSTOMER_REFERENCE_LENGTH, MAX_ORDER_LINES, MAX_REASON_LENGTH, RuleError } from '../../lib/salesOrderRules';
 import { DecimalError } from '../../lib/decimal';
 import { FieldErrors, addError, decimalErrorKey, palletErrorKey } from '../supply/messages';
 
@@ -8,7 +8,6 @@ const DECIMAL_CODES: readonly DecimalError[] = ['empty', 'invalid', 'separator',
 
 const MAX_LENGTHS: Record<string, number> = {
     customerReference: MAX_CUSTOMER_REFERENCE_LENGTH,
-    actorReference: MAX_ACTOR_LENGTH,
     reason: MAX_REASON_LENGTH,
     lotNumber: 100,
     lotDeviationReason: MAX_REASON_LENGTH,
@@ -21,8 +20,7 @@ export function ruleMessage(error: RuleError, t: Translate): string {
     }
     switch (error.code) {
         case 'required':
-            return error.field === 'actorReference' ? t('supply_error_actor_required')
-                : error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
+            return error.field === 'goodsNeverLeftWarehouse' ? t('sales_correct_confirm_required')
                 : error.field === 'shipmentDidNotTakePlace' ? t('sales_dt_correct_confirm_required')
                 : error.field === 'deliveredInFull' ? t('sales_delivery_confirm_required')
                 : error.field === 'recordedInError' ? t('sales_retract_confirm_required')

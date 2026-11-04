@@ -39,7 +39,7 @@ let changed: number;
 const element = () => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <OrderLinePanel order={order} line={line} actor="verkoop-1" readOnly={false} openFifo onOrderChanged={async () => { changed++; return true; }} />
+            <OrderLinePanel order={order} line={line} readOnly={false} openFifo onOrderChanged={async () => { changed++; return true; }} />
         </HydratedGate>
     </PendingCommandsProvider>
 );

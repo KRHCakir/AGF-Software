@@ -50,7 +50,7 @@ let orderChanged: number;
 const panel = (current: SalesOrder, currentLine: SalesOrderLine) => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <OrderLinePanel order={current} line={currentLine} actor="office-1" readOnly={false} onOrderChanged={async () => { orderChanged += 1; return true; }} />
+            <OrderLinePanel order={current} line={currentLine} readOnly={false} onOrderChanged={async () => { orderChanged += 1; return true; }} />
         </HydratedGate>
     </PendingCommandsProvider>
 );
@@ -279,7 +279,7 @@ describe('an allocation in the order', () => {
         await mounted.render(
             <PendingCommandsProvider>
                 <HydratedGate>
-                    <SalesOrderDetail order={committedOrder} actor="office-1" onOrderChanged={async () => true} />
+                    <SalesOrderDetail order={committedOrder} onOrderChanged={async () => true} />
                 </HydratedGate>
             </PendingCommandsProvider>,
         );
@@ -311,7 +311,7 @@ describe('an allocation in the order', () => {
         await mounted.render(
             <PendingCommandsProvider>
                 <HydratedGate>
-                    <SalesOrderDetail order={{ ...order, lines: [allocatedLine] }} actor="office-1" onOrderChanged={async () => true} />
+                    <SalesOrderDetail order={{ ...order, lines: [allocatedLine] }} onOrderChanged={async () => true} />
                 </HydratedGate>
             </PendingCommandsProvider>,
         );

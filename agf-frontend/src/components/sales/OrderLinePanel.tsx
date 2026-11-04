@@ -38,10 +38,9 @@ interface Notice {
 // magazijnvoorraad en toewijzen van verwachte, klantgebonden DirectTrade-aanvoer. Na elke geslaagde schrijfactie worden de
 // order, de keuzelijsten en de beschikbaarheid opnieuw geladen. Een onafgerond commando op deze regel wordt altijd getoond
 // en blokkeert elk nieuw commando op dezelfde regel.
-export default function OrderLinePanel({ order, line, actor, readOnly, onOrderChanged, openFifo = false }: {
+export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, openFifo = false }: {
     order: SalesOrder;
     line: SalesOrderLine;
-    actor: string;
     readOnly: boolean;
     onOrderChanged: () => Promise<boolean>;
     // Vanuit de werklijst "Verkocht, wacht op voorraad": het FIFO-voorstel van deze regel staat meteen open.
@@ -419,7 +418,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                             onSelect={setSelectedSupply} onLoaded={onSupplyLoaded} selectable={pendingAllocate === null} />
                         {formSourceId !== null && (
                             <AllocateDirectTradeForm key={`${formSourceId}:${line.version}:${decisionToken}`}
-                                order={order} line={line} supply={formSupply} actor={actor}
+                                order={order} line={line} supply={formSupply}
                                 onSucceeded={onAllocated} onReload={() => void reload()}
                                 onCancel={() => (pendingAllocate === null ? setSelectedSupply(null) : setAllocating(false))} />
                         )}

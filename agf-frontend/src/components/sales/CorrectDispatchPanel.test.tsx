@@ -60,7 +60,7 @@ let reloads: number;
 const element = (order: SalesOrder) => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <SalesOrderDetail order={order} actor="office-1" onOrderChanged={async () => { reloads += 1; return true; }} />
+            <SalesOrderDetail order={order} onOrderChanged={async () => { reloads += 1; return true; }} />
         </HydratedGate>
     </PendingCommandsProvider>
 );
