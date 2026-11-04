@@ -10,6 +10,7 @@ import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
 import { getAvailabilityOverview } from '../../services/availabilityService';
+import { getNextPartijNumber } from '../../services/partijService';
 import { getCustomers, getProductsWithVariants, getVendors } from '../../services/referenceDataService';
 import type { AvailabilityOverview } from '../../types/availability';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
@@ -63,7 +64,7 @@ export function findOpenTourOrder(items: readonly PurchaseOrderListItem[]): Purc
 const isMissing = (value: object): value is TourMissing => 'key' in value;
 
 export async function precheckPurchase(signal: AbortSignal): Promise<TourPrecheck> {
-    const [vendors, products] = await Promise.all([getVendors(signal), getProductsWithVariants(signal)]);
+    const [vendors, products, numbering] = await Promise.all([getVendors(signal), getProductsWithVariants(signal), getNextPartijNumber(undefined, signal)]);
     const vendor = findTourVendor(vendors, TOUR_VENDOR_SEARCH);
     const article = findTourArticle(products);
     if (isMissing(vendor) || isMissing(article)) return { missing: [vendor, article].filter(isMissing) };
@@ -77,6 +78,8 @@ export async function precheckPurchase(signal: AbortSignal): Promise<TourPrechec
             quantity: String(TOUR_ORDER_QUANTITY),
             // Zoals een gebruiker typt (dd-mm-jjjj); het datumveld leest altijd dag-maand-jaar.
             expectedDate: formatDateInput(addDays(today, 2) ?? today),
+            // Nummering op Eigen (geen voorstel): de rondleiding typt haar eigen kenmerk als partijnummer.
+            ownNumbering: numbering.suggestion === null ? 'yes' : '',
         },
     };
 }
@@ -115,6 +118,12 @@ async function openTourLine(signal: AbortSignal, minimum: number) {
     return line ? { order, line } : null;
 }
 
+// Partij van de ontvangst: heeft de orderregel een partij, dan neemt de ontvangst die over (niets te typen) en heten de regels in de
+// keuring zo; anders typt de rondleiding haar eigen kenmerk (de runner vult lot dan met tourRef).
+export function lotVars(line: { partijNumber?: string | null }): Record<string, string> {
+    return line.partijNumber ? { lot: line.partijNumber, typeLot: '', partijNumber: line.partijNumber } : { typeLot: 'yes', partijNumber: '' };
+}
+
 const kgPerPackageOf = (line: { expectedNetWeightKg: number | null; expectedQuantity: number }, variant: VariantOption) =>
     line.expectedNetWeightKg !== null && line.expectedQuantity > 0 ? line.expectedNetWeightKg / line.expectedQuantity : variant.defaultNetKgPerPackage ?? null;
 
@@ -138,6 +147,7 @@ export async function precheckReceive(signal: AbortSignal): Promise<TourPrecheck
             quantity: String(line.expectedQuantity),
             rejectQuantity: String(Math.max(1, Math.floor(line.expectedQuantity / 4))),
             ...receiptVars(variant, line.expectedQuantity, kg),
+            ...lotVars(line),
         },
     };
 }
@@ -163,6 +173,7 @@ export async function precheckDeviation(signal: AbortSignal): Promise<TourPreche
             quantity: String(quantity),
             expectedOrigin: ordered.origin ?? '',
             ...receiptVars(other, quantity, kg),
+            ...lotVars(line),
         },
     };
 }
