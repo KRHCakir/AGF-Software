@@ -17,6 +17,7 @@ import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from '../suppl
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import { PendingNotice } from '../sales/PendingCommandsBanner';
 import { usePendingCommand } from '../sales/PendingCommandsContext';
+import SubmitErrors from '../shared/SubmitErrors';
 
 // "Afkeuren" van één ontvangen regel: hoeveelheid en netto kg (standaard het hele afkeurbare deel), reden, besluit en
 // medewerker. Een onbekende uitkomst bevriest het verzoek in de opslag per tabblad (usePendingCommand): ook na weg- en
@@ -174,6 +175,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
                 <div className="flex flex-wrap gap-2">
                     <button type="submit" data-tour="reject-save" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_reject_save')}</button>
                     <button type="button" className={secondaryButtonClass} disabled={locked} onClick={onCancel}>{t('po_cancel')}</button>
+                    <SubmitErrors errors={errors} />
                 </div>
             )}
         </form>

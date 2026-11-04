@@ -52,6 +52,7 @@ import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messag
 import ReceivedAttributes from './ReceivedAttributes';
 import SubmitProgress, { ProgressStep, StepState } from './SubmitProgress';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
+import SubmitErrors from '../shared/SubmitErrors';
 
 interface ContentDraft {
     lot: string;
@@ -1004,6 +1005,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                 <button type="submit" data-tour="receive-save" className={primaryButtonClass} disabled={blocked || checking || dialog !== null || sources.status !== 'ready'}>
                     {running || checking ? t('supply_saving') : frozen?.pallet.done ? t('supply_continue_registration') : t('supply_register_pallet')}
                 </button>
+                <SubmitErrors errors={errors} />
             </div>
             {dialog !== null && <DeviationDialog preview={dialog.preview} onNo={() => setDialog(null)} onYes={confirmDeviation} />}
         </form>

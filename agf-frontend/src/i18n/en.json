@@ -273,6 +273,8 @@
   "supply_remove_line_n": "Remove line {n}",
   "supply_add_line": "Add line",
   "supply_saving": "Saving…",
+  "form_errors_next_to_save_one": "Not saved: 1 field still needs attention. It is highlighted.",
+  "form_errors_next_to_save": "Not saved: {count} fields still need attention. The first one is highlighted.",
   "supply_save_plan_warehouse": "Create purchase order",
   "supply_save_plan_direct": "Record customer-bound supply",
   "supply_plan_success_warehouse": "Purchase order #{id} created (expected in the own warehouse)",

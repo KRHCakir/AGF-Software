@@ -26,6 +26,7 @@ import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import InvoiceOrderNotice from './InvoiceOrderNotice';
 import VendorPicker from './VendorPicker';
+import SubmitErrors from '../shared/SubmitErrors';
 
 // Eén compacte werkplek voor een inkoopfactuur: documentkop, direct bewerkbare regels, live totalen en een ingeklapt
 // paneel "Extra gegevens". Alles werkt zonder muis (Tab, Enter, pijltjes, sneltoetsen) en blijft ook met de muis bruikbaar.
@@ -474,6 +475,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 <button type="submit" className={primaryButtonClass} disabled={locked && !unknown}>{submitting ? t('supply_saving') : t('purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
                 <button type="button" className={secondaryButtonClass} disabled={locked && !unknown} onClick={() => void submit('saveAndNew')}>{t('purchase_save_and_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('saveAndNew', isMac)}</kbd></button>
                 <button type="button" className={secondaryButtonClass} disabled={submitting} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
+                <SubmitErrors errors={errors} moveFocus={false} />
                 <span className="text-xs text-gray-600">{t('purchase_footer_hint', { search: shortcutLabel('focusSearch', isMac) })}</span>
                 {lastSaved === null && draft.header.invoiceDate !== '' && <span className="ml-auto text-xs text-gray-500">{t('purchase_date_today_hint', { date: formatCalendarDate(`${draft.header.invoiceDate}T00:00:00`, locale) })}</span>}
             </div>

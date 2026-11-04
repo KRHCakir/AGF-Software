@@ -23,6 +23,7 @@ import GgnPortalButton from './GgnPortalButton';
 import RelationBankAccountsSection from './RelationBankAccountsSection';
 import RelationTermsSection from './RelationTermsSection';
 import RelationWarnings from './RelationWarnings';
+import SubmitErrors from '../shared/SubmitErrors';
 
 // Relatiekaart: altijd zichtbaar zijn zoekcode, bedrijfsnaam, rollen, actief en de belangrijkste contactgegevens; de rest staat
 // compact gegroepeerd (bedrijfsgegevens, adressen, contactpersonen, inkoop-/verkoopdefaults, interne opmerking). Alleen de naam
@@ -700,6 +701,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
                 <button type="submit" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('relations_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
+                <SubmitErrors errors={errors} moveFocus={false} />
                 <span className="text-xs text-gray-600">{t('relations_save_hint')}</span>
             </div>
         </form>
