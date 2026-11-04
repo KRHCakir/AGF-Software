@@ -1,6 +1,8 @@
 name: AI PR Review
 
-# Reviewt elke pull request eerst met DeepSeek en daarna (als die goedkeurt) met Qwen.
+# Reviewt elke pull request eerst met de tweede reviewer (job "Qwen review"; via de QWEN_*-
+# variabelen kan dat ook OpenAI zijn) en daarna, als die goedkeurt, met DeepSeek.
+# Zonder QWEN_API_KEY wordt die eerste stap overgeslagen en draait DeepSeek direct.
 # Elk model zet één comment op de PR en werkt die bij bij nieuwe commits.
 # Rood = een model vraagt om wijzigingen. Groen = beide keuren goed.
 #
@@ -56,7 +58,7 @@ env:
 jobs:
   deepseek:
     name: DeepSeek review
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    needs: qwen
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -90,7 +92,7 @@ jobs:
 
   qwen:
     name: Qwen review
-    needs: deepseek
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -202,7 +204,7 @@ jobs:
             --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
           echo "AI fix rounds so far: $rounds / $MAX_ROUNDS"
           if [ "$rounds" -ge "$MAX_ROUNDS" ]; then
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft al $rounds keer geprobeerd de review-opmerkingen op te lossen, maar DeepSeek/$SECOND_REVIEWER zijn nog niet tevreden. Kijk jij even mee? (De automatische fix-loop stopt hier.)"
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft al $rounds keer geprobeerd de review-opmerkingen op te lossen, maar $SECOND_REVIEWER/DeepSeek zijn nog niet tevreden. Kijk jij even mee? (De automatische fix-loop stopt hier.)"
             exit 0
           fi
           echo "run_claude=true" >> "$GITHUB_OUTPUT"
@@ -270,7 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           reviewers="DeepSeek"
-          if [ "$QWEN_RAN" = "true" ]; then reviewers="DeepSeek en $SECOND_REVIEWER"; fi
+          if [ "$QWEN_RAN" = "true" ]; then reviewers="$SECOND_REVIEWER en DeepSeek"; fi
           rounds=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
             --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body "✅ @$NOTIFY PR #$PR_NUMBER is klaar om te testen!
