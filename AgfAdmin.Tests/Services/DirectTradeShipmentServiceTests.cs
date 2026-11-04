@@ -33,7 +33,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         var result = await new DirectTradeAllocationService(db).AllocateAsync(orderId ?? _orderId, lineId ?? _boxLine, new CreateDirectTradeAllocationDto
         {
-            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = sourceLine ?? _seed.DirectTradeSourceLine, Quantity = quantity, Unit = unit, AcknowledgeExpectedSupply = true, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = sourceLine ?? _seed.DirectTradeSourceLine, Quantity = quantity, Unit = unit, AcknowledgeExpectedSupply = true
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value;
@@ -44,7 +44,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         return await new DirectTradeAllocationService(db).AllocateAsync(orderId, lineId, new CreateDirectTradeAllocationDto
         {
-            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = quantity, Unit = "box", AcknowledgeExpectedSupply = true, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = quantity, Unit = "box", AcknowledgeExpectedSupply = true
         });
     }
 
@@ -56,7 +56,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
 
     private CreateDirectTradeShipmentDto Ship(int orderVersion, params CreateDirectTradeShipmentLineDto[] lines) => new()
     {
-        RequestId = Guid.NewGuid(), ExpectedOrderVersion = orderVersion, ActorReference = "office-1", ShippedOn = new DateOnly(2026, 10, 19), Reference = "CMR-DT-1", Lines = lines.ToList()
+        RequestId = Guid.NewGuid(), ExpectedOrderVersion = orderVersion, ShippedOn = new DateOnly(2026, 10, 19), Reference = "CMR-DT-1", Lines = lines.ToList()
     };
 
     private async Task<ServiceResult<DirectTradeShipmentDto>> ShipAsync(CreateDirectTradeShipmentDto request, int? orderId = null, IBusinessCalendar calendar = null, params IInterceptor[] interceptors)
@@ -139,7 +139,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         Assert.Equal(before.PalletEvents, after.PalletEvents);
         var audit = Assert.Single(after.Events);
         var snapshot = JsonDocument.Parse(audit.NewValue).RootElement;
-        Assert.Equal((dto.RequestId, "office-1"), (audit.RequestId!.Value, audit.ActorReference));
+        Assert.Equal((dto.RequestId, "Admin"), (audit.RequestId!.Value, audit.ActorReference));
         Assert.Equal(("2026-10-19", 1, 81.4m, false, 0, "Customer T"), (snapshot.GetProperty("shippedOn").GetString(), snapshot.GetProperty("consumedAllocationCount").GetInt32(),
             snapshot.GetProperty("shippedNetWeightKg").GetDecimal(), snapshot.GetProperty("deliveryRecorded").GetBoolean(), snapshot.GetProperty("lotDeviationCount").GetInt32(), snapshot.GetProperty("customerName").GetString()));
 
@@ -361,7 +361,6 @@ public class DirectTradeShipmentServiceTests : IDisposable
     [Theory]
     [InlineData("no-request-id", "requestId")]
     [InlineData("no-order-version", "expectedOrderVersion")]
-    [InlineData("no-actor", "actorReference")]
     [InlineData("no-date", "shippedOn")]
     [InlineData("future-date", "shippedOn")]
     [InlineData("reference-too-long", "reference")]
@@ -385,7 +384,6 @@ public class DirectTradeShipmentServiceTests : IDisposable
         {
             case "no-request-id": request.RequestId = Guid.Empty; break;
             case "no-order-version": request.ExpectedOrderVersion = null; break;
-            case "no-actor": request.ActorReference = " "; break;
             case "no-date": request.ShippedOn = null; break;
             case "future-date": request.ShippedOn = Today.AddDays(1); break;
             case "reference-too-long": request.Reference = new string('x', 101); break;
@@ -494,7 +492,6 @@ public class DirectTradeShipmentServiceTests : IDisposable
                      Changed(r => r.Lines[0].LotDeviationReason = "andere reden"),
                      Changed(r => r.ShippedOn = new DateOnly(2026, 10, 18)),
                      Changed(r => r.Reference = "CMR-ANDERS"),
-                     Changed(r => r.ActorReference = "office-2"),
                      Changed(r => r.ExpectedOrderVersion = version + 5),
                  })
         {

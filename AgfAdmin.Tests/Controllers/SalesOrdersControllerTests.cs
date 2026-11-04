@@ -269,7 +269,7 @@ public class SalesOrdersControllerTests : IDisposable
         CreateDirectTradeAllocationDto Allocate(decimal quantity, bool? acknowledge = true, Guid? requestId = null, string reason = null) => new()
         {
             RequestId = requestId ?? Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = quantity, Unit = "box",
-            AcknowledgeExpectedSupply = acknowledge, ActorReference = "office-1", Reason = reason
+            AcknowledgeExpectedSupply = acknowledge, Reason = reason
         };
 
         Assert.Contains("acknowledgeExpectedSupply", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, Allocate(5m, acknowledge: false)))).Value).Errors.Keys);
@@ -303,12 +303,12 @@ public class SalesOrdersControllerTests : IDisposable
         var line = order.Lines[0];
         var allocation = Assert.IsType<StockReservationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.AllocateDirectTrade(order.Id, line.Id, new CreateDirectTradeAllocationDto
         {
-            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = 5m, Unit = "box", AcknowledgeExpectedSupply = true, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = 5m, Unit = "box", AcknowledgeExpectedSupply = true
         }))).Value);
         var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
         CreateDirectTradeShipmentDto Ship(Guid? requestId = null, decimal kg = 20.2m, DateOnly? on = null) => new()
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = current.Version, ActorReference = "office-1", ShippedOn = on ?? new DateOnly(2026, 10, 20), Reference = "CMR-1",
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = current.Version, ShippedOn = on ?? new DateOnly(2026, 10, 20), Reference = "CMR-1",
             Lines = new List<CreateDirectTradeShipmentLineDto> { new() { StockReservationId = allocation.Id, ExpectedReservationVersion = allocation.Version, Quantity = 5m, Unit = "box", NetWeightKg = kg, LotNumber = "LOT-DT-SRC" } }
         };
 

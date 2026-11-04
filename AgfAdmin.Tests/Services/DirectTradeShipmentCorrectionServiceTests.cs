@@ -47,7 +47,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return await new DirectTradeAllocationService(db).AllocateAsync(orderId, lineId, new CreateDirectTradeAllocationDto
         {
-            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = quantity, Unit = "box", AcknowledgeExpectedSupply = true, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = quantity, Unit = "box", AcknowledgeExpectedSupply = true
         });
     }
 
@@ -149,7 +149,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
 
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         var dto = result.Value;
-        Assert.Equal((shipment.Id, _orderA, "Vervoerder heeft niet geladen", "office-1", true, "SHIPMENT_DID_NOT_TAKE_PLACE", "Deze geregistreerde verzending heeft niet plaatsgevonden."),
+        Assert.Equal((shipment.Id, _orderA, "Vervoerder heeft niet geladen", "Admin", true, "SHIPMENT_DID_NOT_TAKE_PLACE", "Deze geregistreerde verzending heeft niet plaatsgevonden."),
             (dto.DirectTradeShipmentId, dto.SalesOrderId, dto.Reason, dto.ActorReference, dto.ShipmentDidNotTakePlaceConfirmed, dto.ConfirmationCode, dto.ConfirmationStatement));
         var line = Assert.Single(dto.Lines);
         Assert.Equal((shipment.Lines[0].Id, a.Id, 20m, "box", 81.4m, _seed.DirectTradeSourceLine, _lineA), (line.DirectTradeShipmentLineId, line.StockReservationId, line.Quantity, line.Unit, line.NetWeightKg, line.SupplyCommitmentLineId, line.SalesOrderLineId));
@@ -272,7 +272,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         {
             var shipped = await new DirectTradeShipmentService(db, new FixedBusinessCalendar(Today)).ShipAsync(_orderA, new CreateDirectTradeShipmentDto
             {
-                RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), ActorReference = "office-1", ShippedOn = Today,
+                RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), ShippedOn = Today,
                 Lines = allocations.Select(id => new CreateDirectTradeShipmentLineDto { StockReservationId = id, ExpectedReservationVersion = 0, Quantity = 1m, Unit = "box", NetWeightKg = 4.125m, LotNumber = "LOT-BULK" }).ToList()
             });
             Assert.Equal(ServiceResultStatus.Created, shipped.Status);
@@ -303,7 +303,6 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
     [Theory]
     [InlineData("no-request-id", "requestId")]
     [InlineData("no-order-version", "expectedOrderVersion")]
-    [InlineData("no-actor", "actorReference")]
     [InlineData("no-reason", "reason")]
     [InlineData("reason-too-long", "reason")]
     [InlineData("not-confirmed", "shipmentDidNotTakePlace")]
@@ -321,7 +320,6 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         {
             case "no-request-id": request.RequestId = Guid.Empty; break;
             case "no-order-version": request.ExpectedOrderVersion = null; break;
-            case "no-actor": request.ActorReference = " "; break;
             case "no-reason": request.Reason = "  "; break;
             case "reason-too-long": request.Reason = new string('r', 501); break;
             case "not-confirmed": request.ShipmentDidNotTakePlace = false; break;
@@ -409,7 +407,6 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         foreach (var changed in new[]
                  {
                      Changed(r => r.Reason = "andere reden"),
-                     Changed(r => r.ActorReference = "office-2"),
                      Changed(r => r.ExpectedOrderVersion = version + 3),
                      Changed(r => r.Lines[0].ExpectedReservationVersion = 7),
                  })

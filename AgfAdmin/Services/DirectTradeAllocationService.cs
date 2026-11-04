@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -23,9 +24,12 @@ namespace AgfAdmin.Services
         private static readonly JsonSerializerOptions SnapshotJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public DirectTradeAllocationService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public DirectTradeAllocationService(AppDbContext db, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
         }
 
@@ -217,7 +221,7 @@ namespace AgfAdmin.Services
             return ServiceResult<StockReservationDto>.Created(await StockReservationService.LoadDtoAsync(_db, reservation.Id, cancellationToken));
         }
 
-        private static AllocateCommand Build(int salesOrderId, int salesOrderLineId, CreateDirectTradeAllocationDto request, Dictionary<string, List<string>> errors)
+        private AllocateCommand Build(int salesOrderId, int salesOrderLineId, CreateDirectTradeAllocationDto request, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {
@@ -244,7 +248,7 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "acknowledgeExpectedSupply", "Confirm explicitly that this is expected supply: the goods are not in our warehouse and have not been shipped.");
             }
-            var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(ReservationRules.MaxActorLength);
             var reason = ValidationErrors.OptionalText(request.Reason, ReservationRules.MaxReasonLength, "reason", errors);
             if (errors.Count > 0)
             {
