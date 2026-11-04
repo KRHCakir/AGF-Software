@@ -3,6 +3,7 @@ import { PACKAGE_UNITS, PackageUnit, QualityStatus } from './availability';
 import { hasConsistentDeliveryState } from '../lib/deliveryState';
 import { isArrayOf, isNullableString, isNumber, isObject, isString, isNullableNumber } from './guards';
 import { isQualityStatus } from './inspection';
+import { type SalesBalance, type SalesLineCoverage, type SalesShortageWarning, type SupplySource, isSalesBalance, isSalesLineCoverage, isSalesShortageWarning, isSupplySource } from './salesSupply';
 
 // Exact het contract van /api/sales-orders en /api/stock-reservations (backend: AgfAdmin/DTOs/SalesOrderDtos.cs).
 // Getallen zijn decimals uit de backend; de frontend rekent er niet mee, behalve vergelijken en aftrekken voor weergave.
@@ -35,6 +36,8 @@ export interface CreateSalesOrderLineRequest {
     netWeightKg?: number;
     grossWeightKg?: number;
     weightSource?: WeightSource;
+    // Uit voorraad of uit verwachte aanvoer; weggelaten = uit voorraad als het past, anders uit verwachte aanvoer (server).
+    supplySource?: SupplySource;
 }
 
 export interface CreateSalesOrderRequest {
@@ -290,10 +293,18 @@ export interface SalesOrderLine {
     delivered: boolean;
     version: number;
     reservations: StockReservation[];
+    // Bron van de regel; ontbreekt in oudere antwoorden (dan uit voorraad).
+    supplySource?: SupplySource;
+    // Alleen bij een open order: de stand van deze variant en eenheid en de dekking van het nog niet gereserveerde deel.
+    balance?: SalesBalance | null;
+    coverage?: SalesLineCoverage | null;
+    awaitingStock?: boolean;
 }
 
 export interface SalesOrder {
     id: number;
+    // Eigen verkoopordernummer VO-jjjj-nnnn; ontbreekt in oudere antwoorden.
+    orderNumber?: string;
     requestId: string;
     customerId: number;
     customerName: string | null;
@@ -316,6 +327,11 @@ export interface SalesOrder {
     lines: SalesOrderLine[];
     // Alleen in het antwoord op aanmaken (201 en herhaling): kredietlimiet overschreden. Blokkeert nooit; ontbreekt bij GET/lijst.
     creditWarning?: SalesOrderCreditWarning | null;
+    // Alleen in het antwoord op aanmaken: meer verkocht dan voorraad en verwachte aanvoer (per variant en eenheid). Nooit blokkerend.
+    shortageWarnings?: SalesShortageWarning[] | null;
+    // Afgeleid bij een open order: Tekort (een regel is niet gedekt) en Wacht op voorraad (verkocht vóór aankomst, nog niet gereserveerd).
+    shortage?: boolean;
+    awaitingStock?: boolean;
 }
 
 export interface SalesOrderCreditWarning {
@@ -358,6 +374,10 @@ export interface ReservableStockLine {
     availableNetWeightKg: number;
     qualityStatus: QualityStatus;
     contentLineVersion: number;
+    // Herkomst voor "oudste partij eerst": ontvangstmoment en inkooporder van de partij (ontbreken in oudere antwoorden).
+    receivedAt?: string;
+    supplyCommitmentId?: number;
+    supplyOrderNumber?: string | null;
 }
 
 function isUnit(value: unknown): value is PackageUnit {
@@ -433,7 +453,11 @@ function isSalesOrderLine(value: unknown): value is SalesOrderLine {
         && isNumber(value.openQuantity)
         && typeof value.fulfilled === 'boolean'
         && isNumber(value.version)
-        && isArrayOf(value.reservations, isStockReservation);
+        && isArrayOf(value.reservations, isStockReservation)
+        && (value.supplySource === undefined || isSupplySource(value.supplySource))
+        && (value.balance === undefined || value.balance === null || isSalesBalance(value.balance))
+        && (value.coverage === undefined || value.coverage === null || isSalesLineCoverage(value.coverage))
+        && (value.awaitingStock === undefined || typeof value.awaitingStock === 'boolean');
 }
 
 export function isSalesOrder(value: unknown): value is SalesOrder {
@@ -446,6 +470,10 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && isNullableString(value.customerReference)
         && (value.internalNote === undefined || isNullableString(value.internalNote))
         && (value.creditWarning === undefined || value.creditWarning === null || isCreditWarning(value.creditWarning))
+        && (value.orderNumber === undefined || isString(value.orderNumber))
+        && (value.shortageWarnings === undefined || value.shortageWarnings === null || isArrayOf(value.shortageWarnings, isSalesShortageWarning))
+        && (value.shortage === undefined || typeof value.shortage === 'boolean')
+        && (value.awaitingStock === undefined || typeof value.awaitingStock === 'boolean')
         && isString(value.requestedDeliveryDate)
         && isString(value.actorReference)
         && isString(value.createdAt)
