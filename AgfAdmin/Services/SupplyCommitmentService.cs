@@ -472,8 +472,8 @@ namespace AgfAdmin.Services
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");
 
         // Partij bij een herhaling: vergeleken met de partij uit de oorspronkelijke aanvraag (RequestPartijKey), niet met de huidige partij
-        // van de order, want die kan na het aanmaken gekoppeld, herkoppeld of gecorrigeerd zijn. Orders van vóór die kolom: de huidige
-        // partij, zoals voorheen. De partij van de leverancier zoals andere optionele velden.
+        // van de order, want die kan na het aanmaken gekoppeld, herkoppeld of gecorrigeerd zijn. Orders van vóór die kolom: een aanvraag met
+        // partij wordt met de huidige partij vergeleken; een aanvraag zonder partij telt als de oorspronkelijke aanvraag. De partij van de leverancier zoals andere optionele velden.
         private static bool HasSamePartij(SupplyCommitment existing, SupplyCommitment candidate, CreateSupplyCommitmentDto request)
         {
             var supplierLot = string.IsNullOrWhiteSpace(request.SupplierLotReference) ? null : request.SupplierLotReference.Trim();
@@ -495,7 +495,9 @@ namespace AgfAdmin.Services
                     ? existing.Partij.Sequence != null
                     : PartijRules.NumberKey(request.NewPartij.Number) == existing.Partij.NumberKey);
             }
-            return existing.PartijId == null;
+            // Oudere order zonder RequestPartijKey en een aanvraag zonder partij: de huidige koppeling is later ontstaan
+            // (migratie of handmatig) en zegt niets over de oorspronkelijke aanvraag.
+            return true;
         }
 
         // Strikte vergelijking, inclusief de volgorde van de regels; decimals worden op waarde vergeleken (12.30 == 12.3).
