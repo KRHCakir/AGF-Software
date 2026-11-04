@@ -146,6 +146,33 @@ public class PartijOrderTests : IDisposable
     }
 
     [Fact]
+    public async Task Retry_Is_Still_The_Same_Order_After_The_Lot_Was_Linked_Or_Relinked_Later()
+    {
+        var plain = await RequestAsync();
+        var order = (await CreateAsync(plain)).Value;
+        var own = await RequestAsync(newNumber: "2610251");
+        var ownOrder = (await CreateAsync(own)).Value;
+        var other = await PartijTestData.CreateAsync(_factory, "2610261");
+
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Ok, (await new PartijService(db).LinkOrderAsync(other, new LinkPartijDto { SupplyCommitmentId = order.Id })).Status);
+            Assert.Equal(ServiceResultStatus.Ok, (await new PartijService(db).LinkOrderAsync(other, new LinkPartijDto { SupplyCommitmentId = ownOrder.Id })).Status);
+        }
+
+        var retry = await CreateAsync(plain);
+        Assert.Equal(ServiceResultStatus.Ok, retry.Status);
+        Assert.Equal(order.Id, retry.Value.Id);
+        var ownRetry = await CreateAsync(own);
+        Assert.Equal(ServiceResultStatus.Ok, ownRetry.Status);
+        Assert.Equal(ownOrder.Id, ownRetry.Value.Id);
+
+        // Een andere partij in de aanvraag blijft een conflict, ook als de order inmiddels aan die partij hangt.
+        plain.PartijId = other;
+        Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(plain)).Status);
+    }
+
+    [Fact]
     public async Task Received_Order_Without_Lot_Is_Linked_With_A_Reason_And_Keeps_Its_Lot_Numbers()
     {
         var order = (await CreateAsync(await RequestAsync())).Value;

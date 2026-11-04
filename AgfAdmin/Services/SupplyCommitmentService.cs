@@ -318,6 +318,9 @@ namespace AgfAdmin.Services
                 OrderChannel = orderChannel,
                 Note = note,
                 SupplierLotReference = supplierLotReference,
+                RequestPartijKey = request.PartijId != null ? $"id:{request.PartijId}"
+                    : request.NewPartij == null ? "none"
+                    : string.IsNullOrWhiteSpace(request.NewPartij.Number) ? "new:auto" : $"new:{PartijRules.NumberKey(request.NewPartij.Number)}",
                 CreatedAt = now,
                 UpdatedAt = now,
                 Lines = lines
@@ -463,19 +466,24 @@ namespace AgfAdmin.Services
         }
 
         private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken) =>
-            HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null) && HasSamePartij(existing, request)
+            HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null) && HasSamePartij(existing, candidate, request)
                 ? ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(existing, cancellationToken))
                 : ServiceResult<SupplyCommitmentDto>.Conflict(
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");
 
-        // Partij bij een herhaling: dezelfde bestaande partij, of een nieuwe met hetzelfde (of een voorgesteld) nummer; zonder partij in de
-        // aanvraag (ook een oudere bevroren opdracht) geen partij op de order. De partij van de leverancier zoals andere optionele velden.
-        private static bool HasSamePartij(SupplyCommitment existing, CreateSupplyCommitmentDto request)
+        // Partij bij een herhaling: vergeleken met de partij uit de oorspronkelijke aanvraag (RequestPartijKey), niet met de huidige partij
+        // van de order, want die kan na het aanmaken gekoppeld, herkoppeld of gecorrigeerd zijn. Orders van vóór die kolom: de huidige
+        // partij, zoals voorheen. De partij van de leverancier zoals andere optionele velden.
+        private static bool HasSamePartij(SupplyCommitment existing, SupplyCommitment candidate, CreateSupplyCommitmentDto request)
         {
             var supplierLot = string.IsNullOrWhiteSpace(request.SupplierLotReference) ? null : request.SupplierLotReference.Trim();
             if (!string.Equals(existing.SupplierLotReference, supplierLot, StringComparison.Ordinal))
             {
                 return false;
+            }
+            if (existing.RequestPartijKey != null)
+            {
+                return string.Equals(existing.RequestPartijKey, candidate.RequestPartijKey, StringComparison.Ordinal);
             }
             if (request.PartijId != null)
             {
