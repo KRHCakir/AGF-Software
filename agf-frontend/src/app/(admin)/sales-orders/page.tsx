@@ -348,7 +348,7 @@ function SalesWorkspace() {
                         <HydratedGate>
                             {/* Een andere voorinvulling ("Verkopen" bij een ander artikel) geeft een vers formulier; zonder voorinvulling blijft het concept staan. */}
                             <CreateSalesOrderForm key={sellPrefill === null ? 'new' : `sell:${sellPrefill.productVariantId}:${sellPrefill.unit}:${sellPrefill.quantity}`}
-                                actor={actor} customers={reference.data.customers} products={reference.data.products}
+                                customers={reference.data.customers} products={reference.data.products}
                                 prefill={sellPrefill} onSaved={onOrderSaved} onOpen={openOrder} onCancel={() => { setCreating(false); if (sellPrefill !== null) select(selectedId); }}
                                 onCustomerCreated={() => setReferenceToken((n) => n + 1)} />
                         </HydratedGate>

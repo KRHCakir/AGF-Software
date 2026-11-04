@@ -460,7 +460,7 @@ export default function SalesOrderDetail({ order, actor, onOrderChanged, onRefre
             )}
 
             {showCancel && (
-                <CancelOrderPanel key={`${order.id}:${decisionToken}`} order={order} actor={actor} onCancelled={onCancelled}
+                <CancelOrderPanel key={`${order.id}:${decisionToken}`} order={order} onCancelled={onCancelled}
                     onReload={() => void reloadForNewDecision()} onClose={() => setCancelling(false)} />
             )}
 

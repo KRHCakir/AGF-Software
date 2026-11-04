@@ -22,7 +22,7 @@ let posted: { url: string; body: string }[];
 const element = () => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <CreateSalesOrderForm actor="office-1" customers={customers} products={products} onSaved={() => {}} onOpen={() => {}} onCancel={() => {}} />
+            <CreateSalesOrderForm customers={customers} products={products} onSaved={() => {}} onOpen={() => {}} onCancel={() => {}} />
         </HydratedGate>
     </PendingCommandsProvider>
 );

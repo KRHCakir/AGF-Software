@@ -43,7 +43,7 @@ async function render(preloaded?: PendingCommand) {
     await mounted.render(
         <PendingCommandsProvider>
             <HydratedGate>
-                <CancelOrderPanel order={order} actor="office-1" onCancelled={async () => { cancelledCalls += 1; }} onReload={() => { reloads += 1; }} onClose={() => undefined} />
+                <CancelOrderPanel order={order} onCancelled={async () => { cancelledCalls += 1; }} onReload={() => { reloads += 1; }} onClose={() => undefined} />
             </HydratedGate>
         </PendingCommandsProvider>,
     );
@@ -140,7 +140,7 @@ describe('CancelOrderPanel through the component lifecycle', () => {
         await mounted.render(
             <PendingCommandsProvider>
                 <HydratedGate>
-                    <CancelOrderPanel order={order} actor="office-1" onCancelled={async () => { cancelledCalls += 1; }} onReload={() => { reloads += 1; }} onClose={() => undefined} />
+                    <CancelOrderPanel order={order} onCancelled={async () => { cancelledCalls += 1; }} onReload={() => { reloads += 1; }} onClose={() => undefined} />
                 </HydratedGate>
             </PendingCommandsProvider>,
         );

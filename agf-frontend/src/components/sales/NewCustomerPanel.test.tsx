@@ -23,7 +23,7 @@ let nextPost: () => Promise<Response>;
 const element = (onCustomerCreated?: () => void) => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <CreateSalesOrderForm actor="office-1" customers={customers} products={products} onSaved={() => {}} onOpen={() => {}} onCancel={() => {}} onCustomerCreated={onCustomerCreated} />
+            <CreateSalesOrderForm customers={customers} products={products} onSaved={() => {}} onOpen={() => {}} onCancel={() => {}} onCustomerCreated={onCustomerCreated} />
         </HydratedGate>
     </PendingCommandsProvider>
 );

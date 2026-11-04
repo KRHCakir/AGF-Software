@@ -67,8 +67,7 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
 // geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren en boven dit formulier bewaard:
 // bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
-export default function CreateSalesOrderForm({ actor, customers: knownCustomers, products, prefill = null, onSaved, onOpen, onCancel, onCustomerCreated }: {
-    actor: string;
+export default function CreateSalesOrderForm({ customers: knownCustomers, products, prefill = null, onSaved, onOpen, onCancel, onCustomerCreated }: {
     prefill?: SellPrefill | null;
     customers: CustomerOption[];
     products: ProductOption[];
@@ -190,7 +189,7 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
         let command = pending;
         if (command === null) {
             const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, lineKg[index].quantity) ?? '' })) };
-            const built = buildOrderPayload(withSources, actor, (variantId) => variants.get(variantId));
+            const built = buildOrderPayload(withSources, (variantId) => variants.get(variantId));
             if (!built.ok) {
                 setErrors(ruleErrorsToFieldErrors(built.errors, t));
                 return;
@@ -324,7 +323,6 @@ export default function CreateSalesOrderForm({ actor, customers: knownCustomers,
                 </PendingNotice>
             )}
             {error && pending === null && <ErrorNotice error={error} />}
-            <FieldError id="actorReference" messages={e('actorReference')} />
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="col-span-2">

@@ -30,7 +30,7 @@ let posted: { url: string; body: string }[];
 const element = () => (
     <PendingCommandsProvider>
         <HydratedGate>
-            <CreateSalesOrderForm actor="verkoop-1" customers={customers} products={products} prefill={{ productVariantId: 7, unit: 'colli', quantity: 50 }}
+            <CreateSalesOrderForm customers={customers} products={products} prefill={{ productVariantId: 7, unit: 'colli', quantity: 50 }}
                 onSaved={() => {}} onOpen={() => {}} onCancel={() => {}} />
         </HydratedGate>
     </PendingCommandsProvider>

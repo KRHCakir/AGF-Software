@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { CancelOrderCommand, blockedBy, cancelKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, normalizeReason } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { cancelSalesOrder } from '../../services/salesOrderService';
 import { SalesOrder } from '../../types/salesOrder';
@@ -23,9 +23,8 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 // De bevestiging toont precies welke Active reserveringen (ook on hold) de server in dezelfde transactie vrijgeeft.
 // De opdracht wordt bevroren en boven dit paneel bewaard; alleen exact dezelfde herhaling of een definitief
 // antwoord (400/404/409) rondt haar af. Bij 409 wordt herladen en opnieuw beslist.
-export default function CancelOrderPanel({ order, actor, onCancelled, onReload, onClose }: {
+export default function CancelOrderPanel({ order, onCancelled, onReload, onClose }: {
     order: SalesOrder;
-    actor: string;
     onCancelled: (order: SalesOrder) => Promise<void>;
     onReload: () => void;
     onClose: () => void;
@@ -63,10 +62,9 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
         let command = pending;
         if (command === null) {
             if (replayOnly) return;
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
-            if (!actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
-                setFieldErrors(ruleErrorsToFieldErrors([...(actorResult.ok ? [] : actorResult.errors), ...(reasonResult.ok ? [] : reasonResult.errors)], t));
+            if (!reasonResult.ok || reasonResult.value === null) {
+                setFieldErrors(ruleErrorsToFieldErrors([...(reasonResult.ok ? [] : reasonResult.errors)], t));
                 return;
             }
             setFieldErrors({});
@@ -76,7 +74,7 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
                 key: cancelKey(order.id),
                 orderId: order.id,
                 requestId,
-                payload: { requestId, expectedOrderVersion: order.version, actorReference: actorResult.value, reason: reasonResult.value },
+                payload: { requestId, expectedOrderVersion: order.version, reason: reasonResult.value },
                 display: { customerName: order.customerName ?? String(order.customerId), activeReservationCount: active.length },
                 attempts: 0,
                 lastError: null,
@@ -162,7 +160,6 @@ export default function CancelOrderPanel({ order, actor, onCancelled, onReload, 
                     aria-describedby={fieldErrors.reason ? `${idPrefix}-reason-error` : `${idPrefix}-reason-count`} className={inputClass} />
                 <span id={`${idPrefix}-reason-count`} className="block text-right text-xs text-gray-500">{reason.trim().length}/{MAX_REASON_LENGTH}</span>
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 <FieldError id={`${idPrefix}-version-error`} messages={fieldErrors.expectedOrderVersion} />
             </div>
             <p className="text-xs text-gray-700">{t('sales_cancel_based_on_version', { version: String(basedOnVersion) })}</p>

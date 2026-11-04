@@ -51,7 +51,7 @@ const orderWith = (status: 'Open' | 'Cancelled', version: number, reservations: 
 
 const frozenCancel: PendingCommand = {
     kind: 'cancel-order', key: cancelKey(4), orderId: 4, requestId: 'k-lost', attempts: 1, lastError: 'network down', frozenAt: '2026-10-19T11:59:00.000Z',
-    payload: { requestId: 'k-lost', expectedOrderVersion: 2, actorReference: 'office-1', reason: 'Klant heeft afgezegd' },
+    payload: { requestId: 'k-lost', expectedOrderVersion: 2, reason: 'Klant heeft afgezegd' },
     display: { customerName: 'Local Market Stalls', activeReservationCount: 1 },
 };
 

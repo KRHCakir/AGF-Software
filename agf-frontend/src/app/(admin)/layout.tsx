@@ -7,6 +7,7 @@ import '../globals.css';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
 import AppMenu from '../../components/AppMenu';
 import DemoAssistant from '../../components/demo/DemoAssistant';
+import { CurrentUserProvider, SignedInAs } from '../../components/shared/CurrentUserContext';
 import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
 
 function AdminLayoutContent({
@@ -61,7 +62,7 @@ function AdminLayoutContent({
                             🇳🇱
                         </button>
                     </div>
-                    <span className="hidden sm:inline">{t('user')}: <strong>Admin</strong></span>
+                    <SignedInAs className="hidden sm:block" />
                 </div>
             </header>
 
@@ -103,7 +104,9 @@ function AdminLayoutContent({
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     return (
         <LanguageProvider>
-            <AdminLayoutContent>{children}</AdminLayoutContent>
+            <CurrentUserProvider>
+                <AdminLayoutContent>{children}</AdminLayoutContent>
+            </CurrentUserProvider>
         </LanguageProvider>
     );
 }
