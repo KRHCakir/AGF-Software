@@ -1,10 +1,13 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Dunne laag: alle regels zitten in PurchaseOrderService. Aanmaken blijft POST /api/supply-commitments (Aanvoer plannen).
+    [Authorize(Policy = Permissions.Purchase)]
     [ApiController]
     [Route("api/purchase-orders")]
     public class PurchaseOrdersController : ControllerBase

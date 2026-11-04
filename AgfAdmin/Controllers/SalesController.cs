@@ -1,13 +1,16 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     public class SalesController : ControllerBase
     {

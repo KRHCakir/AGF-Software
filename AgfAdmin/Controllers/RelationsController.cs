@@ -1,11 +1,14 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Relatiewerkplek: klanten/debiteuren en leveranciers/crediteuren als één onderneming met rollen. Dunne controller op RelationService.
     [Route("api/relations")]
+    [Authorize(Policy = Permissions.MasterDataWrites)]
     [ApiController]
     public class RelationsController : ControllerBase
     {

@@ -1,12 +1,15 @@
 using AgfAdmin.Data;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize(Policy = Permissions.Purchase)]
     [ApiController]
     public class IncomingInvoicesController : ControllerBase
     {

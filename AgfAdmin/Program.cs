@@ -1,5 +1,6 @@
 using AgfAdmin.Configuration;
 using AgfAdmin.Data;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -12,6 +13,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(x => x.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
 builder.Services.AddEndpointsApiExplorer();
+// Aanmelding en rechten per gebied (voorlopig de standaardgebruiker uit Identity:DefaultUser; zie docs/rechten.md).
+builder.Services.AddAgfSecurity(builder.Configuration);
 builder.Services.AddSwaggerGen();
 
 // AI & Email Services
@@ -81,7 +84,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
- // Gebruik de default policy
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

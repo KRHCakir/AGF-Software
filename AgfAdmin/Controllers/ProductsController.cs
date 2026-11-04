@@ -1,5 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using AgfAdmin.DTOs;
@@ -7,6 +9,7 @@ using AgfAdmin.DTOs;
 namespace AgfAdmin.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize(Policy = Permissions.MasterDataWrites)]
     [ApiController]
     public class ProductsController : ControllerBase
     {
