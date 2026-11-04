@@ -17,6 +17,7 @@ import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import SubmitErrors from '../shared/SubmitErrors';
 
 type Kind = AddInvoiceRefRequest['kind'];
 const KINDS: readonly Kind[] = ['Invoice', 'CreditNote'];
@@ -142,6 +143,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
                 <div className="flex flex-wrap gap-2">
                     <button type="submit" data-tour="po-invoice-save" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('po_invoice_save')}</button>
                     <button type="button" className={secondaryButtonClass} disabled={locked} onClick={onClose}>{t('po_cancel')}</button>
+                    <SubmitErrors errors={errors} />
                 </div>
             )}
         </form>

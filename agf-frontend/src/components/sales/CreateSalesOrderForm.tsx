@@ -36,6 +36,7 @@ import NewCustomerPanel from './NewCustomerPanel';
 import { PendingNotice } from './PendingCommandsBanner';
 import { usePendingCommand, usePendingCommands } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
+import SubmitErrors from '../shared/SubmitErrors';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()] });
@@ -437,6 +438,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                     <button type="submit" data-tour="sales-save" className={primaryButtonClass} disabled={locked}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
+                    <SubmitErrors errors={errors} />
                 </div>
             )}
         </form>

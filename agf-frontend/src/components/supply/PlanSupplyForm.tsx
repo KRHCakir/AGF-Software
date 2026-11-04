@@ -33,6 +33,7 @@ import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass, lineTableClass } from './FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown, palletErrorKey } from './messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
+import SubmitErrors from '../shared/SubmitErrors';
 
 export interface ReferenceData {
     vendors: VendorOption[];
@@ -470,6 +471,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <button type="submit" data-tour="supply-save" className={primaryButtonClass} disabled={locked}>
                     {submitting ? t('supply_saving') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
                 </button>
+                <SubmitErrors errors={errors} />
             </div>
         </form>
     );

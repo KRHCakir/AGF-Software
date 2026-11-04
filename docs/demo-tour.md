@@ -74,6 +74,10 @@ Altijd tegen een aparte testdatabase, nooit tegen `agf_smoke`.
    `NEXT_PUBLIC_API_URL=http://localhost:5198/api NEXT_PUBLIC_DEMO_ASSISTANT=true NEXT_PUBLIC_DEMO_TOUR=true npx next dev -p 3001`
 4. In `agf-frontend`: `TOUR_TEST_DATABASE=agf_tour_test npm run test:tour` (ongeveer 2 minuten).
 
+   Met de rondleiding draaien ook mee: `date-field.spec.ts` (datumveld, ook `04-11-26`), `keyboard-lines.spec.ts` (een
+   orderregel met alleen Tab, pijlen en Enter) en `sales-chain.spec.ts` (verkopen gekoppeld aan voorraad, via Verkopen en
+   direct vanaf Verkooporders; maakt per run een eigen artikel met merk `E2E-…`).
+
 Standaard gebruikt de test de geïnstalleerde Google Chrome. Zonder Chrome: `npx playwright install chromium` en
 `TOUR_BROWSER_CHANNEL=chromium`. Andere adressen: `TOUR_BASE_URL` en `TOUR_API_URL`; meekijken: `TOUR_HEADED=true`.
 De set zit (nog) niet in de standaard-CI: hij heeft Postgres, de API en een draaiende frontend nodig en duurt een paar

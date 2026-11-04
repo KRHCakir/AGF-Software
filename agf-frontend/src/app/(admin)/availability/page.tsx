@@ -27,7 +27,11 @@ export default function AvailabilityPage() {
     );
 }
 
-const VIEW_STORAGE_KEY = 'agf_availability_view';
+// Versie 2: een eerder onthouden keuze (Compact of Alle kolommen) is van vóór de weergave Verkoop. Die keuze geldt niet meer, zodat
+// iedereen de nieuwe standaard Verkoop één keer ziet; een nieuwe keuze wordt weer onthouden.
+const VIEW_STORAGE_KEY = 'agf_availability_view_v2';
+// Terug naar dit tabblad (bijvoorbeeld na een verkooporder in een ander tabblad): opnieuw laden als de stand ouder is dan dit.
+const STALE_AFTER_MS = 10_000;
 
 function AvailabilityWorkspace() {
     const { t, locale } = useTranslation();
@@ -81,6 +85,17 @@ function AvailabilityWorkspace() {
     }, [reloadToken, productVariantId, route, customerId, unit]);
 
     const reload = useCallback(() => setReloadToken((n) => n + 1), []);
+
+    // Zichtbaar worden na een tijd weg: verkopen, ontvangen of keuren elders telt dan direct mee, zonder eerst Vernieuwen.
+    const generatedAt = state.status === 'ready' ? state.data.generatedAt : null;
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState !== 'visible' || generatedAt === null) return;
+            if (Date.now() - new Date(generatedAt).getTime() > STALE_AFTER_MS) reload();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
+    }, [generatedAt, reload]);
     const closeDrawer = useCallback(() => setSelection(null), []);
 
     const variants = state.status === 'ready' ? state.data.variants : null;

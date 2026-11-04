@@ -257,6 +257,8 @@
   "supply_remove_line_n": "Regel {n} verwijderen",
   "supply_add_line": "Regel toevoegen",
   "supply_saving": "Bezig met opslaan…",
+  "form_errors_next_to_save_one": "Niet opgeslagen: 1 veld klopt nog niet. Het is gemarkeerd.",
+  "form_errors_next_to_save": "Niet opgeslagen: {count} velden kloppen nog niet. Het eerste is gemarkeerd.",
   "supply_save_plan_warehouse": "Inkooporder aanmaken",
   "supply_save_plan_direct": "Klantgebonden aanvoer vastleggen",
   "supply_plan_success_warehouse": "Inkooporder #{id} aangemaakt (verwacht in het eigen magazijn)",
