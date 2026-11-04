@@ -20,7 +20,8 @@ export interface CreateReceivedWarehousePalletRequest {
 export interface AddPalletContentLineRequest {
     requestId: string;
     supplyCommitmentLineId: number;
-    lotNumber: string;
+    // Null bij een orderregel met partij: de server neemt het partijnummer over (er valt niets te typen).
+    lotNumber: string | null;
     quantity: number;
     unit: PackageUnit;
     // Weighed: netWeightKg is gewogen. Calculated: netKgPerPackage verplicht en netWeightKg = quantity × netKgPerPackage.

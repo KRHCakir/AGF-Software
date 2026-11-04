@@ -15,6 +15,10 @@ export interface PurchaseOrderListItem {
     vendorId: number;
     vendorName: string | null;
     supplierReference: string | null;
+    // Partij van de order en de partij van de leverancier (optioneel voor oudere antwoorden).
+    partijId?: number | null;
+    partijNumber?: string | null;
+    supplierLotReference?: string | null;
     orderedOn: string;
     expectedAt: string | null;
     // Herkomst afgeleid van de regels ("Peru" of "Chili, Peru"); het kopveld origin is alleen een bijschrift.
@@ -49,6 +53,8 @@ export interface PurchaseOrderLine {
     size?: string | null;
     packaging?: string | null;
     lotNumber: string | null;
+    partijId?: number | null;
+    partijNumber?: string | null;
     expectedQuantity: number;
     unit: string | null;
     expectedNetWeightKg: number | null;
@@ -70,6 +76,8 @@ export interface PurchaseOrderReceiptLine {
     productName: string | null;
     productVariantName: string | null;
     lotNumber: string;
+    partijId?: number | null;
+    partijNumber?: string | null;
     quantity: number;
     unit: string;
     netWeightKg: number;
@@ -147,6 +155,9 @@ export interface PurchaseOrderDetail {
     vendorId: number;
     vendorName: string | null;
     supplierReference: string | null;
+    partijId?: number | null;
+    partijNumber?: string | null;
+    supplierLotReference?: string | null;
     orderedOn: string;
     orderChannel: string | null;
     note: string | null;

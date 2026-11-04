@@ -1697,7 +1697,7 @@
   "po_loading": "Inkooporders laden…",
   "po_new": "Inkooporder aanmaken",
   "po_search": "Zoeken",
-  "po_search_placeholder": "Ordernr, leverancier, referentie of factuurnr",
+  "po_search_placeholder": "Ordernr, leverancier, referentie, partij of factuurnr",
   "po_filter_open": "Open",
   "po_filter_all": "Alle",
   "po_list_empty": "Geen inkooporders gevonden.",
@@ -2127,5 +2127,13 @@
   "partij_search_none": "Geen partij gevonden.",
   "partij_supplier_lot": "Partij van de leverancier",
   "partij_saved_without": "Opgeslagen zonder partij. Je kunt er later een kiezen op de inkooporder of bij de ontvangst.",
-  "partij_none_warning": "Nog geen partij. Je kunt zo opslaan en de partij later kiezen, op de inkooporder of bij de ontvangst."
+  "partij_none_warning": "Nog geen partij. Je kunt zo opslaan en de partij later kiezen, op de inkooporder of bij de ontvangst.",
+  "partij_link_none": "Inkooporder {order} heeft nog geen partij.",
+  "partij_link_open": "Partij kiezen of aanmaken",
+  "partij_link_reason": "Reden",
+  "partij_link_reason_hint": "Er is al iets ontvangen: de ontvangen pallets krijgen deze partij, met je reden in de historie. Hun lotnummer blijft staan.",
+  "partij_link_reason_required": "Geef een reden.",
+  "partij_link_save": "Partij koppelen",
+  "partij_link_cancel": "Annuleren",
+  "partij_receipt_without_hint": "Zonder partij typ je het lotnummer zelf, zoals vroeger."
 }
