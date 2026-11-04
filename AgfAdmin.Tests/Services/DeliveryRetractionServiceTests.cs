@@ -69,12 +69,12 @@ public class DeliveryRetractionServiceTests : IDisposable
 
     private static ConfirmDeliveryDto ConfirmBody(int version, Guid? requestId = null, DateOnly? on = null) => new()
     {
-        RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", DeliveredOn = on ?? Today, ReceiptReference = "CMR-1", DeliveredInFull = true
+        RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, DeliveredOn = on ?? Today, ReceiptReference = "CMR-1", DeliveredInFull = true
     };
 
-    private static RetractDeliveryDto RetractBody(int? version, Guid? requestId = null, string reason = "Verkeerde verzending aangeklikt", bool? recordedInError = true, string actor = "office-1") => new()
+    private static RetractDeliveryDto RetractBody(int? version, Guid? requestId = null, string reason = "Verkeerde verzending aangeklikt", bool? recordedInError = true) => new()
     {
-        RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = actor, Reason = reason, RecordedInError = recordedInError
+        RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, Reason = reason, RecordedInError = recordedInError
     };
 
     private async Task<ServiceResult<DeliveryConfirmationDto>> ConfirmAsync(Shipment s, ConfirmDeliveryDto body, AppDbContext db = null)
@@ -113,7 +113,7 @@ public class DeliveryRetractionServiceTests : IDisposable
             {
                 return (await new SalesDispatchCorrectionService(db).CorrectAsync(_orderId, s.Id, new CorrectSalesDispatchDto
                 {
-                    RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
+                    RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
                     Lines = s.Dispatch.Lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.StockReservationId, ExpectedReservationVersion = reservationVersion }).ToList()
                 })).Status;
             }
@@ -348,7 +348,6 @@ public class DeliveryRetractionServiceTests : IDisposable
     [Theory]
     [InlineData("no-request-id", "requestId")]
     [InlineData("no-version", "expectedOrderVersion")]
-    [InlineData("no-actor", "actorReference")]
     [InlineData("no-reason", "reason")]
     [InlineData("blank-reason", "reason")]
     [InlineData("long-reason", "reason")]
@@ -364,7 +363,6 @@ public class DeliveryRetractionServiceTests : IDisposable
         {
             case "no-request-id": body.RequestId = Guid.Empty; break;
             case "no-version": body.ExpectedOrderVersion = null; break;
-            case "no-actor": body.ActorReference = " "; break;
             case "no-reason": body.Reason = null; break;
             case "blank-reason": body.Reason = "   "; break;
             case "long-reason": body.Reason = new string('r', 501); break;
@@ -415,7 +413,7 @@ public class DeliveryRetractionServiceTests : IDisposable
 
         var retry = await RetractAsync(shipment, confirmationId, body);
         Assert.Equal((ServiceResultStatus.Ok, created.Value.Id), (retry.Status, retry.Value.Id));
-        foreach (var changed in new[] { RetractBody(version, body.RequestId, reason: "Andere reden"), RetractBody(version, body.RequestId, actor: "office-2"), RetractBody(version + 5, body.RequestId) })
+        foreach (var changed in new[] { RetractBody(version, body.RequestId, reason: "Andere reden"), RetractBody(version + 5, body.RequestId) })
         {
             Assert.Equal(ServiceResultStatus.Conflict, (await RetractAsync(shipment, confirmationId, changed)).Status);
         }

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -22,10 +23,13 @@ namespace AgfAdmin.Services
         private static readonly JsonSerializerOptions SnapshotJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
         private readonly IBusinessCalendar _calendar;
 
-        public DeliveryConfirmationService(AppDbContext db, IBusinessCalendar calendar)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public DeliveryConfirmationService(AppDbContext db, IBusinessCalendar calendar, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
             _calendar = calendar ?? db.BusinessCalendar;
         }
@@ -194,7 +198,7 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "expectedOrderVersion", "The order version the confirmation is based on is required.");
             }
-            var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(ReservationRules.MaxActorLength);
             var reference = ValidationErrors.OptionalText(request.ReceiptReference, ReservationRules.MaxReceiptReferenceLength, "receiptReference", errors);
             if (request.DeliveredInFull != true)
             {

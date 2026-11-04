@@ -31,7 +31,6 @@ public class SalesDispatchServiceTests : IDisposable
     {
         RequestId = Guid.NewGuid(),
         ExpectedOrderVersion = orderVersion,
-        ActorReference = "office-1",
         Reference = "VRB-2026-001",
         Lines = lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.Id, ExpectedReservationVersion = l.Version }).ToList()
     };
@@ -128,7 +127,7 @@ public class SalesDispatchServiceTests : IDisposable
 
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         var dto = result.Value;
-        Assert.Equal((_orderId, "VRB-2026-001", "office-1", 2), (dto.SalesOrderId, dto.Reference, dto.ActorReference, dto.Lines.Count));
+        Assert.Equal((_orderId, "VRB-2026-001", "Admin", 2), (dto.SalesOrderId, dto.Reference, dto.ActorReference, dto.Lines.Count));
         var boxLine = dto.Lines.Single(l => l.StockReservationId == r1.Id);
         Assert.Equal((10m, "box", 40m, "P-WH", "LOT-A", "Avocado", "Hass"), (boxLine.Quantity, boxLine.Unit, boxLine.NetWeightKg, boxLine.PalletReference, boxLine.LotNumber, boxLine.ProductName, boxLine.ProductVariantName));
 
@@ -266,7 +265,6 @@ public class SalesDispatchServiceTests : IDisposable
     [Theory]
     [InlineData("request-id-missing", "requestId")]
     [InlineData("version-missing", "expectedOrderVersion")]
-    [InlineData("actor-missing", "actorReference")]
     [InlineData("reference-too-long", "reference")]
     [InlineData("lines-missing", "lines")]
     [InlineData("lines-empty", "lines")]
@@ -282,7 +280,6 @@ public class SalesDispatchServiceTests : IDisposable
         {
             case "request-id-missing": request.RequestId = null; break;
             case "version-missing": request.ExpectedOrderVersion = null; break;
-            case "actor-missing": request.ActorReference = " "; break;
             case "reference-too-long": request.Reference = new string('x', 101); break;
             case "lines-missing": request.Lines = null; break;
             case "lines-empty": request.Lines = new List<CreateSalesDispatchLineDto>(); break;
@@ -422,7 +419,6 @@ public class SalesDispatchServiceTests : IDisposable
 
     [Theory]
     [InlineData("other-order")]
-    [InlineData("other-actor")]
     [InlineData("other-reference")]
     [InlineData("other-order-version")]
     [InlineData("other-reservations")]
@@ -438,7 +434,6 @@ public class SalesDispatchServiceTests : IDisposable
         switch (change)
         {
             case "other-order": (orderId, _, _) = await SalesTestData.SeedOrderAsync(_factory, _seed); break;
-            case "other-actor": request.ActorReference = "office-2"; break;
             case "other-reference": request.Reference = "VRB-OTHER"; break;
             case "other-order-version": request.ExpectedOrderVersion += 1; break;
             case "other-reservations": request.Lines.Add(new CreateSalesDispatchLineDto { StockReservationId = r2.Id, ExpectedReservationVersion = r2.Version }); break;
@@ -537,7 +532,7 @@ public class SalesDispatchServiceTests : IDisposable
         var version = (await OrderAsync()).Version;
         var first = Dispatch(version, (r.Id, r.Version));
         var second = sameRequestId
-            ? new CreateSalesDispatchDto { RequestId = first.RequestId, ExpectedOrderVersion = version, ActorReference = "office-1", Reference = "VRB-2026-001", Lines = first.Lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.StockReservationId, ExpectedReservationVersion = l.ExpectedReservationVersion }).ToList() }
+            ? new CreateSalesDispatchDto { RequestId = first.RequestId, ExpectedOrderVersion = version, Reference = "VRB-2026-001", Lines = first.Lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.StockReservationId, ExpectedReservationVersion = l.ExpectedReservationVersion }).ToList() }
             : Dispatch(version, (r.Id, r.Version));
         ServiceResultStatus inner = default;
 

@@ -64,9 +64,9 @@ public class DeliveryConfirmationServiceTests : IDisposable
     private async Task<DirectTradeShipmentDto> DirectTradeShipmentAsync(decimal quantity = 10m, decimal kg = 40.5m) =>
         await ShipAsync(_factory, _orderId, (await AllocateAsync(_factory, _orderId, _boxLine, _seed.DirectTradeSourceLine, quantity), kg, "LOT-DT-SRC"));
 
-    private ConfirmDeliveryDto Confirm(int? version, DateOnly? on = null, Guid? requestId = null, string reference = "CMR-OK-1", bool? full = true, string actor = "office-1") => new()
+    private ConfirmDeliveryDto Confirm(int? version, DateOnly? on = null, Guid? requestId = null, string reference = "CMR-OK-1", bool? full = true) => new()
     {
-        RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = actor, DeliveredOn = on ?? Today, ReceiptReference = reference, DeliveredInFull = full
+        RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, DeliveredOn = on ?? Today, ReceiptReference = reference, DeliveredInFull = full
     };
 
     private async Task<ServiceResult<DeliveryConfirmationDto>> ConfirmWarehouseAsync(int dispatchId, ConfirmDeliveryDto request, IBusinessCalendar calendar = null, params IInterceptor[] interceptors)
@@ -87,7 +87,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return await new SalesDispatchCorrectionService(db).CorrectAsync(_orderId, dispatch.Id, new CorrectSalesDispatchDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
             Lines = dispatch.Lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.StockReservationId, ExpectedReservationVersion = 1 }).ToList()
         });
     }
@@ -301,7 +301,6 @@ public class DeliveryConfirmationServiceTests : IDisposable
     [Theory]
     [InlineData("no-request-id", "requestId")]
     [InlineData("no-order-version", "expectedOrderVersion")]
-    [InlineData("no-actor", "actorReference")]
     [InlineData("not-full", "deliveredInFull")]
     [InlineData("full-missing", "deliveredInFull")]
     [InlineData("no-date", "deliveredOn")]
@@ -317,7 +316,6 @@ public class DeliveryConfirmationServiceTests : IDisposable
         {
             case "no-request-id": request.RequestId = Guid.Empty; break;
             case "no-order-version": request.ExpectedOrderVersion = null; break;
-            case "no-actor": request.ActorReference = " "; break;
             case "not-full": request.DeliveredInFull = false; break;
             case "full-missing": request.DeliveredInFull = null; break;
             case "no-date": request.DeliveredOn = null; break;
@@ -392,7 +390,6 @@ public class DeliveryConfirmationServiceTests : IDisposable
                  {
                      Confirm(version, new DateOnly(2026, 10, 19), request.RequestId),
                      Confirm(version, requestId: request.RequestId, reference: "ANDERS"),
-                     Confirm(version, requestId: request.RequestId, actor: "office-2"),
                      Confirm(version + 3, requestId: request.RequestId),
                  })
         {
@@ -596,7 +593,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
             {
                 var result = await new SalesDispatchCorrectionService(db).CorrectAsync(_orderId, dispatch!.Id, new CorrectSalesDispatchDto
                 {
-                    RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
+                    RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "Verkeerd gescand", GoodsNeverLeftWarehouse = true,
                     Lines = dispatch.Lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.StockReservationId, ExpectedReservationVersion = 1 }).ToList()
                 });
                 (loserStatus, loserMessage) = (result.Status, result.Message);

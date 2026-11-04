@@ -94,7 +94,7 @@ public class DirectTradeAllocationServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         return await new SalesDispatchService(db).DispatchAsync(_orderId, new CreateSalesDispatchDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = orderVersion, ActorReference = "office-1", Reference = "VRB-DT",
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = orderVersion, Reference = "VRB-DT",
             Lines = lines.Select(l => new CreateSalesDispatchLineDto { StockReservationId = l.Id, ExpectedReservationVersion = l.Version }).ToList()
         });
     }

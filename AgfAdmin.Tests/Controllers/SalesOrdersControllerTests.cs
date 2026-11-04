@@ -184,7 +184,7 @@ public class SalesOrdersControllerTests : IDisposable
         }))).Value);
         CreateSalesDispatchDto Dispatch(int? orderVersion, int reservationVersion, Guid? requestId = null, string reference = "VRB-1") => new()
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = orderVersion, ActorReference = "office-1", Reference = reference,
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = orderVersion, Reference = reference,
             Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = reservationVersion } }
         };
         var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
@@ -225,13 +225,13 @@ public class SalesOrdersControllerTests : IDisposable
         var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
         var dispatch = Assert.IsType<SalesDispatchDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Dispatch(order.Id, new CreateSalesDispatchDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = current.Version, ActorReference = "office-1", Reference = "VRB-1",
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = current.Version, Reference = "VRB-1",
             Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = reservation.Version } }
         }))).Value);
         current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
         CorrectSalesDispatchDto Correct(int? version, bool? confirmed = true, Guid? requestId = null, string reason = "Verkeerd gescand") => new()
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = reason, GoodsNeverLeftWarehouse = confirmed,
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, Reason = reason, GoodsNeverLeftWarehouse = confirmed,
             Lines = new List<CreateSalesDispatchLineDto> { new() { StockReservationId = reservation.Id, ExpectedReservationVersion = 1 } }
         };
 
@@ -359,7 +359,7 @@ public class SalesOrdersControllerTests : IDisposable
         var version = await DirectTradeTestFlow.OrderVersionAsync(_factory, order.Id);
         ConfirmDeliveryDto Confirm(int v, bool? full = true, Guid? requestId = null) => new()
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = v, ActorReference = "office-1", DeliveredOn = new DateOnly(2026, 10, 20), ReceiptReference = "CMR-9", DeliveredInFull = full
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = v, DeliveredOn = new DateOnly(2026, 10, 20), ReceiptReference = "CMR-9", DeliveredInFull = full
         };
 
         Assert.Contains("deliveredInFull", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.ConfirmDirectTradeDelivery(order.Id, shipment.Id, Confirm(version, false)))).Value).Errors.Keys);
@@ -386,12 +386,12 @@ public class SalesOrdersControllerTests : IDisposable
         var shipment = await DirectTradeTestFlow.ShipAsync(_factory, order.Id, (allocation, 20.2m, "LOT-DT-SRC"));
         var confirmed = Assert.IsType<DeliveryConfirmationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.ConfirmDirectTradeDelivery(order.Id, shipment.Id, new ConfirmDeliveryDto
         {
-            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version + 1, ActorReference = "office-1", DeliveredOn = new DateOnly(2026, 10, 20), DeliveredInFull = true
+            RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version + 1, DeliveredOn = new DateOnly(2026, 10, 20), DeliveredInFull = true
         }))).Value);
         var version = await DirectTradeTestFlow.OrderVersionAsync(_factory, order.Id);
         RetractDeliveryDto Body(int v, bool? inError = true, Guid? requestId = null) => new()
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = v, ActorReference = "office-1", Reason = "Verkeerde verzending", RecordedInError = inError
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = v, Reason = "Verkeerde verzending", RecordedInError = inError
         };
 
         Assert.Contains("recordedInError", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.RetractDirectTradeDelivery(order.Id, shipment.Id, confirmed.Id, Body(version, false)))).Value).Errors.Keys);
