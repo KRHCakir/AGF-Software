@@ -590,7 +590,7 @@ public class StockReservationServiceTests : IDisposable
             RequestId = Guid.NewGuid(),
             ExpectedContentLineVersion = line.Version,
             ToStatus = "Blocked",
-            ActorReference = "qc-1",
+            InspectedBy = "qc-1",
             Reason = "Claim"
         })).Status;
     }
@@ -618,7 +618,7 @@ public class StockReservationServiceTests : IDisposable
             await using var service = _factory.CreateContext(concurrent);
             block = (await new PalletService(service).ChangeQualityStatusAsync(line.PalletId, line.Id, new ChangeQualityStatusDto
             {
-                RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Blocked", ActorReference = "qc-1", Reason = "Claim"
+                RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = "Blocked", InspectedBy = "qc-1", Reason = "Claim"
             })).Status;
             reserve = inner;
         }
@@ -713,7 +713,7 @@ public class StockReservationServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return (await new PalletService(db).ChangeLogisticsStatusAsync(palletId, new ChangeLogisticsStatusDto
         {
-            RequestId = Guid.NewGuid(), ExpectedPalletVersion = version, ToStatus = "Dispatched", LocationContext = location, ActorReference = "warehouse-1"
+            RequestId = Guid.NewGuid(), ExpectedPalletVersion = version, ToStatus = "Dispatched", LocationContext = location
         })).Status;
     }
 
@@ -724,7 +724,7 @@ public class StockReservationServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         return (await new PalletService(db).ChangeLocationAsync(palletId, new ChangePalletLocationDto
         {
-            RequestId = Guid.NewGuid(), ExpectedPalletVersion = version, LocationContext = location, ActorReference = "warehouse-1"
+            RequestId = Guid.NewGuid(), ExpectedPalletVersion = version, LocationContext = location
         })).Status;
     }
 

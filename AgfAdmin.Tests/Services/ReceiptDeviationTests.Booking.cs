@@ -14,7 +14,7 @@ public sealed partial class ReceiptDeviationTests
         string reason = null, string note = null, string unit = "colli") => new()
     {
         RequestId = requestId ?? Guid.NewGuid(), SupplyCommitmentLineId = lineId, LotNumber = "LOT-ZA-1", Quantity = quantity, Unit = unit,
-        WeightMethod = "Calculated", NetKgPerPackage = 4m, ActorReference = "Kees", ReceivedProductVariantId = variant, ConfirmDeviation = confirm,
+        WeightMethod = "Calculated", NetKgPerPackage = 4m, ReceivedProductVariantId = variant, ConfirmDeviation = confirm,
         DeviationReason = reason, DeviationReasonNote = note
     };
 
@@ -126,7 +126,7 @@ public sealed partial class ReceiptDeviationTests
         Assert.Equal(_v.SouthAfrica, result.Value.ProductVariantId);
 
         var deviation = Assert.Single(deviations);
-        Assert.Equal((_orderId, _lineId, replacement.Id, result.Value.Id, "Origin", 10m, 10m, "colli", "SupplierDeliveredDifferently", "Kees"),
+        Assert.Equal((_orderId, _lineId, replacement.Id, result.Value.Id, "Origin", 10m, 10m, "colli", "SupplierDeliveredDifferently", "Admin"),
             (deviation.SupplyCommitmentId, deviation.OriginalLineId, deviation.NewLineId, deviation.PalletContentLineId, deviation.Kinds, deviation.Quantity, deviation.ReducedQuantity, deviation.Unit, deviation.Reason, deviation.ActorReference));
         Assert.Contains("\"origin\":\"Peru\"", deviation.ExpectedVariantSnapshot);
         Assert.Contains("\"origin\":\"Zuid-Afrika\"", deviation.ReceivedVariantSnapshot);

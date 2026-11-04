@@ -186,7 +186,7 @@ public class PurchaseOrderRejectionTests : IDisposable
         var stored = await db.PalletContentLines.AsNoTracking().SingleAsync(c => c.Id == content);
         var release = await new PalletService(db).ChangeQualityStatusAsync(stored.PalletId, content, new ChangeQualityStatusDto
         {
-            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = stored.Version, ToStatus = "Approved", ActorReference = "Jan", Reason = "Korting afgesproken"
+            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = stored.Version, ToStatus = "Approved", InspectedBy = "Jan", Reason = "Korting afgesproken"
         });
         Assert.Equal(ServiceResultStatus.Ok, release.Status);
         var after = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = seed.HassId })).Value.Variants.Single().WarehouseSupply.Single();

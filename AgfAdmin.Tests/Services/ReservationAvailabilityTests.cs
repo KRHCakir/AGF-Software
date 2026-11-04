@@ -173,7 +173,7 @@ public class ReservationAvailabilityTests : IDisposable
         await using var db = _factory.CreateContext();
         return (await new PalletService(db).ChangeQualityStatusAsync(line.PalletId, line.Id, new ChangeQualityStatusDto
         {
-            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = to, ActorReference = "qc-1", Reason = reason
+            RequestId = Guid.NewGuid(), ExpectedContentLineVersion = line.Version, ToStatus = to, InspectedBy = "qc-1", Reason = reason
         })).Status;
     }
 

@@ -193,6 +193,7 @@ namespace AgfAdmin.DTOs
         public DateTime OccurredAt { get; set; }
         public string Type { get; set; }      // Ordered, Received, QualityChanged, InvoiceRecorded, CreditNoteRecorded, Rejected, DeviationRecorded
         public string ActorReference { get; set; }
+        public string InspectedBy { get; set; } // QualityChanged: wie het product keurde (naast de ingelogde gebruiker)
         public string Reference { get; set; } // leveranciersreferentie, pallet of factuurnummer
         public string Channel { get; set; }   // Ordered
         public decimal? Quantity { get; set; }

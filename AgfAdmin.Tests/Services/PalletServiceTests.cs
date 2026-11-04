@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -82,7 +83,6 @@ public class PalletServiceTests : IDisposable
         LogisticsStatus = "Received",
         LocationContext = "Warehouse",
         WarehouseLocation = "COLD-01",
-        ActorReference = "office-1",
         Reason = "Arrival scan"
     };
 
@@ -90,8 +90,7 @@ public class PalletServiceTests : IDisposable
     {
         Reference = reference,
         LogisticsStatus = "Expected",
-        LocationContext = "Supplier",
-        ActorReference = "office-1"
+        LocationContext = "Supplier"
     };
 
     // Voor tests over brutogrenzen en het ongewijzigd opslaan van gewichten: een bronregel zonder verwacht kg, zodat de
@@ -110,7 +109,6 @@ public class PalletServiceTests : IDisposable
         Quantity = 40m,
         Unit = "box",
         NetWeightKg = 160.125m,
-        ActorReference = "warehouse-1",
         Reason = "Counted on arrival"
     };
 
@@ -257,7 +255,7 @@ public class PalletServiceTests : IDisposable
         Assert.Null(auditEvent.OldValue);
         Assert.Contains("PAL-001", auditEvent.NewValue);
         Assert.Contains("Received", auditEvent.NewValue);
-        Assert.Equal("office-1", auditEvent.ActorReference);
+        Assert.Equal(CurrentUser.Default.DisplayName, auditEvent.ActorReference);
         Assert.Equal("Arrival scan", auditEvent.Reason);
         Assert.True((DateTime.UtcNow - auditEvent.OccurredAt).Duration() < TimeSpan.FromMinutes(1));
     }
@@ -313,8 +311,7 @@ public class PalletServiceTests : IDisposable
         Reference = "   ",
         LogisticsStatus = "Received",
         LocationContext = "Warehouse",
-        WarehouseLocation = "DOCK-1",
-        ActorReference = null
+        WarehouseLocation = "DOCK-1"
     };
 
     [Fact]
@@ -333,7 +330,7 @@ public class PalletServiceTests : IDisposable
         var auditEvent = await verify.PalletAuditEvents.SingleAsync();
         Assert.Contains(result.Value.Reference, auditEvent.NewValue);
         Assert.Contains("ReferenceGenerated", auditEvent.NewValue, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(auditEvent.ActorReference);
+        Assert.Equal(CurrentUser.Default.DisplayName, auditEvent.ActorReference);
         Assert.Equal(pallet.RequestId, auditEvent.RequestId);
     }
 
@@ -420,40 +417,49 @@ public class PalletServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Receipt_Without_Actor_Stores_Null_Actor_And_Never_Invents_One()
+    public async Task Receipt_Records_The_Signed_In_User_As_Actor()
     {
         var seed = await SeedAsync();
-        var palletRequest = PalletRequest();
-        palletRequest.ActorReference = " ";
-        var palletId = await CreatedPalletIdAsync(palletRequest);
-        var content = ContentRequest(seed.WarehouseLine);
-        content.ActorReference = null;
+        var palletId = await CreatedPalletIdAsync(PalletRequest());
 
-        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, content)).Status);
+        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, ContentRequest(seed.WarehouseLine))).Status);
 
         await using var verify = _factory.CreateContext();
         var events = await verify.PalletAuditEvents.OrderBy(e => e.Id).ToListAsync();
         Assert.Equal(2, events.Count);
-        Assert.All(events, e => Assert.Null(e.ActorReference));
+        Assert.All(events, e => Assert.Equal(CurrentUser.Default.DisplayName, e.ActorReference));
     }
 
     [Fact]
-    public async Task Quality_Decision_Still_Requires_Actor()
+    public async Task Quality_Decision_Requires_The_Inspector_And_Records_Inspector_And_Signed_In_User()
     {
         var seed = await SeedAsync();
         var palletId = await CreatedPalletIdAsync(PalletRequest());
         var line = (await AddContentAsync(palletId, ContentRequest(seed.WarehouseLine))).Value;
-
-        await using var db = _factory.CreateContext();
-        var result = await CreateService(db).ChangeQualityStatusAsync(palletId, line.Id, new ChangeQualityStatusDto
+        var admin = new CurrentUser("id-admin", "Admin", new[] { "Admin" }, Permissions.All);
+        ChangeQualityStatusDto Approve(string inspector) => new()
         {
             RequestId = Guid.NewGuid(),
             ExpectedContentLineVersion = line.Version,
             ToStatus = "Approved",
-            ActorReference = "  "
-        });
+            InspectedBy = inspector
+        };
 
-        AssertValidation(result, "actorReference");
+        await using (var db = _factory.CreateContext())
+        {
+            AssertValidation(await new PalletService(db, admin).ChangeQualityStatusAsync(palletId, line.Id, Approve("  ")), "inspectedBy");
+            AssertValidation(await new PalletService(db, admin).ChangeQualityStatusAsync(palletId, line.Id, Approve(null)), "inspectedBy");
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Ok, (await new PalletService(db, admin).ChangeQualityStatusAsync(palletId, line.Id, Approve(" Jan "))).Status);
+        }
+
+        await using var verify = _factory.CreateContext();
+        var decision = await verify.PalletAuditEvents.SingleAsync(e => e.EventType == PalletService.QualityStatusChangedEvent);
+        Assert.Equal(("Jan", "Admin"), (decision.InspectedBy, decision.ActorReference));
+        var history = (await new PalletService(verify).GetAuditEventsAsync(palletId)).Value.Single(e => e.EventType == PalletService.QualityStatusChangedEvent);
+        Assert.Equal(("Jan", "Admin"), (history.InspectedBy, history.ActorReference));
     }
 
     // ---- Gewichtsmethode: gewogen of berekend uit verpakkingsgewicht ----
@@ -568,7 +574,6 @@ public class PalletServiceTests : IDisposable
         var retryRequest = PalletRequest();
         retryRequest.Reference = " PAL-001 ";
         retryRequest.GrossKg = 425.50m;
-        retryRequest.ActorReference = "office-2";
         var retry = await CreatePalletAsync(retryRequest);
 
         Assert.Equal(ServiceResultStatus.Ok, retry.Status);
@@ -647,7 +652,6 @@ public class PalletServiceTests : IDisposable
     [InlineData("gross-too-large", "grossKg")]
     [InlineData("declared-zero", "declaredNetKg")]
     [InlineData("gross-below-tare", "grossKg")]
-    [InlineData("actor-too-long", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Create_Pallet_Rejects_Invalid_Input_And_Stores_Nothing(string invalidCase, string expectedErrorKey)
     {
@@ -681,7 +685,6 @@ public class PalletServiceTests : IDisposable
             case "gross-too-large": request.GrossKg = 1_000_000_000_000_000m; break;
             case "declared-zero": request.DeclaredNetKg = 0m; break;
             case "gross-below-tare": request.GrossKg = 24.999m; break;
-            case "actor-too-long": request.ActorReference = new string('A', 101); break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
         }
 
@@ -732,7 +735,7 @@ public class PalletServiceTests : IDisposable
         Assert.Contains("LOT-6A", auditEvent.NewValue);
         Assert.Contains("160.125", auditEvent.NewValue);
         Assert.Contains("Quarantine", auditEvent.NewValue);
-        Assert.Equal("warehouse-1", auditEvent.ActorReference);
+        Assert.Equal(CurrentUser.Default.DisplayName, auditEvent.ActorReference);
         Assert.Equal("Counted on arrival", auditEvent.Reason);
     }
 
@@ -796,7 +799,6 @@ public class PalletServiceTests : IDisposable
     [InlineData("unit-kg", "unit")]
     [InlineData("unit-capitalised", "unit")]
     [InlineData("unit-pallet", "unit")]
-    [InlineData("actor-too-long", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Add_ContentLine_Rejects_Invalid_Input_And_Stores_Nothing(string invalidCase, string expectedErrorKey)
     {
@@ -823,7 +825,6 @@ public class PalletServiceTests : IDisposable
             case "unit-kg": request.Unit = "kg"; break;
             case "unit-capitalised": request.Unit = "Box"; break;
             case "unit-pallet": request.Unit = "pallet"; break;
-            case "actor-too-long": request.ActorReference = new string('A', 101); break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
         }
 

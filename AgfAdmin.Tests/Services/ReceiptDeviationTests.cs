@@ -124,7 +124,7 @@ internal static class PalletServiceTestExtensions
     {
         var result = await service.CreateAsync(new CreatePalletDto
         {
-            RequestId = Guid.NewGuid(), LogisticsStatus = "Received", LocationContext = "Warehouse", ActorReference = "Kees"
+            RequestId = Guid.NewGuid(), LogisticsStatus = "Received", LocationContext = "Warehouse"
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value.Id;
