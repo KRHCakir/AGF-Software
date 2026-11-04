@@ -375,7 +375,6 @@ namespace AgfAdmin.DTOs
         public decimal? Quantity { get; set; }
         public string Unit { get; set; }
         public bool? AcknowledgeExpectedSupply { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 
@@ -384,7 +383,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         // Kalenderdatum (yyyy-MM-dd) zonder tijdstip; niet na vandaag in Europe/Amsterdam.
         public DateOnly? ShippedOn { get; set; }
         public string Reference { get; set; }
@@ -432,7 +430,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedOrderVersion { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
         public bool? ShipmentDidNotTakePlace { get; set; }
         public List<CreateSalesDispatchLineDto> Lines { get; set; }

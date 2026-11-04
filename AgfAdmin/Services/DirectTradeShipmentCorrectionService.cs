@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -23,9 +24,12 @@ namespace AgfAdmin.Services
         private static readonly JsonSerializerOptions SnapshotJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public DirectTradeShipmentCorrectionService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public DirectTradeShipmentCorrectionService(AppDbContext db, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
         }
 
@@ -193,7 +197,7 @@ namespace AgfAdmin.Services
             return ServiceResult<DirectTradeShipmentCorrectionDto>.Created(ToDto(await Query().SingleAsync(c => c.Id == correction.Id, cancellationToken)));
         }
 
-        private static CorrectCommand Build(int salesOrderId, int shipmentId, CorrectDirectTradeShipmentDto request, Dictionary<string, List<string>> errors)
+        private CorrectCommand Build(int salesOrderId, int shipmentId, CorrectDirectTradeShipmentDto request, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {
@@ -208,7 +212,7 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "expectedOrderVersion", "The order version the correction is based on is required.");
             }
-            var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(ReservationRules.MaxActorLength);
             var reason = ValidationErrors.RequiredText(request.Reason, ReservationRules.MaxReasonLength, "reason", errors);
             if (request.ShipmentDidNotTakePlace != true)
             {

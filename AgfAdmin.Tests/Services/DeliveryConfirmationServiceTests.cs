@@ -496,7 +496,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
                 await using var db = _factory.CreateContext();
                 inner = (await new DirectTradeAllocationService(db).AllocateAsync(_orderId, _boxLine, new CreateDirectTradeAllocationDto
                 {
-                    RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = 5m, Unit = "box", AcknowledgeExpectedSupply = true, ActorReference = "office-1"
+                    RequestId = Guid.NewGuid(), SupplyCommitmentLineId = _seed.DirectTradeSourceLine, Quantity = 5m, Unit = "box", AcknowledgeExpectedSupply = true
                 })).Status;
             }
         });

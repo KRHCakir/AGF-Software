@@ -26,14 +26,13 @@ public class DirectTradeAllocationServiceTests : IDisposable
         (_orderId, _boxLine, _colliLine) = await SalesTestData.SeedOrderAsync(_factory, _seed, boxQuantity, colliQuantity);
     }
 
-    private static CreateDirectTradeAllocationDto Allocate(int sourceLineId, decimal quantity, string unit = "box", Guid? requestId = null, string reason = null, bool? acknowledge = true, string actor = "office-1") => new()
+    private static CreateDirectTradeAllocationDto Allocate(int sourceLineId, decimal quantity, string unit = "box", Guid? requestId = null, string reason = null, bool? acknowledge = true) => new()
     {
         RequestId = requestId ?? Guid.NewGuid(),
         SupplyCommitmentLineId = sourceLineId,
         Quantity = quantity,
         Unit = unit,
         AcknowledgeExpectedSupply = acknowledge,
-        ActorReference = actor,
         Reason = reason
     };
 
@@ -163,7 +162,7 @@ public class DirectTradeAllocationServiceTests : IDisposable
         var events = after.OrderEvents.Where(e => e.EventType == "DirectTradeAllocated").ToList();
         Assert.Equal(2, events.Count);
         var snapshot = Snapshot(events[0].NewValue);
-        Assert.Equal((first.Value.RequestId, "office-1", "Klant wil rechtstreeks"), (events[0].RequestId, events[0].ActorReference, events[0].Reason));
+        Assert.Equal((first.Value.RequestId, "Admin", "Klant wil rechtstreeks"), (events[0].RequestId, events[0].ActorReference, events[0].Reason));
         Assert.Equal((10m, "box", true, 90m, _seed.DirectTradeSourceLine, _seed.CustomerId),
             (snapshot.GetProperty("quantity").GetDecimal(), snapshot.GetProperty("unit").GetString(), snapshot.GetProperty("expectedSupplyAcknowledgedByUser").GetBoolean(),
                 snapshot.GetProperty("remainingAfter").GetDecimal(), snapshot.GetProperty("supplyCommitmentLineId").GetInt32(), snapshot.GetProperty("customerId").GetInt32()));
@@ -316,7 +315,6 @@ public class DirectTradeAllocationServiceTests : IDisposable
     [InlineData("unit-case", "unit")]
     [InlineData("ack-false", "acknowledgeExpectedSupply")]
     [InlineData("ack-missing", "acknowledgeExpectedSupply")]
-    [InlineData("no-actor", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Invalid_Input_Is_Rejected_With_The_Field_Key_And_Changes_Nothing(string invalidCase, string key)
     {
@@ -332,7 +330,6 @@ public class DirectTradeAllocationServiceTests : IDisposable
             case "unit-case": request.Unit = "Box"; break;
             case "ack-false": request.AcknowledgeExpectedSupply = false; break;
             case "ack-missing": request.AcknowledgeExpectedSupply = null; break;
-            case "no-actor": request.ActorReference = " "; break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
         }
 
@@ -376,7 +373,6 @@ public class DirectTradeAllocationServiceTests : IDisposable
                  {
                      Allocate(_seed.DirectTradeSourceLine, 11m, requestId: requestId, reason: "r"),
                      Allocate(_seed.DirectTradeSourceLine, 10m, requestId: requestId, reason: "other"),
-                     Allocate(_seed.DirectTradeSourceLine, 10m, requestId: requestId, reason: "r", actor: "office-2"),
                      Allocate(_seed.DirectTradeColliSourceLine, 10m, requestId: requestId, reason: "r")
                  })
         {
