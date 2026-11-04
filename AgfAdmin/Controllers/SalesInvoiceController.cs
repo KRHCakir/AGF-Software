@@ -1,3 +1,5 @@
+using AgfAdmin.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AgfAdmin.Data;
 using AgfAdmin.Models;
@@ -9,6 +11,7 @@ using QuestPDF.Infrastructure;
 
 namespace AgfAdmin.Controllers
 {
+    [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     [Route("api/[controller]")] // Wordt automatisch bereikbaar via /api/SalesInvoice
     [EnableCors("AllowFrontend")]

@@ -1,10 +1,13 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Dunne laag: landenlijst en eigen aliassen (CountryService). De landen zelf zijn vast en worden hier nooit gewijzigd.
+    [Authorize(Policy = Permissions.MasterDataWrites)]
     [ApiController]
     [Route("api/countries")]
     public class CountriesController : ControllerBase

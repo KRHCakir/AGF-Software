@@ -1,10 +1,13 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Dunne laag: alle regels zitten in ISupplyCommitmentService.
+    [Authorize(Policy = Permissions.Purchase)]
     [ApiController]
     [Route("api/supply-commitments")]
     public class SupplyCommitmentsController : ControllerBase

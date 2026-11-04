@@ -1,11 +1,14 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Nieuwe invoerwerkplek voor inkoopfacturen. Financieel én administratief: raakt nooit voorraad, pallets of kwaliteit.
     [Route("api/purchase-invoices")]
+    [Authorize(Policy = Permissions.Purchase)]
     [ApiController]
     public class PurchaseInvoicesController : ControllerBase
     {

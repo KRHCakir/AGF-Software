@@ -1,10 +1,13 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Alleen lezen: overzicht en drill-down van beschikbaarheid. Geen verkoop, reservering of voorraadmutatie.
+    [Authorize(Policy = Permissions.Stock)]
     [ApiController]
     [Route("api/availability")]
     public class AvailabilityController : ControllerBase

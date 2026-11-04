@@ -1,9 +1,12 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
+    [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     [Route("api/stock-reservations")]
     public class StockReservationsController : ControllerBase

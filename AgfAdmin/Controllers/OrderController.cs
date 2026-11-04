@@ -1,3 +1,5 @@
+using AgfAdmin.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AgfAdmin.Data;
 using AgfAdmin.Models;
@@ -10,6 +12,7 @@ using Microsoft.AspNetCore.Cors;
 
 namespace AgfAdmin.Controllers
 {
+    [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     [Route("api/[controller]")]
     [EnableCors("AllowFrontend")]

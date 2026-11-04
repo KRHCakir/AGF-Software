@@ -1,3 +1,5 @@
+using AgfAdmin.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using AgfAdmin.Data;
@@ -6,6 +8,7 @@ using AgfAdmin.Models;
 
 namespace AgfAdmin.Controllers
 {
+    [Authorize(Policy = Permissions.Stock)]
     [ApiController]
     [Route("api/[controller]")]
     public class InventoryController : ControllerBase

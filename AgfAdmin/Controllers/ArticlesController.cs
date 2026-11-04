@@ -1,11 +1,14 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Artikelwerkplek: beheer van Products/ProductVariants met duidelijke labels. De bestaande api/products blijft bestaan.
     [Route("api/articles")]
+    [Authorize(Policy = Permissions.MasterDataWrites)]
     [ApiController]
     public class ArticlesController : ControllerBase
     {

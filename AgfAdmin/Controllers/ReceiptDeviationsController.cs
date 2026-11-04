@@ -1,9 +1,12 @@
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Alleen lezen: kiezen van het werkelijk ontvangen artikel en wat "Ja, klopt" zou doen. Boeken gaat via POST /api/pallets/{id}/content-lines.
+    [Authorize(Policy = Permissions.Purchase)]
     [ApiController]
     [Route("api/supply-commitment-lines/{lineId:int}")]
     public class ReceiptDeviationsController : ControllerBase

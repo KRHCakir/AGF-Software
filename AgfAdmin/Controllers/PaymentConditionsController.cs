@@ -1,11 +1,14 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Betalingscondities (stamgegevens). Dunne controller op PaymentConditionService.
     [Route("api/payment-conditions")]
+    [Authorize(Policy = Permissions.MasterDataWrites)]
     [ApiController]
     public class PaymentConditionsController : ControllerBase
     {

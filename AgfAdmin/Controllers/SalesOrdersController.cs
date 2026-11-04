@@ -1,10 +1,13 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Dunne laag voor de schone verkoopflow. Raakt nooit de legacy /api/order-endpoints.
+    [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     [Route("api/sales-orders")]
     public class SalesOrdersController : ControllerBase

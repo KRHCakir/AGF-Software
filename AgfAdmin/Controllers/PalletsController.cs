@@ -1,10 +1,13 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgfAdmin.Controllers
 {
     // Dunne laag: alle regels zitten in IPalletService. Wijzigingen gaan via expliciete commando's, nooit via PUT/PATCH.
+    [Authorize(Policy = Permissions.Stock)]
     [ApiController]
     [Route("api/pallets")]
     public class PalletsController : ControllerBase
@@ -42,6 +45,8 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> ChangeLocation(int id, [FromBody] ChangePalletLocationDto request) =>
             this.ToActionResult(await _service.ChangeLocationAsync(id, request, HttpContext?.RequestAborted ?? default));
 
+        // Keuren vraagt naast Voorraad ook Keuring (beide beleidsregels gelden).
+        [Authorize(Policy = Permissions.Inspection)]
         [HttpPost("{id:int}/content-lines/{lineId:int}/quality-status")]
         public async Task<IActionResult> ChangeQualityStatus(int id, int lineId, [FromBody] ChangeQualityStatusDto request) =>
             this.ToActionResult(await _service.ChangeQualityStatusAsync(id, lineId, request, HttpContext?.RequestAborted ?? default));
