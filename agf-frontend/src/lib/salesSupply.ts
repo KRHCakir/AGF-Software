@@ -95,6 +95,11 @@ export function palletEquivalent(quantity: number, packagesPerPallet: number | n
     return Math.round((quantity / packagesPerPallet) * 10) / 10;
 }
 
+// Hoe een verkooporder heet: het eigen VO-nummer, of #id bij een ouder antwoord zonder nummer.
+export function orderLabel(order: { id: number; orderNumber?: string | null }): string {
+    return order.orderNumber ?? `#${order.id}`;
+}
+
 // "verwacht 05-11": dag en maand in de eigen tijdzone (zoals het datumveld dd-mm-jjjj); een onleesbare datum blijft de tekst.
 export function dayMonth(iso: string): string {
     const date = new Date(iso);

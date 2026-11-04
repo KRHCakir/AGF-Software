@@ -6,6 +6,7 @@ import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
 import { formatKgOneDecimal } from '../../lib/quantityKg';
 import { orderProgress } from '../../lib/salesOrderRules';
+import { orderLabel } from '../../lib/salesSupply';
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
@@ -64,13 +65,20 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                 <td className="px-2 py-1.5 align-top">
                                     <button type="button" onClick={() => onSelect(order.id)}
                                         className="text-left font-medium text-blue-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        aria-label={t('sales_open_order', { id: String(order.id), customer: order.customerName ?? '' })}
+                                        aria-label={t('sales_open_order', { id: orderLabel(order), customer: order.customerName ?? '' })}
                                         aria-current={selected ? 'true' : undefined}>
-                                        #{order.id} · {order.customerName ?? t('availability_unknown')}
+                                        {orderLabel(order)} · {order.customerName ?? t('availability_unknown')}
                                     </button>
                                     <span className="block text-xs text-gray-600">
                                         {order.customerReference ? `${t('sales_reference_short')} ${order.customerReference}` : t('sales_no_reference')}
                                     </span>
+                                    {/* Indicatoren van verkopen vóór aankomst: Tekort (niet gedekt door voorraad of verwachte aanvoer) en Wacht op voorraad. */}
+                                    {order.status === 'Open' && (order.shortage || order.awaitingStock) && (
+                                        <span className="mt-1 flex flex-wrap gap-1">
+                                            {order.shortage && <span className="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-800" data-testid="order-shortage">{t('sales_shortage')}</span>}
+                                            {order.awaitingStock && <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-testid="order-awaiting-stock">{t('sales_awaiting_stock')}</span>}
+                                        </span>
+                                    )}
                                     {order.status !== 'Open' && (
                                         <span className="mt-1 block">
                                             <OrderStatusBadge status={order.status} />
