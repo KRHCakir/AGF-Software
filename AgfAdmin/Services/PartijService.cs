@@ -121,6 +121,14 @@ namespace AgfAdmin.Services
                 var built = await BuildNewAsync<PartijSummaryDto>(request.Number, "number", cancellationToken);
                 if (built.Refused != null)
                 {
+                    // Een gelijktijdige herhaling van dezelfde aanvraag kan de partij net hebben opgeslagen: dan is dit een replay, geen nummerconflict.
+                    var raced = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.RequestId == request.RequestId, cancellationToken);
+                    if (raced != null)
+                    {
+                        return SameRequest(raced, request.Number, note)
+                            ? ServiceResult<PartijSummaryDto>.Ok(await SummaryAsync(raced, cancellationToken))
+                            : ServiceResult<PartijSummaryDto>.Conflict($"RequestId {request.RequestId} was already used for lot {raced.Number}.");
+                    }
                     return built.Refused;
                 }
                 built.Partij.RequestId = request.RequestId;
