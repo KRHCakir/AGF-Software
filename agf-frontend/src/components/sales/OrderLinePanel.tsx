@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
-import { AllocateDirectTradeCommand, ReserveCommand, allocateKey, blockedBy, releaseKey, reserveKey } from '../../lib/pendingCommands';
+import { AllocateDirectTradeCommand, ReserveBatchCommand, ReserveCommand, allocateKey, blockedBy, releaseKey, reserveBatchKey, reserveKey } from '../../lib/pendingCommands';
 import { isDirectTradeAllocation, lineProgress } from '../../lib/salesOrderRules';
 import { toApiError } from '../../services/apiClient';
 import { AvailabilitySnapshot, getAvailabilitySnapshot } from '../../services/salesOrderService';
@@ -23,6 +23,7 @@ import { DirectTradeCorrectedBadge, DirectTradeShippedBadge, ExpectedAllocationB
 import ReservableStockTable from './ReservableStockTable';
 import ReserveForm from './ReserveForm';
 import LineSupplyInfo from './LineSupplyInfo';
+import FifoReserveForm from './FifoReserveForm';
 
 const th = 'px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
 const td = 'px-2 py-1.5 align-top';
@@ -37,17 +38,20 @@ interface Notice {
 // magazijnvoorraad en toewijzen van verwachte, klantgebonden DirectTrade-aanvoer. Na elke geslaagde schrijfactie worden de
 // order, de keuzelijsten en de beschikbaarheid opnieuw geladen. Een onafgerond commando op deze regel wordt altijd getoond
 // en blokkeert elk nieuw commando op dezelfde regel.
-export default function OrderLinePanel({ order, line, actor, readOnly, onOrderChanged }: {
+export default function OrderLinePanel({ order, line, actor, readOnly, onOrderChanged, openFifo = false }: {
     order: SalesOrder;
     line: SalesOrderLine;
     actor: string;
     readOnly: boolean;
     onOrderChanged: () => Promise<boolean>;
+    // Vanuit de werklijst "Verkocht, wacht op voorraad": het FIFO-voorstel van deze regel staat meteen open.
+    openFifo?: boolean;
 }) {
     const { t, locale } = useTranslation();
     const { commands } = usePendingCommands();
     const [choosing, setChoosing] = useState(false);
     const [allocating, setAllocating] = useState(false);
+    const [fifo, setFifo] = useState(openFifo);
     const [selected, setSelected] = useState<ReservableStockLine | null>(null);
     const [selectedSupply, setSelectedSupply] = useState<DirectTradeSupplyLine | null>(null);
     const [releasingId, setReleasingId] = useState<number | null>(null);
@@ -61,9 +65,12 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
     const lineBlock = blockedBy(commands, { kind: 'line', orderId: order.id, lineId: line.id });
     const pendingReserve = (commands[reserveKey(order.id, line.id)] as ReserveCommand | undefined) ?? null;
     const pendingAllocate = (commands[allocateKey(order.id, line.id)] as AllocateDirectTradeCommand | undefined) ?? null;
+    const pendingBatch = (commands[reserveBatchKey(order.id, line.id)] as ReserveBatchCommand | undefined) ?? null;
     const canStart = !readOnly && line.openQuantity > 0 && lineBlock === null;
     const showChooser = choosing || pendingReserve !== null;
     const showAllocator = allocating || pendingAllocate !== null;
+    // Oudste partij eerst: open zolang gekozen (of vanuit de werklijst) en de regel nog vraag heeft, of zolang er een bevroren opdracht is.
+    const showFifo = pendingBatch !== null || (fifo && canStart);
 
     const reload = useCallback(async () => {
         setReloadFailed(false);
@@ -90,6 +97,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
 
     const onReserved = async (saved: SaveResult<StockReservation>) => {
         setChoosing(false);
+        await afterWrite('reserved', saved.replayed);
+    };
+
+    const onFifoReserved = async (saved: SaveResult<StockReservation[]>) => {
+        setFifo(false);
         await afterWrite('reserved', saved.replayed);
     };
 
@@ -351,9 +363,12 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
             </div>
 
             <div className="border-t border-gray-200 px-3 py-2">
-                {!showChooser && !showAllocator && (
+                {!showChooser && !showAllocator && !showFifo && (
                     <div className="flex flex-wrap items-center gap-2">
-                        <button type="button" data-tour="sales-choose-stock" className={primaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
+                        <button type="button" data-tour="sales-reserve-fifo" className={primaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setFifo(true); }}>
+                            {t('sales_fifo_start')}
+                        </button>
+                        <button type="button" data-tour="sales-choose-stock" className={secondaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
                             {t('sales_choose_stock')}
                         </button>
                         <button type="button" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} disabled={!canStart} onClick={() => { setNotice(null); setAllocating(true); }}>
@@ -368,7 +383,11 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                         )}
                     </div>
                 )}
-                {showChooser && (
+                {showFifo && (
+                    <FifoReserveForm key={`${line.version}:${decisionToken}`} orderId={order.id} line={line} actor={actor}
+                        onSucceeded={onFifoReserved} onReload={() => void reload()} onCancel={() => setFifo(false)} />
+                )}
+                {showChooser && !showFifo && (
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-semibold text-gray-900">{t('sales_stock_title')}</h4>

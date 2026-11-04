@@ -9,6 +9,7 @@ export function pendingLabel(command: PendingCommand, t: (key: string, variables
         case 'create-order': return t('sales_pending_create', { customer: command.display.customerName });
         case 'create-customer': return t('sales_pending_customer', { name: command.display.name });
         case 'reserve': return t('sales_pending_reserve', { pallet: command.display.palletReference, lot: command.display.lotNumber, id: String(command.orderId), product: command.display.productLabel });
+        case 'reserve-batch': return t('sales_pending_reserve_batch', { count: String(command.display.palletCount), quantity: String(command.display.quantity), id: String(command.orderId), product: command.display.productLabel });
         case 'allocate-direct-trade': return t('sales_pending_allocate', { source: command.display.sourceLabel, id: String(command.orderId), product: command.display.productLabel });
         case 'release': return t('sales_pending_release', { pallet: command.display.palletReference, lot: command.display.lotNumber, id: String(command.orderId), product: command.display.productLabel });
         case 'cancel-order': return t('sales_pending_cancel', { id: String(command.orderId), customer: command.display.customerName, count: String(command.display.activeReservationCount) });
