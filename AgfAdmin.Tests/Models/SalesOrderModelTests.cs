@@ -165,10 +165,14 @@ public class SalesOrderModelTests : IDisposable
         Assert.Equal(18, line.FindProperty(nameof(SalesOrderLine.Quantity))!.GetPrecision());
         Assert.Equal(3, line.FindProperty(nameof(SalesOrderLine.Quantity))!.GetScale());
 
-        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Single().Name == nameof(SalesOrder.RequestId)).IsUnique);
-        var lineIndex = Assert.Single(line.GetIndexes(), i => i.Properties.Count == 3);
+        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Count == 1 && i.Properties[0].Name == nameof(SalesOrder.RequestId)).IsUnique);
+        // Verkoopordernummer: uniek als tekst en als jaar + volgnummer.
+        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Count == 1 && i.Properties[0].Name == nameof(SalesOrder.OrderNumber)).IsUnique);
+        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Count == 2).IsUnique);
+        // Eén regel per variant + eenheid + bron: een gesplitste regel (deel uit voorraad, rest verwacht) zijn twee regels.
+        var lineIndex = Assert.Single(line.GetIndexes(), i => i.Properties.Count == 4);
         Assert.True(lineIndex.IsUnique);
-        Assert.Equal(new[] { nameof(SalesOrderLine.SalesOrderId), nameof(SalesOrderLine.ProductVariantId), nameof(SalesOrderLine.Unit) }, lineIndex.Properties.Select(p => p.Name));
+        Assert.Equal(new[] { nameof(SalesOrderLine.SalesOrderId), nameof(SalesOrderLine.ProductVariantId), nameof(SalesOrderLine.Unit), nameof(SalesOrderLine.SupplySource) }, lineIndex.Properties.Select(p => p.Name));
         Assert.True(Assert.Single(reservation.GetIndexes(), i => i.Properties.Single().Name == nameof(StockReservation.RequestId)).IsUnique);
         Assert.True(Assert.Single(reservation.GetIndexes(), i => i.Properties.Single().Name == nameof(StockReservation.ReleaseRequestId)).IsUnique);
 
@@ -273,7 +277,7 @@ public class SalesOrderModelTests : IDisposable
         Assert.Equal(DeleteBehavior.Restrict, Assert.Single(entity.GetForeignKeys()).DeleteBehavior);
         Assert.Equal(2000, entity.FindProperty(nameof(SalesOrderAuditEvent.NewValue))!.GetMaxLength());
         var order = meta.Model.FindEntityType(typeof(SalesOrder))!;
-        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Single().Name == nameof(SalesOrder.CancelRequestId)).IsUnique);
+        Assert.True(Assert.Single(order.GetIndexes(), i => i.Properties.Count == 1 && i.Properties[0].Name == nameof(SalesOrder.CancelRequestId)).IsUnique);
         Assert.Equal(500, order.FindProperty(nameof(SalesOrder.CancelReason))!.GetMaxLength());
     }
 

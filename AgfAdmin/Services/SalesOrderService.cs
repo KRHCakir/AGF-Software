@@ -27,19 +27,35 @@ namespace AgfAdmin.Services
             _db = db;
         }
 
+        // Pogingen bij een gelijktijdig toegekend verkoopordernummer (unieke index op jaar + volgnummer); daarna een echte fout.
+        public const int MaxOrderNumberAttempts = 5;
+
         public async Task<ServiceResult<SalesOrderDto>> CreateAsync(CreateSalesOrderDto request, CancellationToken cancellationToken = default)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                var (result, numberTaken) = await TryCreateAsync(request, cancellationToken);
+                if (!numberTaken || attempt >= MaxOrderNumberAttempts)
+                {
+                    return result ?? throw new InvalidOperationException($"No free sales order number after {attempt} attempts.");
+                }
+                _db.ChangeTracker.Clear();
+            }
+        }
+
+        private async Task<(ServiceResult<SalesOrderDto> Result, bool NumberTaken)> TryCreateAsync(CreateSalesOrderDto request, CancellationToken cancellationToken)
         {
             var errors = new Dictionary<string, List<string>>();
             var candidate = Build(request, errors);
             if (errors.Count > 0)
             {
-                return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
+                return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
             }
 
             var existing = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return await WithCreditWarningAsync(ResultForRetry(existing, candidate), cancellationToken);
+                return (await WithCreditWarningAsync(ResultForRetry(existing, candidate), cancellationToken), false);
             }
 
             // Nieuwe invoer: hele pallets (na de replaycontrole, zodat een eerder opgeslagen opdracht nog steeds herkend wordt).
@@ -50,18 +66,18 @@ namespace AgfAdmin.Services
             }
             if (errors.Count > 0)
             {
-                return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
+                return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
             }
 
             var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
             if (customerState == null)
             {
-                return ServiceResult<SalesOrderDto>.NotFound($"Customer {candidate.CustomerId} does not exist.");
+                return (ServiceResult<SalesOrderDto>.NotFound($"Customer {candidate.CustomerId} does not exist."), false);
             }
             if (!customerState.IsActive)
             {
                 // Inactieve relatie: historie blijft leesbaar, maar een nieuwe order wordt expliciet geweigerd (nooit stilzwijgend).
-                return ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {candidate.CustomerId} belongs to an inactive relation; reactivate the relation first or choose another customer." } });
+                return (ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {candidate.CustomerId} belongs to an inactive relation; reactivate the relation first or choose another customer." } }), false);
             }
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
             var known = await _db.ProductVariants.Where(v => variantIds.Contains(v.Id))
@@ -69,13 +85,13 @@ namespace AgfAdmin.Services
             var missing = variantIds.Except(known.Keys).Cast<int?>().FirstOrDefault();
             if (missing != null)
             {
-                return ServiceResult<SalesOrderDto>.NotFound($"Product variant {missing} does not exist.");
+                return (ServiceResult<SalesOrderDto>.NotFound($"Product variant {missing} does not exist."), false);
             }
             var archived = known.Values.FirstOrDefault(v => v.IsArchived);
             if (archived != null)
             {
                 var index = lines.FindIndex(l => l.ProductVariantId == archived.Id);
-                return ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { [$"lines[{index}].productVariantId"] = new[] { ArticleRules.ArchivedMessage(archived.Id) } });
+                return (ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { [$"lines[{index}].productVariantId"] = new[] { ArticleRules.ArchivedMessage(archived.Id) } }), false);
             }
 
             // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
@@ -87,28 +103,57 @@ namespace AgfAdmin.Services
             }
             if (errors.Count > 0)
             {
-                return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
+                return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
             }
 
+            // Bron per regel: weggelaten is uit voorraad (zoals alle bestaande regels).
+            ResolveSources(lines, errors);
+            if (errors.Count > 0)
+            {
+                return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
+            }
+
+            // Het ordernummer kent AppDbContext bij opslaan toe (volgende vrije in het jaar). Een gelijktijdige aanmaak kan hetzelfde
+            // nummer kiezen; de unieke index weigert dan de tweede en CreateAsync probeert het opnieuw met een nieuw nummer.
             _db.SalesOrders.Add(candidate);
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException exception)
             {
                 // Gelijktijdige retry: de unieke index op RequestId heeft het tweede verzoek geweigerd.
                 _db.ChangeTracker.Clear();
                 var concurrent = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
-                if (concurrent == null)
+                if (concurrent != null)
                 {
-                    throw;
+                    return (await WithCreditWarningAsync(ResultForRetry(concurrent, candidate), cancellationToken), false);
                 }
-                return await WithCreditWarningAsync(ResultForRetry(concurrent, candidate), cancellationToken);
+                // Anders bezette het nummer een gelijktijdige andere order: opnieuw met het volgende nummer.
+                if (DbErrors.IsUniqueViolation(exception))
+                {
+                    return (null, true);
+                }
+                throw;
             }
 
             var created = await OrderQuery().SingleAsync(o => o.Id == candidate.Id, cancellationToken);
-            return await WithCreditWarningAsync(ServiceResult<SalesOrderDto>.Created(ToDto(created)), cancellationToken);
+            return (await WithCreditWarningAsync(ServiceResult<SalesOrderDto>.Created(ToDto(created)), cancellationToken), false);
+        }
+
+        // Vult een weggelaten bron in (uit voorraad). Daarna mag dezelfde variant + eenheid + bron maar één keer voorkomen.
+        private static void ResolveSources(List<SalesOrderLine> lines, Dictionary<string, List<string>> errors)
+        {
+            var seen = new HashSet<(int, string, string)>();
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                line.SupplySource ??= SalesSupplyRules.SourceStock;
+                if (!seen.Add((line.ProductVariantId, line.Unit, line.SupplySource)))
+                {
+                    ValidationErrors.Add(errors, $"lines[{i}]", "The same product variant, unit and source occur more than once.");
+                }
+            }
         }
 
         // Kredietsignaal bij aanmaken: openstaand bedrag boven de kredietlimiet van de klant -> waarschuwing in het antwoord, nooit blokkeren.
@@ -157,7 +202,7 @@ namespace AgfAdmin.Services
             }
             else
             {
-                var seen = new HashSet<(int, string)>();
+                var seen = new HashSet<(int, string, string)>();
                 for (var i = 0; i < request.Lines.Count; i++)
                 {
                     var key = $"lines[{i}]";
@@ -185,18 +230,24 @@ namespace AgfAdmin.Services
                     var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.Quantity, key, "quantity", errors, ValidationErrors.Add);
                     // Kg optioneel: positief, bruto >= netto; een bron alleen met kg (zonder bron = Entered).
                     var weightSource = LineWeightRules.Validate(line.NetWeightKg, line.GrossWeightKg, line.WeightSource, key, "netWeightKg", "grossWeightKg", errors, ValidationErrors.Add);
+                    if (line.SupplySource != null && !SalesSupplyRules.IsSource(line.SupplySource))
+                    {
+                        ValidationErrors.Add(errors, $"{key}.supplySource", $"Supply source must be one of: {string.Join(", ", SalesSupplyRules.Sources)}.");
+                    }
                     if (errors.Count > before || total == null)
                     {
                         continue;
                     }
-                    // Eén regel per variant + eenheid: anders worden reserveringen dubbelzinnig.
-                    if (!seen.Add((line.ProductVariantId!.Value, line.Unit)))
+                    // Eén regel per variant + eenheid + bron: anders worden reserveringen dubbelzinnig. Een weggelaten bron wordt pas bij
+                    // aanmaken ingevuld (ResolveSources controleert daarna opnieuw).
+                    if (!seen.Add((line.ProductVariantId!.Value, line.Unit, line.SupplySource)))
                     {
-                        ValidationErrors.Add(errors, key, "The same product variant and unit occur more than once.");
+                        ValidationErrors.Add(errors, key, "The same product variant, unit and source occur more than once.");
                         continue;
                     }
+                    // SupplySource blijft null als de aanvrager er geen opgaf: de replayvergelijking accepteert dan elke opgeslagen bron.
                     lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet, LoosePackages = line.LoosePackages,
-                        NetWeightKg = line.NetWeightKg, GrossWeightKg = line.GrossWeightKg, WeightSource = weightSource });
+                        NetWeightKg = line.NetWeightKg, GrossWeightKg = line.GrossWeightKg, WeightSource = weightSource, SupplySource = line.SupplySource });
                 }
             }
 
@@ -226,7 +277,7 @@ namespace AgfAdmin.Services
         }
 
         // Strikt: klant, genormaliseerde referentie, leverdatum (UTC, microseconden), actor en de regels in volgorde (met kg en bron;
-        // een oudere opdracht zonder kg komt overeen met een regel zonder kg).
+        // een oudere opdracht zonder kg komt overeen met een regel zonder kg; zonder opgegeven verkoopbron telt elke opgeslagen bron).
         private static ServiceResult<SalesOrderDto> ResultForRetry(SalesOrder existing, SalesOrder candidate)
         {
             var existingLines = existing.Lines.OrderBy(l => l.Id).ToList();
@@ -246,6 +297,7 @@ namespace AgfAdmin.Services
                     && pair.First.NetWeightKg == pair.Second.NetWeightKg
                     && pair.First.GrossWeightKg == pair.Second.GrossWeightKg
                     && string.Equals(pair.First.WeightSource, pair.Second.WeightSource, StringComparison.Ordinal)
+                    && (pair.Second.SupplySource == null || string.Equals(pair.First.SupplySource, pair.Second.SupplySource, StringComparison.Ordinal))
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
             return same
@@ -306,6 +358,18 @@ namespace AgfAdmin.Services
             var query = OrderQuery();
             if (filter.CustomerId != null) query = query.Where(o => o.CustomerId == filter.CustomerId);
             if (filter.Status != null) query = query.Where(o => o.Status == filter.Status);
+            if (!string.IsNullOrWhiteSpace(filter.Q))
+            {
+                // Deel van de tekst, hoofdletterongevoelig (ToLower werkt in PostgreSQL en SQLite): VO-nummer, klantreferentie, klant,
+                // artikel (soort of variant) en partij (van een reservering op een pallet of van de inkoopregel).
+                var q = filter.Q.Trim().ToLower();
+                query = query.Where(o => o.OrderNumber.ToLower().Contains(q)
+                    || (o.CustomerReference != null && o.CustomerReference.ToLower().Contains(q))
+                    || o.Customer.Name.ToLower().Contains(q)
+                    || o.Lines.Any(l => l.ProductVariant.Name.ToLower().Contains(q) || l.ProductVariant.Product.Name.ToLower().Contains(q)
+                        || l.Reservations.Any(r => (r.PalletContentLine != null && r.PalletContentLine.LotNumber.ToLower().Contains(q))
+                            || (r.SupplyCommitmentLine.LotNumber != null && r.SupplyCommitmentLine.LotNumber.ToLower().Contains(q)))));
+            }
             var orders = await query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id).Take(ReservationRules.MaxListResults).ToListAsync(cancellationToken);
             var actors = await CancelledByAsync(orders.Where(o => o.Status == ReservationRules.OrderStatusCancelled).Select(o => o.Id).ToList(), cancellationToken);
             var corrections = await CorrectionIdsAsync(orders.Select(o => o.Id).ToList(), cancellationToken);
@@ -679,6 +743,7 @@ namespace AgfAdmin.Services
         internal static SalesOrderDto ToDto(SalesOrder order, string cancelledBy = null, IReadOnlyDictionary<int, int> correctionIds = null) => new()
         {
             Id = order.Id,
+            OrderNumber = order.OrderNumber,
             RequestId = order.RequestId,
             CustomerId = order.CustomerId,
             CustomerName = order.Customer?.Name,
@@ -718,6 +783,7 @@ namespace AgfAdmin.Services
                     NetWeightKg = line.NetWeightKg,
                     GrossWeightKg = line.GrossWeightKg,
                     WeightSource = line.WeightSource,
+                    SupplySource = line.SupplySource,
                     ReservedQuantity = reservedQuantity,
                     ReservedNetWeightKg = active.Sum(r => r.NetWeightKg ?? 0m),
                     AllocatedQuantity = allocatedQuantity,

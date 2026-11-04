@@ -27,21 +27,29 @@ namespace AgfAdmin.DTOs
         public decimal? NetWeightKg { get; set; }
         public decimal? GrossWeightKg { get; set; }
         public string WeightSource { get; set; }
+        // Stock (uit voorraad) of Expected (uit verwachte aanvoer). Weggelaten: uit voorraad als het past, anders uit verwachte aanvoer.
+        // Stock met meer dan er vrij op voorraad is: 409 (splitsen of uit verwachte aanvoer kiezen).
+        public string SupplySource { get; set; }
     }
 
     public sealed class SalesOrderFilter
     {
         public int? CustomerId { get; set; }
         public string Status { get; set; }
+        // Zoeken (hoofdletterongevoelig, deel van de tekst) op VO-nummer, klantreferentie, klant, artikel en partij.
+        public string Q { get; set; }
     }
 
     public sealed class SalesOrderDto
     {
         public int Id { get; set; }
+        // Eigen verkoopordernummer VO-jjjj-nnnn.
+        public string OrderNumber { get; set; }
         public Guid RequestId { get; set; }
         public int CustomerId { get; set; }
         public string CustomerName { get; set; }
         public string Status { get; set; }
+        // Ordernummer van de klant (optioneel).
         public string CustomerReference { get; set; }
         public string InternalNote { get; set; }
         public DateTime RequestedDeliveryDate { get; set; }
@@ -99,6 +107,8 @@ namespace AgfAdmin.DTOs
         public decimal? NetWeightKg { get; set; }
         public decimal? GrossWeightKg { get; set; }
         public string WeightSource { get; set; }
+        // Stock (uit voorraad) of Expected (uit verwachte aanvoer, verkocht vóór aankomst).
+        public string SupplySource { get; set; }
         // Alleen Active Physical verkoopreserveringen (magazijnvoorraad); nooit omgerekend.
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }
