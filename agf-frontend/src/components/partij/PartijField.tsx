@@ -51,22 +51,38 @@ export default function PartijField({ value, suggestion, exists, disabled, error
     const [search, setSearch] = useState('');
     const [found, setFound] = useState<PartijTotals[] | null>(null);
 
+    const [searchFailed, setSearchFailed] = useState(false);
+    const [retry, setRetry] = useState(0);
+    const checkController = useRef<AbortController | null>(null);
+
     useEffect(() => {
         if (!picking) return;
         const controller = new AbortController();
         const timer = window.setTimeout(() => {
+            setSearchFailed(false);
             listPartijen({ query: search, status: 'all', page: 1, pageSize: 10 }, controller.signal)
-                .then((list) => setFound(list.items))
-                .catch(() => setFound([]));
+                .then((list) => { if (!controller.signal.aborted) setFound(list.items); })
+                .catch(() => {
+                    if (controller.signal.aborted) return;
+                    setFound([]);
+                    setSearchFailed(true);
+                });
         }, search.trim() === '' ? 0 : 150);
         return () => { window.clearTimeout(timer); controller.abort(); };
-    }, [picking, search]);
+    }, [picking, search, retry]);
+
+    // Een lopende dubbelcontrole vervalt zodra de gebruiker het nummer wijzigt, een partij kiest of het veld verlaat.
+    useEffect(() => () => checkController.current?.abort(), []);
 
     // Dubbelcontrole bij het verlaten van het veld; het voorstel zelf is per definitie vrij (de server kiest bij botsing het volgende).
     const check = async () => {
+        checkController.current?.abort();
         if (value.kind !== 'own' || partijNumberKey(value.number) === null) return;
+        const controller = new AbortController();
+        checkController.current = controller;
         try {
-            const existing = await findPartijByNumber(value.number);
+            const existing = await findPartijByNumber(value.number, controller.signal);
+            if (controller.signal.aborted) return;
             if (existing !== null) onExists(existing);
         } catch {
             // Geen antwoord: de server controleert bij opslaan opnieuw en geeft dan dezelfde vraag.
@@ -74,6 +90,7 @@ export default function PartijField({ value, suggestion, exists, disabled, error
     };
 
     const chooseExisting = (partij: PartijSummary | PartijTotals) => {
+        checkController.current?.abort();
         onExists(null);
         setPicking(false);
         onChange({ kind: 'existing', number: partij.number, partij });
@@ -90,7 +107,7 @@ export default function PartijField({ value, suggestion, exists, disabled, error
             <div className="flex flex-wrap items-center gap-2">
                 <input {...fieldProps('partij', errors)} ref={input} data-tour="supply-partij" value={value.number} maxLength={MAX_PARTIJ_NUMBER_LENGTH}
                     disabled={disabled || value.kind === 'existing'} aria-describedby="partij-hint"
-                    onChange={(event) => { onExists(null); onChange(choiceFromText(event.target.value, suggestion)); }}
+                    onChange={(event) => { checkController.current?.abort(); onExists(null); onChange(choiceFromText(event.target.value, suggestion)); }}
                     onBlur={() => { void check(); }} className={`${inputClass} !w-40 font-mono`} />
                 {value.kind === 'existing' ? (
                     <button type="button" className={secondaryButtonClass} disabled={disabled} data-tour="supply-partij-clear"
@@ -121,7 +138,12 @@ export default function PartijField({ value, suggestion, exists, disabled, error
                     <input id="partij-search-input" autoFocus value={search} onChange={(event) => setSearch(event.target.value)} className={inputClass}
                         onKeyDown={(event) => { if (event.key === 'Escape') setPicking(false); }} />
                     {found === null ? <p className="mt-1 text-xs text-gray-600">{t('supply_open_loading')}</p>
-                        : found.length === 0 ? <p className="mt-1 text-xs text-gray-600">{t('partij_search_none')}</p>
+                        : searchFailed ? (
+                            <div role="alert" className="mt-1 text-xs text-red-700">
+                                <p>{t('partij_search_failed')}</p>
+                                <button type="button" className={secondaryButtonClass} onClick={() => { setFound(null); setRetry((n) => n + 1); }}>{t('partij_search_retry')}</button>
+                            </div>
+                        ) : found.length === 0 ? <p className="mt-1 text-xs text-gray-600">{t('partij_search_none')}</p>
                             : (
                                 <ul className="mt-1 divide-y divide-gray-200 rounded border border-gray-200 bg-white">
                                     {found.map((partij) => (

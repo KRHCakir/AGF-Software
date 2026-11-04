@@ -2125,6 +2125,8 @@
   "partij_other_number": "Ander nummer",
   "partij_search": "Zoek op partijnummer, product of leverancier",
   "partij_search_none": "Geen partij gevonden.",
+  "partij_search_failed": "Zoeken mislukt. Probeer het opnieuw.",
+  "partij_search_retry": "Opnieuw proberen",
   "partij_supplier_lot": "Partij van de leverancier",
   "partij_saved_without": "Opgeslagen zonder partij. Je kunt er later een kiezen op de inkooporder of bij de ontvangst.",
   "partij_none_warning": "Nog geen partij. Je kunt zo opslaan en de partij later kiezen, op de inkooporder of bij de ontvangst."

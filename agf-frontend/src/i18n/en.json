@@ -2125,6 +2125,8 @@
   "partij_other_number": "Other number",
   "partij_search": "Search by lot number, product or supplier",
   "partij_search_none": "No lot found.",
+  "partij_search_failed": "Search failed. Please try again.",
+  "partij_search_retry": "Try again",
   "partij_supplier_lot": "Supplier's lot",
   "partij_saved_without": "Saved without a lot. You can choose one later on the purchase order or at receipt.",
   "partij_none_warning": "No lot yet. You can save like this and choose the lot later, on the purchase order or at receipt."
