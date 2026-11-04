@@ -448,7 +448,7 @@ function isCorrectDispatchPayload(value: unknown, requestId: string): value is C
         && new Set(value.lines.map((line: { stockReservationId: number }) => line.stockReservationId)).size === value.lines.length;
 }
 
-// Eén regel, met versie, hoeveelheid en kg; reden en besluit uit de vaste lijsten; actor verplicht.
+// Eén regel, met versie, hoeveelheid en kg; reden en besluit uit de vaste lijsten.
 function isRejectReceiptPayload(value: unknown, requestId: string, palletContentLineId: number): value is RejectRequest {
     return isRecord(value)
         && value.requestId === requestId
@@ -456,21 +456,19 @@ function isRejectReceiptPayload(value: unknown, requestId: string, palletContent
         && ['ReturnToSupplier', 'ClaimDiscount', 'Dispose'].includes(value.decision as string)
         && isBoundedNullableText(value.explanation, 500)
         && (value.reason !== 'Other' || value.explanation !== null)
-        && isText(value.actorReference)
         && Array.isArray(value.lines) && value.lines.length === 1
         && value.lines.every((line: unknown) => isRecord(line) && line.palletContentLineId === palletContentLineId
             && isNonNegativeInt(line.expectedContentLineVersion) && isPositiveAmount(line.quantity) && isPositiveAmount(line.netWeightKg));
 }
 
-// Nummer verplicht en begrensd; datum yyyy-MM-dd of leeg; bedrag een eindig getal of leeg; actor optioneel.
+// Nummer verplicht en begrensd; datum yyyy-MM-dd of leeg; bedrag een eindig getal of leeg.
 function isInvoiceRefPayload(value: unknown, requestId: string): value is AddInvoiceRefRequest {
     return isRecord(value)
         && value.requestId === requestId
         && (value.kind === 'Invoice' || value.kind === 'CreditNote')
         && isText(value.invoiceNumber) && (value.invoiceNumber as string).length <= 100
         && (value.invoiceDate === null || (typeof value.invoiceDate === 'string' && DATE_ONLY.test(value.invoiceDate)))
-        && (value.amountExclVat === null || (typeof value.amountExclVat === 'number' && Number.isFinite(value.amountExclVat)))
-        && isBoundedNullableText(value.actorReference, 100);
+        && (value.amountExclVat === null || (typeof value.amountExclVat === 'number' && Number.isFinite(value.amountExclVat)));
 }
 
 function isBoundedNullableText(value: unknown, max: number): value is string | null {

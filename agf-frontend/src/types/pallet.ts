@@ -14,8 +14,6 @@ export interface CreateReceivedWarehousePalletRequest {
     logisticsStatus: 'Received';
     locationContext: 'Warehouse';
     warehouseLocation: string | null;
-    // Optioneel bij ontvangst; null blijft null in de audit (nooit een verzonnen naam).
-    actorReference: string | null;
     reason: string | null;
 }
 
@@ -31,7 +29,6 @@ export interface AddPalletContentLineRequest {
     netWeightKg: number;
     // GGN van deze partij (13 cijfers als tekst) zoals op de regel gekozen: voorstel uit het artikel, aangepast of leeggemaakt (null).
     ggn: string | null;
-    actorReference: string | null;
     reason: string | null;
     // Afwijkende ontvangst: de werkelijk ontvangen variant (null = de variant van de bronregel) en de bevestiging "Ja, klopt".
     receivedProductVariantId?: number | null;

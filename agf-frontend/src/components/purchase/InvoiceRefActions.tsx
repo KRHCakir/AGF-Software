@@ -17,7 +17,6 @@ import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { useActorReference } from '../supply/useActorReference';
 
 type Kind = AddInvoiceRefRequest['kind'];
 const KINDS: readonly Kind[] = ['Invoice', 'CreditNote'];
@@ -51,7 +50,6 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
     kind: Kind; orderId: number; orderNumber: string; label: string; onClose: () => void; onDone: (order: PurchaseOrderDetail) => void;
 }) {
     const { t } = useTranslation();
-    const [actor] = useActorReference();
     const [pending, setPending, clearPending] = usePendingCommand<InvoiceRefCommand>(invoiceRefKey(orderId, kind));
     const frozen = pending?.payload;
     const [number, setNumber] = useState(frozen?.invoiceNumber ?? '');
@@ -80,7 +78,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
             const requestId = newRequestId();
             command = {
                 kind: 'invoice-ref', key: invoiceRefKey(orderId, kind), orderId, requestId,
-                payload: { requestId, kind, invoiceNumber, invoiceDate: date === '' ? null : date, amountExclVat: parsed === null ? null : parsed.value, actorReference: actor.trim() === '' ? null : actor.trim() },
+                payload: { requestId, kind, invoiceNumber, invoiceDate: date === '' ? null : date, amountExclVat: parsed === null ? null : parsed.value },
                 display: { orderNumber }, attempts: 0, lastError: null, frozenAt: new Date().toISOString(),
             };
             setPending(command);

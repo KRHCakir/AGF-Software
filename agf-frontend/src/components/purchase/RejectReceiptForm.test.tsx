@@ -39,7 +39,6 @@ const save = () => click(mounted.button('supply_retry_same') ?? mounted.button('
 
 describe('RejectReceiptForm', () => {
     beforeEach(() => {
-        window.localStorage.setItem('agf_actor_reference', 'Steve');
         window.sessionStorage.clear();
         answers = [];
         posted = stubFetch({ onGet: () => json(404, {}), nextPost: () => (answers.shift() ?? (async () => json(500, {})))() });
@@ -76,7 +75,7 @@ describe('RejectReceiptForm', () => {
         const body = JSON.parse(posted[0].body);
         assert.equal(body.decision, 'Dispose');
         assert.equal(body.explanation, 'Schimmel');
-        assert.equal(body.actorReference, 'Steve');
+        assert.equal(body.actorReference, undefined, 'who rejects is the signed-in user on the server');
         assert.deepEqual(body.lines[0], { palletContentLineId: 41, expectedContentLineVersion: 0, quantity: 5, netWeightKg: 20 });
     });
 

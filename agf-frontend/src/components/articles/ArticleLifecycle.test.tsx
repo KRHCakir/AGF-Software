@@ -27,17 +27,15 @@ const dialog = () => doc().querySelector<HTMLElement>('[data-testid="article-del
 
 describe('ArticleLifecycle', () => {
     beforeEach(() => {
-        window.localStorage.setItem('agf_actor_reference', 'Jan');
         answer = async () => json(500, {});
         posted = stubFetch({ onGet: () => json(200, usage), nextPost: () => answer() });
         mounted = new Mounted();
     });
     afterEach(async () => {
         await mounted.unmount();
-        window.localStorage.removeItem('agf_actor_reference');
     });
 
-    test('an article in use cannot be deleted: the button is off and says why; archiving is offered and sends who did it', async () => {
+    test('an article in use cannot be deleted: the button is off and says why; archiving is offered and sends no employee name', async () => {
         usage = { articleId: 7, canDelete: false, usages: [{ kind: 'receipts', count: 3 }], message: 'Dit artikel is gebruikt in 3 ontvangsten' };
         let changed: Article | null = null;
         await mounted.render(<ArticleLifecycle article={article} onChanged={(saved) => { changed = saved; }} onDeleted={() => {}} />);
@@ -51,7 +49,7 @@ describe('ArticleLifecycle', () => {
         await click(button('articles_archive'));
         await mounted.waitFor(() => changed !== null, 'archived');
         assert.equal(posted[0].url.endsWith('/articles/7/archive'), true);
-        assert.deepEqual(JSON.parse(posted[0].body), { actorReference: 'Jan' });
+        assert.deepEqual(JSON.parse(posted[0].body), {}, 'who archives is the signed-in user on the server');
     });
 
     test('an unused article asks first with the full name; Cancel has the focus and Escape cancels; Yes deletes', async () => {

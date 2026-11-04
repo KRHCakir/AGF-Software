@@ -146,15 +146,13 @@ const PALLET_FIELD_KEYS: Record<string, string> = {
     requestId: 'general',
     sscc: 'pallet.sscc',
     warehouseLocation: 'pallet.warehouseLocation',
-    actorReference: 'actorReference',
 };
 
 const LINE_FIELD_KEYS = ['lotNumber', 'quantity', 'netWeightKg', 'netKgPerPackage', 'weightMethod', 'unit', 'supplyCommitmentLineId', 'ggn'];
 
 // Pallet ontvangen in het eigen magazijn: altijd Received + Warehouse, inhoud start altijd in Quarantine.
 // Bronnen zijn uitsluitend geplande Warehouse-aanvoerregels met een bekende eenheid.
-export default function ReceivePalletForm({ actor, preselected, onPreselectedConsumed }: {
-    actor: string;
+export default function ReceivePalletForm({ preselected, onPreselectedConsumed }: {
     preselected: SupplyCommitment | null;
     onPreselectedConsumed: () => void;
 }) {
@@ -304,8 +302,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
 
     const validate = (source: Record<number, ContentDraft>): FieldErrors => {
         const found: FieldErrors = {};
-        // Medewerker en eigen palletnummer zijn optioneel bij ontvangst; leeg blokkeert niets.
-        if (actor.trim().length > 100) addError(found, 'actorReference', t('supply_error_too_long', { max: '100' }));
+        // Het eigen palletnummer is optioneel bij ontvangst; wie ontvangt, is de ingelogde gebruiker.
         if (!(frozen?.pallet.done ?? false)) {
             const reference = pallet.reference.trim();
             if (reference.length > 64) addError(found, 'pallet.reference', t('supply_error_too_long', { max: '64' }));
@@ -378,7 +375,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             article = await createArticleFromEntry({
                 requestId: request.requestId, source: 'Receipt', templateVariantId: entry.line.productVariantId, originCountryCode: draft.entered.origin,
                 sizeCategory: text(draft.entered.size), packaging: text(draft.entered.packaging), tradeClass: text(draft.entered.tradeClass), brand: text(draft.entered.brand),
-                netKgPerPackage, actorReference: actor.trim() === '' ? null : actor.trim(),
+                netKgPerPackage,
             });
         } catch (caught) {
             const existing = existingArticle(caught);
@@ -415,7 +412,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         return netKg.ok ? netKg.value : null;
     };
 
-    const buildLine = (id: number, actorReference: string | null, source: Record<number, ContentDraft>): FrozenLine => {
+    const buildLine = (id: number, source: Record<number, ContentDraft>): FrozenLine => {
         const entry = index.get(id);
         const unit = entry?.line.expectedUnit;
         if (!entry || unit === null || unit === undefined) {
@@ -443,7 +440,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 netKgPerPackage: draft.method === 'Calculated' && perPackage.ok ? perPackage.value : null,
                 netWeightKg: netKg.ok ? netKg.value : 0,
                 ggn: ggn.ok ? ggn.value : null,
-                actorReference,
                 reason: null,
                 // De variant die bij de ingevulde kenmerken hoort; bevestigen alleen na Ja in het venster, nooit bij een exacte controle.
                 receivedProductVariantId: draft.matchedVariantId,
@@ -463,7 +459,7 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
         for (const [key, messages] of Object.entries(error.fieldErrors)) {
             const target = step === 'pallet'
                 ? PALLET_FIELD_KEYS[key]
-                : LINE_FIELD_KEYS.includes(key) ? `line.${step}.${key}` : key === 'actorReference' ? 'actorReference' : undefined;
+                : LINE_FIELD_KEYS.includes(key) ? `line.${step}.${key}` : undefined;
             for (const message of messages) addError(mapped, target ?? 'general', message);
         }
         return mapped;
@@ -569,7 +565,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
             return;
         }
 
-        const actorReference = actor.trim() === '' ? null : actor.trim();
         const next: FrozenSubmission = {
             pallet: frozen?.pallet ?? {
                 payload: {
@@ -579,14 +574,13 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                     logisticsStatus: 'Received',
                     locationContext: 'Warehouse',
                     warehouseLocation: pallet.bin.trim() === '' ? null : pallet.bin.trim(),
-                    actorReference,
                     reason: null,
                 },
                 done: false,
                 result: null,
                 replayed: false,
             },
-            lines: Object.fromEntries(selected.map((id) => [id, frozen?.lines[id] ?? buildLine(id, actorReference, source)])),
+            lines: Object.fromEntries(selected.map((id) => [id, frozen?.lines[id] ?? buildLine(id, source)])),
         };
         setFrozen(next);
         void run(next, selected);
@@ -735,7 +729,6 @@ export default function ReceivePalletForm({ actor, preselected, onPreselectedCon
                 )} />
             )}
             {e('general') && <FieldError id="general" messages={e('general')} />}
-            <FieldError id="actorReference" messages={e('actorReference')} />
 
             <section aria-labelledby="receive-sources" className="space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">

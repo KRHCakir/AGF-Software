@@ -70,7 +70,7 @@ function answer(url: string): DeviationPreview {
 }
 
 async function arrange() {
-    await mounted.render(<ReceivePalletForm actor="Kees" preselected={null} onPreselectedConsumed={() => {}} />);
+    await mounted.render(<ReceivePalletForm preselected={null} onPreselectedConsumed={() => {}} />);
     await mounted.waitFor(() => mounted.container.querySelector('#source-501') !== null, 'sources loaded');
     await act(async () => { mounted.container.querySelector<HTMLInputElement>('#source-501')!.click(); });
     await mounted.waitFor(() => input('line.501.origin'), 'attribute fields');
@@ -230,7 +230,7 @@ describe('ReceivePalletForm blind entry', () => {
         const body = articlePosts()[0];
         assert.deepEqual({ ...body, requestId: typeof body.requestId }, {
             requestId: 'string', source: 'Receipt', templateVariantId: 10, originCountryCode: 'ZA', sizeCategory: '20', packaging: '4 kg doos', tradeClass: 'I', brand: null,
-            netKgPerPackage: 4, actorReference: 'Kees',
+            netKgPerPackage: 4,
         });
         assert.equal(previews().at(-1)!.get('receivedProductVariantId'), '50');
         assert.equal(posts().filter((call) => call.url.endsWith('/pallets')).length, 0, 'No pallet before the answer to "Klopt dit?"');

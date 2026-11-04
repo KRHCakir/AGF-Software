@@ -11,7 +11,6 @@ import CountryPicker from '../shared/CountryPicker';
 import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { readStoredActor } from '../supply/useActorReference';
 
 const section = 'rounded-md border border-gray-200 bg-white p-3';
 
@@ -57,7 +56,7 @@ export default function OriginSettings({ countries, cleanupToken, onCountriesCha
 
     const saveAlias = () => run(async () => {
         if (alias.text.trim() === '' || alias.code === null) return;
-        const saved = await addCountryAlias(alias.text.trim(), alias.code, readStoredActor());
+        const saved = await addCountryAlias(alias.text.trim(), alias.code);
         onCountriesChanged({ ...countries, aliases: [...countries.aliases.filter((a) => a.id !== saved.id), saved].sort((a, b) => a.alias.localeCompare(b.alias)) });
         setAlias({ text: '', code: null });
     });

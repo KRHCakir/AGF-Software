@@ -6,13 +6,11 @@ import { toApiError } from '../../services/apiClient';
 import { deleteProduct, listEmptyProducts } from '../../services/articleService';
 import type { EmptyProduct } from '../../types/article';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
-import { useActorReference } from '../supply/useActorReference';
 
 // Productsoorten zonder artikelen (bijvoorbeeld een tikfout in de productsoort): verwijderen kan, met dezelfde controle in de backend
 // (409 zodra er intussen een artikel onder hangt). Verschijnt alleen als er zulke soorten zijn.
 export default function EmptyProducts({ reloadToken, onDeleted }: { reloadToken: number; onDeleted: (name: string) => void }) {
     const { t } = useTranslation();
-    const [actor] = useActorReference();
     const [products, setProducts] = useState<EmptyProduct[]>([]);
     const [busy, setBusy] = useState<number | null>(null);
     const [message, setMessage] = useState<string | null>(null);
@@ -29,7 +27,7 @@ export default function EmptyProducts({ reloadToken, onDeleted }: { reloadToken:
         setBusy(product.id);
         setMessage(null);
         try {
-            await deleteProduct(product.id, actor.trim() === '' ? null : actor.trim());
+            await deleteProduct(product.id);
             setProducts((current) => current.filter((candidate) => candidate.id !== product.id));
             onDeleted(product.name);
         } catch (caught) {
