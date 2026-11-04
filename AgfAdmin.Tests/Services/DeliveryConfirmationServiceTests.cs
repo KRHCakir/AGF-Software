@@ -33,7 +33,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         var result = await new StockReservationService(db).ReserveAsync(_orderId, lineId ?? _boxLine, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value;
@@ -491,7 +491,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
                 await using var db = _factory.CreateContext();
                 inner = (await new StockReservationService(db).ReserveAsync(_orderId, _boxLine, new CreateStockReservationDto
                 {
-                    RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 5m, Unit = "box", NetWeightKg = 20m, ActorReference = "office-1"
+                    RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 5m, Unit = "box", NetWeightKg = 20m
                 })).Status;
             }
             else

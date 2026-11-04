@@ -102,7 +102,7 @@ public sealed class SalesBeforeArrivalScenario : IDisposable
         await using var db = Factory.CreateContext();
         return await new StockReservationService(db).ReserveAsync(orderId, lineId, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentId, Quantity = quantity, Unit = "colli", NetWeightKg = kg, ActorReference = "verkoop-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentId, Quantity = quantity, Unit = "colli", NetWeightKg = kg
         });
     }
 }

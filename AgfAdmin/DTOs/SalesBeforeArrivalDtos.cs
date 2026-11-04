@@ -30,7 +30,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public string Unit { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
         public List<FifoReservationItemDto> Items { get; set; }
     }

@@ -47,7 +47,7 @@ public class SalesDispatchServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         var result = await new StockReservationService(db).ReserveAsync(orderId ?? _orderId, lineId ?? _boxLine, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value;
@@ -58,7 +58,7 @@ public class SalesDispatchServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return await new StockReservationService(db).ReserveAsync(_orderId, _boxLine, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = "box", NetWeightKg = kg, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = "box", NetWeightKg = kg
         });
     }
 
@@ -67,7 +67,7 @@ public class SalesDispatchServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return await new StockReservationService(db).ReleaseAsync(reservationId, new ReleaseStockReservationDto
         {
-            RequestId = Guid.NewGuid(), ExpectedReservationVersion = version, ActorReference = "office-1", Reason = "Klant wil andere partij"
+            RequestId = Guid.NewGuid(), ExpectedReservationVersion = version, Reason = "Klant wil andere partij"
         });
     }
 

@@ -18,7 +18,7 @@ public sealed class ChainLinkTests : IDisposable
         await using var db = _factory.CreateContext();
         var result = await new StockReservationService(db).ReserveAsync(orderId, lineId, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = "box", NetWeightKg = kg, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = "box", NetWeightKg = kg
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value;
@@ -37,7 +37,7 @@ public sealed class ChainLinkTests : IDisposable
         {
             Assert.Equal(ServiceResultStatus.Ok, (await new StockReservationService(db).ReleaseAsync(released.Id, new ReleaseStockReservationDto
             {
-                RequestId = Guid.NewGuid(), ExpectedReservationVersion = released.Version, ActorReference = "office-1", Reason = "Andere partij"
+                RequestId = Guid.NewGuid(), ExpectedReservationVersion = released.Version, Reason = "Andere partij"
             })).Status);
         }
         await using (var db = _factory.CreateContext())

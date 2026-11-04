@@ -16,7 +16,7 @@ public sealed class FifoReservationTests : IDisposable
 
     private static CreateStockReservationBatchDto Batch(Guid requestId, params (int Content, decimal Quantity, decimal Kg)[] items) => new()
     {
-        RequestId = requestId, Unit = "colli", ActorReference = "verkoop-1",
+        RequestId = requestId, Unit = "colli", 
         Items = items.Select(i => new FifoReservationItemDto { PalletContentLineId = i.Content, Quantity = i.Quantity, NetWeightKg = i.Kg }).ToList()
     };
 
@@ -49,7 +49,7 @@ public sealed class FifoReservationTests : IDisposable
 
         var reserved = await ReserveBatchAsync(order.Id, order.Lines[0].Id, new CreateStockReservationBatchDto
         {
-            RequestId = Guid.NewGuid(), Unit = "colli", ActorReference = "verkoop-1", Items = proposal.Items
+            RequestId = Guid.NewGuid(), Unit = "colli", Items = proposal.Items
         });
         Assert.Equal(ServiceResultStatus.Created, reserved.Status);
         Assert.Equal(new[] { ("LOT-A", 40m), ("LOT-B", 10m) }, reserved.Value.Select(r => (r.LotNumber, r.Quantity)));
@@ -178,7 +178,7 @@ public sealed class FifoReservationTests : IDisposable
         var proposal = await ProposalAsync(early.Id, early.Lines[0].Id);
         Assert.Equal(ServiceResultStatus.Created, (await ReserveBatchAsync(early.Id, early.Lines[0].Id, new CreateStockReservationBatchDto
         {
-            RequestId = Guid.NewGuid(), Unit = "colli", ActorReference = "verkoop-1", Items = proposal.Items
+            RequestId = Guid.NewGuid(), Unit = "colli", Items = proposal.Items
         })).Status);
         await using (var db = _s.Factory.CreateContext())
         {

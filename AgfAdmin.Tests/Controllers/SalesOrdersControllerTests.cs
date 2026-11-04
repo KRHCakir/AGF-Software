@@ -95,7 +95,7 @@ public class SalesOrdersControllerTests : IDisposable
         var lineId = order.Lines[0].Id;
         var request = new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m
         };
 
         var created = Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, lineId, request)));
@@ -104,14 +104,14 @@ public class SalesOrdersControllerTests : IDisposable
         var reservation = Assert.IsType<StockReservationDto>(created.Value);
         Assert.Equal(reservation.Id, Assert.IsType<StockReservationDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.Reserve(order.Id, lineId, request))).Value).Id);
 
-        var invalid = new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box", ActorReference = "office-1" };
+        var invalid = new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box" };
         Assert.Contains("netWeightKg", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.Reserve(order.Id, lineId, invalid))).Value).Errors.Keys);
-        var unknownOrder = new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m, ActorReference = "office-1" };
+        var unknownOrder = new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m };
         Assert.IsType<NotFoundObjectResult>(await Orders(c => c.Reserve(999_999, lineId, unknownOrder)));
         // Dezelfde requestId onder een ander order-id is een ander commando: 409, nooit een stille replay.
         Assert.IsType<ConflictObjectResult>(await Orders(c => c.Reserve(999_999, lineId, request)));
 
-        var blocked = new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = _seed.BlockedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m, ActorReference = "office-1" };
+        var blocked = new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = _seed.BlockedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m };
         Assert.IsType<ConflictObjectResult>(await Orders(c => c.Reserve(order.Id, lineId, blocked)));
     }
 
@@ -121,11 +121,11 @@ public class SalesOrdersControllerTests : IDisposable
         var order = await CreatedOrderAsync();
         var reservation = Assert.IsType<StockReservationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m
         }))).Value);
         ReleaseStockReservationDto Release(int? version, string reason = "Klant annuleert") => new()
         {
-            RequestId = Guid.NewGuid(), ExpectedReservationVersion = version, ActorReference = "office-1", Reason = reason
+            RequestId = Guid.NewGuid(), ExpectedReservationVersion = version, Reason = reason
         };
 
         Assert.Contains("expectedReservationVersion", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Reservations(c => c.Release(reservation.Id, Release(null)))).Value).Errors.Keys);
@@ -142,7 +142,7 @@ public class SalesOrdersControllerTests : IDisposable
         var order = await CreatedOrderAsync();
         Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m
         })));
         CancelSalesOrderDto Cancel(int? version, string reason = "Klant heeft afgezegd", Guid? requestId = null) => new()
         {
@@ -163,7 +163,7 @@ public class SalesOrdersControllerTests : IDisposable
         Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, Cancel(cancelled.Version))));
         Assert.IsType<ConflictObjectResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 1m, Unit = "box", NetWeightKg = 4m
         })));
 
         var events = Assert.IsAssignableFrom<IReadOnlyList<SalesOrderAuditEventDto>>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetAuditEvents(order.Id))).Value);
@@ -180,7 +180,7 @@ public class SalesOrdersControllerTests : IDisposable
         var order = await CreatedOrderAsync();
         var reservation = Assert.IsType<StockReservationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m
         }))).Value);
         CreateSalesDispatchDto Dispatch(int? orderVersion, int reservationVersion, Guid? requestId = null, string reference = "VRB-1") => new()
         {
@@ -220,7 +220,7 @@ public class SalesOrdersControllerTests : IDisposable
         var order = await CreatedOrderAsync();
         var reservation = Assert.IsType<StockReservationDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Reserve(order.Id, order.Lines[0].Id, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m
         }))).Value);
         var current = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.GetById(order.Id))).Value);
         var dispatch = Assert.IsType<SalesDispatchDto>(Assert.IsType<CreatedAtActionResult>(await Orders(c => c.Dispatch(order.Id, new CreateSalesDispatchDto
@@ -291,7 +291,7 @@ public class SalesOrdersControllerTests : IDisposable
         // Vrijgeven via hetzelfde endpoint als een fysieke reservering.
         var released = Assert.IsType<StockReservationDto>(Assert.IsType<OkObjectResult>(await Reservations(c => c.Release(allocation.Id, new ReleaseStockReservationDto
         {
-            RequestId = Guid.NewGuid(), ExpectedReservationVersion = allocation.Version, ActorReference = "office-1", Reason = "Toch uit magazijn"
+            RequestId = Guid.NewGuid(), ExpectedReservationVersion = allocation.Version, Reason = "Toch uit magazijn"
         }))).Value);
         Assert.Equal("Released", released.Status);
     }

@@ -31,7 +31,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         var result = await new StockReservationService(db).ReserveAsync(_orderId, lineId ?? _boxLine, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg
         });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         return result.Value;
@@ -647,7 +647,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         var d = await DispatchedAsync(r);
         Assert.Equal(ServiceResultStatus.Created, (await CorrectAsync(d.Id, Correct(await OrderAsync(), d))).Status);
         await using var db = _factory.CreateContext();
-        var release = await new StockReservationService(db).ReleaseAsync(r.Id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = 2, ActorReference = "office-1", Reason = "x" });
+        var release = await new StockReservationService(db).ReleaseAsync(r.Id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = 2, Reason = "x" });
         Assert.Equal(ServiceResultStatus.Conflict, release.Status);
         var order = (await new SalesOrderService(db).GetAsync(_orderId)).Value;
         var cancel = await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, Reason = "Afgezegd na correctie" });
