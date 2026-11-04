@@ -337,13 +337,12 @@ function isReservePayload(value: unknown, requestId: string): value is CreateSto
         && isPositiveAmount(value.quantity)
         && isUnit(value.unit)
         && isPositiveAmount(value.netWeightKg)
-        && isText(value.actorReference)
         && isNullableText(value.reason);
 }
 
 // Elke inhoudsregel hooguit één keer, elk aantal en elk kg positief (de server controleert alles opnieuw).
 function isReserveBatchPayload(value: unknown, requestId: string): value is CreateStockReservationBatchRequest {
-    if (!isRecord(value) || value.requestId !== requestId || !isUnit(value.unit) || !isText(value.actorReference) || !isNullableText(value.reason)) return false;
+    if (!isRecord(value) || value.requestId !== requestId || !isUnit(value.unit) || !isNullableText(value.reason)) return false;
     if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 50) return false;
     const ids = new Set<number>();
     return value.items.every((item: unknown) => isRecord(item) && isPositiveInt(item.palletContentLineId) && !ids.has(item.palletContentLineId)
@@ -366,7 +365,6 @@ function isReleasePayload(value: unknown, requestId: string): value is ReleaseSt
     return isRecord(value)
         && value.requestId === requestId
         && isNonNegativeInt(value.expectedReservationVersion)
-        && isText(value.actorReference)
         && isText(value.reason);
 }
 

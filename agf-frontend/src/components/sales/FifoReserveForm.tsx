@@ -8,7 +8,7 @@ import { formatDecimalInput } from '../../lib/decimal';
 import { FifoRowInput, calculatedKgFor, sumQuantities, validateFifo } from '../../lib/fifoReservation';
 import { ReserveBatchCommand, reserveBatchKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
+import { normalizeReason } from '../../lib/salesOrderRules';
 import { unitLabelKey } from '../../lib/units';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getFifoProposal, reserveBatch } from '../../services/salesOrderService';
@@ -30,10 +30,9 @@ const td = 'px-2 py-1.5 align-top';
 // "Reserveren (oudste partij eerst)": het systeem stelt de pallets voor op ontvangstmoment en dan partijnummer, over zoveel pallets als
 // nodig. De gebruiker past aantallen aan (kg zoals bij één reservering: berekend gewicht volgt het aantal, gewogen kg vul je in) en
 // bevestigt. Eén batch van gewone exacte reserveringen, alles of niets; bevroren en bewaard tot de uitkomst bekend is (zelfde requestId).
-export default function FifoReserveForm({ orderId, line, actor, onSucceeded, onReload, onCancel }: {
+export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, onCancel }: {
     orderId: number;
     line: SalesOrderLine;
-    actor: string;
     onSucceeded: (saved: SaveResult<StockReservation[]>) => Promise<void>;
     onReload: () => void;
     onCancel: () => void;
@@ -84,10 +83,9 @@ export default function FifoReserveForm({ orderId, line, actor, onSucceeded, onR
         if (command === null) {
             if (proposal.status !== 'ready') return;
             const result = validateFifo(proposal.data.candidates, rows, proposal.data.neededQuantity);
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason('', false);
-            if (!result.ok || !actorResult.ok || !reasonResult.ok) {
-                setFieldErrors(ruleErrorsToFieldErrors([...(result.ok ? [] : result.errors), ...(actorResult.ok ? [] : actorResult.errors)], t));
+            if (!result.ok || !reasonResult.ok) {
+                setFieldErrors(ruleErrorsToFieldErrors([...(result.ok ? [] : result.errors)], t));
                 return;
             }
             setFieldErrors({});
@@ -98,7 +96,7 @@ export default function FifoReserveForm({ orderId, line, actor, onSucceeded, onR
                 orderId,
                 lineId: line.id,
                 requestId,
-                payload: { requestId, unit: line.unit, actorReference: actorResult.value, reason: reasonResult.value, items: result.items },
+                payload: { requestId, unit: line.unit, reason: reasonResult.value, items: result.items },
                 display: { productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}`, palletCount: result.items.length, quantity: result.total },
                 attempts: 0,
                 lastError: null,
@@ -208,7 +206,6 @@ export default function FifoReserveForm({ orderId, line, actor, onSucceeded, onR
                         {t('sales_fifo_total', { total: q(total), needed: q(proposal.data.neededQuantity), unit: t(unitLabelKey(line.unit)).toLowerCase() })}
                     </p>
                     <FieldError id={`fifo-${line.id}-items`} messages={fieldErrors.items} />
-                    <FieldError id={`fifo-${line.id}-actor`} messages={fieldErrors.actorReference} />
                 </>
             )}
 

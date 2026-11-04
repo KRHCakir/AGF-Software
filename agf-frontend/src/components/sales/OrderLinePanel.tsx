@@ -350,7 +350,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                                                 )}
                                                 {releaseOpen && (
                                                     <ReleaseReservationForm key={`${reservation.id}:${reservation.version}:${decisionToken}`} orderId={order.id} line={line}
-                                                        reservation={reservation} actor={actor} onSucceeded={onReleased} onReload={() => void reload()} onCancel={() => setReleasingId(null)} />
+                                                        reservation={reservation} onSucceeded={onReleased} onReload={() => void reload()} onCancel={() => setReleasingId(null)} />
                                                 )}
                                             </td>
                                         </tr>
@@ -384,7 +384,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                     </div>
                 )}
                 {showFifo && (
-                    <FifoReserveForm key={`${line.version}:${decisionToken}`} orderId={order.id} line={line} actor={actor}
+                    <FifoReserveForm key={`${line.version}:${decisionToken}`} orderId={order.id} line={line}
                         onSucceeded={onFifoReserved} onReload={() => void reload()} onCancel={() => setFifo(false)} />
                 )}
                 {showChooser && !showFifo && (
@@ -400,7 +400,7 @@ export default function OrderLinePanel({ order, line, actor, readOnly, onOrderCh
                             onSelect={setSelected} onLoaded={onStockLoaded} selectable={pendingReserve === null} />
                         {formContentId !== null && (
                             <ReserveForm key={`${formContentId}:${line.version}:${decisionToken}`}
-                                orderId={order.id} line={line} stock={formStock} actor={actor}
+                                orderId={order.id} line={line} stock={formStock}
                                 onSucceeded={onReserved} onReload={() => void reload()}
                                 onCancel={() => (pendingReserve === null ? setSelected(null) : setChoosing(false))} />
                         )}

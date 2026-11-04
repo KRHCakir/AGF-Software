@@ -8,7 +8,7 @@ import { calculatedReservationKg } from '../../lib/weight';
 import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
 import { ReserveCommand, reserveKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, fullRemainderFits, normalizeActor, normalizeReason, remainingAfter, validateReservationInput } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, fullRemainderFits, normalizeReason, remainingAfter, validateReservationInput } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { reserveStock } from '../../services/salesOrderService';
 import { SaveResult } from '../../services/supplyService';
@@ -26,11 +26,10 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 // "Volledige rest reserveren" kopieert beide exacte saldi, maar alleen als die in de resterende klantvraag passen.
 // De opdracht wordt bevroren en boven dit formulier bewaard (zelfde requestId) tot de uitkomst bekend is; bij 409 wordt
 // herladen en opnieuw beslist. `stock` is null als de inhoudsregel na een onbekende uitkomst niet meer in de lijst staat.
-export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, onReload, onCancel }: {
+export default function ReserveForm({ orderId, line, stock, onSucceeded, onReload, onCancel }: {
     orderId: number;
     line: SalesOrderLine;
     stock: ReservableStockLine | null;
-    actor: string;
     onSucceeded: (saved: SaveResult<StockReservation>) => Promise<void>;
     onReload: () => void;
     onCancel: () => void;
@@ -80,12 +79,10 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
         if (command === null) {
             if (stock === null || unitMismatch) return;
             const amounts = validateReservationInput({ quantity, netKg: effectiveNetKg }, stock, line.openQuantity);
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, false);
-            if (!amounts.ok || !actorResult.ok || !reasonResult.ok) {
+            if (!amounts.ok || !reasonResult.ok) {
                 setFieldErrors(ruleErrorsToFieldErrors([
                     ...(amounts.ok ? [] : amounts.errors),
-                    ...(actorResult.ok ? [] : actorResult.errors),
                     ...(reasonResult.ok ? [] : reasonResult.errors),
                 ], t));
                 return;
@@ -104,7 +101,6 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
                     quantity: amounts.value.quantity,
                     unit: line.unit,
                     netWeightKg: amounts.value.netWeightKg,
-                    actorReference: actorResult.value,
                     reason: reasonResult.value,
                 },
                 display: { palletReference: stock.palletReference, lotNumber: stock.lotNumber, productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}` },
@@ -201,7 +197,6 @@ export default function ReserveForm({ orderId, line, stock, actor, onSucceeded, 
                     onChange={(event) => edit(setReason)(event.target.value)} aria-invalid={fieldErrors.reason !== undefined}
                     aria-describedby={fieldErrors.reason ? `${idPrefix}-reason-error` : undefined} className={inputClass} />
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 <FieldError id={`${idPrefix}-content-error`} messages={fieldErrors.palletContentLineId} />
                 <FieldError id={`${idPrefix}-unit-error`} messages={fieldErrors.unit} />
             </div>

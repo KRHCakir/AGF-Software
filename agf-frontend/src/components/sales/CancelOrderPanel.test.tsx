@@ -162,7 +162,7 @@ describe('CancelOrderPanel through the component lifecycle', () => {
     test('an unresolved line command blocks cancellation of that order', async () => {
         await render({
             kind: 'reserve', key: 'reserve:4:7', orderId: 4, lineId: 7, requestId: 'r-x', attempts: 1, lastError: 'x', frozenAt: '2026-10-19T10:00:00.000Z',
-            payload: { requestId: 'r-x', palletContentLineId: 2, quantity: 1, unit: 'box', netWeightKg: 4, actorReference: 'office-1', reason: null },
+            payload: { requestId: 'r-x', palletContentLineId: 2, quantity: 1, unit: 'box', netWeightKg: 4, reason: null },
             display: { palletReference: 'P', lotNumber: 'L', productLabel: 'Avocado · Green' },
         });
         await mounted.waitFor(() => mounted.hasText('sales_cancel_blocked'), 'blocked notice');

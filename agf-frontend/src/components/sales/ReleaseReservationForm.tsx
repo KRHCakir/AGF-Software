@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { ReleaseCommand, releaseKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
-import { MAX_REASON_LENGTH, normalizeActor, normalizeReason } from '../../lib/salesOrderRules';
+import { MAX_REASON_LENGTH, normalizeReason } from '../../lib/salesOrderRules';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { releaseReservation } from '../../services/salesOrderService';
 import { SalesOrderLine, StockReservation } from '../../types/salesOrder';
@@ -18,11 +18,10 @@ import TechnicalDetails from '../supply/TechnicalDetails';
 
 // Vrijgeven met een verplichte reden en de reserveringsversie waarop de beslissing is gebaseerd (optimistische concurrency).
 // De opdracht wordt bevroren en boven dit formulier bewaard tot de uitkomst bekend is.
-export default function ReleaseReservationForm({ orderId, line, reservation, actor, onSucceeded, onReload, onCancel }: {
+export default function ReleaseReservationForm({ orderId, line, reservation, onSucceeded, onReload, onCancel }: {
     orderId: number;
     line: SalesOrderLine;
     reservation: StockReservation;
-    actor: string;
     onSucceeded: (released: StockReservation) => Promise<void>;
     onReload: () => void;
     onCancel: () => void;
@@ -51,10 +50,9 @@ export default function ReleaseReservationForm({ orderId, line, reservation, act
         if (inFlight.current) return;
         let command = pending;
         if (command === null) {
-            const actorResult = normalizeActor(actor);
             const reasonResult = normalizeReason(reason, true);
-            if (!actorResult.ok || !reasonResult.ok || reasonResult.value === null) {
-                setFieldErrors(ruleErrorsToFieldErrors([...(actorResult.ok ? [] : actorResult.errors), ...(reasonResult.ok ? [] : reasonResult.errors)], t));
+            if (!reasonResult.ok || reasonResult.value === null) {
+                setFieldErrors(ruleErrorsToFieldErrors([...(reasonResult.ok ? [] : reasonResult.errors)], t));
                 return;
             }
             setFieldErrors({});
@@ -66,7 +64,7 @@ export default function ReleaseReservationForm({ orderId, line, reservation, act
                 lineId: line.id,
                 reservationId: reservation.id,
                 requestId,
-                payload: { requestId, expectedReservationVersion: reservation.version, actorReference: actorResult.value, reason: reasonResult.value },
+                payload: { requestId, expectedReservationVersion: reservation.version, reason: reasonResult.value },
                 // Een toewijzing heeft geen pallet: dan de leverancier als herkenbare bron in de melding.
                 display: { palletReference: reservation.palletReference ?? reservation.vendorName ?? '', lotNumber: reservation.lotNumber ?? '', productLabel: `${line.productName ?? ''} · ${line.productVariantName ?? ''}` },
                 attempts: 0,
@@ -114,7 +112,6 @@ export default function ReleaseReservationForm({ orderId, line, reservation, act
                     aria-describedby={fieldErrors.reason ? `${idPrefix}-reason-error` : `${idPrefix}-reason-count`} className={inputClass} />
                 <span id={`${idPrefix}-reason-count`} className="block text-right text-xs text-gray-500">{reason.trim().length}/{MAX_REASON_LENGTH}</span>
                 <FieldError id={`${idPrefix}-reason-error`} messages={fieldErrors.reason} />
-                <FieldError id={`${idPrefix}-actor-error`} messages={fieldErrors.actorReference} />
                 <FieldError id={`${idPrefix}-version-error`} messages={fieldErrors.expectedReservationVersion} />
             </div>
 

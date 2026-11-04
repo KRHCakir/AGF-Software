@@ -26,13 +26,13 @@ import type { PendingCommand, PendingCommands } from './pendingCommands.ts';
 
 const reserve = (orderId: number, lineId: number, requestId = 'r-1', frozenAt = '2026-10-19T10:00:00.000Z'): PendingCommand => ({
     kind: 'reserve', key: reserveKey(orderId, lineId), orderId, lineId, requestId, attempts: 1, lastError: 'Netwerkfout', frozenAt,
-    payload: { requestId, palletContentLineId: 2, quantity: 5, unit: 'box', netWeightKg: 20, actorReference: 'office-1', reason: null },
+    payload: { requestId, palletContentLineId: 2, quantity: 5, unit: 'box', netWeightKg: 20, reason: null },
     display: { palletReference: 'SMOKE-PAL-002', lotNumber: 'LOT-SALES-1', productLabel: 'Avocado · Green' },
 });
 
 const release = (orderId: number, lineId: number, reservationId: number, requestId = 'x-1'): PendingCommand => ({
     kind: 'release', key: releaseKey(orderId, lineId, reservationId), orderId, lineId, reservationId, requestId, attempts: 1, lastError: null, frozenAt: '2026-10-19T09:00:00.000Z',
-    payload: { requestId, expectedReservationVersion: 0, actorReference: 'office-1', reason: 'Klant annuleert' },
+    payload: { requestId, expectedReservationVersion: 0, reason: 'Klant annuleert' },
     display: { palletReference: 'P', lotNumber: 'L', productLabel: 'Mango · Kent' },
 });
 
@@ -237,24 +237,23 @@ describe('unresolved commands', () => {
         assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { c.payload = { requestId: 'r-1' }; })), {});
         assert.deepEqual(parseStoredCommands(stored(create(), (c) => { c.payload = { requestId: 'c-1' }; })), {});
         assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { c.payload = { requestId: 'x-1' }; })), {});
-        for (const field of ['palletContentLineId', 'quantity', 'unit', 'netWeightKg', 'actorReference', 'reason']) {
+        for (const field of ['palletContentLineId', 'quantity', 'unit', 'netWeightKg', 'reason']) {
             assert.deepEqual(parseStoredCommands(stored(reserve(4, 7), (c) => { delete payloadOf(c)[field]; })), {}, `reserve without ${field}`);
         }
         for (const field of ['customerId', 'customerReference', 'requestedDeliveryDate', 'lines']) {
             assert.deepEqual(parseStoredCommands(stored(create(), (c) => { delete payloadOf(c)[field]; })), {}, `create without ${field}`);
         }
-        for (const field of ['expectedReservationVersion', 'actorReference', 'reason']) {
+        for (const field of ['expectedReservationVersion', 'reason']) {
             assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { delete payloadOf(c)[field]; })), {}, `release without ${field}`);
         }
     });
 
-    test('reserve payload: positive integer id, positive quantity and kg, allowed unit, non-blank actor, nullable reason', () => {
+    test('reserve payload: positive integer id, positive quantity and kg, allowed unit, nullable reason', () => {
         const bad: [string, unknown][] = [
             ['palletContentLineId', 0], ['palletContentLineId', -2], ['palletContentLineId', 2.5], ['palletContentLineId', '2'],
             ['quantity', 0], ['quantity', -1], ['quantity', '5'], ['quantity', Number.NaN],
             ['netWeightKg', 0], ['netWeightKg', -20], ['netWeightKg', '20'],
             ['unit', 'kg'], ['unit', 'Box'], ['unit', ''], ['unit', 1],
-            ['actorReference', ''], ['actorReference', '   '], ['actorReference', 7],
             ['reason', 5], ['reason', undefined],
         ];
         for (const [field, value] of bad) {
@@ -280,10 +279,10 @@ describe('unresolved commands', () => {
         assert.equal(Object.keys(parseStoredCommands(stored(create(), (c) => { payloadOf(c).customerReference = 'PO-1'; }))).length, 1);
     });
 
-    test('release payload: non-negative integer version, non-blank actor and a required non-blank reason', () => {
+    test('release payload: non-negative integer version and a required non-blank reason', () => {
         const bad: [string, unknown][] = [
             ['expectedReservationVersion', -1], ['expectedReservationVersion', 1.5], ['expectedReservationVersion', '0'], ['expectedReservationVersion', null],
-            ['actorReference', ''], ['reason', ''], ['reason', '  '], ['reason', null], ['reason', 3],
+            ['reason', ''], ['reason', '  '], ['reason', null], ['reason', 3],
         ];
         for (const [field, value] of bad) {
             assert.deepEqual(parseStoredCommands(stored(release(4, 7, 11), (c) => { payloadOf(c)[field] = value; })), {}, `release ${field}=${String(value)}`);
