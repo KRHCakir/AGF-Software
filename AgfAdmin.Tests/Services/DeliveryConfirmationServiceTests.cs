@@ -520,7 +520,7 @@ public class DeliveryConfirmationServiceTests : IDisposable
         async Task<ServiceResultStatus> CancelAsync()
         {
             await using var db = _factory.CreateContext();
-            return (await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderId), ActorReference = "o", Reason = "x" })).Status;
+            return (await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderId), Reason = "x" })).Status;
         }
         Assert.Equal(ServiceResultStatus.Conflict, await CancelAsync());
         Assert.Equal(ServiceResultStatus.Created, (await ConfirmWarehouseAsync(dispatch.Id, Confirm(await OrderVersionAsync(_factory, _orderId)))).Status);

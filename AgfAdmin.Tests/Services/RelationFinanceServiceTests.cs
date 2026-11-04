@@ -695,7 +695,7 @@ public class RelationFinanceServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Ok, (await UpdateAsync(created.Id, lower)).Status);
         var order = await WithDbAsync(db => new SalesOrderService(db).CreateAsync(new CreateSalesOrderDto
         {
-            RequestId = Guid.NewGuid(), CustomerId = customerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 25, 8, 0, 0, TimeSpan.Zero), ActorReference = "Jan",
+            RequestId = Guid.NewGuid(), CustomerId = customerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 25, 8, 0, 0, TimeSpan.Zero), 
             Lines = new() { new() { ProductVariantId = variantId, Quantity = 10m, Unit = "box" } }
         }));
         Assert.Equal(ServiceResultStatus.Created, order.Status);
@@ -711,7 +711,7 @@ public class RelationFinanceServiceTests : IDisposable
         await UpdateAsync(created.Id, noLimit);
         var second = await WithDbAsync(db => new SalesOrderService(db).CreateAsync(new CreateSalesOrderDto
         {
-            RequestId = Guid.NewGuid(), CustomerId = customerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 25, 8, 0, 0, TimeSpan.Zero), ActorReference = "Jan",
+            RequestId = Guid.NewGuid(), CustomerId = customerId, RequestedDeliveryDate = new DateTimeOffset(2026, 10, 25, 8, 0, 0, TimeSpan.Zero), 
             Lines = new() { new() { ProductVariantId = variantId, Quantity = 10m, Unit = "box" } }
         }));
         Assert.Null(second.Value.CreditWarning);

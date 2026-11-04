@@ -650,7 +650,7 @@ public class SalesDispatchCorrectionServiceTests : IDisposable
         var release = await new StockReservationService(db).ReleaseAsync(r.Id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = 2, ActorReference = "office-1", Reason = "x" });
         Assert.Equal(ServiceResultStatus.Conflict, release.Status);
         var order = (await new SalesOrderService(db).GetAsync(_orderId)).Value;
-        var cancel = await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, ActorReference = "office-1", Reason = "Afgezegd na correctie" });
+        var cancel = await new SalesOrderService(db).CancelAsync(_orderId, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, Reason = "Afgezegd na correctie" });
         Assert.Equal(ServiceResultStatus.Ok, cancel.Status);
         Assert.Equal("Corrected", (await db.StockReservations.AsNoTracking().SingleAsync(x => x.Id == r.Id)).Status);
     }

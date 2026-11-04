@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -23,9 +24,12 @@ namespace AgfAdmin.Services
     public sealed class SalesOrderService : ISalesOrderService
     {
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public SalesOrderService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public SalesOrderService(AppDbContext db, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
         }
 
@@ -196,7 +200,7 @@ namespace AgfAdmin.Services
             return result;
         }
 
-        private static SalesOrder Build(CreateSalesOrderDto request, Dictionary<string, List<string>> errors)
+        private SalesOrder Build(CreateSalesOrderDto request, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {
@@ -218,7 +222,7 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "requestedDeliveryDate", "A requested delivery date is required.");
             }
-            var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+            var actor = _user.Actor(ReservationRules.MaxActorLength);
 
             var lines = new List<SalesOrderLine>();
             if (request.Lines == null || request.Lines.Count == 0)
@@ -445,7 +449,7 @@ namespace AgfAdmin.Services
                 {
                     ValidationErrors.Add(errors, "expectedOrderVersion", "The order version the cancellation is based on is required.");
                 }
-                var actor = ValidationErrors.RequiredText(request.ActorReference, ReservationRules.MaxActorLength, "actorReference", errors);
+                var actor = _user.Actor(ReservationRules.MaxActorLength);
                 var reason = ValidationErrors.RequiredText(request.Reason, ReservationRules.MaxReasonLength, "reason", errors);
                 if (errors.Count == 0)
                 {

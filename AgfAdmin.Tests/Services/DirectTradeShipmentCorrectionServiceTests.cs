@@ -183,14 +183,14 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         var shipment = await ShipAsync(_factory, _orderA, (a, 81.4m, "LOT-DT-SRC"));
         await using (var db = _factory.CreateContext())
         {
-            var blocked = await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), ActorReference = "office-1", Reason = "x" });
+            var blocked = await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), Reason = "x" });
             Assert.Equal(ServiceResultStatus.Conflict, blocked.Status);
         }
         Assert.Equal(ServiceResultStatus.Created, (await CorrectAsync(_orderA, shipment.Id, Correction(await OrderVersionAsync(_factory, _orderA), shipment))).Status);
 
         await using (var db = _factory.CreateContext())
         {
-            var cancelled = await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), ActorReference = "office-1", Reason = "Klant zegt af" });
+            var cancelled = await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = await OrderVersionAsync(_factory, _orderA), Reason = "Klant zegt af" });
             Assert.Equal(ServiceResultStatus.Ok, cancelled.Status);
             var reservations = cancelled.Value.Lines.Single(l => l.Id == _lineA).Reservations;
             Assert.Equal("Corrected", reservations.Single(r => r.Id == a.Id).Status);
@@ -551,7 +551,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
                 // Gebaseerd op de oude capaciteit (rest 75): de toewijzing elders kan nooit meer dan dat nemen.
                 "allocate-other-order" => (await TryAllocateAsync(orderB, lineB, 75m)).Status,
                 "release-other-allocation" => (await new StockReservationService(db).ReleaseAsync(other.Id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = other.Version, ActorReference = "office-1", Reason = "x" })).Status,
-                _ => (await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = "x" })).Status
+                _ => (await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "x" })).Status
             };
         });
 

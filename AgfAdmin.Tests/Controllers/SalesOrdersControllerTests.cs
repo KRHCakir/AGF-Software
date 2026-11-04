@@ -18,7 +18,6 @@ public class SalesOrdersControllerTests : IDisposable
         RequestId = requestId,
         CustomerId = _seed.CustomerId,
         RequestedDeliveryDate = new DateTimeOffset(2026, 10, 23, 6, 0, 0, TimeSpan.Zero),
-        ActorReference = "office-1",
         Lines = new List<CreateSalesOrderLineDto> { new() { ProductVariantId = _seed.AvocadoId, Quantity = 20m, Unit = "box" } }
     };
 
@@ -147,7 +146,7 @@ public class SalesOrdersControllerTests : IDisposable
         })));
         CancelSalesOrderDto Cancel(int? version, string reason = "Klant heeft afgezegd", Guid? requestId = null) => new()
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, ActorReference = "office-1", Reason = reason
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedOrderVersion = version, Reason = reason
         };
 
         Assert.Contains("reason", Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(await Orders(c => c.Cancel(order.Id, Cancel(0, reason: " ")))).Value).Errors.Keys);
@@ -156,7 +155,7 @@ public class SalesOrdersControllerTests : IDisposable
 
         var request = Cancel(order.Version);
         var cancelled = Assert.IsType<SalesOrderDto>(Assert.IsType<OkObjectResult>(await Orders(c => c.Cancel(order.Id, request))).Value);
-        Assert.Equal(("Cancelled", "Klant heeft afgezegd", "office-1"), (cancelled.Status, cancelled.CancelReason, cancelled.CancelledBy));
+        Assert.Equal(("Cancelled", "Klant heeft afgezegd", "Admin"), (cancelled.Status, cancelled.CancelReason, cancelled.CancelledBy));
         Assert.All(cancelled.Lines.SelectMany(l => l.Reservations), r => Assert.Equal("Released", r.Status));
 
         Assert.IsType<OkObjectResult>(await Orders(c => c.Cancel(order.Id, request)));
@@ -212,7 +211,7 @@ public class SalesOrdersControllerTests : IDisposable
         var line = after.Lines[0];
         Assert.Equal((10m, 0m, 10m, false), (line.DispatchedQuantity, line.ReservedQuantity, line.OpenQuantity, line.Fulfilled));
         Assert.Equal(("Consumed", dispatch.Id), (line.Reservations.Single().Status, line.Reservations.Single().DispatchId));
-        Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = after.Version, ActorReference = "office-1", Reason = "x" })));
+        Assert.IsType<ConflictObjectResult>(await Orders(c => c.Cancel(order.Id, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = after.Version, Reason = "x" })));
     }
 
     [Fact]

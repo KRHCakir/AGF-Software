@@ -105,7 +105,7 @@ public sealed class SalesShortageTests : IDisposable
         var order = (await _s.CreateAsync(_s.Order((40m, "Stock")))).Value;
         await using (var db = _s.Factory.CreateContext())
         {
-            var cancelled = await new SalesOrderService(db).CancelAsync(order.Id, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, ActorReference = "verkoop-1", Reason = "Klant zegt af" });
+            var cancelled = await new SalesOrderService(db).CancelAsync(order.Id, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = order.Version, Reason = "Klant zegt af" });
             Assert.Equal(ServiceResultStatus.Ok, cancelled.Status);
         }
         await using (var db = _s.Factory.CreateContext())
