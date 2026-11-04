@@ -66,6 +66,12 @@ namespace AgfAdmin.DTOs
         public bool Delivered { get; set; }
         // Alleen in het antwoord op aanmaken (ook bij een identieke herhaling): kredietlimiet overschreden. Nooit blokkerend.
         public SalesOrderCreditWarningDto CreditWarning { get; set; }
+        // Alleen in het antwoord op aanmaken: varianten die na deze order meer verkocht zijn dan voorraad en verwachte aanvoer. Nooit blokkerend.
+        public List<SalesShortageWarningDto> ShortageWarnings { get; set; }
+        // Afgeleid bij een open order: een regel heeft tekort (niet gedekt door voorraad of verwachte aanvoer, oudste verkoop eerst).
+        public bool Shortage { get; set; }
+        // Afgeleid bij een open order: een regel uit verwachte aanvoer is nog niet (helemaal) gereserveerd.
+        public bool AwaitingStock { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
     }
 
@@ -109,6 +115,12 @@ namespace AgfAdmin.DTOs
         public string WeightSource { get; set; }
         // Stock (uit voorraad) of Expected (uit verwachte aanvoer, verkocht vóór aankomst).
         public string SupplySource { get; set; }
+        // Alleen bij een open order: de stand van deze variant en eenheid ("Voorraad 40 · Verwacht 20 · Vrij 10") en de dekking van het
+        // nog niet gereserveerde deel van deze regel. Null bij een geannuleerde order.
+        public SalesBalanceDto Balance { get; set; }
+        public SalesLineCoverageDto Coverage { get; set; }
+        // Uit verwachte aanvoer en nog niet (helemaal) gereserveerd.
+        public bool AwaitingStock { get; set; }
         // Alleen Active Physical verkoopreserveringen (magazijnvoorraad); nooit omgerekend.
         public decimal ReservedQuantity { get; set; }
         public decimal ReservedNetWeightKg { get; set; }
