@@ -52,6 +52,17 @@ describe('PartijNumberingSetting', () => {
         assert.equal(calls.filter((call) => call.method === 'PUT').length, 0);
     });
 
+    test('own number mode shows no example and fetches no suggestion', async () => {
+        await mounted.render(<PartijNumberingSetting previewDelayMs={0} />);
+        await mounted.waitFor(() => example().includes('2611252'), 'example');
+        const before = calls.filter((call) => call.url.includes('/partijen/next-number')).length;
+        await act(async () => { mounted.container.querySelector<HTMLInputElement>('input[value="Own"]')!.click(); });
+        assert.ok(!example().includes('2611252'));
+        assert.ok(example().includes('–'));
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+        assert.equal(calls.filter((call) => call.url.includes('/partijen/next-number')).length, before);
+    });
+
     test('saving puts mode, format and reset', async () => {
         await mounted.render(<PartijNumberingSetting previewDelayMs={0} />);
         await mounted.waitFor(() => example().includes('2611252'), 'example');

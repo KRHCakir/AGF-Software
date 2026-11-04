@@ -38,7 +38,7 @@ export default function PartijNumberingSetting({ previewDelayMs = 250 }: { previ
     // Live voorbeeld: eerst de eigen controle van het formaat, daarna (kort na het typen) het voorstel van de server.
     const localError = value === null ? null : partijFormatError(value.format);
     useEffect(() => {
-        if (value === null || localError !== null) { setExample(null); return; }
+        if (value === null || value.mode === 'Own' || localError !== null) { setExample(null); return; }
         const controller = new AbortController();
         const timer = window.setTimeout(() => {
             getNextPartijNumber({ format: value.format, reset: value.sequenceReset }, controller.signal)
