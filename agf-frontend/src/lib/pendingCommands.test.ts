@@ -550,7 +550,7 @@ describe('delivery retraction commands', () => {
 describe('purchase order commands in the same store mechanism', () => {
     const reject = {
         kind: 'reject-receipt', key: 'reject-receipt:7:41', orderId: 7, palletContentLineId: 41, requestId: 'r-1', attempts: 1, lastError: 'network', frozenAt: '2026-10-27T10:00:00.000Z',
-        payload: { requestId: 'r-1', reason: 'Quality', explanation: null, decision: 'ReturnToSupplier', actorReference: 'Jan',
+        payload: { requestId: 'r-1', reason: 'Quality', explanation: null, decision: 'ReturnToSupplier',
             lines: [{ palletContentLineId: 41, expectedContentLineVersion: 3, quantity: 48, netWeightKg: 192 }] },
         display: { orderNumber: 'IO-2026-0007', palletReference: 'P-1', lotNumber: 'LOT-1' },
     };
@@ -573,7 +573,7 @@ describe('purchase order commands in the same store mechanism', () => {
 describe('invoice reference commands', () => {
     const ref = {
         kind: 'invoice-ref', key: 'invoice-ref:7:credit-note', orderId: 7, requestId: 'i-1', attempts: 1, lastError: null, frozenAt: '2026-10-27T10:00:00.000Z',
-        payload: { requestId: 'i-1', kind: 'CreditNote', invoiceNumber: 'CN-12', invoiceDate: null, amountExclVat: -48.5, actorReference: null },
+        payload: { requestId: 'i-1', kind: 'CreditNote', invoiceNumber: 'CN-12', invoiceDate: null, amountExclVat: -48.5 },
         display: { orderNumber: 'IO-2026-0007' },
     };
 

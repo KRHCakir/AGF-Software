@@ -19,7 +19,6 @@ import NewArticlePrompt from '../shared/NewArticlePrompt';
 import TradeClassPicker from '../shared/TradeClassPicker';
 import { inputClass } from './FieldError';
 import { secondaryButtonClass } from './SuccessPanel';
-import { useActorReference } from './useActorReference';
 
 const LABEL_KEYS: Record<ReceiptAttribute, string> = {
     size: 'receipt_attr_size', packaging: 'receipt_attr_packaging', tradeClass: 'receipt_attr_trade_class', brand: 'receipt_attr_brand',
@@ -55,7 +54,6 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
     onClose: () => void;
 }) {
     const { t } = useTranslation();
-    const [actor] = useActorReference();
     const kinds = useMemo(() => articleKinds(products), [products]);
     const [kindKey, setKindKey] = useState(() => kinds.find((kind) => kind.variants.some((variant) => String(variant.id) === currentVariantId))?.key ?? '');
     const [countries, setCountries] = useState<CountryReference | null>(null);
@@ -95,7 +93,7 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
             const article = await createArticleFromEntry({
                 requestId: request.current.requestId, source: 'Supply', templateVariantId: kind.template.id, originCountryCode: entered.origin,
                 sizeCategory: text(entered.size), packaging: text(entered.packaging), tradeClass: text(entered.tradeClass), brand: text(entered.brand),
-                netKgPerPackage: perPackage?.ok ? perPackage.value : null, actorReference: actor.trim() === '' ? null : actor.trim(),
+                netKgPerPackage: perPackage?.ok ? perPackage.value : null,
             });
             onUse(article.id, article);
         } catch (caught) {

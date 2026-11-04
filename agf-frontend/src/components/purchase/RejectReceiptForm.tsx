@@ -15,7 +15,6 @@ import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { useActorReference } from '../supply/useActorReference';
 import { PendingNotice } from '../sales/PendingCommandsBanner';
 import { usePendingCommand } from '../sales/PendingCommandsContext';
 
@@ -32,7 +31,6 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
     onCancel: () => void;
 }) {
     const { t, locale } = useTranslation();
-    const [actor, setActor] = useActorReference();
     const calculated = receipt.weightMethod === 'Calculated' && receipt.netKgPerPackage !== null;
     const kgFor = (quantity: number) => defaultRejectedKg(quantity, receipt.onHandQuantity, receipt.onHandNetWeightKg, receipt.weightMethod, receipt.netKgPerPackage);
     const [pending, setPending, clearPending] = usePendingCommand<RejectReceiptCommand>(rejectReceiptKey(orderId, receipt.palletContentLineId));
@@ -72,14 +70,12 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
         if (reason === '') addError(found, 'reason', t('supply_error_required'));
         const trimmed = explanation.trim();
         if (reason === 'Other' && trimmed === '') addError(found, 'explanation', t('po_reject_explanation_required'));
-        if (actor.trim() === '') addError(found, 'actorReference', t('supply_error_required'));
         setErrors(found);
         if (Object.keys(found).length > 0 || !parsedQuantity.ok || !parsedKg.ok) return null;
         return {
             reason,
             explanation: trimmed === '' ? null : trimmed,
             decision,
-            actorReference: actor.trim(),
             lines: [{ palletContentLineId: receipt.palletContentLineId, expectedContentLineVersion: receipt.version, quantity: parsedQuantity.value, netWeightKg: parsedKg.value }],
         };
     };
@@ -156,12 +152,6 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
                         {REJECTION_REASONS.map((value) => <option key={value} value={value}>{t(REASON_LABEL_KEYS[value])}</option>)}
                     </select>
                     <FieldError id="reason" messages={e('reason')} />
-                </div>
-                <div>
-                    <label htmlFor={`${id}-actor`} className="text-xs font-medium text-gray-700">{t('supply_actor')} *</label>
-                    <input {...fieldProps('actorReference', e('actorReference'))} id={`${id}-actor`} value={actor} maxLength={100} disabled={locked}
-                        onChange={(event) => { if (locked) return; setActor(event.target.value); edited(); }} className={inputClass} />
-                    <FieldError id="actorReference" messages={e('actorReference')} />
                 </div>
             </div>
             <div>

@@ -9,7 +9,6 @@ import { toApiError } from '../../services/apiClient';
 import { deleteArticle, getArticleUsage, setArticleArchived } from '../../services/articleService';
 import type { Article, ArticleUsage } from '../../types/article';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { useActorReference } from '../supply/useActorReference';
 
 const dangerButtonClass = 'rounded-md bg-red-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600';
 
@@ -21,7 +20,6 @@ export default function ArticleLifecycle({ article, onChanged, onDeleted }: {
     onDeleted: (id: number) => void;
 }) {
     const { t, locale } = useTranslation();
-    const [actor] = useActorReference();
     const [usage, setUsage] = useState<ArticleUsage | null>(null);
     const [usageFailed, setUsageFailed] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -40,14 +38,13 @@ export default function ArticleLifecycle({ article, onChanged, onDeleted }: {
         return () => controller.abort();
     }, [article.id, reloadToken]);
 
-    const actorReference = actor.trim() === '' ? null : actor.trim();
     const blocked = deleteBlockedReason(t, usage);
 
     const toggleArchived = async () => {
         setBusy(true);
         setMessage(null);
         try {
-            onChanged(await setArticleArchived(article.id, !article.isArchived, actorReference));
+            onChanged(await setArticleArchived(article.id, !article.isArchived));
         } catch (caught) {
             setMessage(toApiError(caught).message);
         } finally {
@@ -59,7 +56,7 @@ export default function ArticleLifecycle({ article, onChanged, onDeleted }: {
         setBusy(true);
         setMessage(null);
         try {
-            await deleteArticle(article.id, actorReference);
+            await deleteArticle(article.id);
             setConfirming(false);
             onDeleted(article.id);
         } catch (caught) {

@@ -10,8 +10,8 @@ export async function getCountries(signal?: AbortSignal): Promise<CountryReferen
     return json;
 }
 
-export async function addCountryAlias(alias: string, countryCode: string, actorReference: string | null, signal?: AbortSignal): Promise<CountryAlias> {
-    const { json } = await postJson('/countries/aliases', { alias, countryCode, actorReference }, signal);
+export async function addCountryAlias(alias: string, countryCode: string, signal?: AbortSignal): Promise<CountryAlias> {
+    const { json } = await postJson('/countries/aliases', { alias, countryCode }, signal);
     if (!isCountryAlias(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het opslaan van de snelkoppeling.');
     return json;
 }

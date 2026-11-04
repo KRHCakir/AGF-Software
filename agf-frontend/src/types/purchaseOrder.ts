@@ -195,7 +195,6 @@ export interface AddInvoiceRefRequest {
     invoiceNumber: string;
     invoiceDate: string | null;
     amountExclVat: number | null;
-    actorReference: string | null;
 }
 
 export interface RejectRequest {
@@ -203,7 +202,6 @@ export interface RejectRequest {
     reason: string;
     explanation: string | null;
     decision: string;
-    actorReference: string;
     lines: { palletContentLineId: number; expectedContentLineVersion: number; quantity: number; netWeightKg: number }[];
 }
 

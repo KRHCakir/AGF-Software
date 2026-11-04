@@ -28,7 +28,6 @@ const input = (id: string) => mounted.container.querySelector<HTMLInputElement>(
 
 describe('InvoiceRefActions', () => {
     beforeEach(() => {
-        window.localStorage.setItem('agf_actor_reference', 'Jan');
         window.sessionStorage.clear();
         answers = [];
         posted = stubFetch({ onGet: () => json(404, {}), nextPost: () => (answers.shift() ?? (async () => json(500, {})))() });
@@ -50,7 +49,7 @@ describe('InvoiceRefActions', () => {
         await mounted.waitFor(() => mounted.hasText('po_invoice_duplicate'), 'duplicate notice');
         const body = JSON.parse(posted[0].body);
         assert.match(posted[0].url, /\/purchase-orders\/7\/invoice-refs$/);
-        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', kind: 'Invoice', invoiceNumber: 'F-4711', invoiceDate: '2026-10-27', amountExclVat: 1234.5, actorReference: 'Jan' });
+        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', kind: 'Invoice', invoiceNumber: 'F-4711', invoiceDate: '2026-10-27', amountExclVat: 1234.5 });
 
         await act(async () => { setValue(input('invoiceRef-Invoice-number'), 'F-4712'); });
         answers.push(async () => json(201, order));

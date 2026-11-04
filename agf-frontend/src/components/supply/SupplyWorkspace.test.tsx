@@ -13,7 +13,6 @@ const reference = (url: string) => (url.includes('/vendors') || url.includes('/c
 describe('SupplyWorkspace', () => {
     beforeEach(() => {
         gets = [];
-        window.localStorage.setItem('agf_actor_reference', 'wh-1');
         stubFetch({ onGet: (url) => { gets.push(url); return reference(url) ?? json(200, []); }, nextPost: async () => json(500, {}) });
         mounted = new Mounted();
     });
@@ -43,7 +42,6 @@ describe('SupplyWorkspace', () => {
 
 describe('SupplyWorkspace: another order in the link', () => {
     beforeEach(() => {
-        window.localStorage.setItem('agf_actor_reference', 'wh-1');
         mounted = new Mounted();
     });
     afterEach(async () => { await mounted.unmount(); });

@@ -81,7 +81,7 @@ describe('PlanSupplyForm: new article on a supply line', () => {
         const body = JSON.parse(posted[0].body);
         assert.deepEqual({ ...body, requestId: typeof body.requestId }, {
             requestId: 'string', source: 'Supply', templateVariantId: 10, originCountryCode: 'ZA', sizeCategory: '12', packaging: 'test', tradeClass: 'I', brand: 'test',
-            netKgPerPackage: 4.5, actorReference: null,
+            netKgPerPackage: 4.5,
         });
         assert.ok(field('lines[0].productVariantId-input').value.includes('Zuid-Afrika'), 'the new article is on the line');
 

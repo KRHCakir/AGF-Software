@@ -44,7 +44,6 @@ const select = (id: string) => mounted.container.querySelector<HTMLSelectElement
 
 describe('Purchase orders page', () => {
     beforeEach(() => {
-        window.localStorage.setItem('agf_actor_reference', 'Jan');
         window.sessionStorage.clear();
         listUrls = [];
         current = detail();
@@ -104,7 +103,7 @@ describe('Purchase orders page', () => {
         assert.ok(mounted.hasText('F-4711'));
     });
 
-    test('opens the order and rejects part of a received line with reason, decision and actor', async () => {
+    test('opens the order and rejects part of a received line with reason and decision; no employee is sent', async () => {
         navigate('/purchase-orders');
         await mounted.render(<PurchaseOrdersPage />);
         const openButton = await mounted.waitFor(() => mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_open_order'), 'open button');
@@ -129,7 +128,7 @@ describe('Purchase orders page', () => {
         const body = JSON.parse(posted[0].body);
         assert.equal(body.reason, 'Quality');
         assert.equal(body.decision, 'ReturnToSupplier');
-        assert.equal(body.actorReference, 'Jan');
+        assert.equal(body.actorReference, undefined, 'who rejects is the signed-in user on the server');
         assert.deepEqual(body.lines, [{ palletContentLineId: 40, expectedContentLineVersion: 3, quantity: 48, netWeightKg: 192 }]);
 
         await mounted.waitFor(() => mounted.hasText('po_rejected_of'), 'rejected summary');

@@ -9,11 +9,10 @@ import { getCustomers, getProductsWithVariants, getVendors } from '../../service
 import { getSupplyCommitment } from '../../services/supplyService';
 import { SupplyRoute } from '../../types/availability';
 import { SupplyCommitment } from '../../types/supply';
-import { inputClass } from './FieldError';
 import PlanSupplyForm, { ReferenceData } from './PlanSupplyForm';
 import ReceivePalletForm from './ReceivePalletForm';
-import { useActorReference } from './useActorReference';
 import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
+import { SignedInAs } from '../shared/CurrentUserContext';
 
 export type SupplyTask = 'purchase-order' | 'receipt' | 'direct-trade';
 
@@ -29,7 +28,6 @@ const TASKS: Record<SupplyTask, { titleKey: string; introKey: string; route: Sup
 export default function SupplyWorkspace({ task, orderId = null }: { task: SupplyTask; orderId?: number | null }) {
     const { t } = useTranslation();
     const router = useRouter();
-    const [actor, setActor] = useActorReference();
     const config = TASKS[task];
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
     const [referenceToken, setReferenceToken] = useState(0);
@@ -78,12 +76,7 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
                     <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t(config.titleKey)}</h1>
                     <p className="text-sm text-gray-600" data-testid="page-intro">{t(config.introKey)}</p>
                 </div>
-                <div className="w-64">
-                    <label htmlFor="actorReference-page" className="text-xs font-medium text-gray-700">{t('supply_actor')}</label>
-                    <input id="actorReference-page" value={actor} maxLength={100} onChange={(event) => setActor(event.target.value)}
-                        placeholder={t('supply_actor_placeholder')} className={inputClass} aria-describedby="actorReference-hint" />
-                    <span id="actorReference-hint" className="block text-xs text-gray-500">{t('supply_actor_hint')}</span>
-                </div>
+                <SignedInAs />
             </div>
 
             {task !== 'receipt' && (
@@ -101,7 +94,7 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
                     {orderLoading
                         ? <LoadingRows rows={3} label={t('supply_loading_sources')} />
                         // Per order een vers formulier: een keuze voor de vorige order blijft nooit hangen.
-                        : <ReceivePalletForm key={orderId ?? 'none'} actor={actor} preselected={preselected} onPreselectedConsumed={consumePreselected} />}
+                        : <ReceivePalletForm key={orderId ?? 'none'} preselected={preselected} onPreselectedConsumed={consumePreselected} />}
                 </>
             )}
         </div>

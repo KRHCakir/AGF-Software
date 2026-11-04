@@ -42,13 +42,13 @@ export async function getArticleUsage(id: number, signal?: AbortSignal): Promise
     return json;
 }
 
-// Verwijderen (204) of 409 "article-in-use" met de reden; de actor gaat mee voor de historie.
-export async function deleteArticle(id: number, actorReference: string | null, signal?: AbortSignal): Promise<void> {
-    await postJson(`/articles/${id}/delete`, { actorReference }, signal);
+// Verwijderen (204) of 409 "article-in-use" met de reden; wie het deed, legt de server vast (de ingelogde gebruiker).
+export async function deleteArticle(id: number, signal?: AbortSignal): Promise<void> {
+    await postJson(`/articles/${id}/delete`, {}, signal);
 }
 
-export async function setArticleArchived(id: number, archived: boolean, actorReference: string | null, signal?: AbortSignal): Promise<Article> {
-    const { json } = await postJson(`/articles/${id}/${archived ? 'archive' : 'restore'}`, { actorReference }, signal);
+export async function setArticleArchived(id: number, archived: boolean, signal?: AbortSignal): Promise<Article> {
+    const { json } = await postJson(`/articles/${id}/${archived ? 'archive' : 'restore'}`, {}, signal);
     if (!isArticle(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het archiveren van het artikel.');
     return json;
 }
@@ -59,8 +59,8 @@ export async function listEmptyProducts(signal?: AbortSignal): Promise<EmptyProd
     return json;
 }
 
-export async function deleteProduct(id: number, actorReference: string | null, signal?: AbortSignal): Promise<void> {
-    await postJson(`/articles/products/${id}/delete`, { actorReference }, signal);
+export async function deleteProduct(id: number, signal?: AbortSignal): Promise<void> {
+    await postJson(`/articles/products/${id}/delete`, {}, signal);
 }
 
 // "Artikel aanmaken en doorgaan" vanuit aanvoer of ontvangst (idempotent via requestId).
@@ -86,7 +86,6 @@ export interface ArticleFromEntryRequest {
     tradeClass: string | null;
     brand: string | null;
     netKgPerPackage: number | null;
-    actorReference: string | null;
 }
 
 // 201 nieuw of 200 herhaling: het artikel. Een 409 "article-exists" bevat het bestaande artikel (existingArticle haalt het eruit).
