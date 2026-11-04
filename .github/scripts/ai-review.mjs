@@ -18,6 +18,14 @@
 //   AI_API_KEY
 // Optioneel:
 //   MAX_DIFF_CHARS (standaard 60000), REVIEW_OUTPUT (standaard review-result.json)
+//   AI_TEMPERATURE (standaard 0.1; "none" = niet meesturen, voor modellen die geen
+//                  eigen temperature accepteren, zoals veel nieuwere OpenAI-modellen)
+//   AI_REASONING_EFFORT (standaard leeg = niet meesturen; bv. "low" voor OpenAI)
+//   AI_JSON_MODE   (standaard true; false als het model response_format weigert)
+//
+// Gegenereerde bestanden (EF-migratie-Designer, ModelSnapshot, lockfiles, afbeeldingen,
+// docs/) worden vóór het afkappen uit de diff gehaald. Het model krijgt een lijst van wat
+// is weggelaten, zodat het niet concludeert dat die bestanden ontbreken.
 
 import { writeFileSync } from 'node:fs'
 
@@ -42,6 +50,13 @@ if (!Number.isSafeInteger(maxDiffChars) || maxDiffChars <= 0) {
   console.error('::error::MAX_DIFF_CHARS must be a positive safe integer.')
   process.exit(2)
 }
+const rawTemperature = env('AI_TEMPERATURE', '0.1').toLowerCase()
+const temperature = rawTemperature === 'none' ? null : Number(rawTemperature)
+if (temperature !== null && (!Number.isFinite(temperature) || temperature < 0 || temperature > 2)) {
+  console.error('::error::AI_TEMPERATURE must be a number between 0 and 2, or "none".')
+  process.exit(2)
+}
+const reasoningEffort = (process.env.AI_REASONING_EFFORT ?? '').trim()
 const githubTimeoutMs = Number(env('GITHUB_REQUEST_TIMEOUT_MS', '30000'))
 const aiTimeoutMs = Number(env('AI_REQUEST_TIMEOUT_MS', '300000'))
 const jsonModeSetting = env('AI_JSON_MODE', 'true').toLowerCase()
@@ -91,7 +106,8 @@ async function gh(path, { method = 'GET', accept = 'application/vnd.github+json'
 async function askModel(system, user) {
   const requestBody = {
     model,
-    temperature: 0.1,
+    ...(temperature !== null ? { temperature } : {}),
+    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
     messages: [
       { role: 'system', content: system },
@@ -233,11 +249,65 @@ Severity rules (be calibrated, not maximal):
 Theoretical improvements (extra timeouts, extra validation, supporting other providers)
 are minor unless you can name a realistic scenario in which the current code actually fails.
 Use "request_changes" only when there is at least one blocker or major finding.
+
+Completeness of the diff: generated or non-code files (EF migration *.Designer.cs,
+*ModelSnapshot.cs, lockfiles, images, docs/) may be left out of the diff, and a very large
+diff may be cut off. You get a list of every file changed in the PR and of the files that
+were left out or cut off. NEVER report that a file, migration, field or code path is
+missing just because you cannot see it in the diff: if it is listed as part of the PR, it
+exists. Only report something as missing when the visible code proves it is absent.
+Do not raise blockers or majors about code you cannot see.
 Write summary and findings in Dutch.`
+
+// Bestanden die we niet naar het model sturen (gegenereerd of geen code).
+const OMIT = [
+  /\.Designer\.cs$/,
+  /ModelSnapshot\.cs$/,
+  /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|packages\.lock\.json)$/,
+  /\.min\.(js|css)$/,
+  /^docs\//,
+  /\.(png|jpe?g|gif|webp|svg|ico|pdf|woff2?|ttf|eot)$/i,
+]
+
+function filePathOf(part) {
+  const m = part.match(/^diff --git a\/(.+?) b\/(.+)$/m)
+  return m ? m[2].trim() : null
+}
+
+// Splitst de diff per bestand en haalt gegenereerde bestanden eruit.
+function splitDiff(diff) {
+  const parts = diff.split(/^(?=diff --git )/m).filter((p) => p.length > 0)
+  const kept = []
+  const omitted = []
+  const allFiles = []
+  for (const part of parts) {
+    const path = filePathOf(part)
+    if (path) allFiles.push(path)
+    if (path && OMIT.some((re) => re.test(path))) omitted.push(path)
+    else kept.push({ path, text: part })
+  }
+  return { kept, omitted, allFiles }
+}
+
+// Neemt hele bestanden mee tot de grens; wat niet past wordt (deels) ingekort.
+function fitDiff(kept, max) {
+  let out = ''
+  const cut = []
+  for (const { path, text } of kept) {
+    if (out.length + text.length <= max) {
+      out += text
+    } else {
+      const room = max - out.length
+      if (room > 2000) out += text.slice(0, room) + '\n[... rest van dit bestand ingekort ...]\n'
+      if (path) cut.push(path)
+    }
+  }
+  return { diff: out, cut }
+}
 
 const severityIcon = { blocker: '🛑', major: '🟠', minor: '🟡', nit: '⚪' }
 
-function renderComment(result, truncated) {
+function renderComment(result, info) {
   const ok = result.verdict === 'approve'
   const lines = [
     marker,
@@ -254,7 +324,12 @@ function renderComment(result, truncated) {
       lines.push(`| ${severityIcon[f.severity] ?? '•'} ${f.severity ?? ''} | \`${where}\` | ${detail} |`)
     }
   }
-  if (truncated) lines.push('', `_Let op: de diff was groter dan ${maxDiffChars} tekens en is ingekort._`)
+  if (info.omitted.length) {
+    lines.push('', `<sub>Niet meegestuurd (gegenereerd of geen code): ${info.omitted.length} bestand(en).</sub>`)
+  }
+  if (info.cut.length) {
+    lines.push('', `_Let op: de diff was groter dan ${maxDiffChars} tekens. Ingekort of weggelaten: ${info.cut.map((p) => '`' + p + '`').join(', ')}._`)
+  }
   lines.push('', `<sub>Model: \`${model}\`</sub>`)
   return lines.join('\n')
 }
@@ -276,21 +351,45 @@ async function upsertComment(body) {
 
 async function main() {
   const meta = await gh(`/repos/${repo}/pulls/${pr}`)
-  let diff = await gh(`/repos/${repo}/pulls/${pr}`, { accept: 'application/vnd.github.diff' })
-  const truncated = diff.length > maxDiffChars
-  if (truncated) diff = diff.slice(0, maxDiffChars)
+  const fullDiff = await gh(`/repos/${repo}/pulls/${pr}`, { accept: 'application/vnd.github.diff' })
+  const { kept, omitted, allFiles } = splitDiff(fullDiff)
+  const { diff, cut } = fitDiff(kept, maxDiffChars)
+  const info = { omitted, cut }
 
-  console.log(`Reviewing PR #${pr} "${meta.title}" with ${aiName} (${model}), diff ${diff.length} chars`)
+  console.log(
+    `Reviewing PR #${pr} "${meta.title}" with ${aiName} (${model}): full diff ${fullDiff.length} chars, ` +
+      `sent ${diff.length} chars, ${omitted.length} file(s) omitted, ${cut.length} file(s) cut`,
+  )
 
-  const user = `Pull request #${pr}: ${meta.title}\n\nDescription:\n${meta.body || '(none)'}\n\nDiff:\n${diff}`
+  const notes = [`Files changed in this PR (${allFiles.length}):\n${allFiles.map((f) => '- ' + f).join('\n')}`]
+  if (omitted.length) {
+    notes.push(
+      `These generated/non-code files ARE part of the PR but were left out of the diff below ` +
+        `(do not report them as missing):\n${omitted.map((f) => '- ' + f).join('\n')}`,
+    )
+  }
+  if (cut.length) {
+    notes.push(
+      `The diff was larger than ${maxDiffChars} characters. These files ARE part of the PR but ` +
+        `were cut off or left out of the diff below (do not report them or their contents as missing):\n` +
+        cut.map((f) => '- ' + f).join('\n'),
+    )
+  }
+
+  const user =
+    `Pull request #${pr}: ${meta.title}\n\nDescription:\n${meta.body || '(none)'}\n\n` +
+    `${notes.join('\n\n')}\n\nDiff:\n${diff}`
   const result = validateReviewResult(await askModel(SYSTEM, user))
 
-  writeFileSync(outputPath, JSON.stringify({ ...result, reviewer: aiName, model, pr: Number(pr), head: meta.head?.sha }, null, 2))
-  await upsertComment(renderComment(result, truncated))
+  writeFileSync(
+    outputPath,
+    JSON.stringify({ ...result, reviewer: aiName, model, pr: Number(pr), head: meta.head?.sha, omitted, cut }, null, 2),
+  )
+  await upsertComment(renderComment(result, info))
 
   console.log(`Verdict: ${result.verdict} — ${result.summary}`)
   if (process.env.GITHUB_STEP_SUMMARY) {
-    writeFileSync(process.env.GITHUB_STEP_SUMMARY, renderComment(result, truncated).replace(marker, '') + '\n', { flag: 'a' })
+    writeFileSync(process.env.GITHUB_STEP_SUMMARY, renderComment(result, info).replace(marker, '') + '\n', { flag: 'a' })
   }
   if (result.verdict === 'request_changes') {
     console.log(`::error::${aiName} requests changes on PR #${pr}.`)

@@ -1,6 +1,8 @@
 name: AI PR Review
 
-# Reviewt elke pull request eerst met DeepSeek en daarna (als die goedkeurt) met Qwen.
+# Reviewt elke pull request eerst met de tweede reviewer (job "Qwen review"; via de QWEN_*-
+# variabelen kan dat ook OpenAI zijn) en daarna, als die goedkeurt, met DeepSeek.
+# Zonder QWEN_API_KEY wordt die eerste stap overgeslagen en draait DeepSeek direct.
 # Elk model zet één comment op de PR en werkt die bij bij nieuwe commits.
 # Rood = een model vraagt om wijzigingen. Groen = beide keuren goed.
 #
@@ -9,6 +11,16 @@ name: AI PR Review
 #   Variables: DEEPSEEK_MODEL (standaard deepseek-v4-pro)
 #              QWEN_MODEL     (standaard qwen-plus)
 #              QWEN_BASE_URL  (standaard https://dashscope-intl.aliyuncs.com/compatible-mode/v1)
+#              SECOND_REVIEWER_NAME (standaard Qwen) - naam van de tweede reviewer in comments,
+#                             bv. "OpenAI" als QWEN_* naar OpenAI wijst. De job blijft "Qwen review"
+#                             heten, zodat verplichte checks (branch protection) niet breken.
+#              DEEPSEEK_TEMPERATURE / QWEN_TEMPERATURE (standaard 0.1; "none" = niet meesturen,
+#                             nodig voor OpenAI-modellen die geen eigen temperature accepteren)
+#              QWEN_REASONING_EFFORT (standaard leeg) - bv. "low" voor OpenAI GPT-6.x
+#              QWEN_JSON_MODE (standaard true) - false als het model response_format weigert
+#              MAX_DIFF_CHARS (standaard 200000) - max. aantal tekens diff per review, nadat
+#                             gegenereerde bestanden (migratie-Designer, ModelSnapshot, lockfiles,
+#                             afbeeldingen, docs/) er al uit zijn gehaald
 #              AI_FIX_MAX_ROUNDS (standaard 3) - hoe vaak Claude zelf mag fixen per PR
 #              NOTIFY_USER    (standaard: eigenaar van de repo) - wie de "klaar"-melding krijgt
 #
@@ -40,11 +52,13 @@ permissions:
 
 env:
   PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
+  MAX_DIFF_CHARS: ${{ vars.MAX_DIFF_CHARS || '200000' }}
+  SECOND_REVIEWER: ${{ vars.SECOND_REVIEWER_NAME || 'Qwen' }}
 
 jobs:
   deepseek:
     name: DeepSeek review
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    needs: qwen
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -64,6 +78,7 @@ jobs:
           AI_BASE_URL: https://api.deepseek.com
           AI_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-v4-pro' }}
           AI_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AI_TEMPERATURE: ${{ vars.DEEPSEEK_TEMPERATURE || '0.1' }}
           REVIEW_OUTPUT: deepseek-review.json
         run: node .github/scripts/ai-review.mjs
 
@@ -77,7 +92,7 @@ jobs:
 
   qwen:
     name: Qwen review
-    needs: deepseek
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -105,14 +120,17 @@ jobs:
         with:
           node-version: 22
 
-      - name: Review with Qwen
+      - name: Review with second reviewer
         if: steps.key.outputs.present == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          AI_NAME: Qwen
+          AI_NAME: ${{ env.SECOND_REVIEWER }}
           AI_BASE_URL: ${{ vars.QWEN_BASE_URL || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1' }}
           AI_MODEL: ${{ vars.QWEN_MODEL || 'qwen-plus' }}
           AI_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          AI_TEMPERATURE: ${{ vars.QWEN_TEMPERATURE || '0.1' }}
+          AI_REASONING_EFFORT: ${{ vars.QWEN_REASONING_EFFORT || '' }}
+          AI_JSON_MODE: ${{ vars.QWEN_JSON_MODE || 'true' }}
           REVIEW_OUTPUT: qwen-review.json
         run: node .github/scripts/ai-review.mjs
 
@@ -186,7 +204,7 @@ jobs:
             --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
           echo "AI fix rounds so far: $rounds / $MAX_ROUNDS"
           if [ "$rounds" -ge "$MAX_ROUNDS" ]; then
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft al $rounds keer geprobeerd de review-opmerkingen op te lossen, maar DeepSeek/Qwen zijn nog niet tevreden. Kijk jij even mee? (De automatische fix-loop stopt hier.)"
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "⚠️ @$NOTIFY Claude heeft al $rounds keer geprobeerd de review-opmerkingen op te lossen, maar $SECOND_REVIEWER/DeepSeek zijn nog niet tevreden. Kijk jij even mee? (De automatische fix-loop stopt hier.)"
             exit 0
           fi
           echo "run_claude=true" >> "$GITHUB_OUTPUT"
@@ -254,7 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           reviewers="DeepSeek"
-          if [ "$QWEN_RAN" = "true" ]; then reviewers="DeepSeek en Qwen"; fi
+          if [ "$QWEN_RAN" = "true" ]; then reviewers="$SECOND_REVIEWER en DeepSeek"; fi
           rounds=$(gh api "repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
             --jq '[.[] | select(.commit.message | contains("[ai-fix]"))] | length' | awk '{s+=$1} END {print s+0}')
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body "✅ @$NOTIFY PR #$PR_NUMBER is klaar om te testen!
