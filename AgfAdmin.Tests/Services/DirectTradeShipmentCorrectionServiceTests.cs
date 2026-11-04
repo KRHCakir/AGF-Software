@@ -432,7 +432,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
         {
             physical = (await new StockReservationService(db).ReserveAsync(_orderA, _lineA, new CreateStockReservationDto
             {
-                RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m, ActorReference = "office-1"
+                RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40m
             })).Value;
         }
         SalesDispatchDto dispatch;
@@ -550,7 +550,7 @@ public class DirectTradeShipmentCorrectionServiceTests : IDisposable
             {
                 // Gebaseerd op de oude capaciteit (rest 75): de toewijzing elders kan nooit meer dan dat nemen.
                 "allocate-other-order" => (await TryAllocateAsync(orderB, lineB, 75m)).Status,
-                "release-other-allocation" => (await new StockReservationService(db).ReleaseAsync(other.Id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = other.Version, ActorReference = "office-1", Reason = "x" })).Status,
+                "release-other-allocation" => (await new StockReservationService(db).ReleaseAsync(other.Id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = other.Version, Reason = "x" })).Status,
                 _ => (await new SalesOrderService(db).CancelAsync(_orderA, new CancelSalesOrderDto { RequestId = Guid.NewGuid(), ExpectedOrderVersion = version, Reason = "x" })).Status
             };
         });

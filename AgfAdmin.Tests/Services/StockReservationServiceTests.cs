@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -84,7 +85,6 @@ public class StockReservationServiceTests : IDisposable
         Quantity = quantity,
         Unit = unit,
         NetWeightKg = kg,
-        ActorReference = "office-1",
         Reason = reason
     };
 
@@ -98,7 +98,6 @@ public class StockReservationServiceTests : IDisposable
     {
         RequestId = requestId ?? Guid.NewGuid(),
         ExpectedReservationVersion = version,
-        ActorReference = "office-1",
         Reason = reason
     };
 
@@ -124,6 +123,25 @@ public class StockReservationServiceTests : IDisposable
     // ======================== Reserveren ========================
 
     [Fact]
+    public async Task Reserving_records_the_signed_in_user_and_the_same_RequestId_from_another_user_is_a_conflict()
+    {
+        await ArrangeAsync();
+        var request = Reserve(_seed.ApprovedBox, 10m, 40m);
+        var jan = new CurrentUser("id-jan", "Jan", new[] { "Medewerker" }, Permissions.All);
+        var steve = new CurrentUser("id-steve", "Steve", new[] { "Medewerker" }, Permissions.All);
+
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Created, (await new StockReservationService(db, jan).ReserveAsync(_orderId, _boxLine, request)).Status);
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Conflict, (await new StockReservationService(db, steve).ReserveAsync(_orderId, _boxLine, request)).Status);
+            Assert.Equal("Jan", (await db.PalletAuditEvents.SingleAsync(e => e.EventType == "ReservationCreated")).ActorReference);
+        }
+    }
+
+    [Fact]
     public async Task Reserve_Creates_Traceable_Active_Physical_Reservation_With_Audit_And_Version_Touches()
     {
         await ArrangeAsync();
@@ -145,7 +163,7 @@ public class StockReservationServiceTests : IDisposable
         Assert.Equal(await SalesTestData.SupplyLineOfAsync(db, _seed.ApprovedBox), stored.SupplyCommitmentLineId);
 
         var audit = await db.PalletAuditEvents.SingleAsync(e => e.EventType == "ReservationCreated");
-        Assert.Equal((_seed.WarehousePalletId, _seed.ApprovedBox, "office-1", "Klant T, ochtendlevering", request.RequestId), (audit.PalletId!.Value, audit.PalletContentLineId!.Value, audit.ActorReference, audit.Reason, audit.RequestId!.Value));
+        Assert.Equal((_seed.WarehousePalletId, _seed.ApprovedBox, "Admin", "Klant T, ochtendlevering", request.RequestId), (audit.PalletId!.Value, audit.PalletContentLineId!.Value, audit.ActorReference, audit.Reason, audit.RequestId!.Value));
         using var snapshot = JsonDocument.Parse(audit.NewValue!);
         Assert.Equal(10m, snapshot.RootElement.GetProperty("quantity").GetDecimal());
         Assert.Equal(40.5m, snapshot.RootElement.GetProperty("netWeightKg").GetDecimal());
@@ -168,7 +186,6 @@ public class StockReservationServiceTests : IDisposable
     [InlineData("weight-missing", "netWeightKg")]
     [InlineData("weight-zero", "netWeightKg")]
     [InlineData("weight-four-decimals", "netWeightKg")]
-    [InlineData("actor-missing", "actorReference")]
     [InlineData("reason-too-long", "reason")]
     public async Task Reserve_Rejects_Invalid_Input(string invalidCase, string key)
     {
@@ -187,7 +204,6 @@ public class StockReservationServiceTests : IDisposable
             case "weight-missing": request.NetWeightKg = null; break;
             case "weight-zero": request.NetWeightKg = 0m; break;
             case "weight-four-decimals": request.NetWeightKg = 1.0001m; break;
-            case "actor-missing": request.ActorReference = null; break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
         }
 
@@ -304,7 +320,6 @@ public class StockReservationServiceTests : IDisposable
         var request = Reserve(_seed.ApprovedBox, 10m, 40m, reason: "Ochtend");
         var first = await ReserveAsync(request);
         var retry = Reserve(_seed.ApprovedBox, 10.000m, 40.0m, requestId: request.RequestId, reason: " Ochtend ");
-        retry.ActorReference = " office-1 ";
 
         var result = await ReserveAsync(retry);
 
@@ -319,7 +334,6 @@ public class StockReservationServiceTests : IDisposable
     [InlineData("content-line")]
     [InlineData("order-line")]
     [InlineData("other-order-same-line")]
-    [InlineData("actor")]
     [InlineData("reason")]
     public async Task Reused_Reserve_RequestId_With_Different_Payload_Is_Conflict(string change)
     {
@@ -336,7 +350,6 @@ public class StockReservationServiceTests : IDisposable
             case "weight": retry.NetWeightKg = 41m; break;
             case "content-line": retry.PalletContentLineId = _seed.SecondPalletApprovedBox; break;
             case "order-line": lineId = (await SalesTestData.SeedOrderAsync(_factory, _seed)).BoxLineId; break;
-            case "actor": retry.ActorReference = "office-2"; break;
             case "reason": retry.Reason = "Middag"; break;
         }
 
@@ -394,7 +407,7 @@ public class StockReservationServiceTests : IDisposable
         var stored = await db.StockReservations.SingleAsync();
         Assert.Equal((request.RequestId, "Released", 1), (stored.ReleaseRequestId!.Value, stored.Status, stored.Version));
         var audit = await db.PalletAuditEvents.SingleAsync(e => e.EventType == "ReservationReleased");
-        Assert.Equal((_seed.ApprovedBox, "office-1", "Klant annuleert", request.RequestId), (audit.PalletContentLineId!.Value, audit.ActorReference, audit.Reason, audit.RequestId!.Value));
+        Assert.Equal((_seed.ApprovedBox, "Admin", "Klant annuleert", request.RequestId), (audit.PalletContentLineId!.Value, audit.ActorReference, audit.Reason, audit.RequestId!.Value));
         Assert.Equal(contentVersion + 1, await VersionOfContentAsync(_seed.ApprovedBox));
         Assert.Equal(ServiceResultStatus.Created, (await ReserveAsync(Reserve(_seed.ApprovedBox, 40m, 160m))).Status);
     }
@@ -405,7 +418,6 @@ public class StockReservationServiceTests : IDisposable
     [InlineData("reason-missing", "reason")]
     [InlineData("reason-blank", "reason")]
     [InlineData("reason-too-long", "reason")]
-    [InlineData("actor-missing", "actorReference")]
     public async Task Release_Rejects_Invalid_Input(string invalidCase, string key)
     {
         await ArrangeAsync();
@@ -418,7 +430,6 @@ public class StockReservationServiceTests : IDisposable
             case "reason-missing": request.Reason = null; break;
             case "reason-blank": request.Reason = "   "; break;
             case "reason-too-long": request.Reason = new string('x', 501); break;
-            case "actor-missing": request.ActorReference = null; break;
         }
 
         var result = await ReleaseAsync(reservation.Id, request);
@@ -457,7 +468,6 @@ public class StockReservationServiceTests : IDisposable
         {
             RequestId = request.RequestId,
             ExpectedReservationVersion = request.ExpectedReservationVersion,
-            ActorReference = " office-1 ",
             Reason = " Klant annuleert "
         });
 
@@ -468,7 +478,6 @@ public class StockReservationServiceTests : IDisposable
 
     [Theory]
     [InlineData("reason")]
-    [InlineData("actor")]
     [InlineData("version")]
     public async Task Reused_Release_RequestId_With_Different_Payload_Is_Conflict(string change)
     {
@@ -480,7 +489,6 @@ public class StockReservationServiceTests : IDisposable
         switch (change)
         {
             case "reason": retry.Reason = "Andere reden"; break;
-            case "actor": retry.ActorReference = "office-2"; break;
             case "version": retry.ExpectedReservationVersion = 1; break;
         }
 

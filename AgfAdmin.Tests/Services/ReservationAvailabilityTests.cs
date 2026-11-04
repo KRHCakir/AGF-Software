@@ -193,7 +193,7 @@ public class ReservationAvailabilityTests : IDisposable
         {
             reservation = (await new StockReservationService(db).ReserveAsync(orderId, boxLine, new CreateStockReservationDto
             {
-                RequestId = Guid.NewGuid(), PalletContentLineId = seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40.125m, ActorReference = "office-1"
+                RequestId = Guid.NewGuid(), PalletContentLineId = seed.ApprovedBox, Quantity = 10m, Unit = "box", NetWeightKg = 40.125m
             })).Value;
         }
         var reserved = await AvocadoBoxAsync(seed);
@@ -218,7 +218,7 @@ public class ReservationAvailabilityTests : IDisposable
         {
             Assert.Equal(ServiceResultStatus.Ok, (await new StockReservationService(db).ReleaseAsync(reservation.Id, new ReleaseStockReservationDto
             {
-                RequestId = Guid.NewGuid(), ExpectedReservationVersion = reservation.Version, ActorReference = "office-1", Reason = "Partij afgekeurd"
+                RequestId = Guid.NewGuid(), ExpectedReservationVersion = reservation.Version, Reason = "Partij afgekeurd"
             })).Status);
         }
         var released = await AvocadoBoxAsync(seed);
@@ -264,7 +264,7 @@ public class ReservationAvailabilityTests : IDisposable
         {
             await new StockReservationService(db).ReserveAsync(orderId, boxLine, new CreateStockReservationDto
             {
-                RequestId = Guid.NewGuid(), PalletContentLineId = seed.SecondPalletApprovedBox, Quantity = 20m, Unit = "box", NetWeightKg = 80m, ActorReference = "office-1"
+                RequestId = Guid.NewGuid(), PalletContentLineId = seed.SecondPalletApprovedBox, Quantity = 20m, Unit = "box", NetWeightKg = 80m
             });
         }
 

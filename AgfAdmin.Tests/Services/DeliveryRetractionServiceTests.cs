@@ -37,7 +37,7 @@ public class DeliveryRetractionServiceTests : IDisposable
         {
             var reservation = (await new StockReservationService(db).ReserveAsync(_orderId, _boxLine, new CreateStockReservationDto
             {
-                RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = quantity, Unit = "box", NetWeightKg = quantity * 4, ActorReference = "office-1"
+                RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = quantity, Unit = "box", NetWeightKg = quantity * 4
             })).Value;
             reservationId = reservation.Id;
         }
@@ -631,7 +631,7 @@ public class DeliveryRetractionServiceTests : IDisposable
                 await using var db = _factory.CreateContext();
                 return (await new StockReservationService(db).ReserveAsync(_orderId, _boxLine, new CreateStockReservationDto
                 {
-                    RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 5m, Unit = "box", NetWeightKg = 20m, ActorReference = "office-1"
+                    RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 5m, Unit = "box", NetWeightKg = 20m
                 })).Status;
             });
         Assert.Equal((ServiceResultStatus.Created, ServiceResultStatus.Created), (race.Outer, race.Inner));

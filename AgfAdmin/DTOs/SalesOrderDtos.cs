@@ -333,7 +333,6 @@ namespace AgfAdmin.DTOs
         public decimal? Quantity { get; set; }
         public string Unit { get; set; }
         public decimal? NetWeightKg { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 
@@ -341,7 +340,6 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public int? ExpectedReservationVersion { get; set; }
-        public string ActorReference { get; set; }
         public string Reason { get; set; }
     }
 

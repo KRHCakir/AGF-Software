@@ -397,8 +397,7 @@ public class SalesOrderServiceTests : IDisposable
             PalletContentLineId = contentLineId,
             Quantity = quantity,
             Unit = unit,
-            NetWeightKg = kg,
-            ActorReference = "office-1"
+            NetWeightKg = kg
         });
     }
 
@@ -669,7 +668,6 @@ public class SalesOrderServiceTests : IDisposable
             {
                 RequestId = Guid.NewGuid(),
                 ExpectedReservationVersion = first.Value.Version,
-                ActorReference = "office-1",
                 Reason = "Klant wil andere partij"
             });
         }
@@ -705,7 +703,6 @@ public class SalesOrderServiceTests : IDisposable
             {
                 RequestId = Guid.NewGuid(),
                 ExpectedReservationVersion = released.Value.Version,
-                ActorReference = "office-1",
                 Reason = "Verkeerde partij"
             })).Status);
         }

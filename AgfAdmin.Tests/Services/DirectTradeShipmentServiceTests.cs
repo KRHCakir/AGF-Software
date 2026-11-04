@@ -78,7 +78,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
     private async Task<ServiceResult<StockReservationDto>> ReleaseAsync(int id, int version, params IInterceptor[] interceptors)
     {
         await using var db = _factory.CreateContext(interceptors);
-        return await new StockReservationService(db).ReleaseAsync(id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = version, ActorReference = "office-1", Reason = "Toch niet" });
+        return await new StockReservationService(db).ReleaseAsync(id, new ReleaseStockReservationDto { RequestId = Guid.NewGuid(), ExpectedReservationVersion = version, Reason = "Toch niet" });
     }
 
     private async Task<ServiceResult<SalesOrderDto>> CancelAsync(int version, params IInterceptor[] interceptors)
@@ -220,7 +220,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
         {
             Assert.Equal(ServiceResultStatus.Created, (await new StockReservationService(db).ReserveAsync(_orderId, _boxLine, new CreateStockReservationDto
             {
-                RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 20m, Unit = "box", NetWeightKg = 80m, ActorReference = "office-1"
+                RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 20m, Unit = "box", NetWeightKg = 80m
             })).Status);
         }
         var line = BoxLine(await OrderAsync());
@@ -322,7 +322,7 @@ public class DirectTradeShipmentServiceTests : IDisposable
                 {
                     var physical = (await new StockReservationService(db).ReserveAsync(_orderId, _boxLine, new CreateStockReservationDto
                     {
-                        RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 5m, Unit = "box", NetWeightKg = 20m, ActorReference = "office-1"
+                        RequestId = Guid.NewGuid(), PalletContentLineId = _seed.ApprovedBox, Quantity = 5m, Unit = "box", NetWeightKg = 20m
                     })).Value;
                     request = Ship((await OrderAsync()).Version, ShipLine(physical, kg: 20m, lot: "LOT-A"));
                 }

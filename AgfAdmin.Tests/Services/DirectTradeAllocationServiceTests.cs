@@ -63,7 +63,7 @@ public class DirectTradeAllocationServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return await new StockReservationService(db).ReserveAsync(_orderId, lineId ?? _boxLine, new CreateStockReservationDto
         {
-            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg, ActorReference = "office-1"
+            RequestId = Guid.NewGuid(), PalletContentLineId = contentLineId, Quantity = quantity, Unit = unit, NetWeightKg = kg
         });
     }
 
@@ -79,7 +79,7 @@ public class DirectTradeAllocationServiceTests : IDisposable
         await using var db = _factory.CreateContext(interceptors);
         return await new StockReservationService(db).ReleaseAsync(reservationId, new ReleaseStockReservationDto
         {
-            RequestId = requestId ?? Guid.NewGuid(), ExpectedReservationVersion = version, ActorReference = "office-1", Reason = reason
+            RequestId = requestId ?? Guid.NewGuid(), ExpectedReservationVersion = version, Reason = reason
         });
     }
 
@@ -465,7 +465,7 @@ public class DirectTradeAllocationServiceTests : IDisposable
         Assert.Equal(before.PalletEvents, after.PalletEvents);
         Assert.Equal(before.SourceVersion + 1, after.SourceVersion);
         var releaseEvent = Assert.Single(after.OrderEvents.Where(e => e.EventType == "DirectTradeReleased"));
-        Assert.Equal((requestId, "office-1", "Klant wil later"), (releaseEvent.RequestId, releaseEvent.ActorReference, releaseEvent.Reason));
+        Assert.Equal((requestId, "Admin", "Klant wil later"), (releaseEvent.RequestId, releaseEvent.ActorReference, releaseEvent.Reason));
         Assert.Equal(0, Snapshot(releaseEvent.OldValue).GetProperty("version").GetInt32());
 
         // Replay: dezelfde vrijgave nogmaals geeft de huidige toestand; een andere reden of een tweede vrijgave is een conflict.
