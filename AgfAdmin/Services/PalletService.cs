@@ -321,6 +321,12 @@ namespace AgfAdmin.Services
                 return ServiceResult<PalletContentLineDto>.NotFound($"Supply commitment line {candidate.SupplyCommitmentLineId} does not exist.");
             }
 
+            var partijRefusal = await ApplyPartijAsync(source, candidate, cancellationToken);
+            if (partijRefusal != null)
+            {
+                return partijRefusal;
+            }
+
             var conflict = FindBusinessRuleConflict(pallet, source, candidate);
             if (conflict != null)
             {
@@ -423,7 +429,9 @@ namespace AgfAdmin.Services
                 AddError(errors, "supplyCommitmentLineId", "A source supply commitment line is required.");
             }
 
-            var lotNumber = RequiredText(request.LotNumber, MaxLotNumberLength, "lotNumber", errors);
+            // Partij: bij een orderregel met partij hoeft de client niets te sturen (AddContentLineAsync neemt het partijnummer over);
+            // zonder partij blijft het lotnummer verplicht, zoals altijd.
+            var lotNumber = string.IsNullOrWhiteSpace(request.LotNumber) ? null : WithinLength(request.LotNumber.Trim(), MaxLotNumberLength, "lotNumber", errors);
 
             if (request.Quantity == null || !SupplyRules.IsPositiveDecimal18_3(request.Quantity.Value))
             {
@@ -530,6 +538,27 @@ namespace AgfAdmin.Services
             };
         }
 
+        // De ontvangen regel neemt de partij van de orderregel over, met het partijnummer als LotNumber. Een meegestuurd lotnummer moet
+        // dan bij die partij horen (zelfde sleutel): een andere partij op een order met partij is een vergissing, nooit een tweede partij.
+        // Zonder partij op de orderregel blijft het lotnummer verplicht en de regel zonder partij (later te koppelen via de order).
+        private async Task<ServiceResult<PalletContentLineDto>> ApplyPartijAsync(SupplyCommitmentLine source, PalletContentLine candidate, CancellationToken cancellationToken)
+        {
+            if (source.PartijId == null)
+            {
+                return candidate.LotNumber == null
+                    ? ServiceResult<PalletContentLineDto>.Validation(new Dictionary<string, string[]> { ["lotNumber"] = new[] { "This field is required and must not be blank." } })
+                    : null;
+            }
+            var number = await _db.Partijen.AsNoTracking().Where(p => p.Id == source.PartijId).Select(p => p.Number).SingleAsync(cancellationToken);
+            if (candidate.LotNumber != null && PartijRules.NumberKey(candidate.LotNumber) != PartijRules.NumberKey(number))
+            {
+                return ServiceResult<PalletContentLineDto>.Conflict($"This purchase order line belongs to lot {number}, not {candidate.LotNumber}; lots are never mixed.");
+            }
+            candidate.PartijId = source.PartijId;
+            candidate.LotNumber = number;
+            return null;
+        }
+
         private static void ValidateDeviationFields(AddPalletContentLineDto request, Dictionary<string, List<string>> errors)
         {
             if (request.ReceivedProductVariantId is <= 0)
@@ -610,7 +639,9 @@ namespace AgfAdmin.Services
         {
             var same = existing.PalletId == candidate.PalletId
                 && sameSource
-                && string.Equals(existing.LotNumber, candidate.LotNumber, StringComparison.Ordinal)
+                && (existing.PartijId == null
+                    ? string.Equals(existing.LotNumber, candidate.LotNumber, StringComparison.Ordinal)
+                    : candidate.LotNumber == null || PartijRules.NumberKey(existing.LotNumber) == PartijRules.NumberKey(candidate.LotNumber))
                 && existing.Quantity == candidate.Quantity
                 && string.Equals(existing.Unit, candidate.Unit, StringComparison.Ordinal)
                 && existing.NetWeightKg == candidate.NetWeightKg
@@ -1196,6 +1227,7 @@ namespace AgfAdmin.Services
             ProductName = line.SupplyCommitmentLine.ProductVariant?.Product?.Name,
             ProductVariantName = line.SupplyCommitmentLine.ProductVariant?.Name,
             LotNumber = line.LotNumber,
+            PartijId = line.PartijId,
             Quantity = line.Quantity,
             Unit = line.Unit,
             NetWeightKg = line.NetWeightKg,

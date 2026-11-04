@@ -85,6 +85,8 @@ namespace AgfAdmin.DTOs
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
         public string LotNumber { get; set; }
+        // Partij van de regel (overgenomen van de orderregel); null bij een ontvangst zonder partij.
+        public int? PartijId { get; set; }
         // Historische ontvangst.
         public decimal Quantity { get; set; }
         public string Unit { get; set; }

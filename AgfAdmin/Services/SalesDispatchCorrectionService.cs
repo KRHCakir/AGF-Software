@@ -150,6 +150,7 @@ namespace AgfAdmin.Services
                     Pallet = original.Pallet,
                     SupplyCommitmentLineId = original.SupplyCommitmentLineId,
                     LotNumber = original.LotNumber,
+                    PartijId = original.PartijId,
                     Quantity = dispatchLine.Quantity,
                     Unit = dispatchLine.Unit,
                     NetWeightKg = dispatchLine.NetWeightKg,

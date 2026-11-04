@@ -183,6 +183,7 @@ namespace AgfAdmin.Services
                         PalletId = content.PalletId,
                         SupplyCommitmentLineId = content.SupplyCommitmentLineId,
                         LotNumber = content.LotNumber,
+                        PartijId = content.PartijId,
                         Quantity = requested.Quantity,
                         Unit = content.Unit,
                         NetWeightKg = kg,

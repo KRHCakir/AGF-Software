@@ -92,6 +92,12 @@ namespace AgfAdmin.Data
     //    niet herkende waarde blijft alleen staan zolang de klasse niet wijzigt (zie TraceabilityGuard.TradeClass.cs).
     // 22. een nieuwe verkooporder heeft het VO-nummer dat bij haar jaar en volgnummer hoort; het nummer van een opgeslagen order verandert
     //    nooit (zie TraceabilityGuard.SalesOrderNumber.cs).
+    // 23. partijen (zie TraceabilityGuard.Partijen.cs): de sleutel past bij het nummer; een opgeslagen nummer verandert alleen samen
+    //    met een auditregel "Nummer corrigeren" (oud, nieuw, reden) in dezelfde save, volgnummer en aanmaker nooit; een partij wordt alleen
+    //    verwijderd als er geen order, orderregel of palletregel aan hangt; de partijhistorie is append-only. Een order met partij heeft
+    //    die partij op al haar regels; een nieuwe palletregel heeft exact de partij van haar bronregel (en het partijnummer als LotNumber),
+    //    correctie- en afgesplitste inhoud die van de oorspronkelijke regel (regels 9 en 17). Een partij op een order, orderregel of
+    //    palletregel wordt alleen gezet (leeg naar partij) of, zolang er niets ontvangen is, op de order en haar regels vervangen.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -208,6 +214,7 @@ namespace AgfAdmin.Data
             await CheckExpectedShownAsync(db, async, cancellationToken);
             await CheckTradeClassAsync(db, async, cancellationToken);
             await CheckSalesOrderNumbersAsync(db, async, cancellationToken);
+            await CheckPartijenAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
@@ -286,6 +293,7 @@ namespace AgfAdmin.Data
                     var split = restored[0];
                     if (split.PalletId != content.Entity.PalletId || split.SupplyCommitmentLineId != content.Entity.SupplyCommitmentLineId
                         || !string.Equals(split.LotNumber, content.Entity.LotNumber, StringComparison.Ordinal)
+                        || split.PartijId != content.Entity.PartijId
                         || !string.Equals(split.Unit, content.Entity.Unit, StringComparison.Ordinal)
                         || split.Quantity != line.Quantity || split.NetWeightKg != line.NetWeightKg
                         || split.QualityStatus != TargetStatusOf(line)
@@ -665,7 +673,8 @@ namespace AgfAdmin.Data
                     || restored.DispatchedQuantity != 0m || restored.DispatchedNetWeightKg != 0m
                     || restoredPalletId != original.PalletId
                     || restored.SupplyCommitmentLineId != original.SupplyCommitmentLineId
-                    || !string.Equals(restored.LotNumber, original.LotNumber, StringComparison.Ordinal))
+                    || !string.Equals(restored.LotNumber, original.LotNumber, StringComparison.Ordinal)
+                    || restored.PartijId != original.PartijId)
                 {
                     throw new TraceabilityViolationException($"Restored content for reservation {reservation.Id} must be Quarantine on the original pallet, same lot and source line, with exactly the dispatched quantity and net weight and nothing dispatched.");
                 }
