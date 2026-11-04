@@ -43,6 +43,7 @@ function PartijenWorkspace() {
     const [list, setList] = useState<LoadState<List>>({ status: 'loading' });
     const [detail, setDetail] = useState<LoadState<Detail> | null>(null);
     const detailRef = useRef<HTMLDivElement | null>(null);
+    const pendingScrollId = useRef<number | null>(null);
 
     useEffect(() => {
         const handle = setTimeout(() => setDebounced(query.trim()), 250);
@@ -73,11 +74,21 @@ function PartijenWorkspace() {
         return () => controller.abort();
     }, [selectedId, reloadToken]);
 
+    // Scroll pas nadat het geselecteerde detail daadwerkelijk is gerenderd (niet naar de nog lege container).
+    useEffect(() => {
+        if (detail?.status === 'ready' && pendingScrollId.current === detail.data.id) {
+            pendingScrollId.current = null;
+            detailRef.current?.scrollIntoView?.({ block: 'start' });
+        } else if (detail?.status === 'error') {
+            pendingScrollId.current = null;
+        }
+    }, [detail]);
+
     const open = useCallback((id: number | null) => {
         const params = new URLSearchParams(searchParams.toString());
         if (id === null) params.delete('id'); else params.set('id', String(id));
         router.replace(params.size === 0 ? pathname : `${pathname}?${params.toString()}`, { scroll: false });
-        if (id !== null) requestAnimationFrame(() => detailRef.current?.scrollIntoView?.({ block: 'start' }));
+        pendingScrollId.current = id;
     }, [router, pathname, searchParams]);
 
     const total = list.status === 'ready' ? list.data.total : 0;
