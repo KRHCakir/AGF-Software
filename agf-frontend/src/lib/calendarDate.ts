@@ -15,11 +15,14 @@ export function toLocalMidnightIso(dateText: string): string | null {
 
 // Een ingetypte kalenderdatum naar de ISO-vorm (2026-10-31): de ISO-vorm zelf of de Nederlandse volgorde dag-maand-jaar, altijd in
 // die volgorde, ongeacht de browsertaal: dd-mm-jjjj, dd/mm/jjjj, d.m.jjjj, ddmmjjjj en d-m (dan het jaar van `today`, de lokale
-// kalenderdag). null bij lege, onvolledige of niet-bestaande datums (31-02 schuift nooit stil door naar maart). Vandaag en datums
-// in het verleden zijn gewoon geldig: dit is alleen de notatie.
-const DUTCH_DATE = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/;
+// kalenderdag). Een jaar van twee cijfers is 20jj (04-11-26, 4/11/26 en 041126 zijn 4 november 2026): 00 t/m 99 is 2000 t/m 2099,
+// want hier staan alleen recente en komende datums. Een jaar van één of drie cijfers is nooit een datum. null bij lege, onvolledige
+// of niet-bestaande datums (31-02 schuift nooit stil door naar maart). Vandaag en datums in het verleden zijn gewoon geldig: dit is
+// alleen de notatie.
+const DUTCH_DATE = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})$/;
 const DUTCH_DAY_MONTH = /^(\d{1,2})[-/.](\d{1,2})$/;
-const DUTCH_DIGITS = /^(\d{2})(\d{2})(\d{4})$/;
+const DUTCH_DIGITS = /^(\d{2})(\d{2})(\d{4}|\d{2})$/;
+const fullYear = (year: string) => Number(year.length === 2 ? `20${year}` : year);
 export function parseDateInput(text: string, today: string = localToday()): string | null {
     const trimmed = text.trim();
     const iso = DATE_INPUT.exec(trimmed);
@@ -27,7 +30,7 @@ export function parseDateInput(text: string, today: string = localToday()): stri
     const short = iso === null && dutch === null ? DUTCH_DAY_MONTH.exec(trimmed) : null;
     let parts: number[];
     if (iso !== null) parts = [iso[1], iso[2], iso[3]].map(Number);
-    else if (dutch !== null) parts = [dutch[3], dutch[2], dutch[1]].map(Number);
+    else if (dutch !== null) parts = [fullYear(dutch[3]), Number(dutch[2]), Number(dutch[1])];
     else if (short !== null && isDateOnly(today)) parts = [Number(today.slice(0, 4)), Number(short[2]), Number(short[1])];
     else return null;
     const [year, month, day] = parts;

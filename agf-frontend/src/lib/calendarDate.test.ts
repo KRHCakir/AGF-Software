@@ -86,7 +86,6 @@ describe('shipping date of a UTC instant in Europe/Amsterdam', () => {
         assert.equal(parseDateInput('31-02-2026'), null, 'never rolls over to March');
         assert.equal(parseDateInput('2026-02-31'), null);
         assert.equal(parseDateInput('0026-10-31'), null, 'a half-typed year');
-        assert.equal(parseDateInput('31-10-26'), null);
         assert.equal(parseDateInput('2026-10-3'), null);
         assert.equal(parseDateInput(''), null);
         assert.equal(parseDateInput('morgen'), null);
@@ -106,6 +105,22 @@ describe('shipping date of a UTC instant in Europe/Amsterdam', () => {
         assert.equal(parseDateInput('2-11-', today), null);
         assert.equal(parseDateInput('211', today), null);
         assert.equal(parseDateInput('0211202', today), null);
+    });
+
+    test('a two-digit year is 20jj in every Dutch notation; one or three digits never make a date', () => {
+        const today = '2026-11-04';
+        for (const text of ['04-11-26', '4/11/26', '4-11-26', '4.11.26', '041126', '04-11-2026']) {
+            assert.equal(parseDateInput(text, today), '2026-11-04', text);
+        }
+        assert.equal(parseDateInput('31-12-99', today), '2099-12-31', '99 is 2099, never 1999');
+        assert.equal(parseDateInput('1-1-00', today), '2000-01-01', '00 is 2000');
+        assert.equal(parseDateInput('29-02-28', today), '2028-02-29', 'leap day in 2028');
+        assert.equal(parseDateInput('29-02-26', today), null, 'no leap day in 2026');
+        assert.equal(parseDateInput('31-02-26', today), null, 'never rolls over to March');
+        assert.equal(parseDateInput('04-11-6', today), null, 'a one-digit year');
+        assert.equal(parseDateInput('04-11-026', today), null, 'a three-digit year');
+        assert.equal(parseDateInput('0411026', today), null);
+        assert.equal(formatDateInput(parseDateInput('4/11/26', today)!), '04-11-2026', 'the field rewrites the short form');
     });
 
     test('the field shows dd-mm-jjjj for every ISO date and leaves other text alone', () => {

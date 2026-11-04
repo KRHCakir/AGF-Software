@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatDecimalInput } from '../../lib/decimal';
@@ -13,9 +14,11 @@ import QuantityKgLine from './QuantityKgLine';
 // Hoeveelheid per regel: één veld "Aantal" met de eenheid erachter en live de kg volgens het artikel; "per pallet" is een hulp
 // ("3 pallets × 120 colli + 15 losse colli = 375 colli"). Het totaal in verpakkingen blijft de bron; de verhouding wordt meegestuurd zodat de regel herkenbaar blijft.
 // Alleen voor pallets met dezelfde inhoud; gemengde pallets blijven via afzonderlijke inhoudsregels werken.
+// Met `unitSelect` staat de keuze van de eenheid direct na het aantal (Tab: artikel, aantal, eenheid, kg). De knoppen "per pallet" en
+// "gewoon aantal" zijn een hulp met de muis en staan buiten de Tab-volgorde, net als ⧉ en ✕ bij de inkoopfactuur.
 export type QuantityField = 'quantity' | 'mode' | 'palletCount' | 'packagesPerPallet' | 'loosePackages';
 
-export default function QuantityInput({ prefix, index, line, locked, errors, quantityField = 'quantity', defaultPackagesPerPallet, kgDefaults, onChange, dataTour }: {
+export default function QuantityInput({ prefix, index, line, locked, errors, quantityField = 'quantity', defaultPackagesPerPallet, kgDefaults, onChange, dataTour, unitSelect }: {
     prefix: string;
     index: number;
     line: { quantity: string; unit: PackageUnit | ''; mode: QuantityInputMode; palletCount: string; packagesPerPallet: string; loosePackages?: string };
@@ -29,6 +32,8 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
     onChange: (field: QuantityField, value: string) => void;
     // Vaste naam voor de rondleiding (data-tour) op het aantalveld; de sleutel is het regelnummer.
     dataTour?: string;
+    // De keuzelijst van de eenheid, in plaats van het vaste eenheidslabel achter het aantal.
+    unitSelect?: ReactNode;
 }) {
     const { t, locale } = useTranslation();
     // Vertaald eenheidslabel (Doos, Colli, …); zonder gekozen eenheid het woord "eenheid".
@@ -54,7 +59,7 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
         if (mode === 'packages' && total !== null) onChange('quantity', formatDecimalInput(total.quantity));
     };
     const link = (mode: QuantityInputMode, label: string) => (
-        <button type="button" disabled={locked} onClick={() => setMode(mode)} data-testid={`${prefix}.${mode === 'pallets' ? 'per-pallet' : 'plain-quantity'}`}
+        <button type="button" tabIndex={-1} disabled={locked} onClick={() => setMode(mode)} data-testid={`${prefix}.${mode === 'pallets' ? 'per-pallet' : 'plain-quantity'}`}
             className="whitespace-nowrap text-xs text-blue-700 underline decoration-dotted disabled:text-gray-500">{t(label)}</button>
     );
     const field = (name: 'palletCount' | 'packagesPerPallet' | 'loosePackages', label: string) => (
@@ -73,7 +78,7 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
                     <div className="flex items-center gap-2">
                         <input {...fieldProps(totalKey, errors(totalKey))} inputMode="decimal" value={line.quantity} disabled={locked} data-tour={dataTour} data-tour-key={dataTour ? index : undefined}
                             onChange={(event) => onChange('quantity', event.target.value)} className={`${inputClass} !mt-0 min-w-[7rem] flex-1 text-right`} />
-                        <span className="text-sm text-gray-700" data-testid={`${prefix}.unit-suffix`}>{unit}</span>
+                        {unitSelect ?? <span className="text-sm text-gray-700" data-testid={`${prefix}.unit-suffix`}>{unit}</span>}
                         {link('pallets', 'quantity_per_pallet')}
                     </div>
                     <QuantityKgLine value={line.quantity} unit={unit} defaults={kgDefaults} testId={totalKey} />
@@ -86,6 +91,7 @@ export default function QuantityInput({ prefix, index, line, locked, errors, qua
                         {field('packagesPerPallet', t('packages_per_pallet', { unit }))}
                         {field('loosePackages', t('loose_packages', { unit }))}
                     </div>
+                    {unitSelect}
                     <p className="text-xs font-medium text-gray-900" data-testid={`${prefix}.pallet-calculation`}>
                         {total !== null
                             ? t(total.loosePackages ? 'pallet_calculation_loose' : 'pallet_calculation', { pallets: formatQuantity(total.palletCount!, locale), perPallet: formatQuantity(total.packagesPerPallet!, locale), loose: formatQuantity(total.loosePackages ?? 0, locale), unit, total: formatQuantity(total.quantity, locale) })

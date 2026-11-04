@@ -14,11 +14,11 @@ import { PendingSave, clearDraft, clearPending, loadDraft, loadExtraOpen, loadPe
 import { ShortcutAction, isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createPurchaseInvoice } from '../../services/purchaseInvoiceService';
-import { PACKAGE_UNITS } from '../../types/availability';
 import type { ProductOption } from '../../types/referenceData';
 import type { PurchaseInvoice, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../../types/purchaseInvoice';
 import NumberEcho from '../shared/NumberEcho';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
+import UnitSelect from '../shared/UnitSelect';
 import ErrorNotice from '../supply/ErrorNotice';
 import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
@@ -361,8 +361,10 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                     <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(`purchase_field_${field}`)}</label>
                                     {field === 'remarks' ? (
                                         <textarea {...fieldProps(field, e(field))} rows={2} maxLength={1000} value={draft.header.extra[field] ?? ''} disabled={locked} onChange={(event) => updateExtra(field, event.target.value)} className={inputClass} />
+                                    ) : field === 'receivedDate' ? (
+                                        <DateField {...fieldProps(field, e(field))} value={draft.header.extra[field] ?? ''} disabled={locked} onChange={(value) => updateExtra(field, value)} />
                                     ) : (
-                                        <input {...fieldProps(field, e(field))} type={field === 'receivedDate' ? 'date' : 'text'} inputMode={['grossWeightKg', 'netWeightKg', 'customsValue'].includes(field) ? 'decimal' : undefined}
+                                        <input {...fieldProps(field, e(field))} type="text" inputMode={['grossWeightKg', 'netWeightKg', 'customsValue'].includes(field) ? 'decimal' : undefined}
                                             value={draft.header.extra[field] ?? ''} maxLength={200} disabled={locked} onChange={(event) => updateExtra(field, event.target.value)} className={inputClass} />
                                     )}
                                     <FieldError id={field} messages={e(field)} />
@@ -416,11 +418,8 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                         <FieldError id={`${prefix}.quantity`} messages={e(`${prefix}.quantity`)} />
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
-                                        <label htmlFor={`${prefix}.unit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
-                                        <select {...fieldProps(`${prefix}.unit`, e(`${prefix}.unit`))} value={line.unit} disabled={locked} onChange={(event) => updateLine(line.key, { unit: event.target.value as LineDraft['unit'] })} className={inputClass}>
-                                            <option value="">–</option>
-                                            {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
-                                        </select>
+                                        <UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked} emptyLabel="–" className="mt-1 w-full"
+                                            onChange={(unit) => updateLine(line.key, { unit })} />
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('purchase_col_price')} {index + 1}</label>

@@ -66,6 +66,7 @@ describe('DateField', () => {
     for (const [text, iso] of [
         ['02-11-2026', '2026-11-02'], ['2-11-2026', '2026-11-02'], ['02/11/2026', '2026-11-02'], ['02112026', '2026-11-02'],
         ['2026-11-02', '2026-11-02'], ['2-11', '2026-11-02'], ['1-11', '2026-11-01'], ['3-11-2026', '2026-11-03'],
+        ['04-11-26', '2026-11-04'], ['4/11/26', '2026-11-04'], ['4-11-26', '2026-11-04'], ['041126', '2026-11-04'],
     ] as const) {
         test(`typing "${text}" gives ${iso}, and leaving the field shows dd-mm-jjjj`, async () => {
             await mounted.render(<Harness initial="" />);
@@ -76,9 +77,18 @@ describe('DateField', () => {
         });
     }
 
+    test('Enter rewrites a short year to dd-mm-jjjj without leaving the field', async () => {
+        await mounted.render(<Harness initial="" />);
+        await type('04-11-26');
+        assert.equal(last(), '2026-11-04');
+        await act(async () => { input().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+        assert.equal(input().value, '04-11-2026');
+        assert.equal(document.activeElement, input());
+    });
+
     test('what is not a date reaches the form as the typed text, never as a date or as empty', async () => {
         await mounted.render(<Harness initial="" />);
-        for (const text of ['31-02-2026', '31-02', '11/31/2026', '2-11-20', 'morgen']) {
+        for (const text of ['31-02-2026', '31-02', '11/31/2026', '2-11-202', '2-11-2', '31-02-26', 'morgen']) {
             await type(text);
             assert.equal(last(), text, text);
             await blur();

@@ -251,6 +251,7 @@
   "supply_variant": "Product · variant",
   "supply_lot_optional": "Partij (indien bekend)",
   "supply_quantity": "Aantal",
+  "supply_quantity_unit": "Aantal en eenheid",
   "supply_unit": "Eenheid",
   "supply_declared_kg": "Opgegeven netto kg",
   "supply_declared_kg_hint": "opgegeven, niet gewogen (optioneel)",

@@ -14,7 +14,7 @@ import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
-import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from '../../types/availability';
+import { PackageUnit, SupplyRoute } from '../../types/availability';
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
@@ -27,6 +27,7 @@ import ProductVariantPicker from '../shared/ProductVariantPicker';
 import NewSupplyArticle from './NewSupplyArticle';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import QuantityInput from '../shared/QuantityInput';
+import UnitSelect from '../shared/UnitSelect';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass, lineTableClass } from './FieldError';
@@ -400,9 +401,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
+                                <th scope="col" className="px-2 py-1.5">{t('supply_quantity_unit')} *</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_quantity')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_unit')} *</th>
                                 <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                             </tr>
                         </thead>
@@ -428,33 +428,27 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                                         setNewArticleFor(null);
                                                     }} />
                                             ) : !locked && (
-                                                <button type="button" className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                                                <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
                                                     data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
                                             )}
+                                        </td>
+                                        <td className="w-96 px-2 py-1.5">
+                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity" dataTour="supply-line-quantity"
+                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
+                                                onChange={(field, value) => updateLine(line.key, field, value)}
+                                                unitSelect={<UnitSelect fieldKey={`${prefix}.expectedUnit`} index={index} value={line.unit} errors={e(`${prefix}.expectedUnit`)} disabled={locked}
+                                                    dataTour="supply-line-unit" onChange={(unit) => updateLine(line.key, 'unit', unit)} />} />
+                                            <FieldError id={`${prefix}.expectedUnit`} messages={e(`${prefix}.expectedUnit`)} />
+                                            <div data-tour="supply-line-kg" data-tour-key={index}>
+                                                <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="expectedNetWeightKg" grossKey="expectedGrossWeightKg" unit={unitText}
+                                                    locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
+                                            </div>
                                         </td>
                                         <td className="px-2 py-1.5">
                                             <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
                                             <input {...fieldProps(`${prefix}.lotNumber`, e(`${prefix}.lotNumber`))} value={line.lotNumber} disabled={locked} maxLength={100}
                                                 onChange={(event) => updateLine(line.key, 'lotNumber', event.target.value)} className={inputClass} />
                                             <FieldError id={`${prefix}.lotNumber`} messages={e(`${prefix}.lotNumber`)} />
-                                        </td>
-                                        <td className="w-72 px-2 py-1.5">
-                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity" dataTour="supply-line-quantity"
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
-                                                onChange={(field, value) => updateLine(line.key, field, value)} />
-                                            <div data-tour="supply-line-kg" data-tour-key={index}>
-                                                <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="expectedNetWeightKg" grossKey="expectedGrossWeightKg" unit={unitText}
-                                                    locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
-                                            </div>
-                                        </td>
-                                        <td className="w-32 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.expectedUnit-input`} className="sr-only">{t('supply_unit')} {index + 1}</label>
-                                            <select {...fieldProps(`${prefix}.expectedUnit`, e(`${prefix}.expectedUnit`))} data-tour="supply-line-unit" data-tour-key={index} value={line.unit} disabled={locked}
-                                                onChange={(event) => updateLine(line.key, 'unit', event.target.value)} className={inputClass}>
-                                                <option value="">{t('supply_choose')}</option>
-                                                {PACKAGE_UNITS.map((unit) => <option key={unit} value={unit}>{t(unitLabelKey(unit))}</option>)}
-                                            </select>
-                                            <FieldError id={`${prefix}.expectedUnit`} messages={e(`${prefix}.expectedUnit`)} />
                                         </td>
                                         <td className="px-2 py-1.5">
                                             <button type="button" onClick={() => removeLine(line.key)} disabled={locked || lines.length <= 1}

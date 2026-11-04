@@ -2,6 +2,7 @@
 
 import { CSSProperties, KeyboardEvent, ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
+import { focusNextField } from '../../lib/focusNext';
 import { inputClass } from '../supply/FieldError';
 
 // Gedeeld zoekveld (type-ahead) voor producten, leveranciers en latere lookups. Toetsenbord: pijltjes navigeren, Enter
@@ -27,14 +28,6 @@ export function unambiguousLookup<T>(matches: readonly LookupMatch<T>[]): Lookup
     if (matches.length === 1) return matches[0];
     const exact = matches.filter((match) => match.exact);
     return exact.length === 1 ? exact[0] : null;
-}
-
-// Volgende focusbare element na het zoekveld in hetzelfde formulier (na Enter op een suggestie, zoals Tab dat zou doen).
-function focusNextAfter(input: HTMLInputElement) {
-    const scope: ParentNode = input.form ?? input.ownerDocument;
-    const focusable = Array.from(scope.querySelectorAll<HTMLElement>('input, select, textarea, button, a[href]'))
-        .filter((element) => element.tabIndex >= 0 && !(element as HTMLInputElement).disabled && (element as HTMLInputElement).type !== 'hidden');
-    focusable[focusable.indexOf(input) + 1]?.focus();
 }
 
 export default function LookupField<T>({ id, ariaLabel, selected, search, onSelect, onClear, onFreeText, freeText = '', allowFreeText = false, disabled = false, invalid = false, describedBy, placeholderKey, hintKey, noneKey, moreKey, changeKey, inputRef: externalRef, className = '', renderExtra, maxSuggestions = MAX_LOOKUP_SUGGESTIONS, takeHighlighted = false, onQueryChange, dataTour, dataTourKey }: {
@@ -172,7 +165,7 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
                 if (listOpen && shown[highlightIndex]) {
                     event.preventDefault();
                     choose(shown[highlightIndex]);
-                    if (takeHighlighted) focusNextAfter(event.currentTarget);
+                    if (takeHighlighted) focusNextField(event.currentTarget);
                 }
                 return;
             case 'Tab': {
