@@ -59,13 +59,13 @@ public class RelationFinanceControllerTests : IDisposable
     {
         var created = Assert.IsType<CreatedAtActionResult>(await Relations(r => r.Create(new SaveRelationDto
         {
-            RequestId = Guid.NewGuid(), Name = "Bank", ActorReference = "Jan", BankAccounts = new() { new() { Iban = "NL91ABNA0417164300", AccountHolder = "Bank BV" } }
+            RequestId = Guid.NewGuid(), Name = "Bank", BankAccounts = new() { new() { Iban = "NL91ABNA0417164300", AccountHolder = "Bank BV" } }
         })));
         var dto = Assert.IsType<RelationDto>(created.Value);
         var bankId = dto.BankAccounts[0].Id!.Value;
-        Assert.IsType<ConflictObjectResult>(await Relations(r => r.ConfirmBankAccount(dto.Id, bankId, new ConfirmBankAccountDto { ExpectedVersion = dto.Version + 5, ActorReference = "Piet" })));
-        Assert.IsType<NotFoundObjectResult>(await Relations(r => r.ConfirmBankAccount(dto.Id, bankId + 100, new ConfirmBankAccountDto { ExpectedVersion = dto.Version, ActorReference = "Piet" })));
-        var ok = Assert.IsType<OkObjectResult>(await Relations(r => r.ConfirmBankAccount(dto.Id, bankId, new ConfirmBankAccountDto { ExpectedVersion = dto.Version, ActorReference = "Piet" })));
+        Assert.IsType<ConflictObjectResult>(await Relations(r => r.ConfirmBankAccount(dto.Id, bankId, new ConfirmBankAccountDto { ExpectedVersion = dto.Version + 5 })));
+        Assert.IsType<NotFoundObjectResult>(await Relations(r => r.ConfirmBankAccount(dto.Id, bankId + 100, new ConfirmBankAccountDto { ExpectedVersion = dto.Version })));
+        var ok = Assert.IsType<OkObjectResult>(await Relations(r => r.ConfirmBankAccount(dto.Id, bankId, new ConfirmBankAccountDto { ExpectedVersion = dto.Version })));
         Assert.Equal("Confirmed", Assert.IsType<RelationDto>(ok.Value).BankAccounts[0].ConfirmationStatus);
         Assert.IsType<BadRequestObjectResult>(await Relations(r => r.UpdateSettings(new RelationSettingsDto { GlobalGapPortalUrl = "ftp://x" })));
     }

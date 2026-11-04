@@ -63,7 +63,6 @@ namespace AgfAdmin.DTOs
         public string TradeClass { get; set; }
         public string Brand { get; set; }
         public decimal? NetKgPerPackage { get; set; }    // ingevuld kg per verpakking; anders de standaard van de sjabloonvariant
-        public string ActorReference { get; set; }
     }
 
     // 201 nieuw of 200 bij een herhaald verzoek; 409 "article-exists" met het bestaande artikel als de combinatie al bestaat.
@@ -74,9 +73,9 @@ namespace AgfAdmin.DTOs
     }
 
     // Archiveren, terugzetten en verwijderen: wie het deed (vrije tekst tot er gebruikersaccounts zijn).
+    // Lege body voor verwijderen, archiveren en terugzetten: wie het doet, is de ingelogde gebruiker.
     public sealed class ArticleActionDto
     {
-        public string ActorReference { get; set; }
     }
 
     // Productsoorten zonder artikelen (bijv. na het verwijderen van het laatste artikel elders): mogen worden verwijderd.

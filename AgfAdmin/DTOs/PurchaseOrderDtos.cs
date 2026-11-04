@@ -212,7 +212,6 @@ namespace AgfAdmin.DTOs
         public string InvoiceNumber { get; set; }
         public DateOnly? InvoiceDate { get; set; }
         public decimal? AmountExclVat { get; set; }
-        public string ActorReference { get; set; }
     }
 
     // Orders waaraan een factuurnummer hangt (melding bij het invoeren van een inkoopfactuur).

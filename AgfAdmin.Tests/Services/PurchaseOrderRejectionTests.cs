@@ -25,7 +25,6 @@ public class PurchaseOrderRejectionTests : IDisposable
             Reason = reason,
             Explanation = explanation,
             Decision = decision,
-            ActorReference = "Jan",
             Lines = new List<RejectPurchaseOrderLineDto> { new() { PalletContentLineId = contentId, ExpectedContentLineVersion = currentVersion, Quantity = quantity, NetWeightKg = kg } }
         });
     }
@@ -119,7 +118,7 @@ public class PurchaseOrderRejectionTests : IDisposable
 
         await using var db = _factory.CreateContext();
         var audit = await db.PalletAuditEvents.Where(e => e.PalletContentLineId == content && e.EventType == "QualityStatusChanged").SingleAsync();
-        Assert.Equal("Jan", audit.ActorReference);
+        Assert.Equal("Admin", audit.ActorReference);
         Assert.Contains("\"qualityStatus\":\"Rejected\"", audit.NewValue);
         // De resterende 50 verwachte dozen tellen niet meer als verwacht, en 50 afgekeurd is nooit verkoopbaar.
         var supply = (await new AvailabilityService(db).GetOverviewAsync(new AvailabilityQuery { ProductVariantId = seed.HassId })).Value.Variants.Single().WarehouseSupply.Single();
@@ -334,7 +333,7 @@ public class PurchaseOrderRejectionTests : IDisposable
         }));
         var result = await new PurchaseOrderService(db).RejectAsync(order.Id, new RejectPurchaseOrderDto
         {
-            RequestId = Guid.NewGuid(), Reason = "Quality", Decision = "Dispose", ActorReference = "Jan",
+            RequestId = Guid.NewGuid(), Reason = "Quality", Decision = "Dispose", 
             Lines = new List<RejectPurchaseOrderLineDto> { new() { PalletContentLineId = content, ExpectedContentLineVersion = 0, Quantity = 10m } }
         });
 
@@ -355,7 +354,7 @@ public class PurchaseOrderRejectionTests : IDisposable
         var requestId = Guid.NewGuid();
         RejectPurchaseOrderDto Request(params int[] contents) => new()
         {
-            RequestId = requestId, Reason = "Quality", Decision = "ReturnToSupplier", ActorReference = "Jan",
+            RequestId = requestId, Reason = "Quality", Decision = "ReturnToSupplier", 
             Lines = contents.Select(c => new RejectPurchaseOrderLineDto { PalletContentLineId = c, ExpectedContentLineVersion = 0, Quantity = c == first ? 5m : 6m }).ToList()
         };
 

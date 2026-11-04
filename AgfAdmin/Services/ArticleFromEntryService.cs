@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -20,7 +21,14 @@ namespace AgfAdmin.Services
 
         private readonly AppDbContext _db;
 
-        public ArticleFromEntryService(AppDbContext db) => _db = db;
+        private readonly ICurrentUser _user;
+
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public ArticleFromEntryService(AppDbContext db, ICurrentUser currentUser = null)
+        {
+            _db = db;
+            _user = currentUser ?? CurrentUser.Default;
+        }
 
         private sealed record Entry(string Source, ProductVariant Template, string CountryCode, string CountryName, string Size, string Packaging,
             string TradeClass, string Brand, decimal? NetKg, string Actor);
@@ -159,7 +167,7 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "netKgPerPackage", "Net kg per package must be positive and may have at most 3 decimals.");
             }
-            var actor = Text(request.ActorReference, ArticleRules.MaxActorLength, "actorReference");
+            var actor = _user.Actor(ArticleRules.MaxActorLength);
             return new Entry(source, template, country?.Code, country?.NameNl, size, packaging, tradeClass, brand, request.NetKgPerPackage, actor);
         }
 

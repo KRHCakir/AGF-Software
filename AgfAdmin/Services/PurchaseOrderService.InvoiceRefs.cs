@@ -1,5 +1,6 @@
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -58,7 +59,7 @@ namespace AgfAdmin.Services
             return ServiceResult<PurchaseOrderDetailDto>.Created(detail.Value);
         }
 
-        private static SupplyCommitmentInvoiceRef BuildInvoiceRef(int id, AddPurchaseOrderInvoiceRefDto request, Dictionary<string, List<string>> errors)
+        private SupplyCommitmentInvoiceRef BuildInvoiceRef(int id, AddPurchaseOrderInvoiceRefDto request, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {
@@ -88,11 +89,7 @@ namespace AgfAdmin.Services
             {
                 AddError(errors, "amountExclVat", "The amount may have at most 2 decimals and must fit in 16 digits.");
             }
-            var actor = string.IsNullOrWhiteSpace(request.ActorReference) ? null : request.ActorReference.Trim();
-            if (actor != null && actor.Length > PurchaseOrderRules.MaxActorLength)
-            {
-                AddError(errors, "actorReference", $"This field may contain at most {PurchaseOrderRules.MaxActorLength} characters.");
-            }
+            var actor = _user.Actor(PurchaseOrderRules.MaxActorLength);
             if (errors.Count > 0)
             {
                 return null;

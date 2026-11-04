@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -9,9 +10,12 @@ namespace AgfAdmin.Services
     public sealed class CountryService
     {
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public CountryService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
+        public CountryService(AppDbContext db, ICurrentUser currentUser = null)
         {
+            _user = currentUser ?? CurrentUser.Default;
             _db = db;
         }
 
@@ -43,8 +47,7 @@ namespace AgfAdmin.Services
                     ? ServiceResult<CountryAliasDto>.Validation(new Dictionary<string, string[]> { [key == null || request.Alias.Trim().Length > CountryRules.MaxAliasLength ? "alias" : "countryCode"] = new[] { conflict } })
                     : ServiceResult<CountryAliasDto>.Conflict(conflict);
             }
-            var actor = string.IsNullOrWhiteSpace(request.ActorReference) ? null : request.ActorReference.Trim();
-            if (actor != null && actor.Length > PurchaseOrderRules.MaxActorLength) actor = actor[..PurchaseOrderRules.MaxActorLength];
+            var actor = _user.Actor(PurchaseOrderRules.MaxActorLength);
             var alias = new CountryAlias { Alias = request.Alias.Trim(), AliasKey = key, CountryCode = code, ActorReference = actor };
             _db.CountryAliases.Add(alias);
             try

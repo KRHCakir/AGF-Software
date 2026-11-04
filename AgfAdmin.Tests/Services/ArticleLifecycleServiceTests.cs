@@ -15,7 +15,7 @@ public sealed class ArticleLifecycleServiceTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private static readonly ArticleActionDto Jan = new() { ActorReference = " Jan " };
+    private static readonly ArticleActionDto Jan = new() {  };
 
     private async Task<int> NewVariantAsync(string product = "Kiwi", string name = "Hayward", string brand = null)
     {
@@ -54,7 +54,7 @@ public sealed class ArticleLifecycleServiceTests : IDisposable
         var events = await EventsAsync();
         Assert.Equal(new[] { "Deleted", "ProductDeleted" }, events.Select(e => e.EventType));
         Assert.Equal("Kiwi Hayward · Nieuw-Zeeland · maat geen · verpakking geen · klasse geen · merk geen", events[0].Description);
-        Assert.Equal((id, "Jan"), (events[0].ProductVariantId.Value, events[0].ActorReference));
+        Assert.Equal((id, "Admin"), (events[0].ProductVariantId.Value, events[0].ActorReference));
         Assert.Equal("Kiwi", events[1].Description);
 
         await using var again = _factory.CreateContext();
@@ -156,7 +156,7 @@ public sealed class ArticleLifecycleServiceTests : IDisposable
             var service = new ArticleLifecycleService(db);
             var archived = (await service.ArchiveAsync(seed.MangoId, Jan)).Value;
             Assert.True(archived.IsArchived);
-            Assert.Equal("Jan", archived.ArchivedBy);
+            Assert.Equal("Admin", archived.ArchivedBy);
             Assert.NotNull(archived.ArchivedAt);
             Assert.True((await service.ArchiveAsync(seed.MangoId, Jan)).Value.IsArchived);
         }
