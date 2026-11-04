@@ -55,10 +55,12 @@ public static class PurchaseOrderTestData
         await using var db = factory.CreateContext();
         var source = await db.SupplyCommitmentLines.Include(l => l.ProductVariant).FirstAsync(l => l.SupplyCommitmentId == commitmentId);
         var calculated = source.ProductVariant.WeightMethod == "Calculated";
+        // Een orderregel met partij: de ontvangst neemt de partij en haar nummer over (zoals PalletService, regel 23).
+        var partijNumber = source.PartijId == null ? null : (await db.Partijen.FindAsync(source.PartijId))!.Number;
         var pallet = new Pallet { Reference = $"P-{Guid.NewGuid():N}"[..12], LogisticsStatus = palletStatus, LocationContext = palletStatus == "Received" ? "Warehouse" : "InTransit" };
         var content = new PalletContentLine
         {
-            RequestId = Guid.NewGuid(), Pallet = pallet, SupplyCommitmentLineId = source.Id, LotNumber = lot, Quantity = quantity, Unit = "box",
+            RequestId = Guid.NewGuid(), Pallet = pallet, SupplyCommitmentLineId = source.Id, LotNumber = partijNumber ?? lot, PartijId = source.PartijId, Quantity = quantity, Unit = "box",
             NetWeightKg = kg, QualityStatus = quality, WeightMethod = calculated ? "Calculated" : "Weighed", NetKgPerPackage = calculated ? source.ProductVariant.DefaultNetKgPerPackage : null
         };
         db.AddRange(pallet, content);

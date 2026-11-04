@@ -155,6 +155,9 @@ namespace AgfAdmin.DTOs
         public string SupplyOrderNumber { get; set; }
         public DateTime? ExpectedAt { get; set; }
         public string LotNumber { get; set; }
+        // Partij van de inkoopregel (null = geen partij); het nummer uit de partij zelf, LotNumber blijft het oude tekstveld.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public string Unit { get; set; }
         public decimal NotReceived { get; set; }
         public decimal InInspection { get; set; }
@@ -172,6 +175,8 @@ namespace AgfAdmin.DTOs
         public DateTime? ExpectedAt { get; set; }
         public string Unit { get; set; }
         public string LotNumber { get; set; }
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public decimal ExpectedQuantity { get; set; }
         // Opgegeven verwacht gewicht van de bron; nooit opgeteld bij gemeten kg.
         public decimal? DeclaredExpectedNetWeightKg { get; set; }
@@ -195,6 +200,8 @@ namespace AgfAdmin.DTOs
         public string CustomerName { get; set; }
         public int SupplyCommitmentLineId { get; set; }
         public string LotNumber { get; set; }
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public string Unit { get; set; }
         // Historische ontvangst; wordt nooit gewijzigd door verzendingen.
         public decimal Quantity { get; set; }

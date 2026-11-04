@@ -24,6 +24,10 @@ namespace AgfAdmin.DTOs
         public int VendorId { get; set; }
         public string VendorName { get; set; }
         public string SupplierReference { get; set; }
+        // Partij van de order (null = geen partij) en de partij van de leverancier.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
+        public string SupplierLotReference { get; set; }
         public DateOnly OrderedOn { get; set; }
         public DateTime? ExpectedAt { get; set; }
         // Herkomst afgeleid van de regels (SupplyRules.LinesOrigin); het kopveld is alleen een bijschrift.
@@ -67,6 +71,10 @@ namespace AgfAdmin.DTOs
         public DateOnly OrderedOn { get; set; }
         public string OrderChannel { get; set; }
         public string Note { get; set; }
+        // Partij van de order (null = geen partij; dan kan die nog gekoppeld worden) en de partij van de leverancier.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
+        public string SupplierLotReference { get; set; }
         public string Route { get; set; }
         public int? CustomerId { get; set; }
         public string CustomerName { get; set; }
@@ -105,6 +113,9 @@ namespace AgfAdmin.DTOs
         public string Size { get; set; }
         public string Packaging { get; set; }
         public string LotNumber { get; set; }
+        // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public decimal ExpectedQuantity { get; set; }
         public string Unit { get; set; }
         public decimal? ExpectedNetWeightKg { get; set; }
@@ -129,6 +140,8 @@ namespace AgfAdmin.DTOs
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
         public string LotNumber { get; set; }
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
         public decimal NetWeightKg { get; set; }

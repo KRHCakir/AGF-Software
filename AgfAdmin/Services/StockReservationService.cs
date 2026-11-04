@@ -665,6 +665,8 @@ namespace AgfAdmin.Services
             PalletReference = reservation.PalletContentLine?.Pallet?.Reference,
             WarehouseLocation = reservation.PalletContentLine?.Pallet?.WarehouseLocation,
             LotNumber = reservation.PalletContentLine?.LotNumber ?? reservation.SupplyCommitmentLine?.LotNumber,
+            PartijId = reservation.PalletContentLine?.PartijId ?? (reservation.PalletContentLineId == null ? reservation.SupplyCommitmentLine?.PartijId : null),
+            PartijNumber = reservation.PalletContentLine?.Partij?.Number ?? (reservation.PalletContentLineId == null ? reservation.SupplyCommitmentLine?.Partij?.Number : null),
             Quantity = reservation.Quantity,
             Unit = reservation.Unit,
             NetWeightKg = reservation.NetWeightKg,

@@ -20,6 +20,14 @@ namespace AgfAdmin.Controllers
             _service = service;
         }
 
+        [HttpGet]
+        public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] int page = 1, [FromQuery] int pageSize = PartijService.DefaultPageSize) =>
+            this.ToActionResult(await _service.ListAsync(query, status, page, pageSize, HttpContext?.RequestAborted ?? default));
+
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id) =>
+            this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("next-number")]
         public async Task<IActionResult> NextNumber([FromQuery] string format, [FromQuery] string reset) =>
             this.ToActionResult(await _service.NextNumberAsync(format, reset, HttpContext?.RequestAborted ?? default));
