@@ -215,3 +215,17 @@ describe('sales order chain: sold before arrival', () => {
         assert.equal(step(steps, 'sales').parts.length, 1);
     });
 });
+
+describe('chain: the lot links to its lot page', () => {
+    test('from the sales order: the lot number comes from the lot itself and links to the lot detail', () => {
+        const line = salesLine({ reservations: [reservation({ lotNumber: 'L1', partijId: 7, partijNumber: '2610251' })] });
+        const steps = salesOrderChain(salesOrder([line]));
+        assert.deepEqual(step(steps, 'order').parts, [{ key: 'chain_lots', params: { lots: '2610251' } }]);
+        assert.deepEqual(step(steps, 'order').links.at(-1), { label: '2610251', key: 'chain_partij_link', params: { number: '2610251' }, href: '/partijen?id=7' });
+    });
+
+    test('from the purchase order: the lot of the order next to the order itself; no lot, no extra link', () => {
+        assert.deepEqual(hrefs(step(purchaseOrderChain(order({ partijId: 7, partijNumber: '2610251' }), 'order'), 'order')), ['/purchase-orders?id=3', '/partijen?id=7']);
+        assert.equal(step(purchaseOrderChain(order(), 'order'), 'order').links.length, 1);
+    });
+});

@@ -11,7 +11,7 @@ export type ChainStepKey = 'order' | 'receipt' | 'inspection' | 'stock' | 'sales
 export type ChainState = 'done' | 'partial' | 'open' | 'empty' | 'unavailable';
 
 export interface ChainPart { key: string; params?: Record<string, string | number> }
-export interface ChainLink { label: string; href: string; key?: string }
+export interface ChainLink { label: string; href: string; key?: string; params?: Record<string, string> }
 
 export interface ChainStep {
     key: ChainStepKey;
@@ -51,6 +51,9 @@ function availabilityHref(variantIds: number[]): string {
     return `/availability?${params.toString()}`;
 }
 
+// Link naar het partijdetail: "Partij 2610251".
+const partijLink = (id: number, number: string): ChainLink => ({ label: number, key: 'chain_partij_link', params: { number }, href: `/partijen?id=${id}` });
+
 const invoiceStep = (): Omit<ChainStep, 'current'> => ({ key: 'invoice', state: 'unavailable', parts: [{ key: 'chain_not_yet' }], links: [] });
 
 // Vanaf de inkooporder (detail) of vanaf een ontvangst van die order.
@@ -64,7 +67,8 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
     const steps: Omit<ChainStep, 'current'>[] = [];
 
     steps.push({ key: 'order', state: 'done', parts: [{ key: 'chain_order_vendor', params: { vendor: order.vendorName ?? '–' } }],
-        links: [{ label: order.orderNumber, href: `/purchase-orders?id=${order.id}` }] });
+        links: [{ label: order.orderNumber, href: `/purchase-orders?id=${order.id}` },
+            ...(order.partijId ? [partijLink(order.partijId, order.partijNumber ?? `#${order.partijId}`)] : [])] });
 
     if (direct) {
         // Klantgebonden aanvoer gaat rechtstreeks naar de klant: geen ontvangst, keuring of voorraad bij ons.
@@ -142,7 +146,10 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
     const unit = singleUnit(order.lines.map((line) => line.unit));
     const mixed = hasMixedUnits(order.lines.map((line) => line.unit));
     const purchaseOrders = unique(reservations.map((r) => r.supplyCommitmentId)).map((id) => ({ id, number: reservations.find((r) => r.supplyCommitmentId === id)?.supplyOrderNumber ?? `#${id}` }));
-    const lots = unique(reservations.map((r) => r.lotNumber).filter((lot): lot is string => !!lot));
+    // Partij: het nummer uit de partij zelf (met link naar het partijdetail), anders het oude lotnummer van de regel.
+    const lots = unique(reservations.map((r) => r.partijNumber ?? r.lotNumber).filter((lot): lot is string => !!lot));
+    const partijen = unique(reservations.map((r) => r.partijId).filter((id): id is number => !!id))
+        .map((id) => { const r = reservations.find((candidate) => candidate.partijId === id)!; return partijLink(id, r.partijNumber ?? r.lotNumber ?? `#${id}`); });
     const pallets = unique(physical.filter((r) => r.palletId !== null).map((r) => r.palletId!)).map((id) => ({ id, reference: physical.find((r) => r.palletId === id)?.palletReference ?? `#${id}` }));
     // Pallets tellen, geen reserveringen: meerdere verkoopregels op dezelfde pallet tellen één keer.
     const notApproved = unique(physical.filter((r) => r.status === 'Active' && r.contentQualityStatus !== null && r.contentQualityStatus !== 'Approved')
@@ -176,8 +183,8 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
                     ? { key: 'chain_waiting_for_po', params: { number: po.number, date: dayMonth(po.expectedAt) } }
                     : { key: 'chain_waiting_for_po_no_date', params: { number: po.number } })),
             ],
-            links: [...purchaseOrders, ...waiting.filter((po) => !purchaseOrders.some((known) => known.id === po.id))]
-                .slice(0, MAX_LINKS).map((po) => ({ label: po.number, href: `/purchase-orders?id=${po.id}` })),
+            links: [...[...purchaseOrders, ...waiting.filter((po) => !purchaseOrders.some((known) => known.id === po.id))]
+                .slice(0, MAX_LINKS).map((po) => ({ label: po.number, href: `/purchase-orders?id=${po.id}` })), ...partijen.slice(0, MAX_LINKS)],
         },
         {
             key: 'receipt', state: pallets.length > 0 ? 'done' : physical.length === 0 && reservations.length > 0 ? 'unavailable' : 'empty',

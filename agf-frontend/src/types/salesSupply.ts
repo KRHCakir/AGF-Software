@@ -71,6 +71,8 @@ export interface AvailabilityExpectedSupply {
     supplyOrderNumber: string | null;
     expectedAt: string | null;
     lotNumber: string | null;
+    partijId?: number | null;
+    partijNumber?: string | null;
     unit: PackageUnit;
     notReceived: number;
     inInspection: number;

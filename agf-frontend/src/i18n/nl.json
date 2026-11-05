@@ -2185,5 +2185,6 @@
   "partij_correct_exists": "Partij {number} bestaat al. Kies een ander nummer.",
   "partij_delete": "Partij verwijderen",
   "partij_delete_confirm": "Ja, verwijderen",
-  "partij_fixed_hint": "Er hangt een inkooporder of ontvangst aan deze partij: het nummer wijzigt alleen met een correctie en reden, en de partij kan niet meer weg."
+  "partij_fixed_hint": "Er hangt een inkooporder of ontvangst aan deze partij: het nummer wijzigt alleen met een correctie en reden, en de partij kan niet meer weg.",
+  "chain_partij_link": "Partij {number}"
 }
