@@ -247,7 +247,7 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
                     <p className="py-1 text-sm text-gray-700">{t('sales_no_reservations')}</p>
                 ) : (
                     <div className="mt-1 overflow-x-auto rounded border border-gray-200">
-                        <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm" data-tour="sales-reservations">
                             <caption className="sr-only">{t('sales_reservations_title')}</caption>
                             <thead className="bg-gray-50">
                                 <tr>

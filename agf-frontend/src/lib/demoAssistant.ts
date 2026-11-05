@@ -2,7 +2,10 @@
 // De assistent navigeert alleen naar vaste routes. De vaste rondleiding en het orderzoeken wijzigen nooit iets; de autopilot
 // (lib/tour, alleen met NEXT_PUBLIC_DEMO_TOUR=true) vult schermen in via dezelfde routes. Er is geen AI.
 
-export const DEMO_ROUTES = ['/purchase-orders/new', '/receipts', '/inspection', '/availability', '/sales-orders', '/purchase-orders', '/partijen'] as const;
+export const DEMO_ROUTES = [
+    '/purchase-orders/new', '/receipts', '/inspection', '/availability', '/sales-orders', '/purchase-orders', '/partijen',
+    '/relations', '/articles', '/direct-trade', '/purchase-invoices', '/purchase-invoices/new',
+] as const;
 export type DemoRoute = (typeof DEMO_ROUTES)[number];
 
 export interface TourStep {
@@ -28,15 +31,18 @@ const ORDER_LINK = /^\/sales-orders\?orderId=[1-9]\d{0,9}$/;
 const INSPECTION_SEARCH_LINK = /^\/inspection\?search=[A-Za-z0-9-]{1,40}$/;
 const PURCHASE_ORDER_LINK = /^\/purchase-orders\?(id=[1-9]\d{0,9}|query=[A-Za-z0-9-]{1,40})$/;
 const AVAILABILITY_VARIANT_LINK = /^\/availability\?productVariantId=[1-9]\d{0,9}$/;
+// Ontvangst van één inkooporder (de keten-strip daar) en het detail van één partij.
+const RECEIPT_ORDER_LINK = /^\/receipts\?order=[1-9]\d{0,9}$/;
+const PARTIJ_LINK = /^\/partijen\?id=[1-9]\d{0,9}$/;
 // "Verkopen" vanuit Beschikbaarheid: een nieuwe verkooporder met één artikel, eenheid en aantal ingevuld (zie lib/salesSupply.sellHref).
 const SELL_LINK = /^\/sales-orders\?new=1&variantId=[1-9]\d{0,9}&unit=(box|colli|tray|piece|dozen)&quantity=[1-9]\d{0,8}(\.\d{1,3})?$/;
 
-// Alleen een vaste route, een keuringszoekterm, een link naar één verkoop- of inkooporder (of een inkoopzoekterm) of de
-// beschikbaarheid van één variant (of een verkooporder vanuit "Verkopen" daar);
+// Alleen een vaste route, een keuringszoekterm, een link naar één verkoop- of inkooporder (of een inkoopzoekterm), de ontvangst van één
+// inkooporder, één partij of de beschikbaarheid van één variant (of een verkooporder vanuit "Verkopen" daar);
 // nooit externe URL's, scripts of andere paden.
 export function isAllowedDemoHref(href: string): boolean {
     return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href)
-        || AVAILABILITY_VARIANT_LINK.test(href) || SELL_LINK.test(href);
+        || AVAILABILITY_VARIANT_LINK.test(href) || SELL_LINK.test(href) || RECEIPT_ORDER_LINK.test(href) || PARTIJ_LINK.test(href);
 }
 
 export function orderHref(id: number): string {

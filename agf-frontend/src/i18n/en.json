@@ -2220,5 +2220,6 @@
   "inspection_empty_action": "Go to Receiving",
   "sales_empty_action": "Create first sales order",
   "purchase_empty_text": "Your suppliers' invoices appear here, with total, due date and status.",
-  "receipts_empty_title": "No open purchase order to receive yet"
+  "receipts_empty_title": "No open purchase order to receive yet",
+  "demo_tour_skipped": "{count} steps skipped: what they create already existed."
 }

@@ -70,9 +70,10 @@ export default function TourPanel({ chapters, state, settings, onSettings, done,
         return (
             <div className="space-y-3">
                 {state.status === 'done' && chapter && (
-                    <div role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-green-900">
+                    <div role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-green-900" data-tour-skipped={state.skipped.map((index) => index + 1).join(',')}>
                         <p className="font-medium">{t('demo_tour_done', { chapter: t(chapter.titleKey) })}</p>
                         {chapter.doneKey && <p className="mt-1 text-sm">{t(chapter.doneKey, state.vars)}</p>}
+                        {state.skipped.length > 0 && <p className="mt-1 text-xs">{t('demo_tour_skipped', { count: String(state.skipped.length) })}</p>}
                     </div>
                 )}
                 {state.status === 'stopped' && <p role="status" className="text-xs text-gray-600">{t('demo_tour_stopped')}</p>}

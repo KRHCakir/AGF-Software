@@ -2220,5 +2220,6 @@
   "inspection_empty_action": "Naar Ontvangst",
   "sales_empty_action": "Eerste verkooporder aanmaken",
   "purchase_empty_text": "Hier komen de facturen van je leveranciers, met totaal, vervaldatum en status.",
-  "receipts_empty_title": "Nog geen open inkooporder om te ontvangen"
+  "receipts_empty_title": "Nog geen open inkooporder om te ontvangen",
+  "demo_tour_skipped": "{count} stappen overgeslagen: wat ze aanmaken, bestond al."
 }

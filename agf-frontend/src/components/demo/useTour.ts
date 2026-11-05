@@ -52,7 +52,7 @@ export interface TourSettings {
     speed: TourSpeed;
 }
 
-const IDLE: TourState = { status: 'idle', chapterId: null, stepIndex: 0, stepCount: 0, mode: 'watch', speed: 'normal', target: null, error: null, vars: {} };
+const IDLE: TourState = { status: 'idle', chapterId: null, stepIndex: 0, stepCount: 0, mode: 'watch', speed: 'normal', target: null, error: null, vars: {}, skipped: [] };
 
 function read<T>(key: string, parse: (raw: string) => T | null): T | null {
     try {
@@ -120,7 +120,7 @@ export function useTour(allowWrites: boolean, timing?: (speed: TourSpeed) => Tou
         const runner = new TourRunner({
             document: window.document,
             navigate: (href) => routerRef.current.push(href),
-            currentPath: () => pathRef.current ?? '',
+            currentPath: () => (pathRef.current ?? '') + (typeof window !== 'undefined' ? window.location.search : ''),
             isAllowedHref: isAllowedDemoHref,
             allowWrites,
             actor: tourActor,
