@@ -235,14 +235,14 @@ export class TourRunner {
     private async runStep(step: TourStep, index: number, my: number) {
         this.doForMe = false;
         this.focused = null;
-        if (step.when !== undefined && this.text(step.when).trim() === '') {
+        if (this.skipped(step.when)) {
             await this.checkpoint(my);
             this.emit({ stepIndex: index, target: null, skipped: this.state.skipped.includes(index) ? this.state.skipped : [...this.state.skipped, index] });
             return;
         }
         this.emit({ status: 'running', stepIndex: index, target: null, error: null });
         // Eerst lezen (lookup), want de route van de stap kan een gevonden waarde bevatten (?productVariantId={{variantId}}).
-        const skip = (action: TourAction) => action.when !== undefined && this.text(action.when).trim() === '';
+        const skip = (action: TourAction) => this.skipped(action.when);
         for (const action of step.actions) if (action.kind === 'lookup' && !skip(action)) await this.perform(action, my);
         if (!sameRoute(this.options.currentPath(), this.text(step.route))) await this.navigateTo(step.route, my);
         await this.sleep(this.state.mode === 'watch' ? this.timing().readMs : this.timing().actionMs, my);
@@ -481,6 +481,12 @@ export class TourRunner {
 
     private text(value: string): string {
         return interpolate(value, this.state.vars);
+    }
+
+    // `when`: overslaan als de tekst na invullen leeg is. Een variabele die er niet is, telt als leeg (een voorcontrole die een vlag niet
+    // zet, bedoelt "niet nodig"), anders zou "{{needVendor}}" als tekst blijven staan en de stap toch lopen.
+    private skipped(when: string | undefined): boolean {
+        return when !== undefined && this.text(when).replace(/\{\{\w+\}\}/g, '').trim() === '';
     }
 
     private view(): Window & typeof globalThis {

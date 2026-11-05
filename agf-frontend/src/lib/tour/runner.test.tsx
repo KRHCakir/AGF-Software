@@ -236,6 +236,20 @@ describe('TourRunner', () => {
         assert.deepEqual(latest().skipped, [0]);
     });
 
+    test('a flag the precheck does not set counts as empty: the step is skipped, not run with "{{needVendor}}" as text', async () => {
+        const log: string[] = [];
+        await mounted.render(<Field log={log} />);
+        await act(async () => {
+            void runner.start(chapter([
+                step('create', [{ kind: 'type', target: 'supply-reference', text: 'NEW' }], { when: '{{needVendor}}' }),
+                step('use', [{ kind: 'type', target: 'supply-reference', text: 'USE', when: '{{alsoMissing}}{{tourRef}}' }]),
+            ], { precheck: async () => ({ missing: [], vars: {} }) }), { mode: 'watch', speed: 'fast' });
+        });
+        await until(() => latest().status === 'done', 'done');
+        assert.deepEqual(latest().skipped, [0]);
+        assert.equal(mounted.container.querySelector('input')!.value, 'USE');
+    });
+
     test('lookup reads before the step navigates, so the route can use what it found; a lookup that misses something stops', async () => {
         await mounted.render(<p />);
         const seen: Record<string, string>[] = [];
