@@ -112,6 +112,8 @@ export class TourRunner {
             }
         }
         if (chapter.writes) vars.tourRef = this.options.nextRef();
+        // Partij van de ontvangst: die van de inkooporder (uit de voorcontrole), anders het eigen kenmerk van deze rondleiding.
+        if (chapter.writes && !vars.lot) vars.lot = vars.tourRef;
         this.useTourActor();
         this.listen();
         this.emit({ vars });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { findDeviationVariant, findOpenTourOrder, findTourArticle, findTourVendor, receiptVars } from './prechecks.ts';
+import { findDeviationVariant, findOpenTourOrder, findTourArticle, findTourVendor, lotVars, receiptVars } from './prechecks.ts';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder.ts';
 import type { ProductOption, VendorOption } from '../../types/referenceData.ts';
 
@@ -51,5 +51,10 @@ describe('tour prechecks', () => {
         const items = [item(40, 'Ordered', 'DEMO-TOUR-001'), item(45, 'PartiallyReceived', 'DEMO-TOUR-002'), item(44, 'Ordered', 'DEMO-TOUR-003'), item(50, 'Ordered', 'NP-1')];
         assert.equal(findOpenTourOrder(items)?.id, 44);
         assert.equal(findOpenTourOrder([item(50, 'Ordered', null)]), null);
+    });
+
+    test('a receipt on an order with a lot types nothing and uses the lot number; without a lot the tour types its own reference', () => {
+        assert.deepEqual(lotVars({ partijNumber: '2611001' }), { lot: '2611001', typeLot: '', partijNumber: '2611001' });
+        assert.deepEqual(lotVars({ partijNumber: null }), { typeLot: 'yes', partijNumber: '' });
     });
 });

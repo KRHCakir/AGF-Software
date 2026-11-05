@@ -11,6 +11,11 @@ geven), niet voor klanten.
 het script in `lib/tour/`, de `data-tour`-attributen op de schermelementen en de test.** Al gepland: inkoop-afwijkingen
 en mixpallets, verkoopfactuur, creditfactuur en periodeafsluiting.
 
+Hoofdstuk **Inkopen bestellen** toont het veld **Partij** bovenaan de inkooporder: het voorgestelde nummer blijft staan (staat de
+partijnummering op Eigen, dan typt de rondleiding haar eigen DEMO-TOUR-kenmerk) en aan het eind zoekt de rondleiding die partij op
+onder Voorraad › Partijen, met de order erin. **Ontvangen en keuren** neemt de partij van de order over: er valt niets te typen,
+de keuring en het afkeuren gaan op dat partijnummer. Een oudere demo-order zonder partij krijgt zoals vroeger het DEMO-TOUR-kenmerk.
+
 Hoofdstuk **Afwijking bij ontvangst** (na Ontvangen en keuren): een deel van een open demo-inkooporder wordt blind ingevuld als
 een andere variant van hetzelfde artikel (bij voorkeur alleen een andere herkomst), het venster "Klopt dit?" verschijnt, de
 rondleiding kiest een reden en Ja, en toont de afwijking op de order. Nodig: een open DEMO-TOUR-order (hoofdstuk 1) en een tweede

@@ -339,7 +339,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 )}
                 <p className="mb-1" data-tour="supply-saved-partij">
                     {commitment.partijNumber
-                        ? <>{t('partij_field')} <span className="font-mono font-semibold">{commitment.partijNumber}</span>{commitment.supplierLotReference && <> · {t('partij_supplier_lot')} <span className="font-mono">{commitment.supplierLotReference}</span></>}</>
+                        ? <>{t('partij_field')} <span className="font-mono font-semibold" data-tour="supply-saved-partij-number">{commitment.partijNumber}</span>{commitment.supplierLotReference && <> · {t('partij_supplier_lot')} <span className="font-mono">{commitment.supplierLotReference}</span></>}</>
                         : t('partij_saved_without')}
                 </p>
                 <p>

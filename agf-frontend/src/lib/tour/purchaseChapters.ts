@@ -27,6 +27,12 @@ export const ORDER_CHAPTER: TourChapter = {
             { kind: 'highlight', target: 'supply-vendor' },
         ]),
         order('vendor', '/purchase-orders/new', [{ kind: 'pick', target: 'supply-vendor', text: '{{vendorSearch}}', expect: '{{vendorSearch}}' }]),
+        // Partij: het voorgestelde nummer blijft staan; staat de nummering op Eigen, dan typt de rondleiding haar eigen kenmerk.
+        order('partij', '/purchase-orders/new', [
+            { kind: 'highlight', target: 'supply-partij' },
+            { kind: 'type', target: 'supply-partij', text: '{{tourRef}}', when: '{{ownNumbering}}' },
+            { kind: 'highlight', target: 'supply-supplier-lot' },
+        ]),
         order('reference', '/purchase-orders/new', [
             { kind: 'type', target: 'supply-reference', text: '{{tourRef}}' },
             { kind: 'highlight', target: 'supply-ordered-on' },
@@ -42,6 +48,7 @@ export const ORDER_CHAPTER: TourChapter = {
             { kind: 'click', target: 'supply-save' },
             { kind: 'wait', target: 'supply-order-number' },
             { kind: 'remember', target: 'supply-order-number', name: 'orderNumber', pattern: /(IO-\d{4}-\d+)/ },
+            { kind: 'remember', target: 'supply-saved-partij-number', name: 'partijNumber', pattern: /(\S+)/ },
             { kind: 'highlight', target: 'supply-order-number' },
         ]),
         order('find', '/purchase-orders', [
@@ -61,12 +68,20 @@ export const ORDER_CHAPTER: TourChapter = {
             { kind: 'wait', target: 'po-open:{{orderNumber}}' },
             { kind: 'highlight', target: 'po-open:{{orderNumber}}' },
         ]),
+        // Voorraad › Partijen: de partij van deze order, met de order erin.
+        order('lot', '/partijen', [
+            { kind: 'type', target: 'partij-search', text: '{{partijNumber}}' },
+            { kind: 'click', target: 'partij-open:{{partijNumber}}' },
+            { kind: 'wait', target: 'partij-order:{{orderNumber}}' },
+            { kind: 'highlight', target: 'partij-order:{{orderNumber}}' },
+        ]),
     ],
 };
 
 const receive = (id: string, route: string, actions: readonly TourAction[]) => step('receive', id, route, actions);
 
 // Blinde invoer: wat er werkelijk is aangekomen, kenmerk voor kenmerk (lege kenmerken worden overgeslagen), daarna partij, aantal en kg.
+// Heeft de orderregel een partij, dan neemt de ontvangst die over: niets te typen, de rondleiding wijst haar aan.
 const enterReceipt = (lot: string): TourAction[] => [
     { kind: 'click', target: 'receive-line:{{orderId}}-{{lineId}}' },
     { kind: 'pick', target: 'receive-origin:{{lineId}}', text: '{{originText}}', expect: '{{originName}}', when: '{{originText}}' },
@@ -74,7 +89,8 @@ const enterReceipt = (lot: string): TourAction[] => [
     { kind: 'pick', target: 'receive-packaging:{{lineId}}', text: '{{packaging}}', when: '{{packaging}}' },
     { kind: 'pick', target: 'receive-class:{{lineId}}', text: '{{tradeClass}}', when: '{{tradeClass}}' },
     { kind: 'pick', target: 'receive-brand:{{lineId}}', text: '{{brand}}', when: '{{brand}}' },
-    { kind: 'type', target: 'receive-lot:{{lineId}}', text: lot },
+    { kind: 'type', target: 'receive-lot:{{lineId}}', text: lot, when: '{{typeLot}}' },
+    { kind: 'highlight', target: 'receive-partij:{{lineId}}', when: '{{partijNumber}}' },
     { kind: 'type', target: 'receive-quantity:{{lineId}}', text: '{{quantity}}' },
     { kind: 'type', target: 'receive-kg-per-package:{{lineId}}', text: '{{kgPerPackage}}', when: '{{kgPerPackage}}' },
     { kind: 'type', target: 'receive-net-kg:{{lineId}}', text: '{{netKg}}', when: '{{netKg}}' },
@@ -91,7 +107,7 @@ export const RECEIVE_CHAPTER: TourChapter = {
         receive('open', '/receipts', [
             { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
         ]),
-        receive('line', '/receipts', [...enterReceipt('{{tourRef}}'), { kind: 'highlight', target: 'receive-weight:{{lineId}}' }]),
+        receive('line', '/receipts', [...enterReceipt('{{lot}}'), { kind: 'highlight', target: 'receive-weight:{{lineId}}' }]),
         receive('register', '/receipts', [
             { kind: 'click', target: 'receive-save' },
             { kind: 'wait', target: 'receive-to-inspection' },
@@ -101,14 +117,14 @@ export const RECEIVE_CHAPTER: TourChapter = {
             { kind: 'click', target: 'receive-to-inspection' },
         ]),
         receive('approve', '/inspection', [
-            { kind: 'click', target: 'inspection-action:Approved-{{tourRef}}' },
-            { kind: 'type', target: 'inspection-inspector:{{tourRef}}', text: '{{actor}}' },
-            { kind: 'click', target: 'inspection-confirm:{{tourRef}}' },
-            { kind: 'wait', target: 'inspection-status:{{tourRef}}-Approved' },
-            { kind: 'highlight', target: 'inspection-status:{{tourRef}}-Approved' },
+            { kind: 'click', target: 'inspection-action:Approved-{{lot}}' },
+            { kind: 'type', target: 'inspection-inspector:{{lot}}', text: '{{actor}}' },
+            { kind: 'click', target: 'inspection-confirm:{{lot}}' },
+            { kind: 'wait', target: 'inspection-status:{{lot}}-Approved' },
+            { kind: 'highlight', target: 'inspection-status:{{lot}}-Approved' },
         ]),
         receive('reject', '/purchase-orders?id={{orderId}}', [
-            { kind: 'click', target: 'po-reject:{{tourRef}}' },
+            { kind: 'click', target: 'po-reject:{{lot}}' },
             { kind: 'type', target: 'reject-quantity', text: '{{rejectQuantity}}' },
             { kind: 'select', target: 'reject-reason', value: 'Quality' },
             { kind: 'click', target: 'reject-decision:ReturnToSupplier' },
@@ -135,7 +151,7 @@ export const DEVIATION_CHAPTER: TourChapter = {
         deviation('open', '/receipts', [
             { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
         ]),
-        deviation('enter', '/receipts', enterReceipt('{{tourRef}}')),
+        deviation('enter', '/receipts', enterReceipt('{{lot}}')),
         deviation('check', '/receipts', [
             { kind: 'click', target: 'receive-save' },
             { kind: 'wait', target: 'deviation-dialog' },

@@ -120,9 +120,12 @@ test('hoofdstuk 1, Inkopen bestellen: order met ordernummer, leveranciersref en 
     expectAllSteps(result);
     [, orderNumber, tourRef] = /Order (IO-\d{4}-\d+) .* leveranciersref (DEMO-TOUR-\d+)/.exec(result.done) ?? [];
     expect(orderNumber).toMatch(/^IO-\d{4}-\d+$/);
-    const list = await json<{ items: { orderNumber: string; supplierReference: string; status: string; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${tourRef}`);
+    const list = await json<{ items: { orderNumber: string; supplierReference: string; status: string; partijNumber: string | null; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${tourRef}`);
     const order = list.items.find((item) => item.orderNumber === orderNumber)!;
     expect(order.supplierReference).toBe(tourRef);
+    // De order kreeg een partij (het voorgestelde nummer, of bij Eigen nummering het kenmerk van de rondleiding) en die staat in de afsluiting.
+    expect(order.partijNumber).toBeTruthy();
+    expect(result.done).toContain(`partij ${order.partijNumber}`);
     expect(order.status).toBe('Ordered');
     expect(order.invoiceNumbers.map((ref) => ref.invoiceNumber)).toEqual([`F-${tourRef}`]);
     expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
@@ -135,12 +138,14 @@ test('hoofdstuk 2, Ontvangen en keuren: ontvangen, goedgekeurd, deel teruggestuu
     expectAllSteps(result);
     expect(result.done).toContain(orderNumber);
     const list = await json<{ items: { id: number; orderNumber: string }[] }>(request, `/purchase-orders?status=all&query=${orderNumber}`);
-    const detail = await json<{ receivedQuantity: number; rejectedQuantity: number; invoiceIndicator: string; receipts: { lotNumber: string; qualityStatus: string; origin: string }[]; history: { type: string; actorReference: string | null; inspectedBy?: string | null }[] }>(
+    const detail = await json<{ partijNumber: string | null; receivedQuantity: number; rejectedQuantity: number; invoiceIndicator: string; receipts: { lotNumber: string; qualityStatus: string; origin: string }[]; history: { type: string; actorReference: string | null; inspectedBy?: string | null }[] }>(
         request, `/purchase-orders/${list.items.find((item) => item.orderNumber === orderNumber)!.id}`);
     expect(detail.receivedQuantity).toBe(20);
     expect(detail.rejectedQuantity).toBe(5);
     expect(detail.invoiceIndicator).toBe('CreditNoteExpected');
-    const lot = /Partij (DEMO-TOUR-\d+)/.exec(result.done)?.[1];
+    // De partij van de inkooporder (voorgesteld nummer), of het eigen kenmerk van de rondleiding bij een order zonder partij.
+    const lot = /Partij (\S+) van/.exec(result.done)?.[1];
+    expect(detail.partijNumber ?? lot).toBe(lot);
     expect(detail.receipts.filter((receipt) => receipt.lotNumber === lot).map((receipt) => [receipt.origin, receipt.qualityStatus]))
         .toEqual([['Receipt', 'Approved'], ['RejectionSplit', 'Rejected']]);
     const approvals = detail.history.filter((event) => event.type === 'QualityChanged');
