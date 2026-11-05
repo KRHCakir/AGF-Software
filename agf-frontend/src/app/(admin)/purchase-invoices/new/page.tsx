@@ -10,6 +10,8 @@ import { toApiError } from '../../../../services/apiClient';
 import { getPurchaseInvoiceSettings, getPurchaseVendors } from '../../../../services/purchaseInvoiceService';
 import { getProductsWithVariants } from '../../../../services/referenceDataService';
 import type { ProductOption } from '../../../../types/referenceData';
+import { MissingMasterDataNotice } from '../../../../components/shared/FirstStep';
+import { missingMasterData } from '../../../../lib/masterDataStatus';
 import type { PurchaseInvoiceSettings, PurchaseVendor } from '../../../../types/purchaseInvoice';
 
 interface Reference {
@@ -60,6 +62,7 @@ export default function NewPurchaseInvoicePage() {
                         <PurchaseInvoiceSettingsPanel settings={state.data.settings} onClose={() => setSettingsOpen(false)}
                             onSaved={(settings) => setState({ status: 'ready', data: { ...state.data, settings } })} />
                     )}
+                    <MissingMasterDataNotice missing={missingMasterData({ vendors: state.data.vendors }, ['vendor'])} />
                     <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} settings={state.data.settings} />
                 </>
             )}

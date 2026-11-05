@@ -2192,5 +2192,19 @@
   "tour_order_partij_why": "Alles draait om het partijnummer: inkoop, ontvangst en verkoop van deze lading hangen eraan, en straks ook de kosten en het resultaat.",
   "tour_order_lot_title": "De partij terugvinden",
   "tour_order_lot_what": "Onder Voorraad › Partijen zoeken we partij {partijNumber}. In het detail staat deze inkooporder; ontvangsten en verkoop komen er later bij.",
-  "tour_order_lot_why": "Een partij kan meerdere inkooporders hebben, bijvoorbeeld een lading met goederen van twee leveranciers."
+  "tour_order_lot_why": "Een partij kan meerdere inkooporders hebben, bijvoorbeeld een lading met goederen van twee leveranciers.",
+  "first_missing_title": "Eerst nodig",
+  "first_missing_vendor": "Er is nog geen leverancier. Voeg eerst een leverancier toe.",
+  "first_missing_vendor_link": "Leverancier toevoegen",
+  "first_missing_customer": "Er is nog geen klant. Voeg eerst een klant toe.",
+  "first_missing_customer_link": "Klant toevoegen",
+  "first_missing_article": "Er zijn nog geen artikelen. Maak eerst een artikel aan.",
+  "first_missing_article_link": "Artikel toevoegen",
+  "start_begin_title": "Beginnen",
+  "start_begin_intro": "Het systeem is nog leeg. Zo begin je:",
+  "start_begin_relations": "Relaties aanmaken: je leveranciers en klanten",
+  "start_begin_articles": "Artikelen aanmaken: wat je inkoopt en verkoopt",
+  "start_begin_order": "De eerste inkooporder aanmaken",
+  "start_begin_done": "gedaan",
+  "sales_empty_action": "Eerste verkooporder aanmaken"
 }

@@ -19,9 +19,9 @@ export function LoadingRows({ rows = 6, label }: { rows?: number; label: string 
     );
 }
 
-export function EmptyState({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
+export function EmptyState({ title, description, action, testId }: { title: string; description?: string; action?: React.ReactNode; testId?: string }) {
     return (
-        <div className="rounded-md border border-dashed border-gray-300 bg-white px-4 py-8 text-center">
+        <div className="rounded-md border border-dashed border-gray-300 bg-white px-4 py-8 text-center" data-testid={testId}>
             <p className="font-medium text-gray-800">{title}</p>
             {description && <p className="mt-1 text-sm text-gray-600">{description}</p>}
             {action && <div className="mt-3">{action}</div>}

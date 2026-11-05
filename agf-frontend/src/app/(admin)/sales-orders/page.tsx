@@ -5,6 +5,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import AwaitingStockList from '../../../components/sales/AwaitingStockList';
 import CreateSalesOrderForm from '../../../components/sales/CreateSalesOrderForm';
+import { MissingMasterDataNotice } from '../../../components/shared/FirstStep';
+import { missingMasterData } from '../../../lib/masterDataStatus';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
 import { HydratedGate, PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
 import SalesOrderDetail from '../../../components/sales/SalesOrderDetail';
@@ -325,7 +327,8 @@ function SalesWorkspace() {
                     {orders.status === 'loading' && <LoadingRows rows={5} label={t('sales_loading')} />}
                     {orders.status === 'error' && <ErrorState error={orders.error} onRetry={() => setOrdersToken((n) => n + 1)} />}
                     {orders.status === 'ready' && visibleOrders.length === 0 && (
-                        <EmptyState title={orders.data.length === 0 ? t('sales_no_orders') : t('sales_no_matches')} description={orders.data.length === 0 ? t('sales_no_orders_hint') : undefined} />
+                        <EmptyState testId={orders.data.length === 0 ? 'sales-empty' : undefined} title={orders.data.length === 0 ? t('sales_no_orders') : t('sales_no_matches')} description={orders.data.length === 0 ? t('sales_no_orders_hint') : undefined}
+                            action={orders.data.length === 0 && !creating ? <button type="button" className={primaryButtonClass} onClick={() => setCreating(true)}>{t('sales_empty_action')}</button> : undefined} />
                     )}
                     {orders.status === 'ready' && visibleOrders.length > 0 && (
                         <SalesOrderList orders={visibleOrders} selectedId={creating ? null : selectedId} onSelect={openOrder}
@@ -340,6 +343,7 @@ function SalesWorkspace() {
                     {creating && reference.status === 'error' && <ErrorState error={reference.error} onRetry={() => setReferenceToken((n) => n + 1)} />}
                     {creating && reference.status === 'ready' && (
                         <HydratedGate>
+                            <div className="mb-2"><MissingMasterDataNotice missing={missingMasterData({ customers: reference.data.customers, products: reference.data.products }, ['customer', 'article'])} /></div>
                             {/* Een andere voorinvulling ("Verkopen" bij een ander artikel) geeft een vers formulier; zonder voorinvulling blijft het concept staan. */}
                             <CreateSalesOrderForm key={sellPrefill === null ? 'new' : `sell:${sellPrefill.productVariantId}:${sellPrefill.unit}:${sellPrefill.quantity}`}
                                 customers={reference.data.customers} products={reference.data.products}
