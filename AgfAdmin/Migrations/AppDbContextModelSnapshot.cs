@@ -4523,6 +4523,10 @@ namespace AgfAdmin.Migrations
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("RequestPartijKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Route")
                         .IsRequired()
                         .HasMaxLength(32)

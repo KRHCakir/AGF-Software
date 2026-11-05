@@ -39,6 +39,9 @@ namespace AgfAdmin.Models
         public int? PartijId { get; set; }
         public Partij Partij { get; set; }
         public string SupplierLotReference { get; set; }
+        // Partij zoals de aanmaakaanvraag haar vroeg ("none", "id:5", "new:NUMMERSLEUTEL" of "new:auto"), voor de idempotentiecontrole: de
+        // partij van de order kan later gekoppeld, herkoppeld of gecorrigeerd worden. Leeg bij orders van vóór deze kolom.
+        public string RequestPartijKey { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

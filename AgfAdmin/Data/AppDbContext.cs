@@ -450,6 +450,7 @@ namespace AgfAdmin.Data
                 b.Property(c => c.OrderChannel).HasMaxLength(16);
                 b.Property(c => c.Note).HasMaxLength(PurchaseOrderRules.MaxNoteLength);
                 b.Property(c => c.SupplierLotReference).HasMaxLength(PartijRules.MaxSupplierLotReferenceLength);
+                b.Property(c => c.RequestPartijKey).HasMaxLength(200);
                 b.HasOne(c => c.Partij).WithMany().HasForeignKey(c => c.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(c => c.PartijId);
 

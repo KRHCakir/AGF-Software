@@ -1,6 +1,7 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -17,10 +18,14 @@ namespace AgfAdmin.Services
         private const int MaxLotNumberLength = 100;
 
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public SupplyCommitmentService(AppDbContext db)
+        // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek (aanmaker van
+        // een nieuwe partij).
+        public SupplyCommitmentService(AppDbContext db, ICurrentUser currentUser = null)
         {
             _db = db;
+            _user = currentUser ?? CurrentUser.Default;
         }
 
         // Pogingen bij een gelijktijdig toegekend ordernummer (unieke index op jaar + volgnummer); daarna een echte fout.
@@ -88,6 +93,14 @@ namespace AgfAdmin.Services
                 return (ServiceResult<SupplyCommitmentDto>.Validation(errors.ToDictionary(e => e.Key, e => e.Value.ToArray())), false);
             }
 
+            // Partij: een bestaande, of een nieuwe in dezelfde save (eigen nummer na de dubbelcontrole, of het volgende voorstel). Bij een
+            // gelijktijdig gekozen nummer weigert de unieke index en begint CreateAsync opnieuw, met een nieuw voorstel.
+            var partijRefused = await AttachPartijAsync(request, candidate, cancellationToken);
+            if (partijRefused != null)
+            {
+                return (partijRefused, false);
+            }
+
             // Het ordernummer kent AppDbContext bij opslaan toe (volgende vrije in het jaar). Een gelijktijdige aanmaak kan hetzelfde
             // nummer kiezen; de unieke index weigert dan de tweede en CreateAsync probeert het opnieuw met een nieuw nummer.
             _db.SupplyCommitments.Add(candidate);
@@ -114,6 +127,36 @@ namespace AgfAdmin.Services
 
             var created = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
             return (ServiceResult<SupplyCommitmentDto>.Created(await ToDtoAsync(created, cancellationToken)), false);
+        }
+
+        private async Task<ServiceResult<SupplyCommitmentDto>> AttachPartijAsync(CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken)
+        {
+            if (request.PartijId != null)
+            {
+                if (!await _db.Partijen.AsNoTracking().AnyAsync(p => p.Id == request.PartijId, cancellationToken))
+                {
+                    return ServiceResult<SupplyCommitmentDto>.NotFound($"Lot {request.PartijId} does not exist.");
+                }
+                candidate.PartijId = request.PartijId;
+                foreach (var line in candidate.Lines)
+                {
+                    line.PartijId = request.PartijId;
+                }
+            }
+            else if (request.NewPartij != null)
+            {
+                var built = await new PartijService(_db, _user).BuildNewAsync<SupplyCommitmentDto>(request.NewPartij.Number, "newPartij.number", cancellationToken);
+                if (built.Refused != null)
+                {
+                    return built.Refused;
+                }
+                candidate.Partij = built.Partij;
+                foreach (var line in candidate.Lines)
+                {
+                    line.Partij = built.Partij;
+                }
+            }
+            return null;
         }
 
         public async Task<ServiceResult<SupplyCommitmentDto>> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -209,6 +252,11 @@ namespace AgfAdmin.Services
             // Inkoopordergegevens: alle optioneel; leeg telt als niet opgegeven.
             var supplierReference = OptionalText(request.SupplierReference, PurchaseOrderRules.MaxSupplierReferenceLength, "supplierReference", errors);
             var note = OptionalText(request.Note, PurchaseOrderRules.MaxNoteLength, "note", errors);
+            var supplierLotReference = OptionalText(request.SupplierLotReference, PartijRules.MaxSupplierLotReferenceLength, "supplierLotReference", errors);
+            if (request.PartijId != null && request.NewPartij != null)
+            {
+                AddError(errors, "partijId", "Choose an existing lot or a new lot, not both.");
+            }
             var orderChannel = string.IsNullOrWhiteSpace(request.OrderChannel) ? null : request.OrderChannel.Trim();
             if (orderChannel != null && !PurchaseOrderRules.IsChannel(orderChannel))
             {
@@ -269,6 +317,10 @@ namespace AgfAdmin.Services
                 OrderedOn = request.OrderedOn ?? today,
                 OrderChannel = orderChannel,
                 Note = note,
+                SupplierLotReference = supplierLotReference,
+                RequestPartijKey = request.PartijId != null ? $"id:{request.PartijId}"
+                    : request.NewPartij == null ? "none"
+                    : string.IsNullOrWhiteSpace(request.NewPartij.Number) ? "new:auto" : $"new:{PartijRules.NumberKey(request.NewPartij.Number)}",
                 CreatedAt = now,
                 UpdatedAt = now,
                 Lines = lines
@@ -414,10 +466,39 @@ namespace AgfAdmin.Services
         }
 
         private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken) =>
-            HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null)
+            HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null) && HasSamePartij(existing, candidate, request)
                 ? ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(existing, cancellationToken))
                 : ServiceResult<SupplyCommitmentDto>.Conflict(
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");
+
+        // Partij bij een herhaling: vergeleken met de partij uit de oorspronkelijke aanvraag (RequestPartijKey), niet met de huidige partij
+        // van de order, want die kan na het aanmaken gekoppeld, herkoppeld of gecorrigeerd zijn. Orders van vóór die kolom: een aanvraag met
+        // partij wordt met de huidige partij vergeleken; een aanvraag zonder partij telt als de oorspronkelijke aanvraag. De partij van de leverancier zoals andere optionele velden.
+        private static bool HasSamePartij(SupplyCommitment existing, SupplyCommitment candidate, CreateSupplyCommitmentDto request)
+        {
+            var supplierLot = string.IsNullOrWhiteSpace(request.SupplierLotReference) ? null : request.SupplierLotReference.Trim();
+            if (!string.Equals(existing.SupplierLotReference, supplierLot, StringComparison.Ordinal))
+            {
+                return false;
+            }
+            if (existing.RequestPartijKey != null)
+            {
+                return string.Equals(existing.RequestPartijKey, candidate.RequestPartijKey, StringComparison.Ordinal);
+            }
+            if (request.PartijId != null)
+            {
+                return existing.PartijId == request.PartijId;
+            }
+            if (request.NewPartij != null)
+            {
+                return existing.Partij != null && (string.IsNullOrWhiteSpace(request.NewPartij.Number)
+                    ? existing.Partij.Sequence != null
+                    : PartijRules.NumberKey(request.NewPartij.Number) == existing.Partij.NumberKey);
+            }
+            // Oudere order zonder RequestPartijKey en een aanvraag zonder partij: de huidige koppeling is later ontstaan
+            // (migratie of handmatig) en zegt niets over de oorspronkelijke aanvraag.
+            return true;
+        }
 
         // Strikte vergelijking, inclusief de volgorde van de regels; decimals worden op waarde vergeleken (12.30 == 12.3).
         // Inkoopordervelden: weggelaten (null) betekent "niet opgegeven" en is gelijk aan een opgeslagen null; een weggelaten
@@ -470,9 +551,12 @@ namespace AgfAdmin.Services
                 .AsNoTracking()
                 .Include(c => c.Vendor).ThenInclude(v => v.Ggns)
                 .Include(c => c.Customer)
+                .Include(c => c.Partij)
+                .Include(c => c.Lines).ThenInclude(l => l.Partij)
                 .Include(c => c.Lines)
                     .ThenInclude(l => l.ProductVariant)
-                        .ThenInclude(v => v.Product);
+                        .ThenInclude(v => v.Product)
+                .AsSplitQuery();
 
         // DirectTrade-regels tonen hun toegewezen en resterende capaciteit; Warehouse-regels nooit (null): magazijnaanvoer
         // wordt pas voorraad na ontvangst en keuring en heeft geen toewijsbare verwachte capaciteit.
@@ -498,6 +582,9 @@ namespace AgfAdmin.Services
             OrderedOn = commitment.OrderedOn,
             OrderChannel = commitment.OrderChannel,
             Note = commitment.Note,
+            PartijId = commitment.PartijId,
+            PartijNumber = commitment.Partij?.Number,
+            SupplierLotReference = commitment.SupplierLotReference,
             Lines = commitment.Lines
                 .OrderBy(l => l.Id)
                 .Select(l => new SupplyCommitmentLineDto
@@ -507,6 +594,8 @@ namespace AgfAdmin.Services
                     ProductName = l.ProductVariant?.Product?.Name,
                     ProductVariantName = l.ProductVariant?.Name,
                     LotNumber = l.LotNumber,
+                    PartijId = l.PartijId,
+                    PartijNumber = l.Partij?.Number,
                     ExpectedQuantity = l.ExpectedQuantity,
                     ExpectedUnit = l.ExpectedUnit,
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
