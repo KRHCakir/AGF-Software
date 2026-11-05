@@ -43,6 +43,7 @@ scripts/new-clean-db.sh agf_start --settings-from agf_smoke
 - Het gebruikt `PGHOST`, `PGPORT`, `PGUSER` en `PGPASSWORD` (standaard localhost:5432 en je eigen gebruikersnaam) voor alle stappen, ook voor de tijdelijke API.
 - Het maakt de database aan, laat de migraties lopen (de API start daarvoor kort op poort 5296) en neemt met `--settings-from`
   je instellingen over. Uit `agf_smoke` wordt daarbij alleen **gelezen**.
+  Heeft het bedrijf de standaardcondities 14D of 30D aangepast, dan gelden in de nieuwe database die aangepaste waarden.
 - Daarna controleert het dat alleen de referentietabellen gevuld zijn, en toont het per tabel het aantal rijen.
 - Zonder `--settings-from` krijg je de standaardinstellingen. Die stel je later zelf in onder Instellingen.
 
