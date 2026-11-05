@@ -7,6 +7,7 @@ import { formatMoney } from '../../../lib/availability';
 import { DashboardData, DashboardService } from '../../../services/dashboardService';
 import { showLegacyDemoChrome } from '../../../lib/featureFlags';
 import { NAV_GROUPS } from '../../../lib/navigation';
+import GettingStartedCard from '../../../components/shared/GettingStartedCard';
 
 // Startpagina: ingang naar de schermen, per procesgroep zoals het menu. De oude kengetallen (deels vaste voorbeeldwaarden) staan standaard uit.
 export default function Home() {
@@ -17,6 +18,7 @@ export default function Home() {
         <h1 className="text-2xl font-bold text-gray-800">{t('start_title')}</h1>
         <p className="text-sm text-gray-600">{t('start_subtitle')}</p>
       </div>
+      <GettingStartedCard />
       {/* Dezelfde vier procesgroepen als het menu, in de volgorde van de keten: inkopen, voorraad, verkopen; stamgegevens apart. */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {NAV_GROUPS.map((group) => (

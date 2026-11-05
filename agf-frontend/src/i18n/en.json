@@ -2192,5 +2192,19 @@
   "tour_order_partij_why": "Everything revolves around the lot number: purchase, receipt and sales of this load hang on it, and later the costs and the result.",
   "tour_order_lot_title": "Finding the lot",
   "tour_order_lot_what": "Under Stock › Lots we search lot {partijNumber}. Its detail shows this purchase order; receipts and sales follow later.",
-  "tour_order_lot_why": "A lot can have several purchase orders, for example a load with goods from two suppliers."
+  "tour_order_lot_why": "A lot can have several purchase orders, for example a load with goods from two suppliers.",
+  "first_missing_title": "Needed first",
+  "first_missing_vendor": "There is no supplier yet. Add a supplier first.",
+  "first_missing_vendor_link": "Add supplier",
+  "first_missing_customer": "There is no customer yet. Add a customer first.",
+  "first_missing_customer_link": "Add customer",
+  "first_missing_article": "There are no articles yet. Create an article first.",
+  "first_missing_article_link": "Add article",
+  "start_begin_title": "Getting started",
+  "start_begin_intro": "The system is still empty. This is how you start:",
+  "start_begin_relations": "Create relations: your suppliers and customers",
+  "start_begin_articles": "Create articles: what you buy and sell",
+  "start_begin_order": "Create the first purchase order",
+  "start_begin_done": "done",
+  "sales_empty_action": "Create first sales order"
 }
