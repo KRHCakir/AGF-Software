@@ -102,7 +102,8 @@ export const PURCHASE_INVOICE_CHAPTER: TourChapter = {
             { kind: 'type', target: 'pinvoice-line-quantity:0', text: '10' },
             { kind: 'type', target: 'pinvoice-line-price:0', text: '12' },
             { kind: 'click', target: 'pinvoice-number' },
-            { kind: 'assert', target: 'pinvoice-line-amount:0', text: '120,00' },
+            // Zonder decimalen: het bedrag staat als 120,00 (nl) of 120.00 (en) op het scherm, en de controle zoekt een deel van de tekst.
+            { kind: 'assert', target: 'pinvoice-line-amount:0', text: '120' },
             { kind: 'highlight', target: 'pinvoice-totals' },
         ]),
         invoice('save', [
