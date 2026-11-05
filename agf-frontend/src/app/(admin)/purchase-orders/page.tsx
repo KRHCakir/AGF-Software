@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { FirstStepLink } from '../../../components/shared/FirstStep';
 import InvoiceRefActions from '../../../components/purchase/InvoiceRefActions';
 import PurchaseOrderDetail from '../../../components/purchase/PurchaseOrderDetail';
 import PurchaseOrderList from '../../../components/purchase/PurchaseOrderList';
@@ -154,7 +155,11 @@ function PurchaseOrdersWorkspace() {
 
             {list.status === 'loading' && <LoadingRows label={t('po_loading')} />}
             {list.status === 'error' && <ErrorState error={list.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-            {list.status === 'ready' && list.data.items.length === 0 && <EmptyState title={t('po_list_empty')} />}
+            {list.status === 'ready' && list.data.items.length === 0 && (debounced === '' && vendorId === '' && (status === 'open' || status === 'all')
+                // Nog niets gezocht of gefilterd: er zijn (open) inkooporders nog niet, de eerste stap is er een aanmaken.
+                ? <EmptyState testId="po-empty" title={t(status === 'open' ? 'po_empty_open_title' : 'po_empty_title')} description={t('po_empty_text')}
+                    action={<FirstStepLink href="/purchase-orders/new" label={t('nav_purchase_order_new')} />} />
+                : <EmptyState title={t('po_list_empty')} />)}
             {list.status === 'ready' && list.data.items.length > 0 && (
                 <>
                     <PurchaseOrderList items={list.data.items} selectedId={selectedId} onOpen={open} />

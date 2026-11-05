@@ -1,7 +1,7 @@
 'use client';
 
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import RelationForm from '../../../components/relations/RelationForm';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
@@ -63,6 +63,13 @@ export default function RelationsPage() {
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     const openNew = () => setEditing({ relation: null, key: Date.now() });
+    // Leeg nog niets gefilterd: dan zijn er echt nog geen relaties (schone start) en is de eerste stap een nieuwe relatie.
+    const nothingYet = total === 0 && debounced === '' && role === 'all';
+
+    // Link vanaf de Beginnen-kaart of een formulier dat een leverancier of klant mist: /relations?new=1 opent meteen een nieuwe relatie.
+    useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('new') === '1') setEditing({ relation: null, key: Date.now() });
+    }, []);
     const openRelation = async (id: number) => {
         setOpening(id);
         try {
@@ -117,7 +124,7 @@ export default function RelationsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setReloadToken((n) => n + 1)} className={secondaryButtonClass}>↻ {t('availability_refresh')}</button>
-                    <button type="button" onClick={openNew} className={primaryButtonClass}>+ {t('relations_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
+                    <button type="button" onClick={openNew} className={primaryButtonClass} data-tour="relations-new">+ {t('relations_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
                 </div>
             </div>
 
@@ -173,7 +180,14 @@ export default function RelationsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {shown.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-600">{t('relations_none')}</td></tr>}
+                            {shown.length === 0 && (
+                                <tr><td colSpan={7} className={nothingYet ? 'p-2' : 'px-3 py-6 text-center text-gray-600'}>
+                                    {nothingYet ? (
+                                        <EmptyState testId="relations-empty" title={t('relations_empty_title')} description={t('relations_empty_text')}
+                                            action={editing === null ? <button type="button" onClick={openNew} className={primaryButtonClass}>{t('relations_empty_action')}</button> : undefined} />
+                                    ) : t('relations_none')}
+                                </td></tr>
+                            )}
                             {shown.map((item, index) => (
                                 <tr key={item.id} role="option" aria-selected={index === highlight} data-testid={`relation-row-${item.id}`} onClick={() => void openRelation(item.id)}
                                     className={`cursor-pointer hover:bg-blue-50 ${editing?.relation?.id === item.id ? 'bg-blue-50' : index === highlight && query !== '' ? 'bg-blue-50/60' : ''}`}>

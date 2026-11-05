@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { FirstStepLink } from '../../../components/shared/FirstStep';
 import PalletGroup, { InspectionNotice } from '../../../components/inspection/PalletGroup';
 import { inputClass } from '../../../components/supply/FieldError';
 import { useTranslation } from '../../../i18n/LanguageContext';
@@ -194,9 +195,10 @@ function InspectionWorkspace() {
             {state.status === 'ready' && palletParam !== 'invalid' && (() => {
                 if (!single && state.data.length === 0) {
                     return (
-                        <div className="rounded-md border border-dashed border-gray-300 bg-white px-4 py-8 text-center">
+                        <div className="rounded-md border border-dashed border-gray-300 bg-white px-4 py-8 text-center" data-testid="inspection-empty">
                             <p className="font-medium text-gray-800">{t('inspection_queue_empty')}</p>
                             <p className="mt-1 text-sm text-gray-600">{t('inspection_queue_empty_hint')}</p>
+                            <div className="mt-3"><FirstStepLink href="/receipts" label={t('inspection_empty_action')} /></div>
                         </div>
                     );
                 }
