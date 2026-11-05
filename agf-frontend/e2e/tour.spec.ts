@@ -250,7 +250,10 @@ test('hoofdstuk Inkoopfactuur invoeren: factuur van de rondleidingsleverancier m
     await page.close();
 });
 
-test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" maakt de stap af', async () => {
+test('Doe zelf: de gebruiker kiest zelf de leverancier en de rondleiding gaat verder; "Doe dit stuk voor mij" doet de rest', async ({ request }) => {
+    // De leverancier van de rondleiding (hoofdstuk Stamgegevens hierboven), zoals de gebruiker hem zou typen: zijn zoekcode.
+    const vendors = await json<{ id: number; searchCode: string | null; isActive: boolean }[]>(request, '/purchase-invoices/vendors');
+    const search = vendors.filter((vendor) => vendor.isActive && (vendor.searchCode ?? '').startsWith('DEMO-TOUR-')).sort((a, b) => b.id - a.id)[0].searchCode!;
     const page = await context.newPage();
     await page.goto('/dashboard');
     await page.getByRole('button', { name: 'Demo-assistent' }).click();
@@ -258,8 +261,17 @@ test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" ma
     await page.getByRole('button', { name: 'Doe zelf' }).click();
     await page.getByTestId('tour-chapter-order').getByRole('button').click();
     const panel = page.locator('section[aria-label="Demo-assistent"]');
-    await expect(panel).toContainText('Jouw beurt', { timeout: 60_000 });
+    await expect(panel).toContainText('Leverancier kiezen', { timeout: 60_000 });
+    await expect(panel).toContainText('Jouw beurt');
     await expect(page.getByTestId('tour-blocker')).toHaveCount(0);
+    // De gebruiker doet de gevraagde stap zelf; de assistent ziet dat en gaat door naar de volgende stap.
+    const vendor = page.locator('[data-tour="supply-vendor"]');
+    await vendor.click();
+    await page.keyboard.type(search);
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Tab');
+    await expect(panel).not.toContainText('Leverancier kiezen', { timeout: 30_000 });
+    await expect(panel).toContainText('Partij');
     await expect.poll(async () => {
         const text = (await panel.innerText()).replace(/\s+/g, ' ');
         if (/kon niet uitgevoerd/.test(text)) throw new Error(text);
