@@ -49,6 +49,8 @@ export class TourRunner {
     private resumeWaiters: (() => void)[] = [];
     private doForMe = false;
     private savedActor: { value: string | null } | null = null;
+    // Schrijft dit hoofdstuk (zelf, of omdat het eerst iets moet aanmaken)? Bepaalt DEMO-TOUR-referentie en de rondleidingsbeoordelaar.
+    private writes = false;
     private focused: HTMLElement | null = null;
     private precheck: AbortController | null = null;
     private clickedTargets = new Set<string>();
@@ -59,7 +61,7 @@ export class TourRunner {
 
     constructor(options: TourRunnerOptions) {
         this.options = options;
-        this.state = { status: 'idle', chapterId: null, stepIndex: 0, stepCount: 0, mode: 'watch', speed: 'normal', target: null, error: null, vars: {} };
+        this.state = { status: 'idle', chapterId: null, stepIndex: 0, stepCount: 0, mode: 'watch', speed: 'normal', target: null, error: null, vars: {}, skipped: [] };
     }
 
     getState(): TourState {
@@ -82,7 +84,8 @@ export class TourRunner {
         this.cancel();
         this.chapter = chapter;
         const my = this.epoch;
-        this.emit({ status: 'checking', chapterId: chapter.id, stepIndex: 0, stepCount: chapter.steps.length, mode: settings.mode, speed: settings.speed, target: null, error: null, vars: {} });
+        this.writes = chapter.writes;
+        this.emit({ status: 'checking', chapterId: chapter.id, stepIndex: 0, stepCount: chapter.steps.length, mode: settings.mode, speed: settings.speed, target: null, error: null, vars: {}, skipped: [] });
         if (chapter.comingSoon || chapter.steps.length === 0) {
             this.fail({ key: 'tour_error_coming_soon' });
             return;
@@ -102,6 +105,13 @@ export class TourRunner {
                     this.fail({ key: 'tour_error_precheck', missing: result.missing });
                     return;
                 }
+                if (result.writes && !chapter.writes) {
+                    if (!this.options.allowWrites) {
+                        this.fail({ key: 'tour_error_writes_disabled' });
+                        return;
+                    }
+                    this.writes = true;
+                }
                 Object.assign(vars, result.vars ?? {});
             } catch {
                 if (my !== this.epoch) return;
@@ -111,9 +121,9 @@ export class TourRunner {
                 if (this.precheck === controller) this.precheck = null;
             }
         }
-        if (chapter.writes) vars.tourRef = this.options.nextRef();
+        if (this.writes) vars.tourRef = this.options.nextRef();
         // Partij van de ontvangst: die van de inkooporder (uit de voorcontrole), anders het eigen kenmerk van deze rondleiding.
-        if (chapter.writes && !vars.lot) vars.lot = vars.tourRef;
+        if (this.writes && !vars.lot) vars.lot = vars.tourRef;
         this.useTourActor();
         this.listen();
         this.emit({ vars });
@@ -217,13 +227,18 @@ export class TourRunner {
     private async runStep(step: TourStep, index: number, my: number) {
         this.doForMe = false;
         this.focused = null;
-        this.emit({ status: 'running', stepIndex: index, target: null, error: null });
-        if (pathname(this.options.currentPath()) !== pathname(step.route)) await this.navigateTo(step.route, my);
-        await this.sleep(this.state.mode === 'watch' ? this.timing().readMs : this.timing().actionMs, my);
-        for (const action of step.actions) {
-            if (action.when !== undefined && this.text(action.when).trim() === '') continue;
-            await this.perform(action, my);
+        if (step.when !== undefined && this.text(step.when).trim() === '') {
+            await this.checkpoint(my);
+            this.emit({ stepIndex: index, target: null, skipped: this.state.skipped.includes(index) ? this.state.skipped : [...this.state.skipped, index] });
+            return;
         }
+        this.emit({ status: 'running', stepIndex: index, target: null, error: null });
+        // Eerst lezen (lookup), want de route van de stap kan een gevonden waarde bevatten (?productVariantId={{variantId}}).
+        const skip = (action: TourAction) => action.when !== undefined && this.text(action.when).trim() === '';
+        for (const action of step.actions) if (action.kind === 'lookup' && !skip(action)) await this.perform(action, my);
+        if (pathname(this.options.currentPath()) !== pathname(this.text(step.route))) await this.navigateTo(step.route, my);
+        await this.sleep(this.state.mode === 'watch' ? this.timing().readMs : this.timing().actionMs, my);
+        for (const action of step.actions) if (action.kind !== 'lookup' && !skip(action)) await this.perform(action, my);
         if (step.expect) await this.assertTarget(step.expect.target, step.expect.text, undefined, my);
         await this.sleep(this.timing().actionMs, my);
     }
@@ -243,6 +258,9 @@ export class TourRunner {
                 return;
             case 'assert':
                 await this.assertTarget(action.target, action.text, action.value, my);
+                return;
+            case 'lookup':
+                await this.lookup(action.run, my);
                 return;
             case 'remember': {
                 const element = await this.waitForTarget(action.target, my);
@@ -293,6 +311,24 @@ export class TourRunner {
                 return;
             }
         }
+    }
+
+    // Halverwege lezen: alleen GET-aanroepen; afbreken bij Stop of Terug.
+    private async lookup(run: Extract<TourAction, { kind: 'lookup' }>['run'], my: number) {
+        const controller = new AbortController();
+        this.precheck = controller;
+        let result;
+        try {
+            result = await run(this.state.vars, controller.signal);
+        } catch {
+            if (my !== this.epoch) throw new Cancelled();
+            throw new StepFailure({ key: 'tour_error_precheck_failed' });
+        } finally {
+            if (this.precheck === controller) this.precheck = null;
+        }
+        if (my !== this.epoch) throw new Cancelled();
+        if (result.missing.length > 0) throw new StepFailure({ key: 'tour_error_precheck', missing: result.missing });
+        this.emit({ vars: { ...this.state.vars, ...(result.vars ?? {}) } });
     }
 
     private async typeInto(element: HTMLElement, target: TourTarget, text: string, my: number) {
@@ -461,7 +497,7 @@ export class TourRunner {
 
     // Tijdens de rondleiding staat "Demo-assistent" als gebruikersnaam (audit en historie); daarna de eigen naam weer.
     private useTourActor() {
-        if (!this.chapter?.writes) return;
+        if (!this.writes) return;
         if (this.savedActor === null) this.savedActor = { value: this.options.actor.get() };
         this.options.actor.set(TOUR_ACTOR);
     }

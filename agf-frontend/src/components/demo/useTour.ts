@@ -52,7 +52,7 @@ export interface TourSettings {
     speed: TourSpeed;
 }
 
-const IDLE: TourState = { status: 'idle', chapterId: null, stepIndex: 0, stepCount: 0, mode: 'watch', speed: 'normal', target: null, error: null, vars: {} };
+const IDLE: TourState = { status: 'idle', chapterId: null, stepIndex: 0, stepCount: 0, mode: 'watch', speed: 'normal', target: null, error: null, vars: {}, skipped: [] };
 
 function read<T>(key: string, parse: (raw: string) => T | null): T | null {
     try {

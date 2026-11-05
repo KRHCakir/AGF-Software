@@ -116,7 +116,7 @@ export default function ArticlesPage() {
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('articles_title')}</h1>
+                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('articles_title')}</h1>
                     <p className="text-sm text-gray-600">{t('articles_subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">

@@ -341,14 +341,14 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
         <div className={options.span ?? ''}>
             <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{options.required ? ' *' : ''}</label>
             <input {...fieldProps(field, e(field))} ref={options.ref ? firstInput : undefined} value={String(draft[field])} list={options.list} maxLength={options.maxLength ?? 200} disabled={locked}
-                onChange={(event) => update({ [field]: event.target.value } as Partial<RelationDraft>)} className={`${inputClass}${options.mono ? ' font-mono' : ''}${options.upper ? ' uppercase' : ''}`} />
+                data-tour={`relation-${field.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`} onChange={(event) => update({ [field]: event.target.value } as Partial<RelationDraft>)} className={`${inputClass}${options.mono ? ' font-mono' : ''}${options.upper ? ' uppercase' : ''}`} />
             {options.hintKey && <span className="block text-xs text-gray-500">{t(options.hintKey)}</span>}
             <FieldError id={field} messages={e(field)} />
         </div>
     );
 
     const sectionButton = (key: string, labelKey: string, summary: string) => (
-        <button type="button" aria-expanded={open[key]} aria-controls={`relation-${key}`} onClick={() => toggle(key)}
+        <button type="button" aria-expanded={open[key]} aria-controls={`relation-${key}`} onClick={() => toggle(key)} data-tour="relation-section" data-tour-key={key}
             className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold text-gray-900">
             <span>{open[key] ? '▾' : '▸'} {t(labelKey)}{!open[key] && summary ? <span className="ml-2 font-normal text-gray-600">{summary}</span> : null}</span>
         </button>
@@ -367,7 +367,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                     <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting}>{t('relations_close')}</button>
                 </div>
             </div>
-            {notice && <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">{notice}</p>}
+            {notice && <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900" data-tour="relation-notice">{notice}</p>}
             {stale && current !== null && (
                 <div role="alert" className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="relation-stale">
                     <p className="font-medium">{t('relations_stale_title')}</p>
@@ -401,7 +401,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                             </li>
                         ))}
                     </ul>
-                    <button type="button" className={`${secondaryButtonClass} mt-2 border-amber-400`} onClick={() => void submit(true)}>{t('relations_create_anyway')}</button>
+                    <button type="button" className={`${secondaryButtonClass} mt-2 border-amber-400`} onClick={() => void submit(true)} data-tour="relation-create-anyway">{t('relations_create_anyway')}</button>
                 </div>
             )}
 
@@ -413,12 +413,12 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                 {textField('tradeName', 'relations_field_trade_name')}
                 <div className="col-span-2 flex flex-wrap items-end gap-3 md:col-span-2">
                     <label className="flex items-center gap-1 text-sm text-gray-900">
-                        <input type="checkbox" id="customerRole-input" checked={draft.customerRole} disabled={locked || current?.customer != null}
+                        <input type="checkbox" id="customerRole-input" data-tour="relation-role-customer" checked={draft.customerRole} disabled={locked || current?.customer != null}
                             onChange={(event) => { update({ customerRole: event.target.checked }); setOpen((current) => ({ ...current, defaults: true })); }} />
                         {t('relations_role_customer')}
                     </label>
                     <label className="flex items-center gap-1 text-sm text-gray-900">
-                        <input type="checkbox" id="vendorRole-input" checked={draft.vendorRole} disabled={locked || current?.vendor != null}
+                        <input type="checkbox" id="vendorRole-input" data-tour="relation-role-vendor" checked={draft.vendorRole} disabled={locked || current?.vendor != null}
                             onChange={(event) => { update({ vendorRole: event.target.checked }); setOpen((current) => ({ ...current, defaults: true })); }} />
                         {t('relations_role_vendor')}
                     </label>
@@ -477,7 +477,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                             const input = (field: 'label' | 'line1' | 'line2' | 'postalCode' | 'city' | 'region' | 'countryCode', labelKey: string, extra = '') => (
                                 <div className={extra}>
                                     <label htmlFor={`${k(field)}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{field === 'countryCode' ? ' *' : ''}</label>
-                                    <input {...fieldProps(k(field), e(k(field)))} value={address[field]} disabled={locked} maxLength={field === 'countryCode' ? 2 : 300}
+                                    <input {...fieldProps(k(field), e(k(field)))} value={address[field]} disabled={locked} maxLength={field === 'countryCode' ? 2 : 300} data-tour={`relation-address-${field.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`}
                                         onChange={(event) => editAddress(address.key, { [field]: event.target.value })} className={`${inputClass}${field === 'countryCode' ? ' uppercase' : ''}`} />
                                     <FieldError id={k(field)} messages={e(k(field))} />
                                 </div>
@@ -506,7 +506,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                             );
                         })}
                         <div className="flex flex-wrap gap-2">
-                            {ADDRESS_PURPOSES.map((purpose) => <button key={purpose} type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => addAddress(purpose)}>+ {t(`relations_address_${purpose}`)}</button>)}
+                            {ADDRESS_PURPOSES.map((purpose) => <button key={purpose} type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => addAddress(purpose)} data-tour="relation-address-add" data-tour-key={purpose}>+ {t(`relations_address_${purpose}`)}</button>)}
                         </div>
                         <p className="text-xs text-gray-500">{t('relations_addresses_hint')}</p>
                     </div>
@@ -700,7 +700,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             </section>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={locked}>{submitting ? t('supply_saving') : t('relations_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
+                <button type="submit" className={primaryButtonClass} disabled={locked} data-tour="relation-save">{submitting ? t('supply_saving') : t('relations_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
                 <SubmitErrors errors={errors} moveFocus={false} />
                 <span className="text-xs text-gray-600">{t('relations_save_hint')}</span>
             </div>

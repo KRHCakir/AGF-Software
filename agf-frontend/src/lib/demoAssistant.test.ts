@@ -27,7 +27,12 @@ describe('tour', () => {
 
 describe('allowed navigation', () => {
     test('accepts only the fixed routes, a numeric order link and a purchase-order id or search', () => {
-        assert.deepEqual([...DEMO_ROUTES], ['/purchase-orders/new', '/receipts', '/inspection', '/availability', '/sales-orders', '/purchase-orders', '/partijen']);
+        assert.deepEqual([...DEMO_ROUTES], ['/purchase-orders/new', '/receipts', '/inspection', '/availability', '/sales-orders', '/purchase-orders', '/partijen',
+            '/relations', '/articles', '/direct-trade', '/purchase-invoices', '/purchase-invoices/new']);
+        assert.ok(isAllowedDemoHref('/receipts?order=12'));
+        assert.ok(isAllowedDemoHref('/partijen?id=7'));
+        assert.equal(isAllowedDemoHref('/partijen?id=7&x=1'), false);
+        assert.equal(isAllowedDemoHref('/receipts?order=abc'), false);
         assert.ok(isAllowedDemoHref('/sales-orders?orderId=13'));
         assert.ok(isAllowedDemoHref('/inspection?search=DEMO-REP'));
         assert.ok(isAllowedDemoHref('/purchase-orders'));

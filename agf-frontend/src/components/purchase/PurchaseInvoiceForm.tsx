@@ -262,7 +262,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
 
     if (result !== null) {
         return (
-            <section role="status" className="rounded-md border border-green-300 bg-green-50 p-4">
+            <section role="status" className="rounded-md border border-green-300 bg-green-50 p-4" data-tour="pinvoice-saved">
                 <h2 className="text-lg font-semibold text-green-900">{t('purchase_saved_title', { number: result.invoice.invoiceNumber ?? '' })}</h2>
                 {result.replayed && <p className="mt-1 text-sm text-green-900">{t('supply_saved_before')}</p>}
                 <p className="mt-1 text-sm text-gray-800">{t('purchase_saved_summary', { vendor: result.invoice.vendorName ?? '', total: money(result.invoice.totalAmount), currency: result.invoice.currency ?? '', status: result.invoice.status })}</p>
@@ -276,7 +276,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
     return (
         <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit('save'); }} className="space-y-3">
             {lastSaved !== null && (
-                <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">
+                <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900" data-tour="pinvoice-saved">
                     {t('purchase_saved_title', { number: lastSaved.invoice.invoiceNumber ?? '' })} · {money(lastSaved.invoice.totalAmount)} {lastSaved.invoice.currency}{lastSaved.replayed ? ` · ${t('supply_saved_before')}` : ''}
                 </p>
             )}
@@ -298,7 +298,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 <legend className="px-1 text-sm font-semibold text-gray-900">{t('purchase_header')}</legend>
                 <div className="col-span-2">
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('purchase_vendor')} *</label>
-                    <VendorPicker id="vendorId" ariaLabel={t('purchase_vendor')} vendors={vendors} value={draft.header.vendorId} disabled={locked} invalid={!!e('vendorId')}
+                    <VendorPicker id="vendorId" dataTour="pinvoice-vendor" ariaLabel={t('purchase_vendor')} vendors={vendors} value={draft.header.vendorId} disabled={locked} invalid={!!e('vendorId')}
                         describedBy={e('vendorId') ? 'vendorId' : undefined} inputRef={(element) => { vendorInput.current = element; }}
                         badge={vendorTermsBadge} onChange={(chosen) => update(selectVendor(draft, chosen, settings))} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
@@ -312,7 +312,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 </div>
                 <div>
                     <label htmlFor="invoiceNumber-input" className="text-xs font-medium text-gray-700">{t('invoice_number')} *</label>
-                    <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} value={draft.header.invoiceNumber} maxLength={100} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} className={inputClass} />
+                    <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} data-tour="pinvoice-number" value={draft.header.invoiceNumber} maxLength={100} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} className={inputClass} />
                     <FieldError id="invoiceNumber" messages={e('invoiceNumber')} />
                     <InvoiceOrderNotice invoiceNumber={draft.header.invoiceNumber} vendorId={draft.header.vendorId === '' ? null : Number(draft.header.vendorId)} />
                 </div>
@@ -329,7 +329,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 </div>
                 <div>
                     <label htmlFor="dueDate-input" className="text-xs font-medium text-gray-700">{t('purchase_due_date')} *</label>
-                    <DateField {...fieldProps('dueDate', e('dueDate'))} value={draft.header.dueDate} onChange={(value) => update(changeDueDate(draft, value))} />
+                    <DateField {...fieldProps('dueDate', e('dueDate'))} dataTour="pinvoice-due-date" value={draft.header.dueDate} onChange={(value) => update(changeDueDate(draft, value))} />
                     {draft.touched.dueDate && (
                         <span className="block text-xs text-gray-600">
                             {deviation === null ? t('purchase_due_manual') : t('purchase_due_deviation', { days: String(deviation) })}{' '}
@@ -399,7 +399,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                             return (
                                 <tr key={line.key} data-line-key={line.key} className="align-top" onKeyDown={(event) => onLineKeyDown(event, line)} onFocusCapture={() => setActiveLine(line.key)}>
                                     <td className="w-80 px-2 py-1.5">
-                                        <ProductVariantPicker id={`${prefix}.item`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={products} value={line.productVariantId}
+                                        <ProductVariantPicker id={`${prefix}.item`} dataTour={`pinvoice-line-item-${index}`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={products} value={line.productVariantId}
                                             allowFreeText freeText={line.description} disabled={locked} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`)}
                                             describedBy={e(`${prefix}.description`) ? `${prefix}.description` : undefined}
                                             inputRef={(element) => { if (element) itemInputs.current.set(line.key, element); else itemInputs.current.delete(line.key); }}
@@ -414,7 +414,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                     </td>
                                     <td className="w-24 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.quantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
-                                        <input {...fieldProps(`${prefix}.quantity`, e(`${prefix}.quantity`))} inputMode="decimal" value={line.quantity} disabled={locked} onChange={(event) => updateLine(line.key, { quantity: event.target.value })} className={inputClass} />
+                                        <input {...fieldProps(`${prefix}.quantity`, e(`${prefix}.quantity`))} data-tour="pinvoice-line-quantity" data-tour-key={index} inputMode="decimal" value={line.quantity} disabled={locked} onChange={(event) => updateLine(line.key, { quantity: event.target.value })} className={inputClass} />
                                         <NumberEcho value={line.quantity} unit={line.unit === '' ? undefined : t(unitLabelKey(line.unit)).toLowerCase()} testId={`${prefix}.quantity-echo`} />
                                         <FieldError id={`${prefix}.quantity`} messages={e(`${prefix}.quantity`)} />
                                     </td>
@@ -424,7 +424,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('purchase_col_price')} {index + 1}</label>
-                                        <input {...fieldProps(`${prefix}.unitPrice`, e(`${prefix}.unitPrice`))} inputMode="decimal" value={line.unitPrice} disabled={locked} onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })} className={inputClass} />
+                                        <input {...fieldProps(`${prefix}.unitPrice`, e(`${prefix}.unitPrice`))} data-tour="pinvoice-line-price" data-tour-key={index} inputMode="decimal" value={line.unitPrice} disabled={locked} onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.unitPrice`} messages={e(`${prefix}.unitPrice`)} />
                                     </td>
                                     <td className="w-20 px-2 py-1.5">
@@ -437,7 +437,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                                         <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} inputMode="decimal" value={line.vat} disabled={locked} onChange={(event) => updateLine(line.key, { vat: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.vatPercentage`} messages={e(`${prefix}.vatPercentage`)} />
                                     </td>
-                                    <td className="w-28 px-2 py-1.5 text-right font-mono" data-testid={`${prefix}.amount`}>
+                                    <td className="w-28 px-2 py-1.5 text-right font-mono" data-testid={`${prefix}.amount`} data-tour="pinvoice-line-amount" data-tour-key={index}>
                                         {amounts === null ? <span className="text-gray-400">–</span> : <>{money(amounts.net)}<span className="block text-xs text-gray-500">{t('purchase_vat_short')} {money(amounts.vat)}</span></>}
                                     </td>
                                     <td className="whitespace-nowrap px-2 py-1.5">
@@ -464,7 +464,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                     <span className="block text-xs text-gray-500">{t('internal_note_hint')}</span>
                     <FieldError id="internalNote" messages={e('internalNote')} />
                 </div>
-            <dl className="ml-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm" data-testid="purchase-totals">
+            <dl className="ml-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm" data-testid="purchase-totals" data-tour="pinvoice-totals">
                 <dt className="text-gray-600">{t('purchase_total_net')}</dt><dd className="text-right font-mono" data-testid="total-net">{money(totals.net)}</dd>
                 <dt className="text-gray-600">{t('purchase_total_vat')}</dt><dd className="text-right font-mono" data-testid="total-vat">{money(totals.vat)}</dd>
                 <dt className="font-semibold text-gray-900">{t('purchase_total_gross', { currency: draft.header.currency })}</dt><dd className="text-right font-mono font-semibold" data-testid="total-gross">{money(totals.gross)}</dd>
@@ -472,7 +472,7 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={locked && !unknown}>{submitting ? t('supply_saving') : t('purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
+                <button type="submit" className={primaryButtonClass} disabled={locked && !unknown} data-tour="pinvoice-save">{submitting ? t('supply_saving') : t('purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
                 <button type="button" className={secondaryButtonClass} disabled={locked && !unknown} onClick={() => void submit('saveAndNew')}>{t('purchase_save_and_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('saveAndNew', isMac)}</kbd></button>
                 <button type="button" className={secondaryButtonClass} disabled={submitting} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
                 <SubmitErrors errors={errors} moveFocus={false} />

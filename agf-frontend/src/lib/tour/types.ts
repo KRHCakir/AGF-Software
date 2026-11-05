@@ -28,7 +28,10 @@ export type TourActionKind =
     // Controle: staat de tekst of waarde in beeld? Zo niet, dan stopt de rondleiding met een duidelijke melding.
     | { kind: 'assert'; target: TourTarget; text?: string; value?: string }
     // De tekst van een element onthouden als variabele voor latere stappen (bijv. het nieuwe ordernummer).
-    | { kind: 'remember'; target: TourTarget; name: string; pattern?: RegExp };
+    | { kind: 'remember'; target: TourTarget; name: string; pattern?: RegExp }
+    // Halverwege opnieuw lezen (gewone GET-aanroepen), bijv. nadat het hoofdstuk zelf een leverancier en artikel heeft aangemaakt: de
+    // gevonden waarden worden variabelen; ontbreekt er iets, dan stopt de rondleiding met wat er ontbreekt.
+    | { kind: 'lookup'; run: (vars: Readonly<Record<string, string>>, signal: AbortSignal) => Promise<TourPrecheck> };
 
 export interface TourStep {
     id: string;
@@ -38,6 +41,9 @@ export interface TourStep {
     whatKey: string;
     whyKey: string;
     actions: readonly TourAction[];
+    // Alleen als deze tekst (na invullen) niet leeg is; anders wordt de hele stap overgeslagen. Zo maakt een hoofdstuk op een lege
+    // database zelf aan wat het nodig heeft (needVendor, needOrder …) en slaat het die stappen over als het er al is.
+    when?: string;
     // Eindcontrole van de stap (in beide manieren).
     expect?: { target: TourTarget; text?: string };
 }
@@ -50,6 +56,8 @@ export interface TourMissing {
 export interface TourPrecheck {
     missing: TourMissing[];
     vars?: Record<string, string>;
+    // Een hoofdstuk dat zelf niets schrijft, maar eerst iets moet aanmaken (een lege database): dan geldt het als schrijvend.
+    writes?: boolean;
 }
 
 export interface TourChapter {
@@ -93,6 +101,8 @@ export interface TourState {
     target: TourRect | null;
     error: TourError | null;
     vars: Record<string, string>;
+    // Stappen (index) die zijn overgeslagen omdat wat ze aanmaken er al is.
+    skipped: number[];
 }
 
 // Tijden per snelheid in milliseconden: per letter, tussen acties, en leestijd voordat een stap begint.

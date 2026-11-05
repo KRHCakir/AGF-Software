@@ -221,6 +221,56 @@ describe('TourRunner', () => {
         await act(async () => runner.stop());
     });
 
+    test('a step with an empty `when` is skipped entirely and listed as skipped; the next step runs', async () => {
+        const log: string[] = [];
+        await mounted.render(<Field log={log} />);
+        await act(async () => {
+            void runner.start(chapter([
+                step('create', [{ kind: 'type', target: 'supply-reference', text: 'NEW' }], { when: '{{needVendor}}' }),
+                step('use', [{ kind: 'type', target: 'supply-reference', text: 'USE' }]),
+            ], { precheck: async () => ({ missing: [], vars: { needVendor: '' } }) }), { mode: 'watch', speed: 'fast' });
+        });
+        await until(() => latest().status === 'done', 'done');
+        assert.equal(mounted.container.querySelector('input')!.value, 'USE');
+        assert.ok(!log.includes('N'), 'the skipped step typed nothing');
+        assert.deepEqual(latest().skipped, [0]);
+    });
+
+    test('lookup reads before the step navigates, so the route can use what it found; a lookup that misses something stops', async () => {
+        await mounted.render(<p />);
+        const seen: Record<string, string>[] = [];
+        await act(async () => {
+            void runner.start(chapter([
+                step('find', [{ kind: 'lookup', run: async (vars) => { seen.push({ ...vars }); return { missing: [], vars: { orderId: '57' } }; } }, { kind: 'wait', ms: 1 }],
+                    { route: '/purchase-orders?id={{orderId}}' }),
+            ]), { mode: 'watch', speed: 'fast' });
+        });
+        await until(() => latest().status === 'done', 'done');
+        assert.equal(path, '/purchase-orders?id=57');
+        assert.equal(seen[0].tourRef, 'DEMO-TOUR-001');
+        assert.equal(latest().vars.orderId, '57');
+
+        await act(async () => {
+            void runner.start(chapter([step('find', [{ kind: 'lookup', run: async () => ({ missing: [{ key: 'tour_missing_open_order' }] }) }])]), { mode: 'watch', speed: 'fast' });
+        });
+        await until(() => latest().status === 'failed', 'failed');
+        assert.deepEqual(latest().error, { key: 'tour_error_precheck', missing: [{ key: 'tour_missing_open_order' }] });
+        assert.equal(storedActor, 'Jan');
+    });
+
+    test('a read-only chapter whose precheck must create things first counts as writing: tour reference and flag needed', async () => {
+        await mounted.render(<p />);
+        const setup = chapter([step('a', [{ kind: 'wait', ms: 1 }])], { writes: false, precheck: async () => ({ missing: [], vars: {}, writes: true }) });
+        await act(async () => { void runner.start(setup, { mode: 'watch', speed: 'fast' }); });
+        await until(() => latest().status === 'done', 'done');
+        assert.equal(latest().vars.tourRef, 'DEMO-TOUR-001');
+
+        runner.dispose();
+        runner = makeRunner(false);
+        await act(async () => { await runner.start(setup, { mode: 'watch', speed: 'fast' }); });
+        assert.equal(latest().error?.key, 'tour_error_writes_disabled');
+    });
+
     test('precheck: missing prerequisites are named and nothing starts; writing chapters need the tour flag', async () => {
         await mounted.render(<p />);
         const missing = chapter([step('a', [{ kind: 'wait', ms: 1 }])], { precheck: async () => ({ missing: [{ key: 'tour_missing_vendor', params: { search: 'Nature' } }] }) });
