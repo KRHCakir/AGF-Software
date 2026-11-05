@@ -108,6 +108,7 @@ namespace AgfAdmin.Services
                 ExpectedNetWeightKg = candidate.NetWeightKg,
                 WeightSource = LineWeightRules.Entered,
                 LotNumber = candidate.LotNumber,
+                PartijId = original.PartijId,
                 ReplacesLineId = original.Id,
                 CreatedAt = candidate.CreatedAt
             };
