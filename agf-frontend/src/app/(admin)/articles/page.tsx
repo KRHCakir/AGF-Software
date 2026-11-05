@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import ArticleForm from '../../../components/articles/ArticleForm';
 import ArticleLifecycle from '../../../components/articles/ArticleLifecycle';
 import EmptyProducts from '../../../components/articles/EmptyProducts';
@@ -62,6 +62,13 @@ export default function ArticlesPage() {
     const archivedCount = state.status === 'ready' ? state.data.articles.filter((article) => article.isArchived).length : 0;
 
     const openNew = () => setEditing({ article: null, key: Date.now() });
+    // Nog geen enkel artikel (ook geen gearchiveerd): schone start, de eerste stap is een nieuw artikel.
+    const nothingYet = state.status === 'ready' && state.data.articles.length === 0;
+
+    // Link vanaf de Beginnen-kaart of een formulier dat een artikel mist: /articles?new=1 opent meteen een nieuw artikel.
+    useEffect(() => {
+        if (new URLSearchParams(window.location.search).get('new') === '1') setEditing({ article: null, key: Date.now() });
+    }, []);
     const openArticle = (article: Article) => setEditing({ article, key: article.id });
 
     // Sneltoetsen van de werkplek: ⌥F zoeken, ⌥N nieuw artikel; ⌘S en ⌥E regelt het formulier zelf.
@@ -115,7 +122,7 @@ export default function ArticlesPage() {
                 <div className="flex items-center gap-2 text-sm">
                     <Link href="/products" className="font-medium text-blue-800 underline underline-offset-2">{t('articles_legacy_link')}</Link>
                     <button type="button" onClick={() => setReloadToken((n) => n + 1)} className={secondaryButtonClass}>↻ {t('availability_refresh')}</button>
-                    <button type="button" onClick={openNew} className={primaryButtonClass}>+ {t('articles_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
+                    <button type="button" onClick={openNew} className={primaryButtonClass} data-tour="articles-new">+ {t('articles_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
                 </div>
             </div>
 
@@ -155,7 +162,14 @@ export default function ArticlesPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {shown.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-600">{t('articles_none')}</td></tr>}
+                                {shown.length === 0 && (
+                                    <tr><td colSpan={8} className={nothingYet ? 'p-2' : 'px-3 py-6 text-center text-gray-600'}>
+                                        {nothingYet ? (
+                                            <EmptyState testId="articles-empty" title={t('articles_empty_title')} description={t('articles_empty_text')}
+                                                action={editing === null ? <button type="button" onClick={openNew} className={primaryButtonClass}>{t('articles_empty_action')}</button> : undefined} />
+                                        ) : t('articles_none')}
+                                    </td></tr>
+                                )}
                                 {shown.map((article) => (
                                     <tr key={article.id} className={`cursor-pointer hover:bg-blue-50 ${editing?.article?.id === article.id ? 'bg-blue-50' : ''}`} onClick={() => openArticle(article)} data-testid={`article-row-${article.id}`}>
                                         <td className="px-3 py-2 font-mono">{article.shortcutCode ?? <span className="text-gray-400">–</span>}</td>
@@ -173,10 +187,10 @@ export default function ArticlesPage() {
                             </tbody>
                         </table>
                     </div>
-                    <EmptyProducts reloadToken={reloadToken + emptyProductsToken} onDeleted={(name) => setState((current) => (current.status === 'ready'
-                        ? { status: 'ready', data: { ...current.data, reference: { ...current.data.reference, productNames: current.data.reference.productNames.filter((n) => n !== name) } } } : current))} />
-                    <SizeClassCleanup reloadToken={reloadToken} onArticleChanged={(saved) => setState((current) => (current.status === 'ready'
-                        ? { status: 'ready', data: { ...current.data, articles: current.data.articles.map((a) => (a.id === saved.id ? saved : a)) } } : current))} />
+                    {!nothingYet && <EmptyProducts reloadToken={reloadToken + emptyProductsToken} onDeleted={(name) => setState((current) => (current.status === 'ready'
+                        ? { status: 'ready', data: { ...current.data, reference: { ...current.data.reference, productNames: current.data.reference.productNames.filter((n) => n !== name) } } } : current))} />}
+                    {!nothingYet && <SizeClassCleanup reloadToken={reloadToken} onArticleChanged={(saved) => setState((current) => (current.status === 'ready'
+                        ? { status: 'ready', data: { ...current.data, articles: current.data.articles.map((a) => (a.id === saved.id ? saved : a)) } } : current))} />}
                     <OriginSettings countries={state.data.countries} cleanupToken={reloadToken}
                         onCountriesChanged={(countries) => setState((current) => (current.status === 'ready' ? { status: 'ready', data: { ...current.data, countries } } : current))}
                         onArticleChanged={(saved) => setState((current) => (current.status === 'ready'

@@ -38,7 +38,8 @@ import type { ProductOption } from '../../types/referenceData';
 import { SupplyCommitment, SupplyCommitmentLine, VendorGgnOption } from '../../types/supply';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
-import { LoadState, LoadingRows } from '../availability/StateViews';
+import { EmptyState, LoadState, LoadingRows } from '../availability/StateViews';
+import { FirstStepLink } from '../shared/FirstStep';
 import GgnBadge from '../shared/GgnBadge';
 import NewArticlePrompt from '../shared/NewArticlePrompt';
 import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
@@ -755,11 +756,13 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                         <button type="button" className={secondaryButtonClass} onClick={() => setSourcesToken((n) => n + 1)}>{t('availability_retry')}</button>
                     } />
                 )}
-                {sources.status === 'ready' && visibleCommitments.length === 0 && (
-                    <p className="rounded border border-dashed border-gray-300 px-3 py-4 text-center text-sm text-gray-700">
-                        {commitments.length === 0 ? t('supply_receive_no_sources') : t('supply_receive_no_matches')}
-                    </p>
-                )}
+                {sources.status === 'ready' && visibleCommitments.length === 0 && (commitments.length === 0
+                    // Ontvangen gaat altijd tegen een inkooporder: zonder open order is de eerste stap er een aanmaken.
+                    ? <EmptyState testId="receipts-empty" title={t('receipts_empty_title')} description={t('receipts_empty_text')}
+                        action={<FirstStepLink href="/purchase-orders/new" label={t('nav_purchase_order_new')} />} />
+                    : (
+                        <p className="rounded border border-dashed border-gray-300 px-3 py-4 text-center text-sm text-gray-700">{t('supply_receive_no_matches')}</p>
+                    ))}
                 {sources.status === 'ready' && visibleCommitments.length > 0 && (
                     <div className="max-h-80 overflow-y-auto rounded border border-gray-200">
                         {/* Smal scherm (390 px): geen tabel maar per regel onder elkaar (zelfde markup, dus unieke ids en data-tour). */}

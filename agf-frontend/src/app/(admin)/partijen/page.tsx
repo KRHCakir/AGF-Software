@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { FirstStepLink } from '../../../components/shared/FirstStep';
 import PartijDetail from '../../../components/partij/PartijDetail';
 import PartijList from '../../../components/partij/PartijList';
 import { inputClass } from '../../../components/supply/FieldError';
@@ -122,7 +123,11 @@ function PartijenWorkspace() {
 
             {list.status === 'loading' && <LoadingRows label={t('partij_loading')} />}
             {list.status === 'error' && <ErrorState error={list.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-            {list.status === 'ready' && list.data.items.length === 0 && <EmptyState title={t('partij_list_empty')} />}
+            {list.status === 'ready' && list.data.items.length === 0 && (debounced === '' && status === 'all'
+                // Nog geen enkele partij: die ontstaat met de eerste inkooporder.
+                ? <EmptyState testId="partij-empty" title={t('partij_empty_title')} description={t('partij_empty_text')}
+                    action={<FirstStepLink href="/purchase-orders/new" label={t('nav_purchase_order_new')} />} />
+                : <EmptyState title={t('partij_list_empty')} />)}
             {list.status === 'ready' && list.data.items.length > 0 && (
                 <>
                     <PartijList items={list.data.items} selectedId={selectedId} onOpen={open} />

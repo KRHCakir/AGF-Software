@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { FirstStepLink } from '../../../components/shared/FirstStep';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { formatMoney } from '../../../lib/availability';
 import { formatCalendarDate } from '../../../lib/calendarDate';
@@ -57,7 +58,12 @@ export default function PurchaseInvoicesPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {state.data.length === 0 && <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-600">{t('purchase_list_empty')}</td></tr>}
+                            {state.data.length === 0 && (
+                                <tr><td colSpan={6} className="p-2">
+                                    <EmptyState testId="purchase-invoices-empty" title={t('purchase_list_empty')} description={t('purchase_empty_text')}
+                                        action={<FirstStepLink href="/purchase-invoices/new" label={t('purchase_new_title')} />} />
+                                </td></tr>
+                            )}
                             {state.data.map((invoice) => (
                                 <tr key={invoice.id}>
                                     <td className="px-3 py-2">{invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'}</td>

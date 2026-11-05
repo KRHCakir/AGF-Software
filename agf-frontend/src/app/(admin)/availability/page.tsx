@@ -7,6 +7,7 @@ import AvailabilityDrawer, { DrillDownSelection } from '../../../components/avai
 import DataBasisNote from '../../../components/availability/DataBasisNote';
 import DirectTradeSupplyTable from '../../../components/availability/DirectTradeSupplyTable';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import { FirstStepLink } from '../../../components/shared/FirstStep';
 import SalesSupplyTable from '../../../components/availability/SalesSupplyTable';
 import WarehouseSupplyTable, { AvailabilityView, DETAILED_ONLY_FOCUS } from '../../../components/availability/WarehouseSupplyTable';
 import { useTranslation } from '../../../i18n/LanguageContext';
@@ -214,7 +215,8 @@ function AvailabilityWorkspace() {
             {state.status === 'error' && <ErrorState error={state.error} onRetry={reload} />}
 
             {state.status === 'ready' && state.data.variants.length === 0 && (
-                <EmptyState title={t('availability_empty_title')} description={t('availability_empty_description')} />
+                <EmptyState testId="availability-empty" title={t('availability_empty_title')} description={t('availability_empty_description')}
+                    action={productVariantId == null && customerId == null ? <FirstStepLink href="/purchase-orders/new" label={t('nav_purchase_order_new')} /> : undefined} />
             )}
 
             {state.status === 'ready' && state.data.variants.length > 0 && (
