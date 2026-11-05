@@ -53,6 +53,7 @@ import ReceivedAttributes from './ReceivedAttributes';
 import SubmitProgress, { ProgressStep, StepState } from './SubmitProgress';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 import SubmitErrors from '../shared/SubmitErrors';
+import PartijLinkPanel from '../partij/PartijLinkPanel';
 
 interface ContentDraft {
     lot: string;
@@ -263,6 +264,8 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
     const blocked = running || checking || succeeded || unknownFailure;
     const palletEditable = !blocked && !(frozen?.pallet.done ?? false);
     const lineEditable = (id: number) => !blocked && !(frozen?.lines[id]?.done ?? false);
+    // Partijnummer van de orderregel (die van de kop, of bij een oudere order die uit de migratie); null = geen partij.
+    const partijOf = (id: number): string | null => index.get(id)?.line.partijNumber ?? null;
 
     const clearFailure = () => {
         setFailure(null);
@@ -315,7 +318,9 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
             if (frozen?.lines[id]?.done) continue;
             const draft = source[id];
             const lot = draft.lot.trim();
-            if (lot === '') addError(found, `line.${id}.lotNumber`, t('supply_error_required'));
+            // Een orderregel met partij neemt die over; alleen zonder partij typt de ontvanger het lotnummer, zoals vroeger.
+            if (partijOf(id) !== null) { /* niets te typen */ }
+            else if (lot === '') addError(found, `line.${id}.lotNumber`, t('supply_error_required'));
             else if (lot.length > 100) addError(found, `line.${id}.lotNumber`, t('supply_error_too_long', { max: '100' }));
             const quantity = parsePositiveDecimal(draft.quantity);
             if (!quantity.ok) addError(found, `line.${id}.quantity`, t(decimalErrorKey(quantity.error)));
@@ -434,7 +439,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
             payload: {
                 requestId,
                 supplyCommitmentLineId: id,
-                lotNumber: draft.lot.trim(),
+                lotNumber: partijOf(id) !== null ? null : draft.lot.trim(),
                 quantity: quantity.ok ? quantity.value : 0,
                 unit: unit as PackageUnit,
                 weightMethod: draft.method,
@@ -696,7 +701,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                         return (
                             <li key={line.requestId} className="flex flex-wrap items-center gap-2">
                                 <span>{entry?.line.productName} · {entry?.line.productVariantName}{deviated && ` (${t('deviation_recorded')})`}</span>
-                                <span>· {t('supply_lot')} {line.payload.lotNumber}</span>
+                                <span>· {t('supply_lot')} {line.result?.lotNumber ?? line.payload.lotNumber ?? partijOf(line.payload.supplyCommitmentLineId)}</span>
                                 <span>· {formatQuantity(line.payload.quantity, locale)}</span>
                                 <UnitBadge unit={line.payload.unit} />
                                 <span>· {formatKg(line.payload.netWeightKg, locale)}</span>
@@ -806,7 +811,8 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                                         </p>
                                                     )}
                                                 </td>
-                                                <td className="px-2 pb-0.5 align-top md:py-1.5"><span className="text-xs text-gray-600 md:hidden">{t('supply_lot_provisional')}: </span>{line.lotNumber ?? '–'}</td>
+                                                <td className="px-2 pb-0.5 align-top md:py-1.5"><span className="text-xs text-gray-600 md:hidden">{t('supply_lot_provisional')}: </span>
+                                                    {line.partijNumber ? <span className="font-mono font-semibold" data-tour="receive-line-partij" data-tour-key={line.id}>{line.partijNumber}</span> : line.lotNumber ?? '–'}</td>
                                                 <td className="px-2 pb-0.5 align-top md:py-1.5 md:text-right"><span className="text-xs text-gray-600 md:hidden">{t('supply_expected')}: </span>
                                                     {formatQuantity(line.expectedQuantity, locale)}
                                                     {palletBreakdownLabel(line, line.expectedUnit, t, locale) !== null && <span className="block text-xs text-gray-600">{palletBreakdownLabel(line, line.expectedUnit, t, locale)}</span>}
@@ -898,12 +904,27 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                                     busy={creation[id]?.busy ?? false} error={creation[id]?.error ?? null} dataTourKey={id} chooseIncomplete={false} />
                                             ) : undefined} />;
                                 })()}
-                                <div className="col-span-2">
-                                    <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
-                                    <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} data-tour="receive-lot" data-tour-key={id} value={draft.lot} maxLength={100} disabled={!editable}
-                                        onChange={(event) => editLine(id, 'lot', event.target.value)} className={inputClass} />
-                                    <FieldError id={key('lotNumber')} messages={e(key('lotNumber'))} />
-                                </div>
+                                {partijOf(id) !== null ? (
+                                    <div className="col-span-2">
+                                        <span className="block text-xs font-medium text-gray-700">{t('partij_field')}</span>
+                                        <span className="block font-mono text-base font-semibold text-gray-900" data-tour="receive-partij" data-tour-key={id}>{partijOf(id)}</span>
+                                        {entry.commitment.supplierLotReference && <span className="block text-xs text-gray-600">{t('partij_supplier_lot')} {entry.commitment.supplierLotReference}</span>}
+                                    </div>
+                                ) : (
+                                    <div className="col-span-2 md:col-span-7 space-y-1">
+                                        {editable && (
+                                            <PartijLinkPanel orderId={entry.commitment.id} orderNumber={entry.commitment.orderNumber ?? `#${entry.commitment.id}`} dataTourKey={id}
+                                                onLinked={() => setSourcesToken((n) => n + 1)} />
+                                        )}
+                                        <div className="max-w-sm">
+                                            <label htmlFor={`${key('lotNumber')}-input`} className="text-xs font-medium text-gray-700">{t('supply_lot')} *</label>
+                                            <input {...fieldProps(key('lotNumber'), e(key('lotNumber')))} data-tour="receive-lot" data-tour-key={id} value={draft.lot} maxLength={100} disabled={!editable}
+                                                onChange={(event) => editLine(id, 'lot', event.target.value)} className={inputClass} />
+                                            <span className="block text-xs text-gray-600">{t('partij_receipt_without_hint')}</span>
+                                            <FieldError id={key('lotNumber')} messages={e(key('lotNumber'))} />
+                                        </div>
+                                    </div>
+                                )}
                                 <div>
                                     <label htmlFor={`${key('quantity')}-input`} className="text-xs font-medium text-gray-700">{t('supply_quantity')} *</label>
                                     <input {...fieldProps(key('quantity'), e(key('quantity')))} data-tour="receive-quantity" data-tour-key={id} value={draft.quantity} inputMode="decimal" disabled={!editable}

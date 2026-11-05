@@ -1697,7 +1697,7 @@
   "po_loading": "Loading purchase orders…",
   "po_new": "Create purchase order",
   "po_search": "Search",
-  "po_search_placeholder": "Order no., supplier, reference or invoice no.",
+  "po_search_placeholder": "Order no., supplier, reference, lot or invoice no.",
   "po_filter_open": "Open",
   "po_filter_all": "All",
   "po_list_empty": "No purchase orders found.",
@@ -2129,5 +2129,13 @@
   "partij_search_retry": "Try again",
   "partij_supplier_lot": "Supplier's lot",
   "partij_saved_without": "Saved without a lot. You can choose one later on the purchase order or at receipt.",
-  "partij_none_warning": "No lot yet. You can save like this and choose the lot later, on the purchase order or at receipt."
+  "partij_none_warning": "No lot yet. You can save like this and choose the lot later, on the purchase order or at receipt.",
+  "partij_link_none": "Purchase order {order} has no lot yet.",
+  "partij_link_open": "Choose or create a lot",
+  "partij_link_reason": "Reason",
+  "partij_link_reason_hint": "Goods have already been received: the received pallets get this lot, with your reason in the history. Their lot number stays.",
+  "partij_link_reason_required": "Give a reason.",
+  "partij_link_save": "Link lot",
+  "partij_link_cancel": "Cancel",
+  "partij_receipt_without_hint": "Without a lot you type the lot number yourself, as before."
 }

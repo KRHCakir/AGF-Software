@@ -7,6 +7,8 @@ import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { purchaseOrderChain } from '../../lib/chain';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
+import { getPurchaseOrder } from '../../services/purchaseOrderService';
+import PartijLinkPanel from '../partij/PartijLinkPanel';
 import ChainStrip from '../shared/ChainStrip';
 import { primaryButtonClass } from '../supply/SuccessPanel';
 import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
@@ -48,6 +50,25 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <span className="font-medium">{order.vendorName ?? '–'}</span>
                     {order.supplierReference && <> · {t('po_col_supplier_reference')} <span className="font-mono">{order.supplierReference}</span></>}
                 </p>
+                {order.partijId ? (
+                    <p className="text-sm text-gray-900" data-tour="po-partij">
+                        {t('partij_field')}{' '}
+                        <Link href={`/partijen?id=${order.partijId}`} className="font-mono font-semibold text-blue-800 underline underline-offset-2">{order.partijNumber}</Link>
+                        {order.supplierLotReference && <> · {t('partij_supplier_lot')} <span className="font-mono">{order.supplierLotReference}</span></>}
+                    </p>
+                ) : (
+                    <div className="mt-1">
+                        {order.supplierLotReference && <p className="text-sm text-gray-900">{t('partij_supplier_lot')} <span className="font-mono">{order.supplierLotReference}</span></p>}
+                        {order.storedStatus !== 'Cancelled' && (
+                            <PartijLinkPanel orderId={order.id} orderNumber={order.orderNumber} dataTourKey={order.id}
+                                onLinked={(partij) => {
+                                    // Direct zichtbaar maken; daarna op de achtergrond verversen (mislukt dat, dan blijft de gekoppelde partij staan).
+                                    onChanged({ ...order, partijId: partij.id, partijNumber: partij.number });
+                                    void getPurchaseOrder(order.id).then(onChanged).catch(() => undefined);
+                                }} />
+                        )}
+                    </div>
+                )}
                 <p className="text-sm text-gray-700">
                     {t('po_col_ordered_on')} {formatDateOnly(order.orderedOn, locale)}
                     {' · '}{t('po_col_expected')} {order.expectedAt ? formatCalendarDate(order.expectedAt, locale) : '–'}
@@ -66,7 +87,9 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                         <li key={line.id} className="py-1.5">
                             <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                             {[line.origin, line.size, line.packaging].filter(Boolean).length > 0 && <span className="text-gray-700"> · {[line.origin, line.size, line.packaging].filter(Boolean).join(' · ')}</span>}
-                            {line.lotNumber && <span className="text-gray-600"> · {line.lotNumber}</span>}
+                            {line.partijNumber && line.partijNumber !== order.partijNumber
+                                ? <span className="text-gray-600"> · {t('partij_field')} <Link href={`/partijen?id=${line.partijId}`} className="font-mono text-blue-800 underline underline-offset-2">{line.partijNumber}</Link></span>
+                                : line.lotNumber && <span className="text-gray-600"> · {line.lotNumber}</span>}
                             {(line.replacesLineId || (line.replacedByLineIds ?? []).length > 0) && (
                                 <span className="ml-1 inline-flex flex-wrap gap-1 align-middle" data-tour="po-line-replacement" data-tour-key={line.id}>
                                     {line.replacesLineId && <span className={replacementBadge}>{t('po_line_replaces', { line: lineName(line.replacesLineId) })}</span>}
