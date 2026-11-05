@@ -1,11 +1,13 @@
 'use client';
 
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
+import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
 import PaymentConditionsAdmin from '../../../components/settings/PaymentConditionsAdmin';
 import { useTranslation } from '../../../i18n/LanguageContext';
 
 // Instellingen: bedrijfsbrede keuzelijsten en adressen (één bedrijf, geen tenantstructuur). Betalingscondities worden door
-// klant- en leveranciersrollen gedeeld; het GLOBALG.A.P.-portaaladres gebruikt de handmatige GGN-controle op de leverancierskaart.
+// klant- en leveranciersrollen gedeeld; het GLOBALG.A.P.-portaaladres gebruikt de handmatige GGN-controle op de leverancierskaart; de
+// partijnummering bepaalt het voorgestelde partijnummer bij een nieuwe inkooporder.
 export default function SettingsPage() {
     const { t } = useTranslation();
     return (
@@ -14,6 +16,7 @@ export default function SettingsPage() {
                 <h1 className="text-2xl font-bold text-gray-900">{t('settings_title')}</h1>
                 <p className="text-sm text-gray-600">{t('settings_subtitle')}</p>
             </div>
+            <PartijNumberingSetting />
             <PaymentConditionsAdmin />
             <GlobalGapPortalSetting />
         </div>
