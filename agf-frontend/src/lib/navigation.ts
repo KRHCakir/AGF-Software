@@ -1,6 +1,6 @@
 // Het menu volgt het proces: Inkoop, Voorraad, Verkoop en Stamgegevens, met Start bovenaan, Instellingen en Help eronder en de oude
-// schermen onderaan onder "Oud" (dichtgeklapt, niet meer bijgewerkt). Alleen schermen die bestaan staan erin: geen Partijen-,
-// Leveringen- of Verkoopfacturenpagina, want die zijn er (nog) niet. Geen imports: met node:test te toetsen.
+// schermen onderaan onder "Oud" (dichtgeklapt, niet meer bijgewerkt). Alleen schermen die bestaan staan erin: geen Leveringen- of
+// Verkoopfacturenpagina, want die zijn er (nog) niet. Geen imports: met node:test te toetsen.
 
 export interface NavItem {
     id: string;
@@ -33,6 +33,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     {
         id: 'stock', labelKey: 'nav_group_stock', items: [
             { id: 'availability', href: '/availability', labelKey: 'nav_availability' },
+            { id: 'partijen', href: '/partijen', labelKey: 'nav_partijen' },
         ],
     },
     {
