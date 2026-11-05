@@ -39,7 +39,12 @@ fi
 root="$(cd "$(dirname "$0")/.." && pwd)"
 port="${CLEAN_DB_PORT:-5296}"
 api="http://localhost:$port/api"
+# Eén PostgreSQL-server voor alle stappen: psql en createdb krijgen dezelfde host, poort en gebruiker als de API.
+pg_host="${PGHOST:-localhost}"
+pg_port="${PGPORT:-5432}"
 user="${PGUSER:-$(whoami)}"
+export PGHOST="$pg_host" PGPORT="$pg_port" PGUSER="$user"
+connection="Host=$pg_host;Port=$pg_port;Database=$database;Username=$user${PGPASSWORD:+;Password=$PGPASSWORD}"
 
 exists() { [[ "$(psql -d postgres -Atc "select count(*) from pg_database where datname = '$1'")" == 1 ]]; }
 
@@ -56,6 +61,12 @@ if [[ "$source_db" == "$database" ]]; then
     exit 2
 fi
 
+# De tijdelijke API moet echt deze nieuwe database migreren: draait er al iets op de poort, dan zou de controle dat antwoord zien.
+if curl -s -o /dev/null --max-time 2 "http://localhost:$port/"; [[ $? -ne 7 ]]; then
+    echo "Weigering: poort $port is al in gebruik. Stop wat daar draait of kies een andere poort met CLEAN_DB_PORT." >&2
+    exit 2
+fi
+
 # template0: nooit iets meenemen dat iemand in template1 heeft gezet.
 createdb -T template0 "$database"
 tables="$(psql -d "$database" -Atc "select count(*) from information_schema.tables where table_schema = 'public'")"
@@ -65,7 +76,7 @@ if [[ "$tables" != 0 ]]; then
 fi
 
 log="$(mktemp -t new-clean-db-api)"
-ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=$database;Username=$user" \
+ConnectionStrings__DefaultConnection="$connection" \
     ASPNETCORE_ENVIRONMENT=Development Development__SeedDemoData=false \
     ASPNETCORE_URLS="http://localhost:$port" \
     dotnet run --project "$root/AgfAdmin" --no-launch-profile >"$log" 2>&1 &
@@ -83,9 +94,19 @@ pkill -P "$api_pid" 2>/dev/null || true
 wait "$api_pid" 2>/dev/null || true
 trap - EXIT
 
+# Gemigreerd tot en met de laatste migratie van deze code?
+expected="$(find "$root/AgfAdmin/Migrations" -name '*.cs' ! -name '*.Designer.cs' ! -name '*ModelSnapshot.cs' | wc -l | tr -d ' ')"
+applied="$(psql -d "$database" -Atc 'select count(*) from "__EFMigrationsHistory"' 2>/dev/null || echo 0)"
+if [[ "$applied" != "$expected" ]]; then
+    echo "Gestopt: $database heeft $applied van de $expected migraties; zie $log. De database blijft staan." >&2
+    exit 1
+fi
+
 # Instellingen overnemen: alleen lezen uit de bron (COPY naar een tijdelijk bestand), schrijven alleen in de nieuwe database.
 if [[ -n "$source_db" ]]; then
     work="$(mktemp -d -t new-clean-db)"
+    # De export bevat bedrijfsgegevens (IBAN, contact): ook bij een fout opruimen.
+    trap 'rm -rf "$work"' EXIT
     test_marker="'(SMOKE-|DEMO-TOUR-|E2E-)'"
     psql -d "$source_db" -Atc "copy (select \"CompanyName\", \"Address\", \"Email\", \"Phone\", \"KvkNumber\", \"VatNumber\", \"Iban\", \"LogoPath\",
         \"PurchaseInvoiceOptionalFields\", \"PurchaseInvoiceDefaultVatPercentage\", \"PurchaseInvoiceDefaultPaymentTermsDays\",
@@ -103,6 +124,10 @@ begin;
 create temp table import_payment ("Code" text, "CodeKey" text, "DescriptionNl" text, "DescriptionEn" text, "Days" int, "Basis" text,
     "DiscountPercent" numeric, "DiscountDays" int, "IsActive" boolean, "SortOrder" int) on commit drop;
 \copy import_payment from '$work/payment.csv' with csv
+-- Zelfde code als een standaardconditie uit de migratie (14D, 30D): de waarden van het bedrijf gelden.
+update "PaymentConditions" p set "Code" = i."Code", "DescriptionNl" = i."DescriptionNl", "DescriptionEn" = i."DescriptionEn", "Days" = i."Days",
+    "Basis" = i."Basis", "DiscountPercent" = i."DiscountPercent", "DiscountDays" = i."DiscountDays", "IsActive" = i."IsActive", "SortOrder" = i."SortOrder", "UpdatedAt" = now()
+    from import_payment i where p."CodeKey" = i."CodeKey";
 insert into "PaymentConditions" ("Code", "CodeKey", "DescriptionNl", "DescriptionEn", "Days", "Basis", "DiscountPercent", "DiscountDays", "IsActive", "SortOrder", "CreatedAt", "UpdatedAt", "Version")
     select "Code", "CodeKey", "DescriptionNl", "DescriptionEn", "Days", "Basis", "DiscountPercent", "DiscountDays", "IsActive", "SortOrder", now(), now(), 0
     from import_payment i where not exists (select 1 from "PaymentConditions" p where p."CodeKey" = i."CodeKey");
@@ -114,6 +139,7 @@ insert into "CountryAliases" ("Alias", "AliasKey", "CountryCode", "ActorReferenc
 commit;
 SQL
     rm -rf "$work"
+    trap - EXIT
 fi
 
 # Controle: alleen referentietabellen mogen rijen hebben.
@@ -131,6 +157,7 @@ if [[ -n "$unexpected" ]]; then
     exit 1
 fi
 
+rm -f "$log"
 echo "Klaar: nieuwe lege database $database."
 printf '%s' "$summary"
-echo "Verbindingsreeks voor de API: Host=localhost;Port=5432;Database=$database;Username=$user (zie docs/schone-start.md)."
+echo "Verbindingsreeks voor de API: Host=$pg_host;Port=$pg_port;Database=$database;Username=$user (zie docs/schone-start.md)."
