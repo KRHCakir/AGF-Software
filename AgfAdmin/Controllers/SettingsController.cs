@@ -17,11 +17,21 @@ namespace AgfAdmin.Controllers
     public class SettingsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly AgfAdmin.Services.PartijService _partijen;
 
-        public SettingsController(AppDbContext context)
+        public SettingsController(AppDbContext context, AgfAdmin.Services.PartijService partijen)
         {
             _context = context;
+            _partijen = partijen;
         }
+
+        // Partijnummering: modus (Auto of Own), formaat en wanneer het volgnummer opnieuw telt. Lezen mag iedereen, wijzigen met Beheer.
+        [HttpGet("partij-numbering")]
+        public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("partij-numbering")]
+        public async Task<IActionResult> UpdatePartijNumbering([FromBody] AgfAdmin.DTOs.PartijSettingsDto request) =>
+            this.ToActionResult(await _partijen.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
         [HttpGet]
         public async Task<IActionResult> GetSettings()

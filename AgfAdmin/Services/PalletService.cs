@@ -352,6 +352,18 @@ namespace AgfAdmin.Services
 
             _db.PalletContentLines.Add(candidate);
             _db.Entry(pallet).Property(p => p.Version).IsModified = true;
+            if (deviation == null)
+            {
+                // De partij is van de orderregel overgenomen: raakt de orderregel (versie +1) zodat een gelijktijdige koppeling van de order
+                // (PartijService.LinkOrderAsync) of deze ontvangst op een verouderde versie een conflict geeft i.p.v. een verkeerde partij.
+                // De regel kan al gevolgd zijn (via de pallet-inhoud); dan geldt de versie waarmee die geladen is (eerder of gelijk: veilig).
+                var sourceEntry = _db.ChangeTracker.Entries<SupplyCommitmentLine>().FirstOrDefault(e => e.Entity.Id == source.Id) ?? _db.Entry(source);
+                if (sourceEntry.State == EntityState.Detached)
+                {
+                    sourceEntry.State = EntityState.Unchanged;
+                }
+                sourceEntry.Property(l => l.Version).IsModified = true;
+            }
             _db.PalletAuditEvents.Add(new PalletAuditEvent
             {
                 PalletId = palletId,
