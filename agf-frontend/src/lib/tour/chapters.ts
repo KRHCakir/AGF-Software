@@ -1,6 +1,7 @@
 // De hoofdstukken van de rondleiding, in volgorde. Elke nieuwe functie die een scherm toevoegt of wijzigt, neemt het
 // bijbehorende hoofdstuk mee (met de data-tour-attributen en de test); zie docs/demo-tour.md.
 
+import { MASTERDATA_CHAPTER } from './masterdataChapter.ts';
 import { DEVIATION_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER } from './purchaseChapters.ts';
 import { precheckChain } from './prechecks.ts';
 import { INVOICE_CHAPTER, SALES_CHAPTER } from './salesChapters.ts';
@@ -16,7 +17,8 @@ const screen = (id: string, route: string): TourStep => ({
     actions: [{ kind: 'highlight', target: 'page-title' }],
 });
 
-// Kennismaking: alleen navigeren en aanwijzen, nooit iets invullen (werkt ook zonder NEXT_PUBLIC_DEMO_TOUR).
+// Kennismaking: langs de vier groepen van het menu (Inkoop, Voorraad, Verkoop, Stamgegevens), alleen navigeren en aanwijzen, nooit iets
+// invullen (werkt ook zonder NEXT_PUBLIC_DEMO_TOUR).
 export const SCREENS_CHAPTER: TourChapter = {
     id: 'screens',
     titleKey: 'tour_ch_screens_title',
@@ -25,9 +27,14 @@ export const SCREENS_CHAPTER: TourChapter = {
     steps: [
         screen('purchase', '/purchase-orders'),
         screen('supply', '/purchase-orders/new'),
+        screen('receipts', '/receipts'),
         screen('inspection', '/inspection'),
         screen('availability', '/availability'),
+        screen('partijen', '/partijen'),
         screen('sales', '/sales-orders'),
+        screen('direct-trade', '/direct-trade'),
+        screen('relations', '/relations'),
+        screen('articles', '/articles'),
     ],
 };
 
@@ -52,4 +59,4 @@ export const CHAIN_CHAPTER: TourChapter = {
     ],
 };
 
-export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER, DEVIATION_CHAPTER, SALES_CHAPTER, PRESELL_CHAPTER, CHAIN_CHAPTER, INVOICE_CHAPTER];
+export const TOUR_CHAPTERS: readonly TourChapter[] = [SCREENS_CHAPTER, MASTERDATA_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER, DEVIATION_CHAPTER, SALES_CHAPTER, PRESELL_CHAPTER, CHAIN_CHAPTER, INVOICE_CHAPTER];
