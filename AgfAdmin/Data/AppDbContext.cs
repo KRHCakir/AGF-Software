@@ -82,6 +82,8 @@ namespace AgfAdmin.Data
         public DbSet<PaymentCondition> PaymentConditions { get; set; }
         public DbSet<RelationBankAccount> RelationBankAccounts { get; set; }
         public DbSet<RelationBankAccountEvent> RelationBankAccountEvents { get; set; }
+        public DbSet<Partij> Partijen { get; set; }
+        public DbSet<PartijAuditEvent> PartijAuditEvents { get; set; }
 
         // Centrale traceability-guard voor elke writer: zie TraceabilityGuard. De varianten zonder parameters
         // van SaveChanges/SaveChangesAsync lopen via deze overloads.
@@ -338,6 +340,49 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
                 b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
                 b.Property(c => c.GlobalGapPortalUrl).IsRequired().HasMaxLength(500).HasDefaultValue(RelationRules.DefaultGlobalGapPortalUrl);
+                b.Property(c => c.PartijNumberMode).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ModeAuto);
+                b.Property(c => c.PartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultFormat);
+                b.Property(c => c.PartijSequenceReset).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ResetYearly);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_CompanySettings_PartijNumberMode_Allowed", "\"PartijNumberMode\" IN ('Auto', 'Own')");
+                    t.HasCheckConstraint("CK_CompanySettings_PartijSequenceReset_Allowed", "\"PartijSequenceReset\" IN ('Never', 'Yearly', 'Monthly')");
+                });
+            });
+
+            // Partij: de sleutel (hoofdletters, zonder spaties en streepjes) is uniek, en een voorgesteld volgnummer is uniek in zijn
+            // periode; een botsing bij gelijktijdig aanmaken probeert de service opnieuw met het volgende nummer.
+            modelBuilder.Entity<Partij>(b =>
+            {
+                b.ToTable("Partijen", t =>
+                {
+                    t.HasCheckConstraint("CK_Partijen_Status_Allowed", "\"Status\" IN ('Open')");
+                    t.HasCheckConstraint("CK_Partijen_Number_NotBlank", "length(trim(\"Number\")) > 0");
+                    t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
+                    t.HasCheckConstraint("CK_Partijen_Sequence_Consistent",
+                        "(\"Sequence\" IS NULL AND \"SequencePeriod\" IS NULL) OR (\"Sequence\" > 0 AND \"SequencePeriod\" IS NOT NULL)");
+                });
+                b.Property(p => p.Number).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
+                b.Property(p => p.NumberKey).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
+                b.HasIndex(p => p.NumberKey).IsUnique();
+                b.Property(p => p.Status).IsRequired().HasMaxLength(16);
+                b.Property(p => p.SequencePeriod).HasMaxLength(10);
+                b.HasIndex(p => new { p.SequencePeriod, p.Sequence }).IsUnique();
+                b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
+                b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
+                b.HasIndex(p => p.RequestId).IsUnique();
+            });
+
+            modelBuilder.Entity<PartijAuditEvent>(b =>
+            {
+                b.Property(e => e.EventType).IsRequired().HasMaxLength(32);
+                b.Property(e => e.OldValue).HasMaxLength(2000);
+                b.Property(e => e.NewValue).HasMaxLength(2000);
+                b.Property(e => e.Reason).HasMaxLength(PartijRules.MaxReasonLength);
+                b.Property(e => e.ActorReference).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
+                b.HasIndex(e => e.PartijId);
+                b.ToTable(t => t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed",
+                    "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted')"));
             });
 
             modelBuilder.Entity<ProductVariant>(b =>
@@ -404,6 +449,9 @@ namespace AgfAdmin.Data
                 b.Property(c => c.SupplierReference).HasMaxLength(PurchaseOrderRules.MaxSupplierReferenceLength);
                 b.Property(c => c.OrderChannel).HasMaxLength(16);
                 b.Property(c => c.Note).HasMaxLength(PurchaseOrderRules.MaxNoteLength);
+                b.Property(c => c.SupplierLotReference).HasMaxLength(PartijRules.MaxSupplierLotReferenceLength);
+                b.HasOne(c => c.Partij).WithMany().HasForeignKey(c => c.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(c => c.PartijId);
 
                 // DirectTrade is altijd klantgebonden; Warehouse-aanbod is nooit aan een klant gebonden.
                 b.ToTable(t =>
@@ -541,6 +589,8 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<SupplyCommitmentLine>(b =>
             {
                 b.Property(l => l.LotNumber).HasMaxLength(100);
+                b.HasOne(l => l.Partij).WithMany().HasForeignKey(l => l.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(l => l.PartijId);
                 b.Property(l => l.ExpectedQuantity).HasPrecision(18, 3);
                 b.Property(l => l.ExpectedUnit).HasMaxLength(32);
                 b.Property(l => l.ExpectedNetWeightKg).HasPrecision(18, 3);
@@ -993,6 +1043,8 @@ namespace AgfAdmin.Data
                     .HasForeignKey<PalletContentLine>(c => c.OriginRejectionLineId)
                     .OnDelete(DeleteBehavior.Restrict);
                 b.Property(c => c.LotNumber).IsRequired().HasMaxLength(100);
+                b.HasOne(c => c.Partij).WithMany().HasForeignKey(c => c.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(c => c.PartijId);
                 b.Property(c => c.Quantity).HasPrecision(18, 3);
                 b.Property(c => c.Unit).IsRequired().HasMaxLength(32);
                 b.Property(c => c.NetWeightKg).HasPrecision(18, 3);

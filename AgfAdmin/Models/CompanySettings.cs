@@ -26,5 +26,11 @@ namespace AgfAdmin.Models
 
         // Link naar de GLOBALG.A.P. Supply Chain Portal voor de handmatige GGN-controle (absolute https-URL; alleen een link).
         public string GlobalGapPortalUrl { get; set; } = Services.RelationRules.DefaultGlobalGapPortalUrl;
+
+        // Partijnummering (PartijRules): Auto = het systeem stelt het volgende nummer voor (overschrijven mag), Own = alleen zelf typen.
+        // Formaat met de plaatshouders {JJ}, {JJJJ}, {MM} en {volgnr}; het volgnummer telt opnieuw per jaar, per maand of nooit.
+        public string PartijNumberMode { get; set; } = Services.PartijRules.ModeAuto;
+        public string PartijNumberFormat { get; set; } = Services.PartijRules.DefaultFormat;
+        public string PartijSequenceReset { get; set; } = Services.PartijRules.ResetYearly;
     }
 }
