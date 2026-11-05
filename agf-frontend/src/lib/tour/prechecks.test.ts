@@ -1,17 +1,22 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { findDeviationVariant, findOpenTourOrder, findTourArticle, findTourVendor, lotVars, receiptVars } from './prechecks.ts';
+import { findOpenTourOrder, findOriginVariant, findTourArticle, findTourCustomer, findTourVendor, lotVars, receiptVars, shortDate } from './prechecks.ts';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder.ts';
-import type { ProductOption, VendorOption } from '../../types/referenceData.ts';
+import type { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData.ts';
 
-// Voorcontroles: dezelfde zoekregels als de schermen, zodat Tab daar precies deze leverancier en dit artikel kiest.
+// Voorcontroles: de rondleiding werkt met haar eigen voorbeeldgegevens (DEMO-TOUR-…) en dezelfde zoekregels als de schermen, zodat Tab
+// daar precies deze leverancier, klant en dit artikel kiest. Is er niets, dan maakt het hoofdstuk ze zelf aan.
 
-const vendor = (id: number, name: string, isActive = true): VendorOption => ({ id, name, searchCode: null, vatNumber: null, isActive });
+const vendor = (id: number, name: string, searchCode: string | null, isActive = true): VendorOption => ({ id, name, searchCode, vatNumber: null, isActive });
+const customer = (id: number, name: string, searchCode: string | null, isActive = true) => ({ id, name, searchCode, isActive }) as CustomerOption;
 const variant = (id: number, name: string, extra: Partial<ProductOption['variants'][number]> = {}) => ({
     id, name, origin: 'Peru', packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: null,
     defaultNetKgPerPackage: null, defaultGrossKgPerPackage: null, ...extra,
 }) as ProductOption['variants'][number];
 const item = (id: number, status: string, supplierReference: string | null) => ({ id, orderNumber: `IO-2026-${String(id).padStart(4, '0')}`, status, supplierReference }) as PurchaseOrderListItem;
+const tourHass = (id: number, ref: string, extra: Partial<ProductOption['variants'][number]> = {}) => variant(id, 'Hass', {
+    shortcutCode: ref, brand: ref, originCountryCode: 'PE', sizeCategory: '18', tradeClass: 'I', packaging: '4 kg doos', packagingUnit: 'colli', defaultNetKgPerPackage: 4, ...extra,
+});
 
 describe('tour prechecks', () => {
     test('blind entry: the tour fills in every attribute of this variant (empty ones are skipped) and the right kg field', () => {
@@ -23,31 +28,43 @@ describe('tour prechecks', () => {
         assert.deepEqual([receiptVars({ ...pe, weightMethod: 'Weighed' }, 10, 4).kgPerPackage, receiptVars({ ...pe, weightMethod: 'Weighed' }, 10, 4).netKg], ['', '40']);
     });
 
-    test('the deviation chapter prefers a variant that only differs in origin', () => {
-        const pe18 = variant(10, 'Hass', { originCountryCode: 'PE', sizeCategory: '18', packaging: '4 kg doos' });
-        const pe20 = variant(11, 'Hass', { originCountryCode: 'PE', sizeCategory: '20', packaging: '4 kg doos' });
-        const cl18 = variant(13, 'Hass', { origin: 'Chili', originCountryCode: 'CL', sizeCategory: '18', packaging: '4 kg doos' });
-        assert.equal(findDeviationVariant(pe18, [pe18, pe20, cl18])?.id, 13);
-        assert.equal(findDeviationVariant(pe18, [pe18, pe20])?.id, 11);
-        assert.equal(findDeviationVariant(pe18, [pe18]), null);
+    test('the tour supplier is the newest active DEMO-TOUR supplier whose search code finds only her', () => {
+        const vendors = [vendor(1, "Nature's Pride", 'NATURE'), vendor(4, 'DEMO-TOUR-101 Kwekerij', 'DEMO-TOUR-101-LEV'), vendor(7, 'DEMO-TOUR-102 Kwekerij', 'DEMO-TOUR-102-LEV'),
+            vendor(9, 'DEMO-TOUR-103 Kwekerij', 'DEMO-TOUR-103-LEV', false)];
+        assert.deepEqual(findTourVendor(vendors), { vendor: vendors[2], search: 'DEMO-TOUR-102-LEV' });
+        assert.equal(findTourVendor([vendor(1, "Nature's Pride", 'NATURE')]), null);
+        assert.equal(findTourVendor([]), null);
     });
 
-
-    test('the supplier search must find exactly one active supplier, otherwise it names the problem', () => {
-        assert.deepEqual(findTourVendor([vendor(1, "Nature's Pride"), vendor(2, 'Example Supplier')], 'Nature'), vendor(1, "Nature's Pride"));
-        assert.deepEqual(findTourVendor([vendor(1, "Nature's Pride", false)], 'Nature'), { key: 'tour_missing_vendor', params: { search: 'Nature' } });
-        assert.deepEqual(findTourVendor([vendor(1, "Nature's Pride"), vendor(3, 'Nature Fresh')], 'Nature'), { key: 'tour_missing_vendor_unique', params: { search: 'Nature' } });
+    test('the tour customer is the newest active DEMO-TOUR customer, found at the top by her search code', () => {
+        const customers = [customer(2, 'Lokaal Fruit B.V.', 'LOKAAL'), customer(5, 'DEMO-TOUR-101 Groothandel', 'DEMO-TOUR-101-KLANT'), customer(6, 'DEMO-TOUR-102 Groothandel', 'DEMO-TOUR-102-KLANT', false)];
+        assert.deepEqual(findTourCustomer(customers), { customer: customers[1], search: 'DEMO-TOUR-101-KLANT' });
+        assert.equal(findTourCustomer([customers[0]]), null);
     });
 
-    test('Avocado Hass needs a shortcut code, packaging unit and kg per package', () => {
-        const products = [
-            { id: 1, name: 'Avocado', variants: [variant(2, 'Green', { shortcutCode: 'AG' }), variant(1, 'Hass'), variant(10, 'Hass', { shortcutCode: 'AvoHassPE12', packagingUnit: 'colli', defaultNetKgPerPackage: 4 })] },
-        ] as ProductOption[];
-        assert.deepEqual(findTourArticle(products), { variantId: 10, code: 'AvoHassPE12', unit: 'colli', kgPerPackage: 4 });
-        assert.deepEqual(findTourArticle([{ id: 1, name: 'Avocado', variants: [variant(1, 'Hass')] }] as ProductOption[]), { key: 'tour_missing_article', params: { article: 'Avocado Hass' } });
+    test('the tour article is the newest complete Avocado Hass with a DEMO-TOUR brand, a code, a unit and kg per package', () => {
+        const products = [{ id: 1, name: 'Avocado', variants: [
+            variant(2, 'Hass', { shortcutCode: 'AVOPE18', packagingUnit: 'colli', defaultNetKgPerPackage: 4, sizeCategory: '18', tradeClass: 'I', originCountryCode: 'PE' }),
+            tourHass(10, 'DEMO-TOUR-101'), tourHass(12, 'DEMO-TOUR-102', { isArchived: true }), tourHass(11, 'DEMO-TOUR-103', { sizeCategory: null }),
+        ] }] as ProductOption[];
+        assert.deepEqual(findTourArticle(products), { variantId: 10, code: 'DEMO-TOUR-101', unit: 'colli', kgPerPackage: 4 });
+        assert.equal(findTourArticle([{ id: 1, name: 'Avocado', variants: [products[0].variants[0]] }] as ProductOption[]), null);
+        assert.equal(findTourArticle([]), null);
     });
 
-    test('chapter 2 takes the newest DEMO-TOUR order with nothing received', () => {
+    test('a different origin belongs to the variant with the same size, packaging, class and brand from that country', () => {
+        const pe = tourHass(10, 'DEMO-TOUR-101');
+        const cl = tourHass(13, 'DEMO-TOUR-101', { shortcutCode: null, originCountryCode: 'CL', origin: 'Chili' });
+        const otherBrand = tourHass(14, 'DEMO-TOUR-999', { originCountryCode: 'CL' });
+        assert.equal(findOriginVariant(pe, [pe, otherBrand, cl], 'CL')?.id, 13);
+        assert.equal(findOriginVariant(pe, [pe, otherBrand], 'CL'), null);
+    });
+
+    test('the expected date is typed with a two-digit year, as a user does', () => {
+        assert.equal(shortDate('2026-11-07'), '07-11-26');
+    });
+
+    test('receiving takes the newest DEMO-TOUR order with nothing received', () => {
         const items = [item(40, 'Ordered', 'DEMO-TOUR-001'), item(45, 'PartiallyReceived', 'DEMO-TOUR-002'), item(44, 'Ordered', 'DEMO-TOUR-003'), item(50, 'Ordered', 'NP-1')];
         assert.equal(findOpenTourOrder(items)?.id, 44);
         assert.equal(findOpenTourOrder([item(50, 'Ordered', null)]), null);
