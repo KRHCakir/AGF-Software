@@ -74,6 +74,8 @@ Development__SeedDemoData=true dotnet run --project AgfAdmin
 
 Je kunt de waarde ook op `true` zetten in je lokale `appsettings.Development.json`.
 
+Leeg beginnen, met een nieuwe database waarin alleen de referentiegegevens staan: zie `docs/schone-start.md` (`scripts/new-clean-db.sh`).
+
 ## EF Core CLI (`dotnet ef`)
 
 `dotnet ef` gebruikt de launch-profielen niet. Het draait standaard als Production en laadt dan `appsettings.Development.json` niet. Zonder connection string stopt het met de melding hierboven. Kies één van de volgende oplossingen:
