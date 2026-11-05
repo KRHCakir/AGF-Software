@@ -1,12 +1,16 @@
-import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
 
-// Elk hoofdstuk van de demo-rondleiding door het echte paneel (Kijk mee, Snel) tegen een testdatabase: alle stappen
-// komen voorbij, geen stap faalt (een mislukte controle stopt de rondleiding), de gebruikersnaam komt terug en het
-// resultaat staat via de gewone GET-API in het systeem. Zie docs/demo-tour.md voor het opzetten van de testomgeving.
+// Elk hoofdstuk van de demo-rondleiding door het echte paneel (Kijk mee, Snel) tegen een testdatabase: alle stappen komen voorbij of
+// zijn bewust overgeslagen (wat ze aanmaken bestond al), geen stap faalt, en het resultaat staat via de gewone GET-API in het systeem.
+// De rondleiding maakt haar eigen voorbeeldgegevens (DEMO-TOUR-…): de test zet niets klaar. Draai hem op een lege database
+// (scripts/new-clean-db.sh, TOUR_EMPTY_DATABASE=true) en op een gevulde; zie docs/demo-tour.md.
 
 const API = process.env.TOUR_API_URL ?? 'http://localhost:5198/api';
 const DATABASE = process.env.TOUR_TEST_DATABASE ?? '';
+// Lege database: het eerste hoofdstuk (De rode draad) moet dan alles zelf aanmaken, er wordt niets overgeslagen.
+const EMPTY = process.env.TOUR_EMPTY_DATABASE === 'true';
+// Screenshots per hoofdstuk (halverwege en bij Klaar) voor de documentatie, alleen als deze map is opgegeven.
+const SHOTS = process.env.TOUR_SHOTS_DIR ?? '';
 // De eigen onthouden beoordelaar bij de keuring; de rondleiding keurt even als Demo-assistent en zet hem daarna terug.
 const ACTOR = 'E2E-tester';
 
@@ -23,33 +27,10 @@ async function signedIn(request: APIRequestContext): Promise<string> {
     return (await json<{ displayName: string }>(request, '/me')).displayName;
 }
 
-// Voorwaarden via de gewone API: leverancier "Nature's Pride" en een klant op "Lo" (alleen aanmaken als ze ontbreken).
-async function ensurePrerequisites(request: APIRequestContext) {
-    const vendors = await json<{ name: string; isActive: boolean }[]>(request, '/purchase-invoices/vendors');
-    if (!vendors.some((vendor) => vendor.isActive && /^nature/i.test(vendor.name))) {
-        const created = await request.post(`${API}/relations`, { data: { requestId: randomUUID(), searchCode: 'NATURE', name: "Nature's Pride", preferredLanguage: 'nl', vendor: {} } });
-        expect(created.ok(), await created.text()).toBeTruthy();
-    }
-    const customers = await json<{ name: string; isActive?: boolean }[]>(request, '/customers');
-    if (!customers.some((customer) => customer.isActive !== false && /^lo/i.test(customer.name))) {
-        const created = await request.post(`${API}/relations`, { data: { requestId: randomUUID(), searchCode: 'LOKAAL', name: 'Lokaal Fruit B.V.', preferredLanguage: 'nl', customer: {} } });
-        expect(created.ok(), await created.text()).toBeTruthy();
-    }
-    // Afwijking bij ontvangst: een tweede variant van het rondleidingsartikel met een andere herkomst (zelfde maat en verpakking).
-    type Variant = { id: number; name: string; shortcutCode: string | null; packagingUnit: string | null; defaultNetKgPerPackage: number | null; originCountryCode: string | null };
-    const products = await json<{ name: string; variants: Variant[] }[]>(request, '/products?includeVariants=true');
-    const hass = (products.find((product) => product.name.toLowerCase() === 'avocado')?.variants ?? []).filter((variant) => variant.name.toLowerCase().startsWith('hass'));
-    const article = [...hass].sort((a, b) => a.id - b.id).find((variant) => variant.shortcutCode && variant.packagingUnit && variant.defaultNetKgPerPackage);
-    if (article && !hass.some((variant) => variant.id !== article.id && variant.name === article.name && variant.originCountryCode !== article.originCountryCode)) {
-        const full = await json<Record<string, unknown>>(request, `/articles/${article.id}`);
-        const other = article.originCountryCode === 'ZA' ? 'CL' : 'ZA';
-        const created = await request.post(`${API}/articles`, { data: { ...full, id: undefined, shortcutCode: `${article.shortcutCode}-${other}`, originCountryCode: other } });
-        expect(created.ok(), await created.text()).toBeTruthy();
-    }
-}
+interface Played { steps: Set<number>; skipped: number[]; total: number; done: string }
 
-// Speelt een hoofdstuk af en geeft de stapnummers die voorbijkwamen en de afsluittekst terug.
-async function play(page: Page, chapter: string): Promise<{ steps: Set<number>; total: number; done: string }> {
+// Speelt een hoofdstuk af en geeft de stapnummers die voorbijkwamen, de overgeslagen stappen en de afsluittekst terug.
+async function play(page: Page, chapter: string): Promise<Played> {
     await page.goto('/dashboard');
     await page.getByRole('button', { name: 'Demo-assistent' }).click();
     await page.getByRole('button', { name: 'Snel', exact: true }).first().click();
@@ -59,34 +40,45 @@ async function play(page: Page, chapter: string): Promise<{ steps: Set<number>; 
     const steps = new Set<number>();
     let total = 0;
     let done = '';
+    let halfway = false;
     await expect.poll(async () => {
         const text = (await panel.innerText()).replace(/\s+/g, ' ');
         const counter = /Stap (\d+) van (\d+)/.exec(text);
         if (counter) {
             steps.add(Number(counter[1]));
             total = Number(counter[2]);
+            if (SHOTS !== '' && !halfway && Number(counter[1]) >= Math.ceil(total * 0.6)) {
+                halfway = true;
+                await page.screenshot({ path: `${SHOTS}/tour-${chapter}-bezig.png` });
+            }
         }
-        if (/kon niet uitgevoerd|kan nog niet starten/.test(text)) throw new Error(`Rondleiding gestopt: ${text}`);
+        if (/kon niet uitgevoerd|kan nog niet starten|ontbreekt nog iets/.test(text)) throw new Error(`Rondleiding gestopt: ${text}`);
         if (/Klaar:/.test(text)) done = text.slice(text.indexOf('Klaar:'));
         return done !== '';
-    }, { timeout: 200_000, intervals: [200] }).toBe(true);
-    return { steps, total, done };
+    }, { timeout: 420_000, intervals: [150] }).toBe(true);
+    if (SHOTS !== '') await page.screenshot({ path: `${SHOTS}/tour-${chapter}-klaar.png` });
+    const skipped = ((await panel.locator('[data-tour-skipped]').getAttribute('data-tour-skipped')) ?? '').split(',').filter(Boolean).map(Number);
+    return { steps, skipped, total, done };
 }
 
-function expectAllSteps(result: { steps: Set<number>; total: number }) {
+// Elke stap kwam voorbij of is overgeslagen; een overgeslagen stap kan in de teller even te zien zijn geweest.
+function expectAllSteps(result: Played) {
     expect(result.total).toBeGreaterThan(0);
-    expect([...result.steps].sort((a, b) => a - b)).toEqual(Array.from({ length: result.total }, (_, index) => index + 1));
+    const covered = new Set([...result.steps, ...result.skipped]);
+    expect([...covered].sort((a, b) => a - b)).toEqual(Array.from({ length: result.total }, (_, index) => index + 1));
 }
 
-test.describe.configure({ mode: 'serial' });
+const tourRefOf = (done: string) => /(DEMO-TOUR-\d+)/.exec(done)?.[1] ?? '';
 
-test.beforeAll(async ({ browser, request }) => {
+// Op een lege database doet een los gestart hoofdstuk alles zelf (stamgegevens, order, ontvangst, verkoop): ruim de tijd.
+test.describe.configure({ mode: 'serial', timeout: 600_000 });
+
+test.beforeAll(async ({ browser }) => {
     if (DATABASE === '' || DATABASE === 'agf_smoke') {
         throw new Error('Zet TOUR_TEST_DATABASE op de naam van de testdatabase waar de API op draait (nooit agf_smoke).');
     }
-    await ensurePrerequisites(request);
     context = await browser.newContext();
-    // Een eigen DEMO-TOUR-reeks per run, zodat partijnummers niet botsen met eerdere runs op dezelfde testdatabase.
+    // Een eigen DEMO-TOUR-reeks per run, zodat kenmerken en partijnummers niet botsen met eerdere runs op dezelfde testdatabase.
     const sequence = String(100 + (Date.now() % 800000));
     await context.addInitScript(([actor, start]) => {
         if (sessionStorage.getItem('tour-e2e-init')) return;
@@ -101,38 +93,79 @@ test.afterAll(async () => {
     await context?.close();
 });
 
-test('hoofdstuk Kennismaken: alleen navigeren, geen enkele schrijfactie', async () => {
+async function expectActorBack(page: Page) {
+    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
+}
+
+test('hoofdstuk Kennismaken: langs de vier menugroepen, geen enkele schrijfactie', async () => {
     const page = await context.newPage();
     const writes: string[] = [];
     page.on('request', (request) => { if (request.url().startsWith(API) && request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`); });
     const result = await play(page, 'screens');
     expectAllSteps(result);
+    expect(result.total).toBe(10);
     expect(writes).toEqual([]);
     await page.close();
 });
 
-let tourRef = '';
+test('De rode draad, los gestart: maakt zelf aan wat ontbreekt (op een lege database alles) en toont de strip en de partij', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'chain');
+    expectAllSteps(result);
+    // Lege database: elke voorwaarde (stamgegevens, order, ontvangst, verkoop) is echt afgespeeld.
+    if (EMPTY) expect(result.skipped).toEqual([]);
+    // Eindigt op de partij, met de inkooporder erin.
+    await expect(page.locator('[data-tour="partij-detail"]')).toBeVisible();
+    await expect(page.locator('[data-tour="partij-order"]').first()).toHaveText(/IO-\d{4}-\d+/);
+    const vendors = await json<{ name: string }[]>(request, '/purchase-invoices/vendors');
+    expect(vendors.some((vendor) => vendor.name.startsWith('DEMO-TOUR-'))).toBe(true);
+    await expectActorBack(page);
+    await page.close();
+});
+
+test('hoofdstuk Stamgegevens: leverancier en klant met adres, artikel met herkomst, maat en klasse', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'masterdata');
+    expectAllSteps(result);
+    expect(result.skipped).toEqual([]);
+    const ref = tourRefOf(result.done);
+    expect(ref).toMatch(/^DEMO-TOUR-\d+$/);
+    const relations = await json<{ items: { name: string; searchCode: string; customerId: number | null; vendorId: number | null; city: string | null }[] }>(request, `/relations?role=all&query=${ref}&includeInactive=false&page=1&pageSize=10`);
+    expect(relations.items.map((item) => [item.searchCode, item.name, item.vendorId !== null, item.customerId !== null, item.city]).sort())
+        .toEqual([[`${ref}-KLANT`, `${ref} Groothandel`, false, true, 'Rotterdam'], [`${ref}-LEV`, `${ref} Kwekerij`, true, false, 'Barendrecht']]);
+    const articles = await json<{ shortcutCode: string; originCountryCode: string; sizeCategory: string; tradeClass: string; brand: string; packagingUnit: string; defaultNetKgPerPackage: number }[]>(request, '/articles');
+    const article = articles.find((candidate) => candidate.shortcutCode === ref)!;
+    expect([article.originCountryCode, article.sizeCategory, article.tradeClass, article.brand, article.packagingUnit, article.defaultNetKgPerPackage]).toEqual(['PE', '18', 'I', ref, 'colli', 4]);
+    await page.close();
+});
+
 let orderNumber = '';
 
-test('hoofdstuk 1, Inkopen bestellen: order met ordernummer, leveranciersref en factuurnummer', async ({ request }) => {
+test('hoofdstuk Inkooporder aanmaken: stamgegevens bestaan al, order met partij, leveranciersref, datum en factuurnummer', async ({ request }) => {
     const page = await context.newPage();
     const result = await play(page, 'order');
     expectAllSteps(result);
+    // Leverancier en artikel van de rondleiding bestaan al (vorige hoofdstukken): die stappen zijn overgeslagen.
+    expect(result.skipped.length).toBeGreaterThan(0);
+    let tourRef = '';
     [, orderNumber, tourRef] = /Order (IO-\d{4}-\d+) .* leveranciersref (DEMO-TOUR-\d+)/.exec(result.done) ?? [];
     expect(orderNumber).toMatch(/^IO-\d{4}-\d+$/);
-    const list = await json<{ items: { orderNumber: string; supplierReference: string; status: string; partijNumber: string | null; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${tourRef}`);
+    const list = await json<{ items: { id: number; orderNumber: string; supplierReference: string; status: string; partijNumber: string | null; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${tourRef}`);
     const order = list.items.find((item) => item.orderNumber === orderNumber)!;
     expect(order.supplierReference).toBe(tourRef);
-    // De order kreeg een partij (het voorgestelde nummer, of bij Eigen nummering het kenmerk van de rondleiding) en die staat in de afsluiting.
     expect(order.partijNumber).toBeTruthy();
     expect(result.done).toContain(`partij ${order.partijNumber}`);
     expect(order.status).toBe('Ordered');
     expect(order.invoiceNumbers.map((ref) => ref.invoiceNumber)).toEqual([`F-${tourRef}`]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
+    // De verwachte datum is getypt met een tweecijferig jaar en als volledige datum opgeslagen (over twee dagen).
+    const detail = await json<{ expectedAt: string; supplierLotReference: string | null }>(request, `/purchase-orders/${order.id}`);
+    expect(detail.supplierLotReference).toBe(`LOT-${tourRef}`);
+    expect(new Date(detail.expectedAt).getTime()).toBeGreaterThan(Date.now());
+    await expectActorBack(page);
     await page.close();
 });
 
-test('hoofdstuk 2, Ontvangen en keuren: ontvangen, goedgekeurd, deel teruggestuurd, creditnota verwacht', async ({ request }) => {
+test('hoofdstuk Ontvangst en keuring: blind ontvangen, goedgekeurd met Wie beoordeelt, deel teruggestuurd, creditnota verwacht', async ({ request }) => {
     const page = await context.newPage();
     const result = await play(page, 'receive');
     expectAllSteps(result);
@@ -143,39 +176,77 @@ test('hoofdstuk 2, Ontvangen en keuren: ontvangen, goedgekeurd, deel teruggestuu
     expect(detail.receivedQuantity).toBe(20);
     expect(detail.rejectedQuantity).toBe(5);
     expect(detail.invoiceIndicator).toBe('CreditNoteExpected');
-    // De partij van de inkooporder (voorgesteld nummer), of het eigen kenmerk van de rondleiding bij een order zonder partij.
     const lot = /Partij (\S+) van/.exec(result.done)?.[1];
     expect(detail.partijNumber ?? lot).toBe(lot);
     expect(detail.receipts.filter((receipt) => receipt.lotNumber === lot).map((receipt) => [receipt.origin, receipt.qualityStatus]))
         .toEqual([['Receipt', 'Approved'], ['RejectionSplit', 'Rejected']]);
+    // Wie beoordeelde (gekozen bij de keuring) én wie er ingelogd was.
     const approvals = detail.history.filter((event) => event.type === 'QualityChanged');
     expect(approvals.map((event) => [event.inspectedBy, event.actorReference])).toContainEqual(['Demo-assistent', await signedIn(request)]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
+    await expectActorBack(page);
     await page.close();
 });
 
-test('hoofdstuk 3, Verkopen en reserveren: order gereserveerd op een pallet en verzonden', async ({ request }) => {
+test('hoofdstuk Afwijking bij ontvangst: andere herkomst en zwaarder, "Klopt dit?", afwijking op de order, voorraad op de exacte variant', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'deviation');
+    expectAllSteps(result);
+    const number = /Order (IO-\d{4}-\d+)/.exec(result.done)?.[1];
+    const list = await json<{ items: { id: number; orderNumber: string; hasDeviation: boolean }[] }>(request, `/purchase-orders?status=all&query=${number}`);
+    const order = list.items.find((item) => item.orderNumber === number)!;
+    expect(order.hasDeviation).toBe(true);
+    const detail = await json<{ deviations: { kinds: string[]; actorReference: string; reason: string }[] }>(request, `/purchase-orders/${order.id}`);
+    expect(detail.deviations.map((deviation) => [deviation.actorReference, deviation.reason])).toEqual([[await signedIn(request), 'SupplierDeliveredDifferently']]);
+    expect(detail.deviations[0].kinds).toEqual(expect.arrayContaining(['Origin', 'Weight']));
+    // Het scherm eindigt op Beschikbaarheid van de variant uit het andere land: een andere variant dan besteld, die nu als regel op de order staat.
+    const lines = (await json<{ lines: { id: number; productVariantId: number }[] }>(request, `/purchase-orders/${order.id}`)).lines.sort((a, b) => a.id - b.id);
+    const shown = await page.locator('[data-tour="availability-free"]').getAttribute('data-tour-key');
+    expect(shown).not.toBe(String(lines[0].productVariantId));
+    expect(lines.map((line) => String(line.productVariantId))).toContain(shown);
+    await expectActorBack(page);
+    await page.close();
+});
+
+test('hoofdstuk Voorraad en verkopen voor aankomst: verkocht met tekort, ontvangen en gekeurd, oudste partij eerst gereserveerd', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'presell');
+    expectAllSteps(result);
+    const number = /Verkooporder (VO-\d{4}-\d+)/.exec(result.done)?.[1];
+    expect(number, result.done).toBeTruthy();
+    const orders = await json<{ orderNumber: string; actorReference: string; shortage: boolean; lines: { supplySource: string; reservedQuantity: number; reservations: { supplyOrderNumber: string | null; lotNumber: string | null }[] }[] }[]>(request, `/sales-orders?q=${number}`);
+    const order = orders.find((candidate) => candidate.orderNumber === number)!;
+    expect(order.actorReference).toBe(await signedIn(request));
+    expect(order.lines.map((line) => line.supplySource)).toEqual(['Expected']);
+    expect(order.shortage).toBe(true);
+    expect(order.lines[0].reservedQuantity).toBeGreaterThan(0);
+    expect(order.lines[0].reservations.every((reservation) => /IO-\d{4}-\d+/.test(reservation.supplyOrderNumber ?? '') && !!reservation.lotNumber)).toBe(true);
+    await expectActorBack(page);
+    await page.close();
+});
+
+test('hoofdstuk Verkooporder: VO-nummer, gereserveerd met inkooporder, partij en pallet, verzonden', async ({ request }) => {
     const page = await context.newPage();
     const result = await play(page, 'sales');
     expectAllSteps(result);
-    const reference = /Verkooporder (DEMO-TOUR-\d+)/.exec(result.done)?.[1];
-    const orders = await json<{ customerReference: string | null; actorReference: string; lines: { quantity: number; dispatchedQuantity: number }[] }[]>(request, '/sales-orders');
-    const order = orders.find((candidate) => candidate.customerReference === reference)!;
+    const number = /Verkooporder (VO-\d{4}-\d+)/.exec(result.done)?.[1];
+    const orders = await json<{ orderNumber: string; customerReference: string | null; actorReference: string; lines: { quantity: number; dispatchedQuantity: number }[] }[]>(request, `/sales-orders?q=${number}`);
+    const order = orders.find((candidate) => candidate.orderNumber === number)!;
+    expect(order.customerReference).toMatch(/^DEMO-TOUR-\d+$/);
     expect(order.actorReference).toBe(await signedIn(request));
     expect(order.lines.map((line) => [line.quantity, line.dispatchedQuantity])).toEqual([[4, 4]]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
+    await expectActorBack(page);
     await page.close();
 });
 
-test('hoofdstuk De keten van een order: de strip op de inkooporder en op de verkooporder, zonder schrijfactie', async () => {
+test('hoofdstuk Inkoopfactuur invoeren: factuur van de rondleidingsleverancier met bedrag 120,00', async ({ request }) => {
     const page = await context.newPage();
-    const writes: string[] = [];
-    page.on('request', (request) => { if (request.url().startsWith(API) && request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`); });
-    const result = await play(page, 'chain');
+    const result = await play(page, 'purchase-invoice');
     expectAllSteps(result);
-    expect(writes).toEqual([]);
-    // Eindigt op de verkooporder; de strip wijst terug naar een inkooporder.
-    await expect(page.locator('[data-tour="chain-step"][data-tour-key="order"] a').first()).toHaveText(/IO-\d{4}-\d+/);
+    const number = /(F-DEMO-TOUR-\d+)/.exec(result.done)?.[1];
+    const invoices = await json<{ invoiceNumber: string | null; vendorName: string | null; totalAmount: number }[]>(request, '/purchase-invoices');
+    const invoice = invoices.find((candidate) => candidate.invoiceNumber === number)!;
+    expect(invoice.vendorName).toMatch(/^DEMO-TOUR-\d+ Kwekerij$/);
+    expect(invoice.totalAmount).toBeGreaterThanOrEqual(120);
     await page.close();
 });
 
@@ -187,61 +258,20 @@ test('Doe zelf: de assistent wacht op de gebruiker en "Doe dit stuk voor mij" ma
     await page.getByRole('button', { name: 'Doe zelf' }).click();
     await page.getByTestId('tour-chapter-order').getByRole('button').click();
     const panel = page.locator('section[aria-label="Demo-assistent"]');
-    await expect(panel).toContainText('Jouw beurt', { timeout: 30_000 });
-    // Stap 1 wijst alleen aan (Inkooporder aanmaken heeft geen bestemmingskeuze meer); bij stap 2 wacht de assistent echt.
-    await page.waitForTimeout(1500);
-    await expect(panel).toContainText('Stap 2 van');
+    await expect(panel).toContainText('Jouw beurt', { timeout: 60_000 });
     await expect(page.getByTestId('tour-blocker')).toHaveCount(0);
-    // De gebruiker kiest zelf de leverancier; daarna laat hij de rest doen.
-    const vendor = page.locator('[data-tour="supply-vendor"]');
-    await vendor.fill('Nature');
-    await vendor.press('Tab');
     await expect.poll(async () => {
         const text = (await panel.innerText()).replace(/\s+/g, ' ');
         if (/kon niet uitgevoerd/.test(text)) throw new Error(text);
         const help = panel.getByRole('button', { name: 'Doe dit stuk voor mij' });
         if (await help.isVisible()) await help.click();
         return /Klaar:/.test(text);
-    }, { timeout: 200_000, intervals: [300] }).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
+    }, { timeout: 300_000, intervals: [300] }).toBe(true);
+    await expectActorBack(page);
     await page.close();
 });
 
-test('Afwijking bij ontvangst: blind ingevuld, "Klopt dit?" en de afwijking op de order', async ({ request }) => {
-    const page = await context.newPage();
-    const result = await play(page, 'deviation');
-    expectAllSteps(result);
-    const number = /Order (IO-\d{4}-\d+)/.exec(result.done)?.[1];
-    const list = await json<{ items: { id: number; orderNumber: string; hasDeviation: boolean }[] }>(request, `/purchase-orders?status=all&query=${number}`);
-    const order = list.items.find((item) => item.orderNumber === number)!;
-    expect(order.hasDeviation).toBe(true);
-    const detail = await json<{ deviations: { kinds: string[]; actorReference: string; reason: string }[] }>(request, `/purchase-orders/${order.id}`);
-    expect(detail.deviations.map((deviation) => [deviation.actorReference, deviation.reason])).toEqual([[await signedIn(request), 'SupplierDeliveredDifferently']]);
-    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
-    await page.close();
-});
-
-test('hoofdstuk Verkopen voor aankomst: verkocht met tekort, ontvangen en goedgekeurd, daarna oudste partij eerst gereserveerd', async ({ request }) => {
-    const page = await context.newPage();
-    // Een verse open demo-inkooporder (hoofdstuk 1) om te verkopen vóór aankomst.
-    expectAllSteps(await play(page, 'order'));
-    const result = await play(page, 'presell');
-    expectAllSteps(result);
-    const number = /Verkooporder (VO-\d{4}-\d+)/.exec(result.done)?.[1];
-    expect(number, result.done).toBeTruthy();
-    const orders = await json<{ orderNumber: string; actorReference: string; shortage: boolean; lines: { supplySource: string; quantity: number; reservedQuantity: number; reservations: { supplyOrderNumber: string | null; lotNumber: string | null }[] }[] }[]>(request, `/sales-orders?q=${number}`);
-    const order = orders.find((candidate) => candidate.orderNumber === number)!;
-    expect(order.actorReference).toBe(await signedIn(request));
-    expect(order.lines.map((line) => line.supplySource)).toEqual(['Expected']);
-    // Er is meer verkocht dan er is en komt (tekort 5); wat er nu is, is gereserveerd op exacte pallets met inkooporder en partij.
-    expect(order.shortage).toBe(true);
-    expect(order.lines[0].reservedQuantity).toBeGreaterThan(0);
-    expect(order.lines[0].reservations.every((reservation) => /IO-\d{4}-\d+/.test(reservation.supplyOrderNumber ?? '') && !!reservation.lotNumber)).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('agf_inspection_inspector'))).toBe(ACTOR);
-    await page.close();
-});
-
-test('hoofdstuk 4, Factureren: alleen een plek in de lijst', async () => {
+test('Verkoopfacturen: alleen een plek in de lijst', async () => {
     const page = await context.newPage();
     await page.goto('/dashboard');
     await page.getByRole('button', { name: 'Demo-assistent' }).click();

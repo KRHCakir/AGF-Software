@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ensureFlowMasterData } from './fixtures';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 // Een volledige orderregel alleen met het toetsenbord (Tab, pijlen, Enter) op Inkooporder aanmaken en op een nieuwe verkooporder,
@@ -47,6 +48,8 @@ async function keyboardLine(page: Page, prefix: string, quantityField: string, u
 }
 
 test.describe('orderregel met alleen het toetsenbord', () => {
+    test.beforeAll(async ({ request }) => { await ensureFlowMasterData(request); });
+
     test.use({ timezoneId: 'Europe/Amsterdam' });
 
     test.beforeEach(async ({ context }) => {
