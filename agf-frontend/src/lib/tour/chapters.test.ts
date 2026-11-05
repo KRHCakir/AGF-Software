@@ -9,7 +9,7 @@ import { interpolate, targetSelector } from './dom.ts';
 // Elk hoofdstuk blijft binnen de vaste routes, gebruikt alleen geldige data-tour-namen en heeft al zijn teksten in
 // het Nederlands en het Engels.
 
-const sample = { tourRef: 'DEMO-TOUR-001', orderNumber: 'IO-2026-0001', actor: 'Demo-assistent', today: '2026-10-29', orderId: '47', lineId: '52', variantId: '10', salesOrderId: '5', unit: 'colli', sellQuantity: '65', salesNumber: 'VO-2026-0001', lot: '2611001', partijNumber: '2611001' };
+const sample = { tourRef: 'DEMO-TOUR-001', orderNumber: 'IO-2026-0001', actor: 'Demo-assistent', today: '2026-10-29', orderId: '47', lineId: '52', variantId: '10', salesOrderId: '5', unit: 'colli', sellQuantity: '65', salesNumber: 'VO-2026-0001', lot: '2611001', partijNumber: '2611001', actualVariantId: '11', partijId: '3' };
 
 describe('tour chapters', () => {
     test('every chapter has a unique id, its texts in nl and en, and only allowed routes and valid targets', () => {
@@ -33,6 +33,17 @@ describe('tour chapters', () => {
             for (const key of keys) {
                 assert.ok(key in nl, `${key} in nl`);
                 assert.ok(key in en, `${key} in en`);
+            }
+        }
+    });
+
+    test('a step is only skipped on a known flag (what the chapter creates itself on an empty database), and those steps come first', () => {
+        for (const chapter of TOUR_CHAPTERS) {
+            const own = chapter.steps.findIndex((step) => step.when === undefined);
+            for (const [index, step] of chapter.steps.entries()) {
+                if (step.when === undefined) continue;
+                assert.match(step.when, /^\{\{need(Vendor|Customer|Article|Order|Stock|Sale)\}\}$/, `${chapter.id}/${step.id}`);
+                assert.ok(own === -1 || index < own, `${chapter.id}/${step.id} after the chapter's own steps`);
             }
         }
     });
