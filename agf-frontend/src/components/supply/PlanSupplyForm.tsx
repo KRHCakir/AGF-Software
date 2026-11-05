@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDateTime, formatQuantity } from '../../lib/availability';
@@ -11,9 +11,12 @@ import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
 import { withArticle } from '../../lib/articleFromEntry';
 import { isDateOnly, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from '../../lib/calendarDate';
 import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
+import { MAX_PARTIJ_NUMBER_LENGTH, MAX_SUPPLIER_LOT_REFERENCE_LENGTH } from '../../lib/partijRules';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
+import { getNextPartijNumber } from '../../services/partijService';
+import { type PartijSummary, isPartijExistsConflict } from '../../types/partij';
 import { PackageUnit, SupplyRoute } from '../../types/availability';
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
@@ -21,6 +24,7 @@ import { UnitBadge } from '../availability/QuantityCell';
 import DateField from '../shared/DateField';
 import KgTotals from '../shared/KgTotals';
 import VendorPicker from '../purchase/VendorPicker';
+import PartijField, { NO_PARTIJ, type PartijChoice, partijPayload } from '../partij/PartijField';
 import CustomerPicker from '../sales/CustomerPicker';
 import { LineKgFields } from '../shared/LineKgInput';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
@@ -63,6 +67,8 @@ interface HeaderDraft {
     // Inkooporder: referentie van de leverancier en besteldatum (standaard vandaag).
     supplierReference: string;
     orderedOn: string;
+    // Het eigen lotnummer van de leverancier (vrije tekst, optioneel).
+    supplierLotReference: string;
 }
 
 // Bevroren verzending: exact deze payload en requestId worden bij "opnieuw proberen" verstuurd.
@@ -73,7 +79,7 @@ interface PendingSubmission {
 
 const MAX_LINES = 200;
 const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
-const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam() });
+const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), supplierLotReference: '' });
 
 // Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
 export default function PlanSupplyForm({ route, reference, onReceive }: {
@@ -94,6 +100,24 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     // Artikelen van dit formulier: de referentielijst plus wat hier met "Nieuw artikel" is aangemaakt; per regel het open blok.
     const [products, setProducts] = useState(reference.products);
     const [newArticleFor, setNewArticleFor] = useState<string | null>(null);
+    // Partij (kop): het voorstel volgens de bedrijfsinstelling (null in modus Eigen of als het niet te laden is), de keuze en de open
+    // vraag "Partij … bestaat al, wil je die gebruiken?".
+    const [suggestion, setSuggestion] = useState<string | null>(null);
+    const [partij, setPartij] = useState<PartijChoice>(NO_PARTIJ);
+    const [partijExists, setPartijExists] = useState<PartijSummary | null>(null);
+    const [suggestionToken, setSuggestionToken] = useState(0);
+    const partijTouched = useRef(false);
+
+    useEffect(() => {
+        const controller = new AbortController();
+        getNextPartijNumber(undefined, controller.signal)
+            .then((next) => {
+                setSuggestion(next.suggestion);
+                if (!partijTouched.current && next.suggestion !== null) setPartij({ kind: 'suggested', number: next.suggestion });
+            })
+            .catch(() => setSuggestion(null));
+        return () => controller.abort();
+    }, [suggestionToken]);
 
     // Na een onbekende uitkomst of na succes is het formulier vergrendeld (geen dubbele aanvoer door een gewijzigde retry).
     const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
@@ -113,6 +137,13 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     const updateHeader = (field: keyof HeaderDraft, value: string) => {
         if (locked) return;
         setHeader((current) => ({ ...current, [field]: value }));
+        edited();
+    };
+
+    const updatePartij = (choice: PartijChoice) => {
+        if (locked) return;
+        partijTouched.current = true;
+        setPartij(choice);
         edited();
     };
 
@@ -171,6 +202,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         const supplierReference = header.supplierReference.trim();
         if (supplierReference.length > MAX_SUPPLIER_REFERENCE_LENGTH) addError(found, 'supplierReference', t('supply_error_too_long', { max: String(MAX_SUPPLIER_REFERENCE_LENGTH) }));
         if (header.orderedOn !== '' && !isDateOnly(header.orderedOn)) addError(found, 'orderedOn', t('supply_error_required_date'));
+        const supplierLotReference = header.supplierLotReference.trim();
+        if (supplierLotReference.length > MAX_SUPPLIER_LOT_REFERENCE_LENGTH) addError(found, 'supplierLotReference', t('supply_error_too_long', { max: String(MAX_SUPPLIER_LOT_REFERENCE_LENGTH) }));
+        if (partij.kind === 'own' && partij.number.trim().length > MAX_PARTIJ_NUMBER_LENGTH) addError(found, 'partij', t('supply_error_too_long', { max: String(MAX_PARTIJ_NUMBER_LENGTH) }));
 
         if (lines.length === 0) addError(found, 'lines', t('supply_error_lines_required'));
         const seen = new Set<string>();
@@ -218,6 +252,8 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 expectedAt,
                 ...(supplierReference === '' ? {} : { supplierReference }),
                 ...(header.orderedOn === '' ? {} : { orderedOn: header.orderedOn }),
+                ...partijPayload(partij),
+                ...(supplierLotReference === '' ? {} : { supplierLotReference }),
                 lines: payloadLines,
             },
             errors: {},
@@ -243,6 +279,12 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             setResult(await createSupplyCommitment(submission.payload));
         } catch (caught) {
             const apiError = toApiError(caught);
+            // Het getypte partijnummer bestaat al (ook als een ander het net aanmaakte): dezelfde vraag als bij het verlaten van het veld.
+            if (isPartijExistsConflict(apiError.body)) {
+                setPartijExists(apiError.body.partij);
+                setPending(null);
+                return;
+            }
             setError(apiError);
             setErrors(apiError.fieldErrors);
         } finally {
@@ -258,6 +300,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         setError(null);
         setErrors({});
         setResult(null);
+        partijTouched.current = false;
+        setPartij(NO_PARTIJ);
+        setPartijExists(null);
+        setSuggestionToken((token) => token + 1);
     };
 
     if (result !== null) {
@@ -291,6 +337,11 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         <span className="block font-mono text-3xl font-bold text-gray-900" data-testid="supply-order-number" data-tour="supply-order-number">{commitment.orderNumber}</span>
                     </p>
                 )}
+                <p className="mb-1" data-tour="supply-saved-partij">
+                    {commitment.partijNumber
+                        ? <>{t('partij_field')} <span className="font-mono font-semibold">{commitment.partijNumber}</span>{commitment.supplierLotReference && <> · {t('partij_supplier_lot')} <span className="font-mono">{commitment.supplierLotReference}</span></>}</>
+                        : t('partij_saved_without')}
+                </p>
                 <p>
                     {commitment.supplierReference && <>{t('po_col_supplier_reference')} <span className="font-mono">{commitment.supplierReference}</span> · </>}
                     {commitment.vendorName ?? '–'}{(commitment.linesOrigin || commitment.origin) && <> · {commitment.linesOrigin || commitment.origin}</>}
@@ -336,6 +387,19 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     </>
                 ) : undefined} />
             )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+                <div className="sm:col-span-1 md:col-span-2">
+                    <PartijField value={partij} suggestion={suggestion} exists={partijExists} disabled={locked} errors={e('partij') ?? e('newPartij.number') ?? e('partijId')}
+                        onChange={updatePartij} onExists={setPartijExists} />
+                </div>
+                <div>
+                    <label htmlFor="supplierLotReference-input" className="text-xs font-medium text-gray-700">{t('partij_supplier_lot')}</label>
+                    <input {...fieldProps('supplierLotReference', e('supplierLotReference'))} data-tour="supply-supplier-lot" value={header.supplierLotReference} disabled={locked}
+                        maxLength={MAX_SUPPLIER_LOT_REFERENCE_LENGTH} onChange={(event) => updateHeader('supplierLotReference', event.target.value)} className={inputClass} />
+                    <FieldError id="supplierLotReference" messages={e('supplierLotReference')} />
+                </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
@@ -403,7 +467,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                             <tr>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
                                 <th scope="col" className="px-2 py-1.5">{t('supply_quantity_unit')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>
+                                {isDirect && <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>}
                                 <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                             </tr>
                         </thead>
@@ -445,12 +509,15 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                                     locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
                                             </div>
                                         </td>
-                                        <td className="px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
-                                            <input {...fieldProps(`${prefix}.lotNumber`, e(`${prefix}.lotNumber`))} value={line.lotNumber} disabled={locked} maxLength={100}
-                                                onChange={(event) => updateLine(line.key, 'lotNumber', event.target.value)} className={inputClass} />
-                                            <FieldError id={`${prefix}.lotNumber`} messages={e(`${prefix}.lotNumber`)} />
-                                        </td>
+                                        {/* Klantgebonden aanvoer: partij van de bronregel per regel (gaat mee op de verzending). Magazijn: de partij staat op de kop. */}
+                                        {isDirect && (
+                                            <td className="px-2 py-1.5">
+                                                <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
+                                                <input {...fieldProps(`${prefix}.lotNumber`, e(`${prefix}.lotNumber`))} value={line.lotNumber} disabled={locked} maxLength={100}
+                                                    onChange={(event) => updateLine(line.key, 'lotNumber', event.target.value)} className={inputClass} />
+                                                <FieldError id={`${prefix}.lotNumber`} messages={e(`${prefix}.lotNumber`)} />
+                                            </td>
+                                        )}
                                         <td className="px-2 py-1.5">
                                             <button type="button" onClick={() => removeLine(line.key)} disabled={locked || lines.length <= 1}
                                                 className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
@@ -467,11 +534,15 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 </button>
             </fieldset>
 
-            <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
+            <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-3">
                 <button type="submit" data-tour="supply-save" className={primaryButtonClass} disabled={locked}>
                     {submitting ? t('supply_saving') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
                 </button>
                 <SubmitErrors errors={errors} />
+                {/* Zacht: zonder partij kan de order gewoon worden opgeslagen; een partij kiezen kan later op de order of bij ontvangst. */}
+                {partij.kind === 'none' && !locked && (
+                    <p role="status" className="text-sm text-amber-900" data-tour="supply-partij-none">{t('partij_none_warning')}</p>
+                )}
             </div>
         </form>
     );

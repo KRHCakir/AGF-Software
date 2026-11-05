@@ -2112,5 +2112,22 @@
   "settings_partij_example_own": "With Own number this is not suggested; the format only applies when you choose Suggest again.",
   "settings_partij_save": "Save numbering",
   "partij_status_open": "Open",
-  "partij_status_sold_out": "Sold out"
+  "partij_status_sold_out": "Sold out",
+  "partij_field": "Lot",
+  "partij_other": "Other lot",
+  "partij_choose_existing": "Choose existing lot",
+  "partij_hint_suggested": "Suggested number. You may type your own number.",
+  "partij_hint_existing": "Existing lot ({vendors}). This order is added to it.",
+  "partij_hint_own": "Own number. If it exists already, the screen asks whether to use that lot.",
+  "partij_hint_none": "No lot.",
+  "partij_exists_question": "Lot {number} already exists, do you want to use it?",
+  "partij_use_existing": "Use existing lot",
+  "partij_other_number": "Other number",
+  "partij_search": "Search by lot number, product or supplier",
+  "partij_search_none": "No lot found.",
+  "partij_search_failed": "Search failed. Please try again.",
+  "partij_search_retry": "Try again",
+  "partij_supplier_lot": "Supplier's lot",
+  "partij_saved_without": "Saved without a lot. You can choose one later on the purchase order or at receipt.",
+  "partij_none_warning": "No lot yet. You can save like this and choose the lot later, on the purchase order or at receipt."
 }

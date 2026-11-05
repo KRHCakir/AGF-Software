@@ -31,6 +31,10 @@ export interface CreateSupplyCommitmentRequest {
     // Inkooporder (optioneel): alleen meegestuurd als ingevuld, zodat oudere bevroren opdrachten gelijk blijven.
     supplierReference?: string;
     orderedOn?: string;
+    // Partij (kop): een bestaande (partijId) of een nieuwe (newPartij; number null = het voorgestelde nummer), en de partij van de leverancier.
+    partijId?: number;
+    newPartij?: { number: string | null };
+    supplierLotReference?: string;
     lines: CreateSupplyCommitmentLineRequest[];
 }
 
@@ -40,6 +44,9 @@ export interface SupplyCommitmentLine {
     productName: string | null;
     productVariantName: string | null;
     lotNumber: string | null;
+    // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
+    partijId?: number | null;
+    partijNumber?: string | null;
     expectedQuantity: number;
     expectedUnit: PackageUnit | null;
     expectedNetWeightKg: number | null;
@@ -85,6 +92,10 @@ export interface SupplyCommitment {
     supplierReference?: string | null;
     orderedOn?: string;
     orderChannel?: string | null;
+    // Partij van de order (null = geen partij) en de partij van de leverancier.
+    partijId?: number | null;
+    partijNumber?: string | null;
+    supplierLotReference?: string | null;
     vendorGgns: VendorGgnOption[];
     lines: SupplyCommitmentLine[];
 }
