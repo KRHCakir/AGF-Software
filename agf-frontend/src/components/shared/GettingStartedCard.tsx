@@ -9,7 +9,8 @@ import { listPurchaseOrders } from '../../services/purchaseOrderService';
 import { listRelations } from '../../services/relationService';
 
 // Kleine Beginnen-kaart op de startpagina zolang er nog geen relaties of artikelen zijn: 1 relaties, 2 artikelen, 3 inkooporder.
-// Verdwijnt vanzelf zodra die er zijn. Lukt het lezen niet, dan staat er gewoon niets (de startpagina werkt zonder).
+// Verdwijnt vanzelf zodra die er zijn. Net als bij "Eerst nodig" tellen alleen actieve relaties en niet-gearchiveerde artikelen. Lukt
+// het lezen niet, dan staat er gewoon niets (de startpagina werkt zonder).
 export default function GettingStartedCard() {
     const { t } = useTranslation();
     const [counts, setCounts] = useState<{ relations: number; articles: number; orders: number } | null>(null);
@@ -17,11 +18,11 @@ export default function GettingStartedCard() {
     useEffect(() => {
         const controller = new AbortController();
         Promise.all([
-            listRelations({ role: 'all', query: '', includeInactive: true, page: 1, pageSize: 1 }, controller.signal),
+            listRelations({ role: 'all', query: '', includeInactive: false, page: 1, pageSize: 1 }, controller.signal),
             listArticles(controller.signal),
             listPurchaseOrders({ query: '', status: 'all', vendorId: null, page: 1, pageSize: 1 }, controller.signal),
         ])
-            .then(([relations, articles, orders]) => setCounts({ relations: relations.total, articles: articles.length, orders: orders.total }))
+            .then(([relations, articles, orders]) => setCounts({ relations: relations.total, articles: articles.filter((article) => !article.isArchived).length, orders: orders.total }))
             .catch(() => { /* geen kaart */ });
         return () => controller.abort();
     }, []);

@@ -17,6 +17,12 @@ import SalesOrdersPage from './sales-orders/page';
 let mounted: Mounted;
 
 const found = (testId: string) => mounted.waitFor(() => mounted.container.querySelector(`[data-testid="${testId}"]`), testId);
+// Een artikel zoals /api/articles het geeft (de lijst wordt op vorm gecontroleerd).
+const article = (id: number, isArchived: boolean) => ({
+    id, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass', shortcutCode: null, origin: 'Peru', brand: null,
+    sizeCategory: '18', packaging: null, packagingUnit: 'colli', season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4,
+    defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: 'I', defaultPrice: 0, isArchived,
+});
 const needs = (notice: Element) => Array.from(notice.querySelectorAll('li')).map((item) => item.getAttribute('data-testid'));
 
 describe('first steps on an empty system', () => {
@@ -41,13 +47,29 @@ describe('first steps on an empty system', () => {
         globalThis.fetch = (async (input: RequestInfo | URL) => {
             const url = String(input);
             if (url.includes('/relations')) return json(200, { items: [], total: 3, page: 1, pageSize: 1 });
-            if (url.includes('/articles')) return json(200, [{ id: 1 }]);
+            if (url.includes('/articles')) { articlesRead = true; return json(200, [article(1, false)]); }
+            return json(200, emptyApiResponse(url));
+        }) as typeof fetch;
+        let articlesRead = false;
+        await mounted.render(<Home />);
+        await mounted.waitFor(() => articlesRead, 'articles read');
+        for (let i = 0; i < 10; i++) await act(async () => { await Promise.resolve(); });
+        assert.equal(mounted.container.querySelector('[data-testid="getting-started"]'), null);
+    });
+
+    test('Start: only active relations and non-archived articles count, so the card stays with only archived articles', async () => {
+        const urls: string[] = [];
+        globalThis.fetch = (async (input: RequestInfo | URL) => {
+            const url = String(input);
+            urls.push(url);
+            if (url.includes('/relations')) return json(200, { items: [], total: 3, page: 1, pageSize: 1 });
+            if (url.includes('/articles')) return json(200, [article(1, true)]);
             return json(200, emptyApiResponse(url));
         }) as typeof fetch;
         await mounted.render(<Home />);
-        await mounted.waitFor(() => mounted.hasText('start_title'), 'start');
-        for (let i = 0; i < 5; i++) await act(async () => { await Promise.resolve(); });
-        assert.equal(mounted.container.querySelector('[data-testid="getting-started"]'), null);
+        const card = await found('getting-started');
+        assert.deepEqual(Array.from(card.querySelectorAll('li')).map((item) => item.getAttribute('data-done')), ['yes', 'no', 'no']);
+        assert.ok(urls.some((url) => url.includes('/relations') && url.includes('includeInactive=false')));
     });
 
     test('Inkooporder aanmaken needs a supplier and an article; Klantgebonden aanvoer also a customer', async () => {
