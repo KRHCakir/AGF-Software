@@ -1884,7 +1884,7 @@
   "tour_deviation_enter_what": "We vullen in wat er werkelijk op de doos staat: herkomst {originName}, maat, klasse en merk, {quantity} stuks en {kgPerPackage} kg per colli.",
   "tour_deviation_enter_why": "De bestelling staat er niet voor; het systeem vergelijkt pas bij registreren.",
   "tour_deviation_check_title": "Klopt dit?",
-  "tour_deviation_check_what": "Bij registreren is er nog geen artikel uit {originName}: dat maken we hier aan. Dan meldt het systeem het verschil: verwacht {expectedOrigin}, ontvangen {originName}, en meer dan 2% afwijkend gewicht.",
+  "tour_deviation_check_what": "Bij registreren van een artikel uit {originName} (bestaat het nog niet, dan maken we het hier aan) meldt het systeem het verschil: verwacht {expectedOrigin}, ontvangen {originName}, en meer dan 2% afwijkend gewicht.",
   "tour_deviation_check_why": "Nee staat voorgeselecteerd: niets wordt geboekt tot iemand bewust Ja kiest.",
   "tour_deviation_confirm_title": "Ja, klopt",
   "tour_deviation_confirm_what": "We kiezen de reden \"Leverancier leverde anders\" en bevestigen.",

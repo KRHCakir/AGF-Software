@@ -1884,7 +1884,7 @@
   "tour_deviation_enter_what": "We enter what is actually on the box: origin {originName}, size, class and brand, {quantity} pieces and {kgPerPackage} kg per colli.",
   "tour_deviation_enter_why": "The order is not shown first; the system only compares when registering.",
   "tour_deviation_check_title": "Is this correct?",
-  "tour_deviation_check_what": "When registering there is no article from {originName} yet: we create it here. Then the system reports the difference: expected {expectedOrigin}, received {originName}, and more than 2% weight difference.",
+  "tour_deviation_check_what": "When registering an article from {originName} (if it does not exist yet, we create it here) the system reports the difference: expected {expectedOrigin}, received {originName}, and more than 2% weight difference.",
   "tour_deviation_check_why": "No is preselected: nothing is booked until someone deliberately chooses Yes.",
   "tour_deviation_confirm_title": "Yes, correct",
   "tour_deviation_confirm_what": "We choose the reason \"Supplier delivered differently\" and confirm.",
