@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ensureFlowMasterData } from './fixtures';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 // De hele keten uit de testlijst van de eigenaar, één keer via de knop Verkopen op Beschikbaarheid en één keer direct vanaf
@@ -109,6 +110,8 @@ async function expectOrdersInList(page: Page, run: string, first: string) {
 }
 
 test.describe('verkopen gekoppeld aan voorraad, de hele keten', () => {
+    test.beforeAll(async ({ request }) => { await ensureFlowMasterData(request); });
+
     test.use({ timezoneId: 'Europe/Amsterdam' });
     test.beforeEach(async ({ context }) => {
         await context.addInitScript(() => { localStorage.setItem('agf_locale', 'nl'); });

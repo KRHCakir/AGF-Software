@@ -3,8 +3,13 @@ import { defineConfig } from '@playwright/test';
 // E2E-tests van de demo-rondleiding (npm run test:tour). Draait tegen een lokale frontend met NEXT_PUBLIC_DEMO_ASSISTANT
 // en NEXT_PUBLIC_DEMO_TOUR aan, en een API op een aparte testdatabase (nooit agf_smoke); zie docs/demo-tour.md.
 // Standaard met de geïnstalleerde Google Chrome (TOUR_BROWSER_CHANNEL), zodat er geen browser gedownload hoeft te worden.
+// Eerst de rondleiding (die zelf op een lege database moet kunnen beginnen), daarna de flows die vaste testgegevens aanmaken.
 export default defineConfig({
     testDir: './e2e',
+    projects: [
+        { name: 'tour', testMatch: 'tour.spec.ts' },
+        { name: 'flows', testIgnore: 'tour.spec.ts', dependencies: ['tour'] },
+    ],
     timeout: 240_000,
     workers: 1,
     fullyParallel: false,
