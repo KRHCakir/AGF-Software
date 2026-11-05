@@ -152,8 +152,11 @@ namespace AgfAdmin.DTOs
         public int? PalletId { get; set; }
         public string PalletReference { get; set; }
         public string WarehouseLocation { get; set; }
-        // Partij: van de inhoudsregel (Physical) of van de bronregel (DirectTrade); kan leeg zijn.
+        // Partij: van de inhoudsregel (Physical) of van de bronregel (DirectTrade); kan leeg zijn. PartijId/PartijNumber: de partij zelf
+        // (voor de link naar het partijdetail); het nummer alleen waar de partij is meegeladen (verkooporderdetail).
         public string LotNumber { get; set; }
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
         // Gemeten netto kg; null bij een DirectTrade-toewijzing (er is geen gemeten kg, en er wordt nooit kg afgeleid).

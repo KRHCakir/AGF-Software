@@ -99,7 +99,7 @@ namespace AgfAdmin.Services
                 .OrderBy(b => AvailabilityRules.UnitOrder(b.Unit)).ThenBy(b => b.Unit, StringComparer.Ordinal)
                 .ToList();
 
-            return ServiceResult<AvailabilityDrillDownDto>.Ok(new AvailabilityDrillDownDto
+            var drillDown = new AvailabilityDrillDownDto
             {
                 GeneratedAt = DateTime.UtcNow,
                 Basis = new AvailabilityBasisDto { ReservationsApplied = true },
@@ -139,7 +139,33 @@ namespace AgfAdmin.Services
                         NotReceived = e.NotReceived,
                         InInspection = e.InInspection
                     })).ToList()
-            });
+            };
+            await AddPartijenAsync(drillDown, cancellationToken);
+            return ServiceResult<AvailabilityDrillDownDto>.Ok(drillDown);
+        }
+
+        // Uitsplitsing per partij: het partijnummer uit de partij zelf (en haar id voor de link naar het partijdetail), naast het oude
+        // tekstveld LotNumber, waarop de filter blijft werken.
+        private async Task AddPartijenAsync(AvailabilityDrillDownDto drillDown, CancellationToken cancellationToken)
+        {
+            var lineIds = drillDown.SourceLines.Select(l => l.SupplyCommitmentLineId).Concat(drillDown.ExpectedSupplies.Select(e => e.SupplyCommitmentLineId)).Distinct().ToList();
+            var contentIds = drillDown.ContentLines.Select(c => c.PalletContentLineId).ToList();
+            var lines = await _db.SupplyCommitmentLines.AsNoTracking().Where(l => lineIds.Contains(l.Id) && l.PartijId != null)
+                .Select(l => new { l.Id, l.PartijId, l.Partij.Number }).ToDictionaryAsync(l => l.Id, cancellationToken);
+            var contents = await _db.PalletContentLines.AsNoTracking().Where(c => contentIds.Contains(c.Id) && c.PartijId != null)
+                .Select(c => new { c.Id, c.PartijId, c.Partij.Number }).ToDictionaryAsync(c => c.Id, cancellationToken);
+            foreach (var line in drillDown.SourceLines.Where(l => lines.ContainsKey(l.SupplyCommitmentLineId)))
+            {
+                (line.PartijId, line.PartijNumber) = (lines[line.SupplyCommitmentLineId].PartijId, lines[line.SupplyCommitmentLineId].Number);
+            }
+            foreach (var supply in drillDown.ExpectedSupplies.Where(e => lines.ContainsKey(e.SupplyCommitmentLineId)))
+            {
+                (supply.PartijId, supply.PartijNumber) = (lines[supply.SupplyCommitmentLineId].PartijId, lines[supply.SupplyCommitmentLineId].Number);
+            }
+            foreach (var content in drillDown.ContentLines.Where(c => contents.ContainsKey(c.PalletContentLineId)))
+            {
+                (content.PartijId, content.PartijNumber) = (contents[content.PalletContentLineId].PartijId, contents[content.PalletContentLineId].Number);
+            }
         }
 
         // Zet de verkoopstand op elke magazijnrij (variant + eenheid). Een variant of eenheid die alleen verkocht is, krijgt een eigen rij

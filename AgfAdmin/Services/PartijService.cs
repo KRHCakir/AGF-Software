@@ -9,7 +9,7 @@ namespace AgfAdmin.Services
     // Partijen: nummering volgens de bedrijfsinstelling, los aanmaken, dubbelcontrole op de sleutel, nummer corrigeren (met reden en
     // historie), verwijderen zonder koppelingen en een bestaande inkooporder koppelen. Een nieuwe partij samen met een inkooporder loopt
     // via SupplyCommitmentService (één save). De regels van regel 23 bewaakt de TraceabilityGuard daarnaast bij elke schrijver.
-    public sealed class PartijService
+    public sealed partial class PartijService
     {
         // Pogingen bij een gelijktijdig toegekend volgnummer (unieke index op periode + volgnummer of op de sleutel).
         public const int MaxNumberAttempts = 5;

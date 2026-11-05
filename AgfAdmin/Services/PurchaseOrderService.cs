@@ -47,9 +47,14 @@ namespace AgfAdmin.Services
             var term = (query ?? "").Trim().ToLowerInvariant();
             if (term != "")
             {
-                // Ordernummer, leveranciersreferentie, leverancier en factuur- of creditnotanummer.
+                // Ordernummer, leveranciersreferentie, partij (zonder spaties en streepjes), partij van de leverancier, leverancier en
+                // factuur- of creditnotanummer.
+                var partijKey = PartijRules.NumberKey(query) ?? "";
                 commitments = commitments.Where(c => c.OrderNumber.ToLower().Contains(term)
                     || (c.SupplierReference != null && c.SupplierReference.ToLower().Contains(term))
+                    || (c.SupplierLotReference != null && c.SupplierLotReference.ToLower().Contains(term))
+                    || (partijKey != "" && c.Partij != null && c.Partij.NumberKey.Contains(partijKey))
+                    || (partijKey != "" && c.Lines.Any(l => l.Partij != null && l.Partij.NumberKey.Contains(partijKey)))
                     || (c.Vendor.Name != null && c.Vendor.Name.ToLower().Contains(term))
                     || _db.SupplyCommitmentInvoiceRefs.Any(r => r.SupplyCommitmentId == c.Id && r.InvoiceNumberKey.Contains(term)));
             }
@@ -61,7 +66,7 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.OrderNumber, c.OrderYear, c.OrderSequence, c.VendorId, VendorName = c.Vendor.Name, c.SupplierReference, c.OrderedOn,
-                    c.ExpectedAt, c.Route, CustomerName = c.Customer.Name, c.Status
+                    c.ExpectedAt, c.Route, CustomerName = c.Customer.Name, c.Status, c.PartijId, PartijNumber = c.Partij.Number, c.SupplierLotReference
                 })
                 .ToListAsync(cancellationToken);
             var facts = await LoadFactsAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
@@ -78,6 +83,9 @@ namespace AgfAdmin.Services
                         VendorId = h.VendorId,
                         VendorName = h.VendorName,
                         SupplierReference = h.SupplierReference,
+                        PartijId = h.PartijId,
+                        PartijNumber = h.PartijNumber,
+                        SupplierLotReference = h.SupplierLotReference,
                         OrderedOn = h.OrderedOn,
                         ExpectedAt = h.ExpectedAt == null ? null : DateTime.SpecifyKind(h.ExpectedAt.Value, DateTimeKind.Utc),
                         LinesOrigin = f.LinesOrigin,
@@ -133,6 +141,8 @@ namespace AgfAdmin.Services
             var commitment = await _db.SupplyCommitments.AsNoTracking()
                 .Include(c => c.Vendor)
                 .Include(c => c.Customer)
+                .Include(c => c.Partij)
+                .Include(c => c.Lines).ThenInclude(l => l.Partij)
                 .Include(c => c.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .AsSplitQuery()
                 .SingleOrDefaultAsync(c => c.Id == id, cancellationToken);
@@ -148,7 +158,7 @@ namespace AgfAdmin.Services
                 {
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, PalletStatus = c.Pallet.LogisticsStatus, c.SupplyCommitmentLineId,
                     ProductName = c.SupplyCommitmentLine.ProductVariant.Product.Name, VariantName = c.SupplyCommitmentLine.ProductVariant.Name,
-                    c.LotNumber, c.Quantity, c.Unit, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg,
+                    c.LotNumber, c.PartijId, PartijNumber = c.Partij.Number, c.Quantity, c.Unit, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg,
                     c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.QualityReason, c.OriginCorrectionLineId, c.OriginRejectionLineId, c.CreatedAt, c.Version,
                     c.ExpectedShownBeforeEntry, c.ExpectedShownAt, c.ExpectedShownBy
                 })
@@ -207,6 +217,8 @@ namespace AgfAdmin.Services
                     ProductName = c.ProductName,
                     ProductVariantName = c.VariantName,
                     LotNumber = c.LotNumber,
+                    PartijId = c.PartijId,
+                    PartijNumber = c.PartijNumber,
                     Quantity = c.Quantity,
                     Unit = c.Unit,
                     NetWeightKg = c.NetWeightKg,
@@ -273,6 +285,8 @@ namespace AgfAdmin.Services
                     Size = l.ProductVariant?.SizeCategory,
                     Packaging = l.ProductVariant?.Packaging,
                     LotNumber = l.LotNumber,
+                    PartijId = l.PartijId,
+                    PartijNumber = l.Partij?.Number,
                     ExpectedQuantity = l.ExpectedQuantity,
                     Unit = l.ExpectedUnit,
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
@@ -292,6 +306,9 @@ namespace AgfAdmin.Services
                 VendorId = commitment.VendorId,
                 VendorName = commitment.Vendor?.Name,
                 SupplierReference = commitment.SupplierReference,
+                PartijId = commitment.PartijId,
+                PartijNumber = commitment.Partij?.Number,
+                SupplierLotReference = commitment.SupplierLotReference,
                 OrderedOn = commitment.OrderedOn,
                 OrderChannel = commitment.OrderChannel,
                 Note = commitment.Note,
