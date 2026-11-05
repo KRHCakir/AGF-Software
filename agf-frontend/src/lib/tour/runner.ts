@@ -38,6 +38,14 @@ class StepFailure extends Error {
 }
 
 const pathname = (href: string) => href.split(/[?#]/)[0];
+// Zelfde route: zelfde pad en elke queryparameter van het doel staat ook in het huidige adres.
+const sameRoute = (current: string, target: string) => {
+    if (pathname(current) !== pathname(target)) return false;
+    const wanted = new URLSearchParams(target.split('#')[0].split('?')[1] ?? '');
+    const actual = new URLSearchParams(current.split('#')[0].split('?')[1] ?? '');
+    for (const [key, value] of wanted) if (!actual.getAll(key).includes(value)) return false;
+    return true;
+};
 
 export class TourRunner {
     private readonly options: TourRunnerOptions;
@@ -236,7 +244,7 @@ export class TourRunner {
         // Eerst lezen (lookup), want de route van de stap kan een gevonden waarde bevatten (?productVariantId={{variantId}}).
         const skip = (action: TourAction) => action.when !== undefined && this.text(action.when).trim() === '';
         for (const action of step.actions) if (action.kind === 'lookup' && !skip(action)) await this.perform(action, my);
-        if (pathname(this.options.currentPath()) !== pathname(this.text(step.route))) await this.navigateTo(step.route, my);
+        if (!sameRoute(this.options.currentPath(), this.text(step.route))) await this.navigateTo(step.route, my);
         await this.sleep(this.state.mode === 'watch' ? this.timing().readMs : this.timing().actionMs, my);
         for (const action of step.actions) if (action.kind !== 'lookup' && !skip(action)) await this.perform(action, my);
         if (step.expect) await this.assertTarget(step.expect.target, step.expect.text, undefined, my);
@@ -389,7 +397,7 @@ export class TourRunner {
         this.focused = null;
         this.emit({ target: null });
         this.options.navigate(target);
-        await this.until(() => pathname(this.options.currentPath()) === pathname(target), my, { key: 'tour_error_route', params: { href: target } });
+        await this.until(() => sameRoute(this.options.currentPath(), target), my, { key: 'tour_error_route', params: { href: target } });
     }
 
     private async assertTarget(target: TourTarget, text: string | undefined, value: string | undefined, my: number) {

@@ -120,7 +120,7 @@ export function useTour(allowWrites: boolean, timing?: (speed: TourSpeed) => Tou
         const runner = new TourRunner({
             document: window.document,
             navigate: (href) => routerRef.current.push(href),
-            currentPath: () => pathRef.current ?? '',
+            currentPath: () => (pathRef.current ?? '') + (typeof window !== 'undefined' ? window.location.search : ''),
             isAllowedHref: isAllowedDemoHref,
             allowWrites,
             actor: tourActor,
