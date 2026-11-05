@@ -17,41 +17,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAgfSecurity(builder.Configuration);
 builder.Services.AddSwaggerGen();
 
-// AI & Email Services
-builder.Services.AddScoped<IEmailIngestionService, EmailIngestionService>();
-builder.Services.AddScoped<IAIExtractorService, MockAIExtractorService>();
-builder.Services.AddScoped<ISalesParserService, SimpleSalesParserService>();
-builder.Services.AddScoped<PurchaseInvoiceService>();
-builder.Services.AddScoped<ArticleService>();
-builder.Services.AddScoped<ArticleLifecycleService>();
-builder.Services.AddScoped<ArticleFromEntryService>();
-builder.Services.AddScoped<RelationService>();
-builder.Services.AddScoped<PaymentConditionService>();
-builder.Services.AddScoped<PurchaseOrderService>();
-builder.Services.AddScoped<PartijService>();
-builder.Services.AddScoped<ReceiptDeviationService>();
-builder.Services.AddScoped<CountryService>();
-builder.Services.AddSingleton<IEmailDomainChecker, DnsEmailDomainChecker>();
-// Lokale referentielijst van goederencodes: bij het opstarten gelezen uit Data/Reference/goods-codes.json.
-builder.Services.AddSingleton(_ => GoodsCodeCatalog.Load(Path.Combine(builder.Environment.ContentRootPath, GoodsCodeCatalog.DefaultRelativePath)));
-builder.Services.AddScoped<IDevelopmentDataSeeder, DevelopmentDataSeeder>();
-
-// Beschikbaarheidsdomein
-builder.Services.AddScoped<ISupplyCommitmentService, SupplyCommitmentService>();
-builder.Services.AddScoped<IPalletService, PalletService>();
-builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
-builder.Services.AddScoped<ISalesOrderService, SalesOrderService>();
-builder.Services.AddScoped<IStockReservationService, StockReservationService>();
-builder.Services.AddScoped<ISalesDispatchService, SalesDispatchService>();
-builder.Services.AddScoped<ISalesDispatchCorrectionService, SalesDispatchCorrectionService>();
-builder.Services.AddScoped<IDirectTradeAllocationService, DirectTradeAllocationService>();
-builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<IBusinessCalendar, AmsterdamBusinessCalendar>();
-builder.Services.AddScoped<IDirectTradeShipmentService, DirectTradeShipmentService>();
-builder.Services.AddScoped<IDirectTradeShipmentCorrectionService, DirectTradeShipmentCorrectionService>();
-builder.Services.AddScoped<IDeliveryConfirmationService, DeliveryConfirmationService>();
-builder.Services.AddScoped<IDeliveryRetractionService, DeliveryRetractionService>();
-builder.Services.AddScoped<ICustomerService, CustomerService>();
+// Domeinservices (gedeeld met de tests die de echte API op een lege database starten).
+builder.Services.AddAgfServices(builder.Environment.ContentRootPath);
 
 // Database configuratie
 var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder.Configuration);
