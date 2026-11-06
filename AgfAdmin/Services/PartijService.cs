@@ -320,7 +320,7 @@ namespace AgfAdmin.Services
             }
             if (await IsLinkedAsync(id, cancellationToken))
             {
-                return ServiceResult<bool>.Conflict($"Lot {partij.Number} is linked to a purchase order or pallet line and cannot be deleted.");
+                return ServiceResult<bool>.Conflict($"Lot {partij.Number} is linked to a purchase order, pallet line or costs and cannot be deleted.");
             }
             _db.PartijAuditEvents.Add(new PartijAuditEvent
             {
@@ -496,7 +496,8 @@ namespace AgfAdmin.Services
             await _db.Partijen.AsNoTracking().AnyAsync(p => p.Id == id && p.SalesOrderId != null, cancellationToken)
             || await _db.SupplyCommitments.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken)
             || await _db.SupplyCommitmentLines.AsNoTracking().AnyAsync(l => l.PartijId == id, cancellationToken)
-            || await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken);
+            || await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken)
+            || await _db.PartijCosts.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken);
 
         internal async Task<PartijSummaryDto> SummaryAsync(Partij partij, CancellationToken cancellationToken) => new()
         {

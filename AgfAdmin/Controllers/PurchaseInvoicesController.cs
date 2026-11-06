@@ -13,11 +13,21 @@ namespace AgfAdmin.Controllers
     public class PurchaseInvoicesController : ControllerBase
     {
         private readonly PurchaseInvoiceService _service;
+        private readonly PartijCostService _costs;
 
-        public PurchaseInvoicesController(PurchaseInvoiceService service)
+        public PurchaseInvoicesController(PurchaseInvoiceService service, PartijCostService costs)
         {
             _service = service;
+            _costs = costs;
         }
+
+        // Kosten verdelen over partijen: per regel de verdeling, wat algemene kosten blijft en de historie.
+        [HttpGet("{id:int}/allocations")]
+        public async Task<IActionResult> Allocations(int id) => this.ToActionResult(await _costs.GetInvoiceAsync(id, HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("{id:int}/lines/{lineId:int}/allocations")]
+        public async Task<IActionResult> SaveAllocation(int id, int lineId, [FromBody] SaveLineAllocationDto request) =>
+            this.ToActionResult(await _costs.SaveLineAsync(id, lineId, request, HttpContext?.RequestAborted ?? default));
 
         [HttpGet]
         public async Task<IActionResult> List() => Ok(await _service.ListAsync(HttpContext?.RequestAborted ?? default));

@@ -21,6 +21,7 @@ namespace AgfAdmin.Configuration
             services.AddScoped<PurchaseOrderService>();
             services.AddScoped<PartijService>();
             services.AddScoped<CostArticleService>();
+            services.AddScoped<PartijCostService>();
             services.AddScoped<ReceiptDeviationService>();
             services.AddScoped<CountryService>();
             services.AddSingleton<IEmailDomainChecker, DnsEmailDomainChecker>();
