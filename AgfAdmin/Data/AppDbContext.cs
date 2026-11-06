@@ -255,6 +255,18 @@ namespace AgfAdmin.Data
         // concurrency-token in de WHERE-clausule, zodat een verouderde schrijver een DbUpdateConcurrencyException krijgt.
         private void IncrementVersions()
         {
+            // Een gewijzigd regelbedrag verhoogt de verdelingsversie, zodat het concurreert met een gelijktijdige verdeling van dezelfde
+            // regel (AllocationVersion is concurrency token): de ene schrijver ziet dan een concurrencyfout i.p.v. dat beide slagen.
+            foreach (var entry in ChangeTracker.Entries<IncomingInvoiceLine>().Where(e => e.State == EntityState.Modified))
+            {
+                var total = entry.Property(l => l.LineTotal);
+                var version = entry.Property(l => l.AllocationVersion);
+                if (total.OriginalValue != total.CurrentValue && version.CurrentValue == version.OriginalValue)
+                {
+                    version.CurrentValue = version.OriginalValue + 1;
+                }
+            }
+
             foreach (var entry in ChangeTracker.Entries<Pallet>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(p => p.Version).CurrentValue = entry.Property(p => p.Version).OriginalValue + 1;
