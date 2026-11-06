@@ -7,7 +7,7 @@ namespace AgfAdmin.Data
 {
     internal static partial class TraceabilityGuard
     {
-        private sealed record StoredPartij(int Id, string Number, string SequencePeriod, int? Sequence, string CreatedBy, DateTime CreatedAt);
+        private sealed record StoredPartij(int Id, string Number, string SequencePeriod, int? Sequence, string CreatedBy, DateTime CreatedAt, string Kind);
         private sealed record StoredPartijLink(int Id, int? PartijId, int OwnerId);
 
         // ---- Regel 23: partijen (zie PartijService en PartijRules) ----
@@ -53,9 +53,13 @@ namespace AgfAdmin.Data
             var ids = entries.Where(e => e.State != EntityState.Added).Select(e => e.Entity.Id).ToList();
             var stored = ids.Count == 0 ? new Dictionary<int, StoredPartij>()
                 : (await ToListAsync(db.Partijen.AsNoTracking().Where(p => ids.Contains(p.Id))
-                    .Select(p => new StoredPartij(p.Id, p.Number, p.SequencePeriod, p.Sequence, p.CreatedBy, p.CreatedAt)), async, cancellationToken)).ToDictionary(p => p.Id);
+                    .Select(p => new StoredPartij(p.Id, p.Number, p.SequencePeriod, p.Sequence, p.CreatedBy, p.CreatedAt, p.Kind)), async, cancellationToken)).ToDictionary(p => p.Id);
+            // Een correctie met reden; bij een verkoop-partij (opgeslagen soort) ook een aanpassing zonder reden, die regel 24 alleen
+            // toestaat zolang er op haar order niets gereserveerd of geleverd is.
             var corrections = db.ChangeTracker.Entries<PartijAuditEvent>()
-                .Where(e => e.State == EntityState.Added && e.Entity.EventType == PartijRules.EventNumberCorrected && !string.IsNullOrWhiteSpace(e.Entity.Reason))
+                .Where(e => e.State == EntityState.Added
+                    && ((e.Entity.EventType == PartijRules.EventNumberCorrected && !string.IsNullOrWhiteSpace(e.Entity.Reason))
+                        || (e.Entity.EventType == PartijRules.EventNumberChanged && stored.TryGetValue(e.Entity.PartijId, out var target) && target.Kind == PartijRules.KindSales)))
                 .Select(e => e.Entity).ToList();
 
             foreach (var entry in entries.Where(e => e.State == EntityState.Modified))
