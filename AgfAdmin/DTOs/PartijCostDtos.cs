@@ -44,6 +44,12 @@ namespace AgfAdmin.DTOs
         public string Number { get; set; }
         public string PartijKind { get; set; }
         public decimal Amount { get; set; }
+        // Wat het is (leverancier of klant, product) en de basis voor verdelen: ontvangen (inkoop) of besteld (verkoop) en netto kg.
+        public string Party { get; set; }
+        public string Products { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public decimal NetKg { get; set; }
     }
 
     public sealed class AllocationHistoryDto

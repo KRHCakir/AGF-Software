@@ -117,6 +117,9 @@ namespace AgfAdmin.DTOs
         public decimal InInspectionQuantity { get; set; }
         public decimal OpenExpectedQuantity { get; set; }
         public decimal SoldQuantity { get; set; }
+        // Netto kg: bij een inkoop-partij fysiek ontvangen, bij een verkoop-partij de kg van de orderregels (anders de gereserveerde kg).
+        // Samen met ontvangen (inkoop) of besteld (verkoop) de basis voor "Verdeel naar kg" en "Verdeel naar colli".
+        public decimal NetKg { get; set; }
     }
 
     public sealed class PartijListItemDto : PartijTotalsDto
@@ -139,7 +142,32 @@ namespace AgfAdmin.DTOs
         public List<PartijSalesOrderDto> SalesOrders { get; set; } = new();
         // Alleen bij een verkoop-partij: per inkoop-partij en eenheid wat eruit gereserveerd of verzonden is.
         public List<PartijSourceDto> Sources { get; set; } = new();
+        // Kosten op deze partij (P2), per factuurregel; het totaal is alleen van deze partij.
+        public List<PartijCostLineDto> Costs { get; set; } = new();
+        public decimal CostTotal { get; set; }
+        // Apart en niet in CostTotal, zodat niets dubbel telt: de kosten op de verkoop-partijen die colli uit deze inkoop-partij pakken,
+        // of (bij een verkoop-partij) op de inkoop-partijen waar de colli vandaan komen.
+        public List<PartijLinkedCostDto> LinkedCosts { get; set; } = new();
         public List<PartijHistoryDto> History { get; set; } = new();
+    }
+
+    public sealed class PartijCostLineDto
+    {
+        public string Kind { get; set; }
+        public int InvoiceId { get; set; }
+        public string InvoiceNumber { get; set; }
+        public string VendorName { get; set; }
+        public DateTime? InvoiceDate { get; set; }
+        public string Description { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    public sealed class PartijLinkedCostDto
+    {
+        public int PartijId { get; set; }
+        public string Number { get; set; }
+        public string Kind { get; set; }
+        public decimal CostTotal { get; set; }
     }
 
     // Een inkoop-partij waaruit een verkoop-partij colli pakt (20 + 120 + 360 = 500): af te leiden uit de reserveringen op palletregels
