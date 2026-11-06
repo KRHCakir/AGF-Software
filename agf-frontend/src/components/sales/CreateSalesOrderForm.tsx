@@ -109,6 +109,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const [partijText, setPartijText] = useState<string | null>(() => pending?.payload.salesPartijNumber ?? null);
     const [partijExists, setPartijExists] = useState<string | null>(null);
     const [partijToken, setPartijToken] = useState(0);
+    // Volgnummer van de laatste wijziging/controle: een antwoord van een oudere controle wordt genegeerd.
+    const partijCheckSeq = useRef(0);
 
     // Vergrendeld zolang er een onafgerond commando is: nooit een gewijzigde retry, nooit een tweede order ernaast.
     const locked = submitting || result !== null || pending !== null;
@@ -128,9 +130,10 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const checkPartij = async () => {
         const typed = (partijText ?? '').trim();
         if (typed === '' || typed === partijSuggestion || partijNumberKey(typed) === null) return;
+        const seq = ++partijCheckSeq.current;
         try {
             const existing = await findPartijByNumber(typed, undefined, 'Sales');
-            if (existing !== null) setPartijExists(existing.number);
+            if (seq === partijCheckSeq.current && existing !== null) setPartijExists(existing.number);
         } catch {
             // Geen antwoord: bij opslaan volgt dezelfde controle.
         }
@@ -293,6 +296,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     const startOver = () => {
         setDraft(emptyDraft());
+        partijCheckSeq.current++;
         setPartijText(null);
         setPartijExists(null);
         setPartijToken((n) => n + 1);
@@ -408,7 +412,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                     <label htmlFor="salesPartijNumber-input" className="text-xs font-medium text-gray-700">{t('sales_partij_field')}{partijNext?.mode === 'Own' ? ' *' : ''}</label>
                     <input {...fieldProps('salesPartijNumber', partijExists !== null ? [t('sales_partij_exists', { number: partijExists })] : e('salesPartijNumber'))}
                         data-tour="sales-partij" value={partijValue} disabled={locked} maxLength={MAX_SALES_PARTIJ_NUMBER_LENGTH} aria-describedby="salesPartijNumber-hint"
-                        onChange={(event) => { if (locked) return; setPartijText(event.target.value); setPartijExists(null); edited(); }}
+                        onChange={(event) => { if (locked) return; partijCheckSeq.current++; setPartijText(event.target.value); setPartijExists(null); edited(); }}
                         onBlur={() => { void checkPartij(); }} className={`${inputClass} font-mono`} />
                     <span id="salesPartijNumber-hint" className="block text-xs text-gray-500">{t(partijNext?.mode === 'Own' ? 'sales_partij_hint_own' : 'sales_partij_hint')}</span>
                     <FieldError id="salesPartijNumber" messages={partijExists !== null ? [t('sales_partij_exists', { number: partijExists })] : e('salesPartijNumber')} />
