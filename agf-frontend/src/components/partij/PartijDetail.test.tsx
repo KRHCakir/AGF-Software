@@ -10,13 +10,14 @@ import PartijDetail from './PartijDetail';
 // kosten en resultaat, "Nummer corrigeren" alleen met reden (dubbel nummer gemeld) en verwijderen alleen zonder koppelingen.
 
 const detail = (over: Partial<Detail> = {}): Detail => ({
-    id: 7, number: '2610251', status: 'Open', createdAt: '2026-10-27T09:00:00Z', vendors: ['Fruitimport Oost', "Nature's Pride"], products: ['Avocado Hass'],
+    id: 7, number: '2610251', kind: 'Purchase', salesOrderId: null, salesOrderNumber: null, salesOrderStatus: null, customerName: null, orderedQuantity: 0, sourcePartijen: [],
+    numberFixed: true, sources: [], status: 'Open', createdAt: '2026-10-27T09:00:00Z', vendors: ['Fruitimport Oost', "Nature's Pride"], products: ['Avocado Hass'],
     supplierLotReferences: ['NP-LOT-88'], unit: 'box', purchasedQuantity: 150, receivedQuantity: 70, onHandQuantity: 60, inInspectionQuantity: 10, openExpectedQuantity: 80,
     soldQuantity: 15, note: null, createdBy: 'Admin', linked: true, reservedQuantity: 15, shippedQuantity: 0,
     orders: [{ id: 46, orderNumber: 'IO-2026-0046', vendorName: "Nature's Pride", status: 'PartiallyReceived', orderedOn: '2026-10-27', expectedAt: null, supplierLotReference: 'NP-LOT-88', unit: 'box', expectedQuantity: 100, receivedQuantity: 60 }],
     receipts: [{ palletContentLineId: 900, palletId: 77, palletReference: 'P-000077', palletStatus: 'Received', supplyCommitmentId: 46, orderNumber: 'IO-2026-0046', productName: 'Avocado',
         productVariantName: 'Hass', lotNumber: '2610251', kind: 'Receipt', quantity: 60, unit: 'box', netWeightKg: 240, onHandQuantity: 60, qualityStatus: 'Approved', receivedAt: '2026-10-28T08:00:00Z' }],
-    salesOrders: [{ salesOrderId: 12, orderNumber: 'VO-2026-0012', customerName: 'Groothandel Jansen', status: 'Open', unit: 'box', reservedQuantity: 15, shippedQuantity: 0 }],
+    salesOrders: [{ salesOrderId: 12, orderNumber: 'VO-2026-0012', salesPartijId: 40, salesPartijNumber: '2611012', customerName: 'Groothandel Jansen', status: 'Open', unit: 'box', reservedQuantity: 15, shippedQuantity: 0 }],
     history: [{ occurredAt: '2026-10-27T09:00:00Z', type: 'Created', oldValue: null, newValue: '2610251', reason: null, supplyCommitmentId: null, actorReference: 'Admin' }],
     ...over,
 });
