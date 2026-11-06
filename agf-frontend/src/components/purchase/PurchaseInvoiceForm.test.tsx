@@ -179,6 +179,31 @@ describe('PurchaseInvoiceForm', () => {
         assert.equal(window.sessionStorage.getItem('agf_purchase_invoice_pending'), null);
     });
 
+    // Directe factuur van derden (P2): een kostenartikel in de artikelkeuze (groep "Kosten") vult de omschrijving en aantal 1; de regel stuurt
+    // het kostenartikel mee en geen artikel. Hetzelfde factuurnummer van deze leverancier staat na 409 bij het factuurnummer.
+    test('a cost article line: chosen from the Costs group, sent as costArticleId; a duplicate invoice number is named at the field', async () => {
+        const costs = [{ id: 3, name: 'Handling', isStandard: true, isActive: true, sortOrder: 10, lineCount: 0 }, { id: 9, name: 'Afval', isStandard: true, isActive: false, sortOrder: 50, lineCount: 0 }];
+        await mounted.render(<PurchaseInvoiceForm vendors={vendors} products={products} costArticles={costs} settings={settings} />);
+        await chooseVendor('#7');
+        await type(input('invoiceNumber'), 'BC-118');
+        const item = input('lines[0].item');
+        item.focus();
+        await type(item, 'handl');
+        await key(item, 'Tab');
+        assert.equal(input('lines[0].quantity').value, '1', 'a cost line starts with quantity 1');
+        assert.ok(mounted.container.querySelector('[data-testid="lines[0].cost-kind"]'), 'the line says it is a cost article');
+        await type(input('lines[0].unitPrice'), '5000');
+        nextPost = async () => json(409, { message: 'exists', code: 'INVOICE_EXISTS', invoiceId: 4, invoiceNumber: 'BC-118' });
+        await key(input('invoiceNumber'), 's', { code: 'KeyS', ctrlKey: true });
+        await mounted.waitFor(() => text().includes('purchase_invoice_exists'), 'duplicate named');
+        const line = JSON.parse(posted[0].body).lines[0];
+        assert.deepEqual([line.costArticleId, line.productVariantId, line.description, line.quantity, line.unitPrice], [3, null, 'Handling', 1, 5000]);
+        assert.equal(input('invoiceNumber').getAttribute('aria-invalid'), 'true');
+        // Een inactief kostenartikel staat niet in de keuze.
+        await type(input('lines[0].item'), 'afval');
+        assert.equal(text().includes('Costs · Afval') || text().includes('cost_articles_group · Afval'), false);
+    });
+
     test('only enabled optional fields are shown and sent; the panel is collapsed by default', async () => {
         await mounted.render(<PurchaseInvoiceForm vendors={vendors} products={products} settings={settings} />);
         assert.equal(mounted.container.querySelector('#purchase-extra'), null, 'collapsed by default');

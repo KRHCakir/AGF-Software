@@ -15,6 +15,8 @@ import { ShortcutAction, isMacPlatform, matchShortcut, shortcutLabel } from '../
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createPurchaseInvoice } from '../../services/purchaseInvoiceService';
 import type { ProductOption } from '../../types/referenceData';
+import type { CostArticle } from '../../types/costArticle';
+import { costArticleGroup, itemValue, pickedItem } from '../../lib/costArticles';
 import type { PurchaseInvoice, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../../types/purchaseInvoice';
 import NumberEcho from '../shared/NumberEcho';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
@@ -45,9 +47,11 @@ function codeKey(code: string): string {
     return `purchase_error_${code}`;
 }
 
-export default function PurchaseInvoiceForm({ vendors, products, settings, onSaved }: {
+export default function PurchaseInvoiceForm({ vendors, products, costArticles = [], settings, onSaved }: {
     vendors: PurchaseVendor[];
     products: ProductOption[];
+    // Kostenartikelen (type Dienst): een eigen groep "Kosten" in de artikelkeuze van elke regel.
+    costArticles?: CostArticle[];
     settings: PurchaseInvoiceSettings;
     onSaved?: (invoice: PurchaseInvoice) => void;
 }) {
@@ -69,6 +73,10 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
     const focusLine = useRef<string | null>(null);
 
     const vendor = useMemo(() => vendors.find((candidate) => String(candidate.id) === draft.header.vendorId) ?? null, [vendors, draft.header.vendorId]);
+    const pickerProducts = useMemo(() => {
+        const group = costArticleGroup(costArticles, t('cost_articles_group'));
+        return group === null ? products : [...products, group];
+    }, [products, costArticles, t]);
     const totals = useMemo(() => draftTotals(draft.lines), [draft.lines]);
     const locked = submitting || pending !== null;
     const dirty = result === null && (draft.header.vendorId !== '' || draft.header.invoiceNumber.trim() !== '' || draft.lines.some((line) => !isBlankLine(line)));
@@ -184,7 +192,10 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                 setPending(null);
                 setErrors(apiError.fieldErrors);
             }
-            setServerError(apiError);
+            // Hetzelfde factuurnummer van deze leverancier is al ingevoerd: de melding staat bij het factuurnummer.
+            const duplicate = apiError.status === 409 && typeof apiError.body === 'object' && apiError.body !== null && (apiError.body as Record<string, unknown>).code === 'INVOICE_EXISTS';
+            if (duplicate) setErrors({ invoiceNumber: [t('purchase_invoice_exists', { number: String((apiError.body as Record<string, unknown>).invoiceNumber ?? '') })] });
+            setServerError(duplicate ? null : apiError);
         } finally {
             inFlight.current = false;
             setSubmitting(false);
@@ -399,18 +410,26 @@ export default function PurchaseInvoiceForm({ vendors, products, settings, onSav
                             return (
                                 <tr key={line.key} data-line-key={line.key} className="align-top" onKeyDown={(event) => onLineKeyDown(event, line)} onFocusCapture={() => setActiveLine(line.key)}>
                                     <td className="w-80 px-2 py-1.5">
-                                        <ProductVariantPicker id={`${prefix}.item`} dataTour={`pinvoice-line-item-${index}`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={products} value={line.productVariantId}
-                                            allowFreeText freeText={line.description} disabled={locked} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`)}
+                                        <ProductVariantPicker id={`${prefix}.item`} dataTour={`pinvoice-line-item-${index}`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={pickerProducts} value={itemValue(line)}
+                                            allowFreeText freeText={line.description} disabled={locked} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`) || !!e(`${prefix}.costArticleId`)}
                                             describedBy={e(`${prefix}.description`) ? `${prefix}.description` : undefined}
                                             inputRef={(element) => { if (element) itemInputs.current.set(line.key, element); else itemInputs.current.delete(line.key); }}
                                             onChange={(variantId) => {
+                                                // Kostenartikel: omschrijving = de naam, aantal 1 als er nog niets staat (het bedrag is dan de prijs).
+                                                const picked = pickedItem(variantId);
+                                                if (picked.kind === 'cost') {
+                                                    const cost = costArticles.find((candidate) => String(candidate.id) === picked.costArticleId);
+                                                    updateLine(line.key, { productVariantId: '', costArticleId: picked.costArticleId, description: cost?.name ?? '', ...(line.quantity.trim() === '' ? { quantity: '1' } : {}) });
+                                                    return;
+                                                }
                                                 const variant = products.flatMap((product) => product.variants.map((candidate) => ({ product, variant: candidate }))).find((pair) => String(pair.variant.id) === variantId);
                                                 // Artikelstandaard: de verpakkingseenheid vult alleen een nog lege eenheid voor; handmatige keuze blijft staan.
                                                 const unit = line.unit === '' && variant?.variant.packagingUnit ? { unit: variant.variant.packagingUnit } : {};
-                                                updateLine(line.key, { productVariantId: variantId, description: variant ? `${variant.product.name} · ${variant.variant.name}` : '', ...unit });
+                                                updateLine(line.key, { productVariantId: variantId, costArticleId: '', description: variant ? `${variant.product.name} · ${variant.variant.name}` : '', ...unit });
                                             }}
-                                            onFreeText={(text) => { if (line.productVariantId === '' && text !== line.description) updateLine(line.key, { description: text }); }} />
-                                        <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`)} />
+                                            onFreeText={(text) => { if (line.productVariantId === '' && !line.costArticleId && text !== line.description) updateLine(line.key, { description: text }); }} />
+                                        {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t('cost_article_line_hint')}</span>}
+                                        <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`) ?? e(`${prefix}.costArticleId`)} />
                                     </td>
                                     <td className="w-24 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.quantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>

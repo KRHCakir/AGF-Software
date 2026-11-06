@@ -2337,5 +2337,20 @@
   "partij_adjust": "Nummer aanpassen",
   "partij_reason_optional": "optioneel",
   "partij_sales_adjustable_hint": "Deze verkoop-partij hoort bij één verkooporder. Zolang er niets gereserveerd of geleverd is, pas je het nummer aan zonder reden; de historie blijft staan.",
-  "partij_sales_fixed_hint": "Er is op de verkooporder gereserveerd of geleverd: het nummer wijzigt alleen met een correctie en reden."
+  "partij_sales_fixed_hint": "Er is op de verkooporder gereserveerd of geleverd: het nummer wijzigt alleen met een correctie en reden.",
+  "purchase_direct_hint": "Voor kosten zoals handling, transport en autohuur. Goederen ontvang je via een inkooporder.",
+  "purchase_invoice_exists": "Factuur {number} van deze leverancier is al ingevoerd.",
+  "cost_articles_group": "Kosten",
+  "cost_articles_manage": "Kostenartikelen beheren",
+  "cost_article_line_hint": "Kostenartikel (dienst): geen voorraad.",
+  "cost_articles_title": "Kostenartikelen (dienst)",
+  "cost_articles_hint": "Voor facturen van derden, zoals handling, transport en QC. Geen voorraad, maat, klasse of herkomst. Inactief betekent: niet meer te kiezen; bestaande facturen blijven zoals ze zijn.",
+  "cost_article_standard": "standaard",
+  "cost_article_used": "{count} factuurregels",
+  "cost_article_deactivate": "Inactief maken",
+  "cost_article_activate": "Weer actief maken",
+  "cost_article_new": "Nieuw kostenartikel",
+  "cost_article_new_placeholder": "bijvoorbeeld Elektra of Autohuur",
+  "cost_article_add": "Toevoegen",
+  "cost_article_exists": "{name} bestaat al."
 }
