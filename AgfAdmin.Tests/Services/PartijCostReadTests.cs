@@ -80,6 +80,27 @@ public sealed class PartijCostReadTests : IDisposable
     }
 
     [Fact]
+    public async Task The_Kg_Basis_Of_A_Sales_Lot_Takes_The_Line_Kg_And_Only_For_Lines_Without_Kg_The_Reserved_Kg()
+    {
+        await _s.ArrangeAsync();
+        var request = _s.Order((5m, "Stock"));
+        request.Lines[0].NetWeightKg = 50m;
+        request.Lines.Add(new CreateSalesOrderLineDto { ProductVariantId = _s.LookalikeId, Quantity = 5m, Unit = "colli", SupplySource = "Stock" });
+        var order = (await _s.CreateAsync(request)).Value;
+        int lookalikeContent;
+        await using (var db = _s.Factory.CreateContext())
+        {
+            lookalikeContent = await db.PalletContentLines.Where(c => c.LotNumber == "LOT-L").Select(c => c.Id).SingleAsync();
+        }
+        // Regel 1 heeft 50 kg en een reservering van 30 kg (telt niet dubbel); regel 2 heeft geen kg en een reservering van 30 kg.
+        Assert.Equal(ServiceResultStatus.Created, (await _s.ReserveAsync(order.Id, order.Lines[0].Id, _s.StockContentId, 5m, 30m)).Status);
+        Assert.Equal(ServiceResultStatus.Created, (await _s.ReserveAsync(order.Id, order.Lines[1].Id, lookalikeContent, 5m, 30m)).Status);
+        await using var read = _s.Factory.CreateContext();
+        var lot = (await new PartijService(read).ListAsync(null, "all", 1, 50, kind: "Sales")).Value.Items.Single(i => i.SalesOrderId == order.Id);
+        Assert.Equal((10m, 80m), (lot.OrderedQuantity, lot.NetKg));
+    }
+
+    [Fact]
     public async Task A_Lot_Without_Costs_Has_An_Empty_Cost_Block()
     {
         await _s.ArrangeAsync();
