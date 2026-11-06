@@ -56,6 +56,8 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
     const [rows, setRows] = useState<Row[]>(() => rowsFrom(line));
     const [query, setQuery] = useState('');
     const [found, setFound] = useState<PartijTotals[]>([]);
+    const [searchFailed, setSearchFailed] = useState(false);
+    const [searchToken, setSearchToken] = useState(0);
     const [skipped, setSkipped] = useState<{ ids: number[]; mode: DistributeMode } | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [conflict, setConflict] = useState(false);
@@ -76,15 +78,15 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
 
     // Zoeken binnen de gekozen soort op nummer, leverancier, klant, VO-nummer en product (de server zoekt).
     useEffect(() => {
-        if (mode === 'General') { setFound([]); return; }
+        if (mode === 'General') { setFound([]); setSearchFailed(false); return; }
         const controller = new AbortController();
         const timer = window.setTimeout(() => {
             listPartijen({ query, status: 'all', kind: mode, page: 1, pageSize: 8 }, controller.signal)
-                .then((list) => setFound(list.items))
-                .catch(() => { if (!controller.signal.aborted) setFound([]); });
+                .then((list) => { setFound(list.items); setSearchFailed(false); })
+                .catch(() => { if (!controller.signal.aborted) { setFound([]); setSearchFailed(true); } });
         }, query.trim() === '' ? 0 : 150);
         return () => { window.clearTimeout(timer); controller.abort(); };
-    }, [mode, query]);
+    }, [mode, query, searchToken]);
 
     // Een partij die bij "verdeel naar kg / colli" niet meedeed (geen basis) en leeg is gebleven, gaat niet mee en blokkeert niets;
     // vult de gebruiker toch een bedrag in, dan doet ze wel mee.
@@ -172,7 +174,12 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                                     </li>
                                 );
                             })}
-                            {found.length === 0 && <li className="px-2 py-1 text-gray-600">{t('allocation_search_none')}</li>}
+                            {searchFailed && (
+                                <li role="alert" className="px-2 py-1 text-red-800">
+                                    {t('allocation_search_failed')} <button type="button" className="underline" onClick={() => setSearchToken((n) => n + 1)}>{t('allocation_search_retry')}</button>
+                                </li>
+                            )}
+                            {found.length === 0 && !searchFailed && <li className="px-2 py-1 text-gray-600">{t('allocation_search_none')}</li>}
                         </ul>
                     </div>
 

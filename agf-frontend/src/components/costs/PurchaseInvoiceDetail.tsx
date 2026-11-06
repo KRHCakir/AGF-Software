@@ -64,8 +64,8 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                         <span className="font-mono">{t('invoice_line_amount', { amount: money(line.lineTotal) })}</span>
                     </div>
                     <AllocationPanel invoiceId={invoice.id} line={line} canAllocate={allocations.canAllocate} currency={invoice.currency ?? 'EUR'}
-                        onSaved={(next) => setState((current) => (current.status === 'ready'
-                            ? { status: 'ready', data: { invoice, allocations: newestLines(current.data.allocations, next) } } : current))}
+                        onSaved={(next) => setState((current) => (current.status === 'ready' && current.data.invoice.id === invoice.id
+                            ? { status: 'ready', data: { invoice: current.data.invoice, allocations: newestLines(current.data.allocations, next) } } : current))}
                         onReload={() => setReloadToken((n) => n + 1)} />
                 </section>
             ))}

@@ -2361,6 +2361,8 @@
   "allocation_search_purchase": "Inkoop-partij zoeken",
   "allocation_search_sales": "Verkoop-partij zoeken",
   "allocation_search_none": "Geen partij gevonden.",
+  "allocation_search_failed": "Zoeken is mislukt.",
+  "allocation_search_retry": "Opnieuw zoeken",
   "allocation_chosen": "Gekozen partijen",
   "allocation_amount_for": "Bedrag excl. btw voor {number}",
   "allocation_remove": "{number} weghalen",

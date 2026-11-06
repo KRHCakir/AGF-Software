@@ -2361,6 +2361,8 @@
   "allocation_search_purchase": "Find a purchase lot",
   "allocation_search_sales": "Find a sales lot",
   "allocation_search_none": "No lot found.",
+  "allocation_search_failed": "Searching failed.",
+  "allocation_search_retry": "Search again",
   "allocation_chosen": "Chosen lots",
   "allocation_amount_for": "Amount excl. VAT for {number}",
   "allocation_remove": "Remove {number}",
