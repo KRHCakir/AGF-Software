@@ -25,10 +25,11 @@ hieronder, ook Stamgegevens, Inkoopfactuur invoeren en De rode draad. Al gepland
 | 4 | Ontvangst en keuring | Blind invullen wat er aankomt, en keuren met **Wie beoordeelt** per keuring (beoordelaar én ingelogde gebruiker in de historie). Daarna een deel afkeuren met reden en besluit, en kijken wat verkoopbaar is. |
 | 5 | Afwijking bij ontvangst | De helft komt uit een ander land en is 5% zwaarder. Bestaat die variant nog niet, dan maakt de ontvangst hem aan. Daarna "Klopt dit?" met herkomst en gewicht boven 2%, en de afwijking op de order. De voorraad staat op de exacte variant. |
 | 6 | Voorraad en verkopen voor aankomst | Beschikbaarheid (Voorraad, Verwacht, Verkocht, Vrij te verkopen). Met **Verkopen** meer verkopen dan er is: Tekort, geen blokkade. Daarna ontvangen en keuren, en via de werklijst "Verkocht, wacht op voorraad" reserveren met oudste partij eerst. |
-| 7 | Verkooporder, reserveren en verzenden | VO-nummer en klantreferentie. Reserveren op een pallet met per stuk de inkooporder, partij en pallet, daarna verzenden. |
+| 7 | Verkooporder, reserveren en verzenden | VO-nummer, klantreferentie en de voorgestelde verkoop-partij (naast het VO-nummer). Reserveren op een pallet met per stuk de inkooporder, partij en pallet, daarna verzenden. |
 | 8 | De rode draad | De keten-strip op inkooporder, ontvangst en verkooporder, en het partijdetail onder Voorraad › Partijen. |
 | 9 | Inkoopfactuur invoeren | De factuur van de leverancier, met een regel waarvan het bedrag `120,00` wordt, en de totalen. |
-| 10 | Verkoopfacturen | Nog een lege plek: "Komt zodra facturen klaar zijn". |
+| 10 | Kosten verdelen over partijen | Een factuur van derden zonder inkooporder: kostenartikel Handling, € 5.000. Daarna "Aan welke partij hoort dit?": € 500 op de verkoop-partij van de rondleiding, de rest blijft algemene kosten. Tot slot het blok Kosten op die partij. Op een lege database maakt het hoofdstuk eerst een verkoop aan. |
+| 11 | Verkoopfacturen | Nog een lege plek: "Komt zodra facturen klaar zijn". |
 
 Wie iets vastlegt, volgt altijd uit de ingelogde gebruiker; er is geen veld "Medewerker" meer. Alleen bij Keuring kiest de rondleiding
 expliciet de beoordelaar ("Demo-assistent"), zoals een gebruiker dat per keuring doet. Na afloop staat de eigen onthouden beoordelaar
