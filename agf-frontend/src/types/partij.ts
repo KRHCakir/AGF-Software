@@ -1,15 +1,24 @@
 import { isNullableString, isNumber, isString } from './guards';
-import type { PartijNumberMode, PartijSequenceReset, PartijStatus } from '../lib/partijRules';
+import type { PartijKind, PartijNumberMode, PartijSequenceReset, PartijStatus } from '../lib/partijRules';
 
 // Partijen (api/partijen): zie AgfAdmin/DTOs/PartijDtos.cs.
 
+// Modus en opnieuw tellen gelden voor beide reeksen; formaat en aantal cijfers per reeks (inkoop, verkoop).
 export interface PartijSettings {
     mode: PartijNumberMode;
     format: string;
     sequenceReset: PartijSequenceReset;
+    sequenceDigits: number;
+    salesFormat: string;
+    salesSequenceDigits: number;
 }
 
-export interface PartijNextNumber extends PartijSettings {
+export interface PartijNextNumber {
+    kind: PartijKind;
+    mode: PartijNumberMode;
+    format: string;
+    sequenceReset: PartijSequenceReset;
+    sequenceDigits: number;
     // Null in modus Own (zelf typen).
     suggestion: string | null;
 }
@@ -17,6 +26,8 @@ export interface PartijNextNumber extends PartijSettings {
 export interface PartijSummary {
     id: number;
     number: string;
+    kind: PartijKind;
+    salesOrderId: number | null;
     status: string;
     note: string | null;
     createdAt: string;
@@ -27,6 +38,14 @@ export interface PartijSummary {
 export interface PartijTotals {
     id: number;
     number: string;
+    kind: PartijKind;
+    // Alleen bij een verkoop-partij: de order (1-op-1), de klant, wat er besteld is en uit welke inkoop-partijen de colli komen.
+    salesOrderId: number | null;
+    salesOrderNumber: string | null;
+    salesOrderStatus: string | null;
+    customerName: string | null;
+    orderedQuantity: number;
+    sourcePartijen: string[];
     status: PartijStatus;
     createdAt: string;
     vendors: string[];
@@ -84,6 +103,8 @@ export interface PartijReceipt {
 export interface PartijSalesOrder {
     salesOrderId: number;
     orderNumber: string | null;
+    salesPartijId: number | null;
+    salesPartijNumber: string | null;
     customerName: string | null;
     status: string;
     unit: string;
@@ -93,7 +114,7 @@ export interface PartijSalesOrder {
 
 export interface PartijHistory {
     occurredAt: string;
-    type: 'Created' | 'NumberCorrected' | 'OrderLinked' | 'Deleted';
+    type: 'Created' | 'NumberCorrected' | 'NumberChanged' | 'OrderLinked' | 'Deleted';
     oldValue: string | null;
     newValue: string | null;
     reason: string | null;
@@ -101,10 +122,24 @@ export interface PartijHistory {
     actorReference: string;
 }
 
+// Een inkoop-partij waaruit een verkoop-partij colli pakt (via de reserveringen).
+export interface PartijSource {
+    partijId: number;
+    number: string | null;
+    vendorName: string | null;
+    product: string | null;
+    unit: string;
+    reservedQuantity: number;
+    shippedQuantity: number;
+}
+
 export interface PartijDetail extends PartijTotals {
     note: string | null;
     createdBy: string;
     linked: boolean;
+    // Het nummer verandert alleen met reden (inkoop-partij met koppelingen; verkoop-partij na reserveren of leveren).
+    numberFixed: boolean;
+    sources: PartijSource[];
     reservedQuantity: number;
     shippedQuantity: number;
     orders: PartijOrder[];
@@ -124,12 +159,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
 
+// De velden van P2 (aantal cijfers, verkoopformaat, soort) ontbreken bij een oudere server; partijService vult dan de standaard in.
 export function isPartijSettings(value: unknown): value is PartijSettings {
-    return isRecord(value) && isString(value.mode) && isString(value.format) && isString(value.sequenceReset);
+    return isRecord(value) && isString(value.mode) && isString(value.format) && isString(value.sequenceReset)
+        && (value.sequenceDigits === undefined || isNumber(value.sequenceDigits)) && (value.salesFormat === undefined || isString(value.salesFormat))
+        && (value.salesSequenceDigits === undefined || isNumber(value.salesSequenceDigits));
+}
+
+export function withSettingsDefaults(settings: PartijSettings): PartijSettings {
+    return { ...settings, sequenceDigits: settings.sequenceDigits ?? 3, salesFormat: settings.salesFormat ?? '{JJ}{MM}{volgnr}', salesSequenceDigits: settings.salesSequenceDigits ?? 3 };
 }
 
 export function isPartijNextNumber(value: unknown): value is PartijNextNumber {
-    return isPartijSettings(value) && isNullableString((value as unknown as Record<string, unknown>).suggestion);
+    return isRecord(value) && isString(value.mode) && isString(value.format) && isNullableString(value.suggestion);
 }
 
 export function isPartijSummary(value: unknown): value is PartijSummary {

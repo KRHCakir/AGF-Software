@@ -24,7 +24,9 @@ describe('PartijNumberingSetting', () => {
             if (call.method === 'PUT') return json(200, call.body);
             if (call.url.includes('/partijen/next-number')) {
                 const params = new URL(call.url).searchParams;
-                return json(200, { mode: 'Auto', format: params.get('format'), sequenceReset: params.get('reset'), suggestion: params.get('format') === '{JJJJ}-{volgnr}' ? '2026-007' : '2611252' });
+                // Verkoop-partijen: eigen formaat en aantal cijfers (2 geeft 261140).
+                if (params.get('kind') === 'Sales') return json(200, { kind: 'Sales', mode: 'Auto', format: params.get('format'), sequenceReset: params.get('reset'), suggestion: params.get('digits') === '2' ? '261140' : '2611140' });
+                return json(200, { mode: 'Auto', format: params.get('format'), sequenceReset: params.get('reset'), suggestion: params.get('format') === '{JJJJ}-{volgnr}' ? '2026-007' : params.get('format') === '5{JJ}{MM}{volgnr}' ? '52611002' : '2611252' });
             }
             return json(200, { mode: 'Auto', format: '{JJ}{MM}{volgnr}', sequenceReset: 'Yearly' });
         }) as typeof fetch;
@@ -69,6 +71,26 @@ describe('PartijNumberingSetting', () => {
         await act(async () => { mounted.container.querySelector<HTMLInputElement>('input[value="Own"]')!.click(); });
         await act(async () => { mounted.button('settings_partij_save')!.click(); });
         await mounted.waitFor(() => mounted.hasText('settings_partij_saved'), 'saved');
-        assert.deepEqual(calls.find((call) => call.method === 'PUT')!.body, { mode: 'Own', format: '{JJ}{MM}{volgnr}', sequenceReset: 'Yearly' });
+        assert.deepEqual(calls.find((call) => call.method === 'PUT')!.body,
+            { mode: 'Own', format: '{JJ}{MM}{volgnr}', sequenceReset: 'Yearly', sequenceDigits: 3, salesFormat: '{JJ}{MM}{volgnr}', salesSequenceDigits: 3 });
+    });
+
+    test('fixed text in the purchase format and a second series for sales lots with its own digits', async () => {
+        const salesExample = () => mounted.container.querySelector('[data-testid="partij-numbering-sales-example"]')!.textContent ?? '';
+        await mounted.render(<PartijNumberingSetting previewDelayMs={0} />);
+        await mounted.waitFor(() => example().includes('2611252') && salesExample().includes('2611140'), 'both examples');
+        await act(async () => { setValue(format(), '5{JJ}{MM}{volgnr}'); });
+        await mounted.waitFor(() => example().includes('52611002'), 'purchase example with a fixed 5');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="salesSequenceDigits-input"]')!, '2'); });
+        await mounted.waitFor(() => salesExample().includes('261140'), 'sales example with two digits');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="sequenceDigits-input"]')!, '0'); });
+        await act(async () => { mounted.button('settings_partij_save')!.click(); });
+        assert.ok(mounted.hasText('settings_partij_digits_error'));
+        assert.equal(calls.filter((call) => call.method === 'PUT').length, 0);
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="sequenceDigits-input"]')!, '3'); });
+        await act(async () => { mounted.button('settings_partij_save')!.click(); });
+        await mounted.waitFor(() => mounted.hasText('settings_partij_saved'), 'saved');
+        assert.deepEqual(calls.find((call) => call.method === 'PUT')!.body,
+            { mode: 'Auto', format: '5{JJ}{MM}{volgnr}', sequenceReset: 'Yearly', sequenceDigits: 3, salesFormat: '{JJ}{MM}{volgnr}', salesSequenceDigits: 2 });
     });
 });
