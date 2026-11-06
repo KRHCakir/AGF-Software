@@ -38,5 +38,9 @@ namespace AgfAdmin.Models
         
         [Column(TypeName = "decimal(18,2)")]
         public decimal VATAmount { get; set; }
+
+        // Versie van de verdeling over partijen (PartijCost): bij elke wijziging +1, concurrency-token, zodat twee gelijktijdige
+        // herverdelingen nooit stil over elkaar heen gaan.
+        public int AllocationVersion { get; set; }
     }
 }
