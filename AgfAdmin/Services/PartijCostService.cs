@@ -186,6 +186,12 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<InvoiceAllocationsDto>.Conflict("The allocation of this line was changed at the same time; reload and try again.");
             }
+            catch (TraceabilityViolationException)
+            {
+                // De verdeling is hierboven al tegen het regelbedrag gevalideerd en de auditregels staan er; de guard ziet bij het opslaan
+                // alleen méér dan het regelbedrag als een gelijktijdige verdeling van dezelfde regel net is opgeslagen: dat is een conflict (409).
+                return ServiceResult<InvoiceAllocationsDto>.Conflict("The allocation of this line was changed at the same time; reload and try again.");
+            }
             catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
                 return ServiceResult<InvoiceAllocationsDto>.Conflict("The allocation of this line was changed at the same time; reload and try again.");
