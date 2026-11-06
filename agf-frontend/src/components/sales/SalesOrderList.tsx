@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
@@ -70,6 +71,8 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                         {orderLabel(order)} · {order.customerName ?? t('availability_unknown')}
                                     </button>
                                     <span className="block text-xs text-gray-600">
+                                        {order.salesPartijNumber && <span className="font-mono text-gray-900" data-testid="list-sales-partij">{t('sales_partij_short')}{' '}
+                                            {order.salesPartijId ? <Link href={`/partijen?id=${order.salesPartijId}`} className="text-blue-800 underline-offset-2 hover:underline">{order.salesPartijNumber}</Link> : order.salesPartijNumber} · </span>}
                                         {order.customerReference ? `${t('sales_reference_short')} ${order.customerReference}` : t('sales_no_reference')}
                                     </span>
                                     {/* Indicatoren van verkopen vóór aankomst: Tekort (niet gedekt door voorraad of verwachte aanvoer) en Wacht op voorraad. */}

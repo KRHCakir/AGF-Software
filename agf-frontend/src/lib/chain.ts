@@ -213,7 +213,9 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
                 order.status === 'Cancelled' ? { key: 'chain_cancelled' } : qty(mixed, { key: 'chain_demand', params: { quantity: demand, unit } }),
                 ...(shortage > 0 ? [qty(mixed, { key: 'chain_shortage', params: { quantity: shortage, unit } })] : []),
             ],
-            links: [{ label: orderLabel(order), href: `/sales-orders?orderId=${order.id}` }],
+            // De verkoop-partij (1-op-1 met de order) naast het VO-nummer, met link naar het partijdetail.
+            links: [{ label: orderLabel(order), href: `/sales-orders?orderId=${order.id}` },
+                ...(order.salesPartijId ? [{ label: order.salesPartijNumber ?? `#${order.salesPartijId}`, key: 'chain_sales_partij_link', params: { number: order.salesPartijNumber ?? `#${order.salesPartijId}` }, href: `/partijen?id=${order.salesPartijId}` }] : [])],
         },
         {
             key: 'delivery', state: shipped <= 0 ? 'empty' : (mixed ? metPerUnit(order.lines, (line) => line.quantity, (line) => line.deliveredQuantity) : delivered >= demand) ? 'done' : 'partial',

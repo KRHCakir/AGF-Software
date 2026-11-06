@@ -224,6 +224,15 @@ describe('chain: the lot links to its lot page', () => {
         assert.deepEqual(step(steps, 'order').links.at(-1), { label: '2610251', key: 'chain_partij_link', params: { number: '2610251' }, href: '/partijen?id=7' });
     });
 
+    test('the sales lot stands next to the order number on the sales step and links to the lot detail', () => {
+        const steps = salesOrderChain(salesOrder([salesLine({})], { orderNumber: 'VO-2026-0001', salesPartijId: 40, salesPartijNumber: '261140' }));
+        assert.deepEqual(step(steps, 'sales').links, [
+            { label: 'VO-2026-0001', href: '/sales-orders?orderId=1' },
+            { label: '261140', key: 'chain_sales_partij_link', params: { number: '261140' }, href: '/partijen?id=40' },
+        ]);
+        assert.deepEqual(step(salesOrderChain(salesOrder([salesLine({})])), 'sales').links, [{ label: '#1', href: '/sales-orders?orderId=1' }]);
+    });
+
     test('from the purchase order: the lot of the order next to the order itself; no lot, no extra link', () => {
         assert.deepEqual(hrefs(step(purchaseOrderChain(order({ partijId: 7, partijNumber: '2610251' }), 'order'), 'order')), ['/purchase-orders?id=3', '/partijen?id=7']);
         assert.equal(step(purchaseOrderChain(order(), 'order'), 'order').links.length, 1);

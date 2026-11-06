@@ -47,6 +47,8 @@ export interface CreateSalesOrderRequest {
     // Interne opmerking bij deze order: alleen intern zichtbaar, telt mee in de replayvergelijking.
     internalNote: string | null;
     requestedDeliveryDate: string;
+    // Verkoop-partij: alleen een zelf getypt nummer; weggelaten = het voorgestelde nummer (de server kent het echte toe bij opslaan).
+    salesPartijNumber?: string;
     lines: CreateSalesOrderLineRequest[];
 }
 
@@ -300,6 +302,11 @@ export interface SalesOrder {
     id: number;
     // Eigen verkoopordernummer VO-jjjj-nnnn; ontbreekt in oudere antwoorden.
     orderNumber?: string;
+    // Verkoop-partij (1-op-1 met de order) naast het VO-nummer; ontbreekt in oudere antwoorden. Fixed: er is iets gereserveerd of
+    // geleverd (of de order is geannuleerd), het nummer verandert dan alleen met reden.
+    salesPartijId?: number | null;
+    salesPartijNumber?: string | null;
+    salesPartijFixed?: boolean;
     requestId: string;
     customerId: number;
     customerName: string | null;
@@ -466,6 +473,8 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && (value.internalNote === undefined || isNullableString(value.internalNote))
         && (value.creditWarning === undefined || value.creditWarning === null || isCreditWarning(value.creditWarning))
         && (value.orderNumber === undefined || isString(value.orderNumber))
+        && (value.salesPartijNumber === undefined || isNullableString(value.salesPartijNumber))
+        && (value.salesPartijId === undefined || value.salesPartijId === null || isNumber(value.salesPartijId))
         && (value.shortageWarnings === undefined || value.shortageWarnings === null || isArrayOf(value.shortageWarnings, isSalesShortageWarning))
         && (value.shortage === undefined || typeof value.shortage === 'boolean')
         && (value.awaitingStock === undefined || typeof value.awaitingStock === 'boolean')
