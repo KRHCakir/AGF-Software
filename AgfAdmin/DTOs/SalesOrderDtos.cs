@@ -8,6 +8,8 @@ namespace AgfAdmin.DTOs
         // Interne opmerking bij deze order (alleen intern; telt mee in de replayvergelijking).
         public string InternalNote { get; set; }
         public DateTimeOffset? RequestedDeliveryDate { get; set; }
+        // Verkoop-partijnummer (261140): leeg = het voorgestelde nummer (modus Auto), anders zelf getypt (verplicht in modus Own).
+        public string SalesPartijNumber { get; set; }
         public List<CreateSalesOrderLineDto> Lines { get; set; }
     }
 
@@ -44,6 +46,11 @@ namespace AgfAdmin.DTOs
         public int Id { get; set; }
         // Eigen verkoopordernummer VO-jjjj-nnnn.
         public string OrderNumber { get; set; }
+        // Verkoop-partij (1-op-1 met de order): het nummer waarmee op papier gewerkt wordt, naast het VO-nummer. Fixed = er is iets
+        // gereserveerd of geleverd (of de order is geannuleerd): het nummer verandert dan alleen met reden.
+        public int? SalesPartijId { get; set; }
+        public string SalesPartijNumber { get; set; }
+        public bool SalesPartijFixed { get; set; }
         public Guid RequestId { get; set; }
         public int CustomerId { get; set; }
         public string CustomerName { get; set; }
