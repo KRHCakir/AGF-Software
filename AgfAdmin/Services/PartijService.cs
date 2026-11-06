@@ -31,12 +31,30 @@ namespace AgfAdmin.Services
         public async Task<PartijSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
         {
             var settings = await SettingsAsync(_db, cancellationToken);
-            return new PartijSettingsDto { Mode = settings.PartijNumberMode, Format = settings.PartijNumberFormat, SequenceReset = settings.PartijSequenceReset };
+            return new PartijSettingsDto
+            {
+                Mode = settings.PartijNumberMode, Format = settings.PartijNumberFormat, SequenceReset = settings.PartijSequenceReset,
+                SequenceDigits = settings.PartijSequenceDigits, SalesFormat = settings.SalesPartijNumberFormat, SalesSequenceDigits = settings.SalesPartijSequenceDigits
+            };
         }
 
         public async Task<ServiceResult<PartijSettingsDto>> UpdateSettingsAsync(PartijSettingsDto request, CancellationToken cancellationToken = default)
         {
             var errors = SettingsErrors(request?.Mode, request?.Format, request?.SequenceReset);
+            // Verkoopformaat en aantal cijfers zijn later toegevoegd: weggelaten = ongewijzigd laten.
+            var salesFormatError = request?.SalesFormat == null ? null : PartijRules.FormatError(request.SalesFormat);
+            if (salesFormatError != null)
+            {
+                errors["salesFormat"] = new[] { salesFormatError };
+            }
+            if (request?.SequenceDigits != null && !PartijRules.IsSequenceDigits(request.SequenceDigits.Value))
+            {
+                errors["sequenceDigits"] = new[] { DigitsMessage };
+            }
+            if (request?.SalesSequenceDigits != null && !PartijRules.IsSequenceDigits(request.SalesSequenceDigits.Value))
+            {
+                errors["salesSequenceDigits"] = new[] { DigitsMessage };
+            }
             if (errors.Count > 0)
             {
                 return ServiceResult<PartijSettingsDto>.Validation(errors);
@@ -50,42 +68,76 @@ namespace AgfAdmin.Services
             settings.PartijNumberMode = request.Mode;
             settings.PartijNumberFormat = request.Format.Trim();
             settings.PartijSequenceReset = request.SequenceReset;
+            if (request.SalesFormat != null)
+            {
+                settings.SalesPartijNumberFormat = request.SalesFormat.Trim();
+            }
+            if (request.SequenceDigits != null)
+            {
+                settings.PartijSequenceDigits = request.SequenceDigits.Value;
+            }
+            if (request.SalesSequenceDigits != null)
+            {
+                settings.SalesPartijSequenceDigits = request.SalesSequenceDigits.Value;
+            }
             await _db.SaveChangesAsync(cancellationToken);
             return ServiceResult<PartijSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
         }
 
-        // Volgende voorgestelde nummer voor vandaag; met format/reset een voorbeeld voor nog niet opgeslagen instellingen.
-        // Een voorstel is geen reservering: bij opslaan wordt het nummer opnieuw (in de transactie) toegekend.
-        public async Task<ServiceResult<PartijNextNumberDto>> NextNumberAsync(string format = null, string reset = null, CancellationToken cancellationToken = default)
+        // Volgende voorgestelde nummer van deze soort voor vandaag; met format/reset/digits een voorbeeld voor nog niet opgeslagen
+        // instellingen. Een voorstel is geen reservering: bij opslaan wordt het nummer opnieuw (in de transactie) toegekend.
+        public async Task<ServiceResult<PartijNextNumberDto>> NextNumberAsync(string format = null, string reset = null, string kind = null, int? digits = null,
+            CancellationToken cancellationToken = default)
         {
+            var effectiveKind = string.IsNullOrWhiteSpace(kind) ? PartijRules.KindPurchase : kind.Trim();
+            if (!PartijRules.IsKind(effectiveKind))
+            {
+                return ServiceResult<PartijNextNumberDto>.Validation(new Dictionary<string, string[]> { ["kind"] = new[] { $"Kind must be one of: {string.Join(", ", PartijRules.Kinds)}." } });
+            }
             var settings = await SettingsAsync(_db, cancellationToken);
-            var effectiveFormat = string.IsNullOrWhiteSpace(format) ? settings.PartijNumberFormat : format.Trim();
+            var effectiveFormat = string.IsNullOrWhiteSpace(format) ? FormatOf(settings, effectiveKind) : format.Trim();
             var effectiveReset = string.IsNullOrWhiteSpace(reset) ? settings.PartijSequenceReset : reset.Trim();
+            var effectiveDigits = digits ?? DigitsOf(settings, effectiveKind);
             var errors = SettingsErrors(settings.PartijNumberMode, effectiveFormat, effectiveReset);
+            if (!PartijRules.IsSequenceDigits(effectiveDigits))
+            {
+                errors["sequenceDigits"] = new[] { DigitsMessage };
+            }
             if (errors.Count > 0)
             {
                 return ServiceResult<PartijNextNumberDto>.Validation(errors);
             }
-            var next = await AllocateAsync(_db, effectiveFormat, effectiveReset, _db.BusinessCalendar.Today(), cancellationToken);
+            var next = await AllocateAsync(_db, effectiveKind, effectiveFormat, effectiveReset, effectiveDigits, _db.BusinessCalendar.Today(), async: true, cancellationToken);
             return ServiceResult<PartijNextNumberDto>.Ok(new PartijNextNumberDto
             {
+                Kind = effectiveKind,
                 Mode = settings.PartijNumberMode,
                 Format = effectiveFormat,
                 SequenceReset = effectiveReset,
+                SequenceDigits = effectiveDigits,
                 Suggestion = settings.PartijNumberMode == PartijRules.ModeAuto ? next.Number : null
             });
         }
 
+        internal static string FormatOf(CompanySettings settings, string kind) =>
+            kind == PartijRules.KindSales ? settings.SalesPartijNumberFormat : settings.PartijNumberFormat;
+
+        internal static int DigitsOf(CompanySettings settings, string kind) =>
+            kind == PartijRules.KindSales ? settings.SalesPartijSequenceDigits : settings.PartijSequenceDigits;
+
+        private static readonly string DigitsMessage = $"The sequence needs between {PartijRules.MinSequenceDigits} and {PartijRules.MaxSequenceDigits} digits.";
+
         // ---------------- Zoeken op nummer (dubbelcontrole) ----------------
 
-        public async Task<PartijSummaryDto> FindByNumberAsync(string number, CancellationToken cancellationToken = default)
+        // Binnen één soort: een inkoop- en een verkoop-partij mogen hetzelfde nummer hebben (uniek per soort).
+        public async Task<PartijSummaryDto> FindByNumberAsync(string number, string kind = PartijRules.KindPurchase, CancellationToken cancellationToken = default)
         {
             var key = PartijRules.NumberKey(number);
-            if (key == null)
+            if (key == null || !PartijRules.IsKind(kind))
             {
                 return null;
             }
-            var partij = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.NumberKey == key, cancellationToken);
+            var partij = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.Kind == kind && p.NumberKey == key, cancellationToken);
             return partij == null ? null : await SummaryAsync(partij, cancellationToken);
         }
 
@@ -118,7 +170,7 @@ namespace AgfAdmin.Services
                         : ServiceResult<PartijSummaryDto>.Conflict($"RequestId {request.RequestId} was already used for lot {replay.Number}.");
                 }
 
-                var built = await BuildNewAsync<PartijSummaryDto>(request.Number, "number", cancellationToken);
+                var built = await BuildNewAsync<PartijSummaryDto>(request.Number, "number", PartijRules.KindPurchase, cancellationToken);
                 if (built.Refused != null)
                 {
                     // Een gelijktijdige herhaling van dezelfde aanvraag kan de partij net hebben opgeslagen: dan is dit een replay, geen nummerconflict.
@@ -147,9 +199,9 @@ namespace AgfAdmin.Services
             }
         }
 
-        // Een nieuwe (nog niet opgeslagen) partij: een eigen nummer na de dubbelcontrole, of het volgende voorgestelde nummer (alleen in
-        // modus Auto). Een bestaand nummer geeft 409 PARTIJ_EXISTS met die partij, nooit een tweede partij.
-        internal async Task<(Partij Partij, ServiceResult<T> Refused)> BuildNewAsync<T>(string requestedNumber, string field, CancellationToken cancellationToken)
+        // Een nieuwe (nog niet opgeslagen) partij van deze soort: een eigen nummer na de dubbelcontrole, of het volgende voorgestelde
+        // nummer (alleen in modus Auto). Een bestaand nummer van dezelfde soort geeft 409 PARTIJ_EXISTS met die partij, nooit een tweede.
+        internal async Task<(Partij Partij, ServiceResult<T> Refused)> BuildNewAsync<T>(string requestedNumber, string field, string kind, CancellationToken cancellationToken)
         {
             var settings = await SettingsAsync(_db, cancellationToken);
             var now = DateTime.UtcNow;
@@ -163,10 +215,11 @@ namespace AgfAdmin.Services
                         [field] = new[] { "Numbering is set to own numbers only: type the lot number." }
                     }));
                 }
-                var next = await AllocateAsync(_db, settings.PartijNumberFormat, settings.PartijSequenceReset, _db.BusinessCalendar.Today(), cancellationToken);
+                var next = await AllocateAsync(_db, kind, FormatOf(settings, kind), settings.PartijSequenceReset, DigitsOf(settings, kind), _db.BusinessCalendar.Today(),
+                    async: true, cancellationToken);
                 return (new Partij
                 {
-                    Number = next.Number, NumberKey = PartijRules.NumberKey(next.Number), SequencePeriod = next.Period, Sequence = next.Sequence,
+                    Kind = kind, Number = next.Number, NumberKey = PartijRules.NumberKey(next.Number), SequencePeriod = next.Period, Sequence = next.Sequence,
                     CreatedAt = now, CreatedBy = actor
                 }, null);
             }
@@ -177,16 +230,18 @@ namespace AgfAdmin.Services
             {
                 return (null, ServiceResult<T>.Validation(new Dictionary<string, string[]> { [field] = new[] { numberError } }));
             }
-            var existing = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.NumberKey == PartijRules.NumberKey(number), cancellationToken);
+            var existing = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.Kind == kind && p.NumberKey == PartijRules.NumberKey(number), cancellationToken);
             if (existing != null)
             {
                 return (null, await ExistsConflictAsync<T>(existing, cancellationToken));
             }
-            return (new Partij { Number = number, NumberKey = PartijRules.NumberKey(number), CreatedAt = now, CreatedBy = actor }, null);
+            return (new Partij { Kind = kind, Number = number, NumberKey = PartijRules.NumberKey(number), CreatedAt = now, CreatedBy = actor }, null);
         }
 
         // ---------------- Nummer corrigeren ----------------
 
+        // Een verkoop-partij waarvan de order nog niets gereserveerd of geleverd heeft (en niet geannuleerd is) mag zonder reden worden
+        // aangepast (NumberChanged); daarna, en bij elke inkoop-partij, alleen met reden (NumberCorrected). Altijd met historie.
         public async Task<ServiceResult<PartijSummaryDto>> CorrectNumberAsync(int id, CorrectPartijNumberDto request, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, string[]>();
@@ -347,22 +402,37 @@ namespace AgfAdmin.Services
 
         // ---------------- Gedeeld ----------------
 
-        // Volgende vrije voorstel in de periode: hoogste opgeslagen volgnummer + 1, en verder zolang dat nummer al met de hand bestaat
-        // (een eigen nummer verschuift de teller niet). Uniek gemaakt door de database (periode + volgnummer, en de sleutel).
-        internal static async Task<(string Number, string Period, int Sequence)> AllocateAsync(AppDbContext db, string format, string reset, DateOnly today, CancellationToken cancellationToken)
+        // Volgende vrije voorstel van deze soort in de periode: hoogste volgnummer + 1 (opgeslagen, of al in deze save toegekend), en
+        // verder zolang dat nummer al met de hand bestaat (een eigen nummer verschuift de teller niet). Elke soort heeft een eigen teller.
+        // Uniek gemaakt door de database (soort + periode + volgnummer, en soort + sleutel).
+        internal static async Task<(string Number, string Period, int Sequence)> AllocateAsync(AppDbContext db, string kind, string format, string reset, int digits,
+            DateOnly today, bool async, CancellationToken cancellationToken)
         {
             var period = PartijRules.SequencePeriod(reset, today);
-            var sequence = (await db.Partijen.AsNoTracking().Where(p => p.SequencePeriod == period).MaxAsync(p => p.Sequence, cancellationToken) ?? 0) + 1;
+            var storedQuery = db.Partijen.AsNoTracking().Where(p => p.Kind == kind && p.SequencePeriod == period).Select(p => p.Sequence);
+            var stored = (async ? await storedQuery.MaxAsync(cancellationToken) : storedQuery.Max()) ?? 0;
+            var pending = db.ChangeTracker.Entries<Partij>().Where(e => e.State == EntityState.Added && e.Entity.Kind == kind).Select(e => e.Entity).ToList();
+            var sequence = Math.Max(stored, pending.Where(p => p.SequencePeriod == period).Select(p => p.Sequence ?? 0).DefaultIfEmpty(0).Max()) + 1;
             for (var skipped = 0; skipped < MaxSkippedNumbers; skipped++, sequence++)
             {
-                var number = PartijRules.Format(format, today, sequence);
+                var number = PartijRules.Format(format, today, sequence, digits);
                 var key = PartijRules.NumberKey(number);
-                if (!await db.Partijen.AsNoTracking().AnyAsync(p => p.NumberKey == key, cancellationToken))
+                var takenQuery = db.Partijen.AsNoTracking().Where(p => p.Kind == kind && p.NumberKey == key);
+                if (pending.All(p => p.NumberKey != key) && !(async ? await takenQuery.AnyAsync(cancellationToken) : takenQuery.Any()))
                 {
                     return (number, period, sequence);
                 }
             }
             throw new InvalidOperationException($"No free lot number after {MaxSkippedNumbers} numbers in period '{period}'.");
+        }
+
+        // Het nummer van een verkoop-partij ligt vast zodra er op haar order iets gereserveerd (of toegewezen, en dus ook geleverd) is,
+        // of als de order geannuleerd is. Daarvoor mag het zonder reden worden aangepast (regel 24).
+        internal static async Task<bool> SalesNumberFixedAsync(AppDbContext db, int salesOrderId, bool async, CancellationToken cancellationToken)
+        {
+            var query = db.SalesOrders.AsNoTracking().Where(o => o.Id == salesOrderId
+                && (o.Status != ReservationRules.OrderStatusOpen || o.Lines.Any(l => db.StockReservations.Any(r => r.SalesOrderLineId == l.Id))));
+            return async ? await query.AnyAsync(cancellationToken) : query.Any();
         }
 
         internal static async Task<CompanySettings> SettingsAsync(AppDbContext db, CancellationToken cancellationToken) =>
@@ -419,6 +489,8 @@ namespace AgfAdmin.Services
         {
             Id = partij.Id,
             Number = partij.Number,
+            Kind = partij.Kind,
+            SalesOrderId = partij.SalesOrderId,
             Status = partij.Status,
             Note = partij.Note,
             CreatedAt = DateTime.SpecifyKind(partij.CreatedAt, DateTimeKind.Utc),

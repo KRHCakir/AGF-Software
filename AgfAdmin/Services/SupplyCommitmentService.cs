@@ -133,9 +133,14 @@ namespace AgfAdmin.Services
         {
             if (request.PartijId != null)
             {
-                if (!await _db.Partijen.AsNoTracking().AnyAsync(p => p.Id == request.PartijId, cancellationToken))
+                var kind = await _db.Partijen.AsNoTracking().Where(p => p.Id == request.PartijId).Select(p => p.Kind).SingleOrDefaultAsync(cancellationToken);
+                if (kind == null)
                 {
                     return ServiceResult<SupplyCommitmentDto>.NotFound($"Lot {request.PartijId} does not exist.");
+                }
+                if (kind != PartijRules.KindPurchase)
+                {
+                    return ServiceResult<SupplyCommitmentDto>.Validation(new Dictionary<string, string[]> { ["partijId"] = new[] { $"Lot {request.PartijId} is a sales lot; a purchase order needs a purchase lot." } });
                 }
                 candidate.PartijId = request.PartijId;
                 foreach (var line in candidate.Lines)
@@ -145,7 +150,7 @@ namespace AgfAdmin.Services
             }
             else if (request.NewPartij != null)
             {
-                var built = await new PartijService(_db, _user).BuildNewAsync<SupplyCommitmentDto>(request.NewPartij.Number, "newPartij.number", cancellationToken);
+                var built = await new PartijService(_db, _user).BuildNewAsync<SupplyCommitmentDto>(request.NewPartij.Number, "newPartij.number", PartijRules.KindPurchase, cancellationToken);
                 if (built.Refused != null)
                 {
                     return built.Refused;

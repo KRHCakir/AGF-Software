@@ -21,22 +21,23 @@ namespace AgfAdmin.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] int page = 1, [FromQuery] int pageSize = PartijService.DefaultPageSize) =>
-            this.ToActionResult(await _service.ListAsync(query, status, page, pageSize, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] string kind, [FromQuery] int page = 1, [FromQuery] int pageSize = PartijService.DefaultPageSize) =>
+            this.ToActionResult(await _service.ListAsync(query, status, page, pageSize, HttpContext?.RequestAborted ?? default, kind));
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id) =>
             this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
 
         [HttpGet("next-number")]
-        public async Task<IActionResult> NextNumber([FromQuery] string format, [FromQuery] string reset) =>
-            this.ToActionResult(await _service.NextNumberAsync(format, reset, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> NextNumber([FromQuery] string format, [FromQuery] string reset, [FromQuery] string kind, [FromQuery] int? digits) =>
+            this.ToActionResult(await _service.NextNumberAsync(format, reset, kind, digits, HttpContext?.RequestAborted ?? default));
 
-        // Dubbelcontrole: de partij met dezelfde sleutel (hoofdletters, spaties en streepjes tellen niet), of 204 als die er niet is.
+        // Dubbelcontrole: de partij van deze soort (standaard Inkoop) met dezelfde sleutel (hoofdletters, spaties en streepjes tellen
+        // niet), of 204 als die er niet is.
         [HttpGet("by-number")]
-        public async Task<IActionResult> ByNumber([FromQuery] string number)
+        public async Task<IActionResult> ByNumber([FromQuery] string number, [FromQuery] string kind)
         {
-            var partij = await _service.FindByNumberAsync(number, HttpContext?.RequestAborted ?? default);
+            var partij = await _service.FindByNumberAsync(number, string.IsNullOrWhiteSpace(kind) ? PartijRules.KindPurchase : kind.Trim(), HttpContext?.RequestAborted ?? default);
             return partij == null ? NoContent() : Ok(partij);
         }
 
