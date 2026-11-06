@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, json, setValue } from '../../test/reactHarness.ts';
 import type { InvoiceLineAllocation } from '../../types/partijCost';
 import AllocationPanel from './AllocationPanel';
+import { newestLines } from './PurchaseInvoiceDetail';
 
 // "Aan welke partij hoort dit?" door de echte componentlevenscyclus: €5.000 handling over twee verkoop-partijen (€500 + €1.000, rest €3.500
 // algemene kosten als waarschuwing), meer dan het regelbedrag geweigerd naast Opslaan, verdelen naar kg met een partij zonder kg, een
@@ -111,6 +112,35 @@ describe('AllocationPanel', () => {
         assert.deepEqual(calls.find((call) => call.method === 'PUT')!.body!.allocations, [{ partijId: 1, amount: 5000 }]);
     });
 
+    test('while saving nothing can be edited; a reloaded allocation shows its own kind', async () => {
+        let release: (response: Response) => void = () => {};
+        putAnswer = () => { throw new Error('not used'); };
+        globalThis.fetch = (async (inputUrl: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.method === 'PUT') return new Promise<Response>((resolve) => { release = resolve; });
+            return json(200, { total: 1, page: 1, pageSize: 8, items: [lot(1, '261140', 'Sales')] });
+        }) as typeof fetch;
+        let setLine: (line: InvoiceLineAllocation) => void = () => {};
+        function Reloadable() {
+            const [current, set] = useState(line());
+            setLine = set;
+            return <AllocationPanel invoiceId={7} line={current} canAllocate onSaved={() => {}} onReload={() => {}} />;
+        }
+        await mounted.render(<Reloadable />);
+        await click(tour('allocation-mode', 'Sales'));
+        await mounted.waitFor(() => tour('allocation-pick', '261140') !== null, 'found');
+        await click(tour('allocation-pick', '261140'));
+        await act(async () => { setValue(input('line-41-amount-1'), '500'); });
+        await click(tour('allocation-save'));
+        // Uitgeschakeld via de omliggende fieldset (:disabled), zoals de browser het ook doet.
+        assert.equal(input('line-41-amount-1').matches(':disabled'), true, 'amounts locked while saving');
+        assert.equal(tour('allocation-spread', 'kg')!.matches(':disabled'), true);
+        await act(async () => { release(json(200, { invoiceId: 7, currency: 'EUR', canAllocate: true, lines: [line({ version: 1 })] })); });
+        // Herladen met partijen van een ander (versie 2): de soort volgt de geladen verdeling.
+        await act(async () => { setLine(line({ version: 2, allocations: [{ partijId: 3, number: '52611002', partijKind: 'Purchase', amount: 200 }] })); });
+        assert.equal((tour('allocation-mode', 'Purchase') as HTMLInputElement).checked, true);
+        assert.equal(input('line-41-amount-3').value, '200,00');
+    });
+
     test('saving another line of the invoice keeps the unsaved draft of this line', async () => {
         let setOther: (line: InvoiceLineAllocation) => void = () => {};
         function TwoLines() {
@@ -164,5 +194,11 @@ describe('AllocationPanel', () => {
         await mounted.waitFor(() => saved.length === 1, 'saved');
         assert.deepEqual(calls.find((call) => call.method === 'PUT')!.body!.allocations, []);
         assert.equal(calls.find((call) => call.method === 'PUT')!.body!.expectedVersion, 3);
+    });
+
+    test('an older answer never puts back an older state of another line', () => {
+        const current = { invoiceId: 7, currency: 'EUR', canAllocate: true, lines: [line({ lineId: 1, version: 3 }), line({ lineId: 2, version: 1 })] };
+        const older = { invoiceId: 7, currency: 'EUR', canAllocate: true, lines: [line({ lineId: 1, version: 2 }), line({ lineId: 2, version: 2 })] };
+        assert.deepEqual(newestLines(current, older).lines.map((item) => [item.lineId, item.version]), [[1, 3], [2, 2]]);
     });
 });

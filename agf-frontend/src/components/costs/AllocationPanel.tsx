@@ -41,15 +41,17 @@ const rowsFrom = (line: InvoiceLineAllocation): Row[] => line.allocations.map((a
 // "Aan welke partij hoort dit?" bij één regel van een inkoopfactuur: algemene kosten (standaard), of een of meer inkoop- en/of
 // verkoop-partijen met elk een bedrag excl. btw. Samen nooit meer dan het regelbedrag (harde melding naast Opslaan); een rest is
 // algemene kosten (waarschuwing). Verdeel gelijk / naar kg / naar colli vullen de bedragen voor; opslaan schrijft historie.
-export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved, onReload }: {
+export default function AllocationPanel({ invoiceId, line, canAllocate, currency = 'EUR', onSaved, onReload }: {
     invoiceId: number;
+    // Valuta van de factuur (alleen voor de weergave; verdelen kan alleen in euro).
+    currency?: string;
     line: InvoiceLineAllocation;
     canAllocate: boolean;
     onSaved: (allocations: InvoiceAllocations) => void;
     onReload: () => void;
 }) {
     const { t, locale } = useTranslation();
-    const money = (value: number) => formatMoney(value, 'EUR', locale);
+    const money = (value: number) => formatMoney(value, currency, locale);
     const [mode, setMode] = useState<Mode>(() => (line.allocations.length === 0 ? 'General' : line.allocations[0].partijKind));
     const [rows, setRows] = useState<Row[]>(() => rowsFrom(line));
     const [query, setQuery] = useState('');
@@ -65,7 +67,12 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
     // Nieuwe stand van de server (na opslaan of opnieuw laden): de regels volgen; de melding "opgeslagen" blijft staan tot de gebruiker iets wijzigt.
     // Alleen bij een nieuwe stand van déze regel (andere versie): zo wist opslaan op een andere regel van de factuur geen concept hier.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { setRows(rowsFrom(line)); setSkipped(null); }, [line.lineId, line.version]);
+    // De soort volgt de geladen verdeling (geen partijen = algemene kosten), zodat een herladen verdeling nooit verborgen blijft.
+    useEffect(() => {
+        setRows(rowsFrom(line));
+        setSkipped(null);
+        setMode(line.allocations.length === 0 ? 'General' : line.allocations[0].partijKind);
+    }, [line.lineId, line.version]);
 
     // Zoeken binnen de gekozen soort op nummer, leverancier, klant, VO-nummer en product (de server zoekt).
     useEffect(() => {
@@ -147,7 +154,8 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
             {!canAllocate && <p className="text-sm text-amber-900">{t('allocation_not_euro')}</p>}
 
             {mode !== 'General' && canAllocate && (
-                <div className="space-y-2">
+                // Tijdens opslaan niets wijzigen: wat dan getypt zou worden, ging niet mee en verdween bij de nieuwe stand.
+                <fieldset className="space-y-2" disabled={busy}>
                     <div>
                         <label htmlFor={`${prefix}-search`} className="text-xs font-medium text-gray-700">{t(mode === 'Sales' ? 'allocation_search_sales' : 'allocation_search_purchase')}</label>
                         <input id={`${prefix}-search`} type="search" value={query} onChange={(event) => setQuery(event.target.value)} className={inputClass} data-tour="allocation-search"
@@ -195,7 +203,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
                             ))}
                         </div>
                     )}
-                </div>
+                </fieldset>
             )}
 
             <p className="text-sm text-gray-800" data-testid={`${prefix}-summary`} data-tour="allocation-summary">

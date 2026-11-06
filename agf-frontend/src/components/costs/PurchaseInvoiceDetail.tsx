@@ -14,6 +14,15 @@ import AllocationPanel from './AllocationPanel';
 
 // Inkoopfactuur bekijken en per regel de kosten verdelen over partijen (bedragen excl. btw, in euro). Een factuur van goederen via een
 // inkooporder en een directe factuur van derden werken hier hetzelfde.
+// Een antwoord bevat alle regels van de factuur. Komen twee antwoorden in omgekeerde volgorde binnen, dan wint per regel de hoogste versie:
+// een ouder antwoord zet een nieuwere stand van een andere regel nooit terug.
+export function newestLines(current: InvoiceAllocations, next: InvoiceAllocations): InvoiceAllocations {
+    return { ...next, lines: next.lines.map((line) => {
+        const known = current.lines.find((candidate) => candidate.lineId === line.lineId);
+        return known !== undefined && known.version > line.version ? known : line;
+    }) };
+}
+
 export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceId: number; onClose: () => void }) {
     const { t, locale } = useTranslation();
     const [state, setState] = useState<LoadState<{ invoice: PurchaseInvoice; allocations: InvoiceAllocations }>>({ status: 'loading' });
@@ -46,7 +55,7 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                 <p className="text-sm text-gray-800">
                     {invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'} · {t('invoice_detail_totals', { net: money(invoice.subTotal), vat: money(invoice.vatAmount), gross: money(invoice.totalAmount) })}
                 </p>
-                <p className="text-sm text-gray-700" data-testid="invoice-general">{t('invoice_detail_general', { amount: formatMoney(general, 'EUR', locale) })}</p>
+                <p className="text-sm text-gray-700" data-testid="invoice-general">{t('invoice_detail_general', { amount: money(general) })}</p>
             </header>
             {allocations.lines.map((line) => (
                 <section key={line.lineId} className={sectionClass} aria-label={line.description ?? ''} data-tour="invoice-line" data-tour-key={line.lineId}>
@@ -54,8 +63,10 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                         <span className="font-semibold text-gray-900">{line.description ?? '–'} <span className="ml-1 rounded bg-gray-100 px-1 text-xs font-normal text-gray-700">{line.kind}</span></span>
                         <span className="font-mono">{t('invoice_line_amount', { amount: money(line.lineTotal) })}</span>
                     </div>
-                    <AllocationPanel invoiceId={invoice.id} line={line} canAllocate={allocations.canAllocate}
-                        onSaved={(next) => setState({ status: 'ready', data: { invoice, allocations: next } })} onReload={() => setReloadToken((n) => n + 1)} />
+                    <AllocationPanel invoiceId={invoice.id} line={line} canAllocate={allocations.canAllocate} currency={invoice.currency ?? 'EUR'}
+                        onSaved={(next) => setState((current) => (current.status === 'ready'
+                            ? { status: 'ready', data: { invoice, allocations: newestLines(current.data.allocations, next) } } : current))}
+                        onReload={() => setReloadToken((n) => n + 1)} />
                 </section>
             ))}
         </article>
