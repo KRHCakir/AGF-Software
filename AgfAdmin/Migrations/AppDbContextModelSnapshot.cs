@@ -189,6 +189,58 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.CostArticle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsStandard")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NameKey")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.ToTable("CostArticles", t =>
+                        {
+                            t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Country", b =>
                 {
                     b.Property<string>("Code")
@@ -2289,6 +2341,9 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CostArticleId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -2322,11 +2377,16 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CostArticleId");
+
                     b.HasIndex("IncomingInvoiceId");
 
                     b.HasIndex("ProductVariantId");
 
-                    b.ToTable("IncomingInvoiceLines");
+                    b.ToTable("IncomingInvoiceLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_IncomingInvoiceLines_ArticleOrCost", "\"ProductVariantId\" IS NULL OR \"CostArticleId\" IS NULL");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Inspection", b =>
@@ -5321,6 +5381,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoiceLine", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.CostArticle", "CostArticle")
+                        .WithMany()
+                        .HasForeignKey("CostArticleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.IncomingInvoice", "IncomingInvoice")
                         .WithMany("InvoiceLines")
                         .HasForeignKey("IncomingInvoiceId")
@@ -5331,6 +5396,8 @@ namespace AgfAdmin.Migrations
                         .WithMany()
                         .HasForeignKey("ProductVariantId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CostArticle");
 
                     b.Navigation("IncomingInvoice");
 

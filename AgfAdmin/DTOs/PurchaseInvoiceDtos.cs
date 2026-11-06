@@ -34,6 +34,8 @@ namespace AgfAdmin.DTOs
     public sealed class CreatePurchaseInvoiceLineDto
     {
         public int? ProductVariantId { get; set; }
+        // Kostenartikel (type Dienst) in plaats van een artikel: Handling, Transport, ... (nooit allebei).
+        public int? CostArticleId { get; set; }
         public string Description { get; set; }
         public decimal? Quantity { get; set; }
         public string Unit { get; set; }
@@ -79,6 +81,8 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public int? ProductVariantId { get; set; }
+        public int? CostArticleId { get; set; }
+        public string CostArticleName { get; set; }
         public string Description { get; set; }
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
@@ -87,6 +91,17 @@ namespace AgfAdmin.DTOs
         public decimal LineTotal { get; set; }
         public decimal VatPercentage { get; set; }
         public decimal VatAmount { get; set; }
+    }
+
+    // 409 bij een factuurnummer dat van deze leverancier al is ingevoerd: het scherm noemt de bestaande factuur.
+    public sealed class DuplicatePurchaseInvoiceDto
+    {
+        public const string DuplicateCode = "INVOICE_EXISTS";
+
+        public string Message { get; set; }
+        public string Code { get; set; } = DuplicateCode;
+        public int InvoiceId { get; set; }
+        public string InvoiceNumber { get; set; }
     }
 
     public sealed class PurchaseVendorDto

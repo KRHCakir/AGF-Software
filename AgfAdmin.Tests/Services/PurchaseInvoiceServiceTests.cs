@@ -391,8 +391,11 @@ public class PurchaseInvoiceServiceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Conflict, (await CreateAsync(Request(requestId))).Status); // zonder opmerking: andere opdracht
         Assert.Equal(1, await InvoiceCountAsync());
 
-        // Een volgend document begint leeg: de opmerking wordt nergens als standaard overgenomen.
-        var next = await CreateAsync(Request());
+        // Een volgend document begint leeg: de opmerking wordt nergens als standaard overgenomen (eigen factuurnummer: hetzelfde nummer
+        // van dezelfde leverancier wordt geweigerd).
+        var nextRequest = Request();
+        nextRequest.InvoiceNumber = "GR-2026-002";
+        var next = await CreateAsync(nextRequest);
         Assert.Null(next.Value.InternalNote);
 
         var tooLong = Request();
