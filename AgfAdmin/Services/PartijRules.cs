@@ -13,8 +13,18 @@ namespace AgfAdmin.Services
         public const int MaxSupplierLotReferenceLength = 100;
         public const int MaxFormatLength = 40;
         public const int MaxActorLength = 100;
-        // Het volgnummer heeft minstens drie cijfers (2610251: jaar 26, maand 10, nummer 251); groter groeit gewoon door.
-        public const int SequenceDigits = 3;
+        // Aantal cijfers van het volgnummer (bedrijfsinstelling, standaard 3: 52611002 is 5, jaar 26, maand 11, nummer 002); een groter
+        // volgnummer groeit gewoon door. Een eigen of oud nummer met een ander aantal cijfers (5261145) blijft geldig.
+        public const int DefaultSequenceDigits = 3;
+        public const int MinSequenceDigits = 1;
+        public const int MaxSequenceDigits = 9;
+
+        // Soort partij. Inkoop: één leverancier, zoals in P1 (inkooporder, ontvangst, palletregels). Verkoop: precies één verkooporder voor
+        // één klant; de colli komen via de reserveringen op palletregels uit een of meer inkoop-partijen (geen eigen verdeeltabel). Elke
+        // soort heeft een eigen formaat en teller; het nummer is uniek per soort.
+        public const string KindPurchase = "Purchase";
+        public const string KindSales = "Sales";
+        public static readonly IReadOnlyList<string> Kinds = new[] { KindPurchase, KindSales };
 
         // Opgeslagen status. Uitverkocht is afgeleid (DisplayStatus); Afgesloten (resultaat definitief) komt in P3.
         public const string StatusOpen = "Open";
@@ -30,6 +40,8 @@ namespace AgfAdmin.Services
         public static readonly IReadOnlyList<string> Resets = new[] { ResetNever, ResetYearly, ResetMonthly };
 
         public const string DefaultFormat = "{JJ}{MM}{volgnr}";
+        // Verkoop-partijen: zonder vaste 5 vooraan (261140 = jaar 26, maand 11, nummer 140).
+        public const string DefaultSalesFormat = "{JJ}{MM}{volgnr}";
         public const string SequencePlaceholder = "{volgnr}";
         public static readonly IReadOnlyList<string> Placeholders = new[] { "{JJ}", "{JJJJ}", "{MM}", SequencePlaceholder };
 
@@ -37,6 +49,9 @@ namespace AgfAdmin.Services
         public const string EventNumberCorrected = "NumberCorrected";
         public const string EventOrderLinked = "OrderLinked";
         public const string EventDeleted = "Deleted";
+        // Alleen bij een verkoop-partij zolang er op haar order niets gereserveerd of geleverd is: nummer aangepast zonder reden
+        // (regel 24). Daarna gaat het nummer, net als bij een inkoop-partij, alleen via NumberCorrected met reden.
+        public const string EventNumberChanged = "NumberChanged";
 
         // Partijen uit bestaande palletregels (migratie AddPartijen) hebben geen ingelogde aanmaker.
         public const string MigrationActor = "Migratie";
@@ -64,10 +79,12 @@ namespace AgfAdmin.Services
         }
 
         public static bool IsMode(string value) => value != null && Modes.Contains(value, StringComparer.Ordinal);
+        public static bool IsKind(string value) => value != null && Kinds.Contains(value, StringComparer.Ordinal);
+        public static bool IsSequenceDigits(int value) => value >= MinSequenceDigits && value <= MaxSequenceDigits;
         public static bool IsReset(string value) => value != null && Resets.Contains(value, StringComparer.Ordinal);
 
-        // Null als het formaat geldig is, anders de melding: verplicht {volgnr} (precies één keer), alleen bekende plaatshouders,
-        // geen losse accolades en een niet-lege sleutel.
+        // Null als het formaat geldig is, anders de melding: verplicht {volgnr} (precies één keer), alleen bekende plaatshouders en
+        // geen losse accolades. Vaste tekst eromheen mag: 5{JJ}{MM}{volgnr} geeft 52611002.
         public static string FormatError(string format)
         {
             if (string.IsNullOrWhiteSpace(format))
@@ -96,14 +113,15 @@ namespace AgfAdmin.Services
             return null;
         }
 
-        // Nummer volgens het formaat voor deze datum en dit volgnummer: {JJ}{MM}{volgnr} op 27-10-2026 met 251 = 2610251.
-        public static string Format(string format, DateOnly date, int sequence) =>
+        // Nummer volgens het formaat voor deze datum en dit volgnummer: {JJ}{MM}{volgnr} op 27-10-2026 met 251 = 2610251, en
+        // 5{JJ}{MM}{volgnr} op 05-11-2026 met 2 = 52611002 (volgnummer aangevuld tot het ingestelde aantal cijfers).
+        public static string Format(string format, DateOnly date, int sequence, int digits = DefaultSequenceDigits) =>
             PlaceholderPattern.Replace(format.Trim(), match => match.Value switch
             {
                 "{JJ}" => (date.Year % 100).ToString("D2"),
                 "{JJJJ}" => date.Year.ToString("D4"),
                 "{MM}" => date.Month.ToString("D2"),
-                SequencePlaceholder => sequence.ToString($"D{SequenceDigits}"),
+                SequencePlaceholder => sequence.ToString($"D{Math.Clamp(digits, MinSequenceDigits, MaxSequenceDigits)}"),
                 _ => match.Value
             });
 

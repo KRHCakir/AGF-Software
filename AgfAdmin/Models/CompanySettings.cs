@@ -32,5 +32,11 @@ namespace AgfAdmin.Models
         public string PartijNumberMode { get; set; } = Services.PartijRules.ModeAuto;
         public string PartijNumberFormat { get; set; } = Services.PartijRules.DefaultFormat;
         public string PartijSequenceReset { get; set; } = Services.PartijRules.ResetYearly;
+        // Aantal cijfers van het volgnummer (minimaal 1, standaard 3: 52611002).
+        public int PartijSequenceDigits { get; set; } = Services.PartijRules.DefaultSequenceDigits;
+        // Tweede reeks voor verkoop-partijen: eigen formaat, eigen aantal cijfers (2 geeft 261140) en eigen teller; de modus en het
+        // opnieuw tellen zijn dezelfde instelling als hierboven.
+        public string SalesPartijNumberFormat { get; set; } = Services.PartijRules.DefaultSalesFormat;
+        public int SalesPartijSequenceDigits { get; set; } = Services.PartijRules.DefaultSequenceDigits;
     }
 }

@@ -343,15 +343,21 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PartijNumberMode).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ModeAuto);
                 b.Property(c => c.PartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultFormat);
                 b.Property(c => c.PartijSequenceReset).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ResetYearly);
+                b.Property(c => c.PartijSequenceDigits).HasDefaultValue(PartijRules.DefaultSequenceDigits);
+                b.Property(c => c.SalesPartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultSalesFormat);
+                b.Property(c => c.SalesPartijSequenceDigits).HasDefaultValue(PartijRules.DefaultSequenceDigits);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_CompanySettings_PartijNumberMode_Allowed", "\"PartijNumberMode\" IN ('Auto', 'Own')");
                     t.HasCheckConstraint("CK_CompanySettings_PartijSequenceReset_Allowed", "\"PartijSequenceReset\" IN ('Never', 'Yearly', 'Monthly')");
+                    t.HasCheckConstraint("CK_CompanySettings_PartijSequenceDigits_Range", "\"PartijSequenceDigits\" BETWEEN 1 AND 9");
+                    t.HasCheckConstraint("CK_CompanySettings_SalesPartijSequenceDigits_Range", "\"SalesPartijSequenceDigits\" BETWEEN 1 AND 9");
                 });
             });
 
-            // Partij: de sleutel (hoofdletters, zonder spaties en streepjes) is uniek, en een voorgesteld volgnummer is uniek in zijn
-            // periode; een botsing bij gelijktijdig aanmaken probeert de service opnieuw met het volgende nummer.
+            // Partij: de sleutel (hoofdletters, zonder spaties en streepjes) is uniek per soort, en een voorgesteld volgnummer is uniek in
+            // zijn soort en periode; een botsing bij gelijktijdig aanmaken probeert de service opnieuw met het volgende nummer. Een
+            // verkoop-partij hoort bij precies één verkooporder en een order heeft hoogstens één verkoop-partij (unieke index).
             modelBuilder.Entity<Partij>(b =>
             {
                 b.ToTable("Partijen", t =>
@@ -361,13 +367,17 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
                     t.HasCheckConstraint("CK_Partijen_Sequence_Consistent",
                         "(\"Sequence\" IS NULL AND \"SequencePeriod\" IS NULL) OR (\"Sequence\" > 0 AND \"SequencePeriod\" IS NOT NULL)");
+                    t.HasCheckConstraint("CK_Partijen_Kind_SalesOrder",
+                        "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL) OR (\"Kind\" = 'Sales' AND \"SalesOrderId\" IS NOT NULL)");
                 });
                 b.Property(p => p.Number).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
                 b.Property(p => p.NumberKey).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
-                b.HasIndex(p => p.NumberKey).IsUnique();
+                b.Property(p => p.Kind).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.KindPurchase);
+                b.HasIndex(p => new { p.Kind, p.NumberKey }).IsUnique();
                 b.Property(p => p.Status).IsRequired().HasMaxLength(16);
                 b.Property(p => p.SequencePeriod).HasMaxLength(10);
-                b.HasIndex(p => new { p.SequencePeriod, p.Sequence }).IsUnique();
+                b.HasIndex(p => new { p.Kind, p.SequencePeriod, p.Sequence }).IsUnique();
+                b.HasOne(p => p.SalesOrder).WithOne(o => o.SalesPartij).HasForeignKey<Partij>(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
                 b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(p => p.RequestId).IsUnique();
@@ -382,7 +392,7 @@ namespace AgfAdmin.Data
                 b.Property(e => e.ActorReference).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(e => e.PartijId);
                 b.ToTable(t => t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed",
-                    "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted')"));
+                    "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged')"));
             });
 
             modelBuilder.Entity<ProductVariant>(b =>
@@ -918,6 +928,7 @@ namespace AgfAdmin.Data
                 b.HasIndex(o => o.OrderNumber).IsUnique();
                 b.HasIndex(o => new { o.OrderYear, o.OrderSequence }).IsUnique();
                 b.Property(o => o.CustomerReference).HasMaxLength(100);
+                b.Property(o => o.RequestPartijKey).HasMaxLength(200);
                 b.Property(o => o.InternalNote).HasMaxLength(1000);
                 b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
                 b.Property(o => o.CancelReason).HasMaxLength(500);
