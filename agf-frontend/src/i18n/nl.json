@@ -2173,7 +2173,6 @@
   "partij_sales_none": "Nog geen verkoop die van deze partij reserveert of levert.",
   "partij_reserved": "gereserveerd {quantity}",
   "partij_shipped": "verzonden {quantity}",
-  "partij_costs_later": "Kosten en resultaat komen in een volgende stap.",
   "partij_history": "Historie",
   "partij_event_created": "Aangemaakt als {number} door {name}",
   "partij_event_corrected": "Nummer gecorrigeerd van {from} naar {to} door {name}: {reason}",

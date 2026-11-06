@@ -2173,7 +2173,6 @@
   "partij_sales_none": "No sales reserving or delivering from this lot yet.",
   "partij_reserved": "reserved {quantity}",
   "partij_shipped": "shipped {quantity}",
-  "partij_costs_later": "Costs and result come in a next step.",
   "partij_history": "History",
   "partij_event_created": "Created as {number} by {name}",
   "partij_event_corrected": "Number corrected from {from} to {to} by {name}: {reason}",
