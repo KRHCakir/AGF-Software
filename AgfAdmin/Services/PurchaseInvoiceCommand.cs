@@ -22,7 +22,7 @@ namespace AgfAdmin.Services
         public static string Canonical(CreatePurchaseInvoiceDto request)
         {
             var lines = (request.Lines ?? new List<CreatePurchaseInvoiceLineDto>())
-                .Select(l => l == null ? null : new LineSnapshot(l.ProductVariantId, Text(l.Description), Number(l.Quantity), Text(l.Unit), Number(l.UnitPrice), Number(l.DiscountPercentage), Number(l.VatPercentage)))
+                .Select(l => l == null ? null : new LineSnapshot(l.ProductVariantId, Text(l.Description), Number(l.Quantity), Text(l.Unit), Number(l.UnitPrice), Number(l.DiscountPercentage), Number(l.VatPercentage), l.CostArticleId))
                 .ToList();
             var snapshot = new Snapshot(
                 request.VendorId, Text(request.InvoiceNumber), Day(request.InvoiceDate), request.PaymentTermsDays, Day(request.DueDate),
@@ -37,6 +37,8 @@ namespace AgfAdmin.Services
         // veld heeft de sleutel niet; "ontbrekend" telt dan als null (niet ingevuld), zodat een identieke retry 200 blijft en een
         // nu wél ingevulde waarde een conflict geeft. Nieuwe velden hier toevoegen, nooit bestaande verwijderen.
         private static readonly string[] FieldsAddedLater = { "internalNote" };
+        // Hetzelfde per regel (kostenartikel, P2).
+        private static readonly string[] LineFieldsAddedLater = { "costArticleId" };
 
         // Structurele vergelijking (volgorde van sleutels doet er niet toe); verder exact: elke andere ontbrekende of extra sleutel,
         // en elke andere waarde, is een andere opdracht.
@@ -66,6 +68,16 @@ namespace AgfAdmin.Services
                     storedObject[field] = null;
                 }
             }
+            if (storedObject["lines"] is JsonArray storedLines)
+            {
+                foreach (var line in storedLines.OfType<JsonObject>())
+                {
+                    foreach (var field in LineFieldsAddedLater.Where(f => !line.ContainsKey(f)))
+                    {
+                        line[field] = null;
+                    }
+                }
+            }
             return JsonNode.DeepEquals(storedObject, JsonNode.Parse(Canonical(request)));
         }
 
@@ -81,6 +93,7 @@ namespace AgfAdmin.Services
             string ReceivedDate, string PaymentReference, string Remarks, decimal? GrossWeightKg, decimal? NetWeightKg, string ContainerNumber,
             string Transporter, string DriverName, string LicensePlate, string Incoterms, decimal? CustomsValue, string OriginCountry, string ReceiptReference);
 
-        private sealed record LineSnapshot(int? ProductVariantId, string Description, decimal? Quantity, string Unit, decimal? UnitPrice, decimal? DiscountPercentage, decimal? VatPercentage);
+        private sealed record LineSnapshot(int? ProductVariantId, string Description, decimal? Quantity, string Unit, decimal? UnitPrice, decimal? DiscountPercentage, decimal? VatPercentage,
+            int? CostArticleId);
     }
 }

@@ -13,6 +13,11 @@ namespace AgfAdmin.Models
         public int? ProductVariantId { get; set; }
         public ProductVariant? ProductVariant { get; set; }
 
+        // Optioneel kostenartikel (type Dienst: Handling, Transport, ...) in plaats van een artikel; nooit allebei. Geeft de soort van
+        // de kosten op een partij (P2).
+        public int? CostArticleId { get; set; }
+        public CostArticle? CostArticle { get; set; }
+
         public string? Description { get; set; }
         public string? Unit { get; set; }           // box, colli, tray, piece, dozen of leeg; nooit omgerekend
 

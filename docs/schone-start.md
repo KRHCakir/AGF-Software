@@ -11,6 +11,7 @@ onveranderd staan als back-up. Er wordt niets verwijderd, geleegd of overschreve
 | Het schema en alles wat de migraties zelf vullen | Zonder schema werkt niets. |
 | De landenlijst (249 landen) | Bij het artikel kies je de herkomst uit deze lijst. |
 | De standaard betaalcondities (14 en 30 dagen) | De relatieschermen stellen ze voor. |
+| De standaard kostenartikelen (Handling, Transport, QC, Zeevracht, Afval, Overig) | Een factuur van derden kiest er een per regel; eigen kostenartikelen maak je zelf aan. |
 | Met `--settings-from`: je bedrijfsinstellingen, met de partijnummering | Zo blijven je nummerformaat en je keuzes voor de inkoopfactuur gelijk. |
 | Met `--settings-from`: je eigen betaalcondities | Bijvoorbeeld "30 dagen na einde maand, 2% korting". |
 | Met `--settings-from`: je eigen snelkoppelingen voor landen | Een eigen afkorting die in de landkiezer het land vindt. |
