@@ -70,6 +70,7 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                         {orderLabel(order)} · {order.customerName ?? t('availability_unknown')}
                                     </button>
                                     <span className="block text-xs text-gray-600">
+                                        {order.salesPartijNumber && <span className="font-mono text-gray-900" data-testid="list-sales-partij">{t('sales_partij_short')} {order.salesPartijNumber} · </span>}
                                         {order.customerReference ? `${t('sales_reference_short')} ${order.customerReference}` : t('sales_no_reference')}
                                     </span>
                                     {/* Indicatoren van verkopen vóór aankomst: Tekort (niet gedekt door voorraad of verwachte aanvoer) en Wacht op voorraad. */}

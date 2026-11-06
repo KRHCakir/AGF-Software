@@ -26,6 +26,7 @@ import OrderLinePanel from './OrderLinePanel';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
+import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
 
@@ -333,6 +334,15 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                         <dt className="text-xs text-gray-600">{t('sales_delivery_date')}</dt>
                         <dd className="font-medium text-gray-900">{formatCalendarDate(order.requestedDeliveryDate, locale)}</dd>
                     </div>
+                    {order.salesPartijNumber && (
+                        <div>
+                            <dt className="text-xs text-gray-600">{t('sales_partij_field')}</dt>
+                            <dd className="font-medium text-gray-900" data-tour="sales-detail-partij" data-tour-key={order.salesPartijNumber}>
+                                <PartijNumberLink partijId={order.salesPartijId} partijNumber={order.salesPartijNumber} lotNumber={order.salesPartijNumber} />
+                                <span className="block text-xs font-normal text-gray-600">{t(order.salesPartijFixed ? 'sales_partij_fixed' : 'sales_partij_adjustable')}</span>
+                            </dd>
+                        </div>
+                    )}
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_customer_reference')}</dt>
                         <dd className="font-medium text-gray-900" data-tour="sales-detail" data-tour-key={order.customerReference ?? ''}>{order.customerReference ?? t('sales_no_reference')}</dd>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
@@ -9,7 +9,10 @@ import { type LineWeightDraft, lineKgRows } from '../../lib/lineWeight';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
-import { MAX_ORDER_LINES, OrderDraft, OrderLineDraft, buildOrderPayload } from '../../lib/salesOrderRules';
+import { MAX_ORDER_LINES, MAX_SALES_PARTIJ_NUMBER_LENGTH, OrderDraft, OrderLineDraft, buildOrderPayload, salesPartijPayload } from '../../lib/salesOrderRules';
+import { partijNumberKey } from '../../lib/partijRules';
+import { findPartijByNumber, getNextPartijNumber } from '../../services/partijService';
+import { isPartijExistsConflict } from '../../types/partij';
 import { type SellPrefill, orderLabel, singleSource } from '../../lib/salesSupply';
 import type { SupplySource } from '../../types/salesSupply';
 import LineSourceChoice from './LineSourceChoice';
@@ -100,9 +103,38 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const [errors, setErrors] = useState<FieldErrors>({});
     const [result, setResult] = useState<SaveResult<SalesOrder> | null>(null);
     const inFlight = useRef(false);
+    // Verkoop-partij: het voorstel van de server (null in modus Eigen of zonder antwoord) en wat de gebruiker typt (null = niet
+    // aangeraakt, het voorstel staat in het veld). Een getypt nummer dat al bestaat, staat als melding bij het veld.
+    const [partijNext, setPartijNext] = useState<{ suggestion: string | null; mode: 'Auto' | 'Own' } | null>(null);
+    const [partijText, setPartijText] = useState<string | null>(() => pending?.payload.salesPartijNumber ?? null);
+    const [partijExists, setPartijExists] = useState<string | null>(null);
+    const [partijToken, setPartijToken] = useState(0);
 
     // Vergrendeld zolang er een onafgerond commando is: nooit een gewijzigde retry, nooit een tweede order ernaast.
     const locked = submitting || result !== null || pending !== null;
+
+    useEffect(() => {
+        const controller = new AbortController();
+        getNextPartijNumber({ kind: 'Sales' }, controller.signal)
+            .then((next) => setPartijNext({ suggestion: next.suggestion, mode: next.mode }))
+            .catch(() => { if (!controller.signal.aborted) setPartijNext(null); });
+        return () => controller.abort();
+    }, [partijToken]);
+    const partijSuggestion = partijNext?.suggestion ?? null;
+    const partijValue = partijText ?? partijSuggestion ?? '';
+
+    // Dubbelcontrole bij het verlaten van het veld (alleen een eigen nummer; het voorstel is vrij en de server kiest bij een botsing het
+    // volgende). De server controleert bij opslaan opnieuw.
+    const checkPartij = async () => {
+        const typed = (partijText ?? '').trim();
+        if (typed === '' || typed === partijSuggestion || partijNumberKey(typed) === null) return;
+        try {
+            const existing = await findPartijByNumber(typed, undefined, 'Sales');
+            if (existing !== null) setPartijExists(existing.number);
+        } catch {
+            // Geen antwoord: bij opslaan volgt dezelfde controle.
+        }
+    };
 
     // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
     const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
@@ -191,17 +223,19 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         if (command === null) {
             const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, lineKg[index].quantity) ?? '' })) };
             const built = buildOrderPayload(withSources, (variantId) => variants.get(variantId));
-            if (!built.ok) {
-                setErrors(ruleErrorsToFieldErrors(built.errors, t));
+            const partij = salesPartijPayload(partijText, partijSuggestion, partijNext?.mode ?? 'Auto');
+            if (!built.ok || !partij.ok) {
+                setErrors(ruleErrorsToFieldErrors([...(built.ok ? [] : built.errors), ...(partij.ok ? [] : partij.errors)], t));
                 return;
             }
+            if (partijExists !== null) return;
             setErrors({});
             const requestId = newRequestId();
             command = {
                 kind: 'create-order',
                 key: CREATE_ORDER_KEY,
                 requestId,
-                payload: { requestId, ...built.value },
+                payload: { requestId, ...built.value, ...(partij.value === null ? {} : { salesPartijNumber: partij.value }) },
                 display: { customerName: customers.find((customer) => customer.id === built.value.customerId)?.name ?? String(built.value.customerId) },
                 attempts: 0,
                 lastError: null,
@@ -227,7 +261,12 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 // Definitief antwoord van de server (400/404/409): er is niets opgeslagen; de invoer mag weer wijzigen.
                 clearPending();
             }
-            setError(apiError);
+            // Het getypte verkoop-partijnummer bestaat al (409 PARTIJ_EXISTS): melding bij het veld in plaats van de servertekst.
+            if (isPartijExistsConflict(apiError.body)) {
+                setPartijExists(apiError.body.partij.number);
+            } else {
+                setError(apiError);
+            }
             setErrors(apiError.fieldErrors);
         } finally {
             inFlight.current = false;
@@ -254,6 +293,9 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     const startOver = () => {
         setDraft(emptyDraft());
+        setPartijText(null);
+        setPartijExists(null);
+        setPartijToken((n) => n + 1);
         setError(null);
         setErrors({});
         setResult(null);
@@ -268,7 +310,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         return (
             <SuccessPanel
                 title={t('sales_create_success', { id: orderLabel(order), customer: order.customerName ?? '' })}
-                note={result.replayed ? t('supply_saved_before') : undefined}
+                note={[order.salesPartijNumber ? t('sales_created_partij', { number: order.salesPartijNumber }) : null, result.replayed ? t('supply_saved_before') : null]
+                    .filter((part) => part !== null).join(' ') || undefined}
                 actions={(
                     <>
                         <button type="button" data-tour="sales-open-saved" className={primaryButtonClass} onClick={() => onOpen(order.id)}>{t('sales_reserve_for_this_order')}</button>
@@ -360,6 +403,15 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                         placeholder={t('sales_customer_reference_placeholder')}
                         onChange={(event) => updateHeader('customerReference', event.target.value)} className={inputClass} />
                     <FieldError id="customerReference" messages={e('customerReference')} />
+                </div>
+                <div data-tour="sales-partij-block">
+                    <label htmlFor="salesPartijNumber-input" className="text-xs font-medium text-gray-700">{t('sales_partij_field')}{partijNext?.mode === 'Own' ? ' *' : ''}</label>
+                    <input {...fieldProps('salesPartijNumber', partijExists !== null ? [t('sales_partij_exists', { number: partijExists })] : e('salesPartijNumber'))}
+                        data-tour="sales-partij" value={partijValue} disabled={locked} maxLength={MAX_SALES_PARTIJ_NUMBER_LENGTH} aria-describedby="salesPartijNumber-hint"
+                        onChange={(event) => { if (locked) return; setPartijText(event.target.value); setPartijExists(null); edited(); }}
+                        onBlur={() => { void checkPartij(); }} className={`${inputClass} font-mono`} />
+                    <span id="salesPartijNumber-hint" className="block text-xs text-gray-500">{t(partijNext?.mode === 'Own' ? 'sales_partij_hint_own' : 'sales_partij_hint')}</span>
+                    <FieldError id="salesPartijNumber" messages={partijExists !== null ? [t('sales_partij_exists', { number: partijExists })] : e('salesPartijNumber')} />
                 </div>
                 <div className="col-span-2 md:col-span-4">
                     <label htmlFor="internalNote-input" className="text-xs font-medium text-gray-700">{t('internal_note_label')}</label>
