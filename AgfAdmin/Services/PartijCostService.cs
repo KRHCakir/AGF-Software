@@ -74,6 +74,10 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "expectedVersion", "The version of the allocation you saw is required.");
             }
+            if (request != null && request.Allocations == null)
+            {
+                ValidationErrors.Add(errors, "allocations", "The list of allocations is required; send an empty list to remove all allocations.");
+            }
             var items = request?.Allocations ?? new List<SaveLineAllocationItemDto>();
             if (items.Count > PartijCostRules.MaxAllocationsPerLine)
             {

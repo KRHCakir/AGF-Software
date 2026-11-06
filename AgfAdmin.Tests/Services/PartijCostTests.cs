@@ -127,6 +127,33 @@ public sealed class PartijCostTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Missing_Allocations_List_Is_Refused_And_Keeps_The_Existing_Costs()
+    {
+        await ArrangeAsync();
+        await SaveAsync(0, null, (_salesA, 500m));
+        await using var db = _s.Factory.CreateContext();
+        var result = await new PartijCostService(db).SaveLineAsync(_invoiceId, _lineId, new SaveLineAllocationDto { RequestId = Guid.NewGuid(), ExpectedVersion = 1, Allocations = null });
+        Assert.Equal(ServiceResultStatus.Validation, result.Status);
+        Assert.True(result.Errors.ContainsKey("allocations"));
+        Assert.Equal(1, await db.PartijCosts.CountAsync());
+    }
+
+    [Fact]
+    public async Task Rule_25_Refuses_Lowering_The_Line_Amount_Below_The_Allocation()
+    {
+        await ArrangeAsync();
+        await SaveAsync(0, null, (_salesA, 500m), (_salesB, 1000m));
+        await using var db = _s.Factory.CreateContext();
+        var line = await db.IncomingInvoiceLines.SingleAsync(l => l.Id == _lineId);
+        line.LineTotal = 1400m;
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        db.ChangeTracker.Clear();
+        line = await db.IncomingInvoiceLines.SingleAsync(l => l.Id == _lineId);
+        line.LineTotal = 1500m;
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task Rule_25_Guards_Every_Writer()
     {
         await ArrangeAsync();

@@ -6,7 +6,8 @@ namespace AgfAdmin.DTOs
         public Guid? RequestId { get; set; }
         // Versie van de verdeling die de gebruiker zag (InvoiceLineAllocationDto.Version); een gelijktijdige wijziging geeft 409.
         public int? ExpectedVersion { get; set; }
-        public List<SaveLineAllocationItemDto> Allocations { get; set; } = new();
+        // Geen standaardwaarde: een ontbrekende of null-lijst is een validatiefout; alleen een expliciete lege lijst wist de verdeling.
+        public List<SaveLineAllocationItemDto> Allocations { get; set; }
     }
 
     public sealed class SaveLineAllocationItemDto

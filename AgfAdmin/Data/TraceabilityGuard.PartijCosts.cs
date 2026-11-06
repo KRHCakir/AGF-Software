@@ -26,7 +26,10 @@ namespace AgfAdmin.Data
             {
                 throw new TraceabilityViolationException("A lot with costs cannot be deleted.");
             }
-            if (entries.Count == 0)
+            // Ook een gewijzigde factuurregel (bijv. een lager regelbedrag) wordt tegen de bestaande verdeling gecontroleerd.
+            var changedLines = db.ChangeTracker.Entries<IncomingInvoiceLine>().Where(e => e.State == EntityState.Modified)
+                .GroupBy(e => e.Entity.Id).ToDictionary(g => g.Key, g => g.First().Entity.LineTotal);
+            if (entries.Count == 0 && changedLines.Count == 0)
             {
                 return;
             }
@@ -81,7 +84,7 @@ namespace AgfAdmin.Data
             }
 
             // Per factuurregel: de verdeling (opgeslagen regels met de gevolgde wijzigingen erover) is nooit meer dan het regelbedrag.
-            var lineIds = entries.Select(e => e.Property(c => c.IncomingInvoiceLineId).CurrentValue).Concat(stored.Values.Select(s => s.IncomingInvoiceLineId)).Distinct().ToList();
+            var lineIds = entries.Select(e => e.Property(c => c.IncomingInvoiceLineId).CurrentValue).Concat(stored.Values.Select(s => s.IncomingInvoiceLineId)).Concat(changedLines.Keys).Distinct().ToList();
             var lineTotals = (await ToListAsync(db.IncomingInvoiceLines.AsNoTracking().Where(l => lineIds.Contains(l.Id)).Select(l => new { l.Id, l.LineTotal }), async, cancellationToken))
                 .ToDictionary(l => l.Id, l => l.LineTotal);
             var storedCosts = await ToListAsync(db.PartijCosts.AsNoTracking().Where(c => lineIds.Contains(c.IncomingInvoiceLineId))
@@ -92,7 +95,13 @@ namespace AgfAdmin.Data
             {
                 var sum = storedCosts.Where(c => c.IncomingInvoiceLineId == lineId && !trackedIds.Contains(c.Id)).Sum(c => c.AmountExclVat)
                     + tracked.Where(e => e.State != EntityState.Deleted && e.Property(c => c.IncomingInvoiceLineId).CurrentValue == lineId).Sum(e => e.Entity.AmountExclVat);
-                if (lineTotals.TryGetValue(lineId, out var lineTotal) && sum > lineTotal)
+                var found = lineTotals.TryGetValue(lineId, out var lineTotal);
+                if (changedLines.TryGetValue(lineId, out var newTotal))
+                {
+                    lineTotal = newTotal; // het nieuwe regelbedrag, niet het opgeslagen
+                    found = true;
+                }
+                if (found && sum > lineTotal)
                 {
                     throw new TraceabilityViolationException($"The costs on lots of invoice line {lineId} ({sum:0.00}) exceed the line amount excl. VAT ({lineTotal:0.00}).");
                 }
