@@ -19,9 +19,9 @@ namespace AgfAdmin.Services
         private sealed record SaleFact(int PartijId, int SalesOrderId, string OrderNumber, string CustomerName, string OrderStatus, string Status, decimal Quantity, string Unit,
             int? SalesPartijId, string SalesPartijNumber);
         // Verkoop-partij: de order, haar regels en per reservering de inkoop-partij waar de colli vandaan komen.
-        private sealed record SalesSide(int PartijId, int SalesOrderId, string OrderNumber, string OrderStatus, string CustomerName, List<(string Product, decimal Quantity, string Unit)> Lines,
+        private sealed record SalesSide(int PartijId, int SalesOrderId, string OrderNumber, string OrderStatus, string CustomerName, List<(int LineId, string Product, decimal Quantity, string Unit, decimal? NetKg)> Lines,
             List<SourceFact> Sources);
-        private sealed record SourceFact(int SalesOrderId, int? PartijId, string Number, string VendorName, string Product, string Status, decimal Quantity, string Unit);
+        private sealed record SourceFact(int SalesOrderId, int SalesOrderLineId, int? PartijId, string Number, string VendorName, string Product, string Status, decimal Quantity, string Unit, decimal NetKg);
         private sealed record Facts(List<LineFact> Lines, List<ContentFact> Contents, List<SaleFact> Sales)
         {
             public ILookup<int, LineFact> LinesByPartij { get; } = Lines.ToLookup(l => l.PartijId);
@@ -150,6 +150,7 @@ namespace AgfAdmin.Services
                 ReservedQuantity = g.Where(s => s.Status == ReservationRules.StatusActive).Sum(s => s.Quantity),
                 ShippedQuantity = g.Where(s => s.Status == ReservationRules.StatusConsumed).Sum(s => s.Quantity)
             }).OrderBy(s => s.SalesOrderId).ThenBy(s => s.Unit).ToList();
+            await AddCostsAsync(detail, partij, facts, cancellationToken);
             var events = await _db.PartijAuditEvents.AsNoTracking().Where(e => e.PartijId == id).OrderBy(e => e.OccurredAt).ThenBy(e => e.Id).ToListAsync(cancellationToken);
             detail.History = events.Select(e => new PartijHistoryDto
                 {
@@ -160,6 +161,45 @@ namespace AgfAdmin.Services
                     NewValue = events.FirstOrDefault(e => e.EventType is PartijRules.EventNumberCorrected or PartijRules.EventNumberChanged)?.OldValue ?? partij.Number })
                 .ToList();
             return ServiceResult<PartijDetailDto>.Ok(detail);
+        }
+
+        // Kosten (P2): de kostenregels van deze partij met factuur en leverancier, en apart (niet opgeteld) de kosten op de gekoppelde
+        // partijen van de andere soort. Zo telt een kostenpost nooit twee keer: hij hangt aan precies één partij.
+        private async Task AddCostsAsync(PartijDetailDto detail, Partij partij, Facts facts, CancellationToken cancellationToken)
+        {
+            detail.Costs = await _db.PartijCosts.AsNoTracking().Where(c => c.PartijId == partij.Id)
+                .OrderBy(c => c.Kind).ThenBy(c => c.IncomingInvoiceLine.IncomingInvoice.InvoiceDate).ThenBy(c => c.Id)
+                .Select(c => new PartijCostLineDto
+                {
+                    Kind = c.Kind, InvoiceId = c.IncomingInvoiceLine.IncomingInvoiceId, InvoiceNumber = c.IncomingInvoiceLine.IncomingInvoice.InvoiceNumber,
+                    VendorName = c.IncomingInvoiceLine.IncomingInvoice.Vendor.Name, InvoiceDate = c.IncomingInvoiceLine.IncomingInvoice.InvoiceDate,
+                    Description = c.IncomingInvoiceLine.Description, Amount = c.AmountExclVat
+                })
+                .ToListAsync(cancellationToken);
+            detail.CostTotal = detail.Costs.Sum(c => c.Amount);
+            var linked = partij.Kind == PartijRules.KindSales
+                ? (facts.SalesSides.TryGetValue(partij.Id, out var side) ? side.Sources.Where(s => s.PartijId != null).Select(s => s.PartijId.Value) : Enumerable.Empty<int>())
+                : facts.Sales.Where(s => s.SalesPartijId != null).Select(s => s.SalesPartijId.Value);
+            var linkedIds = linked.Distinct().ToList();
+            if (linkedIds.Count == 0)
+            {
+                return;
+            }
+            var amounts = await _db.PartijCosts.AsNoTracking().Where(c => linkedIds.Contains(c.PartijId)).Select(c => new { c.PartijId, c.AmountExclVat }).ToListAsync(cancellationToken);
+            var lots = await _db.Partijen.AsNoTracking().Where(p => linkedIds.Contains(p.Id)).Select(p => new { p.Id, p.Number, p.Kind }).ToListAsync(cancellationToken);
+            detail.LinkedCosts = lots.Select(p => new PartijLinkedCostDto
+                {
+                    PartijId = p.Id, Number = p.Number, Kind = p.Kind, CostTotal = amounts.Where(a => a.PartijId == p.Id).Sum(a => a.AmountExclVat)
+                })
+                .Where(l => l.CostTotal > 0m).OrderBy(l => l.Number).ToList();
+        }
+
+        // Totalen van een aantal partijen (beide soorten), voor de basis van "Verdeel naar kg / colli" bij de kostenverdeling.
+        internal async Task<Dictionary<int, PartijTotalsDto>> TotalsAsync(List<int> ids, CancellationToken cancellationToken)
+        {
+            var partijen = await _db.Partijen.AsNoTracking().Where(p => ids.Contains(p.Id)).ToListAsync(cancellationToken);
+            var facts = await LoadFactsAsync(partijen, cancellationToken);
+            return partijen.ToDictionary(p => p.Id, p => (PartijTotalsDto)Totals<PartijListItemDto>(p, facts));
         }
 
         private async Task<Facts> LoadFactsAsync(List<Partij> partijen, CancellationToken cancellationToken)
@@ -201,18 +241,18 @@ namespace AgfAdmin.Services
             var orders = await _db.SalesOrders.AsNoTracking().Where(o => orderIds.Contains(o.Id))
                 .Select(o => new { o.Id, o.OrderNumber, o.Status, Customer = o.Customer.Name }).ToListAsync(cancellationToken);
             var lines = await _db.SalesOrderLines.AsNoTracking().Where(l => orderIds.Contains(l.SalesOrderId))
-                .Select(l => new { l.SalesOrderId, Product = l.ProductVariant.Product.Name + " " + l.ProductVariant.Name, l.Quantity, l.Unit }).ToListAsync(cancellationToken);
+                .Select(l => new { l.Id, l.SalesOrderId, Product = l.ProductVariant.Product.Name + " " + l.ProductVariant.Name, l.Quantity, l.Unit, l.NetWeightKg }).ToListAsync(cancellationToken);
             var sources = await _db.StockReservations.AsNoTracking()
                 .Where(r => r.SalesOrderLineId != null && orderIds.Contains(r.SalesOrderLine.SalesOrderId)
                     && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
-                .Select(r => new SourceFact(r.SalesOrderLine.SalesOrderId,
+                .Select(r => new SourceFact(r.SalesOrderLine.SalesOrderId, r.SalesOrderLineId.Value,
                     r.PalletContentLine != null ? r.PalletContentLine.PartijId : r.SupplyCommitmentLine.PartijId,
                     r.PalletContentLine != null ? r.PalletContentLine.Partij.Number : r.SupplyCommitmentLine.Partij.Number,
                     r.SupplyCommitmentLine.SupplyCommitment.Vendor.Name, r.SupplyCommitmentLine.ProductVariant.Product.Name + " " + r.SupplyCommitmentLine.ProductVariant.Name,
-                    r.Status, r.Quantity, r.Unit))
+                    r.Status, r.Quantity, r.Unit, r.NetWeightKg ?? 0m))
                 .ToListAsync(cancellationToken);
             return orders.ToDictionary(o => byOrder[o.Id], o => new SalesSide(byOrder[o.Id], o.Id, o.OrderNumber, o.Status, o.Customer,
-                lines.Where(l => l.SalesOrderId == o.Id).Select(l => (l.Product, l.Quantity, l.Unit)).ToList(),
+                lines.Where(l => l.SalesOrderId == o.Id).Select(l => (l.Id, l.Product, l.Quantity, l.Unit, l.NetWeightKg)).ToList(),
                 sources.Where(s => s.SalesOrderId == o.Id).ToList()));
         }
 
@@ -258,7 +298,9 @@ namespace AgfAdmin.Services
                     OrderedQuantity = side.Lines.Sum(l => l.Quantity),
                     SoldQuantity = side.Sources.Sum(s => s.Quantity),
                     SourcePartijen = side.Sources.Select(s => s.Number).Where(n => n != null).Distinct().OrderBy(n => n).ToList(),
-                    Vendors = side.Sources.Select(s => s.VendorName).Where(v => v != null).Distinct().OrderBy(v => v).ToList()
+                    Vendors = side.Sources.Select(s => s.VendorName).Where(v => v != null).Distinct().OrderBy(v => v).ToList(),
+                    // Per orderregel: de kg van de regel, en voor een regel zonder kg de gereserveerde kg van die regel (nooit dubbel).
+                    NetKg = side.Lines.Sum(l => l.NetKg ?? side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.NetKg))
                 };
             }
             var lines = facts.LinesByPartij[partij.Id].ToList();
@@ -287,7 +329,8 @@ namespace AgfAdmin.Services
                 OnHandQuantity = onHand,
                 InInspectionQuantity = inInspection,
                 OpenExpectedQuantity = openExpected,
-                SoldQuantity = sales.Sum(s => s.Quantity)
+                SoldQuantity = sales.Sum(s => s.Quantity),
+                NetKg = received.Sum(c => c.NetWeightKg)
             };
         }
 

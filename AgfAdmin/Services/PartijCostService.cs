@@ -35,6 +35,7 @@ namespace AgfAdmin.Services
             var events = await _db.PartijCostAuditEvents.AsNoTracking().Where(e => e.IncomingInvoiceId == invoiceId).OrderBy(e => e.OccurredAt).ThenBy(e => e.Id).ToListAsync(cancellationToken);
             var partijIds = events.Select(e => e.PartijId).Distinct().ToList();
             var numbers = await _db.Partijen.AsNoTracking().Where(p => partijIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Number, cancellationToken);
+            var totals = await new PartijService(_db, _user).TotalsAsync(costs.Select(c => c.PartijId).Distinct().ToList(), cancellationToken);
             return ServiceResult<InvoiceAllocationsDto>.Ok(new InvoiceAllocationsDto
             {
                 InvoiceId = invoice.Id,
@@ -43,7 +44,7 @@ namespace AgfAdmin.Services
                 Lines = invoice.InvoiceLines.OrderBy(l => l.Id).Select(line =>
                 {
                     var allocations = costs.Where(c => c.IncomingInvoiceLineId == line.Id)
-                        .Select(c => new LineAllocationDto { PartijId = c.PartijId, Number = c.Number, PartijKind = c.Kind, Amount = c.AmountExclVat })
+                        .Select(c => WithBasis(new LineAllocationDto { PartijId = c.PartijId, Number = c.Number, PartijKind = c.Kind, Amount = c.AmountExclVat }, totals.GetValueOrDefault(c.PartijId)))
                         .OrderBy(a => a.Number).ToList();
                     var allocated = allocations.Sum(a => a.Amount);
                     return new InvoiceLineAllocationDto
@@ -197,6 +198,22 @@ namespace AgfAdmin.Services
                 return ServiceResult<InvoiceAllocationsDto>.Conflict("The allocation of this line was changed at the same time; reload and try again.");
             }
             return await GetInvoiceAsync(invoiceId, cancellationToken);
+        }
+
+        // Wat de partij is (leverancier of klant met VO-nummer, product) en de basis voor verdelen: ontvangen (inkoop) of besteld (verkoop).
+        internal static LineAllocationDto WithBasis(LineAllocationDto allocation, PartijTotalsDto totals)
+        {
+            if (totals == null)
+            {
+                return allocation;
+            }
+            var sales = totals.Kind == PartijRules.KindSales;
+            allocation.Party = sales ? string.Join(" · ", new[] { totals.CustomerName, totals.SalesOrderNumber }.Where(p => !string.IsNullOrWhiteSpace(p))) : string.Join(", ", totals.Vendors);
+            allocation.Products = string.Join(", ", totals.Products);
+            allocation.Quantity = sales ? totals.OrderedQuantity : totals.ReceivedQuantity;
+            allocation.Unit = totals.Unit;
+            allocation.NetKg = totals.NetKg;
+            return allocation;
         }
 
         private static bool IsEuro(IncomingInvoice invoice) => string.IsNullOrWhiteSpace(invoice.Currency) || invoice.Currency == PartijCostRules.Currency;
