@@ -61,6 +61,11 @@ export function formatDecimalInput(value: number, maxDecimals = 3, locale: Numbe
     return new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { maximumFractionDigits: maxDecimals }).format(value);
 }
 
+// Geldbedrag als invoertekst, altijd met twee decimalen (500 -> "500,00", 5000 -> "5.000,00").
+export function formatAmountInput(value: number, locale: NumberLocale = inputLocale): string {
+    return new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
 // Na het verlaten van een veld: geldige invoer in de notatie van de schermtaal, met evenveel decimalen als getypt
 // (15000 -> 15.000, 15600,0 -> 15.600,0); ongeldige invoer blijft staan zoals getypt.
 export function reformatDecimal(input: string, locale: NumberLocale = inputLocale): string {

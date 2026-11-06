@@ -59,6 +59,8 @@ export interface PartijTotals {
     inInspectionQuantity: number;
     openExpectedQuantity: number;
     soldQuantity: number;
+    // Netto kg (ontvangen bij inkoop, van de order bij verkoop): basis voor "verdeel naar kg"; ontbreekt bij een oudere server.
+    netKg?: number;
 }
 
 export interface PartijList {
