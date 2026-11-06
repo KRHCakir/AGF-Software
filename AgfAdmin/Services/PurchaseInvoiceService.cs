@@ -12,6 +12,7 @@ namespace AgfAdmin.Services
     // Idempotent via requestId: een identieke herhaling geeft dezelfde factuur (200), een afwijkende 409.
     public sealed class PurchaseInvoiceService
     {
+        private const int InvoiceLockClass = 0x41504931; // eigen lockruimte voor het invoeren van inkoopfacturen
         private const int MaxInvoiceNumberLength = 100;
         private const int MaxTextLength = 200;
         private const int MaxRemarksLength = 1000;
@@ -404,20 +405,45 @@ namespace AgfAdmin.Services
             // Dubbelcontrole: hetzelfde factuurnummer van dezelfde leverancier (getrimd, zonder hoofdletterverschil, zoals bij de
             // factuurnummers op een inkooporder) is al ingevoerd. Nooit een tweede factuur; de bestaande wordt genoemd.
             var numberKey = PurchaseOrderRules.InvoiceNumberKey(invoiceNumber);
-            var sameNumber = await _db.IncomingInvoices.AsNoTracking()
-                .Where(i => i.VendorId == vendor.Id && i.InvoiceNumber != null && i.InvoiceNumber.Trim().ToLower() == numberKey)
-                .Select(i => new { i.Id, i.InvoiceNumber }).FirstOrDefaultAsync(cancellationToken);
-            if (sameNumber != null)
-            {
-                return ServiceResult<PurchaseInvoiceDto>.Conflict(
-                    $"Invoice {sameNumber.InvoiceNumber} of {vendor.Name} has already been entered.",
-                    new DuplicatePurchaseInvoiceDto { Message = $"Invoice {sameNumber.InvoiceNumber} of {vendor.Name} has already been entered.", InvoiceId = sameNumber.Id, InvoiceNumber = sameNumber.InvoiceNumber });
-            }
-
-            _db.IncomingInvoices.Add(candidate);
+            // Controle en invoeging gebeuren in één transactie met een lock per leverancier (tot het einde van de transactie), zodat
+            // gelijktijdige aanvragen achter elkaar lopen en de tweede de eerste ziet. Alleen PostgreSQL (productie) kent deze lock;
+            // SQLite (tests) serialiseert schrijvers zelf op databaseniveau.
+            ServiceResult<PurchaseInvoiceDto> outcome = null;
+            var strategy = _db.Database.CreateExecutionStrategy();
             try
             {
-                await _db.SaveChangesAsync(cancellationToken);
+                await strategy.ExecuteAsync(async () =>
+                {
+                    outcome = null;
+                    await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+                    if (_db.Database.IsNpgsql())
+                    {
+                        await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({InvoiceLockClass}, {vendor.Id})", cancellationToken);
+                    }
+
+                    // Een gelijktijdige herhaling met dezelfde RequestId kan intussen zijn opgeslagen: dan de idempotente uitkomst.
+                    var stored = await Query().SingleOrDefaultAsync(i => i.RequestId == candidate.RequestId, cancellationToken);
+                    if (stored != null)
+                    {
+                        outcome = ResultForRetry(stored, request, candidate);
+                        return;
+                    }
+
+                    var sameNumber = await _db.IncomingInvoices.AsNoTracking()
+                        .Where(i => i.VendorId == vendor.Id && i.InvoiceNumber != null && i.InvoiceNumber.Trim().ToLower() == numberKey)
+                        .Select(i => new { i.Id, i.InvoiceNumber }).FirstOrDefaultAsync(cancellationToken);
+                    if (sameNumber != null)
+                    {
+                        outcome = ServiceResult<PurchaseInvoiceDto>.Conflict(
+                            $"Invoice {sameNumber.InvoiceNumber} of {vendor.Name} has already been entered.",
+                            new DuplicatePurchaseInvoiceDto { Message = $"Invoice {sameNumber.InvoiceNumber} of {vendor.Name} has already been entered.", InvoiceId = sameNumber.Id, InvoiceNumber = sameNumber.InvoiceNumber });
+                        return;
+                    }
+
+                    _db.IncomingInvoices.Add(candidate);
+                    await _db.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                });
             }
             catch (DbUpdateException)
             {
@@ -428,6 +454,11 @@ namespace AgfAdmin.Services
                     return ResultForRetry(concurrent, request, candidate);
                 }
                 throw;
+            }
+
+            if (outcome != null)
+            {
+                return outcome;
             }
 
             return ServiceResult<PurchaseInvoiceDto>.Created(ToDto(await Query().SingleAsync(i => i.Id == candidate.Id, cancellationToken)));
