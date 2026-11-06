@@ -63,7 +63,9 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
     const prefix = `line-${line.lineId}`;
 
     // Nieuwe stand van de server (na opslaan of opnieuw laden): de regels volgen; de melding "opgeslagen" blijft staan tot de gebruiker iets wijzigt.
-    useEffect(() => { setRows(rowsFrom(line)); }, [line]);
+    // Alleen bij een nieuwe stand van déze regel (andere versie): zo wist opslaan op een andere regel van de factuur geen concept hier.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { setRows(rowsFrom(line)); setSkipped(null); }, [line.lineId, line.version]);
 
     // Zoeken binnen de gekozen soort op nummer, leverancier, klant, VO-nummer en product (de server zoekt).
     useEffect(() => {
@@ -77,7 +79,9 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
         return () => { window.clearTimeout(timer); controller.abort(); };
     }, [mode, query]);
 
-    const shown = mode === 'General' ? [] : rows;
+    // Een partij die bij "verdeel naar kg / colli" niet meedeed (geen basis) en leeg is gebleven, gaat niet mee en blokkeert niets;
+    // vult de gebruiker toch een bedrag in, dan doet ze wel mee.
+    const shown = (mode === 'General' ? [] : rows).filter((row) => !(skipped?.ids.includes(row.target.partijId) && row.amount.trim() === ''));
     const check = checkAllocation(line.lineTotal, shown.map((row) => row.amount));
     const touched = () => { setSaved(false); setError(null); setConflict(false); requestId.current = null; };
 
@@ -89,10 +93,12 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
     const remove = (partijId: number) => { setRows((current) => current.filter((row) => row.target.partijId !== partijId)); touched(); };
     const setAmount = (partijId: number, amount: string) => { setRows((current) => current.map((row) => (row.target.partijId === partijId ? { ...row, amount } : row))); touched(); };
 
+    // Over alle gekozen partijen, ook een die bij een vorige verdeling niet meedeed.
     const spread = (how: DistributeMode) => {
-        const result = distribute(line.lineTotal, shown.map((row) => row.target), how);
+        const all = mode === 'General' ? [] : rows;
+        const result = distribute(line.lineTotal, all.map((row) => row.target), how);
         setRows((current) => current.map((row) => {
-            const index = shown.findIndex((candidate) => candidate.target.partijId === row.target.partijId);
+            const index = all.findIndex((candidate) => candidate.target.partijId === row.target.partijId);
             const amount = index === -1 ? null : result.amounts[index];
             return amount === null || amount === undefined ? { ...row, amount: index === -1 ? row.amount : '' } : { ...row, amount: formatAmountInput(amount) };
         }));
@@ -174,7 +180,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, onSaved,
                                     </span>
                                     <label htmlFor={`${prefix}-amount-${row.target.partijId}`} className="sr-only">{t('allocation_amount_for', { number: row.target.number })}</label>
                                     <input id={`${prefix}-amount-${row.target.partijId}`} inputMode="decimal" value={row.amount} onChange={(event) => setAmount(row.target.partijId, event.target.value)}
-                                        aria-invalid={check.amountErrors[rows.indexOf(row)] !== null ? true : undefined} data-tour="allocation-amount" data-tour-key={row.target.number}
+                                        aria-invalid={shown.includes(row) && check.amountErrors[shown.indexOf(row)] !== null ? true : undefined} data-tour="allocation-amount" data-tour-key={row.target.number}
                                         className={`${inputClass} !w-32 text-right font-mono`} placeholder="0,00" />
                                     <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100" aria-label={t('allocation_remove', { number: row.target.number })}
                                         onClick={() => remove(row.target.partijId)}>✕</button>

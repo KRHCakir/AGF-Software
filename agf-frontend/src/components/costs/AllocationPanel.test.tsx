@@ -103,6 +103,32 @@ describe('AllocationPanel', () => {
         await click(tour('allocation-spread', 'colli'));
         assert.deepEqual([input('line-41-amount-1').value, input('line-41-amount-2').value], ['3.125,00', '1.875,00']);
         assert.equal(mounted.hasText('allocation_skipped_kg'), false);
+        // Weer naar kg: de overgeslagen partij blokkeert opslaan niet en gaat niet mee.
+        await click(tour('allocation-spread', 'kg'));
+        assert.equal(mounted.hasText('allocation_amount_invalid'), false);
+        await click(tour('allocation-save'));
+        await mounted.waitFor(() => saved.length === 1, 'saved without the skipped lot');
+        assert.deepEqual(calls.find((call) => call.method === 'PUT')!.body!.allocations, [{ partijId: 1, amount: 5000 }]);
+    });
+
+    test('saving another line of the invoice keeps the unsaved draft of this line', async () => {
+        let setOther: (line: InvoiceLineAllocation) => void = () => {};
+        function TwoLines() {
+            const [other, setLine] = useState(line({ lineId: 42 }));
+            setOther = setLine;
+            return <AllocationPanel invoiceId={7} line={other} canAllocate onSaved={() => {}} onReload={() => {}} />;
+        }
+        await mounted.render(<TwoLines />);
+        await click(tour('allocation-mode', 'Sales'));
+        await mounted.waitFor(() => tour('allocation-pick', '261140') !== null, 'found');
+        await click(tour('allocation-pick', '261140'));
+        await act(async () => { setValue(input('line-42-amount-1'), '750'); });
+        // De pagina vervangt na opslaan van een andere regel alle regels: zelfde regel en versie, nieuw object.
+        await act(async () => { setOther(line({ lineId: 42 })); });
+        assert.equal(input('line-42-amount-1').value, '750', 'draft kept');
+        // Een nieuwe versie van deze regel (opnieuw geladen) neemt wel de stand van de server over.
+        await act(async () => { setOther(line({ lineId: 42, version: 2 })); });
+        assert.equal(input('line-42-amount-1'), null);
     });
 
     test('one line can take a purchase lot and a sales lot; a conflict asks to reload; Tab goes from search to the amounts to save', async () => {
