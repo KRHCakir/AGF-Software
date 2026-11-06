@@ -34,6 +34,8 @@ const AVAILABILITY_VARIANT_LINK = /^\/availability\?productVariantId=[1-9]\d{0,9
 // Ontvangst van één inkooporder (de keten-strip daar) en het detail van één partij.
 const RECEIPT_ORDER_LINK = /^\/receipts\?order=[1-9]\d{0,9}$/;
 const PARTIJ_LINK = /^\/partijen\?id=[1-9]\d{0,9}$/;
+// Eén inkoopfactuur (kosten verdelen per regel).
+const PURCHASE_INVOICE_LINK = /^\/purchase-invoices\?id=[1-9]\d{0,9}$/;
 // "Verkopen" vanuit Beschikbaarheid: een nieuwe verkooporder met één artikel, eenheid en aantal ingevuld (zie lib/salesSupply.sellHref).
 const SELL_LINK = /^\/sales-orders\?new=1&variantId=[1-9]\d{0,9}&unit=(box|colli|tray|piece|dozen)&quantity=[1-9]\d{0,8}(\.\d{1,3})?$/;
 
@@ -42,7 +44,7 @@ const SELL_LINK = /^\/sales-orders\?new=1&variantId=[1-9]\d{0,9}&unit=(box|colli
 // nooit externe URL's, scripts of andere paden.
 export function isAllowedDemoHref(href: string): boolean {
     return (DEMO_ROUTES as readonly string[]).includes(href) || ORDER_LINK.test(href) || INSPECTION_SEARCH_LINK.test(href) || PURCHASE_ORDER_LINK.test(href)
-        || AVAILABILITY_VARIANT_LINK.test(href) || SELL_LINK.test(href) || RECEIPT_ORDER_LINK.test(href) || PARTIJ_LINK.test(href);
+        || AVAILABILITY_VARIANT_LINK.test(href) || SELL_LINK.test(href) || RECEIPT_ORDER_LINK.test(href) || PARTIJ_LINK.test(href) || PURCHASE_INVOICE_LINK.test(href);
 }
 
 export function orderHref(id: number): string {

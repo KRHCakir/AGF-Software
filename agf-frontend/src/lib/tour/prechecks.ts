@@ -10,6 +10,7 @@ import { normalizeTradeClass } from '../tradeClass';
 import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
+import { listSalesOrders } from '../../services/salesOrderService';
 import { getAvailabilityOverview } from '../../services/availabilityService';
 import { getCountries } from '../../services/countryService';
 import { getNextPartijNumber } from '../../services/partijService';
@@ -345,6 +346,30 @@ export async function precheckChain(signal: AbortSignal): Promise<TourPrecheck> 
     const data = await masterData(signal);
     const vars = { ...masterFlags(data, { customer: true }), needOrder: 'yes', needStock: 'yes', needSale: 'yes' };
     return { missing: [], vars, writes: true };
+}
+
+// Kosten verdelen: de factuur is van de leverancier van de rondleiding, de kosten gaan naar de verkoop-partij van de nieuwste open
+// DEMO-TOUR-verkooporder (één order, één klant). Alleen lezen.
+export async function lookupCosts(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const data = await masterData(signal);
+    if (data.vendor === null) return { missing: [missingVendor] };
+    const orders = await listSalesOrders({ status: 'Open' }, signal);
+    const order = orders.filter((candidate) => !!candidate.salesPartijId && !!candidate.salesPartijNumber && isTour(candidate.customerReference))
+        .sort((a, b) => b.id - a.id)[0];
+    if (!order) return { missing: [{ key: 'tour_missing_sales_lot' }] };
+    return {
+        missing: [],
+        vars: { vendorSearch: data.vendor.search, vendorName: data.vendor.vendor.name, salesPartijId: String(order.salesPartijId), salesPartijNumber: order.salesPartijNumber! },
+    };
+}
+
+// Zonder verkoop-partij van de rondleiding (lege database) maakt het hoofdstuk eerst stamgegevens, voorraad en een verkoop aan.
+export async function precheckCosts(signal: AbortSignal): Promise<TourPrecheck> {
+    const data = await masterData(signal);
+    const found = await lookupCosts({}, signal);
+    if (found.missing.length === 0) return { missing: [], vars: masterFlags(data, {}), writes: true };
+    const needStock = !await sellableTourStock(signal, data.article);
+    return { missing: [], vars: { ...masterFlags(data, { customer: true }), needOrder: flag(needStock), needStock: flag(needStock), needSale: 'yes' }, writes: true };
 }
 
 // Inkoopfactuur invoeren: de leverancier en het artikel van de rondleiding.

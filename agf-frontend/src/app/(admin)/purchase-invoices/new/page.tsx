@@ -51,7 +51,7 @@ export default function NewPurchaseInvoicePage() {
                     <h1 className="text-2xl font-bold text-gray-900">{t('purchase_new_title')}</h1>
                     <p className="text-sm text-gray-600">{t('purchase_new_subtitle')}</p>
                     {/* Een factuur heeft geen inkooporder of ontvangst nodig: ook kosten van derden gaan hier direct in. */}
-                    <p className="text-sm text-gray-800" data-testid="purchase-direct-hint">
+                    <p className="text-sm text-gray-800" data-testid="purchase-direct-hint" data-tour="purchase-direct-hint">
                         {t('purchase_direct_hint')} <Link href="/settings#kostenartikelen" className="text-blue-800 underline underline-offset-2">{t('cost_articles_manage')}</Link>
                     </p>
                 </div>
