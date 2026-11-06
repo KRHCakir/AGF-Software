@@ -19,13 +19,14 @@ import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import PartijStatusBadge from './PartijStatusBadge';
 import { SalesPartijSources, SalesPartijSummary } from './SalesPartijSections';
+import PartijCostsSection from './PartijCostsSection';
 
 const h3 = 'mb-2 text-sm font-semibold text-gray-900';
 const link = 'font-mono text-blue-800 underline underline-offset-2';
 
 // Partijdetail: de inkooporders (met link), de ontvangsten en pallets met status, de huidige voorraad en de verkooporders die ervan
-// reserveren of leveren. Kosten en resultaat komen in een volgende stap (P2, P3); daarvoor staat alleen een rustig blokje, geen dode
-// links. Het nummer corrigeren gaat altijd met een reden (historie); verwijderen kan alleen zonder koppelingen.
+// reserveren of leveren, en de kosten (P2; resultaat komt in P3). Het nummer corrigeren gaat met een reden (historie); verwijderen kan
+// alleen zonder koppelingen.
 export default function PartijDetail({ partij, onChanged, onDeleted }: { partij: Detail; onChanged: () => void; onDeleted: () => void }) {
     const { t, locale } = useTranslation();
     const qty = (value: number) => formatQuantity(value, locale);
@@ -131,9 +132,7 @@ export default function PartijDetail({ partij, onChanged, onDeleted }: { partij:
             </section>
             </>}
 
-            <section className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-sm text-gray-700" data-tour="partij-costs-later">
-                {t('partij_costs_later')}
-            </section>
+            <PartijCostsSection partij={partij} />
 
             <section className={sectionClass} aria-labelledby="partij-history">
                 <h3 id="partij-history" className={h3}>{t('partij_history')}</h3>
