@@ -11,6 +11,9 @@ import { fitsAmount, lineNet, lineVat, totals } from './invoiceMath.ts';
 export interface LineDraft {
     key: string;
     productVariantId: string; // '' = vrije omschrijving
+    // Kostenartikel (type Dienst, '' of ontbrekend = geen): Handling, Transport, ... in plaats van een artikel. Een concept van vóór dit
+    // veld heeft het niet.
+    costArticleId?: string;
     description: string;
     quantity: string;
     unit: PackageUnit | '';
@@ -247,8 +250,9 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
         const index = draft.lines.indexOf(line);
         const prefix = `lines[${index}]`;
         const hasProduct = /^[1-9]\d*$/.test(line.productVariantId);
+        const hasCost = !hasProduct && /^[1-9]\d*$/.test(line.costArticleId ?? '');
         const description = line.description.trim();
-        if (!hasProduct && description === '') errors.push({ field: `${prefix}.description`, code: 'required' });
+        if (!hasProduct && !hasCost && description === '') errors.push({ field: `${prefix}.description`, code: 'required' });
         const quantity = parsePositiveDecimal(line.quantity);
         if (!quantity.ok) errors.push({ field: `${prefix}.quantity`, code: quantity.error });
         const price = parseNonNegative(line.unitPrice, 2);
@@ -267,6 +271,7 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
         }
         lines.push({
             productVariantId: hasProduct ? Number(line.productVariantId) : null,
+            ...(hasCost ? { costArticleId: Number(line.costArticleId) } : {}),
             description: description === '' ? null : description,
             quantity: quantity.ok ? quantity.value : 0,
             unit: line.unit === '' ? null : line.unit,

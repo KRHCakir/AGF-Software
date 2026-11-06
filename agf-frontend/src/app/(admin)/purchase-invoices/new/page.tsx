@@ -9,6 +9,8 @@ import { useTranslation } from '../../../../i18n/LanguageContext';
 import { toApiError } from '../../../../services/apiClient';
 import { getPurchaseInvoiceSettings, getPurchaseVendors } from '../../../../services/purchaseInvoiceService';
 import { getProductsWithVariants } from '../../../../services/referenceDataService';
+import { listCostArticles } from '../../../../services/costArticleService';
+import type { CostArticle } from '../../../../types/costArticle';
 import type { ProductOption } from '../../../../types/referenceData';
 import { MissingMasterDataNotice } from '../../../../components/shared/FirstStep';
 import { missingMasterData } from '../../../../lib/masterDataStatus';
@@ -17,6 +19,7 @@ import type { PurchaseInvoiceSettings, PurchaseVendor } from '../../../../types/
 interface Reference {
     vendors: PurchaseVendor[];
     products: ProductOption[];
+    costArticles: CostArticle[];
     settings: PurchaseInvoiceSettings;
 }
 
@@ -30,8 +33,10 @@ export default function NewPurchaseInvoicePage() {
 
     useEffect(() => {
         const controller = new AbortController();
-        Promise.all([getPurchaseVendors(controller.signal), getProductsWithVariants(controller.signal), getPurchaseInvoiceSettings(controller.signal)])
-            .then(([vendors, products, settings]) => setState({ status: 'ready', data: { vendors, products, settings } }))
+        // Kostenartikelen zijn een hulp in de artikelkeuze: zonder antwoord blijft het scherm bruikbaar (vrije omschrijving).
+        Promise.all([getPurchaseVendors(controller.signal), getProductsWithVariants(controller.signal), getPurchaseInvoiceSettings(controller.signal),
+            listCostArticles(false, controller.signal).catch(() => [] as CostArticle[])])
+            .then(([vendors, products, settings, costArticles]) => setState({ status: 'ready', data: { vendors, products, settings, costArticles } }))
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
                 if (apiError.kind !== 'aborted') setState({ status: 'error', error: apiError });
@@ -45,6 +50,10 @@ export default function NewPurchaseInvoicePage() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">{t('purchase_new_title')}</h1>
                     <p className="text-sm text-gray-600">{t('purchase_new_subtitle')}</p>
+                    {/* Een factuur heeft geen inkooporder of ontvangst nodig: ook kosten van derden gaan hier direct in. */}
+                    <p className="text-sm text-gray-800" data-testid="purchase-direct-hint">
+                        {t('purchase_direct_hint')} <Link href="/settings#kostenartikelen" className="text-blue-800 underline underline-offset-2">{t('cost_articles_manage')}</Link>
+                    </p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                     <Link href="/purchase-invoices" className="font-medium text-blue-800 underline underline-offset-2">{t('purchase_back_to_list')}</Link>
@@ -63,7 +72,7 @@ export default function NewPurchaseInvoicePage() {
                             onSaved={(settings) => setState({ status: 'ready', data: { ...state.data, settings } })} />
                     )}
                     <MissingMasterDataNotice missing={missingMasterData({ vendors: state.data.vendors }, ['vendor'])} />
-                    <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} settings={state.data.settings} />
+                    <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} costArticles={state.data.costArticles} settings={state.data.settings} />
                 </>
             )}
         </div>
