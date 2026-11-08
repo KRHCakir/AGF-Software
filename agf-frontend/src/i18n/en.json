@@ -1923,6 +1923,7 @@
   "tour_missing_complete_article": "The article {article} has no size or no class from the list yet. Complete it in Articles under \"Clean up size and class\".",
   "nav_main": "Main menu",
   "nav_menu": "Menu",
+  "nav_sub": "{group} screens",
   "nav_start": "Start",
   "nav_group_purchase": "Purchasing",
   "nav_group_stock": "Stock",

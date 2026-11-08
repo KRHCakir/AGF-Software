@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '../i18n/LanguageContext';
 import { LEGACY_GROUP, NAV_GROUPS, NavGroup, NavItem, SETTINGS_ITEMS, START_ITEM, activeNav } from '../lib/navigation';
 
-// Het hoofdmenu in vier procesgroepen (zie lib/navigation.ts). Op brede schermen een vaste zijbalk; onder 768 px een knop "Menu" in de
-// kop die hetzelfde menu uitklapt. De actieve pagina krijgt aria-current en een duidelijke achtergrond, haar groep een gekleurde kop.
+// Het hoofdmenu in vier procesgroepen onder elkaar (zie lib/navigation.ts), voor smalle schermen: onder 1024 px klapt de knop "Menu" in
+// de kop het uit. Vanaf 1024 px staat het menu boven (TopNav). De actieve pagina krijgt aria-current en een duidelijke achtergrond, haar groep een gekleurde kop.
 // "Oud" staat onderaan, dichtgeklapt, tenzij je op een van die schermen bent.
 export default function AppMenu({ pathname, onNavigate, idPrefix }: {
     pathname: string;
