@@ -5,11 +5,12 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatMoney, formatQuantity } from '../../lib/availability';
 import { type CostTarget, type DistributeMode, checkAllocation, distribute } from '../../lib/costAllocation';
 import { formatAmountInput } from '../../lib/decimal';
+import { inCurrency, isEuro } from '../../lib/exchangeRate';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { listPartijen } from '../../services/partijService';
 import { saveLineAllocation } from '../../services/purchaseInvoiceService';
-import type { InvoiceAllocations, InvoiceLineAllocation } from '../../types/partijCost';
+import { type InvoiceAllocations, type InvoiceLineAllocation, lineEuro } from '../../types/partijCost';
 import type { PartijTotals } from '../../types/partij';
 import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
@@ -41,17 +42,26 @@ const rowsFrom = (line: InvoiceLineAllocation): Row[] => line.allocations.map((a
 // "Aan welke partij hoort dit?" bij één regel van een inkoopfactuur: algemene kosten (standaard), of een of meer inkoop- en/of
 // verkoop-partijen met elk een bedrag excl. btw. Samen nooit meer dan het regelbedrag (harde melding naast Opslaan); een rest is
 // algemene kosten (waarschuwing). Verdeel gelijk / naar kg / naar colli vullen de bedragen voor; opslaan schrijft historie.
-export default function AllocationPanel({ invoiceId, line, canAllocate, currency = 'EUR', onSaved, onReload }: {
+// Bedragen op partijen staan altijd in euro. Bij een factuur in een andere valuta is de grens het regelbedrag omgerekend met de ECB-koers
+// (van de server, line.lineTotalEur) en staat bij elk bedrag het oorspronkelijke bedrag in die valuta (≈).
+export default function AllocationPanel({ invoiceId, line, canAllocate, currency = 'EUR', exchangeRate = null, onSaved, onReload }: {
     invoiceId: number;
-    // Valuta van de factuur (alleen voor de weergave; verdelen kan alleen in euro).
+    // Valuta van de factuur. Verdeeld wordt altijd in euro.
     currency?: string;
+    // ECB-koers van de factuur (eenheden valuta per euro); alleen bij een andere valuta dan EUR.
+    exchangeRate?: number | null;
     line: InvoiceLineAllocation;
     canAllocate: boolean;
     onSaved: (allocations: InvoiceAllocations) => void;
     onReload: () => void;
 }) {
     const { t, locale } = useTranslation();
-    const money = (value: number) => formatMoney(value, currency, locale);
+    const money = (value: number) => formatMoney(value, 'EUR', locale);
+    const foreign = !isEuro(currency) && exchangeRate !== null && exchangeRate > 0;
+    // De grens in euro; null bij een andere valuta zonder koers (dan kan er niet verdeeld worden).
+    const base = lineEuro(line, currency);
+    const allowed = canAllocate && base !== null;
+    const total = base ?? 0;
     const [mode, setMode] = useState<Mode>(() => (line.allocations.length === 0 ? 'General' : line.allocations[0].partijKind));
     const [rows, setRows] = useState<Row[]>(() => rowsFrom(line));
     const [query, setQuery] = useState('');
@@ -68,12 +78,12 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
 
     // Nieuwe stand van de server (na opslaan of opnieuw laden): de regels volgen; de melding "opgeslagen" blijft staan tot de gebruiker iets wijzigt.
     // Alleen bij een nieuwe stand van déze regel (andere versie): zo wist opslaan op een andere regel van de factuur geen concept hier.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     // De soort volgt de geladen verdeling (geen partijen = algemene kosten), zodat een herladen verdeling nooit verborgen blijft.
     useEffect(() => {
         setRows(rowsFrom(line));
         setSkipped(null);
         setMode(line.allocations.length === 0 ? 'General' : line.allocations[0].partijKind);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [line.lineId, line.version]);
 
     // Zoeken binnen de gekozen soort op nummer, leverancier, klant, VO-nummer en product (de server zoekt).
@@ -91,7 +101,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
     // Een partij die bij "verdeel naar kg / colli" niet meedeed (geen basis) en leeg is gebleven, gaat niet mee en blokkeert niets;
     // vult de gebruiker toch een bedrag in, dan doet ze wel mee.
     const shown = (mode === 'General' ? [] : rows).filter((row) => !(skipped?.ids.includes(row.target.partijId) && row.amount.trim() === ''));
-    const check = checkAllocation(line.lineTotal, shown.map((row) => row.amount));
+    const check = checkAllocation(total, shown.map((row) => row.amount));
     const touched = () => { setSaved(false); setError(null); setConflict(false); requestId.current = null; };
 
     const add = (item: PartijTotals) => {
@@ -105,7 +115,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
     // Over alle gekozen partijen, ook een die bij een vorige verdeling niet meedeed.
     const spread = (how: DistributeMode) => {
         const all = mode === 'General' ? [] : rows;
-        const result = distribute(line.lineTotal, all.map((row) => row.target), how);
+        const result = distribute(total, all.map((row) => row.target), how);
         setRows((current) => current.map((row) => {
             const index = all.findIndex((candidate) => candidate.target.partijId === row.target.partijId);
             const amount = index === -1 ? null : result.amounts[index];
@@ -143,7 +153,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
 
     return (
         <form noValidate onSubmit={save} className="space-y-2 rounded border border-gray-200 bg-gray-50 p-2" data-tour="cost-allocation" data-tour-key={line.lineId} aria-labelledby={`${prefix}-title`}>
-            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1" disabled={!canAllocate || busy}>
+            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1" disabled={!allowed || busy}>
                 <legend id={`${prefix}-title`} className="mb-1 text-sm font-semibold text-gray-900">{t('allocation_question')}</legend>
                 {(['General', 'Purchase', 'Sales'] as const).map((option) => (
                     <label key={option} className="flex items-center gap-1 text-sm text-gray-900">
@@ -153,9 +163,9 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                     </label>
                 ))}
             </fieldset>
-            {!canAllocate && <p className="text-sm text-amber-900">{t('allocation_not_euro')}</p>}
+            {!allowed && <p className="text-sm text-amber-900" data-testid={`${prefix}-no-rate`}>{t('allocation_no_rate', { currency })}</p>}
 
-            {mode !== 'General' && canAllocate && (
+            {mode !== 'General' && allowed && (
                 // Tijdens opslaan niets wijzigen: wat dan getypt zou worden, ging niet mee en verdween bij de nieuwe stand.
                 <fieldset className="space-y-2" disabled={busy}>
                     <div>
@@ -197,6 +207,11 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                                     <input id={`${prefix}-amount-${row.target.partijId}`} inputMode="decimal" value={row.amount} onChange={(event) => setAmount(row.target.partijId, event.target.value)}
                                         aria-invalid={shown.includes(row) && check.amountErrors[shown.indexOf(row)] !== null ? true : undefined} data-tour="allocation-amount" data-tour-key={row.target.number}
                                         className={`${inputClass} !w-32 text-right font-mono`} placeholder="0,00" />
+                                    {foreign && shown.includes(row) && check.amountErrors[shown.indexOf(row)] === null && row.amount.trim() !== '' && (
+                                        <span className="w-28 text-right font-mono text-xs text-gray-600" data-testid={`${prefix}-in-currency-${row.target.partijId}`}>
+                                            {t('allocation_in_currency', { amount: formatMoney(inCurrency(check.amounts[shown.indexOf(row)], line.lineTotal, total), currency, locale) })}
+                                        </span>
+                                    )}
                                     <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100" aria-label={t('allocation_remove', { number: row.target.number })}
                                         onClick={() => remove(row.target.partijId)}>✕</button>
                                 </li>
@@ -213,10 +228,13 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                 </fieldset>
             )}
 
-            <p className="text-sm text-gray-800" data-testid={`${prefix}-summary`} data-tour="allocation-summary">
-                {t('allocation_summary', { allocated: money(check.allocated), total: money(line.lineTotal) })}
-                {check.general > 0 && <span className={`ml-1 ${shown.length > 0 ? 'font-medium text-amber-900' : 'text-gray-700'}`} data-testid={`${prefix}-general`}>{t('allocation_general', { amount: money(check.general) })}</span>}
-            </p>
+            {/* Zonder koers is er geen eurobedrag: geen "0,00 van 0,00", de melding hierboven zegt waarom. */}
+            {allowed && (
+                <p className="text-sm text-gray-800" data-testid={`${prefix}-summary`} data-tour="allocation-summary">
+                    {t('allocation_summary', { allocated: money(check.allocated), total: money(total) })}
+                    {check.general > 0 && <span className={`ml-1 ${shown.length > 0 ? 'font-medium text-amber-900' : 'text-gray-700'}`} data-testid={`${prefix}-general`}>{t('allocation_general', { amount: money(check.general) })}</span>}
+                </p>
+            )}
             {error && <ErrorNotice error={error} />}
             {conflict && (
                 <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-900">
@@ -224,8 +242,8 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                 </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-                <button type="submit" className={primaryButtonClass} disabled={!canAllocate || busy} data-tour="allocation-save">{busy ? t('supply_saving') : t('allocation_save')}</button>
-                {check.over && <span role="alert" className="text-sm font-medium text-red-800" data-testid={`${prefix}-over`}>{t('allocation_over', { allocated: money(check.allocated), total: money(line.lineTotal) })}</span>}
+                <button type="submit" className={primaryButtonClass} disabled={!allowed || busy} data-tour="allocation-save">{busy ? t('supply_saving') : t('allocation_save')}</button>
+                {check.over && <span role="alert" className="text-sm font-medium text-red-800" data-testid={`${prefix}-over`}>{t('allocation_over', { allocated: money(check.allocated), total: money(total) })}</span>}
                 {!check.over && check.amountErrors.some((amountError) => amountError !== null) && <span role="alert" className="text-sm font-medium text-red-800">{t('allocation_amount_invalid')}</span>}
                 {saved && <span role="status" className="text-sm text-green-900" data-tour="allocation-saved">{t('allocation_saved')}</span>}
             </div>

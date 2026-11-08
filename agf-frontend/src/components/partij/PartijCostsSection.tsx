@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatMoney } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
+import { formatRate } from '../../lib/exchangeRate';
 import type { PartijDetail } from '../../types/partij';
 import { sectionClass } from '../purchase/sectionClass';
 
@@ -38,7 +39,14 @@ export default function PartijCostsSection({ partij }: { partij: PartijDetail })
                                                 {' · '}{cost.vendorName ?? '–'}{cost.invoiceDate ? ` · ${formatCalendarDate(cost.invoiceDate, locale)}` : ''}
                                                 {cost.description && cost.description !== kind && <span className="text-gray-600"> · {cost.description}</span>}
                                             </span>
-                                            <span className="font-mono">{money(cost.amount)}</span>
+                                            <span className="text-right font-mono">
+                                                {money(cost.amount)}
+                                                {cost.currency && cost.amountInCurrency != null && cost.exchangeRate != null && (
+                                                    <span className="block text-xs text-gray-600" data-testid="partij-cost-in-currency">
+                                                        {t('partij_cost_in_currency', { amount: formatMoney(cost.amountInCurrency, cost.currency, locale), rate: formatRate(cost.exchangeRate, locale) })}
+                                                    </span>
+                                                )}
+                                            </span>
                                         </li>
                                     ))}
                                 </ul>

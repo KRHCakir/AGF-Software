@@ -1,6 +1,7 @@
 import { isNumber, isString } from './guards';
 
-// Kosten verdelen over partijen (api/purchase-invoices/{id}/allocations): zie AgfAdmin/DTOs/PartijCostDtos.cs. Bedragen excl. btw, euro.
+// Kosten verdelen over partijen (api/purchase-invoices/{id}/allocations): zie AgfAdmin/DTOs/PartijCostDtos.cs. Bedragen op partijen
+// excl. btw, altijd in euro; een factuur in een andere valuta wordt omgerekend met haar ECB-koers.
 export interface LineAllocation {
     partijId: number;
     number: string;
@@ -28,9 +29,13 @@ export interface InvoiceLineAllocation {
     lineId: number;
     description: string | null;
     kind: string;
+    // Regelbedrag in de valuta van de factuur.
     lineTotal: number;
+    // Hetzelfde in euro (de grens voor de verdeling); null bij een andere valuta zonder koers. Ontbreekt bij een oudere server (dan euro).
+    lineTotalEur?: number | null;
     allocated: number;
-    general: number;
+    // Niet verdeeld, in euro: algemene kosten; null zonder koers.
+    general: number | null;
     version: number;
     allocations: LineAllocation[];
     history: AllocationHistory[];
@@ -39,8 +44,35 @@ export interface InvoiceLineAllocation {
 export interface InvoiceAllocations {
     invoiceId: number;
     currency: string;
+    // ECB-koers bij een factuur in een andere valuta: eenheden valuta per 1 euro, publicatiedag (jjjj-mm-dd) en bron.
+    exchangeRate?: number | null;
+    exchangeRateDate?: string | null;
+    exchangeRateSource?: string | null;
+    // Er staan kosten op partijen: de koers ligt vast.
+    rateLocked?: boolean;
     canAllocate: boolean;
     lines: InvoiceLineAllocation[];
+}
+
+// Een ECB-koers om te tonen (api/exchange-rates).
+export interface ExchangeRate {
+    currency: string;
+    unitsPerEuro: number;
+    rateDate: string;
+    forDate: string;
+    source: string;
+}
+
+// Het eurobedrag van een regel: de grens voor de verdeling (bij EUR het regelbedrag zelf).
+export function lineEuro(line: InvoiceLineAllocation, currency: string): number | null {
+    if (line.lineTotalEur !== undefined) return line.lineTotalEur;
+    return currency.trim().toUpperCase() === 'EUR' ? line.lineTotal : null;
+}
+
+export function isExchangeRate(value: unknown): value is ExchangeRate {
+    if (typeof value !== 'object' || value === null) return false;
+    const record = value as Record<string, unknown>;
+    return isString(record.currency) && isNumber(record.unitsPerEuro) && isString(record.rateDate) && isString(record.source);
 }
 
 export interface SaveLineAllocationRequest {

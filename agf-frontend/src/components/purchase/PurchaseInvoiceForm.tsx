@@ -31,6 +31,7 @@ import InvoiceOrderNotice from './InvoiceOrderNotice';
 import VendorPicker from './VendorPicker';
 import SubmitErrors from '../shared/SubmitErrors';
 import CurrencyField from '../shared/CurrencyField';
+import ExchangeRatePreview from './ExchangeRatePreview';
 
 // Eén compacte werkplek voor een inkoopfactuur: documentkop, direct bewerkbare regels, live totalen en een ingeklapt
 // paneel "Extra gegevens". Alles werkt zonder muis (Tab, Enter, pijltjes, sneltoetsen) en blijft ook met de muis bruikbaar.
@@ -359,6 +360,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} onChange={(value) => update(changeCurrency(draft, value))} />
                     {defaultsNote('currency') && <span className="block text-xs text-gray-500">{defaultsNote('currency')}</span>}
                     <span className="block text-xs text-gray-500">{t('purchase_currency_hint')}</span>
+                    <ExchangeRatePreview currency={draft.header.currency} invoiceDate={draft.header.invoiceDate} net={totals.net} />
                     <FieldError id="currency" messages={e('currency')} />
                 </div>
             </fieldset>
