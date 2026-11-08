@@ -375,6 +375,11 @@ namespace AgfAdmin.Data
                 b.Property(i => i.OriginCountry).HasMaxLength(200);
                 b.Property(i => i.ReceiptReference).HasMaxLength(200);
                 b.Property(i => i.InternalNote).HasMaxLength(1000);
+                b.Property(i => i.ExchangeRate).HasPrecision(18, 6);
+                b.Property(i => i.ExchangeRateSource).HasMaxLength(ExchangeRateRules.MaxSourceLength);
+                // Een koers is er helemaal (positief, met datum en bron) of helemaal niet.
+                b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoices_ExchangeRate",
+                    "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" > 0 AND \"ExchangeRateDate\" IS NOT NULL AND \"ExchangeRateSource\" IS NOT NULL)"));
                 // NULL telt als verschillend: facturen van vóór de kantoorinvoer (upload, oude handmatige invoer) hebben geen RequestId.
                 b.HasIndex(i => i.RequestId).IsUnique();
             });

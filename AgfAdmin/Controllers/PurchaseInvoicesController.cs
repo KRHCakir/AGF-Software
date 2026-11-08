@@ -14,16 +14,22 @@ namespace AgfAdmin.Controllers
     {
         private readonly PurchaseInvoiceService _service;
         private readonly PartijCostService _costs;
+        private readonly InvoiceExchangeRateService _rates;
 
-        public PurchaseInvoicesController(PurchaseInvoiceService service, PartijCostService costs)
+        public PurchaseInvoicesController(PurchaseInvoiceService service, PartijCostService costs, InvoiceExchangeRateService rates)
         {
             _service = service;
             _costs = costs;
+            _rates = rates;
         }
 
         // Kosten verdelen over partijen: per regel de verdeling, wat algemene kosten blijft en de historie.
         [HttpGet("{id:int}/allocations")]
         public async Task<IActionResult> Allocations(int id) => this.ToActionResult(await _costs.GetInvoiceAsync(id, HttpContext?.RequestAborted ?? default));
+
+        // De ECB-koers van een factuur in een andere valuta opnieuw ophalen (zolang er niets op partijen staat) en de verdeling teruggeven.
+        [HttpPost("{id:int}/exchange-rate")]
+        public async Task<IActionResult> RefreshExchangeRate(int id) => this.ToActionResult(await _rates.RefreshAsync(id, HttpContext?.RequestAborted ?? default));
 
         [HttpPut("{id:int}/lines/{lineId:int}/allocations")]
         public async Task<IActionResult> SaveAllocation(int id, int lineId, [FromBody] SaveLineAllocationDto request) =>
