@@ -173,9 +173,21 @@ namespace AgfAdmin.Services
                 {
                     Kind = c.Kind, InvoiceId = c.IncomingInvoiceLine.IncomingInvoiceId, InvoiceNumber = c.IncomingInvoiceLine.IncomingInvoice.InvoiceNumber,
                     VendorName = c.IncomingInvoiceLine.IncomingInvoice.Vendor.Name, InvoiceDate = c.IncomingInvoiceLine.IncomingInvoice.InvoiceDate,
-                    Description = c.IncomingInvoiceLine.Description, Amount = c.AmountExclVat
+                    Description = c.IncomingInvoiceLine.Description, Amount = c.AmountExclVat,
+                    Currency = c.IncomingInvoiceLine.IncomingInvoice.Currency, ExchangeRate = c.IncomingInvoiceLine.IncomingInvoice.ExchangeRate,
+                    AmountInCurrency = c.IncomingInvoiceLine.LineTotal
                 })
                 .ToListAsync(cancellationToken);
+            foreach (var cost in detail.Costs)
+            {
+                // Het oorspronkelijke bedrag naast het eurobedrag, alleen bij een andere valuta (de koers ligt vast zodra er kosten zijn):
+                // naar verhouding van de regel (AmountInCurrency bevat hier nog het regelbedrag).
+                var euro = ExchangeRateRules.IsEuro(cost.Currency) || cost.ExchangeRate == null;
+                var lineTotal = cost.AmountInCurrency ?? 0m;
+                cost.Currency = euro ? null : cost.Currency.Trim().ToUpperInvariant();
+                cost.AmountInCurrency = euro ? null : ExchangeRateRules.InCurrency(cost.Amount, lineTotal, ExchangeRateRules.ToEuro(lineTotal, cost.ExchangeRate.Value));
+                cost.ExchangeRate = euro ? null : cost.ExchangeRate;
+            }
             detail.CostTotal = detail.Costs.Sum(c => c.Amount);
             var linked = partij.Kind == PartijRules.KindSales
                 ? (facts.SalesSides.TryGetValue(partij.Id, out var side) ? side.Sources.Where(s => s.PartijId != null).Select(s => s.PartijId.Value) : Enumerable.Empty<int>())

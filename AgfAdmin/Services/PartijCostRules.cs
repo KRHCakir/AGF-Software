@@ -14,8 +14,8 @@ namespace AgfAdmin.Services
         public const int MaxKindLength = 100;
         public const int MaxActorLength = 100;
         public const int MaxAllocationsPerLine = 100;
-        // Aanname: bedragen in euro. Een factuur in een andere valuta wordt niet verdeeld (er wordt nooit omgerekend).
-        public const string Currency = "EUR";
+        // Kosten op partijen staan altijd in euro; een factuur in een andere valuta wordt omgerekend met haar ECB-koers (ExchangeRateRules).
+        public const string Currency = ExchangeRateRules.Euro;
 
         public static string KindOf(int? productVariantId, string costArticleName) =>
             costArticleName ?? (productVariantId != null ? KindGoods : KindOther);

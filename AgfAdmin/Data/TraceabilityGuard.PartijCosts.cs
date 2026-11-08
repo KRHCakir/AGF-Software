@@ -11,7 +11,7 @@ namespace AgfAdmin.Data
         // ---- Regel 25: kosten op partijen (zie PartijCostService) ----
         //
         // De kosten per partij zijn de basis voor het resultaat (P3): een verdeling verandert nooit zonder historie en telt nooit op tot meer
-        // dan het regelbedrag excl. btw. Elke nieuwe, gewijzigde of weggehaalde kostenregel heeft in dezelfde save een auditregel met het
+        // dan het regelbedrag excl. btw in euro (bij een factuur in euro het regelbedrag zelf; anders met de koers van de factuur, regel 26). Elke nieuwe, gewijzigde of weggehaalde kostenregel heeft in dezelfde save een auditregel met het
         // oude en nieuwe bedrag; factuurregel, partij, soort en aanmaker veranderen nooit; de historie is append-only; een partij met kosten
         // verdwijnt nooit. Vergeleken met de opgeslagen waarden in de database, niet met OriginalValues.
         private static async Task CheckPartijCostsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
@@ -85,8 +85,11 @@ namespace AgfAdmin.Data
 
             // Per factuurregel: de verdeling (opgeslagen regels met de gevolgde wijzigingen erover) is nooit meer dan het regelbedrag.
             var lineIds = entries.Select(e => e.Property(c => c.IncomingInvoiceLineId).CurrentValue).Concat(stored.Values.Select(s => s.IncomingInvoiceLineId)).Concat(changedLines.Keys).Distinct().ToList();
-            var lineTotals = (await ToListAsync(db.IncomingInvoiceLines.AsNoTracking().Where(l => lineIds.Contains(l.Id)).Select(l => new { l.Id, l.LineTotal }), async, cancellationToken))
-                .ToDictionary(l => l.Id, l => l.LineTotal);
+            var lineTotals = (await ToListAsync(db.IncomingInvoiceLines.AsNoTracking().Where(l => lineIds.Contains(l.Id))
+                    .Select(l => new { l.Id, l.LineTotal, l.IncomingInvoiceId, l.IncomingInvoice.Currency, l.IncomingInvoice.ExchangeRate }), async, cancellationToken))
+                .ToDictionary(l => l.Id);
+            // Valuta en koers zoals ze na deze save zijn (een gevolgde factuur), anders zoals opgeslagen (regel 26 houdt ze vast zodra er kosten zijn).
+            var trackedInvoices = db.ChangeTracker.Entries<IncomingInvoice>().Where(e => e.State != EntityState.Detached).ToDictionary(e => e.Entity.Id, e => e.Entity);
             var storedCosts = await ToListAsync(db.PartijCosts.AsNoTracking().Where(c => lineIds.Contains(c.IncomingInvoiceLineId))
                 .Select(c => new { c.Id, c.IncomingInvoiceLineId, c.AmountExclVat }), async, cancellationToken);
             var tracked = db.ChangeTracker.Entries<PartijCost>().Where(e => e.State != EntityState.Detached).ToList();
@@ -95,15 +98,25 @@ namespace AgfAdmin.Data
             {
                 var sum = storedCosts.Where(c => c.IncomingInvoiceLineId == lineId && !trackedIds.Contains(c.Id)).Sum(c => c.AmountExclVat)
                     + tracked.Where(e => e.State != EntityState.Deleted && e.Property(c => c.IncomingInvoiceLineId).CurrentValue == lineId).Sum(e => e.Entity.AmountExclVat);
-                var found = lineTotals.TryGetValue(lineId, out var lineTotal);
+                var found = lineTotals.TryGetValue(lineId, out var storedLine);
+                var lineTotal = storedLine?.LineTotal ?? 0m;
                 if (changedLines.TryGetValue(lineId, out var newTotal))
                 {
                     lineTotal = newTotal; // het nieuwe regelbedrag, niet het opgeslagen
                     found = true;
                 }
-                if (found && sum > lineTotal)
+                if (!found)
                 {
-                    throw new TraceabilityViolationException($"The costs on lots of invoice line {lineId} ({sum:0.00}) exceed the line amount excl. VAT ({lineTotal:0.00}).");
+                    continue;
+                }
+                // De grens in euro: bij een factuur in euro het regelbedrag zelf (zoals voorheen), anders omgerekend met de koers van de
+                // factuur; zonder koers 0 (regel 26 meldt dat al bij nieuwe kosten).
+                var invoiceId = storedLine?.IncomingInvoiceId ?? db.ChangeTracker.Entries<IncomingInvoiceLine>().Where(e => e.Entity.Id == lineId).Select(e => e.Entity.IncomingInvoiceId).FirstOrDefault();
+                var invoice = trackedInvoices.GetValueOrDefault(invoiceId);
+                var limit = ExchangeRateRules.LineAmountInEuro(lineTotal, invoice != null ? invoice.Currency : storedLine?.Currency, invoice != null ? invoice.ExchangeRate : storedLine?.ExchangeRate) ?? 0m;
+                if (sum > limit)
+                {
+                    throw new TraceabilityViolationException($"The costs on lots of invoice line {lineId} ({sum:0.00}) exceed the line amount excl. VAT in euro ({limit:0.00}).");
                 }
             }
         }

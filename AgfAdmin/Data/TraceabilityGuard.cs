@@ -98,6 +98,9 @@ namespace AgfAdmin.Data
     //    die partij op al haar regels; een nieuwe palletregel heeft exact de partij van haar bronregel (en het partijnummer als LotNumber),
     //    correctie- en afgesplitste inhoud die van de oorspronkelijke regel (regels 9 en 17). Een partij op een order, orderregel of
     //    palletregel wordt alleen gezet (leeg naar partij) of, zolang er niets ontvangen is, op de order en haar regels vervangen.
+    // 24. verkoop-partijen (zie TraceabilityGuard.SalesPartijen.cs); 25. kosten op partijen (zie TraceabilityGuard.PartijCosts.cs).
+    // 26. koers (zie TraceabilityGuard.ExchangeRates.cs): kosten op een regel van een factuur in een andere valuta kunnen alleen met de
+    //    koers van die factuur; valuta en koers van een factuur met kosten op partijen veranderen nooit.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -216,6 +219,7 @@ namespace AgfAdmin.Data
             await CheckSalesOrderNumbersAsync(db, async, cancellationToken);
             await CheckPartijenAsync(db, async, cancellationToken);
             await CheckSalesPartijenAsync(db, async, cancellationToken);
+            await CheckExchangeRatesAsync(db, async, cancellationToken);
             await CheckPartijCostsAsync(db, async, cancellationToken);
         }
 

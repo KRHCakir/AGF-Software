@@ -117,7 +117,7 @@ public sealed class PartijCostTests : IDisposable
     }
 
     [Fact]
-    public async Task An_Invoice_In_Another_Currency_Is_Not_Allocated()
+    public async Task An_Invoice_In_Another_Currency_Without_A_Rate_Is_Not_Allocated()
     {
         await ArrangeAsync(currency: "USD");
         var result = await SaveAsync(0, null, (_salesA, 500m));

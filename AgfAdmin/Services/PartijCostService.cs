@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
 {
-    // Kosten verdelen over partijen (P2): per regel van een inkoopfactuur (direct of via een order) bedragen excl. btw op inkoop- en/of
-    // verkoop-partijen. De som mag het regelbedrag niet overschrijden (harde fout); een rest telt als algemene kosten (alleen een
+    // Kosten verdelen over partijen (P2): per regel van een inkoopfactuur (direct of via een order) bedragen excl. btw in euro op inkoop-
+    // en/of verkoop-partijen; een factuur in een andere valuta met de ECB-koers van de factuur (zie InvoiceExchangeRateService). De som mag het regelbedrag niet overschrijden (harde fout); een rest telt als algemene kosten (alleen een
     // waarschuwing in het scherm). Herverdelen vervangt de verdeling van de regel en schrijft per verschil een auditregel met oud en nieuw.
     public sealed class PartijCostService
     {
@@ -123,9 +123,14 @@ namespace AgfAdmin.Services
             {
                 return await GetInvoiceAsync(invoiceId, cancellationToken);
             }
-            if (!IsEuro(invoice))
+            // Kosten op partijen staan in euro: bij een andere valuta is de grens het regelbedrag omgerekend met de ECB-koers van de factuur.
+            var limit = ExchangeRateRules.LineAmountInEuro(line.LineTotal, invoice.Currency, invoice.ExchangeRate);
+            if (limit == null)
             {
-                return ServiceResult<InvoiceAllocationsDto>.Validation(new Dictionary<string, string[]> { ["allocations"] = new[] { $"Costs are allocated in euro; this invoice is in {invoice.Currency}." } });
+                return ServiceResult<InvoiceAllocationsDto>.Validation(new Dictionary<string, string[]>
+                {
+                    ["allocations"] = new[] { $"This invoice is in {invoice.Currency} and has no exchange rate yet; fetch the ECB rate first (open the invoice again)." }
+                });
             }
             if (request.ExpectedVersion != line.AllocationVersion)
             {
@@ -139,11 +144,11 @@ namespace AgfAdmin.Services
                 return ServiceResult<InvoiceAllocationsDto>.NotFound($"Lot {missing} does not exist.");
             }
             var total = wanted.Values.Sum();
-            if (total > line.LineTotal)
+            if (total > limit.Value)
             {
                 return ServiceResult<InvoiceAllocationsDto>.Validation(new Dictionary<string, string[]>
                 {
-                    ["allocations"] = new[] { $"The lots together ({total:0.00}) exceed the line amount excl. VAT ({line.LineTotal:0.00})." }
+                    ["allocations"] = new[] { $"The lots together ({total:0.00}) exceed the line amount excl. VAT ({limit.Value:0.00} EUR)." }
                 });
             }
 
@@ -221,9 +226,6 @@ namespace AgfAdmin.Services
             allocation.NetKg = totals.NetKg;
             return allocation;
         }
-
-        // Verdelen kan in deze stap nog alleen bij een factuur in euro; met de koers verdelen komt in de volgende stap.
-        private static bool IsEuro(IncomingInvoice invoice) => ExchangeRateRules.IsEuro(invoice.Currency);
 
         private static ServiceResult<InvoiceAllocationsDto> Validation(Dictionary<string, List<string>> errors) =>
             ServiceResult<InvoiceAllocationsDto>.Validation(ValidationErrors.ToArrays(errors));
