@@ -83,6 +83,21 @@ describe('CurrencyField', () => {
         assert.equal(value, 'XAF');
     });
 
+    test('a name-only first suggestion can be taken: with fewer than three letters, or after choosing it with the arrows', async () => {
+        await mounted.render(<Harness />);
+        await type('do');
+        await key('Tab');
+        assert.equal(value, 'USD');
+        await type('dol');
+        await key('Tab');
+        assert.equal(value, 'DOL', 'a typed three-letter code is not replaced silently');
+        await type('dol');
+        await key('ArrowDown');
+        await key('ArrowUp');
+        await key('Enter');
+        assert.equal(value, 'USD');
+    });
+
     test('a click on a suggestion takes it over', async () => {
         await mounted.render(<Harness />);
         await type('gb');

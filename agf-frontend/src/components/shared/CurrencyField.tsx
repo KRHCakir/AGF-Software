@@ -23,6 +23,7 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
     const listId = useId();
     const [open, setOpen] = useState(false);
     const [highlight, setHighlight] = useState(0);
+    const [chosen, setChosen] = useState(false); // met de pijltjes expliciet een suggestie gekozen (ook de eerste)
     const suggestions = open ? suggestCurrencies(value, locale) : [];
     const active = suggestions[Math.min(highlight, suggestions.length - 1)] ?? null;
 
@@ -34,6 +35,7 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
+            setChosen(true);
             if (!open) {
                 setOpen(true);
                 setHighlight(0);
@@ -45,8 +47,8 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
         }
         if (!open || active === null) return;
         // Een suggestie die alleen op naam matcht (ALL bij 'dollar') mag een ingetypte code niet stilletjes vervangen,
-        // tenzij de gebruiker er met de pijltjes expliciet naartoe is gegaan.
-        const mayTake = active.code.startsWith(value) || highlight > 0;
+        // tenzij de gebruiker er met de pijltjes expliciet naartoe is gegaan, of er nog geen volledige code van drie letters staat.
+        const mayTake = active.code.startsWith(value) || chosen || value.length < 3;
         if (event.key === 'Enter') {
             if (mayTake) {
                 event.preventDefault();
@@ -72,6 +74,7 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
                     onChange(next);
                     setOpen(next !== '');
                     setHighlight(0);
+                    setChosen(false);
                 }}
                 onKeyDown={onKeyDown} onBlur={() => setOpen(false)} className={`${inputClass} font-mono uppercase`} />
             <ul id={listId} role="listbox" aria-label={t('currency_suggestions')} hidden={!open || suggestions.length === 0}
