@@ -201,6 +201,41 @@ public sealed class ExchangeRateTests : IDisposable
     }
 
     [Fact]
+    public async Task A_New_Rate_Saved_Between_Reading_And_Saving_An_Allocation_Makes_That_Allocation_A_Conflict()
+    {
+        await ArrangeAsync();
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        // Iemand anders ververst de koers (1,12) precies tussen de controles van de verdeling en het opslaan ervan.
+        _rates.Next = Usd(1.12m);
+        await using var db = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal(ServiceResultStatus.Ok, (await RefreshAsync()).Status));
+        var result = await new PartijCostService(db).SaveLineAsync(_invoiceId, _lineId, new SaveLineAllocationDto
+        {
+            RequestId = Guid.NewGuid(), ExpectedVersion = 1, Allocations = new() { new() { PartijId = _salesA, Amount = 4478.28m } }
+        });
+        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
+        await using var check = _s.Factory.CreateContext();
+        Assert.Equal(0, await check.PartijCosts.CountAsync());
+        Assert.Equal(1.12m, (await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
+    }
+
+    [Fact]
+    public async Task An_Allocation_Saved_Between_Reading_And_Saving_A_New_Rate_Keeps_The_Old_Rate()
+    {
+        await ArrangeAsync();
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        // Iemand anders verdeelt (op koers 1,1165) precies tussen de controles van het verversen en het opslaan van de nieuwe koers.
+        _rates.Next = Usd(1.12m);
+        await using var db = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal(ServiceResultStatus.Ok, (await SaveAsync(1, (_salesA, 500m))).Status));
+        var result = await new InvoiceExchangeRateService(db, _rates, _s.Factory.Calendar).RefreshAsync(_invoiceId);
+        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
+        await using var check = _s.Factory.CreateContext();
+        Assert.Equal(1.1165m, (await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
+        Assert.Equal(500m, (await check.PartijCosts.SingleAsync()).AmountExclVat);
+    }
+
+    [Fact]
     public async Task Exactly_The_Converted_Line_Amount_Is_Allowed()
     {
         await ArrangeAsync();
