@@ -250,6 +250,26 @@ test('hoofdstuk Inkoopfactuur invoeren: factuur van de rondleidingsleverancier m
     await page.close();
 });
 
+// Kosten verdelen (P2): een directe factuur van derden (Handling € 5.000) zonder inkooporder; € 500 op de verkoop-partij van de rondleiding,
+// € 4.500 blijft algemene kosten, en de partij toont de kosten. Op een lege database zou het hoofdstuk eerst een verkoop aanmaken; hier
+// bestaat die al (hoofdstuk Verkooporder hierboven), dus worden die stappen overgeslagen.
+test('hoofdstuk Kosten verdelen: handling € 5.000 zonder inkooporder, € 500 op een verkoop-partij, de rest algemene kosten', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'costs');
+    expectAllSteps(result);
+    const ref = tourRefOf(result.done);
+    const lot = /verkoop-partij (\S+?),/.exec(result.done)?.[1] ?? '';
+    const invoices = await json<{ id: number; invoiceNumber: string | null; vendorName: string | null; subTotal: number; lines: { costArticleName?: string | null }[] }[]>(request, '/purchase-invoices');
+    const invoice = invoices.find((candidate) => candidate.invoiceNumber === `K-${ref}`)!;
+    expect([invoice.vendorName?.startsWith('DEMO-TOUR-'), invoice.subTotal, invoice.lines[0].costArticleName]).toEqual([true, 5000, 'Handling']);
+    const allocations = await json<{ lines: { allocated: number; general: number; allocations: { number: string; partijKind: string; amount: number; partijId: number }[] }[] }>(request, `/purchase-invoices/${invoice.id}/allocations`);
+    const line = allocations.lines[0];
+    expect([line.allocated, line.general, line.allocations.map((allocation) => [allocation.number, allocation.partijKind, allocation.amount])]).toEqual([500, 4500, [[lot, 'Sales', 500]]]);
+    const partij = await json<{ costs: { kind: string; invoiceNumber: string; amount: number }[]; costTotal: number }>(request, `/partijen/${line.allocations[0].partijId}`);
+    expect(partij.costs.filter((cost) => cost.invoiceNumber === `K-${ref}`).map((cost) => [cost.kind, cost.amount])).toEqual([['Handling', 500]]);
+    await page.close();
+});
+
 test('Doe zelf: de gebruiker kiest zelf de leverancier en de rondleiding gaat verder; "Doe dit stuk voor mij" doet de rest', async ({ request }) => {
     // De leverancier van de rondleiding (hoofdstuk Stamgegevens hierboven), zoals de gebruiker hem zou typen: zijn zoekcode.
     const vendors = await json<{ id: number; searchCode: string | null; isActive: boolean }[]>(request, '/purchase-invoices/vendors');

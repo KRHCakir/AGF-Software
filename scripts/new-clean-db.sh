@@ -8,7 +8,8 @@
 #   - het schema via de gewone migraties (de API migreert bij het opstarten; demo-data staat daarbij expliciet uit);
 #   - wat de migraties zelf vullen: de landenlijst, de standaard betaalcondities (14 en 30 dagen) en de standaard kostenartikelen;
 #   - met --settings-from ook de instellingen uit die database (alleen lezen daar): bedrijfsinstellingen met de
-#     partijnummering, eigen betaalcondities en snelkoppelingen van landen. Regels met een testkenmerk (SMOKE-, DEMO-TOUR-,
+#     partijnummering (ook de tweede reeks voor verkoop-partijen, als de bron die al heeft), eigen betaalcondities en snelkoppelingen
+#     van landen. Regels met een testkenmerk (SMOKE-, DEMO-TOUR-,
 #     E2E-) worden overgeslagen.
 # Wat er niet in komt: relaties, artikelen, orders, ontvangsten, pallets, keuringen, reserveringen, facturen, partijen en hun historie.
 #
@@ -138,6 +139,14 @@ insert into "CountryAliases" ("Alias", "AliasKey", "CountryCode", "ActorReferenc
     from import_alias i where not exists (select 1 from "CountryAliases" a where a."AliasKey" = i."AliasKey");
 commit;
 SQL
+    # Nummering van P2 (formaat en cijfers voor verkoop-partijen, cijfers voor inkoop-partijen): alleen als de bron die kolommen al heeft.
+    if [[ "$(psql -d "$source_db" -Atc "select count(*) from information_schema.columns where table_name = 'CompanySettings' and column_name = 'SalesPartijNumberFormat'")" == 1 ]]; then
+        psql -d "$source_db" -Atc "copy (select \"PartijSequenceDigits\", \"SalesPartijNumberFormat\", \"SalesPartijSequenceDigits\" from \"CompanySettings\" order by \"Id\" limit 1) to stdout with csv" >"$work/numbering.csv"
+        IFS=, read -r digits sales_format sales_digits <"$work/numbering.csv"
+        psql -d "$database" -v ON_ERROR_STOP=1 -q -v digits="$digits" -v sales_format="$sales_format" -v sales_digits="$sales_digits" <<'SQL'
+update "CompanySettings" set "PartijSequenceDigits" = :digits, "SalesPartijNumberFormat" = :'sales_format', "SalesPartijSequenceDigits" = :sales_digits;
+SQL
+    fi
     rm -rf "$work"
     trap - EXIT
 fi

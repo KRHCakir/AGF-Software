@@ -3,7 +3,7 @@
 
 import { prerequisite, step } from './compose';
 import { CUSTOMER_STEPS } from './masterdataChapter';
-import { lookupInvoice, lookupSales, precheckInvoice, precheckSales } from './prechecks';
+import { lookupCosts, lookupInvoice, lookupSales, precheckCosts, precheckInvoice, precheckSales } from './prechecks';
 import { MASTER_FOR_PURCHASE, ORDER_CORE, RECEIVE_CORE } from './purchaseChapters';
 import type { TourAction, TourChapter, TourStep } from './types';
 
@@ -30,6 +30,8 @@ export const SALES_CORE: TourStep[] = [
         { kind: 'type', target: 'sales-reference', text: '{{tourRef}}' },
         { kind: 'type', target: 'sales-delivery', text: '{{deliveryDate}}' },
     ]),
+    // De verkoop-partij: voorgesteld bij een nieuwe order, naast het VO-nummer; de rondleiding laat het voorstel staan.
+    sales('partij', [{ kind: 'highlight', target: 'sales-partij' }]),
     sales('line', [
         { kind: 'pick', target: 'sales-line-product-0', text: '{{productCode}}' },
         { kind: 'type', target: 'sales-line-quantity:0', text: '{{salesQuantity}}' },
@@ -110,6 +112,59 @@ export const PURCHASE_INVOICE_CHAPTER: TourChapter = {
             { kind: 'click', target: 'pinvoice-save' },
             { kind: 'wait', target: 'pinvoice-saved' },
             { kind: 'highlight', target: 'pinvoice-saved' },
+        ]),
+    ],
+};
+
+const costs = (id: string, route: string, actions: readonly TourAction[]) => step('costs', id, route, actions);
+
+// Kosten verdelen over partijen: een directe factuur van derden (zonder inkooporder) met één regel Handling van € 5.000; daarvan gaat
+// € 500 naar de verkoop-partij van de rondleiding en de rest blijft algemene kosten. Daarna staat het bedrag bij Kosten op de partij.
+// Op een lege database maakt het hoofdstuk eerst stamgegevens, voorraad en een verkoop aan (zoals De rode draad).
+export const COSTS_CHAPTER: TourChapter = {
+    id: 'costs',
+    titleKey: 'tour_ch_costs_title',
+    summaryKey: 'tour_ch_costs_summary',
+    doneKey: 'tour_ch_costs_done',
+    writes: true,
+    precheck: precheckCosts,
+    steps: [
+        ...STOCK_FOR_SALES,
+        ...prerequisite(SALES_CORE, 's', '{{needSale}}'),
+        costs('invoice', '/purchase-invoices/new', [
+            { kind: 'lookup', run: lookupCosts },
+            { kind: 'wait', target: 'purchase-direct-hint' },
+            { kind: 'highlight', target: 'purchase-direct-hint' },
+            { kind: 'pick', target: 'pinvoice-vendor', text: '{{vendorSearch}}', expect: '{{vendorName}}' },
+            { kind: 'type', target: 'pinvoice-number', text: 'K-{{tourRef}}' },
+        ]),
+        costs('line', '/purchase-invoices/new', [
+            { kind: 'pick', target: 'pinvoice-line-item-0', text: 'Handling' },
+            { kind: 'type', target: 'pinvoice-line-price:0', text: '5000' },
+            { kind: 'click', target: 'pinvoice-number' },
+            { kind: 'assert', target: 'pinvoice-line-amount:0', text: '5' },
+        ]),
+        costs('save', '/purchase-invoices/new', [
+            { kind: 'click', target: 'pinvoice-save' },
+            { kind: 'wait', target: 'pinvoice-saved' },
+            { kind: 'click', target: 'pinvoice-allocate' },
+            { kind: 'wait', target: 'cost-allocation' },
+        ]),
+        costs('choose', '/purchase-invoices', [
+            { kind: 'click', target: 'allocation-mode:Sales' },
+            { kind: 'type', target: 'allocation-search', text: '{{salesPartijNumber}}' },
+            { kind: 'click', target: 'allocation-pick:{{salesPartijNumber}}' },
+            { kind: 'type', target: 'allocation-amount:{{salesPartijNumber}}', text: '500' },
+            { kind: 'highlight', target: 'allocation-summary' },
+        ]),
+        costs('allocate', '/purchase-invoices', [
+            { kind: 'click', target: 'allocation-save' },
+            { kind: 'wait', target: 'allocation-saved' },
+            { kind: 'highlight', target: 'allocation-saved' },
+        ]),
+        costs('partij', '/partijen?id={{salesPartijId}}', [
+            { kind: 'wait', target: 'partij-costs' },
+            { kind: 'highlight', target: 'partij-cost-kind:Handling' },
         ]),
     ],
 };
