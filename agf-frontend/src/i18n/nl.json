@@ -1921,6 +1921,7 @@
   "tour_missing_complete_article": "Het artikel {article} heeft nog geen maat of klasse uit de lijst. Vul die aan in Artikelen bij \"Maat en klasse opschonen\".",
   "nav_main": "Hoofdmenu",
   "nav_menu": "Menu",
+  "nav_sub": "Schermen van {group}",
   "nav_start": "Start",
   "nav_group_purchase": "Inkoop",
   "nav_group_stock": "Voorraad",

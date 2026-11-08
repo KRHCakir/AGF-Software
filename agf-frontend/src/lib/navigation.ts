@@ -1,5 +1,6 @@
-// Het menu volgt het proces: Inkoop, Voorraad, Verkoop en Stamgegevens, met Start bovenaan, Instellingen en Help eronder en de oude
-// schermen onderaan onder "Oud" (dichtgeklapt, niet meer bijgewerkt). Alleen schermen die bestaan staan erin: geen Leveringen- of
+// Het menu volgt het proces: Inkoop, Voorraad, Verkoop en Stamgegevens, met Start ervoor, Instellingen en Help erna en de oude
+// schermen apart onder "Oud" (niet meer bijgewerkt). Op brede schermen staat het boven (TopNav: groepen als tabs, de schermen van de
+// actieve groep in een gekleurde balk eronder); op smalle schermen klapt het uit onder de knop Menu (AppMenu). Alleen schermen die bestaan staan erin: geen Leveringen- of
 // Verkoopfacturenpagina, want die zijn er (nog) niet. Geen imports: met node:test te toetsen.
 
 export interface NavItem {
@@ -67,6 +68,37 @@ export const LEGACY_GROUP: NavGroup = {
         { id: 'tracking', href: '/tracking', labelKey: 'tracking_nav' },
     ],
 };
+
+// Kleuren per groep (feedback 8 november): het menu staat boven, en de kleur laat zien in welk deel van het proces je bent. De actieve
+// groep is een gekleurde tab; de balk eronder met de schermen van die groep heeft dezelfde kleur, licht. Witte tekst op -700 haalt
+// het contrast van 4,5:1. Volledige klassenamen, zodat Tailwind ze vindt.
+export interface GroupTheme {
+    tabActive: string;
+    dot: string;
+    bar: string;
+    itemActive: string;
+    itemIdle: string;
+}
+
+export const GROUP_THEME: Readonly<Record<NavGroup['id'], GroupTheme>> = {
+    purchase: { tabActive: 'bg-blue-700 text-white', dot: 'bg-blue-600', bar: 'border-blue-200 bg-blue-50', itemActive: 'bg-white text-blue-900 ring-1 ring-blue-300', itemIdle: 'text-blue-900 hover:bg-white/70' },
+    stock: { tabActive: 'bg-emerald-700 text-white', dot: 'bg-emerald-600', bar: 'border-emerald-200 bg-emerald-50', itemActive: 'bg-white text-emerald-900 ring-1 ring-emerald-300', itemIdle: 'text-emerald-900 hover:bg-white/70' },
+    sales: { tabActive: 'bg-orange-700 text-white', dot: 'bg-orange-600', bar: 'border-orange-200 bg-orange-50', itemActive: 'bg-white text-orange-900 ring-1 ring-orange-300', itemIdle: 'text-orange-900 hover:bg-white/70' },
+    master: { tabActive: 'bg-purple-700 text-white', dot: 'bg-purple-600', bar: 'border-purple-200 bg-purple-50', itemActive: 'bg-white text-purple-900 ring-1 ring-purple-300', itemIdle: 'text-purple-900 hover:bg-white/70' },
+    legacy: { tabActive: 'bg-gray-600 text-white', dot: 'bg-gray-500', bar: 'border-gray-300 bg-gray-100', itemActive: 'bg-white text-gray-900 ring-1 ring-gray-300', itemIdle: 'text-gray-700 hover:bg-white/70' },
+};
+
+// Een groep aanklikken opent haar eerste scherm; de balk eronder toont dan de andere schermen van die groep.
+export function groupHome(group: NavGroup): string {
+    return group.items[0].href;
+}
+
+// De groep van deze pagina (ook "Oud"), of null op Start, Instellingen, Help en pagina's buiten het menu.
+export function activeGroup(pathname: string): NavGroup | null {
+    const groupId = activeNav(pathname)?.groupId ?? null;
+    if (groupId === null) return null;
+    return groupId === 'legacy' ? LEGACY_GROUP : NAV_GROUPS.find((group) => group.id === groupId) ?? null;
+}
 
 function onPath(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
