@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, test } from 'node:test';
-import { amsterdamDateOf, formatCalendarDate, formatDateInput, formatDateOnly, isDateOnly, isoToDateInput, localToday, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
+import { addDays, amsterdamDateOf, dateShortcut, formatCalendarDate, formatDateInput, formatDateOnly, isDateOnly, isoToDateInput, localToday, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from './calendarDate.ts';
 
 // Rondreis van de gevraagde leverdatum in Europe/Amsterdam, zomer- en wintertijd: de kalenderdag die de gebruiker koos
 // moet na UTC-normalisatie door de server exact zo worden teruggetoond. node:test draait elk bestand in een eigen proces.
@@ -139,5 +139,24 @@ describe('today in the local time zone', () => {
         assert.equal(localToday(now), '2026-11-02');
         assert.equal(localToday(new Date(Date.UTC(2026, 10, 2, 22, 59))), '2026-11-02');
         assert.equal(localToday(new Date(Date.UTC(2026, 10, 2, 23, 0))), '2026-11-03');
+    });
+});
+
+describe('date shortcuts', () => {
+    test('addDays crosses months, years and the switch to winter time, and rejects what is not a date', () => {
+        assert.equal(addDays('2026-10-31', 1), '2026-11-01');
+        assert.equal(addDays('2026-10-25', -1), '2026-10-24');
+        assert.equal(addDays('2026-01-01', -2), '2025-12-30');
+        assert.equal(addDays('2028-02-28', 1), '2028-02-29');
+        assert.equal(addDays('2026-02-30', 1), null);
+    });
+
+    test('one letter is a day relative to today: V/T today, G/Y yesterday, M tomorrow, E two days back, O two days ahead', () => {
+        const today = '2026-11-08';
+        assert.deepEqual(['v', 'T', 'g', 'Y', 'm', 'E', 'o', ' v '].map((letter) => dateShortcut(letter, today)),
+            ['2026-11-08', '2026-11-08', '2026-11-07', '2026-11-07', '2026-11-09', '2026-11-06', '2026-11-10', '2026-11-08']);
+        assert.deepEqual(['vandaag', 'Morgen', ' overmorgen ', 'eergisteren', 'gisteren', 'today', 'yesterday', 'tomorrow'].map((word) => dateShortcut(word, today)),
+            ['2026-11-08', '2026-11-09', '2026-11-10', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-07', '2026-11-09']);
+        for (const text of ['', 'x', 'vv', 'morgenochtend', 'mor', '1', 'v1', 'constructor', '__proto__', 'toString']) assert.equal(dateShortcut(text, today), null, text);
     });
 });

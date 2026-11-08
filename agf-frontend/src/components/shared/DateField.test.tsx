@@ -88,7 +88,7 @@ describe('DateField', () => {
 
     test('what is not a date reaches the form as the typed text, never as a date or as empty', async () => {
         await mounted.render(<Harness initial="" />);
-        for (const text of ['31-02-2026', '31-02', '11/31/2026', '2-11-202', '2-11-2', '31-02-26', 'morgen']) {
+        for (const text of ['31-02-2026', '31-02', '11/31/2026', '2-11-202', '2-11-2', '31-02-26', 'morgenochtend']) {
             await type(text);
             assert.equal(last(), text, text);
             await blur();
@@ -113,6 +113,60 @@ describe('DateField', () => {
         assert.equal(last(), '2026-11-03');
         await type('3-11-');
         assert.equal(last(), '3-11-');
+    });
+
+    for (const [letter, iso] of [
+        ['v', '2026-11-02'], ['V', '2026-11-02'], ['g', '2026-11-01'], ['m', '2026-11-03'], ['e', '2026-10-31'], ['o', '2026-11-04'],
+        ['t', '2026-11-02'], ['y', '2026-11-01'], [' M ', '2026-11-03'],
+    ] as const) {
+        test(`shortcut "${letter}": the form gets ${iso} straight away, the field shows it on leaving (local day: 2 November at 00:30 in Amsterdam)`, async () => {
+            await mounted.render(<Harness initial="" />);
+            await type(letter);
+            assert.equal(last(), iso, 'the form has the date while typing (save shortcut before leaving the field)');
+            assert.equal(input().value, letter, 'the field keeps the letter while typing, so a whole word can still be typed');
+            await blur();
+            assert.equal(last(), iso);
+            assert.equal(input().value, `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`);
+        });
+    }
+
+    test('typing "morgen" letter by letter gives tomorrow, never a date with letters after it; Enter shows it as dd-mm-jjjj', async () => {
+        await mounted.render(<Harness initial="" />);
+        for (const text of ['m', 'mo', 'mor', 'morg', 'morge', 'morgen']) await type(text);
+        assert.equal(input().value, 'morgen');
+        assert.equal(last(), '2026-11-03');
+        await act(async () => { input().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+        assert.equal(input().value, '03-11-2026');
+        for (const [word, iso] of [['Vandaag', '2026-11-02'], ['overmorgen', '2026-11-04'], ['tomorrow', '2026-11-03']] as const) {
+            await type(word);
+            assert.equal(last(), iso, word);
+        }
+    });
+
+    test('a shortcut replaces a filled-in date; other letters and other words stay typed text', async () => {
+        await mounted.render(<Harness initial="2026-12-24" />);
+        await type('g');
+        await blur();
+        assert.equal(last(), '2026-11-01');
+        for (const text of ['x', 'vm', 'morgenochtend']) {
+            await type(text);
+            assert.equal(last(), text, text);
+        }
+    });
+
+    test('the shortcuts are explained under the field while it has the focus, and always to a screen reader', async () => {
+        await mounted.render(<DateField id="when-input" value="" onChange={() => {}} aria-describedby="when-error" />);
+        const hint = () => mounted.container.querySelector<HTMLElement>('[data-testid="date-field-shortcuts"]')!;
+        assert.equal(hint().textContent, 'date_field_shortcuts');
+        assert.equal(hint().className, 'sr-only');
+        assert.equal(input().getAttribute('aria-describedby'), `when-error ${hint().id}`, 'keeps the error link and adds the hint');
+        await act(async () => { input().focus(); input().dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })); });
+        assert.ok(hint().className.includes('absolute'), 'visible, floating under the field');
+        assert.equal(mounted.container.querySelector('[data-testid="date-field-shortcut-result"]'), null, 'no result before a shortcut is typed');
+        await type('m');
+        assert.ok(mounted.container.querySelector('[data-testid="date-field-shortcut-result"]'), 'the hint says which date the letter becomes');
+        await blur();
+        assert.equal(hint().className, 'sr-only');
     });
 
     test('disabled: no typing and no "Today"', async () => {
