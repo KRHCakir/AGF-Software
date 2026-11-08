@@ -143,7 +143,12 @@ export interface PartijCostLine {
     vendorName: string | null;
     invoiceDate: string | null;
     description: string | null;
+    // In euro.
     amount: number;
+    // Bij een factuur in een andere valuta: die valuta, het bedrag daarin en de ECB-koers (ontbreekt bij EUR of een oudere server).
+    currency?: string | null;
+    amountInCurrency?: number | null;
+    exchangeRate?: number | null;
 }
 
 export interface PartijLinkedCost {
