@@ -9,6 +9,7 @@ import type { RelationReference } from '../../types/relation';
 import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
+import CurrencyField from '../shared/CurrencyField';
 
 // Rolafspraken van één rol (klant of leverancier): vrije betalingstermijn (dagen, leeg = standaard als grijze placeholder, vinkje
 // "na einde maand", optionele korting % + dagen), betaalwijze met mandaat bij incasso, valuta, leveringsconditie (Incoterm + plaats of
@@ -52,13 +53,16 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
     const label = (field: string, labelKey: string, required = false) => (
         <label htmlFor={`${k(field)}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{required ? ' *' : ''}</label>
     );
-    const input = (field: Exclude<keyof RoleTermsDraft, 'paymentTermsEndOfMonth'>, labelKey: string, options: { maxLength?: number; type?: string; required?: boolean; mono?: boolean; list?: string; errorField?: string; span?: string } = {}) => (
+    const input = (field: Exclude<keyof RoleTermsDraft, 'paymentTermsEndOfMonth'>, labelKey: string, options: { maxLength?: number; type?: string; required?: boolean; mono?: boolean; errorField?: string; span?: string } = {}) => (
         <div className={options.span ?? ''}>
             <label htmlFor={`${k(options.errorField ?? field)}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{options.required ? ' *' : ''}</label>
-            {options.type === 'date'
+            {options.type === 'currency'
+                ? <CurrencyField {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} value={terms[field]} disabled={locked}
+                    onChange={(value) => onChange({ [field]: value } as Partial<RoleTermsDraft>)} />
+                : options.type === 'date'
                 ? <DateField {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} value={terms[field]} disabled={locked}
                     onChange={(value) => onChange({ [field]: value } as Partial<RoleTermsDraft>)} />
-                : <input {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} type={options.type ?? 'text'} value={terms[field]} maxLength={options.maxLength ?? 200} list={options.list} disabled={locked}
+                : <input {...fieldProps(k(options.errorField ?? field), e(options.errorField ?? field))} type={options.type ?? 'text'} value={terms[field]} maxLength={options.maxLength ?? 200} disabled={locked}
                     onChange={(event) => onChange({ [field]: event.target.value } as Partial<RoleTermsDraft>)} className={`${inputClass}${options.mono ? ' font-mono uppercase' : ''}`} />}
             <FieldError id={k(options.errorField ?? field)} messages={e(options.errorField ?? field)} />
         </div>
@@ -94,7 +98,7 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
                 </select>
                 <FieldError id={k('paymentMethod')} messages={e('paymentMethod')} />
             </div>
-            {input('currency', prefix === 'customer' ? 'relations_field_currency_sales' : 'relations_field_currency', { maxLength: 3, mono: true, list: 'relation-currencies', errorField: currencyField })}
+            {input('currency', prefix === 'customer' ? 'relations_field_currency_sales' : 'relations_field_currency', { type: 'currency', errorField: currencyField })}
             {terms.paymentMethod === 'DirectDebit' && (
                 <>
                     {input('mandateReference', 'relations_terms_mandate_reference', { maxLength: 35, required: true, span: 'sm:col-span-1' })}

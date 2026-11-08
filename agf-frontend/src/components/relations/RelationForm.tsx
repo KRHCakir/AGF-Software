@@ -592,7 +592,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                                 {!current.vendor && <button type="button" className={`${secondaryButtonClass} text-xs`} disabled={locked} onClick={() => void addRole('vendor')}>+ {t('relations_add_role_vendor')}</button>}
                             </div>
                         )}
-                        <datalist id="relation-currencies">{reference.currencies.map((option) => <option key={option} value={option} />)}</datalist>
                         {draft.customerRole && (
                             <div className="space-y-2">
                                 <p className="text-sm font-medium text-gray-900">{t('relations_defaults_sales')}{current?.customer ? ` · #${current.customer.customerId}` : ''}</p>
