@@ -161,7 +161,7 @@ public sealed class ExchangeRateTests : IDisposable
         Assert.Equal(ServiceResultStatus.Ok, result.Status);
         Assert.Equal(("USD", InvoiceDay), Assert.Single(_rates.Asked));
         var invoice = result.Value;
-        Assert.Equal(("USD", 1.1165m, InvoiceDay, "ECB", false, false), (invoice.Currency, invoice.ExchangeRate, invoice.ExchangeRateDate, invoice.ExchangeRateSource, invoice.RateLocked, invoice.CanAllocate));
+        Assert.Equal(("USD", 1.1165m, InvoiceDay, "ECB", false, true), (invoice.Currency, invoice.ExchangeRate, invoice.ExchangeRateDate, invoice.ExchangeRateSource, invoice.RateLocked, invoice.CanAllocate));
         var line = Assert.Single(invoice.Lines);
         Assert.Equal((5000m, (decimal?)4478.28m, 0m, (decimal?)4478.28m, 1), (line.LineTotal, line.LineTotalEur, line.Allocated, line.General, line.Version));
 
