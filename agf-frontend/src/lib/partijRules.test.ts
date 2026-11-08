@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { formatPartijNumber, partijFormatError, partijNumberKey } from './partijRules.ts';
+import { formatPartijNumber, partijFormatError, partijNumberKey, isSequenceDigits } from './partijRules.ts';
 
 // Dezelfde gevallen als AgfAdmin.Tests/Services/PartijRulesTests.cs.
 
@@ -22,6 +22,17 @@ describe('partijRules', () => {
         assert.equal(formatPartijNumber('{JJ}{MM}{volgnr}', '2026-11-15', 1), '2611001');
         assert.equal(formatPartijNumber('{JJJJ}-{volgnr}', '2026-11-15', 7), '2026-007');
         assert.equal(formatPartijNumber('P{JJ}/{volgnr}', '2027-01-15', 1234), 'P27/1234');
+    });
+
+    test('fixed text and the number of digits, as in AgfAdmin.Tests SalesPartijMigrationTests', () => {
+        assert.equal(partijFormatError('5{JJ}{MM}{volgnr}'), null);
+        assert.equal(formatPartijNumber('5{JJ}{MM}{volgnr}', '2026-11-05', 2), '52611002');
+        assert.equal(formatPartijNumber('5{JJ}{MM}{volgnr}', '2026-11-05', 45, 2), '5261145');
+        assert.equal(formatPartijNumber('5{JJ}{MM}{volgnr}', '2026-11-05', 100, 3), '52611100');
+        assert.equal(formatPartijNumber('{JJ}{MM}{volgnr}', '2026-11-05', 40, 2), '261140');
+        assert.equal(formatPartijNumber('{JJ}{MM}{volgnr}', '2026-11-05', 1234, 3), '26111234');
+        assert.equal(partijNumberKey('5261-145'), partijNumberKey('5261145'));
+        assert.deepEqual([0, 1, 9, 10, 2.5].map(isSequenceDigits), [false, true, true, false, false]);
     });
 
     test('invalid formats are refused, valid ones accepted', () => {
