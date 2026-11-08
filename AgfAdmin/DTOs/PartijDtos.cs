@@ -159,7 +159,12 @@ namespace AgfAdmin.DTOs
         public string VendorName { get; set; }
         public DateTime? InvoiceDate { get; set; }
         public string Description { get; set; }
+        // In euro (altijd).
         public decimal Amount { get; set; }
+        // Bij een factuur in een andere valuta: die valuta, het bedrag daarin (omgerekend met de ECB-koers van de factuur) en de koers.
+        public string Currency { get; set; }
+        public decimal? AmountInCurrency { get; set; }
+        public decimal? ExchangeRate { get; set; }
     }
 
     public sealed class PartijLinkedCostDto

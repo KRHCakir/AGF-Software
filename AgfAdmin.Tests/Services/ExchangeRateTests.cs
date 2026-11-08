@@ -161,7 +161,7 @@ public sealed class ExchangeRateTests : IDisposable
         Assert.Equal(ServiceResultStatus.Ok, result.Status);
         Assert.Equal(("USD", InvoiceDay), Assert.Single(_rates.Asked));
         var invoice = result.Value;
-        Assert.Equal(("USD", 1.1165m, InvoiceDay, "ECB", false, false), (invoice.Currency, invoice.ExchangeRate, invoice.ExchangeRateDate, invoice.ExchangeRateSource, invoice.RateLocked, invoice.CanAllocate));
+        Assert.Equal(("USD", 1.1165m, InvoiceDay, "ECB", false, true), (invoice.Currency, invoice.ExchangeRate, invoice.ExchangeRateDate, invoice.ExchangeRateSource, invoice.RateLocked, invoice.CanAllocate));
         var line = Assert.Single(invoice.Lines);
         Assert.Equal((5000m, (decimal?)4478.28m, 0m, (decimal?)4478.28m, 1), (line.LineTotal, line.LineTotalEur, line.Allocated, line.General, line.Version));
 
@@ -173,6 +173,75 @@ public sealed class ExchangeRateTests : IDisposable
         await using var check = _s.Factory.CreateContext();
         var stored = await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId);
         Assert.NotNull(stored.ExchangeRateFetchedAt);
+    }
+
+    [Fact]
+    public async Task Costs_Are_Allocated_In_Euro_Up_To_The_Converted_Line_And_Then_The_Rate_Is_Fixed()
+    {
+        await ArrangeAsync();
+        Assert.Equal(ServiceResultStatus.Validation, (await SaveAsync(0, (_salesA, 500m))).Status);
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        Assert.Equal(ServiceResultStatus.Validation, (await SaveAsync(1, (_salesA, 4000m), (_salesB, 478.29m))).Status);
+        var saved = await SaveAsync(1, (_salesA, 500m), (_salesB, 1000m));
+        Assert.Equal(ServiceResultStatus.Ok, saved.Status);
+        Assert.Equal((1500m, (decimal?)2978.28m, true), (saved.Value.Lines[0].Allocated, saved.Value.Lines[0].General, saved.Value.RateLocked));
+
+        // Vast: een andere koers bij de ECB verandert niets meer aan deze factuur, en de bron wordt ook niet meer gevraagd.
+        _rates.Next = Usd(1.2m);
+        _rates.Asked.Clear();
+        var again = (await RefreshAsync()).Value;
+        Assert.Equal((1.1165m, 2), (again.ExchangeRate.Value, again.Lines[0].Version));
+        Assert.Empty(_rates.Asked);
+
+        // Op de partij: in euro, met het oorspronkelijke bedrag in USD erbij.
+        await using var db = _s.Factory.CreateContext();
+        var cost = Assert.Single((await new PartijService(db).GetAsync(_salesA)).Value.Costs);
+        Assert.Equal((500m, "USD", (decimal?)558.25m, (decimal?)1.1165m), (cost.Amount, cost.Currency, cost.AmountInCurrency, cost.ExchangeRate));
+    }
+
+    [Fact]
+    public async Task A_New_Rate_Saved_Between_Reading_And_Saving_An_Allocation_Makes_That_Allocation_A_Conflict()
+    {
+        await ArrangeAsync();
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        // Iemand anders ververst de koers (1,12) precies tussen de controles van de verdeling en het opslaan ervan.
+        _rates.Next = Usd(1.12m);
+        await using var db = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal(ServiceResultStatus.Ok, (await RefreshAsync()).Status));
+        var result = await new PartijCostService(db).SaveLineAsync(_invoiceId, _lineId, new SaveLineAllocationDto
+        {
+            RequestId = Guid.NewGuid(), ExpectedVersion = 1, Allocations = new() { new() { PartijId = _salesA, Amount = 4478.28m } }
+        });
+        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
+        await using var check = _s.Factory.CreateContext();
+        Assert.Equal(0, await check.PartijCosts.CountAsync());
+        Assert.Equal(1.12m, (await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
+    }
+
+    [Fact]
+    public async Task An_Allocation_Saved_Between_Reading_And_Saving_A_New_Rate_Keeps_The_Old_Rate()
+    {
+        await ArrangeAsync();
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        // Iemand anders verdeelt (op koers 1,1165) precies tussen de controles van het verversen en het opslaan van de nieuwe koers.
+        _rates.Next = Usd(1.12m);
+        await using var db = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal(ServiceResultStatus.Ok, (await SaveAsync(1, (_salesA, 500m))).Status));
+        var result = await new InvoiceExchangeRateService(db, _rates, _s.Factory.Calendar).RefreshAsync(_invoiceId);
+        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
+        await using var check = _s.Factory.CreateContext();
+        Assert.Equal(1.1165m, (await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
+        Assert.Equal(500m, (await check.PartijCosts.SingleAsync()).AmountExclVat);
+    }
+
+    [Fact]
+    public async Task Exactly_The_Converted_Line_Amount_Is_Allowed()
+    {
+        await ArrangeAsync();
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        Assert.Equal(0m, (await SaveAsync(1, (_salesA, 4000m), (_salesB, 478.28m))).Value.Lines[0].General);
     }
 
     [Fact]
@@ -216,4 +285,41 @@ public sealed class ExchangeRateTests : IDisposable
         Assert.Null((await db.IncomingInvoices.AsNoTracking().SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
     }
 
+    [Fact]
+    public async Task Rule_26_Fixes_Currency_And_Rate_Once_There_Are_Costs_And_Needs_A_Rate_For_Costs()
+    {
+        await ArrangeAsync();
+        // Zonder koers: geen kosten op een partij, ook niet buiten de service om (met auditregel).
+        await using (var db = _s.Factory.CreateContext())
+        {
+            db.PartijCosts.Add(new PartijCost { IncomingInvoiceLineId = _lineId, PartijId = _salesA, AmountExclVat = 10m, Kind = "Zeevracht", CreatedBy = "x" });
+            db.PartijCostAuditEvents.Add(new PartijCostAuditEvent { IncomingInvoiceId = _invoiceId, IncomingInvoiceLineId = _lineId, PartijId = _salesA, EventType = "Allocated", NewAmount = 10m, RequestId = Guid.NewGuid(), ActorReference = "x" });
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+        _rates.Next = Usd(1.1165m);
+        await RefreshAsync();
+        await SaveAsync(1, (_salesA, 500m));
+        await using var writer = _s.Factory.CreateContext();
+        // Meer dan het omgerekende regelbedrag (4.478,28 EUR), ook al is het minder dan 5.000.
+        writer.PartijCosts.Add(new PartijCost { IncomingInvoiceLineId = _lineId, PartijId = _salesB, AmountExclVat = 3978.29m, Kind = "Zeevracht", CreatedBy = "x" });
+        writer.PartijCostAuditEvents.Add(new PartijCostAuditEvent { IncomingInvoiceId = _invoiceId, IncomingInvoiceLineId = _lineId, PartijId = _salesB, EventType = "Allocated", NewAmount = 3978.29m, RequestId = Guid.NewGuid(), ActorReference = "x" });
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => writer.SaveChangesAsync());
+        writer.ChangeTracker.Clear();
+        // Koers, datum, bron en valuta liggen vast.
+        foreach (var change in new Action<IncomingInvoice>[]
+        {
+            i => i.ExchangeRate = 1.2m,
+            i => i.ExchangeRateDate = new DateTime(2026, 11, 6, 0, 0, 0, DateTimeKind.Utc),
+            i => i.Currency = "EUR",
+        })
+        {
+            var invoice = await writer.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId);
+            change(invoice);
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => writer.SaveChangesAsync());
+            writer.ChangeTracker.Clear();
+        }
+        // Iets anders aan de factuur blijft gewoon wijzigbaar.
+        (await writer.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).Remarks = "Container MSKU 123";
+        await writer.SaveChangesAsync();
+    }
 }
