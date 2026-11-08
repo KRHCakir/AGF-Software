@@ -15,6 +15,12 @@ namespace AgfAdmin.Models
         public string Number { get; set; }
         public string NumberKey { get; set; }
 
+        // Inkoop (P1: leverancier, inkooporder, palletregels) of Verkoop (P2: precies één verkooporder). Het nummer is uniek per soort,
+        // en elke soort heeft een eigen formaat en teller. Soort en order veranderen nooit (TraceabilityGuard, regel 24).
+        public string Kind { get; set; } = Services.PartijRules.KindPurchase;
+        public int? SalesOrderId { get; set; }
+        public SalesOrder SalesOrder { get; set; }
+
         // Opgeslagen status: nu altijd Open. Uitverkocht wordt afgeleid (PartijRules.DisplayStatus), Afgesloten komt met het
         // partijrapport (P3) als tweede opgeslagen waarde.
         public string Status { get; set; } = Services.PartijRules.StatusOpen;

@@ -122,6 +122,11 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(16)")
                         .HasDefaultValue("Auto");
 
+                    b.Property<int>("PartijSequenceDigits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3);
+
                     b.Property<string>("PartijSequenceReset")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -155,6 +160,18 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(500)")
                         .HasDefaultValue("receivedDate,paymentReference,remarks,originCountry,receiptReference");
 
+                    b.Property<string>("SalesPartijNumberFormat")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("{JJ}{MM}{volgnr}");
+
+                    b.Property<int>("SalesPartijSequenceDigits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3);
+
                     b.Property<string>("VatNumber")
                         .HasColumnType("text");
 
@@ -164,7 +181,11 @@ namespace AgfAdmin.Migrations
                         {
                             t.HasCheckConstraint("CK_CompanySettings_PartijNumberMode_Allowed", "\"PartijNumberMode\" IN ('Auto', 'Own')");
 
+                            t.HasCheckConstraint("CK_CompanySettings_PartijSequenceDigits_Range", "\"PartijSequenceDigits\" BETWEEN 1 AND 9");
+
                             t.HasCheckConstraint("CK_CompanySettings_PartijSequenceReset_Allowed", "\"PartijSequenceReset\" IN ('Never', 'Yearly', 'Monthly')");
+
+                            t.HasCheckConstraint("CK_CompanySettings_SalesPartijSequenceDigits_Range", "\"SalesPartijSequenceDigits\" BETWEEN 1 AND 9");
                         });
                 });
 
@@ -2910,6 +2931,13 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Purchase");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2927,6 +2955,9 @@ namespace AgfAdmin.Migrations
                     b.Property<Guid?>("RequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("SalesOrderId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("Sequence")
                         .HasColumnType("integer");
 
@@ -2941,17 +2972,22 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("NumberKey")
-                        .IsUnique();
-
                     b.HasIndex("RequestId")
                         .IsUnique();
 
-                    b.HasIndex("SequencePeriod", "Sequence")
+                    b.HasIndex("SalesOrderId")
+                        .IsUnique();
+
+                    b.HasIndex("Kind", "NumberKey")
+                        .IsUnique();
+
+                    b.HasIndex("Kind", "SequencePeriod", "Sequence")
                         .IsUnique();
 
                     b.ToTable("Partijen", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Partijen_Kind_SalesOrder", "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL) OR (\"Kind\" = 'Sales' AND \"SalesOrderId\" IS NOT NULL)");
+
                             t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
 
                             t.HasCheckConstraint("CK_Partijen_Number_NotBlank", "length(trim(\"Number\")) > 0");
@@ -3007,7 +3043,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("PartijAuditEvents", t =>
                         {
-                            t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed", "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted')");
+                            t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed", "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged')");
                         });
                 });
 
@@ -3895,6 +3931,10 @@ namespace AgfAdmin.Migrations
 
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("RequestPartijKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("RequestedDeliveryDate")
                         .HasColumnType("timestamp with time zone");
@@ -5471,6 +5511,16 @@ namespace AgfAdmin.Migrations
                     b.Navigation("SupplyCommitmentLine");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Partij", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithOne("SalesPartij")
+                        .HasForeignKey("AgfAdmin.Models.Partij", "SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.ProductVariant", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Country", null)
@@ -6129,6 +6179,8 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("SalesPartij");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>

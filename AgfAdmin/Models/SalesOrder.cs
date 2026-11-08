@@ -19,6 +19,12 @@ namespace AgfAdmin.Models
         public string OrderNumber { get; set; }
         public int OrderYear { get; set; }
         public int OrderSequence { get; set; }
+        // Verkoop-partij (P2): het partijnummer waarmee op papier gewerkt wordt (261140), naast het VO-nummer. Bij het eerste opslaan
+        // toegekend (voorgesteld of zelf getypt), daarna 1-op-1 met deze order. Welk van de twee later het hoofdnummer wordt, kiest de eigenaar.
+        public Partij SalesPartij { get; set; }
+        // Partij uit de oorspronkelijke aanvraag, voor de replayvergelijking: "auto" (voorgesteld) of "new:<sleutel>" (zelf getypt).
+        // Null bij orders van vóór de verkoop-partij.
+        public string RequestPartijKey { get; set; }
         public string CustomerReference { get; set; }    // ordernummer van de klant; optioneel, getrimd, leeg = null; doorzoekbaar
         // Interne opmerking bij deze order: alleen voor interne werkplekken, nooit in klantdocumenten, mails of exports;
         // telt mee in de replayvergelijking en wordt niet naar volgende orders overgenomen.
