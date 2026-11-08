@@ -135,6 +135,24 @@ export interface PartijSource {
     shippedQuantity: number;
 }
 
+// Een kostenregel op de partij (P2): uit een inkoopfactuurregel, excl. btw.
+export interface PartijCostLine {
+    kind: string;
+    invoiceId: number;
+    invoiceNumber: string | null;
+    vendorName: string | null;
+    invoiceDate: string | null;
+    description: string | null;
+    amount: number;
+}
+
+export interface PartijLinkedCost {
+    partijId: number;
+    number: string;
+    kind: string;
+    costTotal: number;
+}
+
 export interface PartijDetail extends PartijTotals {
     note: string | null;
     createdBy: string;
@@ -142,6 +160,10 @@ export interface PartijDetail extends PartijTotals {
     // Het nummer verandert alleen met reden (inkoop-partij met koppelingen; verkoop-partij na reserveren of leveren).
     numberFixed: boolean;
     sources: PartijSource[];
+    // Kosten van deze partij en apart (niet opgeteld) die van gekoppelde partijen van de andere soort; ontbreken bij een oudere server.
+    costs?: PartijCostLine[];
+    costTotal?: number;
+    linkedCosts?: PartijLinkedCost[];
     reservedQuantity: number;
     shippedQuantity: number;
     orders: PartijOrder[];

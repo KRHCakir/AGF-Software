@@ -44,11 +44,11 @@ describe('PartijDetail', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('orders, pallets and sales are links; costs and result are a calm note, nothing else', async () => {
+    test('orders, pallets and sales are links; without costs the cost block points to the purchase invoices', async () => {
         await mounted.render(<PartijDetail partij={detail()} onChanged={() => {}} onDeleted={() => {}} />);
-        assert.deepEqual(hrefs(), ['/purchase-orders?id=46', '/inspection?palletId=77', '/purchase-orders?id=46', '/sales-orders?orderId=12', '/partijen?id=40']);
+        assert.deepEqual(hrefs(), ['/purchase-orders?id=46', '/inspection?palletId=77', '/purchase-orders?id=46', '/sales-orders?orderId=12', '/partijen?id=40', '/purchase-invoices']);
         assert.ok(mounted.hasText('2611012'));
-        assert.ok(tour('partij-costs-later')!.textContent!.includes('partij_costs_later'));
+        assert.ok(tour('partij-costs')!.textContent!.includes('partij_costs_none'));
         assert.ok(mounted.hasText('Groothandel Jansen') && mounted.hasText('NP-LOT-88'));
         // Gekoppeld: niet te verwijderen, het nummer ligt vast.
         assert.equal(tour('partij-delete'), null);
@@ -93,7 +93,7 @@ describe('PartijDetail', () => {
         let changed = 0;
         correctAnswer = () => json(200, { id: 7, number: '261140', kind: 'Sales', salesOrderId: 12, status: 'Open', note: null, createdAt: '2026-10-27T09:00:00Z', createdBy: 'Admin', linked: true });
         await mounted.render(<PartijDetail partij={sales()} onChanged={() => { changed++; }} onDeleted={() => {}} />);
-        assert.deepEqual(hrefs(), ['/sales-orders?orderId=12', '/partijen?id=3', '/partijen?id=4']);
+        assert.deepEqual(hrefs(), ['/sales-orders?orderId=12', '/partijen?id=3', '/partijen?id=4', '/purchase-invoices']);
         assert.ok(mounted.hasText('partij_kind_sales') && mounted.hasText('partij_sales_adjustable_hint'));
         assert.equal(tour('partij-delete'), null);
         assert.equal(tour('partij-order'), null);
@@ -112,6 +112,25 @@ describe('PartijDetail', () => {
         await act(async () => { tour('partij-correct-save')!.click(); });
         assert.ok(mounted.hasText('partij_link_reason_required') && mounted.hasText('partij_sales_fixed_hint'));
         assert.equal(calls.length, 0);
+    });
+
+    // Kosten (P2): per soort met factuur (link), leverancier en bedrag, en het totaal van alleen deze partij. De kosten op de gekoppelde
+    // verkoop-partij staan er apart onder en tellen niet mee.
+    test('the cost block groups the costs per kind with the invoice and keeps the linked lots separate', async () => {
+        await mounted.render(<PartijDetail partij={detail({
+            costs: [
+                { kind: 'Zeevracht', invoiceId: 5, invoiceNumber: 'MAERSK-77', vendorName: 'Maersk', invoiceDate: '2026-11-05T00:00:00Z', description: 'Zeevracht', amount: 2000 },
+                { kind: 'QC', invoiceId: 6, invoiceNumber: 'QC-9', vendorName: 'Controlebureau', invoiceDate: '2026-11-05T00:00:00Z', description: 'Keuring container', amount: 150 },
+            ],
+            costTotal: 2150,
+            linkedCosts: [{ partijId: 40, number: '2611012', kind: 'Sales', costTotal: 500 }],
+        })} onChanged={() => {}} onDeleted={() => {}} />);
+        const block = tour('partij-costs')!;
+        assert.deepEqual(Array.from(block.querySelectorAll('[data-tour="partij-cost-kind"]')).map((element) => (element as HTMLElement).dataset.tourKey), ['Zeevracht', 'QC']);
+        assert.ok(Array.from(block.querySelectorAll('a')).some((a) => a.getAttribute('href') === '/purchase-invoices?id=5'));
+        assert.ok(mounted.container.querySelector('[data-testid="partij-cost-total"]')!.textContent!.includes('2,150.00'));
+        const linked = mounted.container.querySelector('[data-testid="partij-linked-costs"]')!;
+        assert.ok(linked.textContent!.includes('partij_linked_costs_purchase') && linked.textContent!.includes('500.00'));
     });
 
     test('an unlinked lot can be deleted after confirming', async () => {
