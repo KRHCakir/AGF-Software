@@ -10,6 +10,7 @@ import { SalesBalance } from '../../types/salesSupply';
 import { UnitBadge } from './QuantityCell';
 import SalesBreakdown from './SalesBreakdown';
 import WarningBadges from './WarningBadges';
+import { listRowClass } from '../../lib/listRows';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
 const td = 'px-3 py-2 align-top';
@@ -123,11 +124,11 @@ export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {rows.map((row) => {
+                        {rows.map((row, index) => {
                             const balance = balanceOf(row);
                             return (
                                 <Fragment key={row.key}>
-                                    <tr className="hover:bg-blue-50/40" data-row-key={row.key}>
+                                    <tr className={listRowClass(index)} data-row-key={row.key}>
                                         <th scope="row" className={`${td} text-left font-normal`}>{name(row)}</th>
                                         <td className={td}><UnitBadge unit={row.supply.unit} /></td>
                                         <td className={td} data-tour="availability-available" data-tour-key={row.variant.productVariantId} data-col="stock">{stock(row)}</td>

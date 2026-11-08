@@ -7,6 +7,7 @@ import QualityBadge from './QualityBadge';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
 import { WeightBasisBadge } from '../shared/WeightBadge';
 import WarningBadges from './WarningBadges';
+import { listRowClass } from '../../lib/listRows';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
 const td = 'px-3 py-2 align-top';
@@ -62,8 +63,8 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {rows.map((row) => (
-                            <tr key={row.key} className="hover:bg-blue-50/40">
+                        {rows.map((row, index) => (
+                            <tr key={row.key} className={listRowClass(index)}>
                                 {nameCell(row)}
                                 <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
                                 <td className={td}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
@@ -114,8 +115,8 @@ export default function WarehouseSupplyTable({ rows, onOpen, focus = null, view 
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {rows.map((row) => (
-                        <tr key={row.key} className="hover:bg-blue-50/40">
+                    {rows.map((row, index) => (
+                        <tr key={row.key} className={listRowClass(index)}>
                             {nameCell(row)}
                             <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
                             <td className={`${td} bg-green-50/60 ${marked('available')}`} data-tour="availability-available" data-tour-key={row.variant.productVariantId}><QuantityCell value={row.supply.availableBeforeReservations} emphasis /></td>

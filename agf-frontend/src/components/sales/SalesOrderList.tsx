@@ -12,6 +12,7 @@ import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import { OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
+import { listRowClass, rowClick } from '../../lib/listRows';
 
 // Kopcellen blijven bovenaan staan binnen het eigen scrollgebied van de lijst (sticky per cel; werkt ook in tabellen).
 const th = 'sticky top-0 z-10 bg-gray-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 shadow-[inset_0_-1px_0_rgb(229,231,235)]';
@@ -57,12 +58,12 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {orders.map((order) => {
+                    {orders.map((order, index) => {
                         const progress = orderProgress(order);
                         const selected = order.id === selectedId;
                         return (
-                            <tr key={order.id} data-order-id={order.id} aria-selected={selected}
-                                className={selected ? 'bg-blue-100 shadow-[inset_4px_0_0_rgb(29,78,216)]' : 'hover:bg-blue-50/60'}>
+                            <tr key={order.id} data-order-id={order.id} aria-selected={selected} onClick={rowClick(() => onSelect(order.id))}
+                                className={listRowClass(index, { selected, clickable: true, selectedClass: 'bg-blue-100 shadow-[inset_4px_0_0_rgb(29,78,216)]' })}>
                                 <td className="px-2 py-1.5 align-top">
                                     <button type="button" onClick={() => onSelect(order.id)}
                                         className="text-left font-medium text-blue-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500"

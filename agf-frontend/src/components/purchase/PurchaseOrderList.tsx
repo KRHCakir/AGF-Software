@@ -5,6 +5,7 @@ import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
 import { DeviationBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import { listRowClass, rowClick } from '../../lib/listRows';
 
 // Lijst "Inkoopopdrachten": vanaf md een tabel, smaller kaarten met dezelfde gegevens (niets afgekapt).
 export default function PurchaseOrderList({ items, selectedId, onOpen }: {
@@ -40,8 +41,8 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {items.map((item) => (
-                            <tr key={item.id} aria-selected={item.id === selectedId} className={`cursor-pointer hover:bg-blue-50 ${item.id === selectedId ? 'bg-blue-50' : ''}`} onClick={() => onOpen(item.id)}>
+                        {items.map((item, index) => (
+                            <tr key={item.id} aria-selected={item.id === selectedId} className={listRowClass(index, { selected: item.id === selectedId, clickable: true })} onClick={rowClick(() => onOpen(item.id))}>
                                 <td className={`${th} whitespace-nowrap font-mono`}>
                                     <button type="button" data-tour="po-open" data-tour-key={item.orderNumber} className="font-semibold text-blue-800 hover:underline" aria-label={t('po_open_order', { number: item.orderNumber })} onClick={(event) => { event.stopPropagation(); onOpen(item.id); }}>
                                         {item.orderNumber}

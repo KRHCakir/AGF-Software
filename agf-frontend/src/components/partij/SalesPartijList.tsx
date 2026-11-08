@@ -5,6 +5,7 @@ import { formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { PACKAGE_UNITS, type PackageUnit } from '../../types/availability';
 import type { PartijTotals } from '../../types/partij';
+import { listRowClass, rowClick } from '../../lib/listRows';
 
 const th = 'px-2 py-1.5 align-top';
 
@@ -30,8 +31,8 @@ export default function SalesPartijList({ items, selectedId, onOpen }: { items: 
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {items.map((item) => (
-                            <tr key={item.id} aria-selected={item.id === selectedId} className={`cursor-pointer hover:bg-blue-50 ${item.id === selectedId ? 'bg-blue-50' : ''}`} onClick={() => onOpen(item.id)}>
+                        {items.map((item, index) => (
+                            <tr key={item.id} aria-selected={item.id === selectedId} className={listRowClass(index, { selected: item.id === selectedId, clickable: true })} onClick={rowClick(() => onOpen(item.id))}>
                                 <td className={`${th} whitespace-nowrap font-mono`}>
                                     <button type="button" data-tour="partij-open" data-tour-key={item.number} className="font-semibold text-blue-800 hover:underline"
                                         aria-label={t('partij_open', { number: item.number })} onClick={(event) => { event.stopPropagation(); onOpen(item.id); }}>{item.number}</button>

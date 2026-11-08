@@ -5,6 +5,7 @@ import { DirectTradeRow, breakdownTotal } from '../../lib/availability';
 import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
 import WarningBadges from './WarningBadges';
+import { ROW_PLAIN, ROW_STRIPE } from '../../lib/listRows';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-violet-900';
 const td = 'px-3 py-2 align-top';
@@ -33,8 +34,8 @@ export default function DirectTradeSupplyTable({ rows, onOpen, focus = null }: {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-violet-50">
-                    {rows.map((row) => (
-                        <tr key={row.key} className="hover:bg-violet-50/50">
+                    {rows.map((row, index) => (
+                        <tr key={row.key} className={`${index % 2 === 1 ? ROW_STRIPE : ROW_PLAIN} hover:bg-violet-50/50`}>
                             <td className={td}>
                                 <span className="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-900">
                                     <span aria-hidden="true">🔒</span>

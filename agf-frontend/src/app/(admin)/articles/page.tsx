@@ -20,6 +20,7 @@ import type { Article, ArticleReference } from '../../../types/article';
 import type { CountryReference } from '../../../types/country';
 import OriginSettings from '../../../components/articles/OriginSettings';
 import SizeClassCleanup from '../../../components/articles/SizeClassCleanup';
+import { listRowClass, rowClick } from '../../../lib/listRows';
 
 interface Loaded { articles: Article[]; reference: ArticleReference; countries: CountryReference }
 
@@ -170,8 +171,8 @@ export default function ArticlesPage() {
                                         ) : t('articles_none')}
                                     </td></tr>
                                 )}
-                                {shown.map((article) => (
-                                    <tr key={article.id} className={`cursor-pointer hover:bg-blue-50 ${editing?.article?.id === article.id ? 'bg-blue-50' : ''}`} onClick={() => openArticle(article)} data-testid={`article-row-${article.id}`}>
+                                {shown.map((article, index) => (
+                                    <tr key={article.id} className={listRowClass(index, { selected: editing?.article?.id === article.id, clickable: true })} onClick={rowClick(() => openArticle(article))} data-testid={`article-row-${article.id}`}>
                                         <td className="px-3 py-2 font-mono">{article.shortcutCode ?? <span className="text-gray-400">–</span>}</td>
                                         <td className="px-3 py-2 text-gray-900">{article.description}{article.brand ? <span className="ml-1 text-xs text-gray-500">· {article.brand}</span> : null}{article.isArchived && <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-700">{t('articles_archived_badge')}</span>}</td>
                                         <td className="px-3 py-2">{article.packagingUnit ? t(unitLabelKey(article.packagingUnit)) : '–'}</td>
