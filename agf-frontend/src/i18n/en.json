@@ -640,7 +640,7 @@
   "legacy_go_to_availability": "Go to Availability",
   "placeholder_not_available": "This part is not available yet. Nothing is tracked or followed here.",
   "help_title": "Help",
-  "help_text": "A manual and contact details are not available yet. The menu follows the process: Purchasing, Stock, Sales and Master data.",
+  "help_text": "A manual and contact details are not available yet. The menu is at the top and follows the process: Purchase, Stock, Sales and Master data, each with its own colour. The bar below it shows the screens of the group you are in.",
   "start_title": "Start",
   "start_subtitle": "Choose in the menu what you want to do: purchase, check stock, sell or manage master data.",
   "start_legacy_title": "Legacy flows",
