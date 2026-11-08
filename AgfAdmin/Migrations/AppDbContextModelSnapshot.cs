@@ -2246,6 +2246,20 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("ExchangeRate")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<DateTime?>("ExchangeRateDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExchangeRateFetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExchangeRateSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<decimal?>("GrossWeightKg")
                         .HasColumnType("decimal(18,3)");
 
@@ -2330,7 +2344,10 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("VendorId");
 
-                    b.ToTable("IncomingInvoices");
+                    b.ToTable("IncomingInvoices", t =>
+                        {
+                            t.HasCheckConstraint("CK_IncomingInvoices_ExchangeRate", "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateDate\" IS NOT NULL AND \"ExchangeRateSource\" IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoiceLine", b =>

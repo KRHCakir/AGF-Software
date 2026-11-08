@@ -22,6 +22,18 @@ namespace AgfAdmin.Configuration
             services.AddScoped<PartijService>();
             services.AddScoped<CostArticleService>();
             services.AddScoped<PartijCostService>();
+            // ECB-koersen voor facturen in een andere valuta; ExchangeRates:Source = Off zet ophalen uit (afgeschermde testomgeving).
+            services.AddHttpClient<EcbExchangeRateSource>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(8);
+                client.DefaultRequestHeaders.Accept.ParseAdd("text/csv");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("AGF-Software/1.0");
+            });
+            services.AddScoped<IExchangeRateSource>(provider =>
+                string.Equals(provider.GetRequiredService<IConfiguration>()["ExchangeRates:Source"], "Off", StringComparison.OrdinalIgnoreCase)
+                    ? new DisabledExchangeRateSource()
+                    : provider.GetRequiredService<EcbExchangeRateSource>());
+            services.AddScoped<InvoiceExchangeRateService>();
             services.AddScoped<ReceiptDeviationService>();
             services.AddScoped<CountryService>();
             services.AddSingleton<IEmailDomainChecker, DnsEmailDomainChecker>();

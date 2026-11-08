@@ -27,7 +27,7 @@ Elk gebied is een constante in `AgfAdmin/Security/Permissions.cs`. Het is ook ee
 
 | Gebied | Endpoints |
 |---|---|
-| `Inkoop` | inkooporders, aanvoer (`supply-commitments`), inkoopfacturen, inkomende facturen, afwijkingen bij ontvangst |
+| `Inkoop` | inkooporders, aanvoer (`supply-commitments`), inkoopfacturen (ook kosten verdelen en de ECB-koers, `/api/exchange-rates`), inkomende facturen, afwijkingen bij ontvangst |
 | `Voorraad` | beschikbaarheid, pallets en ontvangst, voorraad (oud) |
 | `Keuring` | goedkeuren, blokkeren, afkeuren en vrijgeven (`pallets/{id}/content-lines/{lineId}/quality-status`). Daarnaast is ook `Voorraad` nodig, omdat dat het beleid van de hele pallet-controller is. |
 | `Verkoop` | verkooporders, reserveringen, verzendingen, klanten, verkoop en facturen (oud), rapporten (oud) |

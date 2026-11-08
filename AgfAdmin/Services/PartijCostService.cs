@@ -36,21 +36,27 @@ namespace AgfAdmin.Services
             var partijIds = events.Select(e => e.PartijId).Distinct().ToList();
             var numbers = await _db.Partijen.AsNoTracking().Where(p => partijIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Number, cancellationToken);
             var totals = await new PartijService(_db, _user).TotalsAsync(costs.Select(c => c.PartijId).Distinct().ToList(), cancellationToken);
+            var euro = ExchangeRateRules.IsEuro(invoice.Currency);
             return ServiceResult<InvoiceAllocationsDto>.Ok(new InvoiceAllocationsDto
             {
                 InvoiceId = invoice.Id,
-                Currency = invoice.Currency ?? PartijCostRules.Currency,
-                CanAllocate = IsEuro(invoice),
+                Currency = euro ? PartijCostRules.Currency : invoice.Currency.Trim().ToUpperInvariant(),
+                ExchangeRate = euro ? null : invoice.ExchangeRate,
+                ExchangeRateDate = euro || invoice.ExchangeRateDate == null ? null : DateOnly.FromDateTime(invoice.ExchangeRateDate.Value),
+                ExchangeRateSource = euro ? null : invoice.ExchangeRateSource,
+                RateLocked = !euro && costs.Count > 0,
+                CanAllocate = euro, // opslaan kent in deze stap alleen eurofacturen (zie SaveLineAsync)
                 Lines = invoice.InvoiceLines.OrderBy(l => l.Id).Select(line =>
                 {
                     var allocations = costs.Where(c => c.IncomingInvoiceLineId == line.Id)
                         .Select(c => WithBasis(new LineAllocationDto { PartijId = c.PartijId, Number = c.Number, PartijKind = c.Kind, Amount = c.AmountExclVat }, totals.GetValueOrDefault(c.PartijId)))
                         .OrderBy(a => a.Number).ToList();
                     var allocated = allocations.Sum(a => a.Amount);
+                    var lineEur = ExchangeRateRules.LineAmountInEuro(line.LineTotal, invoice.Currency, invoice.ExchangeRate);
                     return new InvoiceLineAllocationDto
                     {
                         LineId = line.Id, Description = line.Description, Kind = PartijCostRules.KindOf(line.ProductVariantId, line.CostArticle?.Name),
-                        LineTotal = line.LineTotal, Allocated = allocated, General = line.LineTotal - allocated, Version = line.AllocationVersion,
+                        LineTotal = line.LineTotal, LineTotalEur = lineEur, Allocated = allocated, General = lineEur - allocated, Version = line.AllocationVersion,
                         Allocations = allocations,
                         History = events.Where(e => e.IncomingInvoiceLineId == line.Id).Select(e => new AllocationHistoryDto
                         {
@@ -216,7 +222,8 @@ namespace AgfAdmin.Services
             return allocation;
         }
 
-        private static bool IsEuro(IncomingInvoice invoice) => string.IsNullOrWhiteSpace(invoice.Currency) || invoice.Currency == PartijCostRules.Currency;
+        // Verdelen kan in deze stap nog alleen bij een factuur in euro; met de koers verdelen komt in de volgende stap.
+        private static bool IsEuro(IncomingInvoice invoice) => ExchangeRateRules.IsEuro(invoice.Currency);
 
         private static ServiceResult<InvoiceAllocationsDto> Validation(Dictionary<string, List<string>> errors) =>
             ServiceResult<InvoiceAllocationsDto>.Validation(ValidationErrors.ToArrays(errors));

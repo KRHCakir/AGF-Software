@@ -6,7 +6,9 @@ namespace AgfAdmin.Services
         Ok,
         Validation,
         NotFound,
-        Conflict
+        Conflict,
+        // Een externe bron (de ECB-koers) is nu niet bereikbaar: 503, opnieuw proberen kan.
+        Unavailable
     }
 
     // Uitkomst van een domeinservice; de controller vertaalt deze één-op-één naar een HTTP-status.
@@ -36,5 +38,6 @@ namespace AgfAdmin.Services
         public static ServiceResult<T> NotFound(string message) => new(ServiceResultStatus.NotFound, default, null, message);
         public static ServiceResult<T> Conflict(string message) => new(ServiceResultStatus.Conflict, default, null, message);
         public static ServiceResult<T> Conflict(string message, object body) => new(ServiceResultStatus.Conflict, default, null, message, body);
+        public static ServiceResult<T> Unavailable(string message) => new(ServiceResultStatus.Unavailable, default, null, message);
     }
 }

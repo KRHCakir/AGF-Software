@@ -16,7 +16,7 @@ namespace AgfAdmin.Models
 
         // Kantoorinvoer (PurchaseInvoiceService): idempotentiesleutel, op het document bewaarde betaaltermijn en valuta
         // (leveranciersstandaarden zijn alleen voorstellen), en optionele velden volgens de bedrijfsinstellingen.
-        // Valuta is uitsluitend een opgeslagen code: bedragen staan in die valuta, er wordt nooit omgerekend.
+        // Bedragen staan in de valuta van de factuur; alleen voor kosten op partijen wordt met de ECB-koers naar euro omgerekend.
         public Guid? RequestId { get; set; }
         // Genormaliseerde oorspronkelijke opdracht (JSON, zie PurchaseInvoiceCommand). Een herhaling met dezelfde RequestId
         // wordt hiermee één-op-één vergeleken, los van intussen gewijzigde leveranciers- of bedrijfsstandaarden.
@@ -43,6 +43,15 @@ namespace AgfAdmin.Models
         // Interne opmerking bij dit document ("Klant komt morgen langs"): alleen voor interne werkplekken, nooit in klantfacturen,
         // leverbonnen, mails of exports; niet overgenomen naar volgende documenten. Los van Remarks (algemeen opmerkingenveld).
         public string? InternalNote { get; set; }
+
+        // Koers voor een factuur in een andere valuta dan EUR (zie InvoiceExchangeRateService): de ECB-referentiekoers in eenheden
+        // valuta per 1 euro (zoals de ECB hem publiceert, 1 EUR = 1,1165 USD), de datum van die publicatie (de laatste op of vóór de
+        // factuurdatum), de bron en wanneer hij is opgehaald. Nooit getypt, altijd door de server opgehaald; ligt vast zodra er kosten op
+        // partijen staan (regel 26). Alle vier leeg bij een factuur in euro of zolang er nog geen koers is.
+        public decimal? ExchangeRate { get; set; }
+        public DateTime? ExchangeRateDate { get; set; }
+        public string? ExchangeRateSource { get; set; }
+        public DateTime? ExchangeRateFetchedAt { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }
