@@ -89,11 +89,16 @@ describe('CurrencyField', () => {
         await key('Tab');
         assert.equal(value, 'USD');
         await type('dol');
+        const marked = () => mounted.container.querySelectorAll('[role="option"][aria-selected="true"]').length;
+        assert.equal(marked(), 0, 'a typed three-letter code: nothing marked, because Tab will not take it');
+        assert.ok(mounted.container.querySelector('[data-testid="currency-name-note"]'), 'the list says so visibly');
+        assert.equal(input().getAttribute('aria-activedescendant'), null);
         await key('Tab');
         assert.equal(value, 'DOL', 'a typed three-letter code is not replaced silently');
         await type('dol');
         await key('ArrowDown');
-        await key('ArrowUp');
+        assert.equal(marked(), 1, 'arrow down chooses the top suggestion');
+        assert.equal(mounted.container.querySelector('[data-testid="currency-name-note"]'), null);
         await key('Enter');
         assert.equal(value, 'USD');
     });

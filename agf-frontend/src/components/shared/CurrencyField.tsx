@@ -29,6 +29,9 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
     // Een suggestie die alleen op naam matcht (ALL bij 'dollar') mag een ingetypte code niet stilletjes vervangen,
     // tenzij de gebruiker er met de pijltjes expliciet naartoe is gegaan, of er nog geen volledige code van drie letters staat.
     const mayTake = active !== null && (active.code.startsWith(value) || chosen || value.length < 3);
+    // Alleen wat Tab of Enter echt overneemt, staat gemarkeerd. Bij een ingetypte code die nergens mee begint (DOL) staat er niets
+    // gemarkeerd en zegt de lijst zichtbaar dat Tab de code laat staan en pijltje omlaag de suggestie kiest.
+    const marked = mayTake ? active : null;
 
     const choose = (code: string) => {
         onChange(code);
@@ -39,7 +42,8 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
             setChosen(true);
-            if (!open) {
+            if (!open || !mayTake) {
+                // Eerste pijltje: de bovenste suggestie kiezen (ook als die nog niet gemarkeerd was).
                 setOpen(true);
                 setHighlight(0);
                 return;
@@ -68,7 +72,7 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
         <div className={`relative ${className}`}>
             <input id={id} type="text" value={value} disabled={disabled} maxLength={3} autoComplete="off" spellCheck={false}
                 role="combobox" aria-autocomplete="list" aria-expanded={open && suggestions.length > 0} aria-controls={listId}
-                aria-activedescendant={open && active !== null ? `${listId}-${active.code}` : undefined} data-tour={dataTour} {...aria}
+                aria-activedescendant={open && marked !== null ? `${listId}-${marked.code}` : undefined} data-tour={dataTour} {...aria}
                 onChange={(event) => {
                     const next = cleanCurrencyInput(event.target.value);
                     onChange(next);
@@ -77,17 +81,22 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
                     setChosen(false);
                 }}
                 onKeyDown={onKeyDown} onBlur={() => setOpen(false)} className={`${inputClass} font-mono uppercase`} />
-            <ul id={listId} role="listbox" aria-label={t('currency_suggestions')} hidden={!open || suggestions.length === 0}
-                className="absolute right-0 top-full z-30 mt-0.5 max-h-64 w-max min-w-full max-w-[16rem] overflow-y-auto rounded border border-gray-300 bg-white py-1 text-sm shadow-lg">
+            <div hidden={!open || suggestions.length === 0}
+                className="absolute right-0 top-full z-30 mt-0.5 w-max min-w-full max-w-[16rem] rounded border border-gray-300 bg-white py-1 text-sm shadow-lg">
+            {open && active !== null && !mayTake && (
+                <p className="border-b border-gray-100 px-2 pb-1 text-xs text-gray-600" data-testid="currency-name-note">{t('currency_suggestion_hint_name', { code: active.code })}</p>
+            )}
+            <ul id={listId} role="listbox" aria-label={t('currency_suggestions')} hidden={!open || suggestions.length === 0} className="max-h-64 overflow-y-auto">
                 {suggestions.map((option) => (
-                    <li key={option.code} id={`${listId}-${option.code}`} role="option" aria-selected={option === active}
+                    <li key={option.code} id={`${listId}-${option.code}`} role="option" aria-selected={option === marked}
                         onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option.code)}
-                        className={`flex cursor-pointer gap-2 px-2 py-1 ${option === active ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
+                        className={`flex cursor-pointer gap-2 px-2 py-1 ${option === marked ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
                         <span className="font-mono font-semibold">{option.code}</span>
                         <span className="text-gray-600">{currencyName(option, locale)}</span>
                     </li>
                 ))}
             </ul>
+            </div>
             {open && active !== null && <span className="sr-only" aria-live="polite">{t(mayTake ? 'currency_suggestion_hint' : 'currency_suggestion_hint_name', { code: active.code })}</span>}
         </div>
     );
