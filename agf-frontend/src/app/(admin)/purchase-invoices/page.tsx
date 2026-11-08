@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import PurchaseInvoiceDetail from '../../../components/costs/PurchaseInvoiceDetail';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import { FirstStepLink } from '../../../components/shared/FirstStep';
 import { useTranslation } from '../../../i18n/LanguageContext';
@@ -12,9 +14,26 @@ import { listPurchaseInvoices } from '../../../services/purchaseInvoiceService';
 import type { PurchaseInvoice } from '../../../types/purchaseInvoice';
 import { primaryButtonClass } from '../../../components/supply/SuccessPanel';
 
-// Overzicht van inkoopfacturen uit de nieuwe werkplek (dezelfde tabel als de oude pagina "Facturen (oud)").
+// Overzicht van inkoopfacturen uit de nieuwe werkplek (dezelfde tabel als de oude pagina "Facturen (oud)"). Klikken opent de factuur
+// (?id=) met per regel "Aan welke partij hoort dit?" (kosten verdelen over partijen).
 export default function PurchaseInvoicesPage() {
+    const { t } = useTranslation();
+    return (
+        <Suspense fallback={<LoadingRows label={t('purchase_loading')} />}>
+            <PurchaseInvoicesWorkspace />
+        </Suspense>
+    );
+}
+
+function PurchaseInvoicesWorkspace() {
     const { t, locale } = useTranslation();
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const selected = /^[1-9][0-9]{0,9}$/.test(searchParams.get('id') ?? '') ? Number(searchParams.get('id')) : null;
+    const open = useCallback((id: number | null) => {
+        router.replace(id === null ? pathname : `${pathname}?id=${id}`, { scroll: false });
+    }, [router, pathname]);
     const [state, setState] = useState<LoadState<PurchaseInvoice[]>>({ status: 'loading' });
     const [reloadToken, setReloadToken] = useState(0);
 
@@ -42,6 +61,7 @@ export default function PurchaseInvoicesPage() {
                     <Link href="/purchase-invoices/new" className={primaryButtonClass}>+ {t('purchase_new_title')}</Link>
                 </div>
             </div>
+            {selected !== null && <PurchaseInvoiceDetail invoiceId={selected} onClose={() => open(null)} />}
             {state.status === 'loading' && <LoadingRows label={t('purchase_loading')} />}
             {state.status === 'error' && <ErrorState error={state.error} onRetry={() => setReloadToken((n) => n + 1)} />}
             {state.status === 'ready' && (
@@ -65,9 +85,12 @@ export default function PurchaseInvoicesPage() {
                                 </td></tr>
                             )}
                             {state.data.map((invoice) => (
-                                <tr key={invoice.id}>
+                                <tr key={invoice.id} aria-selected={invoice.id === selected} className={invoice.id === selected ? 'bg-blue-50' : ''}>
                                     <td className="px-3 py-2">{invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'}</td>
-                                    <td className="px-3 py-2 font-mono">{invoice.invoiceNumber ?? '–'}</td>
+                                    <td className="px-3 py-2 font-mono">
+                                        <button type="button" className="font-semibold text-blue-800 hover:underline" data-tour="invoice-open" data-tour-key={invoice.invoiceNumber ?? invoice.id}
+                                            aria-label={t('invoice_open', { number: invoice.invoiceNumber ?? String(invoice.id) })} onClick={() => open(invoice.id)}>{invoice.invoiceNumber ?? '–'}</button>
+                                    </td>
                                     <td className="px-3 py-2">{invoice.vendorName ?? '–'}</td>
                                     <td className="px-3 py-2">{invoice.dueDate ? formatCalendarDate(invoice.dueDate, locale) : '–'}</td>
                                     <td className="px-3 py-2 text-right font-mono">{formatMoney(invoice.totalAmount, invoice.currency ?? null, locale)}</td>

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatMoney } from '../../lib/availability';
@@ -279,6 +280,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 <p className="mt-1 text-sm text-gray-800">{t('purchase_saved_summary', { vendor: result.invoice.vendorName ?? '', total: money(result.invoice.totalAmount), currency: result.invoice.currency ?? '', status: result.invoice.status })}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" className={primaryButtonClass} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
+                    {/* Kosten verdelen over partijen gebeurt op de opgeslagen factuur (per regel, met historie). */}
+                    <Link href={`/purchase-invoices?id=${result.invoice.id}`} className={secondaryButtonClass} data-tour="pinvoice-allocate">{t('purchase_allocate_costs')}</Link>
                 </div>
             </section>
         );
@@ -289,6 +292,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             {lastSaved !== null && (
                 <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900" data-tour="pinvoice-saved">
                     {t('purchase_saved_title', { number: lastSaved.invoice.invoiceNumber ?? '' })} · {money(lastSaved.invoice.totalAmount)} {lastSaved.invoice.currency}{lastSaved.replayed ? ` · ${t('supply_saved_before')}` : ''}
+                    {' · '}<Link href={`/purchase-invoices?id=${lastSaved.invoice.id}`} className="underline">{t('purchase_allocate_costs')}</Link>
                 </p>
             )}
             {pending !== null && (
