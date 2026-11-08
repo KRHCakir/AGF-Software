@@ -13,6 +13,7 @@ import { toApiError } from '../../../services/apiClient';
 import { listPurchaseInvoices } from '../../../services/purchaseInvoiceService';
 import type { PurchaseInvoice } from '../../../types/purchaseInvoice';
 import { primaryButtonClass } from '../../../components/supply/SuccessPanel';
+import { listRowClass, rowClick } from '../../../lib/listRows';
 
 // Overzicht van inkoopfacturen uit de nieuwe werkplek (dezelfde tabel als de oude pagina "Facturen (oud)"). Klikken opent de factuur
 // (?id=) met per regel "Aan welke partij hoort dit?" (kosten verdelen over partijen).
@@ -84,8 +85,9 @@ function PurchaseInvoicesWorkspace() {
                                         action={<FirstStepLink href="/purchase-invoices/new" label={t('purchase_new_title')} />} />
                                 </td></tr>
                             )}
-                            {state.data.map((invoice) => (
-                                <tr key={invoice.id} aria-selected={invoice.id === selected} className={invoice.id === selected ? 'bg-blue-50' : ''}>
+                            {state.data.map((invoice, index) => (
+                                <tr key={invoice.id} aria-selected={invoice.id === selected} className={listRowClass(index, { selected: invoice.id === selected, clickable: true })}
+                                    onClick={rowClick(() => open(invoice.id))} data-testid={`purchase-invoice-row-${invoice.id}`}>
                                     <td className="px-3 py-2">{invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'}</td>
                                     <td className="px-3 py-2 font-mono">
                                         <button type="button" className="font-semibold text-blue-800 hover:underline" data-tour="invoice-open" data-tour-key={invoice.invoiceNumber ?? invoice.id}

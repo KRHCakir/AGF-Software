@@ -11,6 +11,7 @@ import { isMacPlatform, matchShortcut, shortcutLabel } from '../../../lib/shortc
 import { toApiError } from '../../../services/apiClient';
 import { getRelation, getRelationReference, listRelations } from '../../../services/relationService';
 import type { Relation, RelationList, RelationReference, RelationRoleFilter } from '../../../types/relation';
+import { listRowClass, rowClick } from '../../../lib/listRows';
 
 const PAGE_SIZE = 50;
 
@@ -189,8 +190,8 @@ export default function RelationsPage() {
                                 </td></tr>
                             )}
                             {shown.map((item, index) => (
-                                <tr key={item.id} role="option" aria-selected={index === highlight} data-testid={`relation-row-${item.id}`} onClick={() => void openRelation(item.id)}
-                                    className={`cursor-pointer hover:bg-blue-50 ${editing?.relation?.id === item.id ? 'bg-blue-50' : index === highlight && query !== '' ? 'bg-blue-50/60' : ''}`}>
+                                <tr key={item.id} role="option" aria-selected={index === highlight} data-testid={`relation-row-${item.id}`} onClick={rowClick(() => void openRelation(item.id))}
+                                    className={listRowClass(index, { clickable: true, selected: editing?.relation?.id === item.id || (index === highlight && query !== ''), selectedClass: editing?.relation?.id === item.id ? 'bg-blue-50' : 'bg-blue-50/60' })}>
                                     <td className="px-3 py-2 font-mono text-xs">{item.searchCode ?? '–'}</td>
                                     <td className="px-3 py-2">
                                         <span className="font-medium text-gray-900">{item.name}</span>
