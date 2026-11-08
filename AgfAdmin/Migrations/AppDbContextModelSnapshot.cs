@@ -2341,6 +2341,12 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AllocationVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<int?>("CostArticleId")
                         .HasColumnType("integer");
 
@@ -3104,6 +3110,108 @@ namespace AgfAdmin.Migrations
                     b.ToTable("PartijAuditEvents", t =>
                         {
                             t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed", "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PartijCost", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountExclVat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("IncomingInvoiceLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("PartijId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartijId");
+
+                    b.HasIndex("IncomingInvoiceLineId", "PartijId")
+                        .IsUnique();
+
+                    b.ToTable("PartijCosts", t =>
+                        {
+                            t.HasCheckConstraint("CK_PartijCosts_Amount_Positive", "\"AmountExclVat\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PartijCostAuditEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("IncomingInvoiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IncomingInvoiceLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("NewAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("OldAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("PartijId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IncomingInvoiceId");
+
+                    b.HasIndex("PartijId");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("PartijCostAuditEvents", t =>
+                        {
+                            t.HasCheckConstraint("CK_PartijCostAuditEvents_EventType_Allowed", "\"EventType\" IN ('Allocated', 'Changed', 'Removed')");
                         });
                 });
 
@@ -5586,6 +5694,25 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("SalesOrder");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PartijCost", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.IncomingInvoiceLine", "IncomingInvoiceLine")
+                        .WithMany()
+                        .HasForeignKey("IncomingInvoiceLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithMany()
+                        .HasForeignKey("PartijId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("IncomingInvoiceLine");
+
+                    b.Navigation("Partij");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.ProductVariant", b =>

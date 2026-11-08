@@ -34,6 +34,8 @@ namespace AgfAdmin.Data
         public DbSet<IncomingInvoice> IncomingInvoices { get; set; }
         public DbSet<IncomingInvoiceLine> IncomingInvoiceLines { get; set; }
         public DbSet<CostArticle> CostArticles { get; set; }
+        public DbSet<PartijCost> PartijCosts { get; set; }
+        public DbSet<PartijCostAuditEvent> PartijCostAuditEvents { get; set; }
         public DbSet<OrderLine> OrderLines { get; set; }
         public DbSet<OrderLineAllocation> OrderLineAllocations { get; set; }
         public DbSet<WasteLog> WasteLogs { get; set; }
@@ -253,6 +255,18 @@ namespace AgfAdmin.Data
         // concurrency-token in de WHERE-clausule, zodat een verouderde schrijver een DbUpdateConcurrencyException krijgt.
         private void IncrementVersions()
         {
+            // Een gewijzigd regelbedrag verhoogt de verdelingsversie, zodat het concurreert met een gelijktijdige verdeling van dezelfde
+            // regel (AllocationVersion is concurrency token): de ene schrijver ziet dan een concurrencyfout i.p.v. dat beide slagen.
+            foreach (var entry in ChangeTracker.Entries<IncomingInvoiceLine>().Where(e => e.State == EntityState.Modified))
+            {
+                var total = entry.Property(l => l.LineTotal);
+                var version = entry.Property(l => l.AllocationVersion);
+                if (total.OriginalValue != total.CurrentValue && version.CurrentValue == version.OriginalValue)
+                {
+                    version.CurrentValue = version.OriginalValue + 1;
+                }
+            }
+
             foreach (var entry in ChangeTracker.Entries<Pallet>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(p => p.Version).CurrentValue = entry.Property(p => p.Version).OriginalValue + 1;
@@ -370,7 +384,33 @@ namespace AgfAdmin.Data
                 b.Property(l => l.Unit).HasMaxLength(32);
                 b.HasOne(l => l.ProductVariant).WithMany().HasForeignKey(l => l.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.Property(l => l.AllocationVersion).HasDefaultValue(0).IsConcurrencyToken();
                 b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoiceLines_ArticleOrCost", "\"ProductVariantId\" IS NULL OR \"CostArticleId\" IS NULL"));
+            });
+
+            // Kosten op partijen: één regel per factuurregel en partij, positief bedrag excl. btw; de historie staat apart (append-only).
+            modelBuilder.Entity<PartijCost>(b =>
+            {
+                b.Property(c => c.AmountExclVat).HasPrecision(18, 2);
+                b.Property(c => c.Kind).IsRequired().HasMaxLength(PartijCostRules.MaxKindLength);
+                b.Property(c => c.CreatedBy).IsRequired().HasMaxLength(PartijCostRules.MaxActorLength);
+                b.HasOne(c => c.IncomingInvoiceLine).WithMany().HasForeignKey(c => c.IncomingInvoiceLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.Partij).WithMany().HasForeignKey(c => c.PartijId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(c => new { c.IncomingInvoiceLineId, c.PartijId }).IsUnique();
+                b.HasIndex(c => c.PartijId);
+                b.ToTable(t => t.HasCheckConstraint("CK_PartijCosts_Amount_Positive", "\"AmountExclVat\" > 0"));
+            });
+
+            modelBuilder.Entity<PartijCostAuditEvent>(b =>
+            {
+                b.Property(e => e.EventType).IsRequired().HasMaxLength(16);
+                b.Property(e => e.OldAmount).HasPrecision(18, 2);
+                b.Property(e => e.NewAmount).HasPrecision(18, 2);
+                b.Property(e => e.ActorReference).IsRequired().HasMaxLength(PartijCostRules.MaxActorLength);
+                b.HasIndex(e => e.IncomingInvoiceId);
+                b.HasIndex(e => e.PartijId);
+                b.HasIndex(e => e.RequestId);
+                b.ToTable(t => t.HasCheckConstraint("CK_PartijCostAuditEvents_EventType_Allowed", "\"EventType\" IN ('Allocated', 'Changed', 'Removed')"));
             });
 
             // Kostenartikelen (type Dienst): de naam is uniek zonder hoofdletter- of spatieverschil (NameKey).
