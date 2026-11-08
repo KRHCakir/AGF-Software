@@ -46,7 +46,8 @@ describe('PartijDetail', () => {
 
     test('orders, pallets and sales are links; costs and result are a calm note, nothing else', async () => {
         await mounted.render(<PartijDetail partij={detail()} onChanged={() => {}} onDeleted={() => {}} />);
-        assert.deepEqual(hrefs(), ['/purchase-orders?id=46', '/inspection?palletId=77', '/purchase-orders?id=46', '/sales-orders?orderId=12']);
+        assert.deepEqual(hrefs(), ['/purchase-orders?id=46', '/inspection?palletId=77', '/purchase-orders?id=46', '/sales-orders?orderId=12', '/partijen?id=40']);
+        assert.ok(mounted.hasText('2611012'));
         assert.ok(tour('partij-costs-later')!.textContent!.includes('partij_costs_later'));
         assert.ok(mounted.hasText('Groothandel Jansen') && mounted.hasText('NP-LOT-88'));
         // Gekoppeld: niet te verwijderen, het nummer ligt vast.
@@ -74,6 +75,43 @@ describe('PartijDetail', () => {
         await act(async () => { tour('partij-correct-save')!.click(); });
         await mounted.waitFor(() => changed === 1, 'changed');
         assert.deepEqual(calls.at(-1)!.body, { number: '2610253', reason: 'Typefout' });
+    });
+
+    // Verkoop-partij: één verkooporder; de colli komen uit inkoop-partijen (via de reserveringen). Zolang er niets gereserveerd of geleverd
+    // is, past de gebruiker het nummer aan zonder reden; nooit verwijderen.
+    const sales = (over: Partial<Detail> = {}) => detail({
+        number: '2611004', kind: 'Sales', salesOrderId: 12, salesOrderNumber: 'VO-2026-0012', salesOrderStatus: 'Open', customerName: 'Groothandel Jansen', orderedQuantity: 500,
+        vendors: [], supplierLotReferences: [], orders: [], receipts: [], salesOrders: [], numberFixed: false, reservedQuantity: 140, shippedQuantity: 0, soldQuantity: 140,
+        sources: [
+            { partijId: 3, number: '52611002', vendorName: 'Kwekerij Peru', product: 'Avocado Hass', unit: 'box', reservedQuantity: 20, shippedQuantity: 0 },
+            { partijId: 4, number: '52611003', vendorName: 'Kwekerij Peru', product: 'Avocado Hass', unit: 'box', reservedQuantity: 120, shippedQuantity: 0 },
+        ],
+        ...over,
+    });
+
+    test('a sales lot shows its order and the purchase lots the packages come from, and can be changed without a reason', async () => {
+        let changed = 0;
+        correctAnswer = () => json(200, { id: 7, number: '261140', kind: 'Sales', salesOrderId: 12, status: 'Open', note: null, createdAt: '2026-10-27T09:00:00Z', createdBy: 'Admin', linked: true });
+        await mounted.render(<PartijDetail partij={sales()} onChanged={() => { changed++; }} onDeleted={() => {}} />);
+        assert.deepEqual(hrefs(), ['/sales-orders?orderId=12', '/partijen?id=3', '/partijen?id=4']);
+        assert.ok(mounted.hasText('partij_kind_sales') && mounted.hasText('partij_sales_adjustable_hint'));
+        assert.equal(tour('partij-delete'), null);
+        assert.equal(tour('partij-order'), null);
+        await act(async () => { tour('partij-correct-open')!.click(); });
+        assert.ok(mounted.hasText('partij_adjust'));
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="partijCorrectNumber-input"]')!, '261140'); });
+        await act(async () => { tour('partij-correct-save')!.click(); });
+        await mounted.waitFor(() => changed === 1, 'changed');
+        assert.deepEqual(calls.at(-1)!.body, { number: '261140', reason: null });
+    });
+
+    test('a sales lot with something reserved needs a reason to correct the number', async () => {
+        await mounted.render(<PartijDetail partij={sales({ numberFixed: true })} onChanged={() => {}} onDeleted={() => {}} />);
+        await act(async () => { tour('partij-correct-open')!.click(); });
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="partijCorrectNumber-input"]')!, '261140'); });
+        await act(async () => { tour('partij-correct-save')!.click(); });
+        assert.ok(mounted.hasText('partij_link_reason_required') && mounted.hasText('partij_sales_fixed_hint'));
+        assert.equal(calls.length, 0);
     });
 
     test('an unlinked lot can be deleted after confirming', async () => {
