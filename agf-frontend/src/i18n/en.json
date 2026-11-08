@@ -1896,6 +1896,7 @@
   "date_field_today": "Today",
   "date_field_today_label": "Fill in today's date",
   "date_field_calendar": "Open calendar",
+  "date_field_shortcuts": "Shortcut: T today · Y yesterday · M tomorrow · E 2 days ago · O in 2 days",
   "relations_error_invalid_date": "Enter a complete, existing date (dd-mm-yyyy).",
   "trade_class_label": "Class",
   "trade_class_placeholder": "Type Extra, I or II",

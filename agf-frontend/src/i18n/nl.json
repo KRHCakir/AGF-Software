@@ -1896,6 +1896,7 @@
   "date_field_today": "Vandaag",
   "date_field_today_label": "Datum van vandaag invullen",
   "date_field_calendar": "Kalender openen",
+  "date_field_shortcuts": "Sneltoets: V vandaag · G gisteren · M morgen · E eergisteren · O overmorgen",
   "relations_error_invalid_date": "Vul een volledige, bestaande datum in (dd-mm-jjjj).",
   "trade_class_label": "Klasse",
   "trade_class_placeholder": "Typ Extra, I of II",

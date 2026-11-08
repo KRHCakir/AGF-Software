@@ -2,7 +2,7 @@
 
 import { RefObject, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDateInput, isDateOnly, localToday, parseDateInput } from '../../lib/calendarDate';
+import { dateShortcut, formatDateInput, isDateOnly, localToday, parseDateInput } from '../../lib/calendarDate';
 import { inputClass } from '../supply/FieldError';
 
 // Het datumveld van de hele app. Een gewoon tekstveld in plaats van <input type="date">: dat native veld toont de datum in de
@@ -15,6 +15,8 @@ import { inputClass } from '../supply/FieldError';
 // `value` en `onChange` gaan over de ISO-datum (jjjj-mm-dd) zonder tijd en zonder tijdzone; wat (nog) geen datum is, gaat als de
 // getypte tekst door, zodat het formulier "ongeldige datum" kan melden in plaats van "leeg". Eigen getypte tekst blijft staan
 // tot het verlaten van het veld of Enter; daarna, en bij elke waarde van buiten (Vandaag, kalender, herstel, leegmaken), staat er dd-mm-jjjj.
+// Sneltoetsen: één letter is meteen een datum (V vandaag, G gisteren, M morgen, E eergisteren, O overmorgen; zie dateShortcut). Zolang
+// het veld de focus heeft, staat de uitleg eronder (zwevend, zodat het formulier niet verspringt).
 export default function DateField({ id, value, onChange, disabled = false, min, max, dataTour, dataTourKey, inputRef, ariaLabel, className = '', ...aria }: {
     id: string;
     value: string;
@@ -35,6 +37,9 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
     const sent = useRef(value);
     const picker = useRef<HTMLInputElement>(null);
     const [canPick, setCanPick] = useState(false);
+    const [focused, setFocused] = useState(false);
+    const hintId = `${id}-shortcuts`;
+    const describedBy = [aria['aria-describedby'], hintId].filter(Boolean).join(' ');
 
     useEffect(() => {
         if (value === sent.current) return;
@@ -52,6 +57,11 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
     };
 
     const type = (raw: string) => {
+        const shortcut = dateShortcut(raw);
+        if (shortcut !== null) {
+            choose(shortcut);
+            return;
+        }
         setText(raw);
         emit(parseDateInput(raw) ?? raw.trim());
     };
@@ -75,8 +85,11 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
     return (
         <div className={`relative flex flex-wrap items-stretch gap-x-1 ${className}`}>
             <input id={id} ref={inputRef} type="text" inputMode="text" autoComplete="off" spellCheck={false} value={text} disabled={disabled}
-                placeholder={t('date_field_placeholder')} aria-label={ariaLabel} data-tour={dataTour} data-tour-key={dataTourKey} {...aria}
-                onChange={(event) => type(event.target.value)} onBlur={settle} onKeyDown={(event) => { if (event.key === 'Enter') settle(); }} className={`${inputClass} min-w-0 flex-1 basis-[7.5rem] tabular-nums`} />
+                placeholder={t('date_field_placeholder')} aria-label={ariaLabel} data-tour={dataTour} data-tour-key={dataTourKey} {...aria} aria-describedby={describedBy}
+                onChange={(event) => type(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); settle(); }} onKeyDown={(event) => { if (event.key === 'Enter') settle(); }} className={`${inputClass} min-w-0 flex-1 basis-[7.5rem] tabular-nums`} />
+            <span id={hintId} data-testid="date-field-shortcuts" className={focused
+                ? 'pointer-events-none absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-600 shadow-sm'
+                : 'sr-only'}>{t('date_field_shortcuts')}</span>
             <button type="button" className={smallButton} disabled={disabled} onClick={() => choose(localToday())}
                 aria-label={t('date_field_today_label')}>{t('date_field_today')}</button>
             {canPick && (

@@ -99,3 +99,20 @@ export function amsterdamDateOf(iso: string): string | null {
     return todayInAmsterdam(date);
 }
 
+
+// Een kalenderdatum `days` dagen verder (of terug bij een negatief getal); in UTC gerekend, dus zonder last van zomer- en wintertijd.
+export function addDays(iso: string, days: number): string | null {
+    if (!isDateOnly(iso)) return null;
+    const [year, month, day] = iso.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+// Sneltoetsen van het datumveld: één letter is een dag ten opzichte van vandaag. V(andaag), G(isteren), M(orgen), E(ergisteren),
+// O(vermorgen); T(oday) en Y(esterday) werken ook, zodat het Engelse scherm een eigen letter heeft. Hoofdletters en spaties doen er
+// niet toe. Alleen een losse letter: "morgen" voluit blijft getypte tekst.
+export const DATE_SHORTCUTS: Readonly<Record<string, number>> = { v: 0, t: 0, g: -1, y: -1, m: 1, e: -2, o: 2 };
+
+export function dateShortcut(text: string, today: string = localToday()): string | null {
+    const days = DATE_SHORTCUTS[text.trim().toLowerCase()];
+    return days === undefined ? null : addDays(today, days);
+}

@@ -115,6 +115,40 @@ describe('DateField', () => {
         assert.equal(last(), '3-11-');
     });
 
+    for (const [letter, iso] of [
+        ['v', '2026-11-02'], ['V', '2026-11-02'], ['g', '2026-11-01'], ['m', '2026-11-03'], ['e', '2026-10-31'], ['o', '2026-11-04'],
+        ['t', '2026-11-02'], ['y', '2026-11-01'], [' M ', '2026-11-03'],
+    ] as const) {
+        test(`shortcut "${letter}" fills in ${iso} straight away (local day: 2 November at 00:30 in Amsterdam)`, async () => {
+            await mounted.render(<Harness initial="" />);
+            await type(letter);
+            assert.equal(last(), iso);
+            assert.equal(input().value, `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`, 'shown as dd-mm-jjjj without leaving the field');
+        });
+    }
+
+    test('a shortcut replaces a filled-in date; other letters and whole words stay typed text', async () => {
+        await mounted.render(<Harness initial="2026-12-24" />);
+        await type('g');
+        assert.equal(last(), '2026-11-01');
+        for (const text of ['x', 'vm', 'morgen']) {
+            await type(text);
+            assert.equal(last(), text, text);
+        }
+    });
+
+    test('the shortcuts are explained under the field while it has the focus, and always to a screen reader', async () => {
+        await mounted.render(<DateField id="when-input" value="" onChange={() => {}} aria-describedby="when-error" />);
+        const hint = () => mounted.container.querySelector<HTMLElement>('[data-testid="date-field-shortcuts"]')!;
+        assert.equal(hint().textContent, 'date_field_shortcuts');
+        assert.equal(hint().className, 'sr-only');
+        assert.equal(input().getAttribute('aria-describedby'), `when-error ${hint().id}`, 'keeps the error link and adds the hint');
+        await act(async () => { input().focus(); input().dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })); });
+        assert.ok(hint().className.includes('absolute'), 'visible, floating under the field');
+        await blur();
+        assert.equal(hint().className, 'sr-only');
+    });
+
     test('disabled: no typing and no "Today"', async () => {
         await mounted.render(<DateField id="when-input" value="2026-11-02" disabled onChange={() => assert.fail('no change while disabled')} />);
         assert.equal(input().disabled, true);
