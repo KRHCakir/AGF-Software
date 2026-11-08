@@ -1,5 +1,6 @@
 'use client';
 
+import CostArticlesAdmin from '../../../components/settings/CostArticlesAdmin';
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
 import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
 import PaymentConditionsAdmin from '../../../components/settings/PaymentConditionsAdmin';
@@ -7,7 +8,8 @@ import { useTranslation } from '../../../i18n/LanguageContext';
 
 // Instellingen: bedrijfsbrede keuzelijsten en adressen (één bedrijf, geen tenantstructuur). Betalingscondities worden door
 // klant- en leveranciersrollen gedeeld; het GLOBALG.A.P.-portaaladres gebruikt de handmatige GGN-controle op de leverancierskaart; de
-// partijnummering bepaalt het voorgestelde partijnummer bij een nieuwe inkooporder.
+// partijnummering bepaalt het voorgestelde partijnummer bij een nieuwe inkooporder; de kostenartikelen (type Dienst) staan in de
+// artikelkeuze van een inkoopfactuurregel.
 export default function SettingsPage() {
     const { t } = useTranslation();
     return (
@@ -18,6 +20,7 @@ export default function SettingsPage() {
             </div>
             <PartijNumberingSetting />
             <PaymentConditionsAdmin />
+            <CostArticlesAdmin />
             <GlobalGapPortalSetting />
         </div>
     );

@@ -2337,5 +2337,20 @@
   "partij_adjust": "Change number",
   "partij_reason_optional": "optional",
   "partij_sales_adjustable_hint": "This sales lot belongs to one sales order. Until something is reserved or delivered, you change the number without a reason; the history is kept.",
-  "partij_sales_fixed_hint": "Something has been reserved or delivered on the sales order: the number only changes with a correction and a reason."
+  "partij_sales_fixed_hint": "Something has been reserved or delivered on the sales order: the number only changes with a correction and a reason.",
+  "purchase_direct_hint": "For costs such as handling, transport and car hire. Goods are received through a purchase order.",
+  "purchase_invoice_exists": "Invoice {number} of this supplier has already been entered.",
+  "cost_articles_group": "Costs",
+  "cost_articles_manage": "Manage cost articles",
+  "cost_article_line_hint": "Cost article (service): no stock.",
+  "cost_articles_title": "Cost articles (service)",
+  "cost_articles_hint": "For invoices from third parties, such as handling, transport and QC. No stock, size, class or origin. Inactive means it can no longer be chosen; existing invoices stay as they are.",
+  "cost_article_standard": "standard",
+  "cost_article_used": "{count} invoice lines",
+  "cost_article_deactivate": "Make inactive",
+  "cost_article_activate": "Make active again",
+  "cost_article_new": "New cost article",
+  "cost_article_new_placeholder": "for example Electricity or Car hire",
+  "cost_article_add": "Add",
+  "cost_article_exists": "{name} already exists."
 }

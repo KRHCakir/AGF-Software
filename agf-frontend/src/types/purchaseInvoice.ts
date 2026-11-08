@@ -48,6 +48,8 @@ export interface UpdatePurchaseInvoiceSettingsRequest {
 
 export interface CreatePurchaseInvoiceLineRequest {
     productVariantId: number | null;
+    // Kostenartikel (type Dienst) in plaats van een artikel; alleen meegestuurd als het gekozen is.
+    costArticleId?: number;
     description: string | null;
     quantity: number;
     unit: PackageUnit | null;
@@ -74,6 +76,9 @@ export interface CreatePurchaseInvoiceRequest extends OptionalFieldValues {
 export interface PurchaseInvoiceLine {
     id: number;
     productVariantId: number | null;
+    // Ontbreekt in oudere antwoorden.
+    costArticleId?: number | null;
+    costArticleName?: string | null;
     description: string | null;
     quantity: number;
     unit: PackageUnit | null;
