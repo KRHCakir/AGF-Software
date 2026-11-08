@@ -25,6 +25,14 @@ export function newestLines(current: InvoiceAllocations, next: InvoiceAllocation
     }) };
 }
 
+// Een koersantwoord kan na een opgeslagen verdeling binnenkomen. Dan blijven de nieuwste regels en de vergrendelde koers van het scherm staan.
+export function mergeRefreshed(current: InvoiceAllocations, next: InvoiceAllocations): InvoiceAllocations {
+    const merged = newestLines(current, next);
+    return current.rateLocked
+        ? { ...merged, rateLocked: true, exchangeRate: current.exchangeRate, exchangeRateDate: current.exchangeRateDate }
+        : merged;
+}
+
 export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceId: number; onClose: () => void }) {
     const { t, locale } = useTranslation();
     const [state, setState] = useState<LoadState<{ invoice: PurchaseInvoice; allocations: InvoiceAllocations }>>({ status: 'loading' });
@@ -41,7 +49,7 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
         setRate({ status: 'fetching' });
         refreshExchangeRate(allocations.invoiceId, controller.signal)
             .then((next) => {
-                setState((current) => (current.status === 'ready' && current.data.invoice.id === next.invoiceId ? { status: 'ready', data: { ...current.data, allocations: next } } : current));
+                setState((current) => (current.status === 'ready' && current.data.invoice.id === next.invoiceId ? { status: 'ready', data: { ...current.data, allocations: mergeRefreshed(current.data.allocations, next) } } : current));
                 setRate({ status: 'idle' });
             })
             .catch((caught: unknown) => {

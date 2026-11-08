@@ -26,6 +26,7 @@ export default function ExchangeRatePreview({ currency, invoiceDate, net }: { cu
             setState({ status: 'idle' });
             return;
         }
+        setState({ status: 'loading' });
         const controller = new AbortController();
         const timer = window.setTimeout(() => {
             setState({ status: 'loading' });
