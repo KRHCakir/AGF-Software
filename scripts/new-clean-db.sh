@@ -6,7 +6,7 @@
 #
 # Wat er in komt:
 #   - het schema via de gewone migraties (de API migreert bij het opstarten; demo-data staat daarbij expliciet uit);
-#   - wat de migraties zelf vullen: de landenlijst en de standaard betaalcondities (14 en 30 dagen);
+#   - wat de migraties zelf vullen: de landenlijst, de standaard betaalcondities (14 en 30 dagen) en de standaard kostenartikelen;
 #   - met --settings-from ook de instellingen uit die database (alleen lezen daar): bedrijfsinstellingen met de
 #     partijnummering, eigen betaalcondities en snelkoppelingen van landen. Regels met een testkenmerk (SMOKE-, DEMO-TOUR-,
 #     E2E-) worden overgeslagen.
@@ -143,7 +143,7 @@ SQL
 fi
 
 # Controle: alleen referentietabellen mogen rijen hebben.
-reference='^(__EFMigrationsHistory|Countries|PaymentConditions|CompanySettings|CountryAliases)$'
+reference='^(__EFMigrationsHistory|Countries|PaymentConditions|CompanySettings|CountryAliases|CostArticles)$'
 unexpected=""
 summary=""
 while read -r table; do

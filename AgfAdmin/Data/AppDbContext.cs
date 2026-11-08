@@ -33,6 +33,7 @@ namespace AgfAdmin.Data
         public DbSet<Vendor> Vendors { get; set; }
         public DbSet<IncomingInvoice> IncomingInvoices { get; set; }
         public DbSet<IncomingInvoiceLine> IncomingInvoiceLines { get; set; }
+        public DbSet<CostArticle> CostArticles { get; set; }
         public DbSet<OrderLine> OrderLines { get; set; }
         public DbSet<OrderLineAllocation> OrderLineAllocations { get; set; }
         public DbSet<WasteLog> WasteLogs { get; set; }
@@ -368,6 +369,19 @@ namespace AgfAdmin.Data
             {
                 b.Property(l => l.Unit).HasMaxLength(32);
                 b.HasOne(l => l.ProductVariant).WithMany().HasForeignKey(l => l.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoiceLines_ArticleOrCost", "\"ProductVariantId\" IS NULL OR \"CostArticleId\" IS NULL"));
+            });
+
+            // Kostenartikelen (type Dienst): de naam is uniek zonder hoofdletter- of spatieverschil (NameKey).
+            modelBuilder.Entity<CostArticle>(b =>
+            {
+                b.Property(c => c.Name).IsRequired().HasMaxLength(CostArticleRules.MaxNameLength);
+                b.Property(c => c.NameKey).IsRequired().HasMaxLength(CostArticleRules.MaxNameLength);
+                b.HasIndex(c => c.NameKey).IsUnique();
+                b.HasIndex(c => c.RequestId).IsUnique();
+                b.Property(c => c.CreatedBy).IsRequired().HasMaxLength(CostArticleRules.MaxActorLength);
+                b.ToTable(t => t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0"));
             });
 
             modelBuilder.Entity<CompanySettings>(b =>

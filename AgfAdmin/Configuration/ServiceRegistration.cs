@@ -20,6 +20,7 @@ namespace AgfAdmin.Configuration
             services.AddScoped<PaymentConditionService>();
             services.AddScoped<PurchaseOrderService>();
             services.AddScoped<PartijService>();
+            services.AddScoped<CostArticleService>();
             services.AddScoped<ReceiptDeviationService>();
             services.AddScoped<CountryService>();
             services.AddSingleton<IEmailDomainChecker, DnsEmailDomainChecker>();
