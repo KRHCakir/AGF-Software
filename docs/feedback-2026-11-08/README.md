@@ -2,8 +2,8 @@
 
 Doorloop in Chrome op 8 november 2026, bij 1440 en 390 px breed.
 
-- **Database:** een kopie van de schermdatabase van Partij P2 (`agf_p2_screens`, oorspronkelijk een kopie van `agf_deviation_clean`), als `agf_fb_screens3`. De test-API migreerde die van 51 naar 52.
-- **Servers:** API op 5211 en frontend op 3011, met de nieuwe code. De demo (3000 en 5197) is niet aangeraakt.
+- **Database:** een kopie van de schermdatabase van Partij P2 (`agf_p2_screens`, oorspronkelijk een kopie van `agf_deviation_clean`), als `agf_fb_screens6`. De test-API migreerde die van 51 naar 52.
+- **Servers:** API op 5211 en frontend op 3011, met de hele stapel samengevoegd (inclusief de reviewfixes). De demo (3000 en 5197) is niet aangeraakt.
 - **ECB:** de koers komt echt van de ECB (data-api.ecb.europa.eu). Zondag 8 november gaf dat de koers van vrijdag 6 november: 1 EUR = 1,1165 USD.
 - **Script:** een Playwright-script met de geïnstalleerde Chrome. Het controleert elke stap en stopt bij de eerste fout.
 - **390 px:** geen scherm schoof horizontaal. Alleen de gekleurde balk scrolt zelf, met het huidige scherm in beeld.
@@ -15,9 +15,9 @@ Doorloop in Chrome op 8 november 2026, bij 1440 en 390 px breed.
    - Elke groep heeft een eigen kleur: Inkoop blauw, Voorraad groen, Verkoop oranje, Stamgegevens paars en Oud grijs.
    - Instellingen, Help en Oud (een uitklaplijst) staan rechts.
    - De pagina heeft nu de volle breedte. Onder 1024 px is er de knop Menu.
-2. **Datum-sneltoetsen in elk datumveld.** V is vandaag, G gisteren, M morgen, E eergisteren en O overmorgen. In het Engels werken ook T en Y.
-   - De letter wordt meteen een datum.
-   - Zolang het veld de focus heeft, staat de uitleg eronder.
+2. **Datum-sneltoetsen in elk datumveld.** V is vandaag, G gisteren, M morgen, E eergisteren en O overmorgen. In het Engels werken ook T en Y, en het woord voluit (vandaag, morgen, overmorgen, ...) werkt ook.
+   - Het formulier krijgt de datum meteen, en de uitleg onder het veld zegt al "Wordt 09-11-2026".
+   - Bij Tab of Enter staat de datum ook in het veld.
 3. **Lijsten om en om gekleurd** (wit, grijs, wit). Erover bewegen kleurt de regel blauw.
    - Een klik op de hele regel opent hem, ook in Inkoopfacturen.
    - Een klik op een knop of link in de regel doet gewoon wat die knop of link doet.
@@ -41,7 +41,7 @@ Doorloop in Chrome op 8 november 2026, bij 1440 en 390 px breed.
 | `05-menu-oud-open.png` | De uitklaplijst Oud rechts in de kop, met de oude schermen. |
 | `06-lijst-om-en-om-hover.png` | Inkoopfacturen om en om gekleurd. De muis staat op de tweede regel, die blauw kleurt. |
 | `07-rij-klik-opent-factuur.png` | Een klik op de leverancier in die regel, niet op het factuurnummer, opent de factuur. |
-| `08-datum-sneltoets-m.png` | Nieuwe verkooporder. In Gevraagde leverdatum is M getypt; er staat meteen 09-11-2026, met de uitleg van de sneltoetsen eronder. |
+| `08-datum-sneltoets-m.png` | Nieuwe verkooporder. In Gevraagde leverdatum is M getypt; onder het veld staat meteen "Wordt 09-11-2026." met de sneltoetsen. Na Tab staat 09-11-2026 in het veld. "overmorgen" voluit getypt gaf 10-11-2026. |
 | `09-valuta-suggestie-e.png` | Inkoopfactuur invoeren. In Valuta is E getypt: EUR (gemarkeerd) en EGP. |
 | `10-factuur-usd-ecb-koers.png` | Zeevracht van 2.400 USD. Onder Valuta: "ECB-koers 6 nov 2026: 1 EUR = 1,1165 USD · excl. btw ≈ 2.149,57 EUR". Er is geen veld om een koers te typen. |
 | `11-verdelen-usd-in-euro.png` | De opgeslagen factuur. De ECB-koers staat op de factuur, de regel is "2.400,00 USD excl. btw = 2.149,57 EUR". Met Verdeel naar kg op RD2-LOT-A gaat 2.149,57 EUR naar de partij, met "≈ 2.400,00 USD" ernaast. |
