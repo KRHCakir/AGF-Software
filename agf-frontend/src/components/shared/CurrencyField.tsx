@@ -44,11 +44,17 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
             return;
         }
         if (!open || active === null) return;
+        // Een suggestie die alleen op naam matcht (ALL bij 'dollar') mag een ingetypte code niet stilletjes vervangen,
+        // tenzij de gebruiker er met de pijltjes expliciet naartoe is gegaan.
+        const mayTake = active.code.startsWith(value) || highlight > 0;
         if (event.key === 'Enter') {
-            event.preventDefault();
-            choose(active.code);
+            if (mayTake) {
+                event.preventDefault();
+                choose(active.code);
+            } else setOpen(false);
         } else if (event.key === 'Tab') {
-            choose(active.code);
+            if (mayTake) choose(active.code);
+            else setOpen(false);
         } else if (event.key === 'Escape') {
             event.preventDefault();
             event.stopPropagation();
