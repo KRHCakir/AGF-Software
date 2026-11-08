@@ -102,7 +102,7 @@ describe('CurrencyField', () => {
         await mounted.render(<Harness />);
         await type('gb');
         const option = mounted.container.querySelector<HTMLElement>('[role="option"]')!;
-        await act(async () => { option.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true, cancelable: true })); });
+        await act(async () => { option.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true })); });
         assert.equal(value, 'GBP');
     });
 });

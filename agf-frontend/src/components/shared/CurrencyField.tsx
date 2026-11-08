@@ -26,6 +26,9 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
     const [chosen, setChosen] = useState(false); // met de pijltjes expliciet een suggestie gekozen (ook de eerste)
     const suggestions = open ? suggestCurrencies(value, locale) : [];
     const active = suggestions[Math.min(highlight, suggestions.length - 1)] ?? null;
+    // Een suggestie die alleen op naam matcht (ALL bij 'dollar') mag een ingetypte code niet stilletjes vervangen,
+    // tenzij de gebruiker er met de pijltjes expliciet naartoe is gegaan, of er nog geen volledige code van drie letters staat.
+    const mayTake = active !== null && (active.code.startsWith(value) || chosen || value.length < 3);
 
     const choose = (code: string) => {
         onChange(code);
@@ -46,9 +49,6 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
             return;
         }
         if (!open || active === null) return;
-        // Een suggestie die alleen op naam matcht (ALL bij 'dollar') mag een ingetypte code niet stilletjes vervangen,
-        // tenzij de gebruiker er met de pijltjes expliciet naartoe is gegaan, of er nog geen volledige code van drie letters staat.
-        const mayTake = active.code.startsWith(value) || chosen || value.length < 3;
         if (event.key === 'Enter') {
             if (mayTake) {
                 event.preventDefault();
@@ -81,14 +81,14 @@ export default function CurrencyField({ id, value, onChange, disabled = false, c
                 className="absolute right-0 top-full z-30 mt-0.5 max-h-64 w-max min-w-full max-w-[16rem] overflow-y-auto rounded border border-gray-300 bg-white py-1 text-sm shadow-lg">
                 {suggestions.map((option) => (
                     <li key={option.code} id={`${listId}-${option.code}`} role="option" aria-selected={option === active}
-                        onMouseDown={(event) => { event.preventDefault(); choose(option.code); }}
+                        onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option.code)}
                         className={`flex cursor-pointer gap-2 px-2 py-1 ${option === active ? 'bg-blue-100 text-blue-900' : 'text-gray-800 hover:bg-gray-100'}`}>
                         <span className="font-mono font-semibold">{option.code}</span>
                         <span className="text-gray-600">{currencyName(option, locale)}</span>
                     </li>
                 ))}
             </ul>
-            {open && active !== null && <span className="sr-only" aria-live="polite">{t('currency_suggestion_hint', { code: active.code })}</span>}
+            {open && active !== null && <span className="sr-only" aria-live="polite">{t(mayTake ? 'currency_suggestion_hint' : 'currency_suggestion_hint_name', { code: active.code })}</span>}
         </div>
     );
 }
