@@ -156,11 +156,12 @@ public sealed class EmptyDatabaseTests : IAsyncLifetime
 
         var shipped = (await Get($"/api/sales-orders/{saleId}")).GetProperty("lines")[0];
         Assert.Equal(4m, shipped.GetProperty("dispatchedQuantity").GetDecimal());
-        // De keten staat in de partij: één partij met deze order, ontvangen 10 en verkocht 4.
+        // De keten staat in de partij: één inkoop-partij met deze order, ontvangen 10 en verkocht 4, en één verkoop-partij met de verkooporder.
         var partijen = await Get("/api/partijen?status=all&page=1&pageSize=50");
         Assert.Equal(1, partijen.GetProperty("total").GetInt32());
         await using var check = _db.CreateContext();
-        Assert.Equal(1, await check.Partijen.CountAsync());
+        Assert.Equal(1, await check.Partijen.CountAsync(p => p.Kind == "Purchase"));
+        Assert.Equal(saleId, (await check.Partijen.SingleAsync(p => p.Kind == "Sales")).SalesOrderId);
         Assert.Equal(1, await check.SalesDispatches.CountAsync());
     }
 }

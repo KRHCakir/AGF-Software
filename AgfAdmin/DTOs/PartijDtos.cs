@@ -7,11 +7,17 @@ namespace AgfAdmin.DTOs
         public string Mode { get; set; }
         public string Format { get; set; }
         public string SequenceReset { get; set; }
+        // Later toegevoegd (P2); weggelaten bij wijzigen = ongewijzigd. Formaat en aantal cijfers per reeks; modus en opnieuw tellen gedeeld.
+        public int? SequenceDigits { get; set; }
+        public string SalesFormat { get; set; }
+        public int? SalesSequenceDigits { get; set; }
     }
 
     // Het volgende voorgestelde nummer (null in modus Own), eventueel voor een nog niet opgeslagen formaat (live voorbeeld).
     public sealed class PartijNextNumberDto
     {
+        public string Kind { get; set; }
+        public int SequenceDigits { get; set; }
         public string Mode { get; set; }
         public string Format { get; set; }
         public string SequenceReset { get; set; }
@@ -22,6 +28,9 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string Number { get; set; }
+        // Purchase of Sales; bij Sales de verkooporder (1-op-1).
+        public string Kind { get; set; }
+        public int? SalesOrderId { get; set; }
         public string Status { get; set; }
         public string Note { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -84,6 +93,15 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string Number { get; set; }
+        // Purchase of Sales. Bij Sales: de verkooporder (1-op-1), de klant, wat er besteld is (OrderedQuantity) en uit welke
+        // inkoop-partijen de colli komen (SourcePartijen, via de reserveringen); de inkoopvelden blijven dan 0 of leeg.
+        public string Kind { get; set; }
+        public int? SalesOrderId { get; set; }
+        public string SalesOrderNumber { get; set; }
+        public string SalesOrderStatus { get; set; }
+        public string CustomerName { get; set; }
+        public decimal OrderedQuantity { get; set; }
+        public List<string> SourcePartijen { get; set; } = new();
         // Open of SoldOut (afgeleid: niets meer op voorraad of in keuring en niets meer verwacht, na minstens één ontvangst).
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -111,12 +129,30 @@ namespace AgfAdmin.DTOs
         public string CreatedBy { get; set; }
         // Er hangt een order, orderregel of palletregel aan: nummer alleen via "Nummer corrigeren", niet meer te verwijderen.
         public bool Linked { get; set; }
+        // Het nummer verandert alleen met reden: een inkoop-partij met koppelingen, of een verkoop-partij waarvan de order iets
+        // gereserveerd of geleverd heeft (of geannuleerd is). Een verkoop-partij daarvoor mag zonder reden worden aangepast.
+        public bool NumberFixed { get; set; }
         public decimal ReservedQuantity { get; set; }
         public decimal ShippedQuantity { get; set; }
         public List<PartijOrderDto> Orders { get; set; } = new();
         public List<PartijReceiptDto> Receipts { get; set; } = new();
         public List<PartijSalesOrderDto> SalesOrders { get; set; } = new();
+        // Alleen bij een verkoop-partij: per inkoop-partij en eenheid wat eruit gereserveerd of verzonden is.
+        public List<PartijSourceDto> Sources { get; set; } = new();
         public List<PartijHistoryDto> History { get; set; } = new();
+    }
+
+    // Een inkoop-partij waaruit een verkoop-partij colli pakt (20 + 120 + 360 = 500): af te leiden uit de reserveringen op palletregels
+    // (of, klantgebonden, op de inkoopregel). Geen eigen verdeeltabel.
+    public sealed class PartijSourceDto
+    {
+        public int PartijId { get; set; }
+        public string Number { get; set; }
+        public string VendorName { get; set; }
+        public string Product { get; set; }
+        public string Unit { get; set; }
+        public decimal ReservedQuantity { get; set; }
+        public decimal ShippedQuantity { get; set; }
     }
 
     public sealed class PartijOrderDto
@@ -160,6 +196,9 @@ namespace AgfAdmin.DTOs
     {
         public int SalesOrderId { get; set; }
         public string OrderNumber { get; set; }
+        // De verkoop-partij van die order (naast het VO-nummer).
+        public int? SalesPartijId { get; set; }
+        public string SalesPartijNumber { get; set; }
         public string CustomerName { get; set; }
         public string Status { get; set; }
         public string Unit { get; set; }

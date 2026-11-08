@@ -92,6 +92,7 @@ namespace AgfAdmin.Data
             EnsureRelations();
             EnsurePaymentConditionsAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureOrderNumbersAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
+            EnsureSalesPartijenAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureInvoiceNumberKeys();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
@@ -103,6 +104,7 @@ namespace AgfAdmin.Data
             EnsureRelations();
             await EnsurePaymentConditionsAsync(async: true, cancellationToken);
             await EnsureOrderNumbersAsync(async: true, cancellationToken);
+            await EnsureSalesPartijenAsync(async: true, cancellationToken);
             EnsureInvoiceNumberKeys();
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
@@ -201,6 +203,41 @@ namespace AgfAdmin.Data
                 order.OrderNumber = Services.SalesSupplyRules.FormatNumber(year, sequence);
             }
         }
+
+        // Verkoop-partij voor elke nieuwe verkooporder zonder (ongeacht de schrijver: service, seed, tests): het volgende nummer in de
+        // reeks voor verkoop-partijen, op de dag van vandaag (Europe/Amsterdam). Een zelf getypt nummer zet SalesOrderService zelf (na de
+        // dubbelcontrole). Twee gelijktijdige orders kunnen hetzelfde volgnummer kiezen; de unieke index weigert dan de tweede en
+        // SalesOrderService probeert opnieuw. Een bestaande order krijgt hier nooit een andere partij.
+        private async Task EnsureSalesPartijenAsync(bool async, CancellationToken cancellationToken)
+        {
+            var tracked = ChangeTracker.Entries<Partij>().Where(e => e.State != EntityState.Detached).Select(e => e.Entity).ToList();
+            var orders = ChangeTracker.Entries<SalesOrder>().Where(e => e.State == EntityState.Added).Select(e => e.Entity)
+                .Where(o => o.SalesPartij == null && !tracked.Any(p => p.Kind == PartijRules.KindSales && (p.SalesOrder == o || (o.Id > 0 && p.SalesOrderId == o.Id))))
+                .OrderBy(o => o.CreatedAt).ToList();
+            if (orders.Count == 0)
+            {
+                return;
+            }
+            var settingsQuery = CompanySettings.AsNoTracking().OrderBy(c => c.Id);
+            var settings = (async ? await settingsQuery.FirstOrDefaultAsync(cancellationToken) : settingsQuery.FirstOrDefault()) ?? new CompanySettings();
+            // Vandaag, zoals het voorstel op het scherm (PartijService.NextNumberAsync) en de inkoop-partij.
+            var day = BusinessCalendar.Today();
+            foreach (var order in orders)
+            {
+                var (number, period, sequence) = await PartijService.AllocateAsync(this, PartijRules.KindSales, settings.SalesPartijNumberFormat, settings.PartijSequenceReset,
+                    settings.SalesPartijSequenceDigits, day, async, cancellationToken);
+                var partij = new Partij
+                {
+                    Kind = PartijRules.KindSales, Number = number, NumberKey = PartijRules.NumberKey(number), SequencePeriod = period, Sequence = sequence,
+                    CreatedAt = order.CreatedAt, CreatedBy = Truncate(order.ActorReference, PartijRules.MaxActorLength) ?? PartijRules.MigrationActor, SalesOrder = order
+                };
+                order.SalesPartij = partij;
+                Partijen.Add(partij);
+            }
+        }
+
+        private static string Truncate(string value, int max) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim().Length <= max ? value.Trim() : value.Trim()[..max];
 
         // Vergelijkingssleutel van een factuurnummer, ongeacht de schrijver: getrimd en in kleine letters (PurchaseOrderRules.InvoiceNumberKey).
         private void EnsureInvoiceNumberKeys()
