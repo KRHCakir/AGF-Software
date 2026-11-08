@@ -126,8 +126,16 @@ namespace AgfAdmin.Services
                 return (ServiceResult<SalesOrderDto>.Conflict(sourceConflict), false);
             }
 
+            // Verkoop-partij: een zelf getypt nummer na de dubbelcontrole (409 PARTIJ_EXISTS bij een bestaand nummer); in modus Own is het
+            // verplicht. Zonder nummer kent AppDbContext bij opslaan het volgende voorgestelde nummer toe.
+            var refusedPartij = await AttachSalesPartijAsync(request, candidate, cancellationToken);
+            if (refusedPartij != null)
+            {
+                return (refusedPartij, false);
+            }
+
             // Het ordernummer kent AppDbContext bij opslaan toe (volgende vrije in het jaar). Een gelijktijdige aanmaak kan hetzelfde
-            // nummer kiezen; de unieke index weigert dan de tweede en CreateAsync probeert het opnieuw met een nieuw nummer.
+            // nummer (of partijnummer) kiezen; de unieke index weigert dan de tweede en CreateAsync probeert het opnieuw met een nieuw nummer.
             _db.SalesOrders.Add(candidate);
             try
             {
@@ -152,6 +160,25 @@ namespace AgfAdmin.Services
 
             var created = await OrderQuery().SingleAsync(o => o.Id == candidate.Id, cancellationToken);
             return (await WithWarningsAsync(ServiceResult<SalesOrderDto>.Created(await ToDtoWithBalancesAsync(created, null, cancellationToken)), cancellationToken), false);
+        }
+
+        private async Task<ServiceResult<SalesOrderDto>> AttachSalesPartijAsync(CreateSalesOrderDto request, SalesOrder candidate, CancellationToken cancellationToken)
+        {
+            var settings = await PartijService.SettingsAsync(_db, cancellationToken);
+            if (string.IsNullOrWhiteSpace(request.SalesPartijNumber) && settings.PartijNumberMode == PartijRules.ModeAuto)
+            {
+                return null;
+            }
+            var built = await new PartijService(_db, _user).BuildNewAsync<SalesOrderDto>(request.SalesPartijNumber, "salesPartijNumber", PartijRules.KindSales, cancellationToken);
+            if (built.Refused != null)
+            {
+                return built.Refused;
+            }
+            built.Partij.CreatedAt = candidate.CreatedAt;
+            built.Partij.SalesOrder = candidate;
+            candidate.SalesPartij = built.Partij;
+            _db.Partijen.Add(built.Partij);
+            return null;
         }
 
         // Vult de bron van elke regel in en geeft een 409-reden als een regel "Uit voorraad" niet in de vrije voorraad past. Daarna mag
@@ -223,6 +250,10 @@ namespace AgfAdmin.Services
                 ValidationErrors.Add(errors, "requestedDeliveryDate", "A requested delivery date is required.");
             }
             var actor = _user.Actor(ReservationRules.MaxActorLength);
+            if (!string.IsNullOrWhiteSpace(request.SalesPartijNumber) && PartijService.NumberError(request.SalesPartijNumber) is { } partijError)
+            {
+                ValidationErrors.Add(errors, "salesPartijNumber", partijError);
+            }
 
             var lines = new List<SalesOrderLine>();
             if (request.Lines == null || request.Lines.Count == 0)
@@ -294,10 +325,12 @@ namespace AgfAdmin.Services
             {
                 line.CreatedAt = now;
             }
+            var partijNumber = string.IsNullOrWhiteSpace(request.SalesPartijNumber) ? null : request.SalesPartijNumber.Trim();
             return new SalesOrder
             {
                 RequestId = request.RequestId!.Value,
                 CustomerId = request.CustomerId!.Value,
+                RequestPartijKey = partijNumber == null ? "auto" : $"new:{PartijRules.NumberKey(partijNumber)}",
                 Status = ReservationRules.OrderStatusOpen,
                 CustomerReference = reference,
                 InternalNote = internalNote,
@@ -315,7 +348,11 @@ namespace AgfAdmin.Services
         {
             var existingLines = existing.Lines.OrderBy(l => l.Id).ToList();
             var candidateLines = candidate.Lines.ToList();
-            var same = existing.CustomerId == candidate.CustomerId
+            // Partij: vergeleken met de oorspronkelijke aanvraag (RequestPartijKey), niet met het huidige nummer (dat kan intussen aangepast
+            // of gecorrigeerd zijn). Een order van vóór de verkoop-partij is gelijk aan een aanvraag zonder eigen nummer.
+            var samePartij = existing.RequestPartijKey == null ? candidate.RequestPartijKey == "auto"
+                : string.Equals(existing.RequestPartijKey, candidate.RequestPartijKey, StringComparison.Ordinal);
+            var same = samePartij && existing.CustomerId == candidate.CustomerId
                 && string.Equals(existing.CustomerReference, candidate.CustomerReference, StringComparison.Ordinal)
                 && string.Equals(existing.InternalNote, candidate.InternalNote, StringComparison.Ordinal)
                 && existing.RequestedDeliveryDate.Ticks == candidate.RequestedDeliveryDate.Ticks
@@ -405,7 +442,9 @@ namespace AgfAdmin.Services
                 // Deel van de tekst, hoofdletterongevoelig (ToLower werkt in PostgreSQL en SQLite): VO-nummer, klantreferentie, klant,
                 // artikel (soort of variant) en partij (van een reservering op een pallet of van de inkoopregel).
                 var q = filter.Q.Trim().ToLower();
+                var partijKey = PartijRules.NumberKey(filter.Q);
                 query = query.Where(o => o.OrderNumber.ToLower().Contains(q)
+                    || (partijKey != null && o.SalesPartij != null && o.SalesPartij.NumberKey.Contains(partijKey))
                     || (o.CustomerReference != null && o.CustomerReference.ToLower().Contains(q))
                     || o.Customer.Name.ToLower().Contains(q)
                     || o.Lines.Any(l => l.ProductVariant.Name.ToLower().Contains(q) || l.ProductVariant.Product.Name.ToLower().Contains(q)
@@ -875,6 +914,7 @@ namespace AgfAdmin.Services
         private IQueryable<SalesOrder> OrderQuery() =>
             _db.SalesOrders.AsNoTracking()
                 .Include(o => o.Customer)
+                .Include(o => o.SalesPartij)
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Partij)
@@ -903,6 +943,10 @@ namespace AgfAdmin.Services
         {
             Id = order.Id,
             OrderNumber = order.OrderNumber,
+            SalesPartijId = order.SalesPartij?.Id,
+            SalesPartijNumber = order.SalesPartij?.Number,
+            // Zelfde regel als PartijService.SalesNumberFixedAsync: geannuleerd, of iets gereserveerd (ook toegewezen, verzonden of vrijgegeven).
+            SalesPartijFixed = order.Status != ReservationRules.OrderStatusOpen || order.Lines.Any(l => l.Reservations.Count > 0),
             RequestId = order.RequestId,
             CustomerId = order.CustomerId,
             CustomerName = order.Customer?.Name,

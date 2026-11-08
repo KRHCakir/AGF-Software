@@ -251,31 +251,34 @@ namespace AgfAdmin.Services
             {
                 errors["number"] = new[] { numberError };
             }
-            var reason = request?.Reason?.Trim();
-            if (string.IsNullOrEmpty(reason))
-            {
-                errors["reason"] = new[] { "A reason is required to correct a lot number." };
-            }
-            else if (reason.Length > PartijRules.MaxReasonLength)
+            var reason = string.IsNullOrWhiteSpace(request?.Reason) ? null : request.Reason.Trim();
+            if (reason != null && reason.Length > PartijRules.MaxReasonLength)
             {
                 errors["reason"] = new[] { $"This field may contain at most {PartijRules.MaxReasonLength} characters." };
+            }
+            var partij = await _db.Partijen.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+            if (partij == null && errors.Count == 0)
+            {
+                return ServiceResult<PartijSummaryDto>.NotFound($"Lot {id} does not exist.");
+            }
+            var reasonRequired = partij == null || partij.Kind != PartijRules.KindSales
+                || await SalesNumberFixedAsync(_db, partij.SalesOrderId!.Value, async: true, cancellationToken);
+            if (reason == null && reasonRequired && !errors.ContainsKey("reason"))
+            {
+                errors["reason"] = new[] { partij?.Kind == PartijRules.KindSales
+                    ? "Something has been reserved or delivered on this order: a reason is required to correct the lot number."
+                    : "A reason is required to correct a lot number." };
             }
             if (errors.Count > 0)
             {
                 return ServiceResult<PartijSummaryDto>.Validation(errors);
-            }
-
-            var partij = await _db.Partijen.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
-            if (partij == null)
-            {
-                return ServiceResult<PartijSummaryDto>.NotFound($"Lot {id} does not exist.");
             }
             if (string.Equals(partij.Number, number, StringComparison.Ordinal))
             {
                 return ServiceResult<PartijSummaryDto>.Validation(new Dictionary<string, string[]> { ["number"] = new[] { "The new number is the same as the current number." } });
             }
             var key = PartijRules.NumberKey(number);
-            var other = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.NumberKey == key && p.Id != id, cancellationToken);
+            var other = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.Kind == partij.Kind && p.NumberKey == key && p.Id != id, cancellationToken);
             if (other != null)
             {
                 return await ExistsConflictAsync<PartijSummaryDto>(other, cancellationToken);
@@ -283,7 +286,8 @@ namespace AgfAdmin.Services
 
             _db.PartijAuditEvents.Add(new PartijAuditEvent
             {
-                PartijId = partij.Id, EventType = PartijRules.EventNumberCorrected, OldValue = partij.Number, NewValue = number, Reason = reason,
+                PartijId = partij.Id, EventType = reason == null ? PartijRules.EventNumberChanged : PartijRules.EventNumberCorrected,
+                OldValue = partij.Number, NewValue = number, Reason = reason,
                 ActorReference = _user.Actor(PartijRules.MaxActorLength), OccurredAt = DateTime.UtcNow
             });
             partij.Number = number;
@@ -295,7 +299,7 @@ namespace AgfAdmin.Services
             catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
                 _db.ChangeTracker.Clear();
-                var concurrent = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.NumberKey == key, cancellationToken);
+                var concurrent = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.Kind == partij.Kind && p.NumberKey == key, cancellationToken);
                 return concurrent == null ? throw exception : await ExistsConflictAsync<PartijSummaryDto>(concurrent, cancellationToken);
             }
             return ServiceResult<PartijSummaryDto>.Ok(await SummaryAsync(partij, cancellationToken));
@@ -309,6 +313,10 @@ namespace AgfAdmin.Services
             if (partij == null)
             {
                 return ServiceResult<bool>.NotFound($"Lot {id} does not exist.");
+            }
+            if (partij.Kind == PartijRules.KindSales)
+            {
+                return ServiceResult<bool>.Conflict($"Lot {partij.Number} belongs to a sales order and cannot be deleted.");
             }
             if (await IsLinkedAsync(id, cancellationToken))
             {
@@ -339,6 +347,10 @@ namespace AgfAdmin.Services
             if (partij == null)
             {
                 return ServiceResult<PartijSummaryDto>.NotFound($"Lot {partijId} does not exist.");
+            }
+            if (partij.Kind != PartijRules.KindPurchase)
+            {
+                return ServiceResult<PartijSummaryDto>.Validation(new Dictionary<string, string[]> { ["supplyCommitmentId"] = new[] { $"Lot {partij.Number} is a sales lot; a purchase order only links to a purchase lot." } });
             }
             var order = await _db.SupplyCommitments.Include(c => c.Lines).SingleOrDefaultAsync(c => c.Id == request.SupplyCommitmentId, cancellationToken);
             if (order == null)
@@ -481,7 +493,8 @@ namespace AgfAdmin.Services
             && (string.IsNullOrWhiteSpace(number) ? existing.Sequence != null : PartijRules.NumberKey(number) == existing.NumberKey);
 
         private async Task<bool> IsLinkedAsync(int id, CancellationToken cancellationToken) =>
-            await _db.SupplyCommitments.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken)
+            await _db.Partijen.AsNoTracking().AnyAsync(p => p.Id == id && p.SalesOrderId != null, cancellationToken)
+            || await _db.SupplyCommitments.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken)
             || await _db.SupplyCommitmentLines.AsNoTracking().AnyAsync(l => l.PartijId == id, cancellationToken)
             || await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken);
 
