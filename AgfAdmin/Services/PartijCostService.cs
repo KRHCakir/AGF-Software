@@ -45,7 +45,7 @@ namespace AgfAdmin.Services
                 ExchangeRateDate = euro || invoice.ExchangeRateDate == null ? null : DateOnly.FromDateTime(invoice.ExchangeRateDate.Value),
                 ExchangeRateSource = euro ? null : invoice.ExchangeRateSource,
                 RateLocked = !euro && costs.Count > 0,
-                CanAllocate = euro || invoice.ExchangeRate != null,
+                CanAllocate = euro, // opslaan kent in deze stap alleen eurofacturen (zie SaveLineAsync)
                 Lines = invoice.InvoiceLines.OrderBy(l => l.Id).Select(line =>
                 {
                     var allocations = costs.Where(c => c.IncomingInvoiceLineId == line.Id)
