@@ -18,7 +18,7 @@ import { inputClass } from '../supply/FieldError';
 // Sneltoetsen (V vandaag, G gisteren, M morgen, E eergisteren, O overmorgen, of het woord voluit; zie dateShortcut): het formulier
 // krijgt de datum meteen en de uitleg onder het veld toont hem ("Wordt 09-11-2026"); het veld zelf toont dd-mm-jjjj zodra je het
 // verlaat of Enter drukt. Zo werkt ook "morgen" voluit typen: de m wordt niet halverwege het woord al een datum. Zolang het veld de
-// focus heeft, staat de uitleg eronder (zwevend, zodat het formulier niet verspringt).
+// focus heeft, staat de uitleg eronder (zwevend, zodat het formulier niet verspringt, en binnen de breedte van het veld: nooit buiten beeld).
 export default function DateField({ id, value, onChange, disabled = false, min, max, dataTour, dataTourKey, inputRef, ariaLabel, className = '', ...aria }: {
     id: string;
     value: string;
@@ -92,7 +92,7 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
                 placeholder={t('date_field_placeholder')} aria-label={ariaLabel} data-tour={dataTour} data-tour-key={dataTourKey} {...aria} aria-describedby={describedBy}
                 onChange={(event) => type(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); settle(); }} onKeyDown={(event) => { if (event.key === 'Enter') settle(); }} className={`${inputClass} min-w-0 flex-1 basis-[7.5rem] tabular-nums`} />
             <span id={hintId} data-testid="date-field-shortcuts" className={focused
-                ? 'pointer-events-none absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-600 shadow-sm'
+                ? 'pointer-events-none absolute left-0 right-0 top-full z-30 mt-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-600 shadow-sm'
                 : 'sr-only'}>
                 {shortcut !== null && <strong className="mr-1 text-gray-900" data-testid="date-field-shortcut-result">{t('date_field_shortcut_result', { date: formatDateInput(shortcut) })}</strong>}
                 {t('date_field_shortcuts')}
