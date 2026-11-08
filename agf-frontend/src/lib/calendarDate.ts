@@ -107,10 +107,13 @@ export function addDays(iso: string, days: number): string | null {
     return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
-// Sneltoetsen van het datumveld: één letter is een dag ten opzichte van vandaag. V(andaag), G(isteren), M(orgen), E(ergisteren),
-// O(vermorgen); T(oday) en Y(esterday) werken ook, zodat het Engelse scherm een eigen letter heeft. Hoofdletters en spaties doen er
-// niet toe. Alleen een losse letter: "morgen" voluit blijft getypte tekst.
-export const DATE_SHORTCUTS: Readonly<Record<string, number>> = { v: 0, t: 0, g: -1, y: -1, m: 1, e: -2, o: 2 };
+// Sneltoetsen van het datumveld: een dag ten opzichte van vandaag. Eén letter: V(andaag), G(isteren), M(orgen), E(ergisteren),
+// O(vermorgen), en T(oday) en Y(esterday) voor het Engelse scherm. Het woord voluit werkt ook (vandaag, morgen, overmorgen, today,
+// tomorrow, ...), zodat wie "morgen" typt ook morgen krijgt. Hoofdletters en spaties doen er niet toe; andere tekst is geen sneltoets.
+export const DATE_SHORTCUTS: Readonly<Record<string, number>> = {
+    v: 0, t: 0, g: -1, y: -1, m: 1, e: -2, o: 2,
+    vandaag: 0, gisteren: -1, morgen: 1, eergisteren: -2, overmorgen: 2, today: 0, yesterday: -1, tomorrow: 1,
+};
 
 export function dateShortcut(text: string, today: string = localToday()): string | null {
     const key = text.trim().toLowerCase();

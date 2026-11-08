@@ -155,6 +155,8 @@ describe('date shortcuts', () => {
         const today = '2026-11-08';
         assert.deepEqual(['v', 'T', 'g', 'Y', 'm', 'E', 'o', ' v '].map((letter) => dateShortcut(letter, today)),
             ['2026-11-08', '2026-11-08', '2026-11-07', '2026-11-07', '2026-11-09', '2026-11-06', '2026-11-10', '2026-11-08']);
-        for (const text of ['', 'x', 'vv', 'morgen', '1', 'v1', 'constructor', '__proto__', 'toString']) assert.equal(dateShortcut(text, today), null, text);
+        assert.deepEqual(['vandaag', 'Morgen', ' overmorgen ', 'eergisteren', 'gisteren', 'today', 'yesterday', 'tomorrow'].map((word) => dateShortcut(word, today)),
+            ['2026-11-08', '2026-11-09', '2026-11-10', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-07', '2026-11-09']);
+        for (const text of ['', 'x', 'vv', 'morgenochtend', 'mor', '1', 'v1', 'constructor', '__proto__', 'toString']) assert.equal(dateShortcut(text, today), null, text);
     });
 });

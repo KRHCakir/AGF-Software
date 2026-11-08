@@ -15,8 +15,10 @@ import { inputClass } from '../supply/FieldError';
 // `value` en `onChange` gaan over de ISO-datum (jjjj-mm-dd) zonder tijd en zonder tijdzone; wat (nog) geen datum is, gaat als de
 // getypte tekst door, zodat het formulier "ongeldige datum" kan melden in plaats van "leeg". Eigen getypte tekst blijft staan
 // tot het verlaten van het veld of Enter; daarna, en bij elke waarde van buiten (Vandaag, kalender, herstel, leegmaken), staat er dd-mm-jjjj.
-// Sneltoetsen: een losse letter wordt een datum zodra je het veld verlaat of Enter drukt, zodat "morgen" voluit te typen blijft (V vandaag, G gisteren, M morgen, E eergisteren, O overmorgen; zie dateShortcut). Zolang
-// het veld de focus heeft, staat de uitleg eronder (zwevend, zodat het formulier niet verspringt).
+// Sneltoetsen (V vandaag, G gisteren, M morgen, E eergisteren, O overmorgen, of het woord voluit; zie dateShortcut): het formulier
+// krijgt de datum meteen en de uitleg onder het veld toont hem ("Wordt 09-11-2026"); het veld zelf toont dd-mm-jjjj zodra je het
+// verlaat of Enter drukt. Zo werkt ook "morgen" voluit typen: de m wordt niet halverwege het woord al een datum. Zolang het veld de
+// focus heeft, staat de uitleg eronder (zwevend, zodat het formulier niet verspringt).
 export default function DateField({ id, value, onChange, disabled = false, min, max, dataTour, dataTourKey, inputRef, ariaLabel, className = '', ...aria }: {
     id: string;
     value: string;
@@ -40,6 +42,8 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
     const [focused, setFocused] = useState(false);
     const hintId = `${id}-shortcuts`;
     const describedBy = [aria['aria-describedby'], hintId].filter(Boolean).join(' ');
+    // Wat de getypte sneltoets wordt (alleen zolang het veld nog de letter of het woord toont).
+    const shortcut = dateShortcut(text);
 
     useEffect(() => {
         if (value === sent.current) return;
@@ -58,7 +62,7 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
 
     const type = (raw: string) => {
         setText(raw);
-        emit(parseDateInput(raw) ?? raw.trim());
+        emit(dateShortcut(raw) ?? parseDateInput(raw) ?? raw.trim());
     };
 
     const choose = (iso: string) => {
@@ -89,7 +93,10 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
                 onChange={(event) => type(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); settle(); }} onKeyDown={(event) => { if (event.key === 'Enter') settle(); }} className={`${inputClass} min-w-0 flex-1 basis-[7.5rem] tabular-nums`} />
             <span id={hintId} data-testid="date-field-shortcuts" className={focused
                 ? 'pointer-events-none absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-600 shadow-sm'
-                : 'sr-only'}>{t('date_field_shortcuts')}</span>
+                : 'sr-only'}>
+                {shortcut !== null && <strong className="mr-1 text-gray-900" data-testid="date-field-shortcut-result">{t('date_field_shortcut_result', { date: formatDateInput(shortcut) })}</strong>}
+                {t('date_field_shortcuts')}
+            </span>
             <button type="button" className={smallButton} disabled={disabled} onClick={() => choose(localToday())}
                 aria-label={t('date_field_today_label')}>{t('date_field_today')}</button>
             {canPick && (

@@ -1893,6 +1893,7 @@
   "tour_deviation_order_what": "Op de order staat de afwijking: verwacht, ontvangen, wie, wanneer en waarom.",
   "tour_deviation_order_why": "Zo blijft zichtbaar wat er anders was, ook voor de factuur later.",
   "date_field_placeholder": "dd-mm-jjjj",
+  "date_field_shortcut_result": "Wordt {date}.",
   "date_field_today": "Vandaag",
   "date_field_today_label": "Datum van vandaag invullen",
   "date_field_calendar": "Kalender openen",

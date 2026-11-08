@@ -1893,6 +1893,7 @@
   "tour_deviation_order_what": "The order shows the deviation: expected, received, who, when and why.",
   "tour_deviation_order_why": "So it stays visible what was different, also for the invoice later.",
   "date_field_placeholder": "dd-mm-yyyy",
+  "date_field_shortcut_result": "Becomes {date}.",
   "date_field_today": "Today",
   "date_field_today_label": "Fill in today's date",
   "date_field_calendar": "Open calendar",
