@@ -15,7 +15,7 @@ import { inputClass } from '../supply/FieldError';
 // `value` en `onChange` gaan over de ISO-datum (jjjj-mm-dd) zonder tijd en zonder tijdzone; wat (nog) geen datum is, gaat als de
 // getypte tekst door, zodat het formulier "ongeldige datum" kan melden in plaats van "leeg". Eigen getypte tekst blijft staan
 // tot het verlaten van het veld of Enter; daarna, en bij elke waarde van buiten (Vandaag, kalender, herstel, leegmaken), staat er dd-mm-jjjj.
-// Sneltoetsen: één letter is meteen een datum (V vandaag, G gisteren, M morgen, E eergisteren, O overmorgen; zie dateShortcut). Zolang
+// Sneltoetsen: een losse letter wordt een datum zodra je het veld verlaat of Enter drukt, zodat "morgen" voluit te typen blijft (V vandaag, G gisteren, M morgen, E eergisteren, O overmorgen; zie dateShortcut). Zolang
 // het veld de focus heeft, staat de uitleg eronder (zwevend, zodat het formulier niet verspringt).
 export default function DateField({ id, value, onChange, disabled = false, min, max, dataTour, dataTourKey, inputRef, ariaLabel, className = '', ...aria }: {
     id: string;
@@ -57,11 +57,6 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
     };
 
     const type = (raw: string) => {
-        const shortcut = dateShortcut(raw);
-        if (shortcut !== null) {
-            choose(shortcut);
-            return;
-        }
         setText(raw);
         emit(parseDateInput(raw) ?? raw.trim());
     };
@@ -72,6 +67,11 @@ export default function DateField({ id, value, onChange, disabled = false, min, 
     };
 
     const settle = () => {
+        const shortcut = dateShortcut(text);
+        if (shortcut !== null) {
+            choose(shortcut);
+            return;
+        }
         const iso = parseDateInput(text);
         if (iso !== null) setText(formatDateInput(iso));
     };

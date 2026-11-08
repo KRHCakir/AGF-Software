@@ -113,6 +113,7 @@ export function addDays(iso: string, days: number): string | null {
 export const DATE_SHORTCUTS: Readonly<Record<string, number>> = { v: 0, t: 0, g: -1, y: -1, m: 1, e: -2, o: 2 };
 
 export function dateShortcut(text: string, today: string = localToday()): string | null {
-    const days = DATE_SHORTCUTS[text.trim().toLowerCase()];
+    const key = text.trim().toLowerCase();
+    const days = Object.hasOwn(DATE_SHORTCUTS, key) ? DATE_SHORTCUTS[key] : undefined;
     return days === undefined ? null : addDays(today, days);
 }

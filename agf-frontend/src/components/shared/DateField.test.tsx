@@ -119,9 +119,11 @@ describe('DateField', () => {
         ['v', '2026-11-02'], ['V', '2026-11-02'], ['g', '2026-11-01'], ['m', '2026-11-03'], ['e', '2026-10-31'], ['o', '2026-11-04'],
         ['t', '2026-11-02'], ['y', '2026-11-01'], [' M ', '2026-11-03'],
     ] as const) {
-        test(`shortcut "${letter}" fills in ${iso} straight away (local day: 2 November at 00:30 in Amsterdam)`, async () => {
+        test(`shortcut "${letter}" fills in ${iso} on leaving the field (local day: 2 November at 00:30 in Amsterdam)`, async () => {
             await mounted.render(<Harness initial="" />);
             await type(letter);
+            assert.equal(input().value, letter, 'stays typed text while typing');
+            await blur();
             assert.equal(last(), iso);
             assert.equal(input().value, `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`, 'shown as dd-mm-jjjj without leaving the field');
         });
@@ -130,6 +132,7 @@ describe('DateField', () => {
     test('a shortcut replaces a filled-in date; other letters and whole words stay typed text', async () => {
         await mounted.render(<Harness initial="2026-12-24" />);
         await type('g');
+        await blur();
         assert.equal(last(), '2026-11-01');
         for (const text of ['x', 'vm', 'morgen']) {
             await type(text);
