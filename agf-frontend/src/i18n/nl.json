@@ -640,7 +640,7 @@
   "legacy_go_to_availability": "Naar Beschikbaarheid",
   "placeholder_not_available": "Dit onderdeel is nog niet beschikbaar. Er wordt hier niets bijgehouden of gevolgd.",
   "help_title": "Help",
-  "help_text": "Een handleiding en contactgegevens zijn nog niet beschikbaar. Het menu volgt het proces: Inkoop, Voorraad, Verkoop en Stamgegevens.",
+  "help_text": "Een handleiding en contactgegevens zijn nog niet beschikbaar. Het menu staat bovenaan en volgt het proces: Inkoop, Voorraad, Verkoop en Stamgegevens, elk met een eigen kleur. De balk eronder toont de schermen van de groep waar je bent.",
   "start_title": "Start",
   "start_subtitle": "Kies in het menu wat je wilt doen: inkopen, voorraad bekijken, verkopen of stamgegevens beheren.",
   "start_legacy_title": "Oude flows",
