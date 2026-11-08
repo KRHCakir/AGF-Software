@@ -44,7 +44,7 @@ namespace AgfAdmin.Services
                 ExchangeRate = euro ? null : invoice.ExchangeRate,
                 ExchangeRateDate = euro || invoice.ExchangeRateDate == null ? null : DateOnly.FromDateTime(invoice.ExchangeRateDate.Value),
                 ExchangeRateSource = euro ? null : invoice.ExchangeRateSource,
-                RateLocked = !euro && costs.Count > 0,
+                RateLocked = costs.Count > 0,
                 // Met een koers kan opslaan nu ook bij een andere valuta (zie SaveLineAsync): in euro tot het omgerekende regelbedrag.
                 CanAllocate = euro || invoice.ExchangeRate != null,
                 Lines = invoice.InvoiceLines.OrderBy(l => l.Id).Select(line =>
