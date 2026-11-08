@@ -8,6 +8,7 @@ import { updatePurchaseInvoiceSettings } from '../../services/purchaseInvoiceSer
 import type { PurchaseInvoiceSettings, PurchaseOptionalField } from '../../types/purchaseInvoice';
 import { inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import CurrencyField from '../shared/CurrencyField';
 
 // Bedrijfsinstellingen voor de invoer (achter het tandwiel): welke optionele velden in gebruik zijn en welke voorstellen
 // gelden. Eén bedrijf, geen tenantstructuur; financiële basisvelden zijn hier bewust niet uitschakelbaar.
@@ -77,9 +78,10 @@ export default function PurchaseInvoiceSettingsPanel({ settings, onSaved, onClos
                 <label className="text-xs font-medium text-gray-700">{t('purchase_settings_default_terms')}
                     <input value={terms} inputMode="numeric" onChange={(event) => setTerms(event.target.value)} className={inputClass} />
                 </label>
-                <label className="text-xs font-medium text-gray-700">{t('purchase_settings_default_currency')}
-                    <input value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className={`${inputClass} font-mono uppercase`} />
-                </label>
+                <div className="text-xs font-medium text-gray-700">
+                    <label htmlFor="purchase-settings-currency-input">{t('purchase_settings_default_currency')}</label>
+                    <CurrencyField id="purchase-settings-currency-input" value={currency} onChange={setCurrency} />
+                </div>
             </div>
             <p className="text-xs text-gray-500">{t('purchase_settings_scope')}</p>
             {error && <p role="alert" className="text-xs text-red-800">{error}</p>}

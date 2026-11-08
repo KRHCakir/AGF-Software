@@ -8,6 +8,7 @@ import type { RelationBankAccountEvent } from '../../types/relation';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
+import CurrencyField from '../shared/CurrencyField';
 
 // Bankrekeningen van de relatie. IBAN (vorm, land, lengte en controlegetal direct gecontroleerd) of, voor een land zonder IBAN, een
 // ander rekeningnummer; BIC, houder, valuta, standaard en actief. Opgeslagen rekeningen worden nooit verwijderd, alleen inactief
@@ -121,7 +122,7 @@ export default function RelationBankAccountsSection({ accounts, onChange, events
                             </div>
                             <div>
                                 <label htmlFor={`${k('currency')}-input`} className="text-xs font-medium text-gray-700">{t('relations_bank_currency')}</label>
-                                <input {...fieldProps(k('currency'), e(k('currency')))} value={account.currency} maxLength={3} list="relation-currencies" disabled={locked} className={`${inputClass} font-mono uppercase`} onChange={(event) => edit(account.key, { currency: event.target.value })} />
+                                <CurrencyField {...fieldProps(k('currency'), e(k('currency')))} value={account.currency} disabled={locked} onChange={(value) => edit(account.key, { currency: value })} />
                                 <FieldError id={k('currency')} messages={e(k('currency'))} />
                             </div>
                         </div>

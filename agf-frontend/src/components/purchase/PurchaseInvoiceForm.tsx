@@ -30,6 +30,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 import InvoiceOrderNotice from './InvoiceOrderNotice';
 import VendorPicker from './VendorPicker';
 import SubmitErrors from '../shared/SubmitErrors';
+import CurrencyField from '../shared/CurrencyField';
 
 // Eén compacte werkplek voor een inkoopfactuur: documentkop, direct bewerkbare regels, live totalen en een ingeklapt
 // paneel "Extra gegevens". Alles werkt zonder muis (Tab, Enter, pijltjes, sneltoetsen) en blijft ook met de muis bruikbaar.
@@ -355,7 +356,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 </div>
                 <div>
                     <label htmlFor="currency-input" className="text-xs font-medium text-gray-700">{t('purchase_currency')} *</label>
-                    <input {...fieldProps('currency', e('currency'))} value={draft.header.currency} maxLength={3} onChange={(event) => update(changeCurrency(draft, event.target.value))} className={`${inputClass} font-mono uppercase`} />
+                    <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} onChange={(value) => update(changeCurrency(draft, value))} />
                     {defaultsNote('currency') && <span className="block text-xs text-gray-500">{defaultsNote('currency')}</span>}
                     <span className="block text-xs text-gray-500">{t('purchase_currency_hint')}</span>
                     <FieldError id="currency" messages={e('currency')} />
