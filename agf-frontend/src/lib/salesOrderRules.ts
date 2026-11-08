@@ -15,6 +15,7 @@ import type { PackageKgDefaults } from './quantityKg.ts';
 
 export const MAX_ORDER_LINES = 200;
 export const MAX_CUSTOMER_REFERENCE_LENGTH = 100;
+export const MAX_SALES_PARTIJ_NUMBER_LENGTH = 100;
 export const MAX_REASON_LENGTH = 500;
 
 export type RuleCode =
@@ -64,6 +65,18 @@ export interface OrderDraft {
 }
 
 export const MAX_INTERNAL_NOTE_LENGTH = 1000;
+
+// Verkoop-partij in het orderformulier: null = niet aangeraakt (het voorstel staat in het veld). Leeg of gelijk aan het voorstel gaat
+// niet mee (de server kent het volgende nummer toe); een ander nummer gaat getrimd mee. In modus Eigen is een nummer verplicht.
+export function salesPartijPayload(text: string | null, suggestion: string | null, mode: 'Auto' | 'Own'): BuildResult<string | null> {
+    const value = (text ?? '').trim();
+    if (value === '' || (suggestion !== null && value === suggestion)) {
+        return mode === 'Own' && value === '' ? { ok: false, errors: [{ field: 'salesPartijNumber', code: 'required' }] } : { ok: true, value: null };
+    }
+    if (value.length > MAX_SALES_PARTIJ_NUMBER_LENGTH) return { ok: false, errors: [{ field: 'salesPartijNumber', code: 'too_long' }] };
+    if (value.replace(/[\s-]/g, '') === '') return { ok: false, errors: [{ field: 'salesPartijNumber', code: 'required' }] };
+    return { ok: true, value };
+}
 
 export type OrderPayload = Omit<CreateSalesOrderRequest, 'requestId'>;
 

@@ -1,31 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import {
-    MAX_ORDER_LINES,
-    validateDeliveredOn,
-    buildOrderPayload,
-    dispatchTotals,
-    expectedAfterRequested,
-    isCorrectedAllocation,
-    isShippableAllocation,
-    isShippedAllocation,
-    lotDeviates,
-    validateShipmentLine,
-    validateShippedOn,
-    fullAllocationRemainder,
-    validateAllocationInput,
-    isDispatchable,
-    normalizeDispatchReference,
-    fullRemainderFits,
-    groupErrors,
-    lineProgress,
-    matchesOrderSearch,
-    normalizeReason,
-    orderProgress,
-    remainingAfter,
-    toLocalMidnightIso,
-    validateReservationInput,
-} from './salesOrderRules.ts';
+import { MAX_ORDER_LINES, validateDeliveredOn, buildOrderPayload, dispatchTotals, expectedAfterRequested, isCorrectedAllocation, isShippableAllocation, isShippedAllocation, lotDeviates, validateShipmentLine, validateShippedOn, fullAllocationRemainder, validateAllocationInput, isDispatchable, normalizeDispatchReference, fullRemainderFits, groupErrors, lineProgress, matchesOrderSearch, normalizeReason, orderProgress, remainingAfter, toLocalMidnightIso, validateReservationInput, salesPartijPayload } from './salesOrderRules.ts';
 import type { BuildResult, OrderDraft } from './salesOrderRules.ts';
 
 // Onafhankelijk uitgeschreven naar de backendregels in SalesOrderService en StockReservationService.
@@ -386,5 +361,14 @@ describe('delivery date', () => {
         assert.deepEqual(validateDeliveredOn('2026-10-21', '2026-10-19', '2026-10-20'), { ok: false, errors: [{ field: 'deliveredOn', code: 'future_date' }] });
         assert.deepEqual(validateDeliveredOn('2026-10-18', '2026-10-19', '2026-10-20'), { ok: false, errors: [{ field: 'deliveredOn', code: 'before_shipping' }] });
     });
-});
 
+    test('sales lot: the suggestion or an empty field is not sent, an own number is sent trimmed, own mode needs a number', () => {
+        assert.deepEqual(salesPartijPayload(null, '2611004', 'Auto'), { ok: true, value: null });
+        assert.deepEqual(salesPartijPayload('2611004', '2611004', 'Auto'), { ok: true, value: null });
+        assert.deepEqual(salesPartijPayload('  ', '2611004', 'Auto'), { ok: true, value: null });
+        assert.deepEqual(salesPartijPayload(' 261140 ', '2611004', 'Auto'), { ok: true, value: '261140' });
+        assert.deepEqual(salesPartijPayload('', null, 'Own'), { ok: false, errors: [{ field: 'salesPartijNumber', code: 'required' }] });
+        assert.deepEqual(salesPartijPayload(' - ', null, 'Own'), { ok: false, errors: [{ field: 'salesPartijNumber', code: 'required' }] });
+        assert.deepEqual(salesPartijPayload('x'.repeat(101), null, 'Own'), { ok: false, errors: [{ field: 'salesPartijNumber', code: 'too_long' }] });
+    });
+});
