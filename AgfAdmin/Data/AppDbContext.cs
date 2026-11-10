@@ -66,6 +66,7 @@ namespace AgfAdmin.Data
         // Schone verkoopflow (los van legacy Order/OrderLine/OrderLineAllocation/Inventory).
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
+        public DbSet<SalesOrderPackagingLine> SalesOrderPackagingLines { get; set; }
         public DbSet<SalesOrderAuditEvent> SalesOrderAuditEvents { get; set; }
         public DbSet<SalesDispatch> SalesDispatches { get; set; }
         public DbSet<SalesDispatchLine> SalesDispatchLines { get; set; }
@@ -437,6 +438,17 @@ namespace AgfAdmin.Data
                         + "(\"Kind\" = 'Packaging' AND \"VatPercentage\" IS NOT NULL AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100 "
                         + "AND (\"DefaultUnitPrice\" IS NULL OR CAST(\"DefaultUnitPrice\" AS NUMERIC) >= 0))");
                 });
+            });
+
+            // Emballageregels op een verkooporder: geen voorraad, alleen artikel, aantal, prijs en btw (guard-regel 27).
+            modelBuilder.Entity<SalesOrderPackagingLine>(b =>
+            {
+                b.HasOne(l => l.SalesOrder).WithMany(o => o.PackagingLines).HasForeignKey(l => l.SalesOrderId).OnDelete(DeleteBehavior.Cascade);
+                b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).OnDelete(DeleteBehavior.Restrict);
+                b.Property(l => l.UnitPrice).HasPrecision(18, 2);
+                b.Property(l => l.VatPercentage).HasPrecision(5, 2);
+                b.ToTable(t => t.HasCheckConstraint("CK_SalesOrderPackagingLines_Values", "\"Quantity\" > 0 AND (\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0) "
+                    + "AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100"));
             });
 
             modelBuilder.Entity<CompanySettings>(b =>

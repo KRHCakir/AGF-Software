@@ -45,5 +45,7 @@ namespace AgfAdmin.Models
         public int Version { get; set; }
 
         public ICollection<SalesOrderLine> Lines { get; set; } = new List<SalesOrderLine>();
+        // Emballage (pallets, kratten) naast de goederen; doet niets met de voorraad (zie SalesOrderPackagingLine).
+        public ICollection<SalesOrderPackagingLine> PackagingLines { get; set; } = new List<SalesOrderPackagingLine>();
     }
 }

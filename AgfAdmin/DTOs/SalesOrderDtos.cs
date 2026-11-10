@@ -11,6 +11,27 @@ namespace AgfAdmin.DTOs
         // Verkoop-partijnummer (261140): leeg = het voorgestelde nummer (modus Auto), anders zelf getypt (verplicht in modus Own).
         public string SalesPartijNumber { get; set; }
         public List<CreateSalesOrderLineDto> Lines { get; set; }
+        // Emballage naast de goederen (optioneel); een order met alleen emballage mag ook.
+        public List<CreateSalesOrderPackagingLineDto> PackagingLines { get; set; }
+    }
+
+    public sealed class CreateSalesOrderPackagingLineDto
+    {
+        public int? CostArticleId { get; set; }
+        public decimal? Quantity { get; set; }  // heel getal; als decimaal ontvangen voor een duidelijke fout bij 1,5
+        public decimal? UnitPrice { get; set; } // excl. btw; leeg = nog geen prijs
+    }
+
+    public sealed class SalesOrderPackagingLineDto
+    {
+        public int Id { get; set; }
+        public int CostArticleId { get; set; }
+        public string Name { get; set; }
+        public int Quantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public decimal VatPercentage { get; set; }
+        // Aantal × prijs (excl. btw); null zonder prijs.
+        public decimal? LineTotal { get; set; }
     }
 
     public sealed class CreateSalesOrderLineDto
@@ -79,6 +100,7 @@ namespace AgfAdmin.DTOs
         // Afgeleid bij een open order: een regel uit verwachte aanvoer is nog niet (helemaal) gereserveerd.
         public bool AwaitingStock { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
+        public List<SalesOrderPackagingLineDto> PackagingLines { get; set; } = new();
     }
 
     // Annuleren van een Open order: alle Active reserveringen (ook on hold) worden in dezelfde transactie vrijgegeven.
