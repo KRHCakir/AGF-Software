@@ -205,11 +205,22 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal?>("DefaultUnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsStandard")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Cost");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -227,6 +238,10 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("VatPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("NameKey")
@@ -237,6 +252,8 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("CostArticles", t =>
                         {
+                            t.HasCheckConstraint("CK_CostArticles_Kind", "(\"Kind\" = 'Cost' AND \"DefaultUnitPrice\" IS NULL AND \"VatPercentage\" IS NULL) OR (\"Kind\" = 'Packaging' AND \"VatPercentage\" IS NOT NULL AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100 AND (\"DefaultUnitPrice\" IS NULL OR CAST(\"DefaultUnitPrice\" AS NUMERIC) >= 0))");
+
                             t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0");
                         });
                 });

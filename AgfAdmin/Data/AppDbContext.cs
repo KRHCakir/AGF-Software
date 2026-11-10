@@ -426,7 +426,17 @@ namespace AgfAdmin.Data
                 b.HasIndex(c => c.NameKey).IsUnique();
                 b.HasIndex(c => c.RequestId).IsUnique();
                 b.Property(c => c.CreatedBy).IsRequired().HasMaxLength(CostArticleRules.MaxActorLength);
-                b.ToTable(t => t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0"));
+                b.Property(c => c.Kind).IsRequired().HasMaxLength(16).HasDefaultValue(CostArticleRules.KindCost);
+                b.Property(c => c.DefaultUnitPrice).HasPrecision(18, 2);
+                b.Property(c => c.VatPercentage).HasPrecision(5, 2);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0");
+                    // Kosten hebben geen prijs of btw; emballage altijd een btw-percentage en een eventuele prijs van 0 of meer.
+                    t.HasCheckConstraint("CK_CostArticles_Kind", "(\"Kind\" = 'Cost' AND \"DefaultUnitPrice\" IS NULL AND \"VatPercentage\" IS NULL) OR "
+                        + "(\"Kind\" = 'Packaging' AND \"VatPercentage\" IS NOT NULL AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100 "
+                        + "AND (\"DefaultUnitPrice\" IS NULL OR CAST(\"DefaultUnitPrice\" AS NUMERIC) >= 0))");
+                });
             });
 
             modelBuilder.Entity<CompanySettings>(b =>
