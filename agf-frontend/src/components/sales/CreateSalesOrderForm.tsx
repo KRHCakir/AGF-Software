@@ -120,14 +120,14 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     // Vergrendeld zolang er een onafgerond commando is: nooit een gewijzigde retry, nooit een tweede order ernaast.
     const locked = submitting || result !== null || pending !== null;
 
-    // Emballage-artikelen (Pallet wegwerp, Euro-pallet, Krat, eigen): zonder antwoord blijft alleen "Emballage toevoegen" zonder keuze.
+    // Emballage-artikelen, ook inactieve: een bevroren regel met een intussen inactief artikel toont dat artikel; kiezen kan alleen uit actieve.
     const [packagingArticles, setPackagingArticles] = useState<CostArticle[]>([]);
     const [packagingFailed, setPackagingFailed] = useState(false);
     const [packagingToken, setPackagingToken] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
         setPackagingFailed(false);
-        listPackagingArticles(false, controller.signal).then(setPackagingArticles).catch(() => { if (!controller.signal.aborted) setPackagingFailed(true); });
+        listPackagingArticles(true, controller.signal).then(setPackagingArticles).catch(() => { if (!controller.signal.aborted) setPackagingFailed(true); });
         return () => controller.abort();
     }, [packagingToken]);
 
