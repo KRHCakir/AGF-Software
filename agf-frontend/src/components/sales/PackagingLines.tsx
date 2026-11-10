@@ -13,7 +13,7 @@ import { secondaryButtonClass } from '../supply/SuccessPanel';
 const emptyPackagingLine = (): PackagingLineDraft => ({ key: newRequestId(), costArticleId: '', quantity: '', unitPrice: '' });
 
 // Emballage (pallets, kratten) in het orderformulier, onder de goederen: artikel, heel aantal en prijs per stuk (voorgevuld met de
-// standaardprijs, aanpasbaar; 0,00 bij een gratis ruil). Tab gaat per regel artikel → aantal → prijs en dan naar de volgende regel.
+// standaardprijs, aanpasbaar; 0,00 bij een gratis ruil). Tab gaat per regel artikel → aantal → prijs → verwijderen en dan naar de volgende regel.
 // "Pallet toevoegen" zet een regel Pallet wegwerp neer met het palletvoorstel uit de goederenregels; alleen na die klik, altijd aanpasbaar.
 export function PackagingLinesInput({ lines, articles, proposal, locked, errors, onChange }: {
     lines: PackagingLineDraft[];
@@ -93,7 +93,7 @@ export function PackagingLinesInput({ lines, articles, proposal, locked, errors,
                                         </td>
                                         <td className="px-2 py-1.5 text-right font-mono" data-testid={`${prefix}.amount`}>{total === null ? '–' : formatMoney(total, null, locale)}</td>
                                         <td className="px-2 py-1.5">
-                                            <button type="button" tabIndex={-1} onClick={() => onChange(lines.filter((candidate) => candidate.key !== line.key))} disabled={locked}
+                                            <button type="button" onClick={() => onChange(lines.filter((candidate) => candidate.key !== line.key))} disabled={locked}
                                                 className={secondaryButtonClass} aria-label={t('packaging_remove_n', { n: String(index + 1) })}>✕</button>
                                         </td>
                                     </tr>

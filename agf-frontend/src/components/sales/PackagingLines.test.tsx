@@ -45,7 +45,7 @@ describe('PackagingLinesInput', () => {
         assert.equal(mounted.container.querySelector('[data-testid="packagingLines[0].amount"]')!.textContent, '22.50');
     });
 
-    test('a chosen article fills its standard price; an inactive one is not offered; Tab skips the remove button', async () => {
+    test('a chosen article fills its standard price; an inactive one is not offered; the remove button is reachable with Tab', async () => {
         await mounted.render(<Harness proposal={1} />);
         await act(async () => { mounted.button('+ packaging_add')!.click(); });
         const select = mounted.container.querySelector<HTMLSelectElement>('[id="packagingLines[0].costArticleId-input"]')!;
@@ -55,8 +55,8 @@ describe('PackagingLinesInput', () => {
         assert.equal(field('packagingLines[0].unitPrice-input').value, '7,50');
         await act(async () => { setSelectValue(select, '12'); });
         assert.equal(field('packagingLines[0].unitPrice-input').value, '', 'no standard price: empty, the user types it or leaves it');
-        const tabbable = Array.from(rows()[0].querySelectorAll<HTMLElement>('select, input, button')).filter((element) => element.tabIndex >= 0).map((element) => element.id);
-        assert.deepEqual(tabbable, ['packagingLines[0].costArticleId-input', 'packagingLines[0].quantity-input', 'packagingLines[0].unitPrice-input']);
+        const tabbable = Array.from(rows()[0].querySelectorAll<HTMLElement>('select, input, button')).filter((element) => element.tabIndex >= 0).map((element) => (element.tagName === 'BUTTON' ? 'remove' : element.id));
+        assert.deepEqual(tabbable, ['packagingLines[0].costArticleId-input', 'packagingLines[0].quantity-input', 'packagingLines[0].unitPrice-input', 'remove']);
     });
 });
 
