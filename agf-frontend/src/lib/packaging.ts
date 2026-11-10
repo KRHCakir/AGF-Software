@@ -19,7 +19,8 @@ export interface PackagingLineDraft {
 
 export type PriceResult = { ok: true; value: number | null } | { ok: false; error: DecimalError };
 
-// Prijs per stuk excl. btw: leeg = (nog) geen prijs; anders 0 of meer met hoogstens 2 decimalen, in de notatie van de schermtaal.
+// Prijs per stuk excl. btw: leeg = (nog) geen prijs; anders 0 of meer met hoogstens 2 decimalen. Zonder locale: de schermtaal
+// (setInputLocale, gezet door de LanguageProvider), zoals bij alle getalvelden.
 export function parseUnitPrice(text: string, locale?: NumberLocale): PriceResult {
     if (text.trim() === '') return { ok: true, value: null };
     const parsed = parseLocaleDecimal(text, locale, { maxDecimals: 2, maxDigits: 16, allowZero: true });

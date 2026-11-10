@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import type { CostArticle } from '../types/costArticle';
 import { buildPackagingLines, effectivePackagesPerPallet,packagingLineTotal, palletArticle, palletProposal, parsePackagingQuantity, parseUnitPrice } from './packaging.ts';
 import { buildOrderPayload, groupErrors, type OrderDraft } from './salesOrderRules.ts';
+import { setInputLocale } from './decimal.ts';
 
 // Emballage op een verkooporder, onafhankelijk uitgeschreven naar SalesOrderService.Packaging en CostArticleRules.
 
@@ -69,6 +70,18 @@ describe('packaging rules', () => {
 });
 
 describe('order payload with packaging', () => {
+    test('without a locale argument the screen language counts, as set by the LanguageProvider (English: 7.50, not 7,50)', () => {
+        setInputLocale('en');
+        try {
+            assert.deepEqual(parseUnitPrice('7.50'), { ok: true, value: 7.5 });
+            assert.equal(parseUnitPrice('7,50').ok, false);
+            const english = buildOrderPayload(draft({ packagingLines: [pack('2', '1,000', '7.50')] }));
+            assert.deepEqual(english.ok && english.value.packagingLines, [{ costArticleId: 2, quantity: 1000, unitPrice: 7.5 }]);
+        } finally {
+            setInputLocale('nl');
+        }
+    });
+
     test('an order with only packaging leaves the empty goods line out and sends the packaging', () => {
         const result = buildOrderPayload(draft({ packagingLines: [pack('2', '10', '0,00')] }));
         assert.equal(result.ok, true);
