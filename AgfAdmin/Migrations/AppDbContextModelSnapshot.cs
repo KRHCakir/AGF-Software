@@ -6020,7 +6020,7 @@ namespace AgfAdmin.Migrations
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
                         .WithMany("PackagingLines")
                         .HasForeignKey("SalesOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("CostArticle");

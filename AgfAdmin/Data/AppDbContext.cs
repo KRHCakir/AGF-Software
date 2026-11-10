@@ -443,7 +443,8 @@ namespace AgfAdmin.Data
             // Emballageregels op een verkooporder: geen voorraad, alleen artikel, aantal, prijs en btw (guard-regel 27).
             modelBuilder.Entity<SalesOrderPackagingLine>(b =>
             {
-                b.HasOne(l => l.SalesOrder).WithMany(o => o.PackagingLines).HasForeignKey(l => l.SalesOrderId).OnDelete(DeleteBehavior.Cascade);
+                // Restrict, geen cascade: een order met emballage verwijderen zou de regels buiten guard-regel 27 om weghalen.
+                b.HasOne(l => l.SalesOrder).WithMany(o => o.PackagingLines).HasForeignKey(l => l.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).OnDelete(DeleteBehavior.Restrict);
                 b.Property(l => l.UnitPrice).HasPrecision(18, 2);
                 b.Property(l => l.VatPercentage).HasPrecision(5, 2);
