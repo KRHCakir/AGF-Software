@@ -357,7 +357,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
                         <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>
-                            {order.lines.length === 0 ? t('packaging_only')
+                            {order.lines.length === 0 && (order.packagingLines?.length ?? 0) > 0 ? t('packaging_only')
                                 : progress.fulfilled
                                 ? (order.delivered ? t('sales_order_delivered') : t('sales_order_shipped_not_confirmed'))
                                 : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
