@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AgfAdmin.Migrations
 {
     // Emballage (fust): kostenartikelen krijgen een soort (bestaande rijen: Cost) en emballage een standaardprijs per stuk en btw. De
-    // standaard-emballage Pallet wegwerp, Euro-pallet en Krat (9% btw, geen prijs) komt erbij (SeedStandardSql); een eigen artikel met
-    // dezelfde naam blijft staan. Bestaande kostenartikelen en factuurregels veranderen verder niet. Het Designer-bestand is weggelaten
+    // standaard-emballage Pallet wegwerp, Euro-pallet en Krat (9% btw, geen prijs) komt erbij (SeedStandardSql); een bestaand artikel met
+    // dezelfde naam blijft staan; is dat een kostenartikel, dan komt de emballage als "<naam> (emballage)" erbij. Bestaande kostenartikelen en factuurregels veranderen verder niet. Het Designer-bestand is weggelaten
     // (zie AddPartijen); de modelsnapshot is bijgewerkt en de attributen hieronder vervangen het.
     [DbContext(typeof(AppDbContext))]
     [Migration("20261110174045_AddPackagingArticles")]
@@ -17,9 +17,13 @@ namespace AgfAdmin.Migrations
         // Referentiegegevens zoals de standaardkostensoorten: bij elke (ook lege) database. Dezelfde SQL draait in de tests (CostArticleTestData).
         public const string SeedStandardSql = @"
 INSERT INTO ""CostArticles"" (""Name"", ""NameKey"", ""Kind"", ""VatPercentage"", ""IsStandard"", ""IsActive"", ""SortOrder"", ""CreatedAt"", ""CreatedBy"")
-SELECT v.""Name"", lower(v.""Name""), 'Packaging', 9, TRUE, TRUE, v.""SortOrder"", CURRENT_TIMESTAMP, 'Standaard'
-FROM (SELECT 'Pallet wegwerp' AS ""Name"", 110 AS ""SortOrder"" UNION ALL SELECT 'Euro-pallet', 120 UNION ALL SELECT 'Krat', 130) v
-WHERE NOT EXISTS (SELECT 1 FROM ""CostArticles"" c WHERE c.""NameKey"" = lower(v.""Name""));
+SELECT n.""Name"", lower(n.""Name""), 'Packaging', 9, TRUE, TRUE, n.""SortOrder"", CURRENT_TIMESTAMP, 'Standaard'
+FROM (
+    SELECT CASE WHEN EXISTS (SELECT 1 FROM ""CostArticles"" c WHERE c.""NameKey"" = lower(v.""Name"") AND c.""Kind"" = 'Cost')
+                THEN v.""Name"" || ' (emballage)' ELSE v.""Name"" END AS ""Name"", v.""SortOrder""
+    FROM (SELECT 'Pallet wegwerp' AS ""Name"", 110 AS ""SortOrder"" UNION ALL SELECT 'Euro-pallet', 120 UNION ALL SELECT 'Krat', 130) v
+) n
+WHERE NOT EXISTS (SELECT 1 FROM ""CostArticles"" c WHERE c.""NameKey"" = lower(n.""Name""));
 ";
 
         /// <inheritdoc />
