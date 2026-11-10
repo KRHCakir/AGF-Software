@@ -2471,5 +2471,8 @@
   "packaging_used": "used {count}×",
   "articles_kind_tabs": "Article kind",
   "articles_tab_goods": "Goods",
-  "articles_tab_packaging": "Packaging"
+  "articles_tab_packaging": "Packaging",
+  "tour_sales_packaging_title": "Add a pallet",
+  "tour_sales_packaging_what": "Add pallet puts a Pallet wegwerp (disposable pallet) line under the goods. The quantity is a proposal from the pallets of the lines; you adjust it yourself.",
+  "tour_sales_packaging_why": "Packaging is on the order with quantity and price, so it reaches the invoice later. It does nothing with stock: you do not reserve or dispatch it."
 }
