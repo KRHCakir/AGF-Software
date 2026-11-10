@@ -1,6 +1,5 @@
-// Emballage (fust) op een verkooporder: pallets en kratten met een heel aantal en een prijs per stuk. Pure regels zonder React of i18n,
-// zodat ze met node:test te toetsen zijn; spiegel van AgfAdmin/Services/SalesOrderService.Packaging.cs. Emballage doet niets met de
-// voorraad: geen eenheid, geen kg, geen bron en geen reservering. Let op: imports met .ts-extensie zijn nodig voor node:test.
+// Emballage (fust): pure regels voor node:test (imports met .ts-extensie), spiegel van SalesOrderService.Packaging.cs. Geen voorraad:
+// geen eenheid, kg, bron of reservering.
 import type { CostArticle } from '../types/costArticle';
 import type { CreateSalesOrderPackagingLineRequest } from '../types/salesOrder';
 import { formatAmountInput, parseLocaleDecimal, type DecimalError, type NumberLocale } from './decimal.ts';
@@ -8,7 +7,7 @@ import type { RuleError } from './salesOrderRules';
 
 export const MAX_PACKAGING_QUANTITY = 99999;
 export const MAX_PACKAGING_LINES = 50;
-// Het standaardartikel voor "Pallet toevoegen" (uit de migratie AddPackaging).
+// Standaardartikel voor "Pallet toevoegen" (migratie AddPackagingArticles).
 export const DISPOSABLE_PALLET = 'Pallet wegwerp';
 
 export interface PackagingLineDraft {
@@ -56,20 +55,18 @@ export function packagingLineTotal(line: PackagingLineDraft, locale?: NumberLoca
     return quantity === null || !price.ok || price.value === null ? null : Math.round(quantity * price.value * 100) / 100;
 }
 
-// De voorgevulde prijs bij het kiezen van een artikel: de standaardprijs met twee decimalen, of leeg zonder standaardprijs.
+// Voorgevulde prijs bij een gekozen artikel: de standaardprijs met twee decimalen, of leeg.
 export function defaultPriceText(article: CostArticle | undefined, locale?: NumberLocale): string {
     return article?.defaultUnitPrice == null ? '' : formatAmountInput(article.defaultUnitPrice, locale);
 }
 
-// Voorstel voor "Pallet toevoegen": de pallets van de goederenregels (zoals "= x pallets": aantal gedeeld door de verpakkingen per
-// pallet van het artikel) opgeteld en naar boven afgerond; 1 als geen regel een palletgetal heeft. Altijd alleen een voorstel.
+// Voorstel voor "Pallet toevoegen": de "= x pallets" van de goederenregels opgeteld, naar boven afgerond; minimaal 1.
 export function palletProposal(lines: { quantity: number | null; packagesPerPallet: number | null | undefined }[]): number {
     const pallets = lines.reduce((sum, line) => sum + (line.quantity !== null && line.quantity > 0 && line.packagesPerPallet ? line.quantity / line.packagesPerPallet : 0), 0);
     return Math.max(1, Math.ceil(pallets - 1e-9));
 }
 
-// Verpakkingen per pallet van een goederenregel zoals de regel zelf rekent: een ingevuld, geldig aantal in palletinvoer gaat voor de
-// standaard van de variant.
+// Verpakkingen per pallet van een goederenregel: bij palletinvoer het getypte aantal, anders de standaard van de variant.
 export function effectivePackagesPerPallet(line: { mode: string; packagesPerPallet: string }, variantDefault: number | null | undefined): number | null | undefined {
     if (line.mode === 'pallets') {
         const typed = parseLocaleDecimal(line.packagesPerPallet);
@@ -85,7 +82,7 @@ export function palletArticle(articles: CostArticle[]): CostArticle | null {
         ?? active.find((article) => article.name.toLowerCase().includes('pallet')) ?? null;
 }
 
-// Een opgeslagen of bevroren regel terug als invoer (onafgerond commando): getallen in de notatie van de schermtaal.
+// Een bevroren regel (onafgerond commando) terug als invoer.
 export function packagingDraftFrom(line: CreateSalesOrderPackagingLineRequest, key: string, locale?: NumberLocale): PackagingLineDraft {
     return { key, costArticleId: String(line.costArticleId), quantity: String(line.quantity), unitPrice: line.unitPrice === null ? '' : formatAmountInput(line.unitPrice, locale) };
 }

@@ -11,10 +11,10 @@ import FieldError, { fieldProps, inputClass, lineTableClass } from '../supply/Fi
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 
 const emptyPackagingLine = (): PackagingLineDraft => ({ key: newRequestId(), costArticleId: '', quantity: '', unitPrice: '' });
+const vatText = (vat: number, locale: string) => String(vat).replace('.', locale === 'nl' ? ',' : '.');
 
-// Emballage (pallets, kratten) in het orderformulier, onder de goederen: artikel, heel aantal en prijs per stuk (voorgevuld met de
-// standaardprijs, aanpasbaar; 0,00 bij een gratis ruil). Tab gaat per regel artikel → aantal → prijs → verwijderen en dan naar de volgende regel.
-// "Pallet toevoegen" zet een regel Pallet wegwerp neer met het palletvoorstel uit de goederenregels; alleen na die klik, altijd aanpasbaar.
+// Emballage onder de goederen: artikel, heel aantal, prijs per stuk (voorgevuld, aanpasbaar, 0,00 mag). "Pallet toevoegen" zet het
+// palletvoorstel neer, alleen na een klik en altijd aanpasbaar.
 export function PackagingLinesInput({ lines, articles, proposal, locked, errors, onChange }: {
     lines: PackagingLineDraft[];
     articles: CostArticle[];
@@ -88,7 +88,7 @@ export function PackagingLinesInput({ lines, articles, proposal, locked, errors,
                                             <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('packaging_unit_price')} {index + 1}</label>
                                             <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} value={line.unitPrice} disabled={locked} inputMode="decimal" placeholder="0,00" className={inputClass}
                                                 onChange={(event) => update(line.key, { unitPrice: event.target.value })} />
-                                            <span className="block text-xs text-gray-500">{article?.vatPercentage != null ? t('packaging_vat', { vat: String(article.vatPercentage).replace('.', locale === 'nl' ? ',' : '.') }) : ''}</span>
+                                            <span className="block text-xs text-gray-500">{article?.vatPercentage != null ? t('packaging_vat', { vat: vatText(article.vatPercentage, locale) }) : ''}</span>
                                             <FieldError id={`${prefix}.unitPrice`} messages={errors(`${prefix}.unitPrice`)} />
                                         </td>
                                         <td className="px-2 py-1.5 text-right font-mono" data-testid={`${prefix}.amount`}>{total === null ? '–' : formatMoney(total, null, locale)}</td>
@@ -121,7 +121,7 @@ export function PackagingLinesInput({ lines, articles, proposal, locked, errors,
     );
 }
 
-// Emballage van een opgeslagen order (alleen lezen): staat los van reserveren en verzenden en gaat later mee naar de factuur.
+// Emballage van een opgeslagen order (alleen lezen), los van reserveren en verzenden.
 export function PackagingLinesView({ lines }: { lines: SalesOrderPackagingLine[] }) {
     const { t, locale } = useTranslation();
     if (lines.length === 0) return null;
@@ -134,7 +134,7 @@ export function PackagingLinesView({ lines }: { lines: SalesOrderPackagingLine[]
                     <li key={line.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1">
                         <span className="text-gray-900">{line.name} · {t('packaging_pieces', { count: String(line.quantity) })} × {money(line.unitPrice)}</span>
                         <span className="font-mono text-gray-900">{line.lineTotal === null ? '–' : money(line.lineTotal)}
-                            <span className="ml-1 font-sans text-xs text-gray-600">{t('packaging_vat', { vat: String(line.vatPercentage).replace('.', locale === 'nl' ? ',' : '.') })}</span></span>
+                            <span className="ml-1 font-sans text-xs text-gray-600">{t('packaging_vat', { vat: vatText(line.vatPercentage, locale) })}</span></span>
                     </li>
                 ))}
             </ul>
