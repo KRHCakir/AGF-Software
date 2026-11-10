@@ -23,6 +23,7 @@ import DirectTradeShipmentPanel from './DirectTradeShipmentPanel';
 import DirectTradeShipmentCorrectionPanel from './DirectTradeShipmentCorrectionPanel';
 import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
+import { PackagingLinesView } from './PackagingLines';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
@@ -356,7 +357,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     <div>
                         <dt className="text-xs text-gray-600">{t('sales_col_progress')}</dt>
                         <dd className={`font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-900'}`}>
-                            {progress.fulfilled
+                            {order.lines.length === 0 ? t('packaging_only')
+                                : progress.fulfilled
                                 ? (order.delivered ? t('sales_order_delivered') : t('sales_order_shipped_not_confirmed'))
                                 : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                     {progress.linesFulfilled > 0 && <span className="block text-xs">{t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</span>}</>}
@@ -501,6 +503,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
             {order.lines.map((line) => (
                 <OrderLinePanel key={line.id} order={order} line={line} readOnly={readOnly} onOrderChanged={onOrderChanged} openFifo={line.id === fifoLineId} />
             ))}
+            {/* Emballage staat los van reserveren en verzenden: geen regelpaneel, geen "niet gereserveerd". */}
+            <PackagingLinesView lines={order.packagingLines ?? []} />
         </div>
     );
 }
