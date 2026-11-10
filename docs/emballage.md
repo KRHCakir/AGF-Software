@@ -5,7 +5,7 @@ Pallets en kratten staan op papier en op een orderbevestiging als gewone regel n
 ## Wat nu kan
 
 **Emballage-artikelen** staan bij **Artikelen › Emballage**, naast de goederen.
-- Standaard zijn er Pallet wegwerp, Euro-pallet en Krat. Je maakt er zelf bij, zoals Fust CBL of Doos.
+- Standaard zijn er Pallet wegwerp, Euro-pallet en Krat. Je maakt er zelf bij, zoals Fust CBL of Doos. Bestond er al een kostenartikel met dezelfde naam, dan heet de standaard-emballage "Krat (emballage)".
 - Per artikel leg je een **standaardprijs per stuk** vast (excl. btw, mag leeg) en een **btw-percentage**. De standaard is 9%: verpakking die met groente en fruit meegaat, volgt het tarief van de goederen. Wordt emballage los geleverd of anders belast, dan pas je het per artikel aan; vraag dat bij twijfel na bij de boekhouder.
 - Een emballage-artikel heeft geen maat, klasse, herkomst of voorraad.
   - Het staat niet in Beschikbaarheid, FIFO, Verwacht of Tekort.
@@ -18,7 +18,7 @@ Pallets en kratten staan op papier en op een orderbevestiging als gewone regel n
   - Het aantal is een voorstel: de pallets van de goederenregels opgeteld en naar boven afgerond. Dat is hetzelfde getal als "= x pallets" bij elke regel. 110 colli kiwi met 120 per pallet wordt 1 pallet.
   - Het voorstel komt er alleen na een klik en blijft aanpasbaar. Er komt nooit vanzelf een regel bij.
 - De btw komt van het artikel en staat bij het opslaan vast op de regel.
-- Tab loopt per regel van artikel naar aantal en prijs, en daarna naar de volgende regel. De verwijderknop slaat Tab over.
+- Tab loopt per regel van artikel naar aantal, prijs en de verwijderknop, net als bij de goederenregels, en daarna naar de volgende regel.
 - Een order met **alleen emballage** mag ook. In de orderlijst heet die "Alleen emballage"; hij telt niet als order met goederen en wordt dus nooit "verzonden" of "afgeleverd".
 
 Een emballageregel doet niets met de voorraad. Er is geen reservering, geen controle op "Uit voorraad", geen invloed op Vrij te verkopen en geen splitsen. Reserveren en verzenden gaan alleen over de goederenregels, en de emballage staat als apart blok op de order.
