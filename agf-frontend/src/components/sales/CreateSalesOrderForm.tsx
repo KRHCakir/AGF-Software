@@ -19,6 +19,10 @@ import LineSourceChoice from './LineSourceChoice';
 import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
+import { listPackagingArticles } from '../../services/costArticleService';
+import { packagingDraftFrom, palletProposal } from '../../lib/packaging';
+import type { CostArticle } from '../../types/costArticle';
+import { PackagingLinesInput, PackagingLinesView } from './PackagingLines';
 import { SaveResult } from '../../services/supplyService';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
@@ -42,7 +46,7 @@ import { ruleErrorsToFieldErrors } from './ruleMessages';
 import SubmitErrors from '../shared/SubmitErrors';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
-const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()] });
+const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()], packagingLines: [] });
 // Voorinvulling vanuit "Verkopen" in Beschikbaarheid: één regel met dit artikel, deze eenheid en dit aantal; de rest kiest de gebruiker.
 const prefilledDraft = (prefill: SellPrefill): OrderDraft => ({
     ...emptyDraft(),
@@ -55,7 +59,7 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     customerReference: command.payload.customerReference ?? '',
     internalNote: command.payload.internalNote ?? '',
     requestedDeliveryDate: isoToDateInput(command.payload.requestedDeliveryDate) ?? '',
-    lines: command.payload.lines.map((line) => ({
+    lines: command.payload.lines.map((line): OrderLineDraft => ({
         key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
         mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
         loosePackages: line.loosePackages == null ? '' : formatDecimalInput(line.loosePackages),
@@ -65,7 +69,8 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
             netKg: line.netWeightKg == null ? '' : formatDecimalInput(line.netWeightKg), netKgEntered: line.netWeightKg != null,
             grossKg: line.grossWeightKg == null ? '' : formatDecimalInput(line.grossWeightKg), grossKgEntered: line.grossWeightKg != null,
         } : {}),
-    })),
+    })).concat(command.payload.lines.length === 0 ? [emptyLine()] : []),
+    packagingLines: (command.payload.packagingLines ?? []).map((line) => packagingDraftFrom(line, newRequestId())),
 });
 
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
@@ -114,6 +119,14 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     // Vergrendeld zolang er een onafgerond commando is: nooit een gewijzigde retry, nooit een tweede order ernaast.
     const locked = submitting || result !== null || pending !== null;
+
+    // Emballage-artikelen (Pallet wegwerp, Euro-pallet, Krat, eigen): zonder antwoord blijft alleen "Emballage toevoegen" zonder keuze.
+    const [packagingArticles, setPackagingArticles] = useState<CostArticle[]>([]);
+    useEffect(() => {
+        const controller = new AbortController();
+        listPackagingArticles(false, controller.signal).then(setPackagingArticles).catch(() => undefined);
+        return () => controller.abort();
+    }, []);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -172,6 +185,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
     const { rows: lineKg, totals } = lineKgRows(draft.lines, (variantId) => variants.get(variantId));
+    // "Pallet toevoegen": de "= x pallets" van de goederenregels samen, naar boven afgerond (alleen een voorstel).
+    const proposal = palletProposal(draft.lines.map((line, index) => ({ quantity: lineKg[index].quantity, packagesPerPallet: variantDefaults.get(Number(line.productVariantId)) })));
 
     // Stand per gekozen variant + eenheid (Voorraad · Verwacht · Vrij) en de bron per regel. Zolang de gebruiker niet zelf kiest, volgt de
     // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan het splitsvoorstel.
@@ -350,6 +365,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                         <li key={line.id}>{line.productName} · {line.productVariantName}: {formatQuantity(line.quantity, locale)} <UnitBadge unit={line.unit} />{lineKgLabel(line, t, locale) !== null && <> · {lineKgLabel(line, t, locale, true)}</>}</li>
                     ))}
                 </ul>
+                <PackagingLinesView lines={order.packagingLines ?? []} />
             </SuccessPanel>
         );
     }
@@ -488,6 +504,9 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                     + {t('supply_add_line')}
                 </button>
             </fieldset>
+
+            <PackagingLinesInput lines={draft.packagingLines ?? []} articles={packagingArticles} proposal={proposal} locked={locked} errors={e}
+                onChange={(packagingLines) => { if (locked) return; setDraft((current) => ({ ...current, packagingLines })); edited(); }} />
 
             {pending === null && (
                 <div className="flex items-center gap-3 border-t border-gray-200 pt-3">

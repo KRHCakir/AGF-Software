@@ -131,3 +131,60 @@ describe('CreateSalesOrderForm: kg on the order line and customer search', () =>
         assert.equal(field('customer-name-input').value, 'Groentehal Jansen');
     });
 });
+
+// Emballage naast de goederen: 110 colli kiwi (120 per pallet) en "Pallet toevoegen" geeft 1 pallet als voorstel; een order met alleen
+// emballage gaat zonder goederenregels de deur uit. Niets komt er vanzelf bij.
+describe('CreateSalesOrderForm: packaging next to the goods', () => {
+    const kiwi: ProductOption[] = [{ id: 5, name: 'Kiwi', variants: [{ ...variant(5, 'Hayward', 10, 10.5), defaultPackagesPerPallet: 120 }] }];
+    const pallet = { id: 11, name: 'Pallet wegwerp', kind: 'Packaging', isStandard: true, isActive: true, sortOrder: 110, lineCount: 0, defaultUnitPrice: 7.5, vatPercentage: 9 };
+    const kiwiForm = () => (
+        <PendingCommandsProvider>
+            <HydratedGate>
+                <CreateSalesOrderForm customers={customers} products={kiwi} onSaved={() => {}} onOpen={() => {}} onCancel={() => {}} />
+            </HydratedGate>
+        </PendingCommandsProvider>
+    );
+    const header = async () => {
+        await mounted.waitFor(() => mounted.button('+ packaging_add_pallet'), 'packaging articles loaded');
+        await type('customerId-input', 'Lo');
+        await key('customerId-input', 'Tab');
+        await type('requestedDeliveryDate-input', '2026-11-12');
+    };
+    const submit = async () => {
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        return JSON.parse(posted[0].body);
+    };
+
+    beforeEach(() => {
+        window.sessionStorage.clear();
+        posted = stubFetch({ onGet: (url) => (url.includes('/packaging-articles') ? json(200, [pallet]) : json(404, { message: 'unexpected GET' })), nextPost: async () => json(500, { message: 'stop' }) });
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('110 colli kiwi and Add pallet: 1 pallet proposed with its price, and the order carries the goods and the packaging line', async () => {
+        await mounted.render(kiwiForm());
+        await header();
+        await chooseVariant(0, 'hayward');
+        await type('lines[0].quantity-input', '110');
+        assert.equal(mounted.container.querySelectorAll('[data-tour="sales-packaging-line"]').length, 0, 'nothing added by itself');
+        await click(mounted.button('+ packaging_add_pallet')!);
+        assert.equal(field('packagingLines[0].quantity-input').value, '1');
+        assert.equal(field('packagingLines[0].unitPrice-input').value, '7,50');
+        const body = await submit();
+        assert.equal(body.lines[0].quantity, 110);
+        assert.deepEqual(body.packagingLines, [{ costArticleId: 11, quantity: 1, unitPrice: 7.5 }]);
+    });
+
+    test('an order with only packaging (free Euro pallet exchange at 0,00) is sent without goods lines', async () => {
+        await mounted.render(kiwiForm());
+        await header();
+        await click(mounted.button('+ packaging_add_pallet')!);
+        await type('packagingLines[0].quantity-input', '4');
+        await type('packagingLines[0].unitPrice-input', '0,00');
+        const body = await submit();
+        assert.deepEqual(body.lines, []);
+        assert.deepEqual(body.packagingLines, [{ costArticleId: 11, quantity: 4, unitPrice: 0 }]);
+    });
+});

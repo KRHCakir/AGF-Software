@@ -4,6 +4,7 @@ import type { SupplySource } from '../types/salesSupply';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { resolveLineWeight, weightPayload, type LineWeightDraft } from './lineWeight.ts';
+import { buildPackagingLines, type PackagingLineDraft } from './packaging.ts';
 import { resolvePalletInput, type QuantityInputMode } from './palletInput.ts';
 import type { PackageKgDefaults } from './quantityKg.ts';
 
@@ -62,6 +63,13 @@ export interface OrderDraft {
     internalNote: string;
     requestedDeliveryDate: string;
     lines: OrderLineDraft[];
+    // Emballage (pallets, kratten) naast de goederen; doet niets met de voorraad.
+    packagingLines?: PackagingLineDraft[];
+}
+
+// Een goederenregel waar nog niets in staat: telt niet mee als de order emballage heeft (een order met alleen emballage mag).
+export function isBlankOrderLine(line: OrderLineDraft): boolean {
+    return line.productVariantId === '' && line.quantity.trim() === '' && line.palletCount.trim() === '' && (line.loosePackages ?? '').trim() === '';
 }
 
 export const MAX_INTERNAL_NOTE_LENGTH = 1000;
@@ -111,11 +119,17 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
         errors.push({ field: 'requestedDeliveryDate', code: draft.requestedDeliveryDate.trim() === '' ? 'required' : 'invalid_date' });
     }
 
-    if (draft.lines.length === 0) errors.push({ field: 'lines', code: 'required' });
-    else if (draft.lines.length > MAX_ORDER_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });
+    const packagingDrafts = draft.packagingLines ?? [];
+    const skip = (line: OrderLineDraft) => packagingDrafts.length > 0 && isBlankOrderLine(line);
+    const goodsCount = draft.lines.filter((line) => !skip(line)).length;
+    if (goodsCount === 0 && packagingDrafts.length === 0) errors.push({ field: 'lines', code: 'required' });
+    else if (goodsCount > MAX_ORDER_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });
+    const packaging = buildPackagingLines(packagingDrafts);
+    if (!packaging.ok) errors.push(...packaging.errors);
 
     const seen = new Set<string>();
-    const lines = draft.lines.map((line, index) => {
+    const lines = draft.lines.flatMap((line, index) => {
+        if (skip(line)) return [];
         const prefix = `lines[${index}]`;
         const before = errors.length;
         if (!/^[1-9]\d*$/.test(line.productVariantId)) errors.push({ field: `${prefix}.productVariantId`, code: 'required' });
@@ -133,7 +147,7 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
             if (seen.has(key)) errors.push({ field: prefix, code: 'duplicate_line' });
             seen.add(key);
         }
-        return {
+        return [{
             productVariantId: Number(line.productVariantId),
             quantity: amounts.ok ? amounts.value.quantity : 0,
             unit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
@@ -145,7 +159,7 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
             ...(weight.ok ? weightPayload(weight.value, 'netWeightKg', 'grossWeightKg') : {}),
             // Bron alleen als die gekozen is: zonder bron blijft het dezelfde opdracht als vóór dit veld.
             ...(line.supplySource ? { supplySource: line.supplySource } : {}),
-        };
+        }];
     });
 
     if (errors.length > 0 || requestedDeliveryDate === null) {
@@ -159,6 +173,8 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
             internalNote: internalNote === '' ? null : internalNote,
             requestedDeliveryDate,
             lines,
+            // Alleen met emballage: een order zonder blijft dezelfde opdracht als vóór dit veld.
+            ...(packaging.ok && packaging.value.length > 0 ? { packagingLines: packaging.value } : {}),
         },
     };
 }

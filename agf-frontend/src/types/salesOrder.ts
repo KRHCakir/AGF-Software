@@ -50,6 +50,25 @@ export interface CreateSalesOrderRequest {
     // Verkoop-partij: alleen een zelf getypt nummer; weggelaten = het voorgestelde nummer (de server kent het echte toe bij opslaan).
     salesPartijNumber?: string;
     lines: CreateSalesOrderLineRequest[];
+    // Emballage (pallets, kratten) naast de goederen; alleen meegestuurd als er emballage is.
+    packagingLines?: CreateSalesOrderPackagingLineRequest[];
+}
+
+export interface CreateSalesOrderPackagingLineRequest {
+    costArticleId: number;
+    quantity: number;
+    unitPrice: number | null;
+}
+
+// Emballageregel van een order: geen voorraad, alleen artikel, aantal, prijs per stuk (excl. btw) en btw (zie SalesOrderPackagingLineDto).
+export interface SalesOrderPackagingLine {
+    id: number;
+    costArticleId: number;
+    name: string | null;
+    quantity: number;
+    unitPrice: number | null;
+    vatPercentage: number;
+    lineTotal: number | null;
 }
 
 // Hoeveelheid, eenheid en netto-kg zijn altijd expliciet; de UI leidt nooit kg af uit dozen of maat.
@@ -327,6 +346,8 @@ export interface SalesOrder {
     // Afgeleid: elke regel volledig verzonden én bevestigd afgeleverd (per regel en eenheid).
     delivered: boolean;
     lines: SalesOrderLine[];
+    // Emballage naast de goederen; ontbreekt in oudere antwoorden.
+    packagingLines?: SalesOrderPackagingLine[];
     // Alleen in het antwoord op aanmaken (201 en herhaling): kredietlimiet overschreden. Blokkeert nooit; ontbreekt bij GET/lijst.
     creditWarning?: SalesOrderCreditWarning | null;
     // Alleen in het antwoord op aanmaken: meer verkocht dan voorraad en verwachte aanvoer (per variant en eenheid). Nooit blokkerend.
