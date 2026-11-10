@@ -51,7 +51,7 @@ export default function PackagingArticles() {
 
     const draftOf = (article: CostArticle): PriceDraft => drafts[article.id]
         ?? { price: article.defaultUnitPrice == null ? '' : formatAmountInput(article.defaultUnitPrice), vat: formatDecimalInput(article.vatPercentage ?? 9, 2) };
-    const changed = (article: CostArticle, patch: Partial<PriceDraft>) => { setDrafts((current) => ({ ...current, [article.id]: { ...draftOf(article), ...patch } })); setNotice(null); };
+    const changed = (article: CostArticle, patch: Partial<PriceDraft>) => { setDrafts((current) => ({ ...current, [article.id]: { ...(current[article.id] ?? draftOf(article)), ...patch } })); setNotice(null); };
 
     // Prijs en btw controleren zoals de server; fouten onder het veld met deze prefix.
     const prices = (draft: PriceDraft, prefix: string, found: FieldErrors): PackagingArticleInput | null => {
@@ -121,17 +121,17 @@ export default function PackagingArticles() {
     };
 
     const e = (key: string) => errors[key];
-    const priceFields = (prefix: string, draft: PriceDraft, onChange: (patch: Partial<PriceDraft>) => void, label: boolean) => (
+    const priceFields = (prefix: string, draft: PriceDraft, onChange: (patch: Partial<PriceDraft>) => void, label: boolean, disabled = false) => (
         <>
             <div className="w-32">
                 <label htmlFor={`${prefix}.defaultUnitPrice-input`} className={label ? 'text-xs font-medium text-gray-700' : 'sr-only'}>{t('packaging_default_price')}</label>
-                <input {...fieldProps(`${prefix}.defaultUnitPrice`, e(`${prefix}.defaultUnitPrice`))} value={draft.price} inputMode="decimal" placeholder={t('packaging_no_price')}
+                <input {...fieldProps(`${prefix}.defaultUnitPrice`, e(`${prefix}.defaultUnitPrice`))} value={draft.price} inputMode="decimal" placeholder={t('packaging_no_price')} disabled={disabled}
                     onChange={(event) => onChange({ price: event.target.value })} className={`${inputClass} bg-white`} />
                 <FieldError id={`${prefix}.defaultUnitPrice`} messages={e(`${prefix}.defaultUnitPrice`)} />
             </div>
             <div className="w-20">
                 <label htmlFor={`${prefix}.vatPercentage-input`} className={label ? 'text-xs font-medium text-gray-700' : 'sr-only'}>{t('packaging_vat_label')}</label>
-                <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} value={draft.vat} inputMode="decimal"
+                <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} value={draft.vat} inputMode="decimal" disabled={disabled}
                     onChange={(event) => onChange({ vat: event.target.value })} className={`${inputClass} bg-white`} />
                 <FieldError id={`${prefix}.vatPercentage`} messages={e(`${prefix}.vatPercentage`)} />
             </div>
@@ -168,11 +168,12 @@ export default function PackagingArticles() {
             <form noValidate onSubmit={add} className="flex flex-wrap items-start gap-2">
                 <div className="min-w-[12rem] flex-1">
                     <label htmlFor="packaging-new.name-input" className="text-xs font-medium text-gray-700">{t('packaging_new')}</label>
-                    <input {...fieldProps('packaging-new.name', e('packaging-new.name'))} value={added.name} maxLength={MAX_COST_ARTICLE_NAME_LENGTH} placeholder={t('packaging_new_placeholder')}
+                    <input {...fieldProps('packaging-new.name', e('packaging-new.name'))} value={added.name} disabled={busy} maxLength={MAX_COST_ARTICLE_NAME_LENGTH} placeholder={t('packaging_new_placeholder')}
                         onChange={(event) => setAdded((current) => ({ ...current, name: event.target.value }))} className={inputClass} />
                     <FieldError id="packaging-new.name" messages={e('packaging-new.name')} />
                 </div>
-                {priceFields('packaging-new', added, (patch) => setAdded((current) => ({ ...current, ...patch })), true)}
+                {/* Tijdens het aanmaken vergrendeld: wat er dan getypt zou worden, wist het succes anders weg. */}
+                {priceFields('packaging-new', added, (patch) => setAdded((current) => ({ ...current, ...patch })), true, busy)}
                 <button type="submit" className={`${primaryButtonClass} mt-5`} disabled={busy} data-tour="packaging-add">{t('cost_article_add')}</button>
             </form>
         </section>
