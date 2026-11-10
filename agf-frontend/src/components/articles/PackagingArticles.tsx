@@ -81,9 +81,17 @@ export default function PackagingArticles() {
         const input = prices(draftOf(article), `packaging-${article.id}`, found);
         setErrors(found);
         if (input === null) return;
+        const sent = draftOf(article);
         void run(async () => {
             await updatePackagingArticle(article.id, input);
-            setDrafts((current) => { const next = { ...current }; delete next[article.id]; return next; });
+            // Alleen de draft wissen als die nog gelijk is aan wat is verstuurd; nieuwere invoer tijdens het opslaan blijft staan.
+            setDrafts((current) => {
+                const latest = current[article.id];
+                if (latest && (latest.price !== sent.price || latest.vat !== sent.vat)) return current;
+                const next = { ...current };
+                delete next[article.id];
+                return next;
+            });
             setNotice(t('packaging_article_saved', { name: article.name }));
         });
     };
