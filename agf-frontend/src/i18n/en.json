@@ -2436,5 +2436,22 @@
   "tour_costs_allocate_why": "More than the line amount is not possible; a rest only gives a warning. Split equally, by kg or by packages works out the amounts.",
   "tour_costs_partij_title": "Costs on the lot",
   "tour_costs_partij_what": "Sales lot {salesPartijNumber} shows under Costs: Handling, invoice K-{tourRef}, € 500.",
-  "tour_costs_partij_why": "Every cost belongs to exactly one lot, so nothing counts twice. The result (sales minus purchase minus costs) comes in a later step."
+  "tour_costs_partij_why": "Every cost belongs to exactly one lot, so nothing counts twice. The result (sales minus purchase minus costs) comes in a later step.",
+  "packaging_no_price": "no price",
+  "packaging_error_price": "0 or more, with at most 2 decimals (for example 7.50).",
+  "packaging_error_vat": "A percentage from 0 to 100.",
+  "packaging_group": "Packaging",
+  "packaging_line_hint": "Packaging: no stock; counts as costs, general or on a lot.",
+  "packaging_articles_title": "Packaging (pallets and crates)",
+  "packaging_articles_hint": "Pallets and crates for a sales order, or charged by a supplier. No stock, size or class. The default price is a proposal on the order line; you adjust it there per order.",
+  "packaging_default_price": "Default price per piece",
+  "packaging_vat_label": "VAT %",
+  "packaging_save": "Save",
+  "packaging_article_saved": "{name} has been saved.",
+  "packaging_new": "New packaging item",
+  "packaging_new_placeholder": "For example CBL crate",
+  "packaging_used": "used {count}×",
+  "articles_kind_tabs": "Article kind",
+  "articles_tab_goods": "Goods",
+  "articles_tab_packaging": "Packaging"
 }

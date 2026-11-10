@@ -27,7 +27,8 @@ export default function CostArticlesAdmin() {
     useEffect(() => {
         const controller = new AbortController();
         listCostArticles(true, controller.signal)
-            .then((list) => { setArticles(list); setLoadError(null); })
+            // Alleen de kostensoorten: emballage (pallets, kratten) beheer je bij Artikelen › Emballage.
+            .then((list) => { setArticles(list.filter((article) => article.kind !== 'Packaging')); setLoadError(null); })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setLoadError(apiError); });
         return () => controller.abort();
     }, [reloadToken]);
