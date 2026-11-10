@@ -60,6 +60,10 @@ WHERE NOT EXISTS (SELECT 1 FROM ""CostArticles"" c WHERE c.""NameKey"" = lower(v
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // De geseede standaard-emballage weghalen (anders blijven ze als kostenartikel achter en zet Up ze niet opnieuw als emballage);
+            // alleen rijen zonder factuurregel, want die verwijzen er met een FK naar.
+            migrationBuilder.Sql(@"DELETE FROM ""CostArticles"" c WHERE c.""Kind"" = 'Packaging' AND c.""IsStandard"" AND c.""CreatedBy"" = 'Standaard' AND NOT EXISTS (SELECT 1 FROM ""IncomingInvoiceLines"" l WHERE l.""CostArticleId"" = c.""Id"");");
+
             migrationBuilder.DropCheckConstraint(
                 name: "CK_CostArticles_Kind",
                 table: "CostArticles");
