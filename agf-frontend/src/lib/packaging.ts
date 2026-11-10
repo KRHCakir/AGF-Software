@@ -68,6 +68,16 @@ export function palletProposal(lines: { quantity: number | null; packagesPerPall
     return Math.max(1, Math.ceil(pallets - 1e-9));
 }
 
+// Verpakkingen per pallet van een goederenregel zoals de regel zelf rekent: een ingevuld, geldig aantal in palletinvoer gaat voor de
+// standaard van de variant.
+export function effectivePackagesPerPallet(line: { mode: string; packagesPerPallet: string }, variantDefault: number | null | undefined): number | null | undefined {
+    if (line.mode === 'pallets') {
+        const typed = parseLocaleDecimal(line.packagesPerPallet);
+        if (typed.ok && Number.isInteger(typed.value)) return typed.value;
+    }
+    return variantDefault;
+}
+
 // Het artikel voor "Pallet toevoegen": Pallet wegwerp, anders het eerste actieve artikel met "pallet" in de naam; null als er geen is.
 export function palletArticle(articles: CostArticle[]): CostArticle | null {
     const active = articles.filter((article) => article.isActive && article.kind !== 'Cost');

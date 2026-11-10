@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { CostArticle } from '../types/costArticle';
-import { buildPackagingLines, packagingLineTotal, palletArticle, palletProposal, parsePackagingQuantity, parseUnitPrice } from './packaging.ts';
+import { buildPackagingLines, effectivePackagesPerPallet,packagingLineTotal, palletArticle, palletProposal, parsePackagingQuantity, parseUnitPrice } from './packaging.ts';
 import { buildOrderPayload, groupErrors, type OrderDraft } from './salesOrderRules.ts';
 
 // Emballage op een verkooporder, onafhankelijk uitgeschreven naar SalesOrderService.Packaging en CostArticleRules.
@@ -53,6 +53,12 @@ describe('packaging rules', () => {
         assert.equal(palletProposal([{ quantity: 121, packagesPerPallet: 120 }]), 2);
         assert.equal(palletProposal([{ quantity: 110, packagesPerPallet: 120 }, { quantity: 130, packagesPerPallet: 120 }]), 2);
         assert.equal(palletProposal([{ quantity: 40, packagesPerPallet: null }, { quantity: null, packagesPerPallet: 120 }]), 1);
+    });
+
+    test('the pallet proposal follows the packages per pallet typed on the goods line, else the article default', () => {
+        assert.equal(effectivePackagesPerPallet({ mode: 'pallets', packagesPerPallet: '60' }, 120), 60);
+        assert.equal(effectivePackagesPerPallet({ mode: 'pallets', packagesPerPallet: '' }, 120), 120);
+        assert.equal(effectivePackagesPerPallet({ mode: 'packages', packagesPerPallet: '60' }, 120), 120);
     });
 
     test('Add pallet takes Pallet wegwerp, otherwise an active article with pallet in its name, never a cost kind', () => {

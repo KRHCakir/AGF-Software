@@ -86,6 +86,21 @@ export function salesPartijPayload(text: string | null, suggestion: string | nul
     return { ok: true, value };
 }
 
+// Backendsleutels lines[i] verwijzen naar de meegestuurde regels; lege goederenregels blijven in het formulier staan maar gaan niet mee.
+// Vertaalt die sleutels terug naar de formulierindex, zodat de fout bij de juiste regel verschijnt.
+export function remapPayloadLineKeys<T>(fieldErrors: Record<string, T>, draft: OrderDraft): Record<string, T> {
+    const hasPackaging = (draft.packagingLines ?? []).length > 0;
+    const formIndexes = draft.lines.flatMap((line, index) => (hasPackaging && isBlankOrderLine(line) ? [] : [index]));
+    const result: Record<string, T> = {};
+    for (const [key, value] of Object.entries(fieldErrors)) {
+        result[key.replace(/^lines\[(\d+)\]/, (match, n: string) => {
+            const mapped = formIndexes[Number(n)];
+            return mapped === undefined ? match : `lines[${mapped}]`;
+        })] = value;
+    }
+    return result;
+}
+
 export type OrderPayload = Omit<CreateSalesOrderRequest, 'requestId'>;
 
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; errors: RuleError[] };

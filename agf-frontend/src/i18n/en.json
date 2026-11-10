@@ -2447,6 +2447,8 @@
   "packaging_vat": "{vat}% VAT",
   "packaging_remove_n": "Remove packaging line {n}",
   "packaging_add": "Add packaging",
+  "packaging_load_failed": "The packaging articles could not be loaded.",
+  "packaging_reload": "Reload",
   "packaging_add_pallet": "Add pallet",
   "packaging_pallet_proposal": "Proposal: {count} × {name}, from the pallets of the goods lines. You adjust it yourself afterwards.",
   "packaging_no_price": "no price",

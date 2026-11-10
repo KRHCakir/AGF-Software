@@ -2447,6 +2447,8 @@
   "packaging_vat": "{vat}% btw",
   "packaging_remove_n": "Emballageregel {n} verwijderen",
   "packaging_add": "Emballage toevoegen",
+  "packaging_load_failed": "De emballageartikelen konden niet worden geladen.",
+  "packaging_reload": "Opnieuw laden",
   "packaging_add_pallet": "Pallet toevoegen",
   "packaging_pallet_proposal": "Voorstel: {count} × {name}, uit de pallets van de goederenregels. Je past het daarna zelf aan.",
   "packaging_no_price": "geen prijs",

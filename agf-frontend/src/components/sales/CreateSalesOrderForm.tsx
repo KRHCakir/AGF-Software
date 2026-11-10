@@ -9,7 +9,7 @@ import { type LineWeightDraft, lineKgRows } from '../../lib/lineWeight';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
-import { MAX_ORDER_LINES, MAX_SALES_PARTIJ_NUMBER_LENGTH, OrderDraft, OrderLineDraft, buildOrderPayload, salesPartijPayload } from '../../lib/salesOrderRules';
+import { MAX_ORDER_LINES, MAX_SALES_PARTIJ_NUMBER_LENGTH, OrderDraft, OrderLineDraft, buildOrderPayload, remapPayloadLineKeys, salesPartijPayload } from '../../lib/salesOrderRules';
 import { partijNumberKey } from '../../lib/partijRules';
 import { findPartijByNumber, getNextPartijNumber } from '../../services/partijService';
 import { isPartijExistsConflict } from '../../types/partij';
@@ -20,7 +20,7 @@ import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { listPackagingArticles } from '../../services/costArticleService';
-import { packagingDraftFrom, palletProposal } from '../../lib/packaging';
+import { effectivePackagesPerPallet, packagingDraftFrom, palletProposal } from '../../lib/packaging';
 import type { CostArticle } from '../../types/costArticle';
 import { PackagingLinesInput, PackagingLinesView } from './PackagingLines';
 import { SaveResult } from '../../services/supplyService';
@@ -122,11 +122,14 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     // Emballage-artikelen (Pallet wegwerp, Euro-pallet, Krat, eigen): zonder antwoord blijft alleen "Emballage toevoegen" zonder keuze.
     const [packagingArticles, setPackagingArticles] = useState<CostArticle[]>([]);
+    const [packagingFailed, setPackagingFailed] = useState(false);
+    const [packagingToken, setPackagingToken] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
-        listPackagingArticles(false, controller.signal).then(setPackagingArticles).catch(() => undefined);
+        setPackagingFailed(false);
+        listPackagingArticles(false, controller.signal).then(setPackagingArticles).catch(() => { if (!controller.signal.aborted) setPackagingFailed(true); });
         return () => controller.abort();
-    }, []);
+    }, [packagingToken]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -186,7 +189,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
     const { rows: lineKg, totals } = lineKgRows(draft.lines, (variantId) => variants.get(variantId));
     // "Pallet toevoegen": de "= x pallets" van de goederenregels samen, naar boven afgerond (alleen een voorstel).
-    const proposal = palletProposal(draft.lines.map((line, index) => ({ quantity: lineKg[index].quantity, packagesPerPallet: variantDefaults.get(Number(line.productVariantId)) })));
+    const proposal = palletProposal(draft.lines.map((line, index) => ({ quantity: lineKg[index].quantity, packagesPerPallet: effectivePackagesPerPallet(line, variantDefaults.get(Number(line.productVariantId))) })));
 
     // Stand per gekozen variant + eenheid (Voorraad · Verwacht · Vrij) en de bron per regel. Zolang de gebruiker niet zelf kiest, volgt de
     // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan het splitsvoorstel.
@@ -285,7 +288,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             } else {
                 setError(apiError);
             }
-            setErrors(apiError.fieldErrors);
+            setErrors(remapPayloadLineKeys(apiError.fieldErrors, draft));
         } finally {
             inFlight.current = false;
             setSubmitting(false);
@@ -505,6 +508,12 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 </button>
             </fieldset>
 
+            {packagingFailed && (
+                <div role="alert" className="flex items-center gap-3 text-sm text-red-700">
+                    <span>{t('packaging_load_failed')}</span>
+                    <button type="button" onClick={() => setPackagingToken((token) => token + 1)} className={secondaryButtonClass}>{t('packaging_reload')}</button>
+                </div>
+            )}
             <PackagingLinesInput lines={draft.packagingLines ?? []} articles={packagingArticles} proposal={proposal} locked={locked} errors={e}
                 onChange={(packagingLines) => { if (locked) return; setDraft((current) => ({ ...current, packagingLines })); edited(); }} />
 
