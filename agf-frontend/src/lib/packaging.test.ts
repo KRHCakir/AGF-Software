@@ -104,5 +104,7 @@ describe('order payload with packaging', () => {
         assert.equal(result.ok, false);
         if (result.ok) return;
         assert.deepEqual(Object.keys(groupErrors(result.errors)).sort(), ['lines[1].quantity', 'packagingLines[0].quantity']);
+        const halfFilled = buildOrderPayload(draft({ lines: [{ ...goods('', ''), netKg: '12' }], packagingLines: [pack('1', '2')] }));
+        assert.ok(!halfFilled.ok && 'lines[0].productVariantId' in groupErrors(halfFilled.errors), 'only kg typed is checked, never skipped silently');
     });
 });

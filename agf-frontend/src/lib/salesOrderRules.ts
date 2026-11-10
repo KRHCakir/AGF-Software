@@ -67,9 +67,10 @@ export interface OrderDraft {
     packagingLines?: PackagingLineDraft[];
 }
 
-// Een goederenregel waar nog niets in staat: telt niet mee als de order emballage heeft (een order met alleen emballage mag).
+// Een goederenregel waar niets in staat (geen enkel veld): telt niet mee als de order emballage heeft. Half ingevuld wordt gecontroleerd.
 export function isBlankOrderLine(line: OrderLineDraft): boolean {
-    return line.productVariantId === '' && line.quantity.trim() === '' && line.palletCount.trim() === '' && (line.loosePackages ?? '').trim() === '';
+    return [line.productVariantId, line.quantity, line.unit, line.palletCount, line.packagesPerPallet, line.loosePackages ?? '', line.netKg ?? '', line.grossKg ?? '']
+        .every((value) => value.trim() === '');
 }
 
 export const MAX_INTERNAL_NOTE_LENGTH = 1000;
