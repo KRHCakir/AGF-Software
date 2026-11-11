@@ -92,7 +92,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <tbody className={purchaseLineBodyClass}>
                         {order.lines.map((line, index) => (
                             <tr key={line.id} className={purchaseLineRowClass(index)}>
-                                <td {...lineCell('product', labels.product, 'max-md:block max-md:text-left max-md:before:hidden')}>
+                                <td {...lineCell('product', labels.product, '', true)}>
                                     <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                                     {line.partijNumber && line.partijNumber !== order.partijNumber
                                         ? <span className="text-gray-600"> · {t('partij_field')} <Link href={`/partijen?id=${line.partijId}`} className="font-mono text-blue-800 underline underline-offset-2">{line.partijNumber}</Link></span>

@@ -20,12 +20,13 @@ export const purchaseLineRowClass = (index: number) =>
     `${index % 2 === 1 ? ROW_STRIPE : ROW_PLAIN} align-top max-md:block max-md:rounded max-md:border max-md:border-gray-300 max-md:p-2`;
 
 // Een cel met haar kolomnaam voor de blokweergave; getallen rechts uitgelijnd.
-export function lineCell(column: PurchaseLineColumn | 'extra', label: string, extra = '') {
+// stacked: de cel blijft in de blokweergave een gewoon blok (links, zonder label) i.p.v. label-links/waarde-rechts.
+export function lineCell(column: PurchaseLineColumn | 'extra', label: string, extra = '', stacked = false) {
     const numeric = column !== 'extra' && NUMERIC.has(column);
     return {
         'data-label': label,
         'data-column': column,
-        className: `px-2 py-1.5 ${numeric ? 'text-right tabular-nums' : ''} max-md:flex max-md:items-start max-md:justify-between max-md:gap-3 max-md:px-0 max-md:py-0.5 max-md:text-right max-md:before:shrink-0 max-md:before:text-left max-md:before:text-xs max-md:before:font-medium max-md:before:text-gray-600 max-md:before:content-[attr(data-label)] ${extra}`,
+        className: `px-2 py-1.5 ${numeric ? 'text-right tabular-nums' : ''} max-md:px-0 max-md:py-0.5 ${stacked ? 'max-md:block max-md:text-left max-md:before:hidden' : 'max-md:flex max-md:items-start max-md:justify-between max-md:gap-3 max-md:text-right max-md:before:shrink-0 max-md:before:text-left max-md:before:text-xs max-md:before:font-medium max-md:before:text-gray-600 max-md:before:content-[attr(data-label)]'} ${extra}`,
     };
 }
 
@@ -61,16 +62,16 @@ export function PurchaseLineTotalsRow({ totals, trailingCells = 0 }: { totals: P
                 <td {...lineCell('product', t('po_line_col_pallets'))}>
                     <span className="max-md:hidden">{t('po_line_totals')} · </span>
                     <span data-testid="line-totals-pallets">{totals.pallets === null ? t('po_line_no_pallets') : t('po_line_pallets_total', { pallets: formatPallets(totals.pallets, locale) })}</span>
-                    {missing(totals.pallets === null ? 0 : totals.linesWithoutPallets, 'po_line_lines_without_pallets')}
+                    {missing(totals.linesWithoutPallets, 'po_line_lines_without_pallets')}
                 </td>
                 <td className="max-md:hidden" colSpan={3} />
-                <td {...lineCell('gross', labels.gross)} data-testid="line-totals-gross">{kg(totals.grossKg)}{missing(totals.grossKg === null ? 0 : totals.linesWithoutGross, 'po_line_lines_without_kg')}</td>
-                <td {...lineCell('net', labels.net)} data-testid="line-totals-net">{kg(totals.netKg)}{missing(totals.netKg === null ? 0 : totals.linesWithoutNet, 'po_line_lines_without_kg')}</td>
+                <td {...lineCell('gross', labels.gross)} data-testid="line-totals-gross">{kg(totals.grossKg)}{missing(totals.linesWithoutGross, 'po_line_lines_without_kg')}</td>
+                <td {...lineCell('net', labels.net)} data-testid="line-totals-net">{kg(totals.netKg)}{missing(totals.linesWithoutNet, 'po_line_lines_without_kg')}</td>
                 <td {...lineCell('quantity', labels.quantity)} data-testid="line-totals-quantity">{formatQuantity(totals.quantity, locale)}</td>
                 <td className="max-md:hidden" colSpan={2} />
                 <td {...lineCell('total', labels.total)} data-testid="line-totals-amount">
                     {totals.amount === null ? '–' : formatMoney(totals.amount, null, locale)}
-                    {missing(totals.amount === null ? 0 : totals.linesWithoutPrice, 'po_line_lines_without_price')}
+                    {missing(totals.linesWithoutPrice, 'po_line_lines_without_price')}
                 </td>
                 {trailingCells > 0 && <td className="max-md:hidden" colSpan={trailingCells} />}
             </tr>
