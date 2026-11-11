@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, before, beforeEach, describe, test } from 'node:test';
 import { todayInAmsterdam } from '../../lib/calendarDate.ts';
-import { Mounted, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { Mounted, json, setValue, stubFetch } from '../../test/reactHarness.ts';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
 // "Verwacht op" bij Aanvoer plannen met een vaste klok rond middernacht in Europe/Amsterdam: vandaag geeft nooit een fout, gisteren en
@@ -41,7 +41,6 @@ async function fillAllButDate() {
     await enter('vendorId-input');
     await type('lines[0].productVariantId-input', 'hass');
     await enter('lines[0].productVariantId-input');
-    await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
     await type('lines[0].expectedQuantity-input', '10');
 }
 

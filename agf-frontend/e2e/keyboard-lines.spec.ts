@@ -3,7 +3,8 @@ import { ensureFlowMasterData } from './fixtures';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 // Een volledige orderregel alleen met het toetsenbord (Tab, pijlen, Enter) op Inkooporder aanmaken en op een nieuwe verkooporder,
-// en opslaan. De volgorde in de regel is artikel, aantal, eenheid, kg: de eenheid wordt niet meer overgeslagen. De kop van het
+// en opslaan. Inkooporder (feedback 11 november): artikel, aantal, prijs; Tab op het laatste veld maakt een nieuwe regel. Verkooporder:
+// artikel, aantal, eenheid, kg (de eenheid wordt niet overgeslagen). De kop van het
 // formulier (leverancier of klant, datum) wordt gewoon ingevuld; het gaat om de regel. Draait mee met `npm run test:tour` (zelfde
 // frontend en API, zie docs/demo-tour.md) en schrijft echte orders met referentie E2E-KEYS-… in de testdatabase.
 
@@ -58,7 +59,7 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         });
     });
 
-    test('Inkooporder aanmaken: artikel, aantal, eenheid met pijlen, kg en opslaan met Enter', async ({ page, request }) => {
+    test('Inkooporder aanmaken: snelcode, aantal, prijs; Tab op de prijs maakt een nieuwe regel; opslaan met Enter zonder lege regel', async ({ page, request }) => {
         const article = await tourArticle(request);
         const reference = `E2E-KEYS-${randomUUID().slice(0, 8)}`;
         await page.goto('/purchase-orders/new');
@@ -73,14 +74,32 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await page.locator('[data-tour="supply-expected"]').press('Enter');
         await expect(page.locator('[data-tour="supply-expected"]')).toHaveValue('04-11-2026');
 
-        await keyboardLine(page, 'lines[0]', 'expectedQuantity', 'expectedUnit', article, '7');
+        // Nieuwe indeling: artikel, aantal, prijs; eenheid en kg komen uit het artikel en worden overgeslagen.
+        await page.locator('[id="lines[0].productVariantId-input"]').focus();
+        await page.keyboard.type(article.shortcutCode!);
+        await page.waitForTimeout(200);
+        await page.keyboard.press('Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[0].expectedQuantity-input');
+        await page.keyboard.type('7');
+        await page.keyboard.press('Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
+        await page.keyboard.type('12');
+        await page.keyboard.press('Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[1].productVariantId-input');
+        await expect(page.locator('[id="lines[0].unitPrice-input"]')).toHaveValue('12,00');
+        await expect(page.locator('[data-testid="line-totals-amount"]')).toHaveText(/^84,00/);
+        // Terug naar de prijs en Enter: opslaan; de lege tweede regel telt niet mee.
+        await page.keyboard.press('Shift+Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
         await page.keyboard.press('Enter');
         await expect(page.getByText(/IO-\d{4}-\d{4}/).first()).toBeVisible({ timeout: 30_000 });
 
         const saved = await request.get(`${API}/purchase-orders?query=${reference}`);
-        const orders = ((await saved.json()) as { items: { supplierReference: string; expectedQuantity: number }[] }).items.filter((order) => order.supplierReference === reference);
+        const orders = ((await saved.json()) as { items: { id: number; supplierReference: string; expectedQuantity: number }[] }).items.filter((order) => order.supplierReference === reference);
         expect(orders).toHaveLength(1);
         expect(orders[0].expectedQuantity).toBe(7);
+        const detail = (await (await request.get(`${API}/purchase-orders/${orders[0].id}`)).json()) as { lines: { unitPrice: number; lineTotal: number; expectedUnit?: string; unit: string }[] };
+        expect(detail.lines.map((line) => [line.unitPrice, line.lineTotal, line.unit])).toEqual([[12, 84, article.packagingUnit]]);
     });
 
     test('Nieuwe verkooporder: artikel, aantal, eenheid met pijlen, kg en opslaan met Enter', async ({ page, request }) => {

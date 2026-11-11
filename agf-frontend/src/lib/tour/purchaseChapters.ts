@@ -12,7 +12,8 @@ const order = (id: string, route: string, actions: readonly TourAction[]) => ste
 // Leverancier en artikel van de rondleiding, als ze er nog niet zijn.
 export const MASTER_FOR_PURCHASE: TourStep[] = [...prerequisite(VENDOR_STEPS, 'mv', '{{needVendor}}'), ...prerequisite(ARTICLE_STEPS, 'ma', '{{needArticle}}')];
 
-// De inkooporder zelf: leverancier, partij, referentie en datum, één regel met Tab door artikel, aantal, eenheid en kg, en opslaan.
+// De inkooporder zelf: leverancier, partij, referentie en datum, één regel met Tab door artikel, aantal en prijs (eenheid, kg, merk,
+// land, maat en inhoud komen uit het artikel), de knop Bruto aanpassen en de totalen onder de kolommen, en opslaan.
 export const ORDER_CORE: TourStep[] = [
     order('open', '/purchase-orders/new', [
         { kind: 'lookup', run: lookupPurchase },
@@ -37,8 +38,9 @@ export const ORDER_CORE: TourStep[] = [
         { kind: 'pick', target: 'supply-line-product-0', text: '{{productCode}}' },
         { kind: 'assert', target: 'supply-expected', value: '{{expectedDateFull}}' },
         { kind: 'type', target: 'supply-line-quantity:0', text: '{{quantity}}' },
-        { kind: 'select', target: 'supply-line-unit:0', value: '{{productUnit}}' },
-        { kind: 'highlight', target: 'supply-line-kg:0' },
+        { kind: 'type', target: 'supply-line-price:0', text: '12,50' },
+        { kind: 'highlight', target: 'supply-line-gross-adjust:0' },
+        { kind: 'highlight', target: 'supply-line-totals' },
     ]),
     order('save', '/purchase-orders/new', [
         { kind: 'click', target: 'supply-save' },

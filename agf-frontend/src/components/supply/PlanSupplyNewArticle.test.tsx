@@ -88,7 +88,6 @@ describe('PlanSupplyForm: new article on a supply line', () => {
         await type(field('vendorId-input'), 'supb');
         await enter(field('vendorId-input'));
         await type(field('expectedAt-input'), '2026-11-02');
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type(field('lines[0].expectedQuantity-input'), '10');
         await submit();
         await mounted.waitFor(() => posted.length === 2, 'supply POST');
