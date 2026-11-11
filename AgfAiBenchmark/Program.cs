@@ -94,7 +94,11 @@ public static class Cli
         {
             var path = Path.Combine(truthDir, Path.GetFileNameWithoutExtension(doc) + ".json");
             if (!File.Exists(path)) { notes.Add($"{Path.GetFileName(doc)}: geen juiste antwoorden, telt alleen mee in kosten, tijd en oneens.md."); continue; }
-            try { truths[Path.GetFileName(doc)] = JsonNode.Parse(File.ReadAllText(path))!.AsObject(); }
+            try
+            {
+                if (JsonNode.Parse(File.ReadAllText(path)) is not JsonObject obj) { notes.Add($"{Path.GetFileName(path)}: geen JSON-object, overgeslagen."); continue; }
+                truths[Path.GetFileName(doc)] = obj;
+            }
             catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException) { notes.Add($"{Path.GetFileName(path)}: geen geldige JSON ({e.Message}), overgeslagen."); }
         }
         return truths;

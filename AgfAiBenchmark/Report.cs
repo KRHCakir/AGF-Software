@@ -29,7 +29,7 @@ public static class Report
         var evaluations = Evaluate(results, truths);
         var md = Markdown(models, results, evaluations, notes);
         File.WriteAllText(Path.Combine(outDir, "overzicht.md"), md);
-        File.WriteAllText(Path.Combine(outDir, "overzicht.csv"), SummaryCsv(models, evaluations));
+        File.WriteAllText(Path.Combine(outDir, "overzicht.csv"), SummaryCsv(models, results, evaluations));
         File.WriteAllText(Path.Combine(outDir, "per-document.csv"), DocumentCsv(results, evaluations));
         File.WriteAllText(Path.Combine(outDir, "oneens.md"), Disagreements(models, results, truths));
         var run = new { datum = DateTimeOffset.Now, instructie = AgfDocumentAi.ExtractionSchema.PromptHash, modellen = models };
@@ -106,21 +106,32 @@ public static class Report
         sb.AppendLine();
     }
 
-    private static string SummaryCsv(IReadOnlyList<ModelSettings> models, List<Evaluation> evaluations)
+    private static string SummaryCsv(IReadOnlyList<ModelSettings> models, List<RawResult> results, List<Evaluation> evaluations)
     {
-        var sb = new StringBuilder("model,dimensie,waarde,goed,totaal,percentage\n");
+        var inv = CultureInfo.InvariantCulture;
+        // De verbruikskolommen (documenten t/m aanroepen) zijn alleen gevuld op de regel met dimensie "totaal".
+        var sb = new StringBuilder("model,dimensie,waarde,goed,totaal,percentage,documenten,geldig,input_tokens,output_tokens,kosten_usd,seconden,seconden_per_document,aanroepen\n");
         foreach (var m in models)
         {
             var own = evaluations.Where(e => e.Result.Model == m.Id).ToList();
+            var ownResults = results.Where(r => r.Model == m.Id).ToList();
             var groups = own.SelectMany(e => e.Scores.SelectMany(s => new[] { ("totaal", "alles", s), ("groep", s.Group, s), ("veld", s.Field, s), ("bron", e.Source, s), ("taal", e.Language, s) }));
+            var wroteTotal = false;
             foreach (var g in groups.GroupBy(x => (x.Item1, x.Item2)))
             {
                 var correct = g.Count(x => x.s.Correct);
-                sb.AppendLine(string.Join(',', m.Id, g.Key.Item1, g.Key.Item2, correct, g.Count(), (100.0 * correct / g.Count()).ToString("0.0", CultureInfo.InvariantCulture)));
+                var isTotal = g.Key.Item1 == "totaal";
+                wroteTotal |= isTotal;
+                sb.AppendLine(string.Join(',', m.Id, g.Key.Item1, g.Key.Item2, correct, g.Count(), (100.0 * correct / g.Count()).ToString("0.0", inv)) + (isTotal ? "," + Usage(ownResults, inv) : ",,,,,,,"));
             }
+            // Model zonder beoordeelde velden: kosten en tijd horen er toch in.
+            if (!wroteTotal && ownResults.Count > 0) sb.AppendLine(string.Join(',', m.Id, "totaal", "alles", 0, 0, "") + "," + Usage(ownResults, inv));
         }
         return sb.ToString();
     }
+
+    private static string Usage(List<RawResult> own, CultureInfo inv) => string.Join(',', own.Count, own.Count(r => r.Status == Status.Ok), own.Sum(r => (long)r.InputTokens), own.Sum(r => (long)r.OutputTokens),
+        own.Sum(r => r.CostUsd).ToString(inv), own.Sum(r => r.Seconds).ToString(inv), own.Average(r => r.Seconds).ToString(inv), own.Sum(r => (long)r.Calls));
 
     private static string DocumentCsv(List<RawResult> results, List<Evaluation> evaluations)
     {
