@@ -20,6 +20,7 @@ import type { Article, ArticleReference } from '../../../types/article';
 import type { CountryReference } from '../../../types/country';
 import OriginSettings from '../../../components/articles/OriginSettings';
 import SizeClassCleanup from '../../../components/articles/SizeClassCleanup';
+import PackagingArticles from '../../../components/articles/PackagingArticles';
 import { listRowClass, rowClick } from '../../../lib/listRows';
 
 interface Loaded { articles: Article[]; reference: ArticleReference; countries: CountryReference }
@@ -35,6 +36,9 @@ export default function ArticlesPage() {
     const [showArchived, setShowArchived] = useState(false);
     const [emptyProductsToken, setEmptyProductsToken] = useState(0);
     const [editing, setEditing] = useState<{ article: Article | null; key: number } | null>(null);
+    // Tab Goederen (artikelen met voorraad) of Emballage (pallets, kratten: geen voorraad); /articles?soort=emballage opent Emballage.
+    const [tab, setTab] = useState<'goods' | 'packaging'>('goods');
+    useEffect(() => { if (new URLSearchParams(window.location.search).get('soort') === 'emballage') setTab('packaging'); }, []);
     const searchInput = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -62,7 +66,7 @@ export default function ArticlesPage() {
     const shown = useMemo(() => (state.status === 'ready' ? searchArticles(visibleArticles(state.data.articles, showArchived), query) : []), [state, query, showArchived]);
     const archivedCount = state.status === 'ready' ? state.data.articles.filter((article) => article.isArchived).length : 0;
 
-    const openNew = () => setEditing({ article: null, key: Date.now() });
+    const openNew = () => { setTab('goods'); setEditing({ article: null, key: Date.now() }); };
     // Nog geen enkel artikel (ook geen gearchiveerd): schone start, de eerste stap is een nieuw artikel.
     const nothingYet = state.status === 'ready' && state.data.articles.length === 0;
 
@@ -127,9 +131,18 @@ export default function ArticlesPage() {
                 </div>
             </div>
 
-            {state.status === 'loading' && <LoadingRows label={t('articles_loading')} />}
-            {state.status === 'error' && <ErrorState error={state.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-            {state.status === 'ready' && (
+            <div role="tablist" aria-label={t('articles_kind_tabs')} className="flex gap-1 border-b border-gray-200 text-sm">
+                {(['goods', 'packaging'] as const).map((kind) => (
+                    <button key={kind} type="button" role="tab" aria-selected={tab === kind} data-tour={`articles-tab-${kind}`} onClick={() => setTab(kind)}
+                        className={`-mb-px border-b-2 px-3 py-1.5 font-medium ${tab === kind ? 'border-blue-700 text-blue-800' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+                        {t(kind === 'goods' ? 'articles_tab_goods' : 'articles_tab_packaging')}
+                    </button>
+                ))}
+            </div>
+            {tab === 'packaging' && <PackagingArticles />}
+            {tab === 'goods' && state.status === 'loading' && <LoadingRows label={t('articles_loading')} />}
+            {tab === 'goods' && state.status === 'error' && <ErrorState error={state.error} onRetry={() => setReloadToken((n) => n + 1)} />}
+            {tab === 'goods' && state.status === 'ready' && (
                 <>
                     {editing !== null && (
                         <ArticleForm key={editing.key} article={editing.article} reference={state.data.reference} countries={state.data.countries} onSaved={onSaved} onClose={() => setEditing(null)} />

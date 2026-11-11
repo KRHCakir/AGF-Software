@@ -7,12 +7,12 @@ import type { ProductOption } from '../types/referenceData';
 export const STANDARD_COST_ARTICLES = ['Handling', 'Transport', 'QC', 'Zeevracht', 'Afval', 'Overig'] as const;
 export const MAX_COST_ARTICLE_NAME_LENGTH = 100;
 
-// Eén groep "Kosten" in de artikelkeuze, alleen met actieve kostenartikelen; null als er geen zijn.
-export function costArticleGroup(articles: CostArticle[], groupName: string): ProductOption | null {
+// Eén groep in de artikelkeuze ("Kosten", of "Emballage" met groupId -2), alleen met actieve kostenartikelen; null als er geen zijn.
+export function costArticleGroup(articles: CostArticle[], groupName: string, groupId = -1): ProductOption | null {
     const active = articles.filter((article) => article.isActive);
     if (active.length === 0) return null;
     return {
-        id: -1,
+        id: groupId,
         name: groupName,
         variants: active.map((article) => ({
             id: -article.id, name: article.name, origin: null, packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: null,

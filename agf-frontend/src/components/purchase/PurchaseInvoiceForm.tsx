@@ -77,8 +77,10 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
 
     const vendor = useMemo(() => vendors.find((candidate) => String(candidate.id) === draft.header.vendorId) ?? null, [vendors, draft.header.vendorId]);
     const pickerProducts = useMemo(() => {
-        const group = costArticleGroup(costArticles, t('cost_articles_group'));
-        return group === null ? products : [...products, group];
+        // Kosten en emballage (pallets, kratten die een leverancier in rekening brengt) als twee groepen; beide zijn een kostenregel.
+        const groups = [costArticleGroup(costArticles.filter((article) => article.kind !== 'Packaging'), t('cost_articles_group')),
+            costArticleGroup(costArticles.filter((article) => article.kind === 'Packaging'), t('packaging_group'), -2)];
+        return [...products, ...groups.filter((group) => group !== null)];
     }, [products, costArticles, t]);
     const totals = useMemo(() => draftTotals(draft.lines), [draft.lines]);
     const locked = submitting || pending !== null;
@@ -435,7 +437,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                                 updateLine(line.key, { productVariantId: variantId, costArticleId: '', description: variant ? `${variant.product.name} · ${variant.variant.name}` : '', ...unit });
                                             }}
                                             onFreeText={(text) => { if (line.productVariantId === '' && !line.costArticleId && text !== line.description) updateLine(line.key, { description: text }); }} />
-                                        {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t('cost_article_line_hint')}</span>}
+                                        {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t(costArticles.find((article) => String(article.id) === line.costArticleId)?.kind === 'Packaging' ? 'packaging_line_hint' : 'cost_article_line_hint')}</span>}
                                         <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`) ?? e(`${prefix}.costArticleId`)} />
                                     </td>
                                     <td className="w-24 px-2 py-1.5">
