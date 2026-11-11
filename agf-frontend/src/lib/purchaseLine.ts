@@ -18,7 +18,12 @@ export function pallets(quantity: number | null, perPallet: number | null): numb
     return quantity === null || perPallet === null || perPallet <= 0 ? null : quantity / perPallet;
 }
 
-// Pallets altijd op twee decimalen (0,40; 2,08), in de notatie van de schermtaal.
+// Pallets altijd op twee decimalen (0,40; 2,08), in de notatie van de schermtaal. Tot en met 1 enkelvoud ("0,40 pallet"), daarboven
+// meervoud ("2,08 pallets"): de vertaalsleutel kiest palletWordKey.
+export function palletWordKey(value: number): 'po_line_pallets' | 'po_line_pallets_many' {
+    return value > 1 ? 'po_line_pallets_many' : 'po_line_pallets';
+}
+
 export function formatPallets(value: number, locale: string): string {
     return new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
@@ -45,13 +50,16 @@ export interface PurchaseLineTotals {
 
 // Totalen onder de regels; kg, bedrag en pallets alleen van de regels die ze hebben (de rest wordt apart geteld).
 export function sumLines(lines: readonly PurchaseLineAmounts[]): PurchaseLineTotals {
-    const sum = (pick: (line: PurchaseLineAmounts) => number | null, digits: number) => {
+    const raw = (pick: (line: PurchaseLineAmounts) => number | null) => {
         const values = lines.map(pick).filter((value): value is number => value !== null);
-        if (values.length === 0) return null;
-        const factor = 10 ** digits;
-        return Math.round(values.reduce((total, value) => total + value, 0) * factor) / factor;
+        return values.length === 0 ? null : values.reduce((total, value) => total + value, 0);
     };
-    const exactPallets = sum((line) => line.pallets, 6);
+    const sum = (pick: (line: PurchaseLineAmounts) => number | null, digits: number) => {
+        const value = raw(pick);
+        return value === null ? null : Math.round(value * 10 ** digits) / 10 ** digits;
+    };
+    // Pallets: de exacte som van de regels, één keer afgerond op twee decimalen (geen tussenafronding).
+    const exactPallets = raw((line) => line.pallets);
     return {
         quantity: sum((line) => line.quantity, 3) ?? 0,
         netKg: sum((line) => line.netKg, 3),

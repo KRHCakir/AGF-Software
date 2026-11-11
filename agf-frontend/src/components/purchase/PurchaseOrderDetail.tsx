@@ -17,7 +17,7 @@ import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
 import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from './PurchaseLineTable';
 import { unitLabelKey } from '../../lib/units';
-import { formatPallets } from '../../lib/purchaseLine';
+import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import type { PackageUnit } from '../../types/availability';
 
 const section = sectionClass;
@@ -124,7 +124,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                 <td {...lineCell('quantity', labels.quantity)}>
                                     <span>
                                         {qty(line.expectedQuantity)} {line.unit && <span className="text-xs text-gray-700">{t(unitLabelKey(line.unit as PackageUnit)).toLowerCase()}</span>}
-                                        {line.pallets != null && <span className="block text-xs text-gray-600">{t('po_line_pallets', { pallets: formatPallets(line.pallets, locale) })}</span>}
+                                        {line.pallets != null && <span className="block text-xs text-gray-600">{t(palletWordKey(line.pallets), { pallets: formatPallets(line.pallets, locale) })}</span>}
                                     </span>
                                 </td>
                                 <td {...lineCell('packaging', labels.packaging)}>{line.packaging || '–'}</td>

@@ -1750,6 +1750,7 @@
   "po_line_lines_without_price": "{count} regel(s) zonder prijs",
   "po_line_gross_deviates": "Afwijkend van het artikel",
   "po_line_pallets": "= {pallets} pallet",
+  "po_line_pallets_many": "= {pallets} pallets",
   "po_line_ordered": "Besteld {quantity}",
   "po_line_received": "ontvangen {quantity}",
   "po_line_rejected": "afgekeurd {quantity}",
