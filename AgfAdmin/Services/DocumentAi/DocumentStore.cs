@@ -14,12 +14,22 @@ namespace AgfAdmin.Services.DocumentAi
     {
         public async Task<string> SaveAsync(byte[] bytes, string extension, CancellationToken cancellationToken)
         {
+            // De extensie komt van ons zelf (.pdf, .jpg, .png, .heic); toch nooit een padscheidingsteken in de naam.
+            if (!System.Text.RegularExpressions.Regex.IsMatch(extension ?? "", @"^\.[a-z0-9]{1,8}$")) throw new ArgumentException("Invalid document extension.", nameof(extension));
             var key = $"{DateTime.UtcNow:yyyy-MM}/{Guid.NewGuid():N}{extension}";
             var path = PathOf(key);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+            // CreateNew faalt als het bestand al bestaat: dan blijft dat bestand staan. Alleen een bestand dat deze aanroep zelf aanmaakte en
+            // niet helemaal kon schrijven, wordt weer weggehaald.
+            var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+            try
             {
-                await stream.WriteAsync(bytes, cancellationToken);
+                await using (stream) await stream.WriteAsync(bytes, cancellationToken);
+            }
+            catch
+            {
+                try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                throw;
             }
             return key;
         }
@@ -35,8 +45,9 @@ namespace AgfAdmin.Services.DocumentAi
         // Een sleutel komt altijd van ons zelf; toch nooit buiten de map.
         private string PathOf(string key)
         {
-            var full = Path.GetFullPath(Path.Combine(root, key));
-            if (!full.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw new InvalidOperationException("Invalid document key.");
+            var baseDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            var full = Path.GetFullPath(Path.Combine(baseDir, key));
+            if (!full.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw new InvalidOperationException("Invalid document key.");
             return full;
         }
     }

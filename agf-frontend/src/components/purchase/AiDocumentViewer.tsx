@@ -18,9 +18,14 @@ export default function AiDocumentViewer({ extraction }: { extraction: AiExtract
     useEffect(() => {
         const controller = new AbortController();
         let objectUrl: string | null = null;
+        setUrl(null);
         setFailed(false);
         getAiDocument(extraction.id, controller.signal)
-            .then((blob) => { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); })
+            .then((blob) => {
+                if (controller.signal.aborted) return;
+                objectUrl = URL.createObjectURL(blob);
+                setUrl(objectUrl);
+            })
             .catch(() => { if (!controller.signal.aborted) setFailed(true); });
         return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
     }, [extraction.id]);

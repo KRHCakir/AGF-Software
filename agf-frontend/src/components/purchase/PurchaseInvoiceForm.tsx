@@ -40,6 +40,8 @@ import type { AiExtraction } from '../../types/aiReading';
 // Goedkeuren en gaat via hetzelfde opslagpad, met de lezing erbij.
 export interface AiReview {
     extraction: AiExtraction;
+    // De formulierregel per regel van het voorstel (zie StoredAiReview); een nieuwe of gedupliceerde regel heeft geen AI-gegevens.
+    lineKeys: string[];
     linkOrderId: number | null;
     onLinkOrder: (orderId: number | null) => void;
     onReject: () => void;
@@ -100,8 +102,15 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     }, [products, costArticles, t]);
     const totals = useMemo(() => draftTotals(draft.lines), [draft.lines]);
     const aiProblems = useMemo(() => problemsByField(ai?.extraction ?? null), [ai?.extraction]);
-    const aiCost = (index: number) => ai?.extraction.matches?.lineCostArticles.find((cost) => cost.index === index) ?? null;
+    const aiCost = (aiIndex: number) => (aiIndex < 0 ? null : ai?.extraction.matches?.lineCostArticles.find((cost) => cost.index === aiIndex) ?? null);
     const locked = submitting || pending !== null;
+    // Een andere leverancier kiezen haalt een orderkoppeling van een andere leverancier weg; terug naar de leverancier van de order
+    // betekent opnieuw aanvinken.
+    const chooseVendor = (chosen: PurchaseVendor | null) => {
+        update(selectVendor(draft, chosen, settings));
+        const linked = ai?.extraction.matches?.orderCandidates.find((order) => order.id === ai.linkOrderId) ?? null;
+        if (ai && linked !== null && linked.vendorId !== chosen?.id) ai.onLinkOrder(null);
+    };
     const dirty = result === null && (draft.header.vendorId !== '' || draft.header.invoiceNumber.trim() !== '' || draft.lines.some((line) => !isBlankLine(line)));
 
     // Concept bewaren bij elke wijziging; na succesvol opslaan is er geen concept meer.
@@ -191,7 +200,9 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 return;
             }
             const requestId = newRequestId();
-            const aiPart = ai === null ? {} : { aiExtractionId: ai.extraction.id, linkPurchaseOrderId: ai.linkOrderId };
+            // De orderkoppeling gaat alleen mee als de order bij de gekozen leverancier hoort (de banner haalt hem anders al weg).
+            const linkedOrder = ai?.extraction.matches?.orderCandidates.find((order) => order.id === ai.linkOrderId) ?? null;
+            const aiPart = ai === null ? {} : { aiExtractionId: ai.extraction.id, linkPurchaseOrderId: linkedOrder !== null && String(linkedOrder.vendorId) === draft.header.vendorId ? linkedOrder.id : null };
             command = { requestId, payload: { requestId, ...built.value, ...aiPart }, mode, attempts: 0, lastError: null, frozenAt: new Date().toISOString() };
             savePending(command);
             setPending(command);
@@ -346,7 +357,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             {e('lines') && <FieldError id="lines" messages={e('lines')} />}
             {ai !== null && (
                 <AiReviewBanner extraction={ai.extraction} vendorId={draft.header.vendorId} linkOrderId={ai.linkOrderId} onLinkOrder={ai.onLinkOrder}
-                    onVendor={(id) => update(selectVendor(draft, vendors.find((candidate) => candidate.id === id) ?? null, settings))} />
+                    onVendor={(id) => chooseVendor(vendors.find((candidate) => candidate.id === id) ?? null)} />
             )}
 
             {/* Documentkop */}
@@ -356,7 +367,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('purchase_vendor')} *</label>
                     <VendorPicker id="vendorId" dataTour="pinvoice-vendor" ariaLabel={t('purchase_vendor')} vendors={vendors} value={draft.header.vendorId} disabled={locked} invalid={!!e('vendorId')}
                         describedBy={e('vendorId') ? 'vendorId' : undefined} inputRef={(element) => { vendorInput.current = element; }}
-                        badge={vendorTermsBadge} onChange={(chosen) => update(selectVendor(draft, chosen, settings))} />
+                        badge={vendorTermsBadge} onChange={(chosen) => chooseVendor(chosen)} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
                     <AiFieldHint codes={aiProblems.vendorId} />
                     {/* Betalen naar een niet-bevestigde rekening is het risico: duidelijk tonen, niet blokkeren (de factuur zelf mag erin). */}
@@ -456,10 +467,15 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <tbody className="divide-y divide-gray-100">
                         {draft.lines.map((line, index) => {
                             const prefix = `lines[${index}]`;
+                            // Markeringen en voorstellen van de AI horen bij de oorspronkelijke regel van het voorstel, niet bij de plek in het formulier.
+                            const aiIndex = ai === null ? -1 : ai.lineKeys.indexOf(line.key);
+                            const aiPrefix = `lines[${aiIndex}]`;
+                            const aiLine = (field: string) => (aiIndex < 0 ? undefined : aiProblems[`${aiPrefix}.${field}`]);
+                            const suggestedCost = aiCost(aiIndex);
                             const amounts = lineAmounts(line);
                             return (
                                 <tr key={line.key} data-line-key={line.key} className="align-top" onKeyDown={(event) => onLineKeyDown(event, line)} onFocusCapture={() => setActiveLine(line.key)}>
-                                    <td className={`w-80 px-2 py-1.5 ${aiFieldClass(aiProblems[`${prefix}.item`])}`}>
+                                    <td className={`w-80 px-2 py-1.5 ${aiFieldClass(aiLine('item'))}`}>
                                         <ProductVariantPicker id={`${prefix}.item`} dataTour={`pinvoice-line-item-${index}`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={pickerProducts} value={itemValue(line)}
                                             allowFreeText freeText={line.description} disabled={locked} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`) || !!e(`${prefix}.costArticleId`)}
                                             describedBy={e(`${prefix}.description`) ? `${prefix}.description` : undefined}
@@ -480,45 +496,45 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                             onFreeText={(text) => { if (line.productVariantId === '' && !line.costArticleId && text !== line.description) updateLine(line.key, { description: text }); }} />
                                         {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t(costArticles.find((article) => String(article.id) === line.costArticleId)?.kind === 'Packaging' ? 'packaging_line_hint' : 'cost_article_line_hint')}</span>}
                                         <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`) ?? e(`${prefix}.costArticleId`)} />
-                                        <AiFieldHint codes={aiProblems[`${prefix}.item`]} />
+                                        <AiFieldHint codes={aiLine('item')} />
                                         {/* Voorstel van een kostenartikel: nooit automatisch, de gebruiker neemt het over. */}
-                                        {aiCost(index) && !line.costArticleId && line.productVariantId === '' && (
+                                        {suggestedCost && !line.costArticleId && line.productVariantId === '' && (
                                             <span className="block text-xs text-blue-900" data-testid={`${prefix}.ai-cost`}>
-                                                {t('ai_cost_suggestion', { name: aiCost(index)!.name })}{' '}
-                                                <button type="button" tabIndex={-1} className="font-medium underline" onClick={() => updateLine(line.key, { costArticleId: String(aiCost(index)!.costArticleId) })}>{t('ai_cost_take')}</button>
+                                                {t('ai_cost_suggestion', { name: suggestedCost.name })}{' '}
+                                                <button type="button" tabIndex={-1} className="font-medium underline" onClick={() => updateLine(line.key, { costArticleId: String(suggestedCost.costArticleId) })}>{t('ai_cost_take')}</button>
                                             </span>
                                         )}
                                     </td>
-                                    <td className={`w-24 px-2 py-1.5 ${aiFieldClass(aiProblems[`${prefix}.quantity`])}`}>
+                                    <td className={`w-24 px-2 py-1.5 ${aiFieldClass(aiLine('quantity'))}`}>
                                         <label htmlFor={`${prefix}.quantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.quantity`, e(`${prefix}.quantity`))} data-tour="pinvoice-line-quantity" data-tour-key={index} inputMode="decimal" value={line.quantity} disabled={locked} onChange={(event) => updateLine(line.key, { quantity: event.target.value })} className={inputClass} />
                                         <NumberEcho value={line.quantity} unit={line.unit === '' ? undefined : t(unitLabelKey(line.unit)).toLowerCase()} testId={`${prefix}.quantity-echo`} />
                                         <FieldError id={`${prefix}.quantity`} messages={e(`${prefix}.quantity`)} />
-                                        <AiFieldHint codes={aiProblems[`${prefix}.quantity`]} />
+                                        <AiFieldHint codes={aiLine('quantity')} />
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
                                         <UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked} emptyLabel="–" className="mt-1 w-full"
                                             onChange={(unit) => updateLine(line.key, { unit })} />
                                     </td>
-                                    <td className={`w-28 px-2 py-1.5 ${aiFieldClass(aiProblems[`${prefix}.unitPrice`])}`}>
+                                    <td className={`w-28 px-2 py-1.5 ${aiFieldClass(aiLine('unitPrice'))}`}>
                                         <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('purchase_col_price')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.unitPrice`, e(`${prefix}.unitPrice`))} data-tour="pinvoice-line-price" data-tour-key={index} inputMode="decimal" value={line.unitPrice} disabled={locked} onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.unitPrice`} messages={e(`${prefix}.unitPrice`)} />
-                                        <AiFieldHint codes={aiProblems[`${prefix}.unitPrice`]} />
+                                        <AiFieldHint codes={aiLine('unitPrice')} />
                                     </td>
                                     <td className="w-20 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.discountPercentage-input`} className="sr-only">{t('purchase_col_discount')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.discountPercentage`, e(`${prefix}.discountPercentage`))} inputMode="decimal" value={line.discount} disabled={locked} onChange={(event) => updateLine(line.key, { discount: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.discountPercentage`} messages={e(`${prefix}.discountPercentage`)} />
                                     </td>
-                                    <td className={`w-20 px-2 py-1.5 ${aiFieldClass(aiProblems[`${prefix}.vatPercentage`])}`}>
+                                    <td className={`w-20 px-2 py-1.5 ${aiFieldClass(aiLine('vatPercentage'))}`}>
                                         <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{t('purchase_col_vat')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} inputMode="decimal" value={line.vat} disabled={locked} onChange={(event) => updateLine(line.key, { vat: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.vatPercentage`} messages={e(`${prefix}.vatPercentage`)} />
                                     </td>
-                                    <td className={`w-28 px-2 py-1.5 text-right font-mono ${aiFieldClass(aiProblems[`${prefix}.amount`])}`} data-testid={`${prefix}.amount`} data-tour="pinvoice-line-amount" data-tour-key={index}>
+                                    <td className={`w-28 px-2 py-1.5 text-right font-mono ${aiFieldClass(aiLine('amount'))}`} data-testid={`${prefix}.amount`} data-tour="pinvoice-line-amount" data-tour-key={index}>
                                         {amounts === null ? <span className="text-gray-400">–</span> : <>{money(amounts.net)}<span className="block text-xs text-gray-500">{t('purchase_vat_short')} {money(amounts.vat)}</span></>}
-                                        <AiFieldHint codes={aiProblems[`${prefix}.amount`]} />
+                                        <AiFieldHint codes={aiLine('amount')} />
                                     </td>
                                     <td className="whitespace-nowrap px-2 py-1.5">
                                         <button type="button" tabIndex={-1} onClick={() => duplicateLine(line.key)} disabled={locked} title={`${t('purchase_line_duplicate')} (${shortcutLabel('duplicateLine', isMac)})`} aria-label={`${t('purchase_line_duplicate')} ${index + 1}`} className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-40">⧉</button>

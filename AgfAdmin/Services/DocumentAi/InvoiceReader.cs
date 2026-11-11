@@ -28,6 +28,8 @@ namespace AgfAdmin.Services.DocumentAi
             {
                 if (Demo) return null;
                 if (string.IsNullOrWhiteSpace(Key)) return "Er is geen sleutel voor de AI-dienst ingesteld (DocumentAi:ApiKey of ANTHROPIC_API_KEY).";
+                if (string.IsNullOrWhiteSpace(_options.PrimaryModel) || (_options.FallbackEnabled && string.IsNullOrWhiteSpace(_options.FallbackModel)))
+                    return "Het model of het vangnetmodel ontbreekt in de instellingen (DocumentAi:PrimaryModel, DocumentAi:FallbackModel).";
                 var models = new[] { _options.PrimaryModel }.Concat(_options.FallbackEnabled ? new[] { _options.FallbackModel } : Array.Empty<string>());
                 var missing = models.FirstOrDefault(m => !_options.Models.ContainsKey(m ?? ""));
                 return missing == null ? null : $"De prijs van model {missing} ontbreekt in de instellingen (DocumentAi:Models).";
@@ -94,8 +96,12 @@ namespace AgfAdmin.Services.DocumentAi
             var watch = Stopwatch.StartNew();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _options.TimeoutSeconds)));
-            void Record(string version, long input, long output, string outcome) => attempts.Add(new ReadAttempt(model, version, input, output,
-                price.InputPerMillionUsd, price.OutputPerMillionUsd, price.CheckedOn, AiReadingRules.CostUsd(price, input, output), (int)watch.ElapsedMilliseconds, outcome));
+            // De prijzen die echt golden (boven de staffel de hogere), zodat de kosten uit de vastgelegde prijzen na te rekenen zijn.
+            void Record(string version, long input, long output, string outcome)
+            {
+                var (inputPrice, outputPrice) = AiReadingRules.Rates(price, input);
+                attempts.Add(new ReadAttempt(model, version, input, output, inputPrice, outputPrice, price.CheckedOn, AiReadingRules.CostUsd(price, input, output), (int)watch.ElapsedMilliseconds, outcome));
+            }
             try
             {
                 var response = await factory.Create(model).ExtractAsync(document, instruction, timeout.Token);

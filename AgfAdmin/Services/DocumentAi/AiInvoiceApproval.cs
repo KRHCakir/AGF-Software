@@ -23,13 +23,13 @@ namespace AgfAdmin.Services.DocumentAi
                 if (request.LinkPurchaseOrderId != null) ValidationErrors.Add(errors, "linkPurchaseOrderId", "A purchase order is linked only when approving an AI proposal.");
                 return null;
             }
-            var extraction = await db.AiExtractions.SingleOrDefaultAsync(e => e.Id == request.AiExtractionId, cancellationToken);
+            var extraction = await db.AiExtractions.AsNoTracking().SingleOrDefaultAsync(e => e.Id == request.AiExtractionId, cancellationToken);
             if (extraction == null)
             {
                 ValidationErrors.Add(errors, "aiExtractionId", $"AI reading {request.AiExtractionId} does not exist.");
                 return null;
             }
-            if (extraction.Status != AiReadingRules.StatusProposed || extraction.FileDeletedAt != null)
+            if (extraction.Status != AiReadingRules.StatusProposed || extraction.FileDeletedAt != null || string.IsNullOrEmpty(extraction.ProposalJson))
             {
                 ValidationErrors.Add(errors, "aiExtractionId", $"AI reading {extraction.Id} is {extraction.Status.ToLowerInvariant()}; only an open proposal can be approved.");
                 return null;
@@ -48,33 +48,50 @@ namespace AgfAdmin.Services.DocumentAi
             return new Prepared(extraction, order, Adjustments(proposal, matches, request, vendor?.Name));
         }
 
-        public async Task ApplyAsync(Prepared prepared, IncomingInvoice invoice, decimal net, string actor, CancellationToken cancellationToken)
+        private Task<bool> InvoiceRefExistsAsync(int orderId, string key, CancellationToken cancellationToken) =>
+            db.SupplyCommitmentInvoiceRefs.AsNoTracking().AnyAsync(r => r.SupplyCommitmentId == orderId && r.Kind == PurchaseOrderRules.KindInvoice && r.InvoiceNumberKey == key, cancellationToken);
+
+        // Claimt de lezing atomair (UPDATE ... WHERE Status = 'Proposed') nadat de factuur is opgeslagen (nog binnen de transactie). Geeft een
+        // foutmelding terug als de lezing intussen al is goedgekeurd/gesloten: de aanroeper
+        // rolt dan de hele transactie terug, dus er blijft geen factuur of bijlage achter.
+        public async Task<string> ApplyAsync(Prepared prepared, IncomingInvoice invoice, decimal net, string actor, CancellationToken cancellationToken)
         {
             var now = DateTime.UtcNow;
             var extraction = prepared.Extraction;
-            extraction.Status = AiReadingRules.StatusApproved;
-            extraction.ApprovedBy = actor;
-            extraction.ApprovedAt = now;
-            extraction.IncomingInvoice = invoice;
-            extraction.ApprovedValuesJson = invoice.RequestPayload;
-            extraction.AdjustmentsJson = JsonSerializer.Serialize(prepared.Adjustments, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var adjustments = JsonSerializer.Serialize(prepared.Adjustments, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var claimed = await db.AiExtractions.Where(e => e.Id == extraction.Id && e.Status == AiReadingRules.StatusProposed && e.FileDeletedAt == null)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(e => e.Status, AiReadingRules.StatusApproved)
+                    .SetProperty(e => e.ApprovedBy, actor)
+                    .SetProperty(e => e.ApprovedAt, now)
+                    .SetProperty(e => e.IncomingInvoiceId, invoice.Id)
+                    .SetProperty(e => e.ApprovedValuesJson, invoice.RequestPayload)
+                    .SetProperty(e => e.AdjustmentsJson, adjustments), cancellationToken);
+            if (claimed == 0)
+            {
+                return $"AI reading {extraction.Id} has already been approved or closed; only an open proposal can be approved.";
+            }
             db.DocumentAttachments.Add(new DocumentAttachment
             {
-                IncomingInvoice = invoice, FileName = extraction.FileName, MediaType = extraction.MediaType, SizeBytes = extraction.SizeBytes, Sha256 = extraction.Sha256,
-                StorageKey = extraction.StorageKey, Source = "AiUpload", AiExtraction = extraction, CreatedBy = actor, CreatedAt = now,
+                IncomingInvoiceId = invoice.Id, FileName = extraction.FileName, MediaType = extraction.MediaType, SizeBytes = extraction.SizeBytes, Sha256 = extraction.Sha256,
+                StorageKey = extraction.StorageKey, Source = "AiUpload", AiExtractionId = extraction.Id, CreatedBy = actor, CreatedAt = now,
             });
-            if (prepared.Order == null) return;
-            var key = PurchaseOrderRules.InvoiceNumberKey(invoice.InvoiceNumber);
-            if (await db.SupplyCommitmentInvoiceRefs.AnyAsync(r => r.SupplyCommitmentId == prepared.Order.Id && r.Kind == PurchaseOrderRules.KindInvoice && r.InvoiceNumberKey == key, cancellationToken))
+            if (prepared.Order != null)
             {
-                return;
+                var key = PurchaseOrderRules.InvoiceNumberKey(invoice.InvoiceNumber);
+                // Staat het nummer al op de order (bijvoorbeeld via "Factuur ontvangen"), dan is die referentie de koppeling en voegen we geen tweede toe
+                // (append-only en uniek per order en nummer); de goedkeuring en de orderkeuze blijven vastgelegd in de goedgekeurde waarden.
+                if (!await InvoiceRefExistsAsync(prepared.Order.Id, key, cancellationToken))
+                {
+                    db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef
+                    {
+                        RequestId = Guid.NewGuid(), SupplyCommitmentId = prepared.Order.Id, Kind = PurchaseOrderRules.KindInvoice, InvoiceNumber = invoice.InvoiceNumber, InvoiceNumberKey = key,
+                        InvoiceDate = invoice.InvoiceDate == null ? null : DateOnly.FromDateTime(invoice.InvoiceDate.Value), AmountExclVat = net, IncomingInvoiceId = invoice.Id,
+                        ActorReference = actor, CreatedAt = now,
+                    });
+                }
             }
-            db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef
-            {
-                RequestId = Guid.NewGuid(), SupplyCommitmentId = prepared.Order.Id, Kind = PurchaseOrderRules.KindInvoice, InvoiceNumber = invoice.InvoiceNumber, InvoiceNumberKey = key,
-                InvoiceDate = invoice.InvoiceDate == null ? null : DateOnly.FromDateTime(invoice.InvoiceDate.Value), AmountExclVat = net, IncomingInvoice = invoice,
-                ActorReference = actor, CreatedAt = now,
-            });
+            return null;
         }
 
         // Wat de AI voorstelde tegenover wat de gebruiker goedkeurde, per veld dat verschilt (regels op volgorde).

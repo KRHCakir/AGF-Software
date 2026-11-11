@@ -14,22 +14,32 @@ import { secondaryButtonClass } from '../supply/SuccessPanel';
 const ACCEPT = '.pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/jpeg,image/png,image/heic,image/heif';
 const ALLOWED = /\.(pdf|jpe?g|png|heic|heif)$/i;
 
-export default function AiUploadPanel({ onProposal, beforeUpload }: {
+export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply }: {
     onProposal: (extraction: AiExtraction) => void;
     // Vraagt de gebruiker of het huidige concept vervangen mag worden; false = niet uploaden.
     beforeUpload?: () => boolean;
+    // Na het lezen, vlak voor het toepassen: het formulier kan tijdens het lezen zijn aangepast. Vraag opnieuw (of weiger) als dat zo is;
+    // false = het voorstel niet toepassen.
+    beforeApply?: () => boolean;
 }) {
     const { t } = useTranslation();
     const [status, setStatus] = useState<AiReadingStatus | null>(null);
     const [reading, setReading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [statusFailed, setStatusFailed] = useState(false);
+    const [statusAttempt, setStatusAttempt] = useState(0);
     const input = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         const controller = new AbortController();
-        getAiReadingStatus(controller.signal).then(setStatus).catch(() => setStatus(null));
+        setStatusFailed(false);
+        getAiReadingStatus(controller.signal).then(setStatus).catch(() => {
+            if (controller.signal.aborted) return;
+            setStatus(null);
+            setStatusFailed(true);
+        });
         return () => controller.abort();
-    }, []);
+    }, [statusAttempt]);
 
     const available = status !== null && status.enabled && status.configured && !status.limitReached;
     const reason = status === null ? null : !status.enabled ? t('ai_off') : !status.configured ? t('ai_not_configured', { reason: status.notConfiguredReason ?? '' })
@@ -45,7 +55,8 @@ export default function AiUploadPanel({ onProposal, beforeUpload }: {
         setError(null);
         setReading(true);
         try {
-            onProposal(await readInvoiceDocument(file));
+            const extraction = await readInvoiceDocument(file);
+            if (!beforeApply || beforeApply()) onProposal(extraction);
         } catch (caught) {
             setError(aiErrorCode(toApiError(caught)));
         } finally {
@@ -65,6 +76,12 @@ export default function AiUploadPanel({ onProposal, beforeUpload }: {
                 {reading && status && <span role="status" className="font-medium text-blue-900" data-testid="ai-reading">{t('ai_reading', { model: status.primaryModel.name })}</span>}
                 {!reading && available && status && (
                     <span className="text-gray-700">{t('ai_upload_hint', { model: status.primaryModel.name, fallback: status.fallbackModel?.name ?? '–' })}</span>
+                )}
+                {statusFailed && (
+                    <span role="alert" className="text-amber-950" data-testid="ai-status-failed">
+                        {t('ai_status_failed')}{' '}
+                        <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={() => setStatusAttempt((n) => n + 1)}>{t('ai_status_retry')}</button>
+                    </span>
                 )}
                 {!reading && reason && (
                     <span className="text-gray-800" data-testid="ai-unavailable">

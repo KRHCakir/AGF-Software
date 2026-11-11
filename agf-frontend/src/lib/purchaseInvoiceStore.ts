@@ -12,7 +12,9 @@ export const EXTRA_OPEN_KEY = 'agf_purchase_invoice_extra_open';
 // Een openstaand AI-voorstel (de lezing en de bevestigde order), zodat verversen het tweedelige scherm niet sluit.
 export const AI_REVIEW_KEY = 'agf_purchase_invoice_ai_review';
 
-export interface StoredAiReview { extraction: AiExtraction; linkOrderId: number | null }
+// lineKeys: de sleutel van de formulierregel per regel van het voorstel (zelfde volgorde). Zo blijven gele markeringen en een voorgesteld
+// kostenartikel bij hun eigen regel, ook als de gebruiker regels verwijdert, dupliceert of toevoegt.
+export interface StoredAiReview { extraction: AiExtraction; linkOrderId: number | null; lineKeys: string[] }
 
 export interface PendingSave {
     requestId: string;
@@ -93,7 +95,8 @@ export function parseAiReview(raw: string | null): StoredAiReview | null {
         const value: unknown = JSON.parse(raw);
         if (!isRecord(value) || !isRecord(value.extraction) || typeof value.extraction.id !== 'number' || !isString(value.extraction.displayMediaType)
             || !Array.isArray(value.extraction.problems) || !(value.linkOrderId === null || typeof value.linkOrderId === 'number')) return null;
-        return value as unknown as StoredAiReview;
+        const lineKeys = Array.isArray(value.lineKeys) ? value.lineKeys.filter(isString) : [];
+        return { ...(value as unknown as StoredAiReview), lineKeys };
     } catch {
         return null;
     }

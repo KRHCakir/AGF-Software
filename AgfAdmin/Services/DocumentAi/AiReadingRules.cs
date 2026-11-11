@@ -127,11 +127,15 @@ namespace AgfAdmin.Services.DocumentAi
         // Kosten van één verzoek in dollars; boven de staffel gelden de hogere prijzen voor het hele verzoek.
         public static decimal CostUsd(DocumentAiModelPrice price, long inputTokens, long outputTokens)
         {
-            var tier = price.TierAboveInputTokens is long above && inputTokens > above && price.TierInputPerMillionUsd != null && price.TierOutputPerMillionUsd != null;
-            var input = tier ? price.TierInputPerMillionUsd.Value : price.InputPerMillionUsd;
-            var output = tier ? price.TierOutputPerMillionUsd.Value : price.OutputPerMillionUsd;
+            var (input, output) = Rates(price, inputTokens);
             return decimal.Round((inputTokens * input + outputTokens * output) / 1_000_000m, 6, MidpointRounding.AwayFromZero);
         }
+
+        // De prijzen per miljoen tokens die voor dit verzoek gelden.
+        public static (decimal Input, decimal Output) Rates(DocumentAiModelPrice price, long inputTokens) =>
+            price.TierAboveInputTokens is long above && inputTokens > above && price.TierInputPerMillionUsd != null && price.TierOutputPerMillionUsd != null
+                ? (price.TierInputPerMillionUsd.Value, price.TierOutputPerMillionUsd.Value)
+                : (price.InputPerMillionUsd, price.OutputPerMillionUsd);
 
         public static decimal ToEur(decimal usd, decimal eurPerUsd) => decimal.Round(usd * eurPerUsd, 6, MidpointRounding.AwayFromZero);
 

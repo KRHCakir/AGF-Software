@@ -21,7 +21,9 @@ export default function AiReviewBanner({ extraction, vendorId, onVendor, linkOrd
     const proposal = extraction.proposal;
     const matches = extraction.matches;
     const money = (value: number | null) => (value === null ? '–' : formatMoney(value, null, locale));
-    const suggestedOrder = matches?.orderCandidates.find((order) => order.id === matches.suggestedOrderId) ?? null;
+    // De voorgestelde order hoort bij één leverancier: staat er een andere leverancier, dan is er geen voorstel. De koppeling zelf haalt het
+    // formulier weg bij een leverancierswissel (een gebruikersactie, niet bij elke weergave: het concept kan nog onderweg zijn).
+    const suggestedOrder = matches?.orderCandidates.find((order) => order.id === matches.suggestedOrderId && String(order.vendorId) === vendorId) ?? null;
     const duplicate = matches?.duplicateInvoice && vendorId === String(matches.suggestedVendorId) ? matches.duplicateInvoice : null;
 
     return (

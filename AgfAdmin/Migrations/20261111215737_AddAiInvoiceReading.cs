@@ -92,7 +92,7 @@ namespace AgfAdmin.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AiExtractions", x => x.Id);
-                    table.CheckConstraint("CK_AiExtractions_Approved_Complete", "(\"Status\" = 'Approved') = (\"IncomingInvoiceId\" IS NOT NULL AND \"ApprovedBy\" IS NOT NULL AND \"ApprovedAt\" IS NOT NULL)");
+                    table.CheckConstraint("CK_AiExtractions_Approved_Complete", "(\"Status\" = 'Approved' AND \"IncomingInvoiceId\" IS NOT NULL AND \"ApprovedBy\" IS NOT NULL AND \"ApprovedAt\" IS NOT NULL) OR (\"Status\" <> 'Approved' AND \"IncomingInvoiceId\" IS NULL AND \"ApprovedBy\" IS NULL AND \"ApprovedAt\" IS NULL)");
                     table.CheckConstraint("CK_AiExtractions_Costs_NotNegative", "CAST(\"CostUsd\" AS NUMERIC) >= 0 AND CAST(\"CostEur\" AS NUMERIC) >= 0 AND \"InputTokens\" >= 0 AND \"OutputTokens\" >= 0");
                     table.CheckConstraint("CK_AiExtractions_Status_Allowed", "\"Status\" IN ('Proposed', 'Approved', 'Rejected', 'Manual', 'Failed')");
                     table.ForeignKey(

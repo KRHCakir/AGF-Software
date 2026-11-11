@@ -181,6 +181,27 @@ public class AiInvoiceApprovalTests : IDisposable
     }
 
     [Fact]
+    public async Task Approving_with_an_order_whose_invoice_number_was_already_received_adds_no_second_reference()
+    {
+        var vendor = await VendorAsync("Zuid Import", iban: "NL91ABNA0417164300");
+        var order = await OrderAsync(vendor, "45-21");
+        await using (var db = _factory.CreateContext())
+        {
+            var received = await new PurchaseOrderService(db, _user).AddInvoiceRefAsync(order, new AddPurchaseOrderInvoiceRefDto { RequestId = Guid.NewGuid(), Kind = "Invoice", InvoiceNumber = "f-2026-118" });
+            Assert.True(received.Status is ServiceResultStatus.Created or ServiceResultStatus.Ok);
+        }
+        var extraction = await ProposeAsync();
+        var saved = await SaveAsync(Approve(extraction, vendor, order));
+        Assert.Equal(ServiceResultStatus.Created, saved.Status);
+
+        await using var check = _factory.CreateContext();
+        var reference = await check.SupplyCommitmentInvoiceRefs.AsNoTracking().SingleAsync();
+        Assert.Equal(order, reference.SupplyCommitmentId);
+        Assert.Equal(AiReadingRules.StatusApproved, (await check.AiExtractions.AsNoTracking().SingleAsync()).Status);
+        Assert.Single(check.IncomingInvoices);
+    }
+
+    [Fact]
     public async Task What_the_user_changed_before_approving_is_recorded_as_proposal_and_final_value()
     {
         var vendor = await VendorAsync("Zuid Import", iban: "NL91ABNA0417164300");

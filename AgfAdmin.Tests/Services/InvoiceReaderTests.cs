@@ -126,13 +126,15 @@ public class InvoiceReaderTests
     [InlineData(UploadedDocuments.Unsupported)]
     [InlineData(UploadedDocuments.Encrypted)]
     [InlineData(UploadedDocuments.Unreadable)]
-    public void Unusable_files_are_explained(string expected)
+    [InlineData(UploadedDocuments.Unreadable, true)]
+    public void Unusable_files_are_explained(string expected, bool unreadablePdf = false)
     {
         var bytes = expected switch
         {
             UploadedDocuments.Empty => Array.Empty<byte>(),
             UploadedDocuments.TooLarge => Pdf.Concat(new byte[1_000]).ToArray(),
             UploadedDocuments.Unsupported => Encoding.UTF8.GetBytes("Factuur F-1 als platte tekst"),
+            UploadedDocuments.Unreadable when unreadablePdf => Encoding.ASCII.GetBytes("%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\n"),
             UploadedDocuments.Encrypted => Encoding.ASCII.GetBytes("%PDF-1.7\ntrailer << /Encrypt 5 0 R >>\n%%EOF"),
             _ => new byte[] { 0xFF, 0xD8, 0xFF, 0x00, 0x01, 0x02 },
         };

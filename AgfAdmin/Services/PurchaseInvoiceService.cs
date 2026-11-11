@@ -453,7 +453,16 @@ namespace AgfAdmin.Services
                     _db.IncomingInvoices.Add(candidate);
                     if (approval != null)
                     {
-                        await new AiInvoiceApproval(_db).ApplyAsync(approval, candidate, totals.Net, _user?.Actor(PurchaseOrderRules.MaxActorLength) ?? CurrentUserExtensions.UnknownActor, cancellationToken);
+                        // Eerst de factuur opslaan, dan de lezing atomair claimen; verliest dit verzoek, dan rolt de transactie alles terug.
+                        await _db.SaveChangesAsync(cancellationToken);
+                        var claimError = await new AiInvoiceApproval(_db).ApplyAsync(approval, candidate, totals.Net, _user?.Actor(PurchaseOrderRules.MaxActorLength) ?? CurrentUserExtensions.UnknownActor, cancellationToken);
+                        if (claimError != null)
+                        {
+                            await transaction.RollbackAsync(cancellationToken);
+                            _db.ChangeTracker.Clear();
+                            outcome = ServiceResult<PurchaseInvoiceDto>.Conflict(claimError);
+                            return;
+                        }
                     }
                     await _db.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
