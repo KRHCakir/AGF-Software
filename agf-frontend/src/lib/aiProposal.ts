@@ -30,7 +30,7 @@ export function draftFromProposal(extraction: AiExtraction, settings: PurchaseIn
         // Een prijs met meer dan twee decimalen blijft zichtbaar zoals gelezen; opslaan vraagt dan om afronden.
         unitPrice: line.unitPrice === null ? '' : Number.isInteger(Math.round(line.unitPrice * 10000) / 100) ? formatAmountInput(line.unitPrice) : formatDecimalInput(line.unitPrice, 4),
         discount: '0',
-        vat: line.vatPercentage === null ? '' :formatDecimalInput(line.vatPercentage, 2),
+        vat: line.vatPercentage === null ? '' : formatDecimalInput(line.vatPercentage, 2),
     }));
     return { ...draft, lines: lines.length === 0 ? draft.lines : lines };
 }
