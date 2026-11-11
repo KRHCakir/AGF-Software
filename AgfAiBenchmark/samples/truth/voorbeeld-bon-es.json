@@ -7,8 +7,8 @@
   "datum": "2026-11-06",
   "valuta": null,
   "regels": [
-    { "omschrijving": "Limon Primofiori calibre 3", "aantal": 80, "eenheid": "caja", "kg_netto": 800, "kg_bruto": 848, "prijs": null, "bedrag": null, "btw_percentage": null },
-    { "omschrijving": "Naranja Navel calibre 5", "aantal": 60, "eenheid": "caja", "kg_netto": 900, "kg_bruto": 954, "prijs": null, "bedrag": null, "btw_percentage": null }
+    { "omschrijving": "Limon Primofiori calibre 3", "aantal": 80, "eenheid": "cajas", "kg_netto": 800, "kg_bruto": 848, "prijs": null, "bedrag": null, "btw_percentage": null },
+    { "omschrijving": "Naranja Navel calibre 5", "aantal": 60, "eenheid": "cajas", "kg_netto": 900, "kg_bruto": 954, "prijs": null, "bedrag": null, "btw_percentage": null }
   ],
   "totaal_excl": null,
   "btw_totaal": null,

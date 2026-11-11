@@ -119,6 +119,7 @@ De prijzen zijn per miljoen tokens, gecontroleerd op 11 november 2026. Ze staan 
 | `claude-sonnet` | Anthropic `claude-sonnet-5-5` | $2,00 / $10,00 | Anthropic, VS |
 | `claude-haiku` | Anthropic `claude-haiku-5-5` | $0,10 / $0,50 (boven 100K invoertokens $0,50 / $2,50) | Anthropic, VS |
 | `gemini-flash` | Google `gemini-3.8-flash` | $0,75 / $3,75 (vanaf 1-1-2027 $1,50 / $7,50) | Google |
+| `gemini-flash-3.6` | Google `gemini-3.6-flash` (vorige Flash, voor als 3.8 overbelast is) | $0,75 / $3,75 (vanaf 1-1-2027 $1,50 / $7,50) | Google |
 | `qwen-vl` | Alibaba `qwen3-vl-plus`, Singapore | $0,20 / $1,60 (tot 32K invoertokens) | Alibaba, alleen opt-in |
 
 Qwen kan ook in Frankfurt (EU) draaien, met een eigen werkruimte en een eigen sleutel. Zet dan `basisUrl` in `models.json` op `https://<werkruimte-id>.eu-central-1.maas.aliyuncs.com/compatible-mode/v1`.
