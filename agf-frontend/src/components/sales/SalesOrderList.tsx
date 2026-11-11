@@ -94,7 +94,8 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                 <td className="px-2 py-1.5 align-top">
                                     {/* Groen alleen als alles gereserveerd is én niets on hold staat; volledig gereserveerd met on hold is een waarschuwing. */}
                                     <span className={`block text-xs font-medium ${progress.fulfilled ? 'text-emerald-800' : progress.ready ? 'text-green-800' : progress.complete && progress.onHoldCount > 0 ? 'text-red-800' : progress.complete ? 'text-violet-900' : 'text-gray-800'}`}>
-                                        {progress.fulfilled
+                                        {order.lines.length === 0 && (order.packagingLines?.length ?? 0) > 0 ? t('packaging_only')
+                                            : progress.fulfilled
                                             ? (order.delivered ? t('sales_order_delivered') : t('sales_order_shipped_not_confirmed'))
                                             : <>{t('sales_lines_complete', { done: String(progress.linesComplete), total: String(progress.linesTotal) })}
                                                 {progress.partiallyDispatched && <> · {t('sales_lines_fulfilled', { done: String(progress.linesFulfilled), total: String(progress.linesTotal) })}</>}
@@ -112,6 +113,9 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                                 {/* Netto kg van de regel (berekend of ingevuld), zoals "221 colli · 2.210,0 kg". */}
                                                 {line.netWeightKg != null && <span className="text-gray-800" data-testid="list-line-kg">· {formatKgOneDecimal(line.netWeightKg, locale)}</span>}
                                             </li>
+                                        ))}
+                                        {(order.packagingLines ?? []).map((line) => (
+                                            <li key={`p${line.id}`} className="text-gray-600" data-testid="list-packaging-line">{line.name} · {t('packaging_pieces', { count: String(line.quantity) })}</li>
                                         ))}
                                     </ul>
                                     {progress.onHoldCount > 0 && <span className="mt-1 block"><OnHoldBadge /></span>}

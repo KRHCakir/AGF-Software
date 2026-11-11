@@ -37,6 +37,11 @@ export const SALES_CORE: TourStep[] = [
         { kind: 'type', target: 'sales-line-quantity:0', text: '{{salesQuantity}}' },
         { kind: 'highlight', target: 'sales-line-kg:0' },
     ]),
+    // Emballage: een pallet bij de goederen, met het voorstel uit de regels; doet niets met de voorraad en komt later op de factuur.
+    sales('packaging', [
+        { kind: 'click', target: 'sales-add-pallet' },
+        { kind: 'highlight', target: 'sales-packaging-line:0' },
+    ]),
     sales('save', [
         { kind: 'click', target: 'sales-save' },
         { kind: 'wait', target: 'sales-saved-number' },

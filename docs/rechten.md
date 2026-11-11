@@ -30,8 +30,8 @@ Elk gebied is een constante in `AgfAdmin/Security/Permissions.cs`. Het is ook ee
 | `Inkoop` | inkooporders, aanvoer (`supply-commitments`), inkoopfacturen (ook kosten verdelen en de ECB-koers, `/api/exchange-rates`), inkomende facturen, afwijkingen bij ontvangst |
 | `Voorraad` | beschikbaarheid, pallets en ontvangst, voorraad (oud) |
 | `Keuring` | goedkeuren, blokkeren, afkeuren en vrijgeven (`pallets/{id}/content-lines/{lineId}/quality-status`). Daarnaast is ook `Voorraad` nodig, omdat dat het beleid van de hele pallet-controller is. |
-| `Verkoop` | verkooporders, reserveringen, verzendingen, klanten, verkoop en facturen (oud), rapporten (oud) |
-| `Stamgegevens` | artikelen, producten, landen, relaties, betalingscondities. **Lezen mag iedereen**, want deze lijsten staan in elk formulier. Wijzigen vraagt `Stamgegevens`. |
+| `Verkoop` | verkooporders (ook de emballageregels erop), reserveringen, verzendingen, klanten, verkoop en facturen (oud), rapporten (oud) |
+| `Stamgegevens` | artikelen, emballage-artikelen (`/api/packaging-articles`), producten, landen, relaties, betalingscondities. **Lezen mag iedereen**, want deze lijsten staan in elk formulier. Wijzigen vraagt `Stamgegevens`. |
 | `Beheer` | instellingen. **Lezen mag iedereen** (standaarden in formulieren). Wijzigen vraagt `Beheer`. |
 | `Inkoop` of `Voorraad` | partijen (`/api/partijen`): lezen, aanmaken, nummer corrigeren, verwijderen en een inkooporder koppelen. Eén van beide gebieden is genoeg: de inkoper maakt de partij bij de order, de loods bij de ontvangst. De partijnummering instellen staat bij de instellingen (`Beheer`). |
 | `Verkoopcijfers` | gevoelige verkoopgegevens; zie hieronder. Staat nog op geen enkel endpoint. |

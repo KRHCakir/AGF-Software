@@ -2471,5 +2471,8 @@
   "packaging_used": "{count}× gebruikt",
   "articles_kind_tabs": "Soort artikel",
   "articles_tab_goods": "Goederen",
-  "articles_tab_packaging": "Emballage"
+  "articles_tab_packaging": "Emballage",
+  "tour_sales_packaging_title": "Pallet erbij",
+  "tour_sales_packaging_what": "Met Pallet toevoegen komt er een regel Pallet wegwerp onder de goederen. Het aantal is een voorstel uit de pallets van de regels; je past het zelf aan.",
+  "tour_sales_packaging_why": "Emballage staat met aantal en prijs op de order, zodat hij later op de factuur komt. Het doet niets met de voorraad: je reserveert of verzendt het niet."
 }
