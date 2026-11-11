@@ -112,6 +112,12 @@ namespace AgfAdmin.Services.DocumentAi
             await ReadLock.WaitAsync(cancellationToken);
             try
             {
+                // Instellingen opnieuw uit de database: een beheerder kan AI hebben uitgezet of de limiet verlaagd terwijl we wachtten.
+                await db.Entry(settings).ReloadAsync(cancellationToken);
+                if (!settings.AiReadingEnabled)
+                {
+                    return Refused(CodeOff, "AI-lezen staat niet aan. Een beheerder kan het aanzetten bij Instellingen; handmatig invoeren werkt gewoon.");
+                }
                 if (await MonthSpentEurAsync(cancellationToken) >= settings.AiReadingMonthlyLimitEur)
                 {
                     return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({settings.AiReadingMonthlyLimitEur:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
@@ -168,7 +174,9 @@ namespace AgfAdmin.Services.DocumentAi
             ReadResult result;
             try
             {
-                result = await reader.ReadAsync(document.ForAi, settings.CompanyName, cancellationToken);
+                // Bewust los van de clientverbinding: een gestarte lezing rondt af (elke poging heeft een eigen time-out), zodat de
+                // gemaakte kosten altijd worden vastgelegd en niet buiten de maandtelling vallen.
+                result = await reader.ReadAsync(document.ForAi, settings.CompanyName, CancellationToken.None);
             }
             catch
             {
@@ -261,8 +269,17 @@ namespace AgfAdmin.Services.DocumentAi
                 var claimed = await db.AiExtractions.Where(e => e.Id == candidate.Id && e.Status != AiReadingRules.StatusApproved && e.FileDeletedAt == null)
                     .ExecuteUpdateAsync(s => s.SetProperty(e => e.FileDeletedAt, now), cancellationToken);
                 if (claimed == 0) continue;
-                store.Delete(candidate.StorageKey);
-                if (candidate.DisplayStorageKey != null) store.Delete(candidate.DisplayStorageKey);
+                try
+                {
+                    store.Delete(candidate.StorageKey);
+                    if (candidate.DisplayStorageKey != null) store.Delete(candidate.DisplayStorageKey);
+                }
+                catch
+                {
+                    // Verwijderen mislukt: claim terugdraaien zodat de volgende ronde het opnieuw probeert (Delete is herhaalbaar).
+                    await db.AiExtractions.Where(e => e.Id == candidate.Id).ExecuteUpdateAsync(s => s.SetProperty(e => e.FileDeletedAt, (DateTime?)null), CancellationToken.None);
+                    continue;
+                }
                 removed++;
             }
             return removed;
