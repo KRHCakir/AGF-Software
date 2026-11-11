@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgfDocumentAi", "AgfDocumen
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgfAiBenchmark.Tests", "AgfAiBenchmark.Tests\AgfAiBenchmark.Tests.csproj", "{BF32942F-4865-480A-9BCD-DCB191E007FA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgfAiBenchmark", "AgfAiBenchmark\AgfAiBenchmark.csproj", "{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{BF32942F-4865-480A-9BCD-DCB191E007FA}.Release|x64.Build.0 = Release|Any CPU
 		{BF32942F-4865-480A-9BCD-DCB191E007FA}.Release|x86.ActiveCfg = Release|Any CPU
 		{BF32942F-4865-480A-9BCD-DCB191E007FA}.Release|x86.Build.0 = Release|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Debug|x64.Build.0 = Debug|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Debug|x86.Build.0 = Debug|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Release|x64.ActiveCfg = Release|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Release|x64.Build.0 = Release|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Release|x86.ActiveCfg = Release|Any CPU
+		{5E86CAF2-05F9-47A5-BE57-D7C38E2B9BD0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

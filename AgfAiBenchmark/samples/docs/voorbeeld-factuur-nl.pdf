@@ -1,0 +1,56 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1181 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 790 Td
+/F1 14 Tf (Voorbeeld Fruit Zonnedal BV) Tj T*
+/F1 9 Tf (Verzonnen voorbeeld voor de AI-testbench - geen echt bedrijf) Tj T*
+/F1 10 Tf (Fruitweg 1, 9999 ZZ Nergenshuizen) Tj T*
+/F1 10 Tf () Tj T*
+/F1 12 Tf (FACTUUR) Tj T*
+/F1 10 Tf (Factuurnummer: VFZ-2026-0142) Tj T*
+/F1 10 Tf (Factuurdatum: 04-11-2026) Tj T*
+/F1 10 Tf (Uw ordernummer bij ons: ZD-88120) Tj T*
+/F1 10 Tf (Aan: AGF Testklant BV) Tj T*
+/F1 10 Tf () Tj T*
+/F1 10 Tf (Omschrijving                          Aantal  Eenheid  Netto kg  Bruto kg   Prijs     Bedrag   Btw) Tj T*
+/F1 10 Tf (Avocado Hass Peru maat 18              100     doos     400       440        12,50     1.250,00  9%) Tj T*
+/F1 10 Tf (Mango Kent Brazilie maat 9             40      doos     160       172        9,75      390,00    9%) Tj T*
+/F1 10 Tf (Transport Rotterdam - Barendrecht      1       rit                           85,00     85,00     21%) Tj T*
+/F1 10 Tf () Tj T*
+/F1 10 Tf (Totaal excl. btw:   EUR 1.725,00) Tj T*
+/F1 10 Tf (Btw 9% over 1.640,00:  147,60) Tj T*
+/F1 10 Tf (Btw 21% over 85,00:  17,85) Tj T*
+/F1 10 Tf (Totaal btw:   EUR 165,45) Tj T*
+/F1 10 Tf (Totaal incl. btw:   EUR 1.890,45) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001474 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1571
+%%EOF
