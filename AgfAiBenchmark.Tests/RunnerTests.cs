@@ -142,4 +142,18 @@ public sealed class RunnerTests : IDisposable
 
         Assert.Equal(["qwen-vl"], ModelSelection.Select(["qwen-vl"], all, keys.GetValueOrDefault, ["qwen-vl"], Create, []).Select(s => s.Settings.Id));
     }
+
+    [Fact]
+    public async Task Our_company_name_goes_into_the_instruction_and_changes_its_fingerprint_so_results_are_not_reused()
+    {
+        var doc = Doc();
+        await Run(new Scripted(Valid), doc);
+        var ai = new Scripted(Valid);
+        var runner = new Runner(Path.Combine(dir, "out"), 2, false, _ => TimeSpan.Zero, instruction: ExtractionSchema.InstructionFor("Verita BV"));
+        var result = (await runner.RunAsync([doc], [new SelectedModel(Settings(), ai)], CancellationToken.None)).Single();
+        Assert.Equal((1, 0), (ai.Calls, runner.Skipped));
+        Assert.Contains("Wij zijn Verita BV.", ai.LastInstruction);
+        Assert.NotEqual(ExtractionSchema.PromptHash, result.PromptHash);
+        Assert.Equal(ExtractionSchema.Instruction, ExtractionSchema.InstructionFor("  "));
+    }
 }

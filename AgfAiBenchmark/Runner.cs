@@ -37,8 +37,11 @@ public sealed record RawResult
 /// met wachttijd; een ongeldige uitvoer: één keer opnieuw. Een mislukt document stopt de run niet. Wat al gedraaid is voor
 /// hetzelfde model, document en dezelfde instructie wordt overgeslagen, tenzij <c>force</c>.
 /// </summary>
-public sealed class Runner(string outDir, int parallel, bool force, Func<int, TimeSpan>? backoff = null, Action<string>? log = null)
+public sealed class Runner(string outDir, int parallel, bool force, Func<int, TimeSpan>? backoff = null, Action<string>? log = null, string? instruction = null)
 {
+    private readonly string instruction = instruction ?? ExtractionSchema.Instruction;
+    public string PromptHash => ExtractionSchema.HashOf(instruction);
+
     public const int MaxTransientAttempts = 3;
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly Func<int, TimeSpan> backoff = backoff ?? (attempt => TimeSpan.FromSeconds(2 * Math.Pow(2, attempt)));
@@ -80,7 +83,7 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
         if (mediaType == null) return Failure(model, name, hash, Status.Unsupported, "Bestandstype wordt niet ondersteund.");
 
         var rawPath = RawPath(model.Settings.Id, path);
-        if (!force && await ReadCachedAsync(rawPath, cancellationToken) is { } cached && cached.DocumentHash == hash && cached.PromptHash == ExtractionSchema.PromptHash && cached.ApiModel == model.Settings.ApiModel && IsReusable(cached))
+        if (!force && await ReadCachedAsync(rawPath, cancellationToken) is { } cached && cached.DocumentHash == hash && cached.PromptHash == PromptHash && cached.ApiModel == model.Settings.ApiModel && IsReusable(cached))
         {
             lock (this) Skipped++;
             return cached;
@@ -110,10 +113,10 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
         _ => false,
     };
 
-    private static RawResult Failure(SelectedModel model, string name, string hash, string status, string error) => new()
+    private RawResult Failure(SelectedModel model, string name, string hash, string status, string error) => new()
     {
         Model = model.Settings.Id, ApiModel = model.Settings.ApiModel, Document = name, DocumentHash = hash,
-        PromptHash = ExtractionSchema.PromptHash, Status = status, Error = error, At = DateTimeOffset.Now,
+        PromptHash = this.PromptHash, Status = status, Error = error, At = DateTimeOffset.Now,
     };
 
     // Een beschadigd of half geschreven resultaat telt als niet gedraaid.
@@ -137,7 +140,7 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
             try
             {
                 calls++;
-                var response = await model.Ai.ExtractAsync(document, ExtractionSchema.Instruction, cancellationToken);
+                var response = await model.Ai.ExtractAsync(document, instruction, cancellationToken);
                 (input, output, seconds, version, text) = (input + response.InputTokens, output + response.OutputTokens, seconds + response.Duration.TotalSeconds, response.ModelVersion, response.Text);
                 cost += model.Settings.CostUsd(response.InputTokens, response.OutputTokens);
                 if (ExtractionSchema.Validate(response.Text, out error) != null) { status = Status.Ok; break; }
@@ -155,7 +158,7 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
         return new RawResult
         {
             Model = model.Settings.Id, ApiModel = model.Settings.ApiModel, ModelVersion = version, Document = document.Name, DocumentHash = hash,
-            PromptHash = ExtractionSchema.PromptHash, Status = status, Error = status == Status.Ok ? null : error, Text = text,
+            PromptHash = this.PromptHash, Status = status, Error = status == Status.Ok ? null : error, Text = text,
             InputTokens = input, OutputTokens = output, CostUsd = cost, Seconds = Math.Round(seconds, 2), Calls = calls,
             At = DateTimeOffset.Now,
         };

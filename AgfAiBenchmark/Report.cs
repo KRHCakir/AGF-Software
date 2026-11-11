@@ -23,16 +23,18 @@ public static class Report
         return new Evaluation(r, meta?["bron"]?.GetValue<string>() ?? "onbekend", meta?["taal"]?.GetValue<string>() ?? "onbekend", scores);
     })];
 
-    public static string Write(string outDir, IReadOnlyList<ModelSettings> models, List<RawResult> results, IReadOnlyDictionary<string, JsonObject> truths, IEnumerable<string> notes)
+    public static string Write(string outDir, IReadOnlyList<ModelSettings> models, List<RawResult> results, IReadOnlyDictionary<string, JsonObject> truths, IEnumerable<string> notes,
+        string? promptHash = null)
     {
+        promptHash ??= AgfDocumentAi.ExtractionSchema.PromptHash;
         Directory.CreateDirectory(outDir);
         var evaluations = Evaluate(results, truths);
-        var md = Markdown(models, results, evaluations, notes);
+        var md = Markdown(models, results, evaluations, notes, promptHash);
         File.WriteAllText(Path.Combine(outDir, "overzicht.md"), md);
         File.WriteAllText(Path.Combine(outDir, "overzicht.csv"), SummaryCsv(models, results, evaluations));
         File.WriteAllText(Path.Combine(outDir, "per-document.csv"), DocumentCsv(results, evaluations));
         File.WriteAllText(Path.Combine(outDir, "oneens.md"), Disagreements(models, results, truths));
-        var run = new { datum = DateTimeOffset.Now, instructie = AgfDocumentAi.ExtractionSchema.PromptHash, modellen = models };
+        var run = new { datum = DateTimeOffset.Now, instructie = promptHash, modellen = models };
         File.WriteAllText(Path.Combine(outDir, "run.json"), JsonSerializer.Serialize(run, new JsonSerializerOptions { WriteIndented = true }));
         return md;
     }
@@ -46,12 +48,12 @@ public static class Report
     private static string Usd(decimal value) => "$" + value.ToString("0.0000", Nl);
     private static string Sec(double value) => value.ToString("0.0", Nl) + " s";
 
-    private static string Markdown(IReadOnlyList<ModelSettings> models, List<RawResult> results, List<Evaluation> evaluations, IEnumerable<string> notes)
+    private static string Markdown(IReadOnlyList<ModelSettings> models, List<RawResult> results, List<Evaluation> evaluations, IEnumerable<string> notes, string promptHash)
     {
         var ids = models.Select(m => m.Id).ToList();
         var sb = new StringBuilder();
         sb.AppendLine("# AI-testbench: overzicht").AppendLine();
-        sb.AppendLine($"Run van {DateTimeOffset.Now:yyyy-MM-dd HH:mm}, instructie {AgfDocumentAi.ExtractionSchema.PromptHash}, {results.Select(r => r.Document).Distinct().Count()} documenten, waarvan {evaluations.Select(e => e.Result.Document).Distinct().Count()} met juiste antwoorden.").AppendLine();
+        sb.AppendLine($"Run van {DateTimeOffset.Now:yyyy-MM-dd HH:mm}, instructie {promptHash}, {results.Select(r => r.Document).Distinct().Count()} documenten, waarvan {evaluations.Select(e => e.Result.Document).Distinct().Count()} met juiste antwoorden.").AppendLine();
         foreach (var note in notes) sb.AppendLine($"- {note}");
         sb.AppendLine().AppendLine("## Modellen").AppendLine();
         Table(sb, ["Model", "API-model", "Gemelde versie", "Prijs in / uit per 1M", "Prijs gecontroleerd", "Verwerking"], models.Select(m => new[]

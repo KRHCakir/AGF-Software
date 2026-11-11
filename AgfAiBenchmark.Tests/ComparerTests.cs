@@ -100,4 +100,14 @@ public class ComparerTests
         Assert.Equal(Outcome.Ontbreekt, Field(scores, "regels[0].aantal").Outcome);
         Assert.True(Field(scores, "regels[1].aantal") is { Outcome: Outcome.Fout, HighCertainty: true });
     }
+
+    [Fact]
+    public void A_description_is_right_when_every_word_of_the_answer_is_in_it_even_with_an_article_code_after_it()
+    {
+        var truth = Obj("""{"regels":[{"omschrijving":"Tomaten trostomaat 6+ kist 6 kg"},{"omschrijving":"Aubergine 5 kg"}]}""");
+        var output = Obj("""{"regels":[{"omschrijving":"Tomaten trostomaat 6+ kist 6 kg [TOM-TRS]"},{"omschrijving":"Aubergine [AUB-005]"}]}""");
+        var scores = Comparer.Compare(truth, output);
+        Assert.Equal(Outcome.Goed, Field(scores, "regels[0].omschrijving").Outcome);
+        Assert.Equal(Outcome.Fout, Field(scores, "regels[1].omschrijving").Outcome);
+    }
 }

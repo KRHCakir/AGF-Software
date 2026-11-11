@@ -39,8 +39,9 @@ public static class ExtractionSchema
         (pakbon, weegbon, ontvangstbon, kassabon) of iets anders. Geef uitsluitend JSON volgens het schema.
         - Neem waarden over zoals ze in het document staan. Verzin niets: wat je niet ziet of niet zeker kunt lezen is null.
         - soort: inkoopfactuur als wij (de ontvanger) moeten betalen, verkoopfactuur als wij de uitgever zijn, bon of overig.
-        - leverancier: het bedrijf dat het document uitgeeft. ordernummer_leverancier: hun order- of referentienummer.
-          factuurnummer: het factuurnummer, bij een bon het bonnummer.
+        - leverancier: het bedrijf dat het document uitgeeft. factuurnummer: het factuurnummer, bij een bon het bonnummer.
+        - ordernummer_leverancier: het bestel- of ordernummer waarmee deze levering bekend is, ook als het "uw referentie",
+          "your PO" of "Ihre Bestellung" heet; anders het ordernummer van de leverancier; staat er geen, dan null.
         - datum: de factuurdatum (anders de documentdatum) als JJJJ-MM-DD. valuta: ISO-code zoals EUR of USD.
         - Getallen als JSON-getal met een punt als decimaalteken, zonder valutateken en zonder duizendtallen.
         - regels: elke artikel- of kostenregel (ook transport, handling, emballage), in de volgorde van het document;
@@ -79,8 +80,14 @@ public static class ExtractionSchema
     }
 
     /// <summary>Vingerafdruk van instructie plus schema: een run wordt alleen overgeslagen als die gelijk is gebleven.</summary>
-    public static string PromptHash { get; } =
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Instruction + Build().ToJsonString()))).ToLowerInvariant()[..12];
+    public static string PromptHash { get; } = HashOf(Instruction);
+
+    public static string HashOf(string instruction) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(instruction + Build().ToJsonString()))).ToLowerInvariant()[..12];
+
+    /// <summary>De instructie met de naam van ons bedrijf erbij, zodat het model inkoop en verkoop kan onderscheiden.</summary>
+    public static string InstructionFor(string? ourCompany) => string.IsNullOrWhiteSpace(ourCompany) ? Instruction : Instruction +
+        $"- Wij zijn {ourCompany.Trim()}. Een document dat wij ontvangen en moeten betalen is een inkoopfactuur; een document dat wij uitgeven is een verkoopfactuur; wij zijn nooit de leverancier van een inkoopfactuur.\n";
 
     /// <summary>Controleert de uitvoer van een model. Een ongeldige uitvoer telt als fout (de runner probeert één keer opnieuw).</summary>
     public static JsonObject? Validate(string text, out string? error)
