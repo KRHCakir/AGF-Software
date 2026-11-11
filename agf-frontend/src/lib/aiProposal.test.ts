@@ -33,11 +33,13 @@ describe('aiProposal', () => {
             ['3', 'F-2026-118', '2026-11-10', 'USD', '30', '2026-12-10']);
         assert.deepEqual(draft.lines.map((line) => [line.description, line.quantity, line.unit, line.unitPrice, line.vat, line.costArticleId]), [
             ['Avocado Hass 4 kg', '1.250', 'box', '12,50', '9', ''],
-            ['', '1', '', '0,1234', '9', ''],
+            ['', '1', '', '0,1234', '', ''],
         ]);
         const unknown = draftFromProposal(extraction({ matches: { ...extraction().matches!, suggestedVendorId: null } }), settings, [vendor(3)], '2026-11-12');
         assert.equal(unknown.header.vendorId, '');
         assert.equal(draftFromProposal(extraction(), settings, [vendor(3, { isActive: false })], '2026-11-12').header.vendorId, '', 'never an inactive supplier');
+        const noDate = draftFromProposal(extraction({ proposal: { ...extraction().proposal!, invoiceDate: null } }), settings, [vendor(3)], '2026-11-12');
+        assert.deepEqual([noDate.header.invoiceDate, noDate.header.dueDate], ['', ''], 'no invoice date found: left empty, not today');
         assert.deepEqual(draftFromProposal(extraction({ proposal: null }), settings, [], '2026-11-12').lines.length, 1);
     });
 
