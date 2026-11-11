@@ -63,4 +63,18 @@ public sealed class CliTests : IDisposable
         Assert.Contains("\"kg_bruto\": null", text);
         Assert.Equal(1, Cli.NewTruth("scan-01.jpg", dir, output));
     }
+
+    [Fact]
+    public async Task An_answer_file_that_is_still_the_empty_template_does_not_count()
+    {
+        Cli.NewTruth("voorbeeld-bon-es.pdf", dir, new StringWriter());
+        Assert.True(Cli.IsUnfilled(System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(dir, "voorbeeld-bon-es.json")))!.AsObject()));
+        Assert.False(Cli.IsUnfilled(System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(Samples, "truth", "voorbeeld-bon-es.json")))!.AsObject()));
+
+        var output = new StringWriter();
+        var outDir = Path.Combine(dir, "uit");
+        await Cli.MainAsync(["run", "--docs", Path.Combine(Samples, "docs"), "--truth", dir, "--out", outDir, "--models", "fake-goed"], new StringReader(""), output);
+        Assert.Contains("voorbeeld-bon-es.json: nog niet ingevuld", output.ToString() + File.ReadAllText(Path.Combine(outDir, "overzicht.md")));
+        Assert.Contains("2 documenten, waarvan 0 met juiste antwoorden", File.ReadAllText(Path.Combine(outDir, "overzicht.md")));
+    }
 }

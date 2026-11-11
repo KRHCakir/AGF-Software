@@ -103,11 +103,29 @@ public static class Cli
             try
             {
                 if (JsonNode.Parse(File.ReadAllText(path)) is not JsonObject obj) { notes.Add($"{Path.GetFileName(path)}: geen JSON-object, overgeslagen."); continue; }
+                if (IsUnfilled(obj)) { notes.Add($"{Path.GetFileName(path)}: nog niet ingevuld (alleen het lege sjabloon), telt niet mee in de score."); continue; }
                 truths[Path.GetFileName(doc)] = obj;
             }
             catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException) { notes.Add($"{Path.GetFileName(path)}: geen geldige JSON ({e.Message}), overgeslagen."); }
         }
         return truths;
+    }
+
+    /// <summary>
+    /// Een sjabloon van new-truth waarin nog niets is ingevuld (alleen soort en _meta): zo'n bestand zou elk goed gelezen veld
+    /// als "verzonnen" tellen, dus het telt niet mee.
+    /// </summary>
+    public static bool IsUnfilled(JsonObject truth)
+    {
+        static bool Empty(JsonNode? node) => node switch
+        {
+            null => true,
+            JsonObject o => o.All(p => Empty(p.Value)),
+            JsonArray a => a.All(Empty),
+            JsonValue v => v.TryGetValue(out string? text) && string.IsNullOrWhiteSpace(text),
+            _ => false,
+        };
+        return truth.Where(p => p.Key is not ("_meta" or "soort")).All(p => Empty(p.Value));
     }
 
     /// <summary>Maakt een leeg antwoordbestand in het vaste schema, om zelf in te vullen. Overschrijft nooit.</summary>

@@ -45,6 +45,7 @@ Invullen:
 - **Getallen:** mogen in nl-notatie als tekst (`"1.250,00"`) of als gewoon getal (`1250`). **Datums:** `04-11-2026` of `2026-11-04`.
 - **`regels`:** één object per artikel- of kostenregel (ook transport, handling en emballage), in de volgorde van het document. Subtotalen en btw-regels tellen niet als regel. **`prijs`** is per eenheid, **`bedrag`** het regelbedrag excl. btw.
 - Een voorbeeld staat in `AgfAiBenchmark/samples/truth/`.
+- Een bestand dat nog het lege sjabloon is, telt niet mee in de score: het programma meldt dan "nog niet ingevuld". Na het invullen draai je de run opnieuw. De modellen worden niet opnieuw aangeroepen, alleen de score wordt opnieuw berekend.
 
 ## 3. De run starten
 
