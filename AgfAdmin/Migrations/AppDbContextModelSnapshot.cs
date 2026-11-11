@@ -3440,6 +3440,10 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("ShortcutCode")
                         .HasColumnType("text");
 
+                    b.Property<string>("ShortcutKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("SizeCategory")
                         .HasColumnType("text");
 
@@ -3461,6 +3465,9 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("ProductId");
 
                     b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("ShortcutKey")
                         .IsUnique();
 
                     b.ToTable("ProductVariants", t =>
@@ -4983,6 +4990,10 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("SupplyCommitmentId")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
@@ -5004,6 +5015,8 @@ namespace AgfAdmin.Migrations
                     b.ToTable("SupplyCommitmentLines", t =>
                         {
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)");
+
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_UnitPrice_NotNegative", "\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0");
 
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_WeightSource_Consistent", "(\"WeightSource\" IS NULL AND \"ExpectedNetWeightKg\" IS NULL AND \"ExpectedGrossWeightKg\" IS NULL) OR (\"WeightSource\" IS NOT NULL AND \"WeightSource\" IN ('Calculated', 'Entered') AND (\"ExpectedNetWeightKg\" IS NOT NULL OR \"ExpectedGrossWeightKg\" IS NOT NULL))");
 

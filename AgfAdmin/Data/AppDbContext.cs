@@ -98,6 +98,7 @@ namespace AgfAdmin.Data
             EnsureOrderNumbersAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureSalesPartijenAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureInvoiceNumberKeys();
+            EnsureShortcutKeys();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
             return base.SaveChanges(acceptAllChangesOnSuccess);
@@ -110,6 +111,7 @@ namespace AgfAdmin.Data
             await EnsureOrderNumbersAsync(async: true, cancellationToken);
             await EnsureSalesPartijenAsync(async: true, cancellationToken);
             EnsureInvoiceNumberKeys();
+            EnsureShortcutKeys();
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -242,6 +244,15 @@ namespace AgfAdmin.Data
 
         private static string Truncate(string value, int max) =>
             string.IsNullOrWhiteSpace(value) ? null : value.Trim().Length <= max ? value.Trim() : value.Trim()[..max];
+
+        // Sleutel van de snelcode, ongeacht de schrijver (Artikelen, de oude productpagina, seeds): de unieke index staat erop.
+        private void EnsureShortcutKeys()
+        {
+            foreach (var entry in ChangeTracker.Entries<ProductVariant>().Where(e => e.State is EntityState.Added or EntityState.Modified))
+            {
+                entry.Entity.ShortcutKey = Services.ArticleRules.ShortcutKey(entry.Entity.ShortcutCode);
+            }
+        }
 
         // Vergelijkingssleutel van een factuurnummer, ongeacht de schrijver: getrimd en in kleine letters (PurchaseOrderRules.InvoiceNumberKey).
         private void EnsureInvoiceNumberKeys()
@@ -536,6 +547,9 @@ namespace AgfAdmin.Data
                 b.Property(v => v.IsArchived).HasDefaultValue(false);
                 b.Property(v => v.ArchivedBy).HasMaxLength(100);
                 b.HasIndex(v => v.RequestId).IsUnique();
+                // Snelcode uniek, hoofdletterongevoelig: op de genormaliseerde sleutel (EnsureShortcutKeys), ook bij gelijktijdig opslaan.
+                b.Property(v => v.ShortcutKey).HasMaxLength(64);
+                b.HasIndex(v => v.ShortcutKey).IsUnique();
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_ProductVariants_Archived_HasMoment", "NOT \"IsArchived\" OR \"ArchivedAt\" IS NOT NULL");
@@ -729,6 +743,7 @@ namespace AgfAdmin.Data
                 b.Property(l => l.LoosePackages).HasPrecision(18, 3);
                 b.Property(l => l.ExpectedGrossWeightKg).HasPrecision(18, 3);
                 b.Property(l => l.WeightSource).HasMaxLength(16);
+                b.Property(l => l.UnitPrice).HasPrecision(18, 2);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
                 b.ToTable(t =>
@@ -737,6 +752,7 @@ namespace AgfAdmin.Data
                     // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
                     t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", PalletInputCheck("ExpectedQuantity"));
                     LineWeightChecks(t, "SupplyCommitmentLines", "ExpectedNetWeightKg", "ExpectedGrossWeightKg");
+                    t.HasCheckConstraint("CK_SupplyCommitmentLines_UnitPrice_NotNegative", "\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0");
                 });
 
                 b.HasOne(l => l.SupplyCommitment)

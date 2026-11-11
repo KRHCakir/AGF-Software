@@ -77,7 +77,7 @@ namespace AgfAdmin.Data
     //    (aantal en kg), eenheid en bronregel. De herkomst van
     //    afgesplitste inhoud is onveranderlijk; afkeuringen, afkeuringsregels en factuurkoppelingen van inkooporders zijn append-only.
     //    Een afsplitsing is nooit groter dan de voorraad vóór de save, en de actieve verkoopreserveringen passen er daarna nog in.
-    // 18. afwijkende ontvangst (zie TraceabilityGuard.Deviations.cs): order, variant, eenheid en vervanging van een opgeslagen
+    // 18. afwijkende ontvangst (zie TraceabilityGuard.Deviations.cs): order, variant, eenheid, prijs en vervanging van een opgeslagen
     //    aanvoerregel liggen vast; verwacht, kg en palletweergave veranderen alleen samen met precies één nieuwe afwijking op die regel,
     //    met exact haar verlaging. Een afwijking verwijst naar een opgeslagen regel en een nieuwe vervangende regel van dezelfde order,
     //    hetzelfde artikel (product en ras) maar een andere variant, met verwacht = de ontvangen hoeveelheid, en naar de nieuwe inhoudsregel

@@ -28,6 +28,10 @@ namespace AgfAdmin.Models
         public decimal? LoosePackages { get; set; }
         public string LotNumber { get; set; } // optioneel
 
+        // Inkoopprijs per verpakking (de eenheid van de regel), excl. btw. Optioneel: een prijs kan ook pas bij afrekening komen.
+        // Vast na aanmaken (TraceabilityGuard); het regeltotaal is aantal × prijs (PurchaseLineMath), nooit opgeslagen.
+        public decimal? UnitPrice { get; set; }
+
         // Partij van de regel: bij een nieuwe order die van de kop; bij oudere regels alleen als al hun ontvangsten eenduidig bij één
         // partij horen (migratie AddPartijen). Een vervangende regel na een afwijking erft de partij van de oorspronkelijke regel.
         public int? PartijId { get; set; }

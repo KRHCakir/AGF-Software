@@ -100,6 +100,22 @@ namespace AgfAdmin.DTOs
         public List<PurchaseOrderHistoryEventDto> History { get; set; } = new();
         // Keten-strip: de verkooporders die van deze inkooporder reserveren of verzonden hebben (alleen lezen, uit de reserveringen).
         public List<PurchaseOrderSalesLinkDto> SalesOrders { get; set; } = new();
+        // Totalen onder de regels, in dezelfde kolommen (PurchaseLineMath).
+        public PurchaseOrderLineTotalsDto Totals { get; set; }
+    }
+
+    public sealed class PurchaseOrderLineTotalsDto
+    {
+        public decimal Quantity { get; set; }
+        public decimal? NetWeightKg { get; set; }
+        public decimal? GrossWeightKg { get; set; }
+        public decimal? Amount { get; set; }
+        // Som van de regels met colli per pallet, op twee decimalen (niet afgerond naar hele pallets).
+        public decimal? Pallets { get; set; }
+        public int LinesWithoutNet { get; set; }
+        public int LinesWithoutGross { get; set; }
+        public int LinesWithoutPrice { get; set; }
+        public int LinesWithoutPallets { get; set; }
     }
 
     public sealed class PurchaseOrderLineDto
@@ -112,6 +128,7 @@ namespace AgfAdmin.DTOs
         public string Origin { get; set; }
         public string Size { get; set; }
         public string Packaging { get; set; }
+        public string Brand { get; set; }
         public string LotNumber { get; set; }
         // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
         public int? PartijId { get; set; }
@@ -119,6 +136,14 @@ namespace AgfAdmin.DTOs
         public decimal ExpectedQuantity { get; set; }
         public string Unit { get; set; }
         public decimal? ExpectedNetWeightKg { get; set; }
+        public decimal? ExpectedGrossWeightKg { get; set; }
+        // Calculated = kg uit het artikel; Entered = (bruto) op de regel aangepast; null = geen kg.
+        public string WeightSource { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public decimal? LineTotal { get; set; }
+        // Colli per pallet (eigen palletinvoer van de regel, anders het artikel) en pallets op twee decimalen; null = telt niet mee.
+        public decimal? PackagesPerPallet { get; set; }
+        public decimal? Pallets { get; set; }
         // Afwijkende ontvangst: deze regel vervangt (een deel van) die regel, of is (deels) vervangen door die regels.
         public int? ReplacesLineId { get; set; }
         public List<int> ReplacedByLineIds { get; set; } = new();
