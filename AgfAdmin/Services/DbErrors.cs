@@ -25,5 +25,23 @@ namespace AgfAdmin.Services
             }
             return false;
         }
+
+        // Unieke schending op één specifieke index: PostgreSQL op constraintnaam, SQLite op "Tabel.Kolom" in de melding.
+        public static bool IsUniqueViolationOn(DbUpdateException exception, string indexName, string sqliteColumn)
+        {
+            for (var inner = exception.InnerException; inner != null; inner = inner.InnerException)
+            {
+                if (inner is Npgsql.PostgresException postgres)
+                {
+                    return postgres.SqlState == "23505" && string.Equals(postgres.ConstraintName, indexName, StringComparison.Ordinal);
+                }
+                if (inner.GetType().Name == "SqliteException")
+                {
+                    return inner.Message.Contains("UNIQUE constraint failed", StringComparison.Ordinal)
+                        && inner.Message.Contains(sqliteColumn, StringComparison.Ordinal);
+                }
+            }
+            return false;
+        }
     }
 }

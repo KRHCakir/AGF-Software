@@ -17,7 +17,7 @@ import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
 import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from './PurchaseLineTable';
 import { unitLabelKey } from '../../lib/units';
-import { formatPallets } from '../../lib/purchaseLine';
+import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import type { PackageUnit } from '../../types/availability';
 
 const section = sectionClass;
@@ -92,7 +92,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <tbody className={purchaseLineBodyClass}>
                         {order.lines.map((line, index) => (
                             <tr key={line.id} className={purchaseLineRowClass(index)}>
-                                <td {...lineCell('product', labels.product, 'max-md:block max-md:text-left max-md:before:hidden')}>
+                                <td {...lineCell('product', labels.product, '', true)}>
                                     <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                                     {line.partijNumber && line.partijNumber !== order.partijNumber
                                         ? <span className="text-gray-600"> · {t('partij_field')} <Link href={`/partijen?id=${line.partijId}`} className="font-mono text-blue-800 underline underline-offset-2">{line.partijNumber}</Link></span>
@@ -124,7 +124,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                 <td {...lineCell('quantity', labels.quantity)}>
                                     <span>
                                         {qty(line.expectedQuantity)} {line.unit && <span className="text-xs text-gray-700">{t(unitLabelKey(line.unit as PackageUnit)).toLowerCase()}</span>}
-                                        {line.pallets != null && <span className="block text-xs text-gray-600">{t('po_line_pallets', { pallets: formatPallets(line.pallets, locale) })}</span>}
+                                        {line.pallets != null && <span className="block text-xs text-gray-600">{t(palletWordKey(line.pallets), { pallets: formatPallets(line.pallets, locale) })}</span>}
                                     </span>
                                 </td>
                                 <td {...lineCell('packaging', labels.packaging)}>{line.packaging || '–'}</td>
