@@ -14,17 +14,20 @@ namespace AgfAdmin.Services.DocumentAi
     {
         public async Task<string> SaveAsync(byte[] bytes, string extension, CancellationToken cancellationToken)
         {
+            // De extensie komt van ons zelf (.pdf, .jpg, .png, .heic); toch nooit een padscheidingsteken in de naam.
+            if (!System.Text.RegularExpressions.Regex.IsMatch(extension ?? "", @"^\.[a-z0-9]{1,8}$")) throw new ArgumentException("Invalid document extension.", nameof(extension));
             var key = $"{DateTime.UtcNow:yyyy-MM}/{Guid.NewGuid():N}{extension}";
             var path = PathOf(key);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            // CreateNew faalt als het bestand al bestaat: dan blijft dat bestand staan. Alleen een bestand dat deze aanroep zelf aanmaakte en
+            // niet helemaal kon schrijven, wordt weer weggehaald.
+            var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
             try
             {
-                await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
-                await stream.WriteAsync(bytes, cancellationToken);
+                await using (stream) await stream.WriteAsync(bytes, cancellationToken);
             }
             catch
             {
-                // Geen gedeeltelijk bestand zonder sleutel laten liggen (CreateNew mislukt alleen als het bestand al bestond: GUID, praktisch onmogelijk).
                 try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 throw;
             }

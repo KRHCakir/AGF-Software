@@ -62,5 +62,6 @@ public class AiReadingSchemaTests : IDisposable
         store.Delete(first);
         Assert.False(File.Exists(Path.Combine(_root, first)));
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.ReadAsync("../buiten.pdf", default));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveAsync(new byte[] { 1 }, "/../x.pdf", default));
     }
 }
