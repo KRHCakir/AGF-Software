@@ -7,8 +7,7 @@ import type { AiExtraction } from '../../types/aiReading';
 import AiReviewBanner from './AiReviewBanner';
 import AiUploadPanel from './AiUploadPanel';
 
-// De bouwstenen van het AI-voorstel: de voorgestelde order hoort bij één leverancier (een andere leverancier haalt voorstel en koppeling
-// weg), en lukt het ophalen van de AI-status niet, dan zegt het paneel dat, met Opnieuw proberen.
+// De bouwstenen van het AI-voorstel: de voorgestelde order hoort bij één leverancier (bij een andere leverancier is er geen voorstel), en lukt het ophalen van de AI-status niet, dan zegt het paneel dat, met Opnieuw proberen.
 
 const extraction: AiExtraction = {
     id: 41, status: 'Proposed', fileName: 'factuur.pdf', mediaType: 'application/pdf', displayMediaType: 'application/pdf', sizeBytes: 2000, provider: 'Anthropic',
@@ -43,7 +42,7 @@ describe('AI proposal building blocks', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('the suggested order shows only for its own vendor; choosing another vendor clears the link', async () => {
+    test('the suggested order shows only for its own vendor', async () => {
         const links: (number | null)[] = [];
         const banner = (vendorId: string, linkOrderId: number | null) => (
             <AiReviewBanner extraction={extraction} vendorId={vendorId} onVendor={() => undefined} linkOrderId={linkOrderId} onLinkOrder={(id) => links.push(id)} />
@@ -55,7 +54,7 @@ describe('AI proposal building blocks', () => {
         await mounted.render(banner('8', 5));
         assert.equal($('[data-testid="ai-order-link"]'), null);
         assert.ok($('[data-testid="ai-order-none"]'));
-        assert.deepEqual(links, [null]);
+        assert.deepEqual(links, [], 'showing never changes the link by itself');
     });
 
     test('a failed status check says so and can be retried', async () => {

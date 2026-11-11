@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatMoney } from '../../lib/availability';
 import { needsAttention } from '../../lib/aiProposal';
@@ -22,11 +21,9 @@ export default function AiReviewBanner({ extraction, vendorId, onVendor, linkOrd
     const proposal = extraction.proposal;
     const matches = extraction.matches;
     const money = (value: number | null) => (value === null ? '–' : formatMoney(value, null, locale));
-    // De voorgestelde order hoort bij één leverancier: kiest de gebruiker een andere, dan verdwijnt het voorstel en de koppeling.
+    // De voorgestelde order hoort bij één leverancier: staat er een andere leverancier, dan is er geen voorstel. De koppeling zelf haalt het
+    // formulier weg bij een leverancierswissel (een gebruikersactie, niet bij elke weergave: het concept kan nog onderweg zijn).
     const suggestedOrder = matches?.orderCandidates.find((order) => order.id === matches.suggestedOrderId && String(order.vendorId) === vendorId) ?? null;
-    useEffect(() => {
-        if (linkOrderId !== null && suggestedOrder?.id !== linkOrderId) onLinkOrder(null);
-    }, [linkOrderId, suggestedOrder?.id, onLinkOrder]);
     const duplicate = matches?.duplicateInvoice && vendorId === String(matches.suggestedVendorId) ? matches.duplicateInvoice : null;
 
     return (
