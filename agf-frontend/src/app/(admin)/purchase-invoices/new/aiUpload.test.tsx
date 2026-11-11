@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, json, stubFetch } from '../../../../test/reactHarness.ts';
 import type { Posted } from '../../../../test/reactHarness.ts';
 import type { AiExtraction, AiReadingStatus } from '../../../../types/aiReading';
+import { emptyDraft } from '../../../../lib/purchaseInvoiceRules.ts';
+import { saveDraft } from '../../../../lib/purchaseInvoiceStore.ts';
+import { todayInAmsterdam } from '../../../../lib/calendarDate.ts';
 import NewPurchaseInvoicePage from './page';
 
 // Factuur uploaden op Inkoopfactuur invoeren (stap 7a), met een nagebootste API: zonder AI een duidelijke melding en geen gegevens; een
@@ -153,6 +156,48 @@ describe('purchase invoice: upload and let AI fill in a proposal', () => {
         await click($('[data-tour="pinvoice-ai-reject"]')!);
         await mounted.waitFor(() => posted.filter((p) => p.url.endsWith('/close')).length === 2, 'reject');
         assert.deepEqual(JSON.parse(posted.filter((p) => p.url.endsWith('/close'))[1].body), { outcome: 'Rejected' });
+        await mounted.waitFor(() => field('invoiceNumber').value === '', 'empty form');
+    });
+
+    test('markers and the cost suggestion stay with their own line after an earlier line is removed', async () => {
+        await mounted.render(<NewPurchaseInvoicePage />);
+        await mounted.waitFor(() => $<HTMLButtonElement>('[data-testid="ai-upload-button"]') && !$<HTMLButtonElement>('[data-testid="ai-upload-button"]')!.disabled, 'upload button');
+        await upload(pdf());
+        await mounted.waitFor(() => $('[data-testid="lines[1].ai-cost"]'), 'cost suggestion on the transport line');
+        await click($('[aria-label="purchase_line_remove 1"]')!);
+        await mounted.waitFor(() => field('lines[0].quantity').value === '1', 'transport is now the first line');
+        assert.ok($('[data-testid="lines[0].ai-cost"]'), 'the suggestion moved with the transport line');
+        assert.equal($('[data-testid="lines[1].ai-cost"]'), null);
+    });
+
+    test('an upload asks before replacing a draft with only a changed header field', async () => {
+        const blank = emptyDraft(todayInAmsterdam(), settings as never);
+        saveDraft({ ...blank, header: { ...blank.header, currency: 'USD' } });
+        let asked = 0;
+        window.confirm = () => { asked += 1; return false; };
+        await mounted.render(<NewPurchaseInvoicePage />);
+        await mounted.waitFor(() => $<HTMLButtonElement>('[data-testid="ai-upload-button"]') && !$<HTMLButtonElement>('[data-testid="ai-upload-button"]')!.disabled, 'upload button');
+        await upload(pdf());
+        assert.equal(asked, 1);
+        assert.equal(posted.length, 0, 'declined: nothing is read');
+    });
+
+    test('a failed close keeps the proposal with a notice; trying again closes it', async () => {
+        let closeFails = true;
+        reply = (url) => (url.endsWith('/purchase-invoices/ai/extractions') ? json(200, extraction) : url.includes('/close') ? (closeFails ? json(500, {}) : json(200, {})) : json(201, { id: 90 }));
+        await mounted.render(<NewPurchaseInvoicePage />);
+        await mounted.waitFor(() => $<HTMLButtonElement>('[data-testid="ai-upload-button"]') && !$<HTMLButtonElement>('[data-testid="ai-upload-button"]')!.disabled, 'upload button');
+        await upload(pdf());
+        await mounted.waitFor(() => $('[data-testid="ai-review"]'), 'review');
+        await click($('[data-tour="pinvoice-ai-reject"]')!);
+        await mounted.waitFor(() => $('[data-testid="ai-close-failed"]'), 'close failed notice');
+        assert.ok($('[data-testid="ai-review"]'), 'the proposal stays');
+        assert.equal(field('invoiceNumber').value, 'F-2026-118');
+
+        closeFails = false;
+        await click($('[data-tour="pinvoice-ai-reject"]')!);
+        await mounted.waitFor(() => $('[data-testid="ai-review"]') === null, 'closed');
+        assert.equal($('[data-testid="ai-close-failed"]'), null);
         await mounted.waitFor(() => field('invoiceNumber').value === '', 'empty form');
     });
 });

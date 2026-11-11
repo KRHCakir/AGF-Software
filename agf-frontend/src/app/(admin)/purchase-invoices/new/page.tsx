@@ -43,23 +43,41 @@ export default function NewPurchaseInvoicePage() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [review, setReview] = useState<StoredAiReview | null>(() => loadAiReview());
     const [seed, setSeed] = useState<{ key: number; draft: InvoiceDraft } | null>(null);
+    const [closing, setClosing] = useState(false);
+    const [closeFailed, setCloseFailed] = useState(false);
 
     const changeReview = (next: StoredAiReview | null) => {
         setReview(next);
         if (next === null) clearAiReview(); else saveAiReview(next);
     };
-    const hasDraft = () => {
+    // Een concept telt als ingevuld zodra iets afwijkt van een leeg concept: ook een datum, valuta, betaaltermijn, notitie of extra veld.
+    const hasDraft = (settings: PurchaseInvoiceSettings) => {
         const current = loadDraft();
-        return current !== null && (current.header.vendorId !== '' || current.header.invoiceNumber.trim() !== '' || current.lines.some((line) => !isBlankLine(line)));
+        if (current === null) return false;
+        const blank = emptyDraft(todayInAmsterdam(), settings).header;
+        const { extra, ...header } = current.header;
+        const changed = (Object.keys(header) as (keyof typeof header)[]).some((field) => String(header[field] ?? '').trim() !== String(blank[field] ?? '').trim());
+        return changed || Object.values(extra ?? {}).some((value) => String(value ?? '').trim() !== '') || current.lines.some((line) => !isBlankLine(line));
     };
     const propose = (extraction: AiExtraction, data: Reference) => {
-        if (review !== null) void closeAiExtraction(review.extraction.id, 'Rejected').catch(() => undefined);
-        setSeed({ key: Date.now(), draft: draftFromProposal(extraction, data.settings, data.vendors, todayInAmsterdam()) });
-        changeReview({ extraction, linkOrderId: extraction.matches?.suggestedOrderId ?? null });
+        const draft = draftFromProposal(extraction, data.settings, data.vendors, todayInAmsterdam());
+        setSeed({ key: Date.now(), draft });
+        changeReview({ extraction, linkOrderId: extraction.matches?.suggestedOrderId ?? null, lineKeys: (extraction.proposal?.lines.length ?? 0) > 0 ? draft.lines.map((line) => line.key) : [] });
     };
-    const close = (outcome: 'Rejected' | 'Manual', data: Reference) => {
-        if (review === null) return;
-        void closeAiExtraction(review.extraction.id, outcome).catch(() => undefined);
+    // Afwijzen en Handmatig verder: pas als de server de lezing heeft afgesloten verdwijnt het voorstel. Lukt dat niet, dan blijft alles
+    // staan met een melding, en kan de gebruiker het opnieuw proberen.
+    const close = async (outcome: 'Rejected' | 'Manual', data: Reference) => {
+        if (review === null || closing) return;
+        setClosing(true);
+        setCloseFailed(false);
+        try {
+            await closeAiExtraction(review.extraction.id, outcome);
+        } catch {
+            setCloseFailed(true);
+            return;
+        } finally {
+            setClosing(false);
+        }
         if (outcome === 'Rejected') {
             clearDraft();
             setSeed({ key: Date.now(), draft: emptyDraft(todayInAmsterdam(), data.settings) });
@@ -108,16 +126,17 @@ export default function NewPurchaseInvoicePage() {
                             onSaved={(settings) => setState({ status: 'ready', data: { ...state.data, settings } })} />
                     )}
                     <MissingMasterDataNotice missing={missingMasterData({ vendors: state.data.vendors }, ['vendor'])} />
-                    {review === null && <AiUploadPanel onProposal={(extraction) => propose(extraction, state.data)} beforeUpload={() => !hasDraft() || window.confirm(t('ai_replace_confirm'))} />}
+                    {review === null && <AiUploadPanel onProposal={(extraction) => propose(extraction, state.data)} beforeUpload={() => !hasDraft(state.data.settings) || window.confirm(t('ai_replace_confirm'))} />}
+                    {closeFailed && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="ai-close-failed">{t('ai_close_failed')}</p>}
                     <div className={review === null ? '' : 'grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]'}>
                         {review !== null && <AiDocumentViewer key="document" extraction={review.extraction} />}
                         <div key="form" className="min-w-0">
                             <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} costArticles={state.data.costArticles} settings={state.data.settings} seed={seed}
                                 onSaved={() => changeReview(null)}
                                 ai={review === null ? null : {
-                                    extraction: review.extraction, linkOrderId: review.linkOrderId,
+                                    extraction: review.extraction, lineKeys: review.lineKeys, linkOrderId: review.linkOrderId,
                                     onLinkOrder: (linkOrderId) => changeReview({ ...review, linkOrderId }),
-                                    onReject: () => close('Rejected', state.data), onManual: () => close('Manual', state.data),
+                                    onReject: () => void close('Rejected', state.data), onManual: () => void close('Manual', state.data),
                                 }} />
                         </div>
                     </div>
