@@ -29,7 +29,7 @@ namespace AgfAdmin.Services.DocumentAi
                 ValidationErrors.Add(errors, "aiExtractionId", $"AI reading {request.AiExtractionId} does not exist.");
                 return null;
             }
-            if (extraction.Status != AiReadingRules.StatusProposed || extraction.FileDeletedAt != null)
+            if (extraction.Status != AiReadingRules.StatusProposed || extraction.FileDeletedAt != null || string.IsNullOrEmpty(extraction.ProposalJson))
             {
                 ValidationErrors.Add(errors, "aiExtractionId", $"AI reading {extraction.Id} is {extraction.Status.ToLowerInvariant()}; only an open proposal can be approved.");
                 return null;
