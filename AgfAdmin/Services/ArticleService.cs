@@ -176,7 +176,7 @@ namespace AgfAdmin.Services
                 await _db.SaveChangesAsync(cancellationToken);
                 return null;
             }
-            catch (DbUpdateException exception) when (shortcut != null && DbErrors.IsUniqueViolation(exception))
+            catch (DbUpdateException exception) when (shortcut != null && DbErrors.IsUniqueViolationOn(exception, "IX_ProductVariants_ShortcutKey", "ProductVariants.ShortcutKey"))
             {
                 return ServiceResult<ArticleDto>.Validation(new Dictionary<string, string[]> { ["shortcutCode"] = new[] { $"Search code '{shortcut}' is already used by another article." } });
             }

@@ -3,7 +3,7 @@
 // of met preventDefault betrouwbaar zijn te onderscheppen. Alt/Option-combinaties worden op `code` herkend, omdat Option
 // op macOS het `key`-teken verandert (⌥N geeft een dode toets). Pure module, zodat node:test de toewijzing kan toetsen.
 
-export type ShortcutAction = 'save' | 'saveAndNew' | 'newDocument' | 'focusSearch' | 'toggleExtra' | 'duplicateLine' | 'removeLine';
+export type ShortcutAction = 'save' | 'saveAndNew' | 'newDocument' | 'focusSearch' | 'toggleExtra' | 'duplicateLine' | 'removeLine' | 'adjustGross';
 
 export interface ShortcutKeys {
     key?: string;
@@ -21,6 +21,8 @@ export const SHORTCUTS: Readonly<Record<ShortcutAction, ShortcutKeys>> = {
     toggleExtra: { code: 'KeyE', alt: true },
     duplicateLine: { code: 'KeyD', alt: true },
     removeLine: { code: 'KeyR', alt: true },
+    // Inkooporderregel: "Bruto aanpassen" vanuit elk veld van de regel (de knop staat buiten de Tab-volgorde).
+    adjustGross: { code: 'KeyB', alt: true },
 };
 
 export interface KeyLike {
