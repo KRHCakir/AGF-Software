@@ -18,16 +18,29 @@ public sealed record ModelSettings
     [JsonPropertyName("verwerking")] public string Processing { get; init; } = "";
     [JsonPropertyName("optIn")] public bool OptIn { get; init; }
 
+    /// <summary>Hogere tarieven boven een aantal invoertokens per aanroep (Haiku boven 100K, Qwen boven 32K en 128K).</summary>
+    [JsonPropertyName("staffels")] public List<PriceTier> Tiers { get; init; } = [];
+
     public bool SendsData => Provider != "fake";
 
-    public decimal CostUsd(long inputTokens, long outputTokens) =>
-        Math.Round((inputTokens * InputPricePerMillion + outputTokens * OutputPricePerMillion) / 1_000_000m, 6);
+    /// <summary>Kosten van één aanroep: het tarief hangt af van de invoer van die aanroep, dus de runner telt per aanroep op.</summary>
+    public decimal CostUsd(long inputTokens, long outputTokens)
+    {
+        var tier = Tiers.Where(t => inputTokens > t.Above).MaxBy(t => t.Above);
+        var (input, output) = tier == null ? (InputPricePerMillion, OutputPricePerMillion) : (tier.InputPricePerMillion, tier.OutputPricePerMillion);
+        return Math.Round((inputTokens * input + outputTokens * output) / 1_000_000m, 6);
+    }
 
     public static IReadOnlyList<ModelSettings> Load(string path) =>
         JsonSerializer.Deserialize<ModelFile>(File.ReadAllText(path))?.Models ?? [];
 
     private sealed record ModelFile([property: JsonPropertyName("modellen")] List<ModelSettings> Models);
 }
+
+public sealed record PriceTier(
+    [property: JsonPropertyName("boven")] long Above,
+    [property: JsonPropertyName("invoer")] decimal InputPricePerMillion,
+    [property: JsonPropertyName("uitvoer")] decimal OutputPricePerMillion);
 
 public sealed record SelectedModel(ModelSettings Settings, IDocumentAI Ai);
 

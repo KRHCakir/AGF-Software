@@ -51,13 +51,17 @@ public static class Comparer
         var pairs = new int[expected.Count];
         Array.Fill(pairs, -1);
         var free = Enumerable.Range(0, actual.Count).ToList();
-        for (var t = 0; t < expected.Count; t++)
-        {
-            var words = Words(expected[t]["omschrijving"]);
-            var best = free.Select(o => (o, sim: Similarity(words, Words(actual[o]["omschrijving"])))).Where(x => x.sim >= MinSimilarity)
-                .OrderByDescending(x => x.sim).ThenBy(x => x.o).FirstOrDefault((-1, 0));
-            if (best.o >= 0) { pairs[t] = best.o; free.Remove(best.o); }
-        }
+        var expectedWords = expected.Select(e => Words(e["omschrijving"])).ToList();
+        var actualWords = actual.Select(a => Words(a["omschrijving"])).ToList();
+        // Sterkste koppelingen over alle regels heen eerst, zodat een vergeten regel niet de modelregel van een ander opeist.
+        var candidates = (from t in Enumerable.Range(0, expected.Count)
+                          from o in Enumerable.Range(0, actual.Count)
+                          let sim = Similarity(expectedWords[t], actualWords[o])
+                          where sim.Overlap >= MinSimilarity
+                          select (t, o, sim))
+            .OrderByDescending(x => x.sim.Shared).ThenByDescending(x => x.sim.Overlap).ThenByDescending(x => x.sim.Jaccard).ThenBy(x => x.t).ThenBy(x => x.o);
+        foreach (var (t, o, _) in candidates)
+            if (pairs[t] < 0 && free.Contains(o)) { pairs[t] = o; free.Remove(o); }
         for (var t = 0; t < expected.Count; t++)
             if (pairs[t] < 0 && free.Count > 0) { pairs[t] = free[0]; free.RemoveAt(0); }
         return [.. pairs.Select((o, t) => (t, o))];
@@ -83,15 +87,14 @@ public static class Comparer
     /// </summary>
     public static string? Normalize(FieldKind kind, string field, JsonNode? node)
     {
-        if (node == null || node.GetValueKind() == JsonValueKind.Null) return null;
+        if (node == null || node.GetValueKind() == JsonValueKind.Null || string.IsNullOrWhiteSpace(Text(node))) return null;
         switch (kind)
         {
             case FieldKind.Money: return Number(node) is decimal m ? Math.Round(m, 2, MidpointRounding.AwayFromZero).ToString("0.00", CultureInfo.InvariantCulture) : Raw(node);
             case FieldKind.Number: return Number(node) is decimal n ? Math.Round(n, 3, MidpointRounding.AwayFromZero).ToString("0.###", CultureInfo.InvariantCulture) : Raw(node);
             case FieldKind.Date: return Date(Text(node)) ?? Raw(node);
         }
-        var text = Text(node);
-        if (string.IsNullOrWhiteSpace(text)) return null;
+        var text = Text(node)!;
         if (field is "factuurnummer" or "ordernummer_leverancier") return Regex.Replace(text, @"\s+", "").ToLowerInvariant();
         return string.Join(' ', Words(node));
     }
@@ -121,15 +124,21 @@ public static class Comparer
 
     private static List<string> Words(JsonNode? node)
     {
-        var plain = new string((Text(node) ?? "").Normalize(NormalizationForm.FormD).Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark).ToArray());
+        // Leestekens verdwijnen (ze splitsen geen woorden): "S.L." en "SL" zijn gelijk.
+        var plain = new string((Text(node) ?? "").Normalize(NormalizationForm.FormD)
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) is not (UnicodeCategory.NonSpacingMark or UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
+                or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation)).ToArray());
         return [.. Regex.Split(plain.ToLowerInvariant(), @"[^\p{L}\p{N}]+").Where(w => w.Length > 0)];
     }
 
-    private static double Similarity(List<string> a, List<string> b)
+    // Shared: aantal gelijke woorden (bepaalt de rangorde). Overlap: gedeelde woorden t.o.v. de kortste omschrijving (alleen de drempel, zodat extra woorden een regel niet uitsluiten). Jaccard ontloopt gelijke scores.
+    private static (int Shared, double Overlap, double Jaccard) Similarity(List<string> a, List<string> b)
     {
-        if (a.Count == 0 || b.Count == 0) return 0;
+        if (a.Count == 0 || b.Count == 0) return (0, 0, 0);
         var set = a.ToHashSet();
-        return (double)set.Intersect(b).Count() / set.Union(b).Count();
+        var other = b.ToHashSet();
+        var shared = set.Intersect(other).Count();
+        return (shared, (double)shared / Math.Min(set.Count, other.Count), (double)shared / set.Union(other).Count());
     }
 
     private static List<JsonObject> Objects(JsonNode? node) => node is JsonArray array ? [.. array.OfType<JsonObject>()] : [];

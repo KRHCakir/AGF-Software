@@ -17,14 +17,20 @@ public abstract class HttpDocumentAi(HttpClient http) : IDocumentAI
         auth(request.Headers);
         var watch = Stopwatch.StartNew();
         HttpResponseMessage response;
-        try { response = await http.SendAsync(request, cancellationToken); }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        string text;
+        try
+        {
+            response = await http.SendAsync(request, cancellationToken);
+            // Ook het lezen van de body kan een time-out of netwerkfout geven: dat is net zo tijdelijk als het verzenden.
+            try { text = await response.Content.ReadAsStringAsync(cancellationToken); }
+            catch { response.Dispose(); throw; }
+        }
+        catch (Exception e) when ((e is HttpRequestException or TaskCanceledException or IOException) && !cancellationToken.IsCancellationRequested)
         {
             throw new TransientAiException($"{provider}: geen antwoord ({e.GetType().Name})", e);
         }
         using (response)
         {
-            var text = await response.Content.ReadAsStringAsync(cancellationToken);
             var status = (int)response.StatusCode;
             // Alleen de statuscode in de melding: de body kan delen van het verzoek herhalen.
             if (response.StatusCode == HttpStatusCode.TooManyRequests || status >= 500) throw new TransientAiException($"{provider}: HTTP {status}");
@@ -71,6 +77,7 @@ public sealed class QwenDocumentAi(string apiModel, string apiKey, string baseUr
 
     public override async Task<AiResponse> ExtractAsync(DocumentInput document, string instruction, CancellationToken cancellationToken)
     {
+        var total = Stopwatch.StartNew(); // inclusief PDF-conversie, zodat de snelheid vergelijkbaar is met de andere modellen
         var images = document.IsPdf ? await PdfPagesAsync(document.Bytes, cancellationToken) : [(document.MediaType, document.Bytes)];
         var content = new JsonArray(images.Select(i => (JsonNode?)new JsonObject
         {
@@ -83,11 +90,15 @@ public sealed class QwenDocumentAi(string apiModel, string apiKey, string baseUr
             ["messages"] = new JsonArray(new JsonObject { ["role"] = "user", ["content"] = content }),
             ["response_format"] = new JsonObject { ["type"] = "json_object" },
         };
-        var (json, duration) = await PostAsync("Qwen", baseUrl.TrimEnd('/') + "/chat/completions", body, h => h.Add("Authorization", $"Bearer {apiKey}"), cancellationToken);
+        var (json, _) = await PostAsync("Qwen", baseUrl.TrimEnd('/') + "/chat/completions", body, h => h.Add("Authorization", $"Bearer {apiKey}"), cancellationToken);
         var usage = json["usage"];
         return new AiResponse(json["choices"]?[0]?["message"]?["content"]?.GetValue<string>() ?? "",
-            usage?["prompt_tokens"]?.GetValue<long>() ?? 0, usage?["completion_tokens"]?.GetValue<long>() ?? 0, duration, json["model"]?.GetValue<string>());
+            usage?["prompt_tokens"]?.GetValue<long>() ?? 0, usage?["completion_tokens"]?.GetValue<long>() ?? 0, total.Elapsed, json["model"]?.GetValue<string>());
     }
+
+    // p-1.png, p-02.png, p-10.png: numeriek sorteren op paginanummer, ongeacht de zero-padding
+    private static int PageNumber(string fileName) =>
+        int.TryParse(Path.GetFileNameWithoutExtension(fileName)[(fileName.LastIndexOf('-') + 1)..], out var n) ? n : int.MaxValue;
 
     private static async Task<List<(string MediaType, byte[] Bytes)>> PdfPagesAsync(byte[] pdf, CancellationToken cancellationToken)
     {
@@ -96,12 +107,28 @@ public sealed class QwenDocumentAi(string apiModel, string apiKey, string baseUr
         {
             var input = Path.Combine(dir.FullName, "in.pdf");
             await File.WriteAllBytesAsync(input, pdf, cancellationToken);
-            var start = new ProcessStartInfo("pdftoppm", ["-png", "-r", "150", "-l", MaxPages.ToString(), input, Path.Combine(dir.FullName, "p")]) { RedirectStandardError = true };
+            var start = new ProcessStartInfo("pdftoppm", ["-png", "-r", "150", "-l", (MaxPages + 1).ToString(), input, Path.Combine(dir.FullName, "p")]) { RedirectStandardError = true };
             Process? process;
             try { process = Process.Start(start); }
             catch (System.ComponentModel.Win32Exception) { throw new UnsupportedDocumentException("Qwen-VL leest geen PDF en pdftoppm (poppler) is niet geïnstalleerd"); }
-            using (process) { await process!.WaitForExitAsync(cancellationToken); if (process.ExitCode != 0) throw new UnsupportedDocumentException("pdftoppm kon de PDF niet omzetten"); }
-            var pages = dir.GetFiles("p*.png").OrderBy(f => f.Name, StringComparer.Ordinal).ToList();
+            using (process)
+            {
+                // stderr leeg lezen, anders kan een volle pijp pdftoppm laten blokkeren
+                var stderr = process!.StandardError.ReadToEndAsync(CancellationToken.None);
+                try { await process.WaitForExitAsync(cancellationToken); }
+                catch (OperationCanceledException)
+                {
+                    // Bij annuleren pdftoppm stoppen en laten afsluiten, pas daarna de tijdelijke map opruimen.
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                    throw;
+                }
+                await stderr;
+                if (process.ExitCode != 0) throw new UnsupportedDocumentException("pdftoppm kon de PDF niet omzetten");
+            }
+            var pages = dir.GetFiles("p*.png").OrderBy(f => PageNumber(f.Name)).ToList();
+            // Er wordt één pagina extra omgezet om te zien dat het document te lang is: liever "niet ondersteund" dan stilzwijgend afkappen.
+            if (pages.Count > MaxPages) throw new UnsupportedDocumentException($"PDF heeft meer dan {MaxPages} pagina's; Qwen verwerkt er maximaal {MaxPages}");
             return [.. pages.Select(f => ("image/png", File.ReadAllBytes(f.FullName)))];
         }
         finally { dir.Delete(true); }

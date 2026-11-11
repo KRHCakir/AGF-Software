@@ -5,7 +5,11 @@ namespace AgfAiBenchmark.Tests;
 /// <summary>Geeft de antwoorden in volgorde terug; een Exception in de lijst wordt gegooid.</summary>
 public sealed class Scripted(params object[] steps) : IDocumentAI
 {
-    public const string Valid = """{"soort":"bon","regels":[]}""";
+    /// <summary>Kleinste uitvoer die het strikte schema aanneemt: elk veld aanwezig, null waar niets staat.</summary>
+    public const string Valid = """
+        {"soort":"bon","leverancier":null,"ordernummer_leverancier":null,"factuurnummer":null,"datum":null,"valuta":null,"regels":[],
+         "totaal_excl":null,"btw_totaal":null,"totaal_incl":null,"zekerheden":[]}
+        """;
 
     public int Calls { get; private set; }
 

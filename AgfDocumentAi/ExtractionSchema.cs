@@ -85,22 +85,46 @@ public static class ExtractionSchema
         catch (JsonException e) { error = $"geen geldige JSON: {e.Message}"; return null; }
         if (root is not JsonObject obj) { error = "geen JSON-object"; return null; }
         if (obj["soort"] is not JsonValue soort || !soort.TryGetValue(out string? kind) || !Kinds.Contains(kind)) error = "soort ontbreekt of is onbekend";
-        else if (obj["regels"] is not (null or JsonArray)) error = "regels is geen lijst";
-        else error = CheckFields(obj, HeaderFields.Concat(TotalFields), "")
-            ?? (obj["regels"] as JsonArray ?? []).Select((line, i) => line is JsonObject l ? CheckFields(l, LineFields, $"regels[{i}].") : $"regels[{i}] is geen object").FirstOrDefault(e => e != null);
+        else error = CheckObject(obj, [.. HeaderFields, .. TotalFields], ["soort", "regels", "zekerheden"], "")
+            ?? CheckArray(obj, "regels", (item, prefix) => CheckObject(item, LineFields, [], prefix))
+            ?? CheckArray(obj, "zekerheden", CheckCertainty);
         return error == null ? obj : null;
     }
 
-    private static string? CheckFields(JsonObject obj, IEnumerable<(string Name, FieldKind Kind)> fields, string prefix)
+    // Spiegelt Build(): elk veld verplicht (null mag bij de gewone velden), geen onbekende eigenschappen, juiste typen.
+    private static string? CheckObject(JsonObject obj, (string Name, FieldKind Kind)[] fields, string[] otherNames, string prefix)
     {
+        foreach (var (name, _) in obj)
+            if (!fields.Any(f => f.Name == name) && !otherNames.Contains(name)) return $"{prefix}{name} is een onbekende eigenschap";
+        foreach (var name in otherNames)
+            if (!obj.ContainsKey(name)) return $"{prefix}{name} ontbreekt";
         foreach (var (name, kind) in fields)
         {
-            var value = obj[name];
+            if (!obj.TryGetPropertyValue(name, out var value)) return $"{prefix}{name} ontbreekt";
             if (value == null) continue;
-            var ok = value.GetValueKind() == (kind is FieldKind.Number or FieldKind.Money ? JsonValueKind.Number : JsonValueKind.String);
-            if (!ok) return $"{prefix}{name} heeft het verkeerde type";
+            var expected = kind is FieldKind.Number or FieldKind.Money ? JsonValueKind.Number : JsonValueKind.String;
+            if (value.GetValueKind() != expected) return $"{prefix}{name} heeft het verkeerde type";
         }
         return null;
+    }
+
+    private static string? CheckArray(JsonObject obj, string name, Func<JsonObject, string, string?> checkItem)
+    {
+        if (obj[name] is not JsonArray array) return $"{name} ontbreekt of is geen lijst";
+        for (var i = 0; i < array.Count; i++)
+        {
+            if (array[i] is not JsonObject item) return $"{name}[{i}] is geen object";
+            var error = checkItem(item, $"{name}[{i}].");
+            if (error != null) return error;
+        }
+        return null;
+    }
+
+    private static string? CheckCertainty(JsonObject item, string prefix)
+    {
+        if (item["veld"] is not JsonValue veld || !veld.TryGetValue(out string? _)) return $"{prefix}veld ontbreekt of is geen tekst";
+        if (item["zekerheid"] is not JsonValue z || !z.TryGetValue(out string? level) || !Certainties.Contains(level)) return $"{prefix}zekerheid ontbreekt of is onbekend";
+        return CheckObject(item, [("plek", FieldKind.Text)], ["veld", "zekerheid"], prefix);
     }
 
     // Sommige modellen zetten JSON zonder afgedwongen schema tussen ```json ... ```.

@@ -49,6 +49,21 @@ public class ComparerTests
     }
 
     [Fact]
+    public void A_forgotten_line_does_not_claim_the_model_line_of_another()
+    {
+        var truth = Obj("""{"regels":[{"omschrijving":"appel rood"},{"omschrijving":"appel groen"}]}""");
+        var output = Obj("""{"regels":[{"omschrijving":"appel groen"}]}""");
+        Assert.Equal([(0, -1), (1, 0)], Comparer.MatchLines([.. ((JsonArray)truth["regels"]!).OfType<JsonObject>()], [.. ((JsonArray)output["regels"]!).OfType<JsonObject>()]));
+    }
+
+    [Fact]
+    public async Task Fake_model_fails_when_the_answer_file_is_missing()
+    {
+        var ai = new FakeDocumentAi("fake-goed", Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        await Assert.ThrowsAsync<FileNotFoundException>(() => ai.ExtractAsync(new DocumentInput("x.pdf", [1], "application/pdf"), "", CancellationToken.None));
+    }
+
+    [Fact]
     public void Lines_are_matched_on_description_first_and_the_rest_by_order()
     {
         var truth = Obj("""{"regels":[{"omschrijving":"Avocado Hass Peru","bedrag":10},{"omschrijving":"Mango Kent","bedrag":20},{"omschrijving":"Transport","bedrag":5}]}""");
@@ -59,6 +74,22 @@ public class ComparerTests
         Assert.Equal(Outcome.Fout, Field(scores, "regels[2].omschrijving").Outcome);
         Assert.Equal(Outcome.Verzonnen, Field(scores, "extra regel 4").Outcome);
     }
+
+    [Fact]
+    public void Line_matching_prefers_the_candidate_with_most_equal_words()
+    {
+        var truth = Obj("""{"regels":[{"omschrijving":"appel rood biologisch"}]}""");
+        var output = Obj("""{"regels":[{"omschrijving":"appel"},{"omschrijving":"appel rood"}]}""");
+        Assert.Equal([(0, 1)], Comparer.MatchLines([.. ((JsonArray)truth["regels"]!).OfType<JsonObject>()], [.. ((JsonArray)output["regels"]!).OfType<JsonObject>()]));
+    }
+
+    [Theory]
+    [InlineData("Fruit S.L.", "fruit sl")]
+    [InlineData("Fruit SL", "fruit sl")]
+    [InlineData("Fruit S.L.,Spanje", "fruit slspanje")]
+    [InlineData("Avocado (Peru)", "avocado peru")]
+    public void Punctuation_is_removed_not_used_as_word_separator(string input, string expected) =>
+        Assert.Equal(expected, Comparer.Normalize(FieldKind.Text, "leverancier", JsonValue.Create(input)));
 
     [Fact]
     public void A_forgotten_line_counts_every_field_of_it_and_high_certainty_is_tracked_on_the_models_own_index()

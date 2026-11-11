@@ -34,6 +34,8 @@ public sealed class RunnerTests : IDisposable
     public async Task Cost_and_time_come_from_the_real_token_usage_of_every_call()
     {
         Assert.Equal(12m, Settings().CostUsd(1_000_000, 1_000_000));
+        var haiku = Settings() with { InputPricePerMillion = 0.10m, OutputPricePerMillion = 0.50m, Tiers = [new(100_000, 0.50m, 2.50m)] };
+        Assert.Equal((0.0105m, 0.0525m), (haiku.CostUsd(100_000, 1_000), haiku.CostUsd(100_001, 1_000)));
         var (result, _) = await Run(new Scripted("{ kapot", Valid));
         Assert.Equal((Status.Ok, 2, 2000L, 400L, 0.008m, 3.0), (result.Status, result.Calls, result.InputTokens, result.OutputTokens, result.CostUsd, result.Seconds));
         Assert.Equal("test-1", result.ModelVersion);
@@ -78,9 +80,48 @@ public sealed class RunnerTests : IDisposable
         File.WriteAllText(doc, "%PDF-1.4 andere inhoud");
         await Run(again, doc);
         Assert.Equal(2, again.Calls);
-        File.WriteAllText(runner.RawPath("test", "a.pdf"), "{ half geschreven");
+        File.WriteAllText(runner.RawPath("test", doc), "{ half geschreven");
         await Run(again, doc);
         Assert.Equal(3, again.Calls);
+    }
+
+    [Fact]
+    public async Task Same_file_names_in_different_folders_and_unreadable_documents_are_handled_per_document()
+    {
+        var one = Doc("een/factuur.pdf");
+        var two = Doc("twee/factuur.pdf", "%PDF-1.4 andere");
+        var runner = new Runner(Path.Combine(dir, "out3"), 2, false, _ => TimeSpan.Zero);
+        Assert.NotEqual(runner.RawPath("test", one), runner.RawPath("test", two));
+
+        var results = await runner.RunAsync([one, two, Path.Combine(dir, "docs", "weg.pdf")], [new SelectedModel(Settings(), new Scripted(Valid))], CancellationToken.None);
+        Assert.Equal([Status.Failed, Status.Ok, Status.Ok], results.Select(r => r.Status).Order());
+        Assert.True(File.Exists(runner.RawPath("test", one)) && File.Exists(runner.RawPath("test", two)));
+    }
+
+    [Fact]
+    public async Task A_result_with_status_ok_but_damaged_text_and_an_unsupported_result_are_run_again()
+    {
+        var doc = Doc();
+        var (first, runner) = await Run(new Scripted(Valid), doc);
+        File.WriteAllText(runner.RawPath("test", doc), System.Text.Json.JsonSerializer.Serialize(first with { Text = "kapot" }));
+        var again = new Scripted(Valid);
+        Assert.Equal(Status.Ok, (await Run(again, doc)).Result.Status);
+        Assert.Equal(1, again.Calls);
+
+        File.WriteAllText(runner.RawPath("test", doc), System.Text.Json.JsonSerializer.Serialize(first with { Status = Status.Unsupported, Text = null }));
+        Assert.Equal(Status.Ok, (await Run(again, doc)).Result.Status);
+        Assert.Equal(2, again.Calls);
+    }
+
+    [Fact]
+    public async Task A_model_line_with_extra_words_is_matched_and_empty_date_and_number_fields_are_null()
+    {
+        await Task.CompletedTask;
+        var truth = System.Text.Json.Nodes.JsonNode.Parse("""{"regels":[{"omschrijving":"Mango Kent"},{"omschrijving":"Avocado"}]}""")!.AsObject();
+        var output = System.Text.Json.Nodes.JsonNode.Parse("""{"regels":[{"omschrijving":"Avocado Hass"},{"omschrijving":"Mango Kent Brazilie maat 9"}]}""")!.AsObject();
+        Assert.Equal([(0, 1), (1, 0)], Comparer.MatchLines([.. truth["regels"]!.AsArray().OfType<System.Text.Json.Nodes.JsonObject>()], [.. output["regels"]!.AsArray().OfType<System.Text.Json.Nodes.JsonObject>()]));
+        Assert.Null(Comparer.Normalize(FieldKind.Date, "datum", System.Text.Json.Nodes.JsonValue.Create("")));
+        Assert.Null(Comparer.Normalize(FieldKind.Money, "totaal", System.Text.Json.Nodes.JsonValue.Create("  ")));
     }
 
     [Fact]
