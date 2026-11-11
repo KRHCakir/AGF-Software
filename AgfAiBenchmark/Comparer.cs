@@ -54,8 +54,8 @@ public static class Comparer
         for (var t = 0; t < expected.Count; t++)
         {
             var words = Words(expected[t]["omschrijving"]);
-            var best = free.Select(o => (o, sim: Similarity(words, Words(actual[o]["omschrijving"])))).Where(x => x.sim >= MinSimilarity)
-                .OrderByDescending(x => x.sim).ThenBy(x => x.o).FirstOrDefault((-1, 0));
+            var best = free.Select(o => (o, sim: Similarity(words, Words(actual[o]["omschrijving"])))).Where(x => x.sim.Overlap >= MinSimilarity)
+                .OrderByDescending(x => x.sim.Overlap).ThenByDescending(x => x.sim.Jaccard).ThenBy(x => x.o).DefaultIfEmpty((o: -1, sim: (Overlap: 0.0, Jaccard: 0.0))).First();
             if (best.o >= 0) { pairs[t] = best.o; free.Remove(best.o); }
         }
         for (var t = 0; t < expected.Count; t++)
@@ -83,15 +83,14 @@ public static class Comparer
     /// </summary>
     public static string? Normalize(FieldKind kind, string field, JsonNode? node)
     {
-        if (node == null || node.GetValueKind() == JsonValueKind.Null) return null;
+        if (node == null || node.GetValueKind() == JsonValueKind.Null || string.IsNullOrWhiteSpace(Text(node))) return null;
         switch (kind)
         {
             case FieldKind.Money: return Number(node) is decimal m ? Math.Round(m, 2, MidpointRounding.AwayFromZero).ToString("0.00", CultureInfo.InvariantCulture) : Raw(node);
             case FieldKind.Number: return Number(node) is decimal n ? Math.Round(n, 3, MidpointRounding.AwayFromZero).ToString("0.###", CultureInfo.InvariantCulture) : Raw(node);
             case FieldKind.Date: return Date(Text(node)) ?? Raw(node);
         }
-        var text = Text(node);
-        if (string.IsNullOrWhiteSpace(text)) return null;
+        var text = Text(node)!;
         if (field is "factuurnummer" or "ordernummer_leverancier") return Regex.Replace(text, @"\s+", "").ToLowerInvariant();
         return string.Join(' ', Words(node));
     }
@@ -125,11 +124,14 @@ public static class Comparer
         return [.. Regex.Split(plain.ToLowerInvariant(), @"[^\p{L}\p{N}]+").Where(w => w.Length > 0)];
     }
 
-    private static double Similarity(List<string> a, List<string> b)
+    // Overlap: gedeelde woorden t.o.v. de kortste omschrijving, zodat extra woorden een regel niet uitsluiten. Jaccard dient alleen om gelijke scores te ontlopen.
+    private static (double Overlap, double Jaccard) Similarity(List<string> a, List<string> b)
     {
-        if (a.Count == 0 || b.Count == 0) return 0;
+        if (a.Count == 0 || b.Count == 0) return (0, 0);
         var set = a.ToHashSet();
-        return (double)set.Intersect(b).Count() / set.Union(b).Count();
+        var other = b.ToHashSet();
+        double shared = set.Intersect(other).Count();
+        return (shared / Math.Min(set.Count, other.Count), shared / set.Union(other).Count());
     }
 
     private static List<JsonObject> Objects(JsonNode? node) => node is JsonArray array ? [.. array.OfType<JsonObject>()] : [];
