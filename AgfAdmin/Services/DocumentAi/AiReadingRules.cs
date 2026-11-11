@@ -87,6 +87,8 @@ namespace AgfAdmin.Services.DocumentAi
                 if (quantity == null) Add($"lines[{i}].quantity", Missing, false);
                 if (price == null) Add($"lines[{i}].unitPrice", Missing, false);
                 if (amount == null) Add($"lines[{i}].amount", Missing, false);
+                // Zonder btw-percentage wordt de btw-controle overgeslagen: markeren, geen vangnet (verlegde btw/export kent geen percentage).
+                if (Number(line["btw_percentage"]) == null) Add($"lines[{i}].vatPercentage", Missing, false);
                 // Een korting op de regel kan het bedrag lager maken dan aantal x prijs: alleen markeren, geen vangnet.
                 if (quantity != null && price != null && amount != null && Math.Abs(quantity.Value * price.Value - amount.Value) > Math.Max(Tolerance, Math.Abs(amount.Value) * 0.005m))
                 {
