@@ -2,7 +2,7 @@
 
 # AI-testbench: overzicht
 
-Run van 2026-11-11 15:13, instructie 673939031b45, 2 documenten, waarvan 2 met juiste antwoorden.
+Run van 2026-11-11 15:42, instructie 673939031b45, 2 documenten, waarvan 2 met juiste antwoorden.
 
 - claude-sonnet: geen sleutel ANTHROPIC_API_KEY gevonden, overgeslagen.
 - claude-haiku: geen sleutel ANTHROPIC_API_KEY gevonden, overgeslagen.

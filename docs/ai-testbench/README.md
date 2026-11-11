@@ -74,7 +74,7 @@ In de map met resultaten:
 | `oneens.md` | Per document de velden waar de modellen verschillen, naast het juiste antwoord. ✓ is goed. Hier zie je snel wie gelijk heeft. |
 | `overzicht.csv`, `per-document.csv` | Dezelfde cijfers voor Excel: tokens, kosten in USD, seconden en het aantal aanroepen. |
 | `run.json` | De modellen met API-naam, prijs en de datum waarop die prijs is gecontroleerd, plus de vingerafdruk van de instructie. |
-| `ruw/<model>/<document>.json` | De ruwe uitvoer per model en document, met de modelversie die de aanbieder zelf terugmeldde. |
+| `ruw/<model>/<document>.<code>.json` | De ruwe uitvoer per model en document, met de modelversie die de aanbieder zelf terugmeldde. |
 
 `overzicht.md` bevat:
 

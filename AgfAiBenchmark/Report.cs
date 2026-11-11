@@ -122,10 +122,10 @@ public static class Report
                 var correct = g.Count(x => x.s.Correct);
                 var isTotal = g.Key.Item1 == "totaal";
                 wroteTotal |= isTotal;
-                sb.AppendLine(string.Join(',', m.Id, g.Key.Item1, g.Key.Item2, correct, g.Count(), (100.0 * correct / g.Count()).ToString("0.0", inv)) + (isTotal ? "," + Usage(ownResults, inv) : ",,,,,,,"));
+                sb.AppendLine(string.Join(',', Csv(m.Id), g.Key.Item1, Csv(g.Key.Item2), correct, g.Count(), (100.0 * correct / g.Count()).ToString("0.0", inv)) + (isTotal ? "," + Usage(ownResults, inv) : ",,,,,,,"));
             }
             // Model zonder beoordeelde velden: kosten en tijd horen er toch in.
-            if (!wroteTotal && ownResults.Count > 0) sb.AppendLine(string.Join(',', m.Id, "totaal", "alles", 0, 0, "") + "," + Usage(ownResults, inv));
+            if (!wroteTotal && ownResults.Count > 0) sb.AppendLine(string.Join(',', Csv(m.Id), "totaal", "alles", 0, 0, "") + "," + Usage(ownResults, inv));
         }
         return sb.ToString();
     }
@@ -139,13 +139,18 @@ public static class Report
         foreach (var r in results)
         {
             var scores = evaluations.FirstOrDefault(e => e.Result == r)?.Scores ?? [];
-            sb.AppendLine(string.Join(',', r.Model, Csv(r.Document), r.Status, scores.Count(s => s.Correct), scores.Count, scores.Count(s => s.HighCertainty && !s.Correct),
+            sb.AppendLine(string.Join(',', Csv(r.Model), Csv(r.Document), r.Status, scores.Count(s => s.Correct), scores.Count, scores.Count(s => s.HighCertainty && !s.Correct),
                 r.InputTokens, r.OutputTokens, r.CostUsd.ToString(CultureInfo.InvariantCulture), r.Seconds.ToString(CultureInfo.InvariantCulture), r.Calls));
         }
         return sb.ToString();
     }
 
-    private static string Csv(string value) => value.Contains(',') || value.Contains('"') ? $"\"{value.Replace("\"", "\"\"")}\"" : value;
+    // Tekst voor Excel: een begin met = + - @ wordt geen formule, en komma's, aanhalingstekens en regeleinden blijven in hun kolom.
+    private static string Csv(string value)
+    {
+        if (value.Length > 0 && "=+-@\t\r".Contains(value[0])) value = "'" + value;
+        return value.IndexOfAny([',', '"', '\n', '\r']) >= 0 ? $"\"{value.Replace("\"", "\"\"")}\"" : value;
+    }
 
     /// <summary>Per document de velden waar de geldige uitvoer van de modellen verschilt, naast het juiste antwoord (als dat er is).</summary>
     public static string Disagreements(IReadOnlyList<ModelSettings> models, List<RawResult> results, IReadOnlyDictionary<string, JsonObject> truths)
