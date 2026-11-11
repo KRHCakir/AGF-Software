@@ -17,14 +17,20 @@ public abstract class HttpDocumentAi(HttpClient http) : IDocumentAI
         auth(request.Headers);
         var watch = Stopwatch.StartNew();
         HttpResponseMessage response;
-        try { response = await http.SendAsync(request, cancellationToken); }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        string text;
+        try
+        {
+            response = await http.SendAsync(request, cancellationToken);
+            // Ook het lezen van de body kan een time-out of netwerkfout geven: dat is net zo tijdelijk als het verzenden.
+            try { text = await response.Content.ReadAsStringAsync(cancellationToken); }
+            catch { response.Dispose(); throw; }
+        }
+        catch (Exception e) when ((e is HttpRequestException or TaskCanceledException or IOException) && !cancellationToken.IsCancellationRequested)
         {
             throw new TransientAiException($"{provider}: geen antwoord ({e.GetType().Name})", e);
         }
         using (response)
         {
-            var text = await response.Content.ReadAsStringAsync(cancellationToken);
             var status = (int)response.StatusCode;
             // Alleen de statuscode in de melding: de body kan delen van het verzoek herhalen.
             if (response.StatusCode == HttpStatusCode.TooManyRequests || status >= 500) throw new TransientAiException($"{provider}: HTTP {status}");
