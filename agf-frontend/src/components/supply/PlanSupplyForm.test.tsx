@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { formatDateInput, todayInAmsterdam } from '../../lib/calendarDate.ts';
-import { Mounted, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { Mounted, json, setValue, stubFetch } from '../../test/reactHarness.ts';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
 // Aanvoerregel met netto en bruto kg: berekend uit het artikel, bruto onder netto geweigerd vóór versturen, en de payload
@@ -41,19 +41,22 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('calculated kg is sent with its source; gross below net is refused before sending', async () => {
+    test('net and gross come from the article; Bruto aanpassen changes only this line, below net is refused before sending', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         await chooseVendor('supb');
         await type('origin-input', 'Peru');
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type('lines[0].expectedQuantity-input', '1.560');
-        assert.equal(field('lines[0].expectedNetWeightKg-input').value, '15.600');
-        assert.equal(field('lines[0].expectedGrossWeightKg-input').value, '16.068');
+        assert.equal(mounted.container.querySelector('[id="lines[0].expectedNetWeightKg-input"]'), null, 'net is no input any more');
+        // Zonder LanguageProvider toont de test de Engelse notatie; de invoer leest de schermtaal (nl).
+        assert.equal(mounted.container.querySelector('[data-testid="lines[0].net"]')!.textContent, '15,600 kg');
+        assert.equal(mounted.container.querySelector('[data-testid="lines[0].gross"]')!.textContent, '16,068 kg');
 
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-tour="supply-line-gross-adjust"]')!.click(); });
         await type('lines[0].expectedGrossWeightKg-input', '15.000');
+        assert.ok(mounted.container.querySelector('[data-testid="lines[0].gross-deviates"]'));
         await submit();
         assert.equal(posted.length, 0);
         assert.ok(mounted.hasText('line_kg_gross_below_net'));
@@ -62,7 +65,7 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST');
         const line = JSON.parse(posted[0].body).lines[0];
-        assert.deepEqual([line.expectedNetWeightKg, line.expectedGrossWeightKg, line.weightSource], [15600, 16100, 'Entered']);
+        assert.deepEqual([line.expectedUnit, line.expectedNetWeightKg, line.expectedGrossWeightKg, line.weightSource], ['colli', 15600, 16100, 'Entered']);
     });
 
     test('the order origin is optional: an empty field is sent as empty, never as an error', async () => {
@@ -71,9 +74,7 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type('lines[0].expectedQuantity-input', '10');
-        assert.ok(mounted.hasText('supply_origin_hint'));
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST without an origin');
         assert.equal(JSON.parse(posted[0].body).origin, '');
@@ -92,7 +93,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await enter('lines[0].productVariantId-input');
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type('lines[0].expectedQuantity-input', '10');
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST');
@@ -115,7 +115,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await enter('lines[0].productVariantId-input');
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type('lines[0].expectedQuantity-input', '10');
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST');
@@ -133,7 +132,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type('lines[0].expectedQuantity-input', '221');
 
         answer = async () => {
@@ -161,7 +159,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
         await type('lines[0].expectedQuantity-input', '10');
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST');

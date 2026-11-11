@@ -2,7 +2,7 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, json, setSelectValue, setValue } from '../../test/reactHarness.ts';
+import { Mounted, json, setValue } from '../../test/reactHarness.ts';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
 // Veld Partij op de inkooporder door de echte componentlevenscyclus: voorstel, eigen nummer met dubbelcontrole (beide knoppen), 409
@@ -36,7 +36,6 @@ async function fillOrder() {
     await type('expectedAt-input', '2026-10-30');
     await type('lines[0].productVariantId-input', 'hass');
     await enter('lines[0].productVariantId-input');
-    await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].expectedUnit-input"]')!, 'colli'); });
     await type('lines[0].expectedQuantity-input', '10');
 }
 const save = () => act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });

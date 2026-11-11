@@ -5,39 +5,34 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDateTime, formatQuantity } from '../../lib/availability';
-import { unitLabelKey } from '../../lib/units';
-import { type LineWeightDraft, lineKgRows, resolveLineWeight, weightPayload } from '../../lib/lineWeight';
-import { QuantityInputMode, resolvePalletInput } from '../../lib/palletInput';
+import { type PurchaseLineDraft, emptyPurchaseLine, purchaseLinePayloads, purchaseLineRow } from '../../lib/purchaseOrderLines';
 import { withArticle } from '../../lib/articleFromEntry';
 import { isDateOnly, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from '../../lib/calendarDate';
 import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
 import { MAX_PARTIJ_NUMBER_LENGTH, MAX_SUPPLIER_LOT_REFERENCE_LENGTH } from '../../lib/partijRules';
 import { newRequestId } from '../../lib/requestId';
+import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
 import { getNextPartijNumber } from '../../services/partijService';
 import { type PartijSummary, isPartijExistsConflict } from '../../types/partij';
-import { PackageUnit, SupplyRoute } from '../../types/availability';
+import { SupplyRoute } from '../../types/availability';
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
 import { CreateSupplyCommitmentRequest, SupplyCommitment } from '../../types/supply';
 import { UnitBadge } from '../availability/QuantityCell';
 import DateField from '../shared/DateField';
-import KgTotals from '../shared/KgTotals';
 import VendorPicker from '../purchase/VendorPicker';
 import PartijField, { NO_PARTIJ, type PartijChoice, partijPayload } from '../partij/PartijField';
 import CustomerPicker from '../sales/CustomerPicker';
-import { LineKgFields } from '../shared/LineKgInput';
-import ProductVariantPicker from '../shared/ProductVariantPicker';
 import NewSupplyArticle from './NewSupplyArticle';
+import PurchaseOrderLines from './PurchaseOrderLines';
 import { lineKgLabel } from '../shared/lineKgLabel';
-import QuantityInput from '../shared/QuantityInput';
-import UnitSelect from '../shared/UnitSelect';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import ErrorNotice from './ErrorNotice';
-import FieldError, { fieldProps, inputClass, lineTableClass } from './FieldError';
+import FieldError, { fieldProps, inputClass } from './FieldError';
 import { MissingMasterDataNotice } from '../shared/FirstStep';
 import { missingMasterData } from '../../lib/masterDataStatus';
-import { FieldErrors, addError, decimalErrorKey, outcomeUnknown, palletErrorKey } from './messages';
+import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 import SubmitErrors from '../shared/SubmitErrors';
 
@@ -45,19 +40,6 @@ export interface ReferenceData {
     vendors: VendorOption[];
     customers: CustomerOption[];
     products: ProductOption[];
-}
-
-interface LineDraft extends LineWeightDraft {
-    key: string;
-    productVariantId: string;
-    lotNumber: string;
-    quantity: string;
-    unit: PackageUnit | '';
-    // Invoer per pallet: 'pallets' rekent de hoeveelheid uit palletCount × packagesPerPallet.
-    mode: QuantityInputMode;
-    palletCount: string;
-    packagesPerPallet: string;
-    loosePackages?: string;
 }
 
 interface HeaderDraft {
@@ -80,7 +62,7 @@ interface PendingSubmission {
 }
 
 const MAX_LINES = 200;
-const emptyLine = (): LineDraft => ({ key: newRequestId(), productVariantId: '', lotNumber: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
+const emptyLine = (): PurchaseLineDraft => emptyPurchaseLine(newRequestId());
 const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), supplierLotReference: '' });
 
 // Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
@@ -90,9 +72,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     onReceive: (commitment: SupplyCommitment) => void;
 }) {
     const { t, locale } = useTranslation();
+    const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     const isDirect = route === 'DirectTrade';
     const [header, setHeader] = useState<HeaderDraft>(emptyHeader);
-    const [lines, setLines] = useState<LineDraft[]>(() => [emptyLine()]);
+    const [lines, setLines] = useState<PurchaseLineDraft[]>(() => [emptyLine()]);
     const [pending, setPending] = useState<PendingSubmission | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
@@ -124,9 +107,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     // Na een onbekende uitkomst of na succes is het formulier vergrendeld (geen dubbele aanvoer door een gewijzigde retry).
     const locked = submitting || result !== null || (error !== null && outcomeUnknown(error));
 
-    // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
-    const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
-    // Netto en bruto kg per verpakking van het artikel: berekende kg in de kg-velden van de regel.
+    // Het artikel van een regel: eenheid, netto en bruto per colli, colli per pallet, merk, land, maat en inhoud.
     const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
 
     const edited = () => {
@@ -149,21 +130,14 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         edited();
     };
 
-    const updateLine = (key: string, field: keyof Omit<LineDraft, 'key'>, value: string) => {
-        if (locked) return;
-        setLines((current) => current.map((line) => (line.key === key ? { ...line, [field]: value } : line)));
-        edited();
-    };
-
-    // Kg-velden van een regel (tekst en "ingevuld"-vlag tegelijk).
-    const updateLineWeight = (key: string, patch: LineWeightDraft) => {
+    const updateLine = (key: string, patch: Partial<Omit<PurchaseLineDraft, 'key'>>) => {
         if (locked) return;
         setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
         edited();
     };
 
-    // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
-    const { rows: lineKg, totals } = lineKgRows(lines, (variantId) => variants.get(variantId));
+    // Per regel wat uit het artikel en de invoer volgt (kg, totaal, pallets); ook voor de totalen onder de regels.
+    const lineRows = lines.map((line) => purchaseLineRow(line, line.productVariantId === '' ? undefined : variants.get(Number(line.productVariantId))));
 
     const addLine = () => {
         if (locked || lines.length >= MAX_LINES) return;
@@ -209,37 +183,24 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         if (partij.kind === 'own' && partij.number.trim().length > MAX_PARTIJ_NUMBER_LENGTH) addError(found, 'partij', t('supply_error_too_long', { max: String(MAX_PARTIJ_NUMBER_LENGTH) }));
 
         if (lines.length === 0) addError(found, 'lines', t('supply_error_lines_required'));
+        // Alleen invullen wat per regel anders is: product, aantal, prijs (en eventueel de bruto); de rest komt uit het artikel.
+        // Een lege regel (zoals de nieuwe na Tab op het laatste veld) telt niet mee zolang er een gevulde regel is.
+        const built = purchaseLinePayloads(lines, (variantId) => variants.get(variantId));
+        for (const { index, error } of built.errors) {
+            const message = error.code === 'required'
+                ? t(error.field === 'expectedUnit' ? 'supply_error_required_unit' : 'supply_error_required')
+                : error.code === 'gross_below_net' ? t('line_kg_gross_below_net') : t(decimalErrorKey(error.code));
+            addError(found, `lines[${index}].${error.field}`, message);
+        }
         const seen = new Set<string>();
-        const payloadLines = lines.map((line, index) => {
-            const prefix = `lines[${index}]`;
-            if (!line.productVariantId) addError(found, `${prefix}.productVariantId`, t('supply_error_required'));
-            // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet; de server controleert dezelfde rekensom.
-            const amounts = resolvePalletInput(line);
-            if (!amounts.ok) for (const error of amounts.errors) addError(found, `${prefix}.${error.field === 'quantity' ? 'expectedQuantity' : error.field}`, t(palletErrorKey(error.field, error.code)));
-            if (line.unit === '') addError(found, `${prefix}.expectedUnit`, t('supply_error_required_unit'));
-            // Kg optioneel: berekend uit het artikel of ingevuld; bruto nooit onder netto (zelfde regels als LineWeightRules).
-            const weight = resolveLineWeight(line, amounts.ok ? amounts.value.quantity : null, variants.get(Number(line.productVariantId)));
-            if (!weight.ok) for (const error of weight.errors) addError(found, `${prefix}.${error.field === 'net' ? 'expectedNetWeightKg' : 'expectedGrossWeightKg'}`, error.code === 'gross_below_net' ? t('line_kg_gross_below_net') : t(decimalErrorKey(error.code)));
-            const lot = line.lotNumber.trim();
-            if (lot.length > 100) addError(found, `${prefix}.lotNumber`, t('supply_error_too_long', { max: '100' }));
-            if (lot !== '' && line.productVariantId) {
-                const duplicateKey = `${line.productVariantId}|${lot}`;
-                if (seen.has(duplicateKey)) addError(found, prefix, t('supply_error_duplicate_line'));
-                seen.add(duplicateKey);
-            }
-            return {
-                productVariantId: Number(line.productVariantId),
-                expectedQuantity: amounts.ok ? amounts.value.quantity : 0,
-                expectedUnit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
-                expectedNetWeightKg: null,
-                lotNumber: lot === '' ? null : lot,
-                palletCount: amounts.ok ? amounts.value.palletCount : null,
-                packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
-                ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
-                // Bruto kg en bron alleen als er kg is: een regel zonder kg blijft dezelfde opdracht als vóór deze velden.
-                ...(weight.ok ? weightPayload(weight.value, 'expectedNetWeightKg', 'expectedGrossWeightKg') : {}),
-            };
-        });
+        for (const { index, payload } of built.lines) {
+            if (payload.lotNumber !== null && payload.lotNumber.length > 100) addError(found, `lines[${index}].lotNumber`, t('supply_error_too_long', { max: '100' }));
+            if (payload.lotNumber === null || !payload.productVariantId) continue;
+            const duplicateKey = `${payload.productVariantId}|${payload.lotNumber}`;
+            if (seen.has(duplicateKey)) addError(found, `lines[${index}]`, t('supply_error_duplicate_line'));
+            seen.add(duplicateKey);
+        }
+        const payloadLines = built.lines.map((line) => line.payload);
 
         if (Object.keys(found).length > 0) {
             return { payload: null, errors: found };
@@ -465,75 +426,20 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             <fieldset className="space-y-2">
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
-                <div className="overflow-x-auto rounded border border-gray-200">
-                    <table className={lineTableClass}>
-                        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
-                            <tr>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_quantity_unit')} *</th>
-                                {isDirect && <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>}
-                                <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {lines.map((line, index) => {
-                                const prefix = `lines[${index}]`;
-                                const unitText = line.unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(line.unit)).toLowerCase();
-                                return (
-                                    <tr key={line.key} className="align-top">
-                                        <td className="w-80 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
-                                                value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
-                                                describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
-                                                onChange={(variantId) => updateLine(line.key, 'productVariantId', variantId)} />
-                                            <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
-                                            <FieldError id={prefix} messages={e(prefix)} />
-                                            {newArticleFor === line.key ? (
-                                                <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
-                                                    onUse={(variantId, created) => {
-                                                        if (created !== null) setProducts((current) => withArticle(current, created));
-                                                        updateLine(line.key, 'productVariantId', String(variantId));
-                                                        setNewArticleFor(null);
-                                                    }} />
-                                            ) : !locked && (
-                                                <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
-                                                    data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
-                                            )}
-                                        </td>
-                                        <td className="w-96 px-2 py-1.5">
-                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} quantityField="expectedQuantity" dataTour="supply-line-quantity"
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
-                                                onChange={(field, value) => updateLine(line.key, field, value)}
-                                                unitSelect={<UnitSelect fieldKey={`${prefix}.expectedUnit`} index={index} value={line.unit} errors={e(`${prefix}.expectedUnit`)} disabled={locked}
-                                                    dataTour="supply-line-unit" onChange={(unit) => updateLine(line.key, 'unit', unit)} />} />
-                                            <FieldError id={`${prefix}.expectedUnit`} messages={e(`${prefix}.expectedUnit`)} />
-                                            <div data-tour="supply-line-kg" data-tour-key={index}>
-                                                <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="expectedNetWeightKg" grossKey="expectedGrossWeightKg" unit={unitText}
-                                                    locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
-                                            </div>
-                                        </td>
-                                        {/* Klantgebonden aanvoer: partij van de bronregel per regel (gaat mee op de verzending). Magazijn: de partij staat op de kop. */}
-                                        {isDirect && (
-                                            <td className="px-2 py-1.5">
-                                                <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
-                                                <input {...fieldProps(`${prefix}.lotNumber`, e(`${prefix}.lotNumber`))} value={line.lotNumber} disabled={locked} maxLength={100}
-                                                    onChange={(event) => updateLine(line.key, 'lotNumber', event.target.value)} className={inputClass} />
-                                                <FieldError id={`${prefix}.lotNumber`} messages={e(`${prefix}.lotNumber`)} />
-                                            </td>
-                                        )}
-                                        <td className="px-2 py-1.5">
-                                            <button type="button" onClick={() => removeLine(line.key)} disabled={locked || lines.length <= 1}
-                                                className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-                <KgTotals totals={totals} lineCount={lines.length} testId="supply-kg-totals" />
-                <button type="button" onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
+                <PurchaseOrderLines lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
+                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor}
+                    productExtra={(line, index) => (newArticleFor === line.key ? (
+                        <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
+                            onUse={(variantId, created) => {
+                                if (created !== null) setProducts((current) => withArticle(current, created));
+                                updateLine(line.key, { productVariantId: String(variantId) });
+                                setNewArticleFor(null);
+                            }} />
+                    ) : !locked && (
+                        <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                            title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                    ))} />
+                <button type="button" tabIndex={-1} onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
                     + {t('supply_add_line')}
                 </button>
             </fieldset>

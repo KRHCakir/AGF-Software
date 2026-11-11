@@ -22,9 +22,9 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // (bij klantgebonden aanvoer daarna de partij); alles wat uit het artikel komt is tekst. Tab op het laatste veld van de laatste regel
 // maakt een nieuwe regel en zet de cursor in haar productveld; een lege regel telt bij opslaan niet mee. De knoppen (Bruto aanpassen,
 // Bruto van het artikel, ✕) staan buiten de Tab-volgorde, zoals de eigenaar wil en net als ⧉ en ✕ bij de inkoopfactuur; met het
-// toetsenbord bereik je ze vanuit elk veld van de regel met Alt+B (Bruto aanpassen) en Alt+R (regel verwijderen), wat onder de tabel
+// toetsenbord bereik je ze vanuit elk veld van de regel met Alt+B (Bruto aanpassen), Alt+A (Nieuw artikel) en Alt+R (regel verwijderen), wat onder de tabel
 // staat. Een aangepaste bruto leegmaken zet de regel terug op de bruto van het artikel.
-export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, productExtra }: {
+export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra }: {
     lines: PurchaseLineDraft[];
     rows: PurchaseLineRow[];
     products: ProductOption[];
@@ -35,6 +35,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
     onChange: (key: string, patch: Partial<PurchaseLineDraft>) => void;
     onAdd: () => void;
     onRemove: (key: string) => void;
+    onNewArticle?: (key: string) => void;
     productExtra: (line: PurchaseLineDraft, index: number) => ReactNode;
 }) {
     const { t, locale } = useTranslation();
@@ -73,6 +74,9 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         if (action === 'adjustGross' && line.productVariantId !== '') {
             event.preventDefault();
             openGross(line, row);
+        } else if (action === 'newArticle' && onNewArticle) {
+            event.preventDefault();
+            onNewArticle(line.key);
         } else if (action === 'removeLine' && lines.length > 1) {
             event.preventDefault();
             onRemove(line.key);
@@ -188,7 +192,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                 </tbody>
                 <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 2 : 1} />
             </table>
-            {!locked && <p className="px-2 py-1 text-xs text-gray-600" data-testid="purchase-lines-keys">{t('po_line_keys_hint', { gross: shortcutLabel('adjustGross', isMac), remove: shortcutLabel('removeLine', isMac) })}</p>}
+            {!locked && <p className="px-2 py-1 text-xs text-gray-600" data-testid="purchase-lines-keys">{t('po_line_keys_hint', { gross: shortcutLabel('adjustGross', isMac), article: shortcutLabel('newArticle', isMac), remove: shortcutLabel('removeLine', isMac) })}</p>}
         </div>
     );
 }

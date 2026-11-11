@@ -43,6 +43,18 @@ describe('purchase order lines: keyboard', () => {
         assert.equal(mounted.container.querySelector('[data-testid="purchase-lines-keys"]')!.textContent, 'po_line_keys_hint');
     });
 
+    test('Alt+A asks for a new article on that line', async () => {
+        const opened: string[] = [];
+        function WithNewArticle() {
+            const lines = [{ ...emptyPurchaseLine('a'), productVariantId: '1', quantity: '100' }, { ...emptyPurchaseLine('b'), productVariantId: '1', quantity: '50' }];
+            return <PurchaseOrderLines lines={lines} rows={lines.map((line) => purchaseLineRow(line, variant))} products={products} variantOf={() => variant} locked={false} isDirect={false}
+                errors={() => undefined} onChange={() => undefined} onAdd={() => undefined} onRemove={() => undefined} onNewArticle={(key) => opened.push(key)} productExtra={() => null} />;
+        }
+        await mounted.render(<WithNewArticle />);
+        await alt('lines[1].expectedQuantity-input', 'KeyA');
+        assert.deepEqual(opened, ['b']);
+    });
+
     test('Alt+B opens Bruto aanpassen on that line, Alt+R removes the line', async () => {
         await mounted.render(<Harness />);
         assert.equal(field('lines[1].expectedGrossWeightKg-input'), null);
