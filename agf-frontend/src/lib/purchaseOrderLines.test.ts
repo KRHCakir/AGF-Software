@@ -37,6 +37,7 @@ describe('purchase order line drafts', () => {
         const ok = purchaseLinePayloads([line({ quantity: '7', unitPrice: '12' }), emptyPurchaseLine('b')], () => avocado);
         assert.deepEqual(ok.lines.map((entry) => entry.payload), [{ productVariantId: 1, expectedQuantity: 7, expectedUnit: 'colli', expectedNetWeightKg: 28, lotNumber: null, palletCount: null, packagesPerPallet: null, expectedGrossWeightKg: 30.8, weightSource: 'Calculated', unitPrice: 12 }]);
         assert.deepEqual(purchaseLinePayloads([emptyPurchaseLine('a')], () => avocado).errors.map((entry) => entry.error.field), ['productVariantId', 'expectedQuantity'], 'only empty lines: the first one is checked');
+        assert.deepEqual(purchaseLinePayloads([emptyPurchaseLine('a'), emptyPurchaseLine('b'), emptyPurchaseLine('c')], () => avocado).errors.map((entry) => entry.index), [0, 0], 'several empty lines: only the first gets the messages');
         const totals = purchaseLineTotals([purchaseLineRow(line({ quantity: '100', unitPrice: '12,50' }), avocado), purchaseLineRow(line({ quantity: '30' }), noUnit)]);
         assert.deepEqual([totals.quantity, totals.netKg, totals.amount, totals.linesWithoutPrice, totals.linesWithoutPallets], [130, 400, 1250, 1, 1]);
     });
