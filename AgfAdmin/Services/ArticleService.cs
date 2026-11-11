@@ -120,7 +120,7 @@ namespace AgfAdmin.Services
             var variant = new ProductVariant { Product = product, DefaultPrice = 0m };
             Apply(variant, values);
             _db.ProductVariants.Add(variant);
-            await _db.SaveChangesAsync(cancellationToken);
+            if (await SaveTakenShortcutAsync(values.ShortcutCode, cancellationToken) is { } taken) return taken;
             return ServiceResult<ArticleDto>.Created(ToDto(variant));
         }
 
@@ -163,8 +163,23 @@ namespace AgfAdmin.Services
                 variant.Product.Name = values.ProductName; // alleen schrijfwijze (spaties, hoofdletters)
             }
             Apply(variant, values);
-            await _db.SaveChangesAsync(cancellationToken);
+            if (await SaveTakenShortcutAsync(values.ShortcutCode, cancellationToken) is { } taken) return taken;
             return ServiceResult<ArticleDto>.Ok(ToDto(variant));
+        }
+
+        // Opslaan; botst de snelcode toch nog (een ander sloeg dezelfde code net tegelijk op, unieke index op ShortcutKey), dan dezelfde
+        // melding als bij de controle vooraf in plaats van een serverfout. Null = opgeslagen.
+        private async Task<ServiceResult<ArticleDto>> SaveTakenShortcutAsync(string shortcut, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+                return null;
+            }
+            catch (DbUpdateException exception) when (shortcut != null && DbErrors.IsUniqueViolation(exception))
+            {
+                return ServiceResult<ArticleDto>.Validation(new Dictionary<string, string[]> { ["shortcutCode"] = new[] { $"Search code '{shortcut}' is already used by another article." } });
+            }
         }
 
         private Task<Product> FindProductAsync(string name, CancellationToken cancellationToken)
@@ -197,9 +212,9 @@ namespace AgfAdmin.Services
                 }
                 else
                 {
-                    var lower = shortcut.ToLowerInvariant();
+                    var key = ArticleRules.ShortcutKey(shortcut);
                     var taken = await _db.ProductVariants.AsNoTracking().Include(v => v.Product)
-                        .FirstOrDefaultAsync(v => v.ShortcutCode != null && v.ShortcutCode.ToLower() == lower && v.Id != selfId, cancellationToken);
+                        .FirstOrDefaultAsync(v => v.ShortcutKey == key && v.Id != selfId, cancellationToken);
                     if (taken != null)
                     {
                         ValidationErrors.Add(errors, "shortcutCode", $"Search code '{shortcut}' is already used by article #{taken.Id} ({Describe(taken)}).");

@@ -176,5 +176,8 @@ namespace AgfAdmin.Services
         private static readonly Regex Shortcut = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$", RegexOptions.Compiled);
 
         public static bool IsShortcutCode(string value) => value != null && Shortcut.IsMatch(value);
+
+        // Genormaliseerde snelcode voor de unieke index en het opzoeken: getrimd, kleine letters; leeg = geen snelcode.
+        public static string ShortcutKey(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
     }
 }

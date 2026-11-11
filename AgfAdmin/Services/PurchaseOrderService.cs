@@ -284,12 +284,19 @@ namespace AgfAdmin.Services
                     Origin = l.ProductVariant?.Origin,
                     Size = l.ProductVariant?.SizeCategory,
                     Packaging = l.ProductVariant?.Packaging,
+                    Brand = l.ProductVariant?.Brand,
                     LotNumber = l.LotNumber,
                     PartijId = l.PartijId,
                     PartijNumber = l.Partij?.Number,
                     ExpectedQuantity = l.ExpectedQuantity,
                     Unit = l.ExpectedUnit,
                     ExpectedNetWeightKg = l.ExpectedNetWeightKg,
+                    ExpectedGrossWeightKg = l.ExpectedGrossWeightKg,
+                    WeightSource = l.WeightSource,
+                    UnitPrice = l.UnitPrice,
+                    LineTotal = PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice),
+                    PackagesPerPallet = PurchaseLineMath.PackagesPerPallet(l.PackagesPerPallet, l.ProductVariant?.DefaultPackagesPerPallet),
+                    Pallets = PalletsOf(l),
                     ReplacesLineId = l.ReplacesLineId,
                     ReplacedByLineIds = commitment.Lines.Where(r => r.ReplacesLineId == l.Id).OrderBy(r => r.Id).Select(r => r.Id).ToList(),
                     ReceivedQuantity = line.ReceivedQuantity,
@@ -330,6 +337,7 @@ namespace AgfAdmin.Services
                 RejectedQuantity = facts.RejectedQuantity,
                 RejectedNetWeightKg = facts.RejectedNetWeightKg,
                 Lines = lines,
+                Totals = TotalsOf(commitment.Lines),
                 Receipts = receipts,
                 InvoiceRefs = facts.Refs.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).Select(r => new PurchaseOrderInvoiceRefDto
                 {
@@ -516,6 +524,24 @@ namespace AgfAdmin.Services
             {
                 return null;
             }
+        }
+
+        // Pallets van een regel (niet afgerond) en voor de weergave op twee decimalen; zonder colli per pallet null.
+        private static decimal? ExactPallets(SupplyCommitmentLine line) =>
+            PurchaseLineMath.Pallets(line.ExpectedQuantity, PurchaseLineMath.PackagesPerPallet(line.PackagesPerPallet, line.ProductVariant?.DefaultPackagesPerPallet));
+
+        private static decimal? PalletsOf(SupplyCommitmentLine line) => ExactPallets(line) is { } pallets ? PurchaseLineMath.Round2(pallets) : null;
+
+        private static PurchaseOrderLineTotalsDto TotalsOf(IEnumerable<SupplyCommitmentLine> lines)
+        {
+            var totals = PurchaseLineMath.Sum(lines.Select(l => new PurchaseLineMath.Line(l.ExpectedQuantity, l.ExpectedNetWeightKg, l.ExpectedGrossWeightKg,
+                PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice), ExactPallets(l))).ToList());
+            return new PurchaseOrderLineTotalsDto
+            {
+                Quantity = totals.Quantity, NetWeightKg = totals.NetKg, GrossWeightKg = totals.GrossKg, Amount = totals.Amount, Pallets = totals.Pallets,
+                LinesWithoutNet = totals.LinesWithoutNet, LinesWithoutGross = totals.LinesWithoutGross, LinesWithoutPrice = totals.LinesWithoutPrice,
+                LinesWithoutPallets = totals.LinesWithoutPallets
+            };
         }
 
         private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);

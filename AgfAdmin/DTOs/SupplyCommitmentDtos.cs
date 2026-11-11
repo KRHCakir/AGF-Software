@@ -38,6 +38,8 @@ namespace AgfAdmin.DTOs
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
         public decimal? LoosePackages { get; set; }
+        // Optioneel: inkoopprijs per verpakking (eenheid van de regel), excl. btw, >= 0 met hooguit 2 decimalen. Weggelaten = geen prijs.
+        public decimal? UnitPrice { get; set; }
     }
 
     public sealed class SupplyCommitmentFilter
@@ -124,5 +126,8 @@ namespace AgfAdmin.DTOs
         public decimal? DirectTradeRemainingQuantity { get; set; }
         // Vervangende regel na een afwijkende ontvangst: de oorspronkelijke regel (anders null).
         public int? ReplacesLineId { get; set; }
+        // Prijs per verpakking en aantal × prijs (null zonder prijs).
+        public decimal? UnitPrice { get; set; }
+        public decimal? LineTotal { get; set; }
     }
 }

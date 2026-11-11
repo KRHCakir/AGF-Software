@@ -361,6 +361,11 @@ namespace AgfAdmin.Services
             // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet + losse verpakkingen, of moet daar exact aan gelijk zijn.
             var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.ExpectedQuantity, key, "expectedQuantity", errors, AddError);
 
+            if (line.UnitPrice != null && !CostArticleRules.IsUnitPrice(line.UnitPrice.Value))
+            {
+                AddError(errors, $"{key}.unitPrice", "Unit price, when given, must be 0 or more with at most 2 decimals.");
+            }
+
             if (errors.Count > errorCount || total == null)
             {
                 return null;
@@ -377,7 +382,8 @@ namespace AgfAdmin.Services
                 ExpectedNetWeightKg = line.ExpectedNetWeightKg,
                 ExpectedGrossWeightKg = line.ExpectedGrossWeightKg,
                 WeightSource = weightSource,
-                LotNumber = lotNumber
+                LotNumber = lotNumber,
+                UnitPrice = line.UnitPrice
             };
         }
 
@@ -545,6 +551,7 @@ namespace AgfAdmin.Services
                 && pair.First.PalletCount == pair.Second.PalletCount
                 && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                 && pair.First.LoosePackages == pair.Second.LoosePackages
+                && pair.First.UnitPrice == pair.Second.UnitPrice
                 && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal));
         }
 
@@ -616,7 +623,9 @@ namespace AgfAdmin.Services
                     DirectTradeAllocatedQuantity = commitment.Route == SupplyRules.RouteDirectTrade ? allocated.GetValueOrDefault(l.Id) : null,
                     DirectTradeRemainingQuantity = commitment.Route == SupplyRules.RouteDirectTrade
                         ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null,
-                    ReplacesLineId = l.ReplacesLineId
+                    ReplacesLineId = l.ReplacesLineId,
+                    UnitPrice = l.UnitPrice,
+                    LineTotal = PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice)
                 })
                 .ToList(),
             LinesOrigin = SupplyRules.LinesOrigin(commitment.Lines.Where(l => l.ExpectedQuantity > 0m).Select(l => l.ProductVariant?.Origin))

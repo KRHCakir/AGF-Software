@@ -9,7 +9,7 @@ namespace AgfAdmin.Data
     {
         private sealed record StoredSupplyLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, int? ReplacesLineId,
             decimal ExpectedQuantity, decimal? ExpectedNetWeightKg, decimal? ExpectedGrossWeightKg, string WeightSource,
-            decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, string Route);
+            decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, string Route, decimal? UnitPrice);
 
         // ---- Regel 18: afwijkende ontvangst (zie PalletService.Deviation.cs) ----
         //
@@ -37,7 +37,7 @@ namespace AgfAdmin.Data
             var stored = (await ToListAsync(db.SupplyCommitmentLines.AsNoTracking().Where(l => storedIds.Contains(l.Id))
                     .Select(l => new StoredSupplyLine(l.Id, l.SupplyCommitmentId, l.ProductVariantId, l.ExpectedUnit, l.ReplacesLineId,
                         l.ExpectedQuantity, l.ExpectedNetWeightKg, l.ExpectedGrossWeightKg, l.WeightSource, l.PalletCount, l.PackagesPerPallet, l.LoosePackages,
-                        l.SupplyCommitment.Route)), async, cancellationToken))
+                        l.SupplyCommitment.Route, l.UnitPrice)), async, cancellationToken))
                 .ToDictionary(l => l.Id);
 
             foreach (var entry in lines.Where(e => e.State == EntityState.Modified))
@@ -45,9 +45,10 @@ namespace AgfAdmin.Data
                 var line = entry.Entity;
                 var before = stored[line.Id];
                 if (before.SupplyCommitmentId != line.SupplyCommitmentId || before.ProductVariantId != line.ProductVariantId
-                    || !string.Equals(before.ExpectedUnit, line.ExpectedUnit, StringComparison.Ordinal) || before.ReplacesLineId != line.ReplacesLineId)
+                    || !string.Equals(before.ExpectedUnit, line.ExpectedUnit, StringComparison.Ordinal) || before.ReplacesLineId != line.ReplacesLineId
+                    || before.UnitPrice != line.UnitPrice)
                 {
-                    throw new TraceabilityViolationException($"The order, product variant, unit and replaced line of supply commitment line {line.Id} are fixed.");
+                    throw new TraceabilityViolationException($"The order, product variant, unit, replaced line and price of supply commitment line {line.Id} are fixed.");
                 }
                 var shapeChanged = before.ExpectedQuantity != line.ExpectedQuantity || before.ExpectedNetWeightKg != line.ExpectedNetWeightKg
                     || before.ExpectedGrossWeightKg != line.ExpectedGrossWeightKg || !string.Equals(before.WeightSource, line.WeightSource, StringComparison.Ordinal)

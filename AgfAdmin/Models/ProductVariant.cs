@@ -27,6 +27,10 @@ namespace AgfAdmin.Models
         public decimal DefaultPrice { get; set; }
 
         public string? ShortcutCode { get; set; }
+        // Genormaliseerde snelcode (zonder spaties eromheen, kleine letters) voor de unieke index: "AvoHassPer13" en "avohassper13"
+        // zijn dezelfde snelcode. Gezet bij het opslaan (AppDbContext), nooit zelf invullen.
+        [JsonIgnore]
+        public string? ShortcutKey { get; set; }
 
         // Gewichtsmethode van deze variant/verpakking: "Weighed" (altijd werkelijk wegen) of "Calculated" (aantal ×
         // netto kg per verpakking volgens etiket). Bestaande varianten zijn Weighed. Een maat alleen bepaalt dit nooit.
