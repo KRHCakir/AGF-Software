@@ -41,6 +41,8 @@ namespace AgfAdmin.Data
         public DbSet<WasteLog> WasteLogs { get; set; }
         // Voeg deze regel toe aan je bestaande AppDbContext
         public DbSet<CompanySettings> CompanySettings { get; set; }
+        public DbSet<AiExtraction> AiExtractions { get; set; }
+        public DbSet<DocumentAttachment> DocumentAttachments { get; set; }
 
         // Beschikbaarheidsdomein (verwacht, ontvangen, gereserveerd). Legacy Inventory/Shipment blijven ongewijzigd.
         public DbSet<SupplyCommitment> SupplyCommitments { get; set; }
@@ -476,6 +478,8 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PartijSequenceDigits).HasDefaultValue(PartijRules.DefaultSequenceDigits);
                 b.Property(c => c.SalesPartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultSalesFormat);
                 b.Property(c => c.SalesPartijSequenceDigits).HasDefaultValue(PartijRules.DefaultSequenceDigits);
+                b.Property(c => c.AiReadingEnabledBy).HasMaxLength(100);
+                b.Property(c => c.AiReadingMonthlyLimitEur).HasPrecision(18, 2).HasDefaultValue(Services.DocumentAi.AiReadingRules.DefaultMonthlyLimitEur);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_CompanySettings_PartijNumberMode_Allowed", "\"PartijNumberMode\" IN ('Auto', 'Own')");
@@ -1539,6 +1543,8 @@ namespace AgfAdmin.Data
                     .HasForeignKey(e => e.PalletContentLineId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
+
+            AiReadingModel.Configure(modelBuilder);
         }
     }
 }
