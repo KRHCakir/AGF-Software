@@ -5,6 +5,10 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string Name { get; set; }
+        // Cost of Packaging (emballage); alleen emballage heeft een standaardprijs per stuk (excl. btw) en een btw-percentage.
+        public string Kind { get; set; }
+        public decimal? DefaultUnitPrice { get; set; }
+        public decimal? VatPercentage { get; set; }
         public bool IsStandard { get; set; }
         public bool IsActive { get; set; }
         public int SortOrder { get; set; }
@@ -21,5 +25,14 @@ namespace AgfAdmin.DTOs
     public sealed class SetCostArticleActiveDto
     {
         public bool? IsActive { get; set; }
+    }
+
+    // Emballage-artikel (api/packaging-articles): naam alleen bij aanmaken; prijs (leeg = geen standaardprijs) en btw ook daarna.
+    public sealed class SavePackagingArticleDto
+    {
+        public Guid? RequestId { get; set; }
+        public string Name { get; set; }
+        public decimal? DefaultUnitPrice { get; set; }
+        public decimal? VatPercentage { get; set; }
     }
 }

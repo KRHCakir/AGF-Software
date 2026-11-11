@@ -15,7 +15,14 @@ namespace AgfAdmin.Models
         // Vergelijkingssleutel (CostArticleRules.NameKey): "Zee vracht " en "zee vracht" zijn één kostenartikel. Uniek.
         public string NameKey { get; set; }
 
-        // Een van de standaardsoorten uit de migratie (Handling, Transport, QC, Zeevracht, Afval, Overig).
+        // Soort (CostArticleRules.Kinds): Cost = kosten op een factuur van derden (P2); Packaging = emballage (fust) zoals pallets en kratten,
+        // ook als regel op een verkooporder. Verandert nooit (guard-regel 27).
+        public string Kind { get; set; } = Services.CostArticleRules.KindCost;
+        // Alleen bij emballage: optionele standaardprijs per stuk (excl. btw) en het btw-percentage voor een verkoopregel.
+        public decimal? DefaultUnitPrice { get; set; }
+        public decimal? VatPercentage { get; set; }
+
+        // Een van de standaardsoorten uit de migraties (Handling, Transport, QC, Zeevracht, Afval, Overig; Pallet wegwerp, Euro-pallet, Krat).
         public bool IsStandard { get; set; }
         public bool IsActive { get; set; } = true;
         public int SortOrder { get; set; }

@@ -54,7 +54,8 @@ public sealed class DirectPurchaseInvoiceTests : IDisposable
         await SeedAsync();
         await using var db = _factory.CreateContext();
         var service = new CostArticleService(db);
-        Assert.Equal(CostArticleRules.StandardNames, (await service.ListAsync(includeInactive: false)).Select(c => c.Name));
+        // Eerst de kostensoorten, daarna de standaard-emballage (AddPackaging), elk in vaste volgorde.
+        Assert.Equal(CostArticleRules.StandardNames.Concat(CostArticleRules.StandardPackagingNames), (await service.ListAsync(includeInactive: false)).Select(c => c.Name));
 
         var requestId = Guid.NewGuid();
         var created = await service.CreateAsync(new CreateCostArticleDto { RequestId = requestId, Name = "  Auto huur " });
