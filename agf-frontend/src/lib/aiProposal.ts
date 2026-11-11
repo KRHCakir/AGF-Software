@@ -13,6 +13,8 @@ export function draftFromProposal(extraction: AiExtraction, settings: PurchaseIn
     const proposal = extraction.proposal;
     let draft = emptyDraft(today, settings);
     if (proposal === null) return draft;
+    // Geen gevonden factuurdatum: leeg laten (dus ook de vervaldatum), zodat opslaan erom vraagt; niet stilzwijgend vandaag.
+    draft = { ...draft, header: { ...draft.header, invoiceDate: '', dueDate: '' } };
     const vendor = vendors.find((candidate) => candidate.id === extraction.matches?.suggestedVendorId && candidate.isActive) ?? null;
     if (vendor !== null) draft = selectVendor(draft, vendor, settings);
     draft = { ...draft, header: { ...draft.header, invoiceNumber: proposal.invoiceNumber ?? '' } };
@@ -28,7 +30,7 @@ export function draftFromProposal(extraction: AiExtraction, settings: PurchaseIn
         // Een prijs met meer dan twee decimalen blijft zichtbaar zoals gelezen; opslaan vraagt dan om afronden.
         unitPrice: line.unitPrice === null ? '' : Number.isInteger(Math.round(line.unitPrice * 10000) / 100) ? formatAmountInput(line.unitPrice) : formatDecimalInput(line.unitPrice, 4),
         discount: '0',
-        vat: line.vatPercentage === null ? String(settings.defaultVatPercentage) : formatDecimalInput(line.vatPercentage, 2),
+        vat: line.vatPercentage === null ? '' :formatDecimalInput(line.vatPercentage, 2),
     }));
     return { ...draft, lines: lines.length === 0 ? draft.lines : lines };
 }

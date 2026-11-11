@@ -14,10 +14,13 @@ import { secondaryButtonClass } from '../supply/SuccessPanel';
 const ACCEPT = '.pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/jpeg,image/png,image/heic,image/heif';
 const ALLOWED = /\.(pdf|jpe?g|png|heic|heif)$/i;
 
-export default function AiUploadPanel({ onProposal, beforeUpload }: {
+export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply }: {
     onProposal: (extraction: AiExtraction) => void;
     // Vraagt de gebruiker of het huidige concept vervangen mag worden; false = niet uploaden.
     beforeUpload?: () => boolean;
+    // Na het lezen, vlak voor het toepassen: het formulier kan tijdens het lezen zijn aangepast. Vraag opnieuw (of weiger) als dat zo is;
+    // false = het voorstel niet toepassen.
+    beforeApply?: () => boolean;
 }) {
     const { t } = useTranslation();
     const [status, setStatus] = useState<AiReadingStatus | null>(null);
@@ -45,7 +48,8 @@ export default function AiUploadPanel({ onProposal, beforeUpload }: {
         setError(null);
         setReading(true);
         try {
-            onProposal(await readInvoiceDocument(file));
+            const extraction = await readInvoiceDocument(file);
+            if (!beforeApply || beforeApply()) onProposal(extraction);
         } catch (caught) {
             setError(aiErrorCode(toApiError(caught)));
         } finally {
