@@ -82,8 +82,10 @@ public static class Cli
         static bool InSamples(string path, string root)
         {
             var relative = Path.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/') + "/";
-            return relative.StartsWith("AgfAiBenchmark/samples/", StringComparison.Ordinal)
-                || (relative.StartsWith("AgfAiBenchmark.Tests/bin/", StringComparison.Ordinal) && relative.Contains("/samples/"));
+            // Windows (en macOS) negeren hoofdletters in paden; op Linux blijft de vergelijking strikt.
+            var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            return relative.StartsWith("AgfAiBenchmark/samples/", comparison)
+                || (relative.StartsWith("AgfAiBenchmark.Tests/bin/", comparison) && relative.Contains("/samples/", comparison));
         }
 
         foreach (var (name, path) in new[] { ("--docs", docsDir), ("--truth", truthDir) })
