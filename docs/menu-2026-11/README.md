@@ -16,5 +16,6 @@ Verder:
 |---|---|
 | `voor-1440-oud-open.png` | Het menu "Oud" van vroeger, uitgeklapt. Dat is nu weg. |
 | `na-1440-instellingen.png` | Instellingen in dezelfde balk en stijl als de groepen, als actief scherm. |
+| `na-1440-oude-url.png` | Een bewaarde link naar een verdwenen oud scherm (`/reports`): een nette melding met een knop naar Start. |
 
 Zelf opnieuw maken: zie de PR. Het script controleert ook dat de kop op 1024, 1280, 1440 en 1920 px nergens overlapt en dat er op 390 px niet horizontaal gescrold hoeft te worden.

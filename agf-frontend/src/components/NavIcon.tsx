@@ -29,10 +29,6 @@ const PATHS: Readonly<Record<string, string>> = {
     articles: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9',
 };
 
-export function hasNavIcon(id: string): boolean {
-    return id in PATHS;
-}
-
 export default function NavIcon({ id, className = 'h-5 w-5' }: { id: string; className?: string }) {
     const d = PATHS[id];
     if (!d) return null;
