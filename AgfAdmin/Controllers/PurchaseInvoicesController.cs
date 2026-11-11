@@ -41,6 +41,16 @@ namespace AgfAdmin.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
 
+        // Het originele document van een goedgekeurd AI-voorstel (bijlage, met hash).
+        [HttpGet("{id:int}/attachments/{attachmentId:int}")]
+        public async Task<IActionResult> Attachment(int id, int attachmentId, [FromServices] Services.DocumentAi.IDocumentStore store)
+        {
+            var attachment = await _service.AttachmentAsync(id, attachmentId, HttpContext?.RequestAborted ?? default);
+            if (attachment == null) return NotFound(new { message = $"Attachment {attachmentId} of purchase invoice {id} does not exist." });
+            Response.Headers.CacheControl = "private, no-store";
+            return File(await store.ReadAsync(attachment.StorageKey, HttpContext?.RequestAborted ?? default), attachment.MediaType, attachment.FileName);
+        }
+
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreatePurchaseInvoiceDto request)
         {
