@@ -12,7 +12,7 @@ const order = (id: string, route: string, actions: readonly TourAction[]) => ste
 // Leverancier en artikel van de rondleiding, als ze er nog niet zijn.
 export const MASTER_FOR_PURCHASE: TourStep[] = [...prerequisite(VENDOR_STEPS, 'mv', '{{needVendor}}'), ...prerequisite(ARTICLE_STEPS, 'ma', '{{needArticle}}')];
 
-// De inkooporder zelf: leverancier, partij, referentie en datum, één regel met Tab door artikel, aantal en prijs (eenheid, kg, merk,
+// De inkooporder zelf: leverancier, haar ordernummer en de datums, partij, één regel met Tab door artikel, aantal en prijs (eenheid, kg, merk,
 // land, maat en inhoud komen uit het artikel), de knop Bruto aanpassen en de totalen onder de kolommen, en opslaan.
 export const ORDER_CORE: TourStep[] = [
     order('open', '/purchase-orders/new', [
@@ -20,19 +20,20 @@ export const ORDER_CORE: TourStep[] = [
         { kind: 'highlight', target: 'supply-vendor' },
     ]),
     order('vendor', '/purchase-orders/new', [{ kind: 'pick', target: 'supply-vendor', text: '{{vendorSearch}}', expect: '{{vendorName}}' }]),
+    // Direct na de leverancier haar ordernummer (het hoofdnummer van de order, DEMO-TOUR-…), dan de datums: een tweecijferig jaar wordt bij
+    // het verlaten dd-mm-jjjj.
+    order('reference', '/purchase-orders/new', [
+        { kind: 'type', target: 'supply-reference', text: '{{tourRef}}' },
+        { kind: 'highlight', target: 'supply-ordered-on' },
+        { kind: 'type', target: 'supply-expected', text: '{{expectedDate}}' },
+    ]),
     // Partij: het voorgestelde nummer blijft staan (staat de nummering op Eigen, dan typt de rondleiding haar eigen kenmerk). Een tweede
-    // order op dezelfde partij kies je met "Bestaande partij kiezen". Daarnaast de partij van de leverancier.
+    // order op dezelfde partij kies je met "Bestaande partij kiezen". Daarnaast het lot van de leverancier.
     order('partij', '/purchase-orders/new', [
         { kind: 'highlight', target: 'supply-partij' },
         { kind: 'type', target: 'supply-partij', text: '{{tourRef}}', when: '{{ownNumbering}}' },
         { kind: 'highlight', target: 'supply-partij-choose' },
         { kind: 'type', target: 'supply-supplier-lot', text: 'LOT-{{tourRef}}' },
-    ]),
-    // Datum met tweecijferig jaar: het veld maakt er bij het verlaten dd-mm-jjjj van.
-    order('reference', '/purchase-orders/new', [
-        { kind: 'type', target: 'supply-reference', text: '{{tourRef}}' },
-        { kind: 'highlight', target: 'supply-ordered-on' },
-        { kind: 'type', target: 'supply-expected', text: '{{expectedDate}}' },
     ]),
     order('article', '/purchase-orders/new', [
         { kind: 'pick', target: 'supply-line-product-0', text: '{{productCode}}' },
@@ -62,8 +63,10 @@ export const ORDER_CHAPTER: TourChapter = {
         ...MASTER_FOR_PURCHASE,
         ...ORDER_CORE,
         order('find', '/purchase-orders', [
-            { kind: 'type', target: 'po-search', text: '{{orderNumber}}' },
+            // Terugvinden op het ordernummer van de leverancier; de titel toont dat nummer met het eigen IO-nummer klein eronder.
+            { kind: 'type', target: 'po-search', text: '{{tourRef}}' },
             { kind: 'click', target: 'po-open:{{orderNumber}}' },
+            { kind: 'assert', target: 'po-detail-number', text: '{{tourRef}}' },
             { kind: 'assert', target: 'po-detail-number', text: '{{orderNumber}}' },
         ]),
         order('invoice', '/purchase-orders', [

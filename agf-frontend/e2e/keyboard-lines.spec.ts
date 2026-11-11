@@ -68,8 +68,12 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await vendor.click();
         await page.keyboard.type('Nature');
         await page.waitForTimeout(200);
+        // Tab-volgorde van de kop: Leverancier, Ordernummer leverancier, Besteldatum (daarna de knoppen van het datumveld en Verwacht).
         await page.keyboard.press('Tab');
-        await page.locator('[data-tour="supply-reference"]').fill(reference);
+        await expect.poll(() => focusedId(page)).toBe('supplierReference-input');
+        await page.keyboard.type(reference);
+        await page.keyboard.press('Tab');
+        await expect.poll(() => focusedId(page)).toBe('orderedOn-input');
         await page.locator('[data-tour="supply-expected"]').fill('04-11-26');
         await page.locator('[data-tour="supply-expected"]').press('Enter');
         await expect(page.locator('[data-tour="supply-expected"]')).toHaveValue('04-11-2026');
@@ -92,7 +96,9 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await page.keyboard.press('Shift+Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
         await page.keyboard.press('Enter');
-        await expect(page.getByText(/IO-\d{4}-\d{4}/).first()).toBeVisible({ timeout: 30_000 });
+        // Het ordernummer van de leverancier is het hoofdnummer, het eigen IO-nummer staat eronder als intern nummer.
+        await expect(page.locator('[data-testid="supply-order-number"] [data-testid="order-number-main"]')).toHaveText(reference, { timeout: 30_000 });
+        await expect(page.locator('[data-testid="supply-order-number"] [data-testid="order-number-internal"]')).toHaveText(/Intern nummer IO-\d{4}-\d{4}/);
 
         const saved = await request.get(`${API}/purchase-orders?query=${reference}`);
         const orders = ((await saved.json()) as { items: { id: number; supplierReference: string; expectedQuantity: number }[] }).items.filter((order) => order.supplierReference === reference);

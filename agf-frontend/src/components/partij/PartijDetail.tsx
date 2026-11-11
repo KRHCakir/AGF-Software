@@ -6,12 +6,14 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity, logisticsKey } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { MAX_PARTIJ_NUMBER_LENGTH, MAX_PARTIJ_REASON_LENGTH } from '../../lib/partijRules';
+import { orderNumbers } from '../../lib/purchaseOrderRules';
 import { unitLabelKey } from '../../lib/units';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { correctPartijNumber, deletePartij } from '../../services/partijService';
 import { PACKAGE_UNITS, type PackageUnit } from '../../types/availability';
 import { type PartijDetail as Detail, isPartijExistsConflict } from '../../types/partij';
 import QualityBadge from '../availability/QualityBadge';
+import OrderNumberText from '../purchase/OrderNumberText';
 import { OrderStatusBadge } from '../purchase/PurchaseOrderBadges';
 import { sectionClass } from '../purchase/sectionClass';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -30,6 +32,8 @@ const link = 'font-mono text-blue-800 underline underline-offset-2';
 export default function PartijDetail({ partij, onChanged, onDeleted }: { partij: Detail; onChanged: () => void; onDeleted: () => void }) {
     const { t, locale } = useTranslation();
     const qty = (value: number) => formatQuantity(value, locale);
+    // Het nummer van een order van deze partij zoals de handelaar het kent: het ordernummer van de leverancier, anders het IO-nummer.
+    const orderName = (id: number, fallback: string | null) => orderNumbers(partij.orders.find((order) => order.id === id) ?? { id, orderNumber: fallback }).main;
     const unitText = (unit: string | null) => (unit !== null && (PACKAGE_UNITS as readonly string[]).includes(unit) ? t(unitLabelKey(unit as PackageUnit)) : t('partij_unit_mixed'));
     const pallets = [...new Map(partij.receipts.map((receipt) => [receipt.palletId, receipt])).values()];
     const sales = partij.kind === 'Sales';
@@ -81,7 +85,9 @@ export default function PartijDetail({ partij, onChanged, onDeleted }: { partij:
                     <ul className="divide-y divide-gray-100 text-sm">
                         {partij.orders.map((order) => (
                             <li key={order.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5" data-tour="partij-order" data-tour-key={order.orderNumber}>
-                                <Link href={`/purchase-orders?id=${order.id}`} className={`${link} font-semibold`}>{order.orderNumber}</Link>
+                                <Link href={`/purchase-orders?id=${order.id}`} className={`${link} font-semibold`}>
+                                    <OrderNumberText id={order.id} orderNumber={order.orderNumber} supplierReference={order.supplierReference} />
+                                </Link>
                                 <span>· {order.vendorName ?? '–'}</span>
                                 {order.supplierLotReference && <span className="text-gray-700">· {t('partij_supplier_lot')} <span className="font-mono">{order.supplierLotReference}</span></span>}
                                 <span className="text-gray-700">· {t('po_col_ordered_on')} {formatDateOnly(order.orderedOn, locale)}</span>
@@ -102,7 +108,7 @@ export default function PartijDetail({ partij, onChanged, onDeleted }: { partij:
                                 <Link href={`/inspection?palletId=${receipt.palletId}`} className={`${link} font-semibold`}>{receipt.palletReference}</Link>
                                 <span className="text-xs text-gray-600">({logisticsKey(receipt.palletStatus) ? t(logisticsKey(receipt.palletStatus)!) : receipt.palletStatus})</span>
                                 <span>· {receipt.productName} · {receipt.productVariantName}</span>
-                                <span className="text-gray-700">· <Link href={`/purchase-orders?id=${receipt.supplyCommitmentId}`} className={link}>{receipt.orderNumber}</Link></span>
+                                <span className="text-gray-700">· <Link href={`/purchase-orders?id=${receipt.supplyCommitmentId}`} className={link}>{orderName(receipt.supplyCommitmentId, receipt.orderNumber)}</Link></span>
                                 <span className="font-mono">· {qty(receipt.quantity)} {unitText(receipt.unit)} · {formatKg(receipt.netWeightKg, locale)}</span>
                                 <span className="font-mono text-gray-700">· {t('partij_on_hand_now', { quantity: qty(receipt.onHandQuantity) })}</span>
                                 <QualityBadge status={receipt.qualityStatus} />
@@ -146,7 +152,7 @@ export default function PartijDetail({ partij, onChanged, onDeleted }: { partij:
                             {event.type === 'OrderLinked' && (
                                 <>
                                     {t('partij_event_linked', { name: event.actorReference })}{' '}
-                                    {event.supplyCommitmentId !== null && <Link href={`/purchase-orders?id=${event.supplyCommitmentId}`} className={link}>{partij.orders.find((order) => order.id === event.supplyCommitmentId)?.orderNumber ?? `#${event.supplyCommitmentId}`}</Link>}
+                                    {event.supplyCommitmentId !== null && <Link href={`/purchase-orders?id=${event.supplyCommitmentId}`} className={link}>{orderName(event.supplyCommitmentId, null)}</Link>}
                                     {event.reason && <> · {event.reason}</>}
                                 </>
                             )}

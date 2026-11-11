@@ -36,14 +36,16 @@ public class PurchaseOrderSupplierReferenceTests : IDisposable
         var first = await OrderAsync(seed, "45-21");
         // Dezelfde leverancier en hetzelfde nummer (anders geschreven): de order wordt gewoon aangemaakt.
         var second = await OrderAsync(seed, "45 21");
+        // Geplakt met een tab of harde spatie: dezelfde sleutel.
+        var pasted = await OrderAsync(seed, "45\t2\u00A01");
         var otherVendor = await OrderAsync(seed, "4521", seed.OtherVendorId);
         await OrderAsync(seed, "45210");
 
         await using var db = _factory.CreateContext();
         var service = new PurchaseOrderService(db);
         var matches = await service.FindBySupplierReferenceAsync("4521", seed.VendorId);
-        Assert.Equal(new[] { first.Id, second.Id }, matches.Select(m => m.Id));
-        Assert.Equal(new[] { "45-21", "45 21" }, matches.Select(m => m.SupplierReference));
+        Assert.Equal(new[] { first.Id, second.Id, pasted.Id }, matches.Select(m => m.Id));
+        Assert.Equal(new[] { "45-21", "45 21", "45\t2\u00A01" }, matches.Select(m => m.SupplierReference));
         Assert.Equal(first.OrderNumber, matches[0].OrderNumber);
         Assert.Equal(otherVendor.Id, Assert.Single(await service.FindBySupplierReferenceAsync("45-21", seed.OtherVendorId)).Id);
         Assert.Empty(await service.FindBySupplierReferenceAsync(" - ", seed.VendorId));

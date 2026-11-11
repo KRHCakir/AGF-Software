@@ -55,7 +55,9 @@ describe('supplier order number: duplicate warning', () => {
         assert.equal(internal(notice)!.textContent, 'po_internal_number IO-2026-0012');
         assert.equal(field('supplierReference-input').getAttribute('aria-invalid'), 'false');
 
-        // Leeg nummer: geen waarschuwing.
+        // Een ander nummer: de oude waarschuwing verdwijnt meteen (niet pas na de nieuwe opzoeking); leeg: geen waarschuwing.
+        await type('supplierReference-input', '4522');
+        assert.equal(mounted.container.querySelector('[data-testid="supplier-reference-duplicate"]'), null, 'cleared at once');
         await type('supplierReference-input', ' ');
         await settle();
         assert.equal(mounted.container.querySelector('[data-testid="supplier-reference-duplicate"]'), null);

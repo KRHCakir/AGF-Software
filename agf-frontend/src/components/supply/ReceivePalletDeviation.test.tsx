@@ -271,7 +271,8 @@ describe('ReceivePalletForm blind entry', () => {
     test('the order header shows order number, supplier, supplier reference and order date, never the attributes to check', async () => {
         await arrange();
         const header = mounted.container.querySelector('[data-testid="receive-order-46"]')!.textContent ?? '';
-        assert.ok(header.includes('IO-2026-0046') && header.includes("Nature's Pride") && header.includes('receive_order_reference') && header.includes('receive_order_ordered_on'), header);
+        assert.ok(header.includes('NP-778') && header.includes('IO-2026-0046') && header.includes("Nature's Pride") && header.includes('receive_order_ordered_on'), header);
+        assert.equal(mounted.container.querySelector('[data-testid="receive-order-46"] [data-testid="order-number-main"]')!.textContent, 'NP-778');
         assert.equal(header.includes('Peru'), false);
     });
 

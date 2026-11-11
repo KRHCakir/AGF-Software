@@ -25,6 +25,7 @@ import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import { WeightBadge } from '../shared/WeightBadge';
 import LineHistory from './LineHistory';
+import OrderNumberText from '../purchase/OrderNumberText';
 import TechnicalDetails from '../supply/TechnicalDetails';
 import { KNOWN_INSPECTORS, onRememberedInspectorChange, readRememberedInspector, rememberInspector } from './inspectorMemory';
 
@@ -166,7 +167,7 @@ export default function InspectionLineRow({ context, line, readOnly, onSucceeded
             </td>
             <td className="px-3 py-2 text-sm text-gray-800">
                 {commitment?.vendorName ?? t('availability_unknown')}
-                <span className="block text-xs text-gray-600">{commitment?.origin ?? t('availability_unknown')} · #{line.supplyCommitmentId}</span>
+                <span className="block text-xs text-gray-600">{commitment?.origin ?? t('availability_unknown')} · <OrderNumberText id={line.supplyCommitmentId} orderNumber={commitment?.orderNumber} supplierReference={commitment?.supplierReference} /></span>
             </td>
             <td className="px-3 py-2">
                 <span data-tour="inspection-status" data-tour-key={`${line.lotNumber}-${line.qualityStatus}`}><QualityBadge status={line.qualityStatus} /></span>
