@@ -574,3 +574,8 @@ FodyWeavers.xsd
 
 # Lokale ontwikkelconfiguratie met credentials (zie docs/development-setup.md)
 AgfAdmin/appsettings.Development.json
+
+# AI-testbench: echte documenten, juiste antwoorden en resultaten horen nooit in de repo (zie docs/ai-testbench/README.md).
+agf-ai-bench/
+**/resultaten/
+**/ruw/

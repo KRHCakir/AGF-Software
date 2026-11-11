@@ -11,8 +11,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <ProjectReference Include="..\AgfDocumentAi\AgfDocumentAi.csproj" />
+    <ProjectReference Include="..\AgfAiBenchmark\AgfAiBenchmark.csproj" />
     <Using Include="Xunit" />
+    <None Include="..\AgfAiBenchmark\samples\**\*" LinkBase="samples" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

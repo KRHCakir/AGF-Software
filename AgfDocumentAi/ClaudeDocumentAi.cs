@@ -37,7 +37,7 @@ public sealed class ClaudeDocumentAi(string apiModel, string apiKey) : IDocument
             if (message.StopReason == "refusal") text = "";
             return new AiResponse(text, message.Usage.InputTokens, message.Usage.OutputTokens, watch.Elapsed, message.Model);
         }
-        catch (Exception e) when (e is AnthropicRateLimitException or Anthropic5xxException or AnthropicIOException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        catch (Exception e) when ((e is AnthropicRateLimitException or Anthropic5xxException or AnthropicIOException or TaskCanceledException) && !cancellationToken.IsCancellationRequested)
         {
             throw new TransientAiException($"Anthropic: {e.GetType().Name}", e);
         }

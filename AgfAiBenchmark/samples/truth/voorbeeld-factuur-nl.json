@@ -1,0 +1,17 @@
+{
+  "_meta": { "bron": "digitaal", "taal": "nl", "opmerking": "Verzonnen voorbeeld; bedragen bewust in nl-notatie ingevuld." },
+  "soort": "inkoopfactuur",
+  "leverancier": "Voorbeeld Fruit Zonnedal BV",
+  "ordernummer_leverancier": "ZD-88120",
+  "factuurnummer": "VFZ-2026-0142",
+  "datum": "04-11-2026",
+  "valuta": "EUR",
+  "regels": [
+    { "omschrijving": "Avocado Hass Peru maat 18", "aantal": 100, "eenheid": "doos", "kg_netto": 400, "kg_bruto": 440, "prijs": "12,50", "bedrag": "1.250,00", "btw_percentage": 9 },
+    { "omschrijving": "Mango Kent Brazilie maat 9", "aantal": 40, "eenheid": "doos", "kg_netto": 160, "kg_bruto": 172, "prijs": "9,75", "bedrag": "390,00", "btw_percentage": 9 },
+    { "omschrijving": "Transport Rotterdam - Barendrecht", "aantal": 1, "eenheid": "rit", "kg_netto": null, "kg_bruto": null, "prijs": "85,00", "bedrag": "85,00", "btw_percentage": 21 }
+  ],
+  "totaal_excl": "1.725,00",
+  "btw_totaal": "165,45",
+  "totaal_incl": "1.890,45"
+}
