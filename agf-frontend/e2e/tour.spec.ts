@@ -291,7 +291,8 @@ test('Doe zelf: de gebruiker kiest zelf de leverancier en de rondleiding gaat ve
     await page.waitForTimeout(300);
     await page.keyboard.press('Tab');
     await expect(panel).not.toContainText('Leverancier kiezen', { timeout: 30_000 });
-    await expect(panel).toContainText('Partij');
+    // Na de leverancier haar ordernummer (het hoofdnummer van de order), daarna pas de partij.
+    await expect(panel).toContainText('Ordernummer leverancier');
     await expect.poll(async () => {
         const text = (await panel.innerText()).replace(/\s+/g, ' ');
         if (/kon niet uitgevoerd/.test(text)) throw new Error(text);
