@@ -114,8 +114,15 @@ public sealed class QwenDocumentAi(string apiModel, string apiKey, string baseUr
             using (process)
             {
                 // stderr leeg lezen, anders kan een volle pijp pdftoppm laten blokkeren
-                var stderr = process!.StandardError.ReadToEndAsync(cancellationToken);
-                await process.WaitForExitAsync(cancellationToken);
+                var stderr = process!.StandardError.ReadToEndAsync(CancellationToken.None);
+                try { await process.WaitForExitAsync(cancellationToken); }
+                catch (OperationCanceledException)
+                {
+                    // Bij annuleren pdftoppm stoppen en laten afsluiten, pas daarna de tijdelijke map opruimen.
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                    throw;
+                }
                 await stderr;
                 if (process.ExitCode != 0) throw new UnsupportedDocumentException("pdftoppm kon de PDF niet omzetten");
             }
