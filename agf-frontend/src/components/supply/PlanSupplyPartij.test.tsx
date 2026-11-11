@@ -123,12 +123,14 @@ describe('PlanSupplyForm: lot on the purchase order', () => {
         assert.equal(posts()[0].body!.partijId, undefined);
     });
 
-    test('own-number mode leaves the field empty; the field is first in the tab order of the order header', async () => {
+    test('own-number mode leaves the field empty; the order header tabs Leverancier, Ordernummer leverancier, Besteldatum, then the partij', async () => {
         suggestion = null;
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         await mounted.waitFor(() => calls.some((call) => call.url.includes('next-number')), 'numbering');
         assert.equal(field('partij-input').value, '');
         const focusable = Array.from(mounted.container.querySelectorAll<HTMLElement>('input, button, select')).filter((element) => element.tabIndex >= 0).map((element) => element.id || element.dataset.tour);
-        assert.deepEqual(focusable.slice(0, 4), ['partij-input', 'supply-partij-choose', 'supplierLotReference-input', 'supplierReference-input']);
+        assert.deepEqual(focusable.slice(0, 3), ['vendorId-input', 'supplierReference-input', 'orderedOn-input']);
+        const at = (id: string) => focusable.indexOf(id);
+        assert.ok(at('expectedAt-input') < at('origin-input') && at('origin-input') < at('partij-input') && at('partij-input') < at('supplierLotReference-input'), focusable.join(' '));
     });
 });

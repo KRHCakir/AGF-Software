@@ -5,7 +5,8 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { purchaseOrderChain } from '../../lib/chain';
-import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts } from '../../lib/purchaseOrderRules';
+import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts, orderNumbers } from '../../lib/purchaseOrderRules';
+import OrderNumberText from './OrderNumberText';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
 import { getPurchaseOrder } from '../../services/purchaseOrderService';
 import PartijLinkPanel from '../partij/PartijLinkPanel';
@@ -45,7 +46,10 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
             <ChainStrip steps={purchaseOrderChain(order, 'order')} />
             <header className={section}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 id="po-detail-title" data-tour="po-detail-number" className="font-mono text-2xl font-bold text-gray-900">{order.orderNumber}</h2>
+                    {/* Hoofdnummer: het ordernummer van de leverancier (volledig, ook als het lang is), het eigen IO-nummer klein en grijs eronder. */}
+                    <h2 id="po-detail-title" data-tour="po-detail-number" className="min-w-0 text-2xl font-bold text-gray-900">
+                        <OrderNumberText orderNumber={order.orderNumber} supplierReference={order.supplierReference} stacked />
+                    </h2>
                     {receivable && (
                         <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={`${primaryButtonClass} ml-auto`}>{t('po_receive')}</Link>
                     )}
@@ -53,7 +57,6 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 </div>
                 <p className="mt-1 break-words text-sm text-gray-900">
                     <span className="font-medium">{order.vendorName ?? '–'}</span>
-                    {order.supplierReference && <> · {t('po_col_supplier_reference')} <span className="font-mono">{order.supplierReference}</span></>}
                 </p>
                 {order.partijId ? (
                     <p className="text-sm text-gray-900" data-tour="po-partij">
@@ -65,7 +68,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <div className="mt-1">
                         {order.supplierLotReference && <p className="text-sm text-gray-900">{t('partij_supplier_lot')} <span className="font-mono">{order.supplierLotReference}</span></p>}
                         {order.storedStatus !== 'Cancelled' && (
-                            <PartijLinkPanel orderId={order.id} orderNumber={order.orderNumber} dataTourKey={order.id}
+                            <PartijLinkPanel orderId={order.id} orderNumber={orderNumbers(order).main} dataTourKey={order.id}
                                 onLinked={(partij) => {
                                     // Direct zichtbaar maken; daarna op de achtergrond verversen (mislukt dat, dan blijft de gekoppelde partij staan).
                                     onChanged({ ...order, partijId: partij.id, partijNumber: partij.number });

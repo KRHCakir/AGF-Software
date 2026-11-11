@@ -147,8 +147,9 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         assert.equal(body.orderedOn, todayInAmsterdam());
         assert.equal('orderChannel' in body, false);
         const number = await mounted.waitFor(() => mounted.container.querySelector('[data-testid="supply-order-number"]'), 'order number');
-        assert.equal(number.textContent, 'IO-2026-0045');
-        assert.ok(number.className.includes('text-3xl'));
+        assert.equal(number.querySelector('[data-testid="order-number-main"]')!.textContent, 'NP-88123');
+        assert.equal(number.querySelector('[data-testid="order-number-internal"]')!.textContent, 'po_internal_number IO-2026-0045');
+        assert.ok(number.querySelector('[data-testid="order-number-main"]')!.className.includes('text-3xl'), 'the main number is shown large');
         assert.equal(mounted.container.querySelector('a[href="/purchase-orders?id=45"]')?.textContent, 'po_to_order');
     });
 
