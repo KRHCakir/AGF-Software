@@ -17,9 +17,16 @@ namespace AgfAdmin.Services.DocumentAi
             var key = $"{DateTime.UtcNow:yyyy-MM}/{Guid.NewGuid():N}{extension}";
             var path = PathOf(key);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+            try
             {
+                await using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
                 await stream.WriteAsync(bytes, cancellationToken);
+            }
+            catch
+            {
+                // Geen gedeeltelijk bestand zonder sleutel laten liggen (CreateNew mislukt alleen als het bestand al bestond: GUID, praktisch onmogelijk).
+                try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                throw;
             }
             return key;
         }
@@ -35,8 +42,9 @@ namespace AgfAdmin.Services.DocumentAi
         // Een sleutel komt altijd van ons zelf; toch nooit buiten de map.
         private string PathOf(string key)
         {
-            var full = Path.GetFullPath(Path.Combine(root, key));
-            if (!full.StartsWith(Path.GetFullPath(root) + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw new InvalidOperationException("Invalid document key.");
+            var baseDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+            var full = Path.GetFullPath(Path.Combine(baseDir, key));
+            if (!full.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.Ordinal)) throw new InvalidOperationException("Invalid document key.");
             return full;
         }
     }
