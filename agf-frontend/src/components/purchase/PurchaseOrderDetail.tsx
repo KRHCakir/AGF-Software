@@ -15,6 +15,10 @@ import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
+import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from './PurchaseLineTable';
+import { unitLabelKey } from '../../lib/units';
+import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
+import type { PackageUnit } from '../../types/availability';
 
 const section = sectionClass;
 const h3 = 'mb-2 text-sm font-semibold text-gray-900';
@@ -32,6 +36,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     const receivable = order.route === 'Warehouse' && order.status !== 'Cancelled' && order.storedStatus !== 'Cancelled' && order.lines.some((line) => line.receivedQuantity < line.expectedQuantity);
     const label = (keys: Readonly<Record<string, string>>, value: string | null) => { const key = labelKey(keys, value); return key ? t(key) : (value ?? '–'); };
     const qty = (value: number) => formatQuantity(value, locale);
+    const labels = usePurchaseLineLabels();
     // Herkenbare naam van een andere regel van deze order: het onderscheidende kenmerk (herkomst, maat of verpakking).
     const lineName = (id: number) => { const other = order.lines.find((line) => line.id === id); return other ? [other.origin, other.size, other.packaging].filter(Boolean).join(' · ') || `#${id}` : `#${id}`; };
 
@@ -82,30 +87,54 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
 
             <section className={section} aria-labelledby="po-lines">
                 <h3 id="po-lines" className={h3}>{t('po_lines')}</h3>
-                <ul className="divide-y divide-gray-100 text-sm">
-                    {order.lines.map((line) => (
-                        <li key={line.id} className="py-1.5">
-                            <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
-                            {[line.origin, line.size, line.packaging].filter(Boolean).length > 0 && <span className="text-gray-700"> · {[line.origin, line.size, line.packaging].filter(Boolean).join(' · ')}</span>}
-                            {line.partijNumber && line.partijNumber !== order.partijNumber
-                                ? <span className="text-gray-600"> · {t('partij_field')} <Link href={`/partijen?id=${line.partijId}`} className="font-mono text-blue-800 underline underline-offset-2">{line.partijNumber}</Link></span>
-                                : line.lotNumber && <span className="text-gray-600"> · {line.lotNumber}</span>}
-                            {(line.replacesLineId || (line.replacedByLineIds ?? []).length > 0) && (
-                                <span className="ml-1 inline-flex flex-wrap gap-1 align-middle" data-tour="po-line-replacement" data-tour-key={line.id}>
-                                    {line.replacesLineId && <span className={replacementBadge}>{t('po_line_replaces', { line: lineName(line.replacesLineId) })}</span>}
-                                    {(line.replacedByLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_replaced_by', { line: lineName(id) })}</span>)}
-                                </span>
-                            )}
-                            <span className="block font-mono text-gray-800">
-                                {lineAmountParts(line).map((part, index) => (
-                                    <span key={part.key} className={part.key === 'po_line_rejected' ? 'text-red-800' : undefined}>
-                                        {index > 0 && ' · '}{t(part.key, { quantity: qty(part.quantity) })}{part.kg !== null && <> · {formatKg(part.kg, locale)}</>}
+                <table className={purchaseLineTableClass} data-tour="po-lines-table">
+                    <PurchaseLineHead />
+                    <tbody className={purchaseLineBodyClass}>
+                        {order.lines.map((line, index) => (
+                            <tr key={line.id} className={purchaseLineRowClass(index)}>
+                                <td {...lineCell('product', labels.product, '', true)}>
+                                    <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
+                                    {line.partijNumber && line.partijNumber !== order.partijNumber
+                                        ? <span className="text-gray-600"> · {t('partij_field')} <Link href={`/partijen?id=${line.partijId}`} className="font-mono text-blue-800 underline underline-offset-2">{line.partijNumber}</Link></span>
+                                        : line.lotNumber && <span className="text-gray-600"> · {line.lotNumber}</span>}
+                                    {(line.replacesLineId || (line.replacedByLineIds ?? []).length > 0) && (
+                                        <span className="ml-1 inline-flex flex-wrap gap-1 align-middle" data-tour="po-line-replacement" data-tour-key={line.id}>
+                                            {line.replacesLineId && <span className={replacementBadge}>{t('po_line_replaces', { line: lineName(line.replacesLineId) })}</span>}
+                                            {(line.replacedByLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_replaced_by', { line: lineName(id) })}</span>)}
+                                        </span>
+                                    )}
+                                    <span className="block font-mono text-xs text-gray-800">
+                                        {lineAmountParts(line).map((part, partIndex) => (
+                                            <span key={part.key} className={part.key === 'po_line_rejected' ? 'text-red-800' : undefined}>
+                                                {partIndex > 0 && ' · '}{t(part.key, { quantity: qty(part.quantity) })}{part.kg !== null && <> · {formatKg(part.kg, locale)}</>}
+                                            </span>
+                                        ))}
                                     </span>
-                                ))}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
+                                </td>
+                                <td {...lineCell('brand', labels.brand)}>{line.brand || '–'}</td>
+                                <td {...lineCell('country', labels.country)}>{line.origin || '–'}</td>
+                                <td {...lineCell('size', labels.size)}>{line.size || '–'}</td>
+                                <td {...lineCell('gross', labels.gross)}>
+                                    <span>
+                                        {line.expectedGrossWeightKg == null ? '–' : formatKg(line.expectedGrossWeightKg, locale)}
+                                        {line.weightSource === 'Entered' && line.expectedGrossWeightKg != null && <span className="block text-xs font-medium text-amber-900">{t('po_line_gross_deviates')}</span>}
+                                    </span>
+                                </td>
+                                <td {...lineCell('net', labels.net)}>{line.expectedNetWeightKg == null ? '–' : formatKg(line.expectedNetWeightKg, locale)}</td>
+                                <td {...lineCell('quantity', labels.quantity)}>
+                                    <span>
+                                        {qty(line.expectedQuantity)} {line.unit && <span className="text-xs text-gray-700">{t(unitLabelKey(line.unit as PackageUnit)).toLowerCase()}</span>}
+                                        {line.pallets != null && <span className="block text-xs text-gray-600">{t(palletWordKey(line.pallets), { pallets: formatPallets(line.pallets, locale) })}</span>}
+                                    </span>
+                                </td>
+                                <td {...lineCell('packaging', labels.packaging)}>{line.packaging || '–'}</td>
+                                <td {...lineCell('price', labels.price)}>{line.unitPrice == null ? '–' : formatMoney(line.unitPrice, null, locale)}</td>
+                                <td {...lineCell('total', labels.total)}>{line.lineTotal == null ? '–' : formatMoney(line.lineTotal, null, locale)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    {order.totals && <PurchaseLineTotalsRow totals={{ ...order.totals, netKg: order.totals.netWeightKg, grossKg: order.totals.grossWeightKg }} />}
+                </table>
             </section>
 
             <ReceiptsSection order={order} onChanged={onChanged} />

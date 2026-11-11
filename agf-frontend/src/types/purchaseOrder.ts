@@ -52,12 +52,20 @@ export interface PurchaseOrderLine {
     origin?: string | null;
     size?: string | null;
     packaging?: string | null;
+    brand?: string | null;
     lotNumber: string | null;
     partijId?: number | null;
     partijNumber?: string | null;
     expectedQuantity: number;
     unit: string | null;
     expectedNetWeightKg: number | null;
+    expectedGrossWeightKg?: number | null;
+    // Calculated = kg uit het artikel; Entered = (bruto) op de regel aangepast.
+    weightSource?: string | null;
+    unitPrice?: number | null;
+    lineTotal?: number | null;
+    packagesPerPallet?: number | null;
+    pallets?: number | null;
     // Afwijkende ontvangst: deze regel vervangt die regel, of is (deels) vervangen door die regels.
     replacesLineId?: number | null;
     replacedByLineIds?: number[];
@@ -184,6 +192,20 @@ export interface PurchaseOrderDetail {
     history: PurchaseOrderHistoryEvent[];
     // Keten-strip: verkooporders die van deze order reserveren of verzonden hebben (per eenheid opgeteld).
     salesOrders?: PurchaseOrderSalesLink[];
+    // Totalen onder de regels (PurchaseLineMath); ontbreekt bij een oudere server.
+    totals?: PurchaseLineTotalsDto;
+}
+
+export interface PurchaseLineTotalsDto {
+    quantity: number;
+    netWeightKg: number | null;
+    grossWeightKg: number | null;
+    amount: number | null;
+    pallets: number | null;
+    linesWithoutNet: number;
+    linesWithoutGross: number;
+    linesWithoutPrice: number;
+    linesWithoutPallets: number;
 }
 
 export interface PurchaseOrderSalesLink {
