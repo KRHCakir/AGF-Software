@@ -6,9 +6,11 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { normalizeInvoiceNumber } from '../../lib/purchaseOrderRules';
 import { findOrdersByInvoiceNumber } from '../../services/purchaseOrderService';
 import type { PurchaseOrderInvoiceMatch } from '../../types/purchaseOrder';
+import OrderNumberText from './OrderNumberText';
 
 // Bij het invoeren van een inkoopfactuur: hangt dit nummer al aan een inkooporder (van deze leverancier, als die gekozen
-// is), dan "Hoort bij order IO-2026-0001" met een link; anders niets. Een mislukte opzoeking toont ook niets.
+// is), dan "Hoort bij order 4521" (het ordernummer van de leverancier, met het eigen IO-nummer klein erachter) met een link; anders
+// niets. Een mislukte opzoeking toont ook niets.
 export default function InvoiceOrderNotice({ invoiceNumber, vendorId }: { invoiceNumber: string; vendorId: number | null }) {
     const { t } = useTranslation();
     const [matches, setMatches] = useState<PurchaseOrderInvoiceMatch[]>([]);
@@ -31,7 +33,9 @@ export default function InvoiceOrderNotice({ invoiceNumber, vendorId }: { invoic
             {orders.map((match, index) => (
                 <span key={match.id}>
                     {index > 0 && ', '}
-                    <Link href={`/purchase-orders?id=${match.id}`} className="whitespace-nowrap font-mono font-semibold underline">{match.orderNumber}</Link>
+                    <Link href={`/purchase-orders?id=${match.id}`} className="font-semibold underline">
+                        <OrderNumberText id={match.id} orderNumber={match.orderNumber} supplierReference={match.supplierReference} />
+                    </Link>
                 </span>
             ))}
         </p>

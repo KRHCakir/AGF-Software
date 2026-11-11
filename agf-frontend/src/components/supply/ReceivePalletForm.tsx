@@ -13,6 +13,7 @@ import { DEVIATION_CODES, deviationConflict } from '../../lib/receiptDeviation';
 import { enteredFrom, similarVariants, withArticle } from '../../lib/articleFromEntry';
 import { normalizeTradeClass } from '../../lib/tradeClass';
 import { lineOrdinals, orderListGroups } from '../../lib/receiptOrderList';
+import { orderNumbers } from '../../lib/purchaseOrderRules';
 import { EnteredAttributes, articleVariants, emptyEntered, matchVariant } from '../../lib/receiptBlindEntry';
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
@@ -42,6 +43,7 @@ import { EmptyState, LoadState, LoadingRows } from '../availability/StateViews';
 import { FirstStepLink } from '../shared/FirstStep';
 import GgnBadge from '../shared/GgnBadge';
 import NewArticlePrompt from '../shared/NewArticlePrompt';
+import OrderNumberText from '../purchase/OrderNumberText';
 import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 import NumberEcho from '../shared/NumberEcho';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
@@ -783,9 +785,8 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                     <tr className="block bg-gray-50 md:table-row">
                                         <th scope="rowgroup" colSpan={5} className="block px-2 py-1 text-left md:table-cell text-xs font-semibold text-gray-700" data-testid={`receive-order-${commitment.id}`}>
                                             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 break-words">
-                                                <span className="font-mono text-gray-900">{commitment.orderNumber ?? `#${commitment.id}`}</span>
+                                                <span className="text-gray-900"><OrderNumberText id={commitment.id} orderNumber={commitment.orderNumber} supplierReference={commitment.supplierReference} /></span>
                                                 <span>· {commitment.vendorName ?? '–'}</span>
-                                                {commitment.supplierReference && <span>· {t('receive_order_reference', { reference: commitment.supplierReference })}</span>}
                                                 {commitment.orderedOn && <span>· {t('receive_order_ordered_on', { date: formatDateOnly(commitment.orderedOn, locale) })}</span>}
                                                 {commitment.expectedAt && <span>· {t('supply_expected_on', { date: formatDateTime(commitment.expectedAt, locale) })}</span>}
                                                 {due && <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900">{t('receive_order_due')}</span>}
@@ -876,7 +877,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                 {entry.line.productName} · {entry.line.productVariantName}
                             </legend>
                             <p className="mb-2 text-xs text-gray-700">
-                                {entry.commitment.orderNumber ?? `#${entry.commitment.id}`} · {entry.commitment.vendorName ?? '–'} · {t('supply_expected')} {formatQuantity(entry.line.expectedQuantity, locale)} {entry.line.expectedUnit === null ? t('availability_unit_unknown') : t(unitLabelKey(entry.line.expectedUnit))}
+                                <OrderNumberText id={entry.commitment.id} orderNumber={entry.commitment.orderNumber} supplierReference={entry.commitment.supplierReference} /> · {entry.commitment.vendorName ?? '–'} · {t('supply_expected')} {formatQuantity(entry.line.expectedQuantity, locale)} {entry.line.expectedUnit === null ? t('availability_unit_unknown') : t(unitLabelKey(entry.line.expectedUnit))}
                                 {' · '}
                                 {open === 'loading' || open === undefined
                                     ? t('supply_open_loading')
@@ -916,7 +917,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                 ) : (
                                     <div className="col-span-2 md:col-span-7 space-y-1">
                                         {editable && (
-                                            <PartijLinkPanel orderId={entry.commitment.id} orderNumber={entry.commitment.orderNumber ?? `#${entry.commitment.id}`} dataTourKey={id}
+                                            <PartijLinkPanel orderId={entry.commitment.id} orderNumber={orderNumbers(entry.commitment).main} dataTourKey={id}
                                                 onLinked={() => setSourcesToken((n) => n + 1)} />
                                         )}
                                         <div className="max-w-sm">

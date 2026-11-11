@@ -32,6 +32,8 @@ describe('receiptOrderList', () => {
         assert.deepEqual(numbers('nature hass'), [['IO-2026-0002', [21]], ['IO-2026-0001', [11, 12]]]);
         assert.deepEqual(numbers('0003'), [['IO-2026-0003', [31]]]);
         assert.deepEqual(numbers('np-778'), [['IO-2026-0001', [11, 12, 13]]]);
+        // Het ordernummer van de leverancier ook zonder streepje of met andere hoofdletters: np778 vindt NP-778.
+        assert.deepEqual(numbers('np778'), [['IO-2026-0001', [11, 12, 13]]]);
         assert.deepEqual(numbers('test-009'), [['IO-2026-0001', [12]]]);
         assert.deepEqual(numbers('fruitimport'), [['IO-2026-0003', [31]]]);
         assert.deepEqual(numbers('banaan'), []);

@@ -18,6 +18,9 @@ import {
 export interface CommitmentContext {
     vendorName: string | null;
     origin: string | null;
+    // Het nummer van de inkooporder bij de keuring: het ordernummer van de leverancier, met het eigen IO-nummer.
+    orderNumber?: string | null;
+    supplierReference?: string | null;
 }
 
 export interface InspectionPallet {
@@ -60,7 +63,7 @@ export async function loadPalletContext(palletId: number, signal?: AbortSignal):
     const commitmentList = await Promise.all(commitmentIds.map((id) => getSupplyCommitment(id, signal)));
     const commitments: Record<number, CommitmentContext> = {};
     for (const commitment of commitmentList) {
-        commitments[commitment.id] = { vendorName: commitment.vendorName, origin: commitment.origin };
+        commitments[commitment.id] = { vendorName: commitment.vendorName, origin: commitment.origin, orderNumber: commitment.orderNumber, supplierReference: commitment.supplierReference };
     }
     return { pallet, receiptRegisteredAt: receiptRegisteredAt(events), commitments, events };
 }

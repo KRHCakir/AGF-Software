@@ -141,14 +141,14 @@ test('hoofdstuk Stamgegevens: leverancier en klant met adres, artikel met herkom
 
 let orderNumber = '';
 
-test('hoofdstuk Inkooporder aanmaken: stamgegevens bestaan al, order met partij, leveranciersref, datum en factuurnummer', async ({ request }) => {
+test('hoofdstuk Inkooporder aanmaken: stamgegevens bestaan al, order met ordernummer leverancier als hoofdnummer, partij, datum en factuurnummer', async ({ request }) => {
     const page = await context.newPage();
     const result = await play(page, 'order');
     expectAllSteps(result);
     // Leverancier en artikel van de rondleiding bestaan al (vorige hoofdstukken): die stappen zijn overgeslagen.
     expect(result.skipped.length).toBeGreaterThan(0);
     let tourRef = '';
-    [, orderNumber, tourRef] = /Order (IO-\d{4}-\d+) .* leveranciersref (DEMO-TOUR-\d+)/.exec(result.done) ?? [];
+    [, tourRef, orderNumber] = /Order (DEMO-TOUR-\d+) \(intern nummer (IO-\d{4}-\d+)\)/.exec(result.done) ?? [];
     expect(orderNumber).toMatch(/^IO-\d{4}-\d+$/);
     const list = await json<{ items: { id: number; orderNumber: string; supplierReference: string; status: string; partijNumber: string | null; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${tourRef}`);
     const order = list.items.find((item) => item.orderNumber === orderNumber)!;

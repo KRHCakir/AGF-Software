@@ -1,8 +1,10 @@
 import type { SupplyCommitment, SupplyCommitmentLine } from '../types/supply';
 import { countryKey } from './countries.ts';
+import { supplierReferenceKey } from './purchaseOrderRules.ts';
 
-// Lijst met open orders bij "Pallet ontvangen" (30 orders per dag): zoeken op leverancier, ordernummer, leveranciersreferentie,
-// partij en product (elk woord moet ergens voorkomen, in willekeurige volgorde), eerst wat vandaag of eerder verwacht werd, en
+// Lijst met open orders bij "Pallet ontvangen" (30 orders per dag): zoeken op leverancier, ordernummer, ordernummer van de leverancier
+// (ook zonder spaties en streepjes: 4521 vindt 45-21), partij en product (elk woord moet ergens voorkomen, in willekeurige volgorde),
+// eerst wat vandaag of eerder verwacht werd, en
 // "regel 1 van 3" bij meerdere regels van hetzelfde product in één order. De te controleren kenmerken (herkomst, maat, verpakking,
 // klasse, merk, kg per colli) staan hier bewust niet in: blinde invoer.
 // Geen imports buiten types en lib: met node:test te toetsen.
@@ -19,7 +21,7 @@ const amsterdamDay = (iso: string) =>
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
 
 function orderText(commitment: SupplyCommitment): string {
-    return [commitment.orderNumber ?? '', String(commitment.id), commitment.vendorName ?? '', commitment.supplierReference ?? ''].join(' ');
+    return [commitment.orderNumber ?? '', String(commitment.id), commitment.vendorName ?? '', commitment.supplierReference ?? '', supplierReferenceKey(commitment.supplierReference) ?? ''].join(' ');
 }
 
 function lineText(line: SupplyCommitmentLine): string {

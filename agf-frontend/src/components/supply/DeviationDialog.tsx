@@ -4,6 +4,7 @@ import { KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
+import { orderNumbers } from '../../lib/purchaseOrderRules';
 import { AttributeKind, DEVIATION_REASONS, DEVIATION_REASON_LABEL_KEYS, DeviationReason, articleName, deviationRows, isWeightOnly, shortNames, unitText } from '../../lib/receiptDeviation';
 
 const WITHOUT_KEYS: Record<AttributeKind, string> = {
@@ -77,8 +78,8 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
                 <h2 id={titleId} className="text-lg font-semibold text-gray-900">{t('deviation_title')}</h2>
                 <p className="mt-1 text-sm text-gray-900">
                     {weightOnly
-                        ? t('deviation_question_weight', { order: preview.orderNumber, article: articleName(preview.expected), expected: expectedWeight, received: receivedWeight })
-                        : t('deviation_question', { order: preview.orderNumber, expected: expectedText, received: names.received })}
+                        ? t('deviation_question_weight', { order: orderNumbers(preview).main, article: articleName(preview.expected), expected: expectedWeight, received: receivedWeight })
+                        : t('deviation_question', { order: orderNumbers(preview).main, expected: expectedText, received: names.received })}
                 </p>
 
                 <dl className="mt-3 divide-y divide-gray-100 rounded border border-gray-200 text-sm" data-testid="deviation-rows">
