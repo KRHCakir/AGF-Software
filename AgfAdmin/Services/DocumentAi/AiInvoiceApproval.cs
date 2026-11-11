@@ -42,16 +42,6 @@ namespace AgfAdmin.Services.DocumentAi
                 {
                     ValidationErrors.Add(errors, "linkPurchaseOrderId", "The purchase order must exist, not be cancelled and belong to the supplier of this invoice.");
                 }
-                else
-                {
-                    // Een vastgelegde koppeling is append-only en kan dus niet achteraf aan deze factuur worden gehangen: een nummer dat al op de order staat
-                    // (bijvoorbeeld via "Factuur ontvangen") wordt expliciet geweigerd in plaats van stilzwijgend niet gekoppeld.
-                    var number = PurchaseOrderRules.NormalizeInvoiceNumber(request.InvoiceNumber);
-                    if (number != null && await InvoiceRefExistsAsync(order.Id, PurchaseOrderRules.InvoiceNumberKey(number), cancellationToken))
-                    {
-                        ValidationErrors.Add(errors, "linkPurchaseOrderId", $"Invoice {number} is already recorded on this purchase order; it cannot be linked to this invoice afterwards. Approve without linking the order.");
-                    }
-                }
             }
             var proposal = AiInvoiceReadingService.ToProposal((JsonObject)JsonNode.Parse(extraction.ProposalJson));
             var matches = await new AiInvoiceMatching(db).MatchAsync(proposal, cancellationToken);
@@ -62,7 +52,7 @@ namespace AgfAdmin.Services.DocumentAi
             db.SupplyCommitmentInvoiceRefs.AsNoTracking().AnyAsync(r => r.SupplyCommitmentId == orderId && r.Kind == PurchaseOrderRules.KindInvoice && r.InvoiceNumberKey == key, cancellationToken);
 
         // Claimt de lezing atomair (UPDATE ... WHERE Status = 'Proposed') nadat de factuur is opgeslagen (nog binnen de transactie). Geeft een
-        // foutmelding terug als de lezing intussen al is goedgekeurd/gesloten of het nummer inmiddels op de order staat: de aanroeper
+        // foutmelding terug als de lezing intussen al is goedgekeurd/gesloten: de aanroeper
         // rolt dan de hele transactie terug, dus er blijft geen factuur of bijlage achter.
         public async Task<string> ApplyAsync(Prepared prepared, IncomingInvoice invoice, decimal net, string actor, CancellationToken cancellationToken)
         {
@@ -89,16 +79,17 @@ namespace AgfAdmin.Services.DocumentAi
             if (prepared.Order != null)
             {
                 var key = PurchaseOrderRules.InvoiceNumberKey(invoice.InvoiceNumber);
-                if (await InvoiceRefExistsAsync(prepared.Order.Id, key, cancellationToken))
+                // Staat het nummer al op de order (bijvoorbeeld via "Factuur ontvangen"), dan is die referentie de koppeling en voegen we geen tweede toe
+                // (append-only en uniek per order en nummer); de goedkeuring en de orderkeuze blijven vastgelegd in de goedgekeurde waarden.
+                if (!await InvoiceRefExistsAsync(prepared.Order.Id, key, cancellationToken))
                 {
-                    return $"Invoice {invoice.InvoiceNumber} is already recorded on this purchase order; it cannot be linked to this invoice afterwards.";
+                    db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef
+                    {
+                        RequestId = Guid.NewGuid(), SupplyCommitmentId = prepared.Order.Id, Kind = PurchaseOrderRules.KindInvoice, InvoiceNumber = invoice.InvoiceNumber, InvoiceNumberKey = key,
+                        InvoiceDate = invoice.InvoiceDate == null ? null : DateOnly.FromDateTime(invoice.InvoiceDate.Value), AmountExclVat = net, IncomingInvoiceId = invoice.Id,
+                        ActorReference = actor, CreatedAt = now,
+                    });
                 }
-                db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef
-                {
-                    RequestId = Guid.NewGuid(), SupplyCommitmentId = prepared.Order.Id, Kind = PurchaseOrderRules.KindInvoice, InvoiceNumber = invoice.InvoiceNumber, InvoiceNumberKey = key,
-                    InvoiceDate = invoice.InvoiceDate == null ? null : DateOnly.FromDateTime(invoice.InvoiceDate.Value), AmountExclVat = net, IncomingInvoiceId = invoice.Id,
-                    ActorReference = actor, CreatedAt = now,
-                });
             }
             return null;
         }
