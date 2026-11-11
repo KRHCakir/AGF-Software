@@ -35,15 +35,16 @@ namespace AgfAdmin.Services.DocumentAi
             var settings = await SettingsAsync(cancellationToken);
             var spent = await MonthSpentEurAsync(cancellationToken);
             var reason = factory.NotConfiguredReason;
+            var demo = factory.Provider == DocumentAiOptions.ReaderDemo;
             return new AiReadingStatusDto
             {
                 Enabled = settings.AiReadingEnabled,
                 Configured = reason == null,
                 NotConfiguredReason = reason,
                 Provider = factory.Provider,
-                PrimaryModel = ModelDto(_options.PrimaryModel),
-                FallbackEnabled = _options.FallbackEnabled,
-                FallbackModel = _options.FallbackEnabled ? ModelDto(_options.FallbackModel) : null,
+                PrimaryModel = demo ? new AiModelDto { Id = DemoInvoiceAi.Model, Name = AiModelNames.Display(DemoInvoiceAi.Model) } : ModelDto(_options.PrimaryModel),
+                FallbackEnabled = _options.FallbackEnabled && !demo,
+                FallbackModel = _options.FallbackEnabled && !demo ? ModelDto(_options.FallbackModel) : null,
                 MonthSpentEur = decimal.Round(spent, 2),
                 MonthlyLimitEur = settings.AiReadingMonthlyLimitEur,
                 LimitReached = spent >= settings.AiReadingMonthlyLimitEur,
@@ -266,7 +267,7 @@ namespace AgfAdmin.Services.DocumentAi
                 SizeBytes = extraction.SizeBytes,
                 Provider = extraction.Provider,
                 Model = extraction.Model,
-                ModelName = extraction.Model == null ? null : _options.Models.GetValueOrDefault(extraction.Model)?.DisplayName ?? extraction.Model,
+                ModelName = extraction.Model == null ? null : _options.Models.GetValueOrDefault(extraction.Model)?.DisplayName ?? AiModelNames.Display(extraction.Model),
                 ModelVersion = extraction.ModelVersion,
                 UsedFallback = extraction.UsedFallback,
                 CostEur = decimal.Round(extraction.CostEur, 4),

@@ -101,8 +101,9 @@ namespace AgfAdmin.Services.DocumentAi
                 Compare($"lines[{i}].unit", proposed.Unit, final.Unit);
                 Compare($"lines[{i}].unitPrice", Number(proposed.UnitPrice), Number(final.UnitPrice));
                 Compare($"lines[{i}].vatPercentage", Number(proposed.VatPercentage), Number(final.VatPercentage));
+                // Een voorgesteld kostenartikel niet overnemen is geen aanpassing; zelf een (ander) kostenartikel kiezen wel.
                 var suggestedCost = matches.LineCostArticles.FirstOrDefault(c => c.Index == i)?.CostArticleId;
-                if (final.CostArticleId != null || suggestedCost != null) Compare($"lines[{i}].costArticleId", suggestedCost?.ToString(CultureInfo.InvariantCulture), final.CostArticleId?.ToString(CultureInfo.InvariantCulture));
+                if (final.CostArticleId != null) Compare($"lines[{i}].costArticleId", suggestedCost?.ToString(CultureInfo.InvariantCulture), final.CostArticleId?.ToString(CultureInfo.InvariantCulture));
             }
             if (matches.SuggestedOrderId != request.LinkPurchaseOrderId)
             {

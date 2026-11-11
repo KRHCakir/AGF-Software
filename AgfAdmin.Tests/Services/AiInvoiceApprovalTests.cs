@@ -150,7 +150,9 @@ public class AiInvoiceApprovalTests : IDisposable
         Assert.Null(matches.DuplicateInvoice);
         Assert.Equal(new[] { (1, "Transport") }, matches.LineCostArticles.Select(c => (c.Index, c.Name)));
 
-        Assert.Equal(ServiceResultStatus.Created, (await SaveAsync(Approve(extraction, vendor))).Status);
+        // Het voorgestelde kostenartikel niet overnemen is geen aanpassing.
+        var saved = await SaveAsync(Approve(extraction, vendor, order));
+        Assert.Equal((ServiceResultStatus.Created, 0), (saved.Status, saved.Value.AiReading.AdjustedFields));
         var again = await MatchAsync(await ProposeAsync());
         Assert.Equal("F-2026-118", again.DuplicateInvoice.InvoiceNumber);
     }

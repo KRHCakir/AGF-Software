@@ -60,10 +60,13 @@ namespace AgfAdmin.Services.DocumentAi
         {
             var instruction = ExtractionSchema.InstructionFor(companyName) + ExtractionSchema.SupplierIdInstruction;
             var attempts = new List<ReadAttempt>();
-            var primary = await ReadWithRetryAsync(_options.PrimaryModel, document, instruction, attempts, cancellationToken);
+            // De nagebootste lezer (tests en rondleiding) leest alleen zichzelf: geen vangnet, en de lezing heet zoals ze is.
+            var demo = factory.Provider == DocumentAiOptions.ReaderDemo;
+            var primaryModel = demo ? DemoInvoiceAi.Model : _options.PrimaryModel;
+            var primary = await ReadWithRetryAsync(primaryModel, document, instruction, attempts, cancellationToken);
             var problems = primary.Proposal == null ? null : AiReadingRules.Problems(primary.Proposal);
             var fallbackModel = _options.FallbackModel;
-            if ((primary.Proposal == null || AiReadingRules.NeedsFallback(problems)) && _options.FallbackEnabled
+            if ((primary.Proposal == null || AiReadingRules.NeedsFallback(problems)) && _options.FallbackEnabled && !demo
                 && !string.IsNullOrWhiteSpace(fallbackModel) && fallbackModel != _options.PrimaryModel && primary.Failure != "unsupported")
             {
                 var fallback = await ReadWithRetryAsync(fallbackModel, document, instruction, attempts, cancellationToken);
@@ -73,7 +76,7 @@ namespace AgfAdmin.Services.DocumentAi
                 }
             }
             return primary.Proposal != null
-                ? new ReadResult(primary.Proposal, problems, _options.PrimaryModel, primary.Version, false, attempts, null)
+                ? new ReadResult(primary.Proposal, problems, primaryModel, primary.Version, false, attempts, null)
                 : new ReadResult(null, new List<ReadingProblem>(), null, null, false, attempts, primary.Failure);
         }
 

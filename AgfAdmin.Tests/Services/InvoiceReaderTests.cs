@@ -56,6 +56,17 @@ public class InvoiceReaderTests
     }
 
     [Fact]
+    public async Task The_demo_reader_reads_itself_without_fallback_even_when_a_required_field_is_doubtful()
+    {
+        var demo = new DocumentAiFactory(Options.Create(new DocumentAiOptions { Reader = DocumentAiOptions.ReaderDemo }), new ConfigurationBuilder().Build());
+        var result = await new InvoiceReader(demo, Options.Create(_options), NullLogger<InvoiceReader>.Instance).ReadAsync(Document, "Mijn AGF Bedrijf", default);
+        Assert.Equal((DemoInvoiceAi.Model, false, 1), (result.Model, result.UsedFallback, result.Attempts.Count));
+        Assert.Contains(result.Problems, p => p is { Field: "invoiceDate", Code: AiReadingRules.Uncertain, TriggersFallback: true });
+        Assert.Equal("Demolezer", AiModelNames.Display(result.Model));
+        Assert.Equal("Claude Haiku 5.5", AiModelNames.Display(Haiku));
+    }
+
+    [Fact]
     public async Task With_the_fallback_off_Haikus_proposal_is_kept_with_its_problems()
     {
         _options.FallbackEnabled = false;
