@@ -5,7 +5,8 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
 import { formatAmountInput } from '../../lib/decimal';
 import { parseUnitPrice } from '../../lib/packaging';
-import { formatPallets } from '../../lib/purchaseLine';
+import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
+import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { type PurchaseArticle, type PurchaseLineDraft, type PurchaseLineRow, isBlankPurchaseLine, purchaseLineTotals } from '../../lib/purchaseOrderLines';
 import { unitLabelKey } from '../../lib/units';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
@@ -20,7 +21,9 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // De regels van Inkooporder aanmaken in de nieuwe indeling (zie PurchaseLineTable). Tab loopt per regel door Product, Aantal en Prijs
 // (bij klantgebonden aanvoer daarna de partij); alles wat uit het artikel komt is tekst. Tab op het laatste veld van de laatste regel
 // maakt een nieuwe regel en zet de cursor in haar productveld; een lege regel telt bij opslaan niet mee. De knoppen (Bruto aanpassen,
-// bruto herstellen, ✕) blijven met Tab bereikbaar: er is geen ander toetsenbordalternatief.
+// Bruto van het artikel, ✕) staan buiten de Tab-volgorde, zoals de eigenaar wil en net als ⧉ en ✕ bij de inkoopfactuur; met het
+// toetsenbord bereik je ze vanuit elk veld van de regel met Alt+B (Bruto aanpassen) en Alt+R (regel verwijderen), wat onder de tabel
+// staat. Een aangepaste bruto leegmaken zet de regel terug op de bruto van het artikel.
 export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, productExtra }: {
     lines: PurchaseLineDraft[];
     rows: PurchaseLineRow[];
@@ -36,6 +39,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
 }) {
     const { t, locale } = useTranslation();
     const labels = usePurchaseLineLabels();
+    const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     // Regels waar "Bruto aanpassen" open staat (ook zonder getypte waarde nog).
     const [grossOpen, setGrossOpen] = useState<ReadonlySet<string>>(new Set());
     const focusIndex = useRef<number | null>(null);
@@ -62,6 +66,20 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         if (!line.grossKgEntered) onChange(line.key, { grossKg: row.weight?.grossWeightKg == null ? '' : formatQuantity(row.weight.grossWeightKg, locale) });
         setTimeout(() => document.getElementById(`lines[${lines.indexOf(line)}].expectedGrossWeightKg-input`)?.focus(), 0);
     };
+    // Alt+B en Alt+R in een veld van de regel: dezelfde acties als de knoppen.
+    const onRowKey = (event: KeyboardEvent<HTMLTableRowElement>, line: PurchaseLineDraft, row: PurchaseLineRow, index: number) => {
+        if (locked) return;
+        const action = matchShortcut(event, isMac);
+        if (action === 'adjustGross' && line.productVariantId !== '') {
+            event.preventDefault();
+            openGross(line, row);
+        } else if (action === 'removeLine' && lines.length > 1) {
+            event.preventDefault();
+            onRemove(line.key);
+            const next = Math.min(index, lines.length - 2);
+            setTimeout(() => document.getElementById(`lines[${next}].productVariantId-input`)?.focus(), 0);
+        }
+    };
     const resetGross = (line: PurchaseLineDraft) => {
         setGrossOpen((current) => { const next = new Set(current); next.delete(line.key); return next; });
         onChange(line.key, { grossKg: '', grossKgEntered: false });
@@ -82,8 +100,8 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         const editingGross = line.grossKgEntered === true || grossOpen.has(line.key);
                         const last = isDirect ? 'lot' : 'price';
                         return (
-                            <tr key={line.key} className={purchaseLineRowClass(index)} data-tour="supply-line" data-tour-key={index}>
-                                <td {...lineCell('product', labels.product, 'w-64 max-md:block max-md:w-auto max-md:text-left max-md:before:hidden')}>
+                            <tr key={line.key} className={purchaseLineRowClass(index)} data-tour="supply-line" data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
+                                <td {...lineCell('product', labels.product, 'w-64 max-md:w-auto', true)}>
                                     <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
                                     <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                         value={line.productVariantId} disabled={locked} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
@@ -105,13 +123,13 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                                     data-tour="supply-line-gross" data-tour-key={index} onChange={(event) => onChange(line.key, { grossKg: event.target.value, grossKgEntered: true })}
                                                     className={`${inputClass} !mt-0 w-24 text-right`} />
                                                 {line.grossKgEntered && <span className="block text-xs font-medium text-amber-900" data-testid={`${prefix}.gross-deviates`}>{t('po_line_gross_deviates')}</span>}
-                                                <button type="button" disabled={locked} className={linkButton} onClick={() => resetGross(line)}>↺ {t('po_line_gross_reset')}</button>
+                                                <button type="button" tabIndex={-1} disabled={locked} className={linkButton} onClick={() => resetGross(line)}>↺ {t('po_line_gross_reset')}</button>
                                             </>
                                         ) : (
                                             <>
                                                 <span data-testid={`${prefix}.gross`}>{kg(row?.weight?.grossWeightKg)}</span>
                                                 {variant && !locked && (
-                                                    <button type="button" className={`${linkButton} block`} data-tour="supply-line-gross-adjust" data-tour-key={index}
+                                                    <button type="button" tabIndex={-1} title={`${t('po_line_gross_adjust')} (${shortcutLabel('adjustGross', isMac)})`} className={`${linkButton} block`} data-tour="supply-line-gross-adjust" data-tour-key={index}
                                                         onClick={() => openGross(line, row)}>{t('po_line_gross_adjust')}</button>
                                                 )}
                                             </>
@@ -134,7 +152,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         </div>
                                         {variant && row?.quantity != null && (
                                             <span className="block text-xs text-gray-600" data-testid={`${prefix}.pallets`}>
-                                                {row.pallets === null ? t('po_line_no_packages_per_pallet') : t('po_line_pallets', { pallets: formatPallets(row.pallets, locale) })}
+                                                {row.pallets === null ? t('po_line_no_packages_per_pallet') : t(palletWordKey(row.pallets), { pallets: formatPallets(row.pallets, locale) })}
                                             </span>
                                         )}
                                         <FieldError id={`${prefix}.expectedQuantity`} messages={errors(`${prefix}.expectedQuantity`)} />
@@ -161,7 +179,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     </td>
                                 )}
                                 <td className="px-2 py-1.5 max-md:block max-md:px-0 max-md:pt-1 max-md:text-right">
-                                    <button type="button" onClick={() => onRemove(line.key)} disabled={locked || lines.length <= 1}
+                                    <button type="button" tabIndex={-1} title={`${t('supply_remove_line_n', { n: String(index + 1) })} (${shortcutLabel('removeLine', isMac)})`} onClick={() => onRemove(line.key)} disabled={locked || lines.length <= 1}
                                         className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
                                 </td>
                             </tr>
@@ -170,6 +188,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                 </tbody>
                 <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 2 : 1} />
             </table>
+            {!locked && <p className="px-2 py-1 text-xs text-gray-600" data-testid="purchase-lines-keys">{t('po_line_keys_hint', { gross: shortcutLabel('adjustGross', isMac), remove: shortcutLabel('removeLine', isMac) })}</p>}
         </div>
     );
 }

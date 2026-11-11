@@ -1750,6 +1750,7 @@
   "po_line_lines_without_price": "{count} line(s) without price",
   "po_line_gross_adjust": "Adjust gross",
   "po_line_gross_reset": "Gross of the article",
+  "po_line_keys_hint": "{gross} adjust gross · {remove} remove line",
   "po_line_gross_deviates": "Differs from the article",
   "po_line_pallets": "= {pallets} pallet",
   "po_line_pallets_many": "= {pallets} pallets",
