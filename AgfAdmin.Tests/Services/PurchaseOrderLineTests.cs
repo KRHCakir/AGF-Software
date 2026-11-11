@@ -167,6 +167,7 @@ public class PurchaseOrderLineTests : IDisposable
         }
         await using (var db = _factory.CreateContext())
         {
+            Assert.Equal("ab\t", ArticleRules.ShortcutKey("  AB\t "));
             await db.Database.ExecuteSqlRawAsync("UPDATE \"ProductVariants\" SET \"ShortcutKey\" = NULL");
             await db.Database.ExecuteSqlRawAsync(AddPurchaseLinePriceAndShortcutKey.FillShortcutKeysSql);
             Assert.Equal(new[] { "1", "avohassper13" }, await db.ProductVariants.Where(v => v.ShortcutKey != null).OrderBy(v => v.ShortcutKey).Select(v => v.ShortcutKey).ToListAsync());

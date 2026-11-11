@@ -177,7 +177,9 @@ namespace AgfAdmin.Services
 
         public static bool IsShortcutCode(string value) => value != null && Shortcut.IsMatch(value);
 
-        // Genormaliseerde snelcode voor de unieke index en het opzoeken: getrimd, kleine letters; leeg = geen snelcode.
-        public static string ShortcutKey(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+        // Genormaliseerde snelcode voor de unieke index en het opzoeken: spaties eromheen weg, kleine letters; leeg = geen snelcode.
+        // Precies zoals de migratie bestaande codes vult (PostgreSQL trim() haalt alleen spaties weg), zodat beide dezelfde sleutel geven.
+        // Andere witruimte kan in een snelcode niet voorkomen: Artikelen weigert die, de oude productpagina trimt vóór het opslaan.
+        public static string ShortcutKey(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim(' ').ToLowerInvariant();
     }
 }
