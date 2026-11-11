@@ -27,7 +27,6 @@ namespace AgfAdmin.Services.DocumentAi
 
         private readonly DocumentAiOptions _options = options.Value;
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-        private static readonly SemaphoreSlim ReadLock = new(1, 1);
 
         // ---- Status en instellingen ----
 
@@ -107,35 +106,25 @@ namespace AgfAdmin.Services.DocumentAi
                 return ServiceResult<AiExtractionDto>.Validation(new Dictionary<string, string[]> { ["file"] = new[] { error } });
             }
 
-            // Limietcontrole, vastleggen en lezen gaan achter elkaar: anders zien gelijktijdige uploads allemaal hetzelfde bedrag onder de
-            // limiet en starten ze alle betaalde aanvragen.
-            await ReadLock.WaitAsync(cancellationToken);
-            try
+            // Bewust geen vergrendeling rond het lezen (5 tot 20 seconden): gelijktijdige uploads van verschillende gebruikers wachten niet op
+            // elkaar. De maandlimiet pauzeert het lezen zodra het verbruik haar haalt; gelijktijdige lezingen kunnen haar daardoor met hooguit
+            // een paar cent overschrijden (een lezing kost ongeveer een tiende cent, met vangnet enkele centen).
+            if (await MonthSpentEurAsync(cancellationToken) >= settings.AiReadingMonthlyLimitEur)
             {
-                // Instellingen opnieuw uit de database: een beheerder kan AI hebben uitgezet of de limiet verlaagd terwijl we wachtten.
-                await db.Entry(settings).ReloadAsync(cancellationToken);
-                if (!settings.AiReadingEnabled)
-                {
-                    return Refused(CodeOff, "AI-lezen staat niet aan. Een beheerder kan het aanzetten bij Instellingen; handmatig invoeren werkt gewoon.");
-                }
-                if (await MonthSpentEurAsync(cancellationToken) >= settings.AiReadingMonthlyLimitEur)
-                {
-                    return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({settings.AiReadingMonthlyLimitEur:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
-                }
-                return await ReadLockedAsync(fileName, document, settings, cancellationToken);
+                return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({settings.AiReadingMonthlyLimitEur:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
             }
-            finally
-            {
-                ReadLock.Release();
-            }
+            return await ReadDocumentAsync(fileName, document, settings, cancellationToken);
         }
 
-        private async Task<ServiceResult<AiExtractionDto>> ReadLockedAsync(string fileName, PreparedDocument document, CompanySettings settings, CancellationToken cancellationToken)
+        private async Task<ServiceResult<AiExtractionDto>> ReadDocumentAsync(string fileName, PreparedDocument document, CompanySettings settings, CancellationToken cancellationToken)
         {
             var originalName = Path.GetFileName(string.IsNullOrWhiteSpace(fileName) ? "document" + document.Extension : fileName.Trim());
             var extraction = new AiExtraction
             {
-                Status = AiReadingRules.StatusProposed,
+                // Tijdens het lezen staat de lezing als mislukt ("reading"): valt de API midden in het lezen weg, dan blijft er nooit een open
+                // voorstel zonder inhoud staan. Na het lezen wordt het een voorstel, of mislukt met de echte reden.
+                Status = AiReadingRules.StatusFailed,
+                ErrorCode = "reading",
                 DocumentType = AiReadingRules.DocumentPurchaseInvoice,
                 FileName = originalName.Length > 255 ? originalName[^255..] : originalName,
                 MediaType = document.MediaType,
@@ -197,11 +186,8 @@ namespace AgfAdmin.Services.DocumentAi
             extraction.DurationMs = result.DurationMs;
             extraction.ProposalJson = result.Proposal?.ToJsonString();
             extraction.ProblemsJson = JsonSerializer.Serialize(result.Problems.Select(p => new AiProblemDto { Field = p.Field, Code = p.Code }), Json);
-            if (result.Proposal == null)
-            {
-                extraction.Status = AiReadingRules.StatusFailed;
-                extraction.ErrorCode = result.FailureCode;
-            }
+            extraction.Status = result.Proposal == null ? AiReadingRules.StatusFailed : AiReadingRules.StatusProposed;
+            extraction.ErrorCode = result.Proposal == null ? result.FailureCode : null;
             // Zonder annulering: de kosten zijn al gemaakt en moeten in de maandtelling komen.
             await db.SaveChangesAsync(CancellationToken.None);
 
