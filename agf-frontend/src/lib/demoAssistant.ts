@@ -5,6 +5,8 @@
 export const DEMO_ROUTES = [
     '/purchase-orders/new', '/receipts', '/inspection', '/availability', '/sales-orders', '/purchase-orders', '/partijen',
     '/relations', '/articles', '/direct-trade', '/purchase-invoices', '/purchase-invoices/new',
+    // Instellingen: het hoofdstuk Factuur uploaden zet daar AI-lezen aan (met de bevestiging).
+    '/settings',
 ] as const;
 export type DemoRoute = (typeof DEMO_ROUTES)[number];
 

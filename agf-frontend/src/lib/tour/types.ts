@@ -23,6 +23,8 @@ export type TourActionKind =
     | { kind: 'pick'; target: TourTarget; text: string; expect?: string; key?: 'Tab' | 'Enter' }
     | { kind: 'select'; target: TourTarget; value: string }
     | { kind: 'click'; target: TourTarget }
+    // Een vast demodocument (uit public/) in een bestandsveld zetten, onder de naam `name`; alleen voor de nagebootste lezer.
+    | { kind: 'upload'; target: TourTarget; file: string; name: string }
     // Een vaste tijd, of tot het element er is (en eventueel de tekst bevat).
     | { kind: 'wait'; ms?: number; target?: TourTarget; text?: string }
     // Controle: staat de tekst of waarde in beeld? Zo niet, dan stopt de rondleiding met een duidelijke melding.

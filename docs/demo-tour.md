@@ -111,7 +111,9 @@ databases:
 
 Per database:
 1. **API** op de testdatabase (poort 5198, CORS voor de testfrontend):
-   `ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=<testdatabase>;Username=…" ASPNETCORE_URLS=http://localhost:5198 Cors__Origins__0=http://localhost:3001 dotnet run --project AgfAdmin --no-launch-profile`
+   `ConnectionStrings__DefaultConnection="Host=localhost;Port=5432;Database=<testdatabase>;Username=…" ASPNETCORE_URLS=http://localhost:5198 Cors__Origins__0=http://localhost:3001 DocumentAi__Reader=Demo dotnet run --project AgfAdmin --no-launch-profile`
+   (`DocumentAi__Reader=Demo`: het hoofdstuk Factuur uploaden gebruikt de nagebootste lezer, nooit de echte AI; zonder die instelling
+   meldt het hoofdstuk dat het alleen met de demolezer werkt).
 2. **Frontend** met de rondleiding aan (poort 3001, naast de demo op 3000):
    `NEXT_PUBLIC_API_URL=http://localhost:5198/api NEXT_PUBLIC_DEMO_ASSISTANT=true NEXT_PUBLIC_DEMO_TOUR=true npx next dev -p 3001`
 3. **Test** in `agf-frontend`: `TOUR_TEST_DATABASE=<testdatabase> [TOUR_EMPTY_DATABASE=true] npm run test:tour`. Dat duurt ongeveer 12

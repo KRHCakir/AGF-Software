@@ -270,6 +270,19 @@ export class TourRunner {
             case 'lookup':
                 await this.lookup(action.run, my);
                 return;
+            case 'upload': {
+                // Een bestand kiezen kan de assistent niet in het venster van de gebruiker: hij zet zelf een vast demodocument klaar (ook bij Doe zelf).
+                const element = await this.waitForTarget(action.target, my);
+                const view = this.view();
+                if (!(element instanceof view.HTMLInputElement) || element.type !== 'file') throw new StepFailure({ key: 'tour_error_not_field', params: { target: this.text(action.target) } });
+                const blob = await (await view.fetch(this.text(action.file))).blob();
+                const transfer = new view.DataTransfer();
+                transfer.items.add(new view.File([blob], this.text(action.name), { type: blob.type || 'image/png' }));
+                element.files = transfer.files;
+                element.dispatchEvent(new view.Event('change', { bubbles: true }));
+                await this.sleep(this.timing().actionMs, my);
+                return;
+            }
             case 'remember': {
                 const element = await this.waitForTarget(action.target, my);
                 const text = textOf(element).trim();

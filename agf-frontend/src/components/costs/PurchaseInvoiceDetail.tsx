@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatMoney } from '../../lib/availability';
+import { formatDateTime, formatMoney } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { formatRate, isEuro } from '../../lib/exchangeRate';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getInvoiceAllocations, getPurchaseInvoice, refreshExchangeRate } from '../../services/purchaseInvoiceService';
+import { getInvoiceAttachment } from '../../services/aiReadingService';
 import { type InvoiceAllocations, lineEuro } from '../../types/partijCost';
 import type { PurchaseInvoice } from '../../types/purchaseInvoice';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
@@ -96,6 +97,19 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                 <p className="text-sm text-gray-800">
                     {invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'} · {t('invoice_detail_totals', { net: money(invoice.subTotal), vat: money(invoice.vatAmount), gross: money(invoice.totalAmount) })}
                 </p>
+                {/* AI-voorstel (stap 7a): wie keurde het goed, welk model las het, hoeveel velden werden aangepast; het originele document als bijlage. */}
+                {invoice.aiReading && (
+                    <p className="text-sm text-gray-800" data-testid="invoice-ai-reading" data-tour="invoice-ai-reading">
+                        {t('ai_detail_approved', { name: invoice.aiReading.approvedBy, date: formatDateTime(invoice.aiReading.approvedAt, locale), model: invoice.aiReading.modelName ?? '–', version: invoice.aiReading.modelVersion ?? '–' })}
+                        {invoice.aiReading.adjustedFields > 0 && <> · {t('ai_detail_adjusted', { count: String(invoice.aiReading.adjustedFields) })}</>}
+                    </p>
+                )}
+                {(invoice.attachments ?? []).map((attachment) => (
+                    <button key={attachment.id} type="button" className="mr-2 text-sm text-blue-800 underline underline-offset-2" data-testid="invoice-attachment"
+                        onClick={() => void getInvoiceAttachment(invoice.id, attachment.id).then((blob) => window.open(URL.createObjectURL(blob), '_blank')).catch(() => undefined)}>
+                        📎 {attachment.fileName}
+                    </button>
+                ))}
                 {foreign && (
                     <div className="mt-1 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-sm text-sky-950" data-testid="invoice-exchange-rate" data-tour="invoice-exchange-rate">
                         {rateKnown && (

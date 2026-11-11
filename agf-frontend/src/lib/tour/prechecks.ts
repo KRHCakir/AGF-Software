@@ -10,6 +10,7 @@ import { normalizeTradeClass } from '../tradeClass';
 import { searchCustomers } from '../customerSearch';
 import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
+import { getAiReadingStatus } from '../../services/aiReadingService';
 import { listSalesOrders } from '../../services/salesOrderService';
 import { getAvailabilityOverview } from '../../services/availabilityService';
 import { getCountries } from '../../services/countryService';
@@ -386,4 +387,16 @@ export async function precheckInvoice(signal: AbortSignal): Promise<TourPrecheck
 // Stamgegevens: altijd een nieuwe leverancier, klant en artikel (met het kenmerk van deze rondleiding); niets vooraf nodig.
 export async function precheckMasterdata(): Promise<TourPrecheck> {
     return { missing: [], vars: { originSearch: TOUR_ORIGIN } };
+}
+
+// Factuur uploaden (stap 7a): alleen met de nagebootste lezer (DocumentAi:Reader = Demo), nooit met de echte AI; de leverancier van de
+// rondleiding en een niet-geannuleerde demo-inkooporder (DEMO-TOUR-…) om het voorstel aan te koppelen. AI-lezen uit: de rondleiding zet het aan.
+export async function precheckAiInvoice(signal: AbortSignal): Promise<TourPrecheck> {
+    const [status, data, list] = await Promise.all([getAiReadingStatus(signal).catch(() => null), masterData(signal),
+        listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'all', vendorId: null, page: 1, pageSize: 50 }, signal)]);
+    if (status === null || status.provider !== 'Demo') return { missing: [{ key: 'tour_missing_demo_reader' }] };
+    if (data.vendor === null) return { missing: [missingVendor] };
+    const order = newestFirst(list.items.filter((item) => item.vendorId === data.vendor!.vendor.id && item.status !== 'Cancelled' && isTour(item.supplierReference)))[0];
+    if (!order) return { missing: [{ key: 'tour_missing_ai_order' }] };
+    return { missing: [], vars: { vendorName: data.vendor.vendor.name, orderRef: order.supplierReference!, aiOff: status.enabled ? '' : 'ja' } };
 }
