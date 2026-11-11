@@ -11,6 +11,7 @@ import { isDateOnly, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from
 import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
 import { MAX_PARTIJ_NUMBER_LENGTH, MAX_SUPPLIER_LOT_REFERENCE_LENGTH } from '../../lib/partijRules';
 import { newRequestId } from '../../lib/requestId';
+import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
 import { getNextPartijNumber } from '../../services/partijService';
@@ -71,6 +72,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     onReceive: (commitment: SupplyCommitment) => void;
 }) {
     const { t, locale } = useTranslation();
+    const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     const isDirect = route === 'DirectTrade';
     const [header, setHeader] = useState<HeaderDraft>(emptyHeader);
     const [lines, setLines] = useState<PurchaseLineDraft[]>(() => [emptyLine()]);
@@ -425,7 +427,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
                 <PurchaseOrderLines lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
-                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine}
+                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor}
                     productExtra={(line, index) => (newArticleFor === line.key ? (
                         <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
                             onUse={(variantId, created) => {
@@ -435,7 +437,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                             }} />
                     ) : !locked && (
                         <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
-                            data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                            title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
                     ))} />
                 <button type="button" tabIndex={-1} onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
                     + {t('supply_add_line')}
