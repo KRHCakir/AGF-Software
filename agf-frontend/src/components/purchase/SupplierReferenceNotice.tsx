@@ -10,21 +10,24 @@ import OrderNumberText from './OrderNumberText';
 
 // Bij Inkooporder aanmaken: heeft deze leverancier al een order met dit ordernummer (zonder hoofdletters, spaties en streepjes vergeleken),
 // dan een waarschuwing met een link naar die order. Geen blokkade: twee orders op dezelfde bevestiging of partij kan gewoon. Een mislukte
-// opzoeking toont niets.
+// opzoeking toont niets. Bij een ander nummer of een andere leverancier verdwijnt de oude waarschuwing meteen; een afgebroken opzoeking
+// (er is intussen verder getypt) telt niet. Gezocht wordt op de sleutel, dus "45-21" en "45 21" geven geen nieuwe opzoeking.
 export default function SupplierReferenceNotice({ supplierReference, vendorId }: { supplierReference: string; vendorId: number | null }) {
     const { t } = useTranslation();
     const [matches, setMatches] = useState<PurchaseOrderSupplierReferenceMatch[]>([]);
     const key = supplierReferenceKey(supplierReference);
-    const reference = supplierReference.trim();
 
     useEffect(() => {
-        if (key === null || vendorId === null) { setMatches([]); return; }
+        setMatches([]);
+        if (key === null || vendorId === null) return;
         const controller = new AbortController();
         const handle = setTimeout(() => {
-            findOrdersBySupplierReference(reference, vendorId, controller.signal).then(setMatches).catch(() => setMatches([]));
+            findOrdersBySupplierReference(key, vendorId, controller.signal)
+                .then((found) => { if (!controller.signal.aborted) setMatches(found); })
+                .catch(() => { if (!controller.signal.aborted) setMatches([]); });
         }, 300);
         return () => { clearTimeout(handle); controller.abort(); };
-    }, [key, reference, vendorId]);
+    }, [key, vendorId]);
 
     if (key === null || vendorId === null || matches.length === 0) return null;
     return (

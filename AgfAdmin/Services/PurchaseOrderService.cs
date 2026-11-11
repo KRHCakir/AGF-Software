@@ -47,7 +47,7 @@ namespace AgfAdmin.Services
             if (vendorId != null) commitments = commitments.Where(c => c.VendorId == vendorId);
             // Filter "Ordernummer leverancier": deel van de sleutel, dus 4521 vindt 45-21 en 45210.
             var referenceFilter = PurchaseOrderRules.SupplierReferenceKey(supplierReference);
-            if (referenceFilter != null) commitments = commitments.Where(c => c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("-", "").Contains(referenceFilter));
+            if (referenceFilter != null) commitments = commitments.Where(c => c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("\t", "").Replace("\u00A0", "").Replace("-", "").Contains(referenceFilter));
             var term = (query ?? "").Trim().ToLowerInvariant();
             if (term != "")
             {
@@ -56,7 +56,7 @@ namespace AgfAdmin.Services
                 var partijKey = PartijRules.NumberKey(query) ?? "";
                 commitments = commitments.Where(c => c.OrderNumber.ToLower().Contains(term)
                     || (c.SupplierReference != null && c.SupplierReference.ToLower().Contains(term))
-                    || (partijKey != "" && c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("-", "").Contains(partijKey))
+                    || (partijKey != "" && c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("\t", "").Replace("\u00A0", "").Replace("-", "").Contains(partijKey))
                     || (c.SupplierLotReference != null && c.SupplierLotReference.ToLower().Contains(term))
                     || (partijKey != "" && c.Partij != null && c.Partij.NumberKey.Contains(partijKey))
                     || (partijKey != "" && c.Lines.Any(l => l.Partij != null && l.Partij.NumberKey.Contains(partijKey)))
@@ -149,7 +149,7 @@ namespace AgfAdmin.Services
                 return Array.Empty<PurchaseOrderSupplierReferenceMatchDto>();
             }
             return await _db.SupplyCommitments.AsNoTracking()
-                .Where(c => c.VendorId == vendorId && c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("-", "") == key)
+                .Where(c => c.VendorId == vendorId && c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("\t", "").Replace("\u00A0", "").Replace("-", "") == key)
                 .OrderBy(c => c.OrderYear).ThenBy(c => c.OrderSequence).ThenBy(c => c.Id)
                 .Select(c => new PurchaseOrderSupplierReferenceMatchDto { Id = c.Id, OrderNumber = c.OrderNumber, SupplierReference = c.SupplierReference, OrderedOn = c.OrderedOn })
                 .Take(20)

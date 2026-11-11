@@ -284,7 +284,7 @@ export function isPurchaseOrderDetail(value: unknown): value is PurchaseOrderDet
 }
 
 export function isSupplierReferenceMatchList(value: unknown): value is PurchaseOrderSupplierReferenceMatch[] {
-    return isArrayOf(value, (item): item is PurchaseOrderSupplierReferenceMatch => isObject(item) && isNumber(item.id) && isString(item.orderNumber) && isString(item.supplierReference));
+    return isArrayOf(value, (item): item is PurchaseOrderSupplierReferenceMatch => isObject(item) && isNumber(item.id) && isString(item.orderNumber) && isString(item.supplierReference) && isString(item.orderedOn));
 }
 
 export function isInvoiceMatchList(value: unknown): value is PurchaseOrderInvoiceMatch[] {

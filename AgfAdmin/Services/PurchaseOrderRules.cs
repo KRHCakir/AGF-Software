@@ -20,7 +20,7 @@ namespace AgfAdmin.Services
 
         // Vergelijkingssleutel van het ordernummer van de leverancier: dezelfde regel als het partijnummer (hoofdletterongevoelig, zonder
         // spaties en streepjes), zodat 4521, "45 21" en "45-21" één nummer zijn. Leeg = null. Voor zoeken en de dubbelcontrole; opgeslagen
-        // wordt de invoer zoals getypt. De query's doen hetzelfde met upper en replace (spatie en streepje; tabs komen in de invoer niet voor).
+        // wordt de invoer zoals getypt. De query's doen hetzelfde met upper en replace (spatie, tab, harde spatie en streepje: wat een geplakt nummer bevat).
         public static string SupplierReferenceKey(string reference) => PartijRules.NumberKey(reference);
 
         public static bool IsChannel(string value) => value != null && Channels.Contains(value, StringComparer.Ordinal);
