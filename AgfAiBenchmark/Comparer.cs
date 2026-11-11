@@ -134,8 +134,14 @@ public static class Comparer
     // Een omschrijving is goed als alle woorden van het juiste antwoord erin staan: een artikelcode of extra woorden erachter mogen.
     private static bool ContainsAllWords(string actual, string expected)
     {
-        var words = actual.Split(' ').ToHashSet();
-        return expected.Split(' ').All(words.Contains);
+        // Elk voorkomen telt: "6 kist 6 kg" vraagt twee keer "6".
+        var available = actual.Split(' ').GroupBy(w => w).ToDictionary(g => g.Key, g => g.Count());
+        foreach (var word in expected.Split(' '))
+        {
+            if (!available.TryGetValue(word, out var n) || n == 0) return false;
+            available[word] = n - 1;
+        }
+        return true;
     }
 
     // Shared: aantal gelijke woorden (bepaalt de rangorde). Overlap: gedeelde woorden t.o.v. de kortste omschrijving (alleen de drempel, zodat extra woorden een regel niet uitsluiten). Jaccard ontloopt gelijke scores.
