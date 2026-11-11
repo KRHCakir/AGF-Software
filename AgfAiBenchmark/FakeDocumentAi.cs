@@ -12,7 +12,8 @@ public sealed class FakeDocumentAi(string variant, string truthDir) : IDocumentA
     public Task<AiResponse> ExtractAsync(DocumentInput document, string instruction, CancellationToken cancellationToken)
     {
         var truthPath = Path.Combine(truthDir, Path.GetFileNameWithoutExtension(document.Name) + ".json");
-        var output = File.Exists(truthPath) ? JsonNode.Parse(File.ReadAllText(truthPath))!.AsObject() : new JsonObject { ["soort"] = "overig" };
+        if (!File.Exists(truthPath)) throw new FileNotFoundException($"Antwoordbestand ontbreekt voor {document.Name}: {truthPath}", truthPath);
+        var output = JsonNode.Parse(File.ReadAllText(truthPath))!.AsObject();
         output.Remove("_meta");
         AsModelOutput(output);
         output["zekerheden"] = new JsonArray();

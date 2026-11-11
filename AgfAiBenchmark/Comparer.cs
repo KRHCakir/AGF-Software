@@ -51,13 +51,17 @@ public static class Comparer
         var pairs = new int[expected.Count];
         Array.Fill(pairs, -1);
         var free = Enumerable.Range(0, actual.Count).ToList();
-        for (var t = 0; t < expected.Count; t++)
-        {
-            var words = Words(expected[t]["omschrijving"]);
-            var best = free.Select(o => (o, sim: Similarity(words, Words(actual[o]["omschrijving"])))).Where(x => x.sim.Overlap >= MinSimilarity)
-                .OrderByDescending(x => x.sim.Overlap).ThenByDescending(x => x.sim.Jaccard).ThenBy(x => x.o).DefaultIfEmpty((o: -1, sim: (Overlap: 0.0, Jaccard: 0.0))).First();
-            if (best.o >= 0) { pairs[t] = best.o; free.Remove(best.o); }
-        }
+        var expectedWords = expected.Select(e => Words(e["omschrijving"])).ToList();
+        var actualWords = actual.Select(a => Words(a["omschrijving"])).ToList();
+        // Sterkste koppelingen over alle regels heen eerst, zodat een vergeten regel niet de modelregel van een ander opeist.
+        var candidates = (from t in Enumerable.Range(0, expected.Count)
+                          from o in Enumerable.Range(0, actual.Count)
+                          let sim = Similarity(expectedWords[t], actualWords[o])
+                          where sim.Overlap >= MinSimilarity
+                          select (t, o, sim))
+            .OrderByDescending(x => x.sim.Overlap).ThenByDescending(x => x.sim.Jaccard).ThenBy(x => x.t).ThenBy(x => x.o);
+        foreach (var (t, o, _) in candidates)
+            if (pairs[t] < 0 && free.Contains(o)) { pairs[t] = o; free.Remove(o); }
         for (var t = 0; t < expected.Count; t++)
             if (pairs[t] < 0 && free.Count > 0) { pairs[t] = free[0]; free.RemoveAt(0); }
         return [.. pairs.Select((o, t) => (t, o))];
