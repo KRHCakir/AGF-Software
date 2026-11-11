@@ -76,6 +76,22 @@ public class ComparerTests
     }
 
     [Fact]
+    public void Line_matching_prefers_the_candidate_with_most_equal_words()
+    {
+        var truth = Obj("""{"regels":[{"omschrijving":"appel rood biologisch"}]}""");
+        var output = Obj("""{"regels":[{"omschrijving":"appel"},{"omschrijving":"appel rood"}]}""");
+        Assert.Equal([(0, 1)], Comparer.MatchLines([.. ((JsonArray)truth["regels"]!).OfType<JsonObject>()], [.. ((JsonArray)output["regels"]!).OfType<JsonObject>()]));
+    }
+
+    [Theory]
+    [InlineData("Fruit S.L.", "fruit sl")]
+    [InlineData("Fruit SL", "fruit sl")]
+    [InlineData("Fruit S.L.,Spanje", "fruit slspanje")]
+    [InlineData("Avocado (Peru)", "avocado peru")]
+    public void Punctuation_is_removed_not_used_as_word_separator(string input, string expected) =>
+        Assert.Equal(expected, Comparer.Normalize(FieldKind.Text, "leverancier", JsonValue.Create(input)));
+
+    [Fact]
     public void A_forgotten_line_counts_every_field_of_it_and_high_certainty_is_tracked_on_the_models_own_index()
     {
         var truth = Obj("""{"regels":[{"omschrijving":"Limon","aantal":80},{"omschrijving":"Naranja","aantal":60}]}""");

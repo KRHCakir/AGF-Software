@@ -59,7 +59,7 @@ public static class Comparer
                           let sim = Similarity(expectedWords[t], actualWords[o])
                           where sim.Overlap >= MinSimilarity
                           select (t, o, sim))
-            .OrderByDescending(x => x.sim.Overlap).ThenByDescending(x => x.sim.Jaccard).ThenBy(x => x.t).ThenBy(x => x.o);
+            .OrderByDescending(x => x.sim.Shared).ThenByDescending(x => x.sim.Overlap).ThenByDescending(x => x.sim.Jaccard).ThenBy(x => x.t).ThenBy(x => x.o);
         foreach (var (t, o, _) in candidates)
             if (pairs[t] < 0 && free.Contains(o)) { pairs[t] = o; free.Remove(o); }
         for (var t = 0; t < expected.Count; t++)
@@ -124,18 +124,21 @@ public static class Comparer
 
     private static List<string> Words(JsonNode? node)
     {
-        var plain = new string((Text(node) ?? "").Normalize(NormalizationForm.FormD).Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark).ToArray());
+        // Leestekens verdwijnen (ze splitsen geen woorden): "S.L." en "SL" zijn gelijk.
+        var plain = new string((Text(node) ?? "").Normalize(NormalizationForm.FormD)
+            .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) is not (UnicodeCategory.NonSpacingMark or UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
+                or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation)).ToArray());
         return [.. Regex.Split(plain.ToLowerInvariant(), @"[^\p{L}\p{N}]+").Where(w => w.Length > 0)];
     }
 
-    // Overlap: gedeelde woorden t.o.v. de kortste omschrijving, zodat extra woorden een regel niet uitsluiten. Jaccard dient alleen om gelijke scores te ontlopen.
-    private static (double Overlap, double Jaccard) Similarity(List<string> a, List<string> b)
+    // Shared: aantal gelijke woorden (bepaalt de rangorde). Overlap: gedeelde woorden t.o.v. de kortste omschrijving (alleen de drempel, zodat extra woorden een regel niet uitsluiten). Jaccard ontloopt gelijke scores.
+    private static (int Shared, double Overlap, double Jaccard) Similarity(List<string> a, List<string> b)
     {
-        if (a.Count == 0 || b.Count == 0) return (0, 0);
+        if (a.Count == 0 || b.Count == 0) return (0, 0, 0);
         var set = a.ToHashSet();
         var other = b.ToHashSet();
-        double shared = set.Intersect(other).Count();
-        return (shared / Math.Min(set.Count, other.Count), shared / set.Union(other).Count());
+        var shared = set.Intersect(other).Count();
+        return (shared, (double)shared / Math.Min(set.Count, other.Count), (double)shared / set.Union(other).Count());
     }
 
     private static List<JsonObject> Objects(JsonNode? node) => node is JsonArray array ? [.. array.OfType<JsonObject>()] : [];
