@@ -54,6 +54,18 @@ public class SchemaTests
     }
 
     [Fact]
+    public void The_schema_stays_within_the_anthropic_limit_for_nullable_fields()
+    {
+        static int Unions(JsonNode? node) => node switch
+        {
+            JsonObject o => (o["type"] is JsonArray ? 1 : 0) + o.Sum(p => Unions(p.Value)),
+            JsonArray a => a.Sum(Unions),
+            _ => 0,
+        };
+        Assert.InRange(Unions(ExtractionSchema.Build()), 1, ExtractionSchema.MaxNullableFields);
+    }
+
+    [Fact]
     public void Valid_output_passes_also_inside_a_code_fence_and_the_schema_requires_every_field()
     {
         Assert.NotNull(ExtractionSchema.Validate("```json\n" + Doc() + "\n```", out _));
