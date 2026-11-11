@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import '../globals.css';
 import { LanguageProvider, useTranslation } from '../../i18n/LanguageContext';
 import AppMenu from '../../components/AppMenu';
-import { SubNav, TopNav, TopNavExtras } from '../../components/TopNav';
+import { SubNav, TopNav } from '../../components/TopNav';
 import DemoAssistant from '../../components/demo/DemoAssistant';
 import { CurrentUserProvider, SignedInAs } from '../../components/shared/CurrentUserContext';
 import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
@@ -34,19 +34,18 @@ function AdminLayoutContent({
 
     return (
         <div className="flex flex-col min-h-dvh">
-            {/* KOP: logo (naar Start), het menu als tabs per procesgroep (vanaf 1024 px; smaller de knop Menu), Instellingen, Help, Oud,
-                taal en gebruiker. Daaronder de gekleurde balk met de schermen van de groep waar je bent (SubNav). Geen zijbalk: de pagina
-                heeft de volle breedte (feedback 8 november). */}
-            <header className="bg-white border-b border-gray-300 h-12 flex items-center px-4 shadow-sm z-20">
-                <button ref={menuButton} type="button" className="mr-3 rounded border border-gray-300 px-2 py-1 text-sm font-medium text-gray-800 lg:hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
+            {/* KOP: logo (naar Start), het menu als tabs per procesgroep met Instellingen en Help in dezelfde balk (vanaf 1024 px; smaller
+                de knop Menu), en rustiger de taal en de gebruiker. Daaronder de gekleurde balk met de schermen van de groep waar je bent
+                (SubNav). Geen zijbalk: de pagina heeft de volle breedte (feedback 8 en 11 november). */}
+            <header className="bg-white border-b border-gray-300 h-14 flex items-center gap-2 px-4 shadow-sm z-20">
+                <button ref={menuButton} type="button" className="mr-1 min-h-11 rounded border border-gray-300 px-3 text-base font-medium text-gray-800 lg:hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
                     aria-expanded={menuOpen} aria-controls="app-menu-mobile" onClick={() => setMenuOpen((open) => !open)}>
                     {menuOpen ? '✕' : '☰'} {t('nav_menu')}
                 </button>
-                <Link href="/dashboard" className="font-bold text-xl text-blue-800 mr-4 lg:mr-6 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></Link>
-                <div className="hidden min-w-0 lg:flex"><TopNav pathname={pathname} /></div>
+                <Link href="/dashboard" className="font-bold text-xl text-blue-800 mr-2 lg:mr-4 tracking-tight shrink-0">AGF<span className="text-gray-600 font-normal">ERP</span></Link>
+                <div className="hidden min-w-0 flex-1 lg:flex"><TopNav pathname={pathname} /></div>
 
-                <div className="ml-auto flex shrink-0 items-center space-x-4 pl-2 text-gray-500">
-                    <div className="hidden lg:block"><TopNavExtras pathname={pathname} /></div>
+                <div className="ml-auto flex shrink-0 items-center space-x-3 pl-2 text-gray-500">
                     <div className="flex items-center space-x-1 border border-gray-200 rounded p-1">
                         <button
                             type="button"
@@ -67,7 +66,7 @@ function AdminLayoutContent({
                             🇳🇱
                         </button>
                     </div>
-                    <SignedInAs className="hidden sm:block lg:hidden xl:block" />
+                    <SignedInAs className="hidden sm:block lg:max-[1359px]:hidden" />
                 </div>
             </header>
 
