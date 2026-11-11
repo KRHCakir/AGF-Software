@@ -2,7 +2,7 @@
 
 # AI-testbench: overzicht
 
-Run van 2026-11-11 16:15, instructie 06cab552ab50, 2 documenten, waarvan 2 met juiste antwoorden.
+Run van 2026-11-11 17:02, instructie f75c3001fee1, 2 documenten, waarvan 2 met juiste antwoorden.
 
 - claude-sonnet: geen sleutel ANTHROPIC_API_KEY gevonden, overgeslagen.
 - claude-haiku: geen sleutel ANTHROPIC_API_KEY gevonden, overgeslagen.
@@ -79,7 +79,7 @@ Alleen geldige uitvoer, genormaliseerd. ✓ = gelijk aan het juiste antwoord.
 | valuta | null | null ✓ | eur |
 | regels[1].omschrijving | naranja navel calibre 5 | naranja navel calibre 5 ✓ | null |
 | regels[1].aantal | 60 | 60 ✓ | null |
-| regels[1].eenheid | caja | caja ✓ | null |
+| regels[1].eenheid | cajas | cajas ✓ | null |
 | regels[1].kg_netto | 900 | 900 ✓ | null |
 | regels[1].kg_bruto | 954 | 954 ✓ | null |
 

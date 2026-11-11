@@ -41,6 +41,7 @@ Invullen:
 - **`_meta.bron`:** `digitaal`, `scan` of `foto`. **`_meta.taal`:** `nl`, `en` of `es`. Hiermee splitst het overzicht de uitkomsten op.
 - **`soort`:** `inkoopfactuur`, `verkoopfactuur`, `bon` of `overig`.
 - **`leverancier`:** het bedrijf dat het document uitgeeft. **`factuurnummer`:** bij een bon het bonnummer.
+- **`ordernummer_leverancier`:** het bestelnummer waarmee we de inkooporder terugvinden, ook als het op de factuur "Uw referentie", "Your PO" of "Ihre Bestellung" heet. Staat er geen, dan het ordernummer van de leverancier, anders `null`.
 - **Wat niet op het document staat:** `null` (niet leeg laten en niet raden). Een model dat daar toch iets invult, krijgt "verzonnen".
 - **Getallen:** mogen in nl-notatie als tekst (`"1.250,00"`) of als gewoon getal (`1250`). **Datums:** `04-11-2026` of `2026-11-04`.
 - **`regels`:** één object per artikel- of kostenregel (ook transport, handling en emballage), in de volgorde van het document. Subtotalen en btw-regels tellen niet als regel. **`prijs`** is per eenheid, **`bedrag`** het regelbedrag excl. btw.
@@ -56,6 +57,7 @@ dotnet run --project AgfAiBenchmark -- run --models claude-sonnet,qwen-vl --opt-
 
 - **Vóór het versturen:** het programma meldt per aanbieder dat de documenten daarheen gaan en vraagt één keer om `ja`. Met `--yes` sla je die vraag over.
 - **Qwen (Alibaba, China)** draait alleen met `--opt-in qwen-vl`.
+- **Ons bedrijf:** met `--wij "Verita BV"` staat de naam in de instructie, zodat het model weet dat een factuur aan ons een inkoopfactuur is. Een andere naam (of geen) is een andere instructie, en dan draait alles opnieuw.
 - **Andere mappen:** `--docs`, `--truth` en `--out`.
 - **Gelijktijdige verzoeken:** standaard 4, aan te passen met `--parallel 2`.
 - **Opnieuw draaien:** een document dat al gedraaid is voor hetzelfde model en dezelfde instructie wordt overgeslagen, zodat je niet twee keer betaalt. `--force` draait alles opnieuw. Een ander document, model of andere instructie draait vanzelf opnieuw.
@@ -106,6 +108,7 @@ Voor het vergelijken worden alle waarden genormaliseerd:
 | Andere getallen (aantal, kg, btw-percentage) | Op drie decimalen. Tekst in nl-notatie wordt gelezen. |
 | Factuur- en ordernummer | Hoofdletters en spaties tellen niet. |
 | Overige tekst | Hoofdletters, accenten, leestekens en dubbele spaties tellen niet. |
+| Omschrijving van een regel | Goed als alle woorden van jouw antwoord erin staan. Een artikelcode of extra woorden erachter mogen. |
 
 **Regels koppelen:** elke juiste regel wordt eerst gekoppeld aan de modelregel met de meest overeenkomende omschrijving (minstens de helft van de woorden gelijk). Wat dan nog over is, gaat op volgorde.
 

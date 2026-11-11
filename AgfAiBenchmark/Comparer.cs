@@ -76,7 +76,7 @@ public static class Comparer
             (null, null) => Outcome.Goed,
             (null, _) => Outcome.Verzonnen,
             (_, null) => Outcome.Ontbreekt,
-            _ => e == a ? Outcome.Goed : Outcome.Fout,
+            _ => e == a || (field == "regels.omschrijving" && ContainsAllWords(a, e)) ? Outcome.Goed : Outcome.Fout,
         };
         return new FieldScore(field, group, path, outcome, e, a, high);
     }
@@ -129,6 +129,19 @@ public static class Comparer
             .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) is not (UnicodeCategory.NonSpacingMark or UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
                 or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation)).ToArray());
         return [.. Regex.Split(plain.ToLowerInvariant(), @"[^\p{L}\p{N}]+").Where(w => w.Length > 0)];
+    }
+
+    // Een omschrijving is goed als alle woorden van het juiste antwoord erin staan: een artikelcode of extra woorden erachter mogen.
+    private static bool ContainsAllWords(string actual, string expected)
+    {
+        // Elk voorkomen telt: "6 kist 6 kg" vraagt twee keer "6".
+        var available = actual.Split(' ').GroupBy(w => w).ToDictionary(g => g.Key, g => g.Count());
+        foreach (var word in expected.Split(' '))
+        {
+            if (!available.TryGetValue(word, out var n) || n == 0) return false;
+            available[word] = n - 1;
+        }
+        return true;
     }
 
     // Shared: aantal gelijke woorden (bepaalt de rangorde). Overlap: gedeelde woorden t.o.v. de kortste omschrijving (alleen de drempel, zodat extra woorden een regel niet uitsluiten). Jaccard ontloopt gelijke scores.

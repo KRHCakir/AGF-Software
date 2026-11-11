@@ -14,7 +14,7 @@ public static class Cli
 
     private const string Usage = """
         Gebruik:
-          run --models <id,id> [--docs <map>] [--truth <map>] [--out <map>] [--opt-in <id>] [--parallel 4] [--force] [--yes]
+          run --models <id,id> [--wij "<ons bedrijf>"] [--docs <map>] [--truth <map>] [--out <map>] [--opt-in <id>] [--parallel 4] [--force] [--yes]
           new-truth <document> [--truth <map>]
         Standaardmappen: <bench>/documenten, <bench>/juist, <bench>/resultaten, met <bench> = AGF_AI_BENCH of ~/agf-ai-bench.
         """;
@@ -61,10 +61,13 @@ public static class Cli
             if (input.ReadLine()?.Trim().ToLowerInvariant() is not ("ja" or "j")) { output.WriteLine("Gestopt, er is niets verstuurd."); return 1; }
         }
 
-        var runner = new Runner(outDir, int.TryParse(options.Get("parallel"), out var p) ? p : 4, options.Has("force"), log: output.WriteLine);
+        var ourCompany = options.Get("wij");
+        if (ourCompany != null) notes.Add($"Wij zijn {ourCompany}: dat staat in de instructie, zodat het model inkoop en verkoop kan onderscheiden.");
+        var runner = new Runner(outDir, int.TryParse(options.Get("parallel"), out var p) ? p : 4, options.Has("force"), log: output.WriteLine,
+            instruction: ExtractionSchema.InstructionFor(ourCompany));
         var results = await runner.RunAsync(documents, models, CancellationToken.None);
         if (runner.Skipped > 0) notes.Add($"{runner.Skipped} combinaties van model en document al eerder gedraaid met dezelfde instructie, overgeslagen (--force draait ze opnieuw).");
-        Report.Write(outDir, [.. models.Select(m => m.Settings)], results, truths, notes);
+        Report.Write(outDir, [.. models.Select(m => m.Settings)], results, truths, notes, runner.PromptHash);
         output.WriteLine($"Klaar: {Path.Combine(outDir, "overzicht.md")}");
         return 0;
     }
