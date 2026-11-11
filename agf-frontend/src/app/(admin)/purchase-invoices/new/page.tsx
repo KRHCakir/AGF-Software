@@ -4,6 +4,14 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ErrorState, LoadState, LoadingRows } from '../../../../components/availability/StateViews';
 import PurchaseInvoiceForm from '../../../../components/purchase/PurchaseInvoiceForm';
+import AiDocumentViewer from '../../../../components/purchase/AiDocumentViewer';
+import AiUploadPanel from '../../../../components/purchase/AiUploadPanel';
+import { draftFromProposal } from '../../../../lib/aiProposal';
+import { type InvoiceDraft, emptyDraft, isBlankLine } from '../../../../lib/purchaseInvoiceRules';
+import { type StoredAiReview, clearAiReview, clearDraft, loadAiReview, loadDraft, saveAiReview } from '../../../../lib/purchaseInvoiceStore';
+import { todayInAmsterdam } from '../../../../lib/calendarDate';
+import { closeAiExtraction } from '../../../../services/aiReadingService';
+import type { AiExtraction } from '../../../../types/aiReading';
 import PurchaseInvoiceSettingsPanel from '../../../../components/purchase/PurchaseInvoiceSettingsPanel';
 import { useTranslation } from '../../../../i18n/LanguageContext';
 import { toApiError } from '../../../../services/apiClient';
@@ -25,11 +33,39 @@ interface Reference {
 
 // Inkoopfactuur invoeren: één compact scherm. Referentiedata (leveranciers, artikelen, instellingen) wordt los van het
 // concept geladen en ververst: het formulier bewaart zijn eigen waarden en wordt daardoor nooit overschreven.
+// Factuur uploaden (stap 7a): de AI leest het document en vult het formulier voor; links het document, rechts het voorstel (op een
+// telefoon het document erboven). Goedkeuren slaat op via het gewone opslagpad; Afwijzen gooit het voorstel weg; Handmatig verder houdt
+// de waarden als gewoon concept zonder AI-goedkeuring.
 export default function NewPurchaseInvoicePage() {
     const { t } = useTranslation();
     const [state, setState] = useState<LoadState<Reference>>({ status: 'loading' });
     const [reloadToken, setReloadToken] = useState(0);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [review, setReview] = useState<StoredAiReview | null>(() => loadAiReview());
+    const [seed, setSeed] = useState<{ key: number; draft: InvoiceDraft } | null>(null);
+
+    const changeReview = (next: StoredAiReview | null) => {
+        setReview(next);
+        if (next === null) clearAiReview(); else saveAiReview(next);
+    };
+    const hasDraft = () => {
+        const current = loadDraft();
+        return current !== null && (current.header.vendorId !== '' || current.header.invoiceNumber.trim() !== '' || current.lines.some((line) => !isBlankLine(line)));
+    };
+    const propose = (extraction: AiExtraction, data: Reference) => {
+        if (review !== null) void closeAiExtraction(review.extraction.id, 'Rejected').catch(() => undefined);
+        setSeed({ key: Date.now(), draft: draftFromProposal(extraction, data.settings, data.vendors, todayInAmsterdam()) });
+        changeReview({ extraction, linkOrderId: extraction.matches?.suggestedOrderId ?? null });
+    };
+    const close = (outcome: 'Rejected' | 'Manual', data: Reference) => {
+        if (review === null) return;
+        void closeAiExtraction(review.extraction.id, outcome).catch(() => undefined);
+        if (outcome === 'Rejected') {
+            clearDraft();
+            setSeed({ key: Date.now(), draft: emptyDraft(todayInAmsterdam(), data.settings) });
+        }
+        changeReview(null);
+    };
 
     useEffect(() => {
         const controller = new AbortController();
@@ -72,7 +108,19 @@ export default function NewPurchaseInvoicePage() {
                             onSaved={(settings) => setState({ status: 'ready', data: { ...state.data, settings } })} />
                     )}
                     <MissingMasterDataNotice missing={missingMasterData({ vendors: state.data.vendors }, ['vendor'])} />
-                    <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} costArticles={state.data.costArticles} settings={state.data.settings} />
+                    {review === null && <AiUploadPanel onProposal={(extraction) => propose(extraction, state.data)} beforeUpload={() => !hasDraft() || window.confirm(t('ai_replace_confirm'))} />}
+                    <div className={review === null ? '' : 'grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]'}>
+                        {review !== null && <AiDocumentViewer key="document" extraction={review.extraction} />}
+                        <div key="form" className="min-w-0">
+                            <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} costArticles={state.data.costArticles} settings={state.data.settings} seed={seed}
+                                onSaved={() => changeReview(null)}
+                                ai={review === null ? null : {
+                                    extraction: review.extraction, linkOrderId: review.linkOrderId,
+                                    onLinkOrder: (linkOrderId) => changeReview({ ...review, linkOrderId }),
+                                    onReject: () => close('Rejected', state.data), onManual: () => close('Manual', state.data),
+                                }} />
+                        </div>
+                    </div>
                 </>
             )}
         </div>
