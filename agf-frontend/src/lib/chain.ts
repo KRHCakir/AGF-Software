@@ -1,5 +1,6 @@
 import type { PurchaseOrderDetail } from '../types/purchaseOrder';
 import type { SalesOrder } from '../types/salesOrder';
+import { orderNumbers } from './purchaseOrderRules.ts';
 import { dayMonth, orderLabel } from './salesSupply.ts';
 
 // De keten-strip: Inkooporder > Ontvangst > Keuring > Voorraad > Verkooporder > Levering > Factuur, met per stap een status, aantallen
@@ -67,7 +68,8 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
     const steps: Omit<ChainStep, 'current'>[] = [];
 
     steps.push({ key: 'order', state: 'done', parts: [{ key: 'chain_order_vendor', params: { vendor: order.vendorName ?? '–' } }],
-        links: [{ label: order.orderNumber, href: `/purchase-orders?id=${order.id}` },
+        // Het ordernummer van de leverancier als het er is (het hoofdnummer), anders het eigen IO-nummer.
+        links: [{ label: orderNumbers(order).main, href: `/purchase-orders?id=${order.id}` },
             ...(order.partijId ? [partijLink(order.partijId, order.partijNumber ?? `#${order.partijId}`)] : [])] });
 
     if (direct) {

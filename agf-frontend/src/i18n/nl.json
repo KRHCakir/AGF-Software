@@ -1801,6 +1801,7 @@
   "po_own_order_number": "Eigen ordernummer",
   "po_to_order": "Naar inkooporder",
   "po_supplier_reference": "Leveranciersreferentie",
+  "po_internal_number": "Intern nummer",
   "po_ordered_on": "Besteldatum",
   "po_pending_reject": "Afkeuren op order {number}: pallet {pallet} · partij {lot}",
   "po_pending_invoice": "Factuur {number} bij order {order}",

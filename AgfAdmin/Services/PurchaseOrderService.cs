@@ -27,7 +27,8 @@ namespace AgfAdmin.Services
         // Status: leeg of "open" = Besteld + Deels ontvangen (standaard), "all" = alles, of één weergavestatus. De weergavestatus volgt
         // uit ontvangen en afgekeurde hoeveelheden en wordt daarom na de SQL-filters (zoeken, leverancier) in het geheugen bepaald;
         // daarna sorteren (nieuwste eerst) en pagineren op de server.
-        public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, CancellationToken cancellationToken = default)
+        public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, string supplierReference = null,
+            CancellationToken cancellationToken = default)
         {
             // Hoofdletterongevoelig ("Open", "received"), maar altijd terug naar een waarde uit de toelatingslijst.
             var statusFilter = string.IsNullOrWhiteSpace(status) ? "open"
@@ -44,14 +45,18 @@ namespace AgfAdmin.Services
 
             var commitments = _db.SupplyCommitments.AsNoTracking();
             if (vendorId != null) commitments = commitments.Where(c => c.VendorId == vendorId);
+            // Filter "Ordernummer leverancier": deel van de sleutel, dus 4521 vindt 45-21 en 45210.
+            var referenceFilter = PurchaseOrderRules.SupplierReferenceKey(supplierReference);
+            if (referenceFilter != null) commitments = commitments.Where(c => c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("-", "").Contains(referenceFilter));
             var term = (query ?? "").Trim().ToLowerInvariant();
             if (term != "")
             {
-                // Ordernummer, leveranciersreferentie, partij (zonder spaties en streepjes), partij van de leverancier, leverancier en
-                // factuur- of creditnotanummer.
+                // Ordernummer, ordernummer van de leverancier en partij (beide zonder spaties en streepjes), lot van de leverancier, leverancier
+                // en factuur- of creditnotanummer.
                 var partijKey = PartijRules.NumberKey(query) ?? "";
                 commitments = commitments.Where(c => c.OrderNumber.ToLower().Contains(term)
                     || (c.SupplierReference != null && c.SupplierReference.ToLower().Contains(term))
+                    || (partijKey != "" && c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("-", "").Contains(partijKey))
                     || (c.SupplierLotReference != null && c.SupplierLotReference.ToLower().Contains(term))
                     || (partijKey != "" && c.Partij != null && c.Partij.NumberKey.Contains(partijKey))
                     || (partijKey != "" && c.Lines.Any(l => l.Partij != null && l.Partij.NumberKey.Contains(partijKey)))
@@ -129,7 +134,24 @@ namespace AgfAdmin.Services
             if (vendorId != null) refs = refs.Where(r => r.SupplyCommitment.VendorId == vendorId);
             return await refs
                 .OrderBy(r => r.SupplyCommitment.OrderYear).ThenBy(r => r.SupplyCommitment.OrderSequence).ThenBy(r => r.Id)
-                .Select(r => new PurchaseOrderInvoiceMatchDto { Id = r.SupplyCommitmentId, OrderNumber = r.SupplyCommitment.OrderNumber, Kind = r.Kind, VendorName = r.SupplyCommitment.Vendor.Name })
+                .Select(r => new PurchaseOrderInvoiceMatchDto { Id = r.SupplyCommitmentId, OrderNumber = r.SupplyCommitment.OrderNumber, SupplierReference = r.SupplyCommitment.SupplierReference, Kind = r.Kind, VendorName = r.SupplyCommitment.Vendor.Name })
+                .Take(20)
+                .ToListAsync(cancellationToken);
+        }
+
+        // Orders van deze leverancier met hetzelfde ordernummer van de leverancier (op de sleutel), voor de waarschuwing bij Inkooporder aanmaken.
+        // Alleen een melding: twee orders onder hetzelfde nummer kan (bijvoorbeeld een tweede levering op dezelfde bevestiging).
+        public async Task<IReadOnlyList<PurchaseOrderSupplierReferenceMatchDto>> FindBySupplierReferenceAsync(string supplierReference, int vendorId, CancellationToken cancellationToken = default)
+        {
+            var key = PurchaseOrderRules.SupplierReferenceKey(supplierReference);
+            if (key == null)
+            {
+                return Array.Empty<PurchaseOrderSupplierReferenceMatchDto>();
+            }
+            return await _db.SupplyCommitments.AsNoTracking()
+                .Where(c => c.VendorId == vendorId && c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("-", "") == key)
+                .OrderBy(c => c.OrderYear).ThenBy(c => c.OrderSequence).ThenBy(c => c.Id)
+                .Select(c => new PurchaseOrderSupplierReferenceMatchDto { Id = c.Id, OrderNumber = c.OrderNumber, SupplierReference = c.SupplierReference, OrderedOn = c.OrderedOn })
                 .Take(20)
                 .ToListAsync(cancellationToken);
         }

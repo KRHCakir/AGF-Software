@@ -220,8 +220,17 @@ export interface PurchaseOrderSalesLink {
 export interface PurchaseOrderInvoiceMatch {
     id: number;
     orderNumber: string;
+    supplierReference?: string | null;
     kind: string;
     vendorName: string | null;
+}
+
+// Een order van dezelfde leverancier met hetzelfde ordernummer van de leverancier (waarschuwing bij aanmaken).
+export interface PurchaseOrderSupplierReferenceMatch {
+    id: number;
+    orderNumber: string;
+    supplierReference: string;
+    orderedOn: string;
 }
 
 export interface AddInvoiceRefRequest {
@@ -272,6 +281,10 @@ export function isPurchaseOrderDetail(value: unknown): value is PurchaseOrderDet
         && (value.deviations === undefined || isArrayOf(value.deviations, isPurchaseOrderDeviation))
         && (value.salesOrders === undefined || isArrayOf(value.salesOrders, (link): link is PurchaseOrderSalesLink => isObject(link) && isNumber(link.salesOrderId)
             && isNullableString(link.customerName) && isString(link.status) && isNullableString(link.unit) && isNumber(link.reservedQuantity) && isNumber(link.shippedQuantity)));
+}
+
+export function isSupplierReferenceMatchList(value: unknown): value is PurchaseOrderSupplierReferenceMatch[] {
+    return isArrayOf(value, (item): item is PurchaseOrderSupplierReferenceMatch => isObject(item) && isNumber(item.id) && isString(item.orderNumber) && isString(item.supplierReference));
 }
 
 export function isInvoiceMatchList(value: unknown): value is PurchaseOrderInvoiceMatch[] {

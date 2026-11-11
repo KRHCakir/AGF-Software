@@ -192,6 +192,8 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string OrderNumber { get; set; }
+        // Ordernummer van de leverancier: het hoofdnummer in beeld als het er is.
+        public string SupplierReference { get; set; }
         public string VendorName { get; set; }
         // Ordered, PartiallyReceived, Received, Rejected of Cancelled (zoals de inkooporderlijst).
         public string Status { get; set; }

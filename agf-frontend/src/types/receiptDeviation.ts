@@ -21,6 +21,7 @@ export interface DeviationPreview {
     status: DeviationStatus;
     supplyCommitmentId: number;
     orderNumber: string;
+    supplierReference?: string | null;
     originalLineId: number;
     expected: DeviationVariant;
     received: DeviationVariant;

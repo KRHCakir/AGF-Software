@@ -257,7 +257,17 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string OrderNumber { get; set; }
+        public string SupplierReference { get; set; }
         public string Kind { get; set; }
         public string VendorName { get; set; }
+    }
+
+    // Een order van dezelfde leverancier met hetzelfde ordernummer van de leverancier (waarschuwing bij aanmaken, geen blokkade).
+    public sealed class PurchaseOrderSupplierReferenceMatchDto
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; }
+        public string SupplierReference { get; set; }
+        public DateOnly OrderedOn { get; set; }
     }
 }
