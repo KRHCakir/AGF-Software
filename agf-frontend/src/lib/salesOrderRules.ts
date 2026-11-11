@@ -4,6 +4,7 @@ import type { SupplySource } from '../types/salesSupply';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { resolveLineWeight, weightPayload, type LineWeightDraft } from './lineWeight.ts';
+import { buildPackagingLines, type PackagingLineDraft } from './packaging.ts';
 import { resolvePalletInput, type QuantityInputMode } from './palletInput.ts';
 import type { PackageKgDefaults } from './quantityKg.ts';
 
@@ -62,6 +63,14 @@ export interface OrderDraft {
     internalNote: string;
     requestedDeliveryDate: string;
     lines: OrderLineDraft[];
+    // Emballage (pallets, kratten) naast de goederen; doet niets met de voorraad.
+    packagingLines?: PackagingLineDraft[];
+}
+
+// Een goederenregel waar niets in staat (geen enkel veld): telt niet mee als de order emballage heeft. Half ingevuld wordt gecontroleerd.
+export function isBlankOrderLine(line: OrderLineDraft): boolean {
+    return [line.productVariantId, line.quantity, line.unit, line.palletCount, line.packagesPerPallet, line.loosePackages ?? '', line.netKg ?? '', line.grossKg ?? '']
+        .every((value) => value.trim() === '');
 }
 
 export const MAX_INTERNAL_NOTE_LENGTH = 1000;
@@ -76,6 +85,21 @@ export function salesPartijPayload(text: string | null, suggestion: string | nul
     if (value.length > MAX_SALES_PARTIJ_NUMBER_LENGTH) return { ok: false, errors: [{ field: 'salesPartijNumber', code: 'too_long' }] };
     if (value.replace(/[\s-]/g, '') === '') return { ok: false, errors: [{ field: 'salesPartijNumber', code: 'required' }] };
     return { ok: true, value };
+}
+
+// Backendsleutels lines[i] verwijzen naar de meegestuurde regels; lege goederenregels blijven in het formulier staan maar gaan niet mee.
+// Vertaalt die sleutels terug naar de formulierindex, zodat de fout bij de juiste regel verschijnt.
+export function remapPayloadLineKeys<T>(fieldErrors: Record<string, T>, draft: OrderDraft): Record<string, T> {
+    const hasPackaging = (draft.packagingLines ?? []).length > 0;
+    const formIndexes = draft.lines.flatMap((line, index) => (hasPackaging && isBlankOrderLine(line) ? [] : [index]));
+    const result: Record<string, T> = {};
+    for (const [key, value] of Object.entries(fieldErrors)) {
+        result[key.replace(/^lines\[(\d+)\]/, (match, n: string) => {
+            const mapped = formIndexes[Number(n)];
+            return mapped === undefined ? match : `lines[${mapped}]`;
+        })] = value;
+    }
+    return result;
 }
 
 export type OrderPayload = Omit<CreateSalesOrderRequest, 'requestId'>;
@@ -111,11 +135,17 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
         errors.push({ field: 'requestedDeliveryDate', code: draft.requestedDeliveryDate.trim() === '' ? 'required' : 'invalid_date' });
     }
 
-    if (draft.lines.length === 0) errors.push({ field: 'lines', code: 'required' });
-    else if (draft.lines.length > MAX_ORDER_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });
+    const packagingDrafts = draft.packagingLines ?? [];
+    const skip = (line: OrderLineDraft) => packagingDrafts.length > 0 && isBlankOrderLine(line);
+    const goodsCount = draft.lines.filter((line) => !skip(line)).length;
+    if (goodsCount === 0 && packagingDrafts.length === 0) errors.push({ field: 'lines', code: 'required' });
+    else if (goodsCount > MAX_ORDER_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });
+    const packaging = buildPackagingLines(packagingDrafts);
+    if (!packaging.ok) errors.push(...packaging.errors);
 
     const seen = new Set<string>();
-    const lines = draft.lines.map((line, index) => {
+    const lines = draft.lines.flatMap((line, index) => {
+        if (skip(line)) return [];
         const prefix = `lines[${index}]`;
         const before = errors.length;
         if (!/^[1-9]\d*$/.test(line.productVariantId)) errors.push({ field: `${prefix}.productVariantId`, code: 'required' });
@@ -133,7 +163,7 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
             if (seen.has(key)) errors.push({ field: prefix, code: 'duplicate_line' });
             seen.add(key);
         }
-        return {
+        return [{
             productVariantId: Number(line.productVariantId),
             quantity: amounts.ok ? amounts.value.quantity : 0,
             unit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
@@ -145,7 +175,7 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
             ...(weight.ok ? weightPayload(weight.value, 'netWeightKg', 'grossWeightKg') : {}),
             // Bron alleen als die gekozen is: zonder bron blijft het dezelfde opdracht als vóór dit veld.
             ...(line.supplySource ? { supplySource: line.supplySource } : {}),
-        };
+        }];
     });
 
     if (errors.length > 0 || requestedDeliveryDate === null) {
@@ -159,6 +189,8 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
             internalNote: internalNote === '' ? null : internalNote,
             requestedDeliveryDate,
             lines,
+            // Alleen met emballage: een order zonder blijft dezelfde opdracht als vóór dit veld.
+            ...(packaging.ok && packaging.value.length > 0 ? { packagingLines: packaging.value } : {}),
         },
     };
 }

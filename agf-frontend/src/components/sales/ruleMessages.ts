@@ -1,5 +1,6 @@
 import { MAX_CUSTOMER_REFERENCE_LENGTH, MAX_ORDER_LINES, MAX_REASON_LENGTH, RuleError } from '../../lib/salesOrderRules';
 import { DecimalError } from '../../lib/decimal';
+import { MAX_PACKAGING_LINES } from '../../lib/packaging';
 import { FieldErrors, addError, decimalErrorKey, palletErrorKey } from '../supply/messages';
 
 type Translate = (key: string, variables?: Record<string, string>) => string;
@@ -15,6 +16,12 @@ const MAX_LENGTHS: Record<string, number> = {
 
 // Vertaling van een pure regelfout naar een melding; veldsleutels blijven gelijk aan die van de backend.
 export function ruleMessage(error: RuleError, t: Translate): string {
+    // Emballage: een heel aantal en een prijs van 0 of meer met hoogstens 2 decimalen.
+    if (error.field === 'packagingLines') return t('sales_error_too_many_lines', { max: String(MAX_PACKAGING_LINES) });
+    if (error.field.startsWith('packagingLines[') && error.code !== 'required') {
+        if (error.field.endsWith('.quantity')) return t('packaging_error_quantity');
+        if (error.field.endsWith('.unitPrice')) return t('packaging_error_price');
+    }
     if ((DECIMAL_CODES as readonly string[]).includes(error.code)) {
         return t(decimalErrorKey(error.code as DecimalError));
     }
