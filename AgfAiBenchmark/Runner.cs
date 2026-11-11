@@ -127,6 +127,7 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
     private async Task<RawResult> CallAsync(DocumentInput document, SelectedModel model, string hash, CancellationToken cancellationToken)
     {
         long input = 0, output = 0;
+        decimal cost = 0;
         double seconds = 0;
         int calls = 0, transient = 0, invalid = 0;
         string? version = null, text = null, error;
@@ -138,6 +139,7 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
                 calls++;
                 var response = await model.Ai.ExtractAsync(document, ExtractionSchema.Instruction, cancellationToken);
                 (input, output, seconds, version, text) = (input + response.InputTokens, output + response.OutputTokens, seconds + response.Duration.TotalSeconds, response.ModelVersion, response.Text);
+                cost += model.Settings.CostUsd(response.InputTokens, response.OutputTokens);
                 if (ExtractionSchema.Validate(response.Text, out error) != null) { status = Status.Ok; break; }
                 if (++invalid > 1) { status = Status.Invalid; break; }
             }
@@ -154,7 +156,7 @@ public sealed class Runner(string outDir, int parallel, bool force, Func<int, Ti
         {
             Model = model.Settings.Id, ApiModel = model.Settings.ApiModel, ModelVersion = version, Document = document.Name, DocumentHash = hash,
             PromptHash = ExtractionSchema.PromptHash, Status = status, Error = status == Status.Ok ? null : error, Text = text,
-            InputTokens = input, OutputTokens = output, CostUsd = model.Settings.CostUsd(input, output), Seconds = Math.Round(seconds, 2), Calls = calls,
+            InputTokens = input, OutputTokens = output, CostUsd = cost, Seconds = Math.Round(seconds, 2), Calls = calls,
             At = DateTimeOffset.Now,
         };
     }

@@ -34,6 +34,8 @@ public sealed class RunnerTests : IDisposable
     public async Task Cost_and_time_come_from_the_real_token_usage_of_every_call()
     {
         Assert.Equal(12m, Settings().CostUsd(1_000_000, 1_000_000));
+        var haiku = Settings() with { InputPricePerMillion = 0.10m, OutputPricePerMillion = 0.50m, Tiers = [new(100_000, 0.50m, 2.50m)] };
+        Assert.Equal((0.0105m, 0.0525m), (haiku.CostUsd(100_000, 1_000), haiku.CostUsd(100_001, 1_000)));
         var (result, _) = await Run(new Scripted("{ kapot", Valid));
         Assert.Equal((Status.Ok, 2, 2000L, 400L, 0.008m, 3.0), (result.Status, result.Calls, result.InputTokens, result.OutputTokens, result.CostUsd, result.Seconds));
         Assert.Equal("test-1", result.ModelVersion);
