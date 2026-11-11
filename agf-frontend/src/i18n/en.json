@@ -2536,7 +2536,7 @@
   "ai_matched_kvk": "Chamber of Commerce",
   "ai_matched_vat": "VAT number",
   "ai_matched_name": "name",
-  "ai_vendor_not_found": "Supplier not found: {name}.",
+  "ai_vendor_not_found": "Supplier not found: {name}",
   "ai_vendor_add": "Add relation",
   "ai_order_link": "Link to purchase order",
   "ai_order_none": "No order number on the invoice: this becomes a direct invoice.",

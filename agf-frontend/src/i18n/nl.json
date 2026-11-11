@@ -2536,7 +2536,7 @@
   "ai_matched_kvk": "KvK",
   "ai_matched_vat": "btw-nummer",
   "ai_matched_name": "naam",
-  "ai_vendor_not_found": "Leverancier niet gevonden: {name}.",
+  "ai_vendor_not_found": "Leverancier niet gevonden: {name}",
   "ai_vendor_add": "Relatie toevoegen",
   "ai_order_link": "Koppel aan inkooporder",
   "ai_order_none": "Geen ordernummer op de factuur: dit wordt een directe factuur.",
