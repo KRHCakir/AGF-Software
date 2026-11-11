@@ -80,6 +80,8 @@ public class AiReadingRulesTests
         var haiku = new DocumentAiModelPrice { InputPerMillionUsd = 0.10m, OutputPerMillionUsd = 0.50m, TierAboveInputTokens = 100_000, TierInputPerMillionUsd = 0.50m, TierOutputPerMillionUsd = 2.50m };
         Assert.Equal(0.00095m, AiReadingRules.CostUsd(haiku, 4_500, 1_000));
         Assert.Equal(0.0625m, AiReadingRules.CostUsd(haiku, 120_000, 1_000));
+        Assert.Equal((0.50m, 2.50m), AiReadingRules.Rates(haiku, 120_000));
+        Assert.Equal((0.10m, 0.50m), AiReadingRules.Rates(haiku, 100_000));
         Assert.Equal(0.000817m, AiReadingRules.ToEur(0.00095m, 0.86m));
     }
 

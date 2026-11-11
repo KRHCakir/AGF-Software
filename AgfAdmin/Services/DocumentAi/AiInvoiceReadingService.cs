@@ -96,10 +96,6 @@ namespace AgfAdmin.Services.DocumentAi
             {
                 return Refused(CodeNotConfigured, $"AI-lezen staat niet aan: {reason}");
             }
-            if (await MonthSpentEurAsync(cancellationToken) >= settings.AiReadingMonthlyLimitEur)
-            {
-                return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({settings.AiReadingMonthlyLimitEur:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
-            }
             if (!rateLimiter.TryAcquire(user.UserId ?? "", _options.MaxUploadsPerMinute))
             {
                 return Refused(CodeRateLimit, "Te veel uploads in korte tijd. Wacht een minuut en probeer het opnieuw.");
@@ -110,25 +106,75 @@ namespace AgfAdmin.Services.DocumentAi
                 return ServiceResult<AiExtractionDto>.Validation(new Dictionary<string, string[]> { ["file"] = new[] { error } });
             }
 
+            // Bewust geen vergrendeling rond het lezen (5 tot 20 seconden): gelijktijdige uploads van verschillende gebruikers wachten niet op
+            // elkaar. De maandlimiet pauzeert het lezen zodra het verbruik haar haalt; gelijktijdige lezingen kunnen haar daardoor met hooguit
+            // een paar cent overschrijden (een lezing kost ongeveer een tiende cent, met vangnet enkele centen).
+            if (await MonthSpentEurAsync(cancellationToken) >= settings.AiReadingMonthlyLimitEur)
+            {
+                return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({settings.AiReadingMonthlyLimitEur:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
+            }
+            return await ReadDocumentAsync(fileName, document, settings, cancellationToken);
+        }
+
+        private async Task<ServiceResult<AiExtractionDto>> ReadDocumentAsync(string fileName, PreparedDocument document, CompanySettings settings, CancellationToken cancellationToken)
+        {
             var originalName = Path.GetFileName(string.IsNullOrWhiteSpace(fileName) ? "document" + document.Extension : fileName.Trim());
             var extraction = new AiExtraction
             {
-                Status = AiReadingRules.StatusProposed,
+                // Tijdens het lezen staat de lezing als mislukt ("reading"): valt de API midden in het lezen weg, dan blijft er nooit een open
+                // voorstel zonder inhoud staan. Na het lezen wordt het een voorstel, of mislukt met de echte reden.
+                Status = AiReadingRules.StatusFailed,
+                ErrorCode = "reading",
                 DocumentType = AiReadingRules.DocumentPurchaseInvoice,
                 FileName = originalName.Length > 255 ? originalName[^255..] : originalName,
                 MediaType = document.MediaType,
                 SizeBytes = document.Original.LongLength,
                 Sha256 = document.Sha256,
-                StorageKey = await store.SaveAsync(document.Original, document.Extension, cancellationToken),
                 DisplayMediaType = document.DisplayMediaType,
                 Provider = factory.Provider,
                 EurPerUsd = _options.EurPerUsd,
                 CreatedBy = user.Actor(MaxActorLength),
                 CreatedAt = clock.GetUtcNow().UtcDateTime,
             };
-            if (document.Display != null) extraction.DisplayStorageKey = await store.SaveAsync(document.Display, ".jpg", cancellationToken);
+            var saved = new List<string>();
+            try
+            {
+                extraction.StorageKey = await store.SaveAsync(document.Original, document.Extension, cancellationToken);
+                saved.Add(extraction.StorageKey);
+                if (document.Display != null)
+                {
+                    extraction.DisplayStorageKey = await store.SaveAsync(document.Display, ".jpg", cancellationToken);
+                    saved.Add(extraction.DisplayStorageKey);
+                }
+                // Eerst vastleggen, dan pas lezen: elk bewaard bestand heeft zo een regel en de bewaartaak vindt het ook na een fout of afbreken.
+                db.AiExtractions.Add(extraction);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch
+            {
+                db.Entry(extraction).State = EntityState.Detached;
+                foreach (var key in saved)
+                {
+                    try { store.Delete(key); } catch { /* best effort */ }
+                }
+                throw;
+            }
 
-            var result = await reader.ReadAsync(document.ForAi, settings.CompanyName, cancellationToken);
+            ReadResult result;
+            try
+            {
+                // Bewust los van de clientverbinding: een gestarte lezing rondt af (elke poging heeft een eigen time-out), zodat de
+                // gemaakte kosten altijd worden vastgelegd en niet buiten de maandtelling vallen.
+                result = await reader.ReadAsync(document.ForAi, settings.CompanyName, CancellationToken.None);
+            }
+            catch
+            {
+                // Afgebroken of mislukt: de regel staat als mislukt en wordt na de bewaartermijn opgeruimd, niet als open voorstel.
+                extraction.Status = AiReadingRules.StatusFailed;
+                extraction.ErrorCode = "failed";
+                try { await db.SaveChangesAsync(CancellationToken.None); } catch { /* de bewaartaak ruimt het bestand toch op */ }
+                throw;
+            }
             extraction.Model = result.Model;
             extraction.ModelVersion = result.ModelVersion;
             extraction.UsedFallback = result.UsedFallback;
@@ -140,13 +186,10 @@ namespace AgfAdmin.Services.DocumentAi
             extraction.DurationMs = result.DurationMs;
             extraction.ProposalJson = result.Proposal?.ToJsonString();
             extraction.ProblemsJson = JsonSerializer.Serialize(result.Problems.Select(p => new AiProblemDto { Field = p.Field, Code = p.Code }), Json);
-            if (result.Proposal == null)
-            {
-                extraction.Status = AiReadingRules.StatusFailed;
-                extraction.ErrorCode = result.FailureCode;
-            }
-            db.AiExtractions.Add(extraction);
-            await db.SaveChangesAsync(cancellationToken);
+            extraction.Status = result.Proposal == null ? AiReadingRules.StatusFailed : AiReadingRules.StatusProposed;
+            extraction.ErrorCode = result.Proposal == null ? result.FailureCode : null;
+            // Zonder annulering: de kosten zijn al gemaakt en moeten in de maandtelling komen.
+            await db.SaveChangesAsync(CancellationToken.None);
 
             return result.FailureCode switch
             {
@@ -200,15 +243,32 @@ namespace AgfAdmin.Services.DocumentAi
         public async Task<int> CleanupAsync(CancellationToken cancellationToken = default)
         {
             var before = clock.GetUtcNow().UtcDateTime.AddDays(-Math.Max(1, _options.RetentionDays));
-            var old = await db.AiExtractions.Where(e => e.Status != AiReadingRules.StatusApproved && e.FileDeletedAt == null && e.CreatedAt < before).ToListAsync(cancellationToken);
-            foreach (var extraction in old)
+            var candidates = await db.AiExtractions.AsNoTracking()
+                .Where(e => e.Status != AiReadingRules.StatusApproved && e.FileDeletedAt == null && e.CreatedAt < before)
+                .Select(e => new { e.Id, e.StorageKey, e.DisplayStorageKey }).ToListAsync(cancellationToken);
+            var removed = 0;
+            foreach (var candidate in candidates)
             {
-                store.Delete(extraction.StorageKey);
-                if (extraction.DisplayStorageKey != null) store.Delete(extraction.DisplayStorageKey);
-                extraction.FileDeletedAt = clock.GetUtcNow().UtcDateTime;
+                // Eerst atomair claimen, met de voorwaarden in dezelfde update: is de lezing ondertussen goedgekeurd, dan slaat de claim niet
+                // aan en blijft het document staan. Goedkeuren moet op zijn beurt FileDeletedAt == null eisen.
+                var now = clock.GetUtcNow().UtcDateTime;
+                var claimed = await db.AiExtractions.Where(e => e.Id == candidate.Id && e.Status != AiReadingRules.StatusApproved && e.FileDeletedAt == null)
+                    .ExecuteUpdateAsync(s => s.SetProperty(e => e.FileDeletedAt, now), cancellationToken);
+                if (claimed == 0) continue;
+                try
+                {
+                    store.Delete(candidate.StorageKey);
+                    if (candidate.DisplayStorageKey != null) store.Delete(candidate.DisplayStorageKey);
+                }
+                catch
+                {
+                    // Verwijderen mislukt: claim terugdraaien zodat de volgende ronde het opnieuw probeert (Delete is herhaalbaar).
+                    await db.AiExtractions.Where(e => e.Id == candidate.Id).ExecuteUpdateAsync(s => s.SetProperty(e => e.FileDeletedAt, (DateTime?)null), CancellationToken.None);
+                    continue;
+                }
+                removed++;
             }
-            if (old.Count > 0) await db.SaveChangesAsync(cancellationToken);
-            return old.Count;
+            return removed;
         }
 
         // ---- Hulp ----
