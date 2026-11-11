@@ -105,13 +105,13 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                                     data-tour="supply-line-gross" data-tour-key={index} onChange={(event) => onChange(line.key, { grossKg: event.target.value, grossKgEntered: true })}
                                                     className={`${inputClass} !mt-0 w-24 text-right`} />
                                                 {line.grossKgEntered && <span className="block text-xs font-medium text-amber-900" data-testid={`${prefix}.gross-deviates`}>{t('po_line_gross_deviates')}</span>}
-                                                <button type="button" tabIndex={-1} disabled={locked} className={linkButton} onClick={() => resetGross(line)}>↺ {t('po_line_gross_reset')}</button>
+                                                <button type="button" disabled={locked} className={linkButton} onClick={() => resetGross(line)}>↺ {t('po_line_gross_reset')}</button>
                                             </>
                                         ) : (
                                             <>
                                                 <span data-testid={`${prefix}.gross`}>{kg(row?.weight?.grossWeightKg)}</span>
                                                 {variant && !locked && (
-                                                    <button type="button" tabIndex={-1} className={`${linkButton} block`} data-tour="supply-line-gross-adjust" data-tour-key={index}
+                                                    <button type="button" className={`${linkButton} block`} data-tour="supply-line-gross-adjust" data-tour-key={index}
                                                         onClick={() => openGross(line, row)}>{t('po_line_gross_adjust')}</button>
                                                 )}
                                             </>
@@ -161,7 +161,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     </td>
                                 )}
                                 <td className="px-2 py-1.5 max-md:block max-md:px-0 max-md:pt-1 max-md:text-right">
-                                    <button type="button" tabIndex={-1} onClick={() => onRemove(line.key)} disabled={locked || lines.length <= 1}
+                                    <button type="button" onClick={() => onRemove(line.key)} disabled={locked || lines.length <= 1}
                                         className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
                                 </td>
                             </tr>
