@@ -90,6 +90,10 @@ public sealed class QwenDocumentAi(string apiModel, string apiKey, string baseUr
             usage?["prompt_tokens"]?.GetValue<long>() ?? 0, usage?["completion_tokens"]?.GetValue<long>() ?? 0, total.Elapsed, json["model"]?.GetValue<string>());
     }
 
+    // p-1.png, p-02.png, p-10.png: numeriek sorteren op paginanummer, ongeacht de zero-padding
+    private static int PageNumber(string fileName) =>
+        int.TryParse(Path.GetFileNameWithoutExtension(fileName)[(fileName.LastIndexOf('-') + 1)..], out var n) ? n : int.MaxValue;
+
     private static async Task<List<(string MediaType, byte[] Bytes)>> PdfPagesAsync(byte[] pdf, CancellationToken cancellationToken)
     {
         var dir = Directory.CreateTempSubdirectory("agf-ai-qwen-");
@@ -101,8 +105,15 @@ public sealed class QwenDocumentAi(string apiModel, string apiKey, string baseUr
             Process? process;
             try { process = Process.Start(start); }
             catch (System.ComponentModel.Win32Exception) { throw new UnsupportedDocumentException("Qwen-VL leest geen PDF en pdftoppm (poppler) is niet geïnstalleerd"); }
-            using (process) { await process!.WaitForExitAsync(cancellationToken); if (process.ExitCode != 0) throw new UnsupportedDocumentException("pdftoppm kon de PDF niet omzetten"); }
-            var pages = dir.GetFiles("p*.png").OrderBy(f => f.Name, StringComparer.Ordinal).ToList();
+            using (process)
+            {
+                // stderr leeg lezen, anders kan een volle pijp pdftoppm laten blokkeren
+                var stderr = process!.StandardError.ReadToEndAsync(cancellationToken);
+                await process.WaitForExitAsync(cancellationToken);
+                await stderr;
+                if (process.ExitCode != 0) throw new UnsupportedDocumentException("pdftoppm kon de PDF niet omzetten");
+            }
+            var pages = dir.GetFiles("p*.png").OrderBy(f => PageNumber(f.Name)).ToList();
             // Er wordt één pagina extra omgezet om te zien dat het document te lang is: liever "niet ondersteund" dan stilzwijgend afkappen.
             if (pages.Count > MaxPages) throw new UnsupportedDocumentException($"PDF heeft meer dan {MaxPages} pagina's; Qwen verwerkt er maximaal {MaxPages}");
             return [.. pages.Select(f => ("image/png", File.ReadAllBytes(f.FullName)))];
