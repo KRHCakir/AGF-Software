@@ -15,7 +15,7 @@ namespace AgfAdmin.Controllers
                     result.Errors.ToDictionary(e => e.Key, e => e.Value))),
                 ServiceResultStatus.NotFound => controller.NotFound(new { message = result.Message }),
                 ServiceResultStatus.Conflict => controller.Conflict(result.ConflictBody ?? new { message = result.Message }),
-                ServiceResultStatus.Unavailable => controller.StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = result.Message }),
+                ServiceResultStatus.Unavailable => controller.StatusCode(StatusCodes.Status503ServiceUnavailable, result.ConflictBody ?? new { message = result.Message }),
                 _ => throw new InvalidOperationException($"Unhandled service result status {result.Status}.")
             };
     }

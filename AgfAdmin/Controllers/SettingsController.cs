@@ -26,6 +26,15 @@ namespace AgfAdmin.Controllers
         }
 
         // Partijnummering: modus (Auto of Own), formaat en wanneer het volgnummer opnieuw telt. Lezen mag iedereen, wijzigen met Beheer.
+        // AI-lezen (Beheer): aan/uit met de bevestiging dat de klant weet dat documenten naar een externe dienst gaan, en de maandlimiet.
+        [HttpGet("ai-reading")]
+        public async Task<IActionResult> GetAiReading([FromServices] Services.DocumentAi.AiInvoiceReadingService ai) =>
+            Ok(await ai.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("ai-reading")]
+        public async Task<IActionResult> UpdateAiReading([FromServices] Services.DocumentAi.AiInvoiceReadingService ai, [FromBody] AgfAdmin.DTOs.UpdateAiReadingSettingsDto request) =>
+            this.ToActionResult(await ai.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("partij-numbering")]
         public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
 
