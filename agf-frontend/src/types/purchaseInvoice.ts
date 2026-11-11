@@ -71,6 +71,9 @@ export interface CreatePurchaseInvoiceRequest extends OptionalFieldValues {
     // Interne opmerking bij dit document: alleen intern zichtbaar, telt mee in de replayvergelijking, nooit overgenomen.
     internalNote: string | null;
     lines: CreatePurchaseInvoiceLineRequest[];
+    // Goedkeuren van een AI-voorstel: de lezing en de door de gebruiker bevestigde inkooporder (alleen bij AI).
+    aiExtractionId?: number;
+    linkPurchaseOrderId?: number | null;
 }
 
 export interface PurchaseInvoiceLine {
@@ -89,7 +92,23 @@ export interface PurchaseInvoiceLine {
     vatAmount: number;
 }
 
+// Op een factuur uit een AI-voorstel: wie het goedkeurde, met welk model (ontbreekt in oudere antwoorden en bij handmatige invoer).
+export interface PurchaseInvoiceAiReading {
+    extractionId: number;
+    model: string | null;
+    modelName: string | null;
+    modelVersion: string | null;
+    usedFallback: boolean;
+    approvedBy: string;
+    approvedAt: string;
+    adjustedFields: number;
+}
+
+export interface PurchaseInvoiceAttachment { id: number; fileName: string; mediaType: string; sizeBytes: number; sha256: string; createdAt: string }
+
 export interface PurchaseInvoice extends OptionalFieldValues {
+    aiReading?: PurchaseInvoiceAiReading | null;
+    attachments?: PurchaseInvoiceAttachment[];
     id: number;
     requestId: string | null;
     vendorId: number | null;
