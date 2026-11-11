@@ -81,6 +81,10 @@ describe('Purchase orders page', () => {
         await mounted.waitFor(() => mounted.hasText('IO-2026-0007'), 'list');
         assert.ok(listUrls[0].includes('status=open'));
         assert.ok(mounted.hasText('F-4711'));
+        // Het ordernummer van de leverancier is het hoofdnummer in de lijst, het IO-nummer staat er klein onder.
+        const row = mounted.container.querySelector('tbody tr')!;
+        assert.equal(row.querySelector('[data-testid="order-number-main"]')!.textContent, 'NP-88123');
+        assert.equal(row.querySelector('[data-testid="order-number-internal"]')!.textContent, 'po_internal_number IO-2026-0007');
 
         // De server zoekt (na een korte debounce); zoeken zet Open op Alle, leegmaken zet het terug.
         await act(async () => { setValue(input('po-search'), 'F-4711'); await new Promise((resolve) => setTimeout(resolve, 300)); });
@@ -90,6 +94,11 @@ describe('Purchase orders page', () => {
         assert.equal(select('po-status').value, 'open');
         await act(async () => { setSelectValue(select('po-status'), 'Rejected'); });
         await mounted.waitFor(() => listUrls.some((url) => url.includes('status=Rejected')), 'status filter');
+
+        // Filter Ordernummer leverancier: een eigen parameter, en (net als zoeken) ook afgeronde orders.
+        await act(async () => { setSelectValue(select('po-status'), 'open'); });
+        await act(async () => { setValue(input('po-supplier-reference'), '45 21'); await new Promise((resolve) => setTimeout(resolve, 300)); });
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('supplierReference=45+21') && url.includes('status=all')), 'supplier number filter');
     });
 
     test('opens the order detail with its own number, invoices and history', async () => {
@@ -97,8 +106,10 @@ describe('Purchase orders page', () => {
         await mounted.render(<PurchaseOrdersPage />);
         const openButton = await mounted.waitFor(() => mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_open_order'), 'open button');
         await click(openButton);
-        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent === 'IO-2026-0007', 'detail');
-        assert.ok(mounted.hasText('NP-88123'));
+        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent?.includes('IO-2026-0007'), 'detail');
+        const title = mounted.container.querySelector('#po-detail-title')!;
+        assert.equal(title.querySelector('[data-testid="order-number-main"]')!.textContent, 'NP-88123');
+        assert.equal(title.querySelector('[data-testid="order-number-internal"]')!.textContent, 'po_internal_number IO-2026-0007');
         assert.ok(mounted.hasText('po_history_ordered'));
         assert.ok(mounted.hasText('F-4711'));
     });
@@ -108,7 +119,7 @@ describe('Purchase orders page', () => {
         await mounted.render(<PurchaseOrdersPage />);
         const openButton = await mounted.waitFor(() => mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_open_order'), 'open button');
         await click(openButton);
-        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent === 'IO-2026-0007', 'detail');
+        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent?.includes('IO-2026-0007'), 'detail');
 
         await click(mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_reject_line')!);
         assert.equal(input('reject-40-quantity').value, '221');
@@ -139,7 +150,7 @@ describe('Purchase orders page', () => {
     test('"Factuur ontvangen" records the number on the order and the list shows it right away', async () => {
         navigate('/purchase-orders?id=7');
         await mounted.render(<PurchaseOrdersPage />);
-        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent === 'IO-2026-0007', 'detail');
+        await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent?.includes('IO-2026-0007'), 'detail');
         await click(mounted.button('+ po_invoice_received_action')!);
         await act(async () => { setValue(input('invoiceRef-Invoice-number'), 'F-4712'); });
         await click(mounted.button('po_invoice_save')!);

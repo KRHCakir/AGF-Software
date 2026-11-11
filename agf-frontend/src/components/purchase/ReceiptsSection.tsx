@@ -9,6 +9,7 @@ import QualityBadge from '../availability/QualityBadge';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 import { sectionClass } from './sectionClass';
 import { rejectReceiptKey } from '../../lib/pendingCommands';
+import { orderNumbers } from '../../lib/purchaseOrderRules';
 import { usePendingCommands } from '../sales/PendingCommandsContext';
 import RejectReceiptForm from './RejectReceiptForm';
 
@@ -58,7 +59,7 @@ export default function ReceiptsSection({ order, onChanged }: { order: PurchaseO
                             </button>
                         )}
                         {(rejecting === receipt.palletContentLineId || kept.includes(receipt.palletContentLineId) || frozen(receipt.palletContentLineId)) && (
-                            <RejectReceiptForm orderId={order.id} orderNumber={order.orderNumber} receipt={receipt}
+                            <RejectReceiptForm orderId={order.id} orderNumber={orderNumbers(order).main} receipt={receipt}
                                 onCancel={() => { setRejecting(null); keep(receipt.palletContentLineId, false); }}
                                 onFailed={() => keep(receipt.palletContentLineId, true)}
                                 onDone={(updated) => { setRejecting(null); keep(receipt.palletContentLineId, false); onChanged(updated); }} />

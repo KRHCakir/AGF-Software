@@ -13,6 +13,8 @@ import { MAX_PARTIJ_NUMBER_LENGTH, MAX_SUPPLIER_LOT_REFERENCE_LENGTH } from '../
 import { newRequestId } from '../../lib/requestId';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import { ApiError, toApiError } from '../../services/apiClient';
+import OrderNumberText from '../purchase/OrderNumberText';
+import SupplierReferenceNotice from '../purchase/SupplierReferenceNotice';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
 import { getNextPartijNumber } from '../../services/partijService';
 import { type PartijSummary, isPartijExistsConflict } from '../../types/partij';
@@ -295,9 +297,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 )}
             >
                 {commitment.orderNumber && (
-                    <p className="mb-2">
-                        <span className="block text-xs font-medium uppercase tracking-wide text-green-900">{t('po_own_order_number')}</span>
-                        <span className="block font-mono text-3xl font-bold text-gray-900" data-testid="supply-order-number" data-tour="supply-order-number">{commitment.orderNumber}</span>
+                    <p className="mb-2" data-testid="supply-order-number" data-tour="supply-order-number">
+                        <span className="block text-xs font-medium uppercase tracking-wide text-green-900">{t(commitment.supplierReference ? 'po_supplier_reference' : 'po_own_order_number')}</span>
+                        <OrderNumberText orderNumber={commitment.orderNumber} supplierReference={commitment.supplierReference} stacked mainClassName="block text-3xl font-bold text-gray-900" />
                     </p>
                 )}
                 <p className="mb-1" data-tour="supply-saved-partij">
@@ -306,7 +308,6 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         : t('partij_saved_without')}
                 </p>
                 <p>
-                    {commitment.supplierReference && <>{t('po_col_supplier_reference')} <span className="font-mono">{commitment.supplierReference}</span> · </>}
                     {commitment.vendorName ?? '–'}{(commitment.linesOrigin || commitment.origin) && <> · {commitment.linesOrigin || commitment.origin}</>}
                     {commitment.customerName && <> · 🔒 {commitment.customerName}</>}
                     {commitment.destination && <> → {commitment.destination}</>}
@@ -353,6 +354,50 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 ) : undefined} />
             )}
 
+            {/* Leverancier en haar ordernummer eerst (Tab: Leverancier, Ordernummer leverancier, Besteldatum, Verwacht, Herkomst); de partij daarna. */}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="col-span-2">
+                    <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
+                    <VendorPicker id="vendorId" dataTour="supply-vendor" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked}
+                        invalid={!!e('vendorId')} describedBy={e('vendorId') ? 'vendorId' : undefined}
+                        onChange={(vendor) => updateHeader('vendorId', vendor === null ? '' : String(vendor.id))} />
+                    <FieldError id="vendorId" messages={e('vendorId')} />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="col-span-2">
+                    <label htmlFor="supplierReference-input" className="text-xs font-medium text-gray-700">{t('po_supplier_reference')}</label>
+                    <input {...fieldProps('supplierReference', e('supplierReference'))} data-tour="supply-reference" value={header.supplierReference} disabled={locked} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH}
+                        onChange={(event) => updateHeader('supplierReference', event.target.value)} className={`${inputClass} font-mono`} aria-describedby="supplierReference-hint" />
+                    <span id="supplierReference-hint" className="block text-xs text-gray-500">{t('po_supplier_reference_hint')}</span>
+                    <FieldError id="supplierReference" messages={e('supplierReference')} />
+                    <SupplierReferenceNotice supplierReference={header.supplierReference} vendorId={header.vendorId === '' ? null : Number(header.vendorId)} />
+                </div>
+                <div>
+                    <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
+                    <DateField {...fieldProps('orderedOn', e('orderedOn'))} dataTour="supply-ordered-on" value={header.orderedOn} disabled={locked}
+                        onChange={(value) => updateHeader('orderedOn', value)} />
+                    <FieldError id="orderedOn" messages={e('orderedOn')} />
+                </div>
+                <div>
+                    <label htmlFor="expectedAt-input" className="text-xs font-medium text-gray-700">{t('supply_expected_date')} *</label>
+                    <DateField {...fieldProps('expectedAt', e('expectedAt'))} dataTour="supply-expected" value={header.expectedDate} disabled={locked}
+                        onChange={(value) => updateHeader('expectedDate', value)} />
+                    <FieldError id="expectedAt" messages={e('expectedAt')} />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div>
+                    <label htmlFor="origin-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
+                    <input {...fieldProps('origin', e('origin'))} data-tour="supply-origin" value={header.origin} disabled={locked} maxLength={200}
+                        onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} aria-describedby="origin-hint" />
+                    <span id="origin-hint" className="block text-xs text-gray-500">{t('supply_origin_hint')}</span>
+                    <FieldError id="origin" messages={e('origin')} />
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <div className="sm:col-span-1 md:col-span-2">
                     <PartijField value={partij} suggestion={suggestion} exists={partijExists} disabled={locked} errors={e('partij') ?? e('newPartij.number') ?? e('partijId')}
@@ -361,46 +406,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <div>
                     <label htmlFor="supplierLotReference-input" className="text-xs font-medium text-gray-700">{t('partij_supplier_lot')}</label>
                     <input {...fieldProps('supplierLotReference', e('supplierLotReference'))} data-tour="supply-supplier-lot" value={header.supplierLotReference} disabled={locked}
-                        maxLength={MAX_SUPPLIER_LOT_REFERENCE_LENGTH} onChange={(event) => updateHeader('supplierLotReference', event.target.value)} className={inputClass} />
+                        maxLength={MAX_SUPPLIER_LOT_REFERENCE_LENGTH} onChange={(event) => updateHeader('supplierLotReference', event.target.value)} className={inputClass}
+                        aria-describedby="supplierLotReference-hint" />
+                    <span id="supplierLotReference-hint" className="block text-xs text-gray-500">{t('partij_supplier_lot_hint')}</span>
                     <FieldError id="supplierLotReference" messages={e('supplierLotReference')} />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div>
-                    <label htmlFor="supplierReference-input" className="text-xs font-medium text-gray-700">{t('po_supplier_reference')}</label>
-                    <input {...fieldProps('supplierReference', e('supplierReference'))} data-tour="supply-reference" value={header.supplierReference} disabled={locked} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH}
-                        onChange={(event) => updateHeader('supplierReference', event.target.value)} className={inputClass} />
-                    <FieldError id="supplierReference" messages={e('supplierReference')} />
-                </div>
-                <div>
-                    <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
-                    <DateField {...fieldProps('orderedOn', e('orderedOn'))} dataTour="supply-ordered-on" value={header.orderedOn} disabled={locked}
-                        onChange={(value) => updateHeader('orderedOn', value)} />
-                    <FieldError id="orderedOn" messages={e('orderedOn')} />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div>
-                    <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
-                    <VendorPicker id="vendorId" dataTour="supply-vendor" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked}
-                        invalid={!!e('vendorId')} describedBy={e('vendorId') ? 'vendorId' : undefined}
-                        onChange={(vendor) => updateHeader('vendorId', vendor === null ? '' : String(vendor.id))} />
-                    <FieldError id="vendorId" messages={e('vendorId')} />
-                </div>
-                <div>
-                    <label htmlFor="origin-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
-                    <input {...fieldProps('origin', e('origin'))} data-tour="supply-origin" value={header.origin} disabled={locked} maxLength={200}
-                        onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} aria-describedby="origin-hint" />
-                    <span id="origin-hint" className="block text-xs text-gray-500">{t('supply_origin_hint')}</span>
-                    <FieldError id="origin" messages={e('origin')} />
-                </div>
-                <div>
-                    <label htmlFor="expectedAt-input" className="text-xs font-medium text-gray-700">{t('supply_expected_date')} *</label>
-                    <DateField {...fieldProps('expectedAt', e('expectedAt'))} dataTour="supply-expected" value={header.expectedDate} disabled={locked}
-                        onChange={(value) => updateHeader('expectedDate', value)} />
-                    <FieldError id="expectedAt" messages={e('expectedAt')} />
                 </div>
             </div>
 
