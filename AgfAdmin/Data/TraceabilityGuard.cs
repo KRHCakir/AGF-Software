@@ -101,6 +101,8 @@ namespace AgfAdmin.Data
     // 24. verkoop-partijen (zie TraceabilityGuard.SalesPartijen.cs); 25. kosten op partijen (zie TraceabilityGuard.PartijCosts.cs).
     // 26. koers (zie TraceabilityGuard.ExchangeRates.cs): kosten op een regel van een factuur in een andere valuta kunnen alleen met de
     //    koers van die factuur; valuta en koers van een factuur met kosten op partijen veranderen nooit.
+    // 27. emballage (zie TraceabilityGuard.Packaging.cs): een emballageregel op een verkooporder heeft een artikel van de soort Packaging en
+    //    verandert nooit; de soort van een kostenartikel verandert nooit.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -221,6 +223,7 @@ namespace AgfAdmin.Data
             await CheckSalesPartijenAsync(db, async, cancellationToken);
             await CheckExchangeRatesAsync(db, async, cancellationToken);
             await CheckPartijCostsAsync(db, async, cancellationToken);
+            await CheckPackagingAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

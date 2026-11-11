@@ -12,7 +12,7 @@ namespace AgfAdmin.DTOs
         public bool IsStandard { get; set; }
         public bool IsActive { get; set; }
         public int SortOrder { get; set; }
-        // Aantal factuurregels met dit kostenartikel (informatief; een gebruikt kostenartikel kan wel inactief worden).
+        // Aantal factuur- en verkoopregels met dit artikel (informatief; een gebruikt artikel kan wel inactief worden).
         public int LineCount { get; set; }
     }
 

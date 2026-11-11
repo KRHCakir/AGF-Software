@@ -38,7 +38,7 @@ namespace AgfAdmin.Services
                 {
                     Id = c.Id, Name = c.Name, Kind = c.Kind, DefaultUnitPrice = c.DefaultUnitPrice, VatPercentage = c.VatPercentage,
                     IsStandard = c.IsStandard, IsActive = c.IsActive, SortOrder = c.SortOrder,
-                    LineCount = _db.IncomingInvoiceLines.Count(l => l.CostArticleId == c.Id)
+                    LineCount = _db.IncomingInvoiceLines.Count(l => l.CostArticleId == c.Id) + _db.SalesOrderPackagingLines.Count(l => l.CostArticleId == c.Id)
                 })
                 .ToListAsync(cancellationToken);
         }

@@ -21,7 +21,7 @@ namespace AgfAdmin.Services
 
     // Schone verkooporders voor het nieuwe domein. Raakt nooit legacy Order/OrderLine/OrderLineAllocation/Inventory.
     // Idempotent via RequestId: de volledige genormaliseerde payload wordt vergeleken.
-    public sealed class SalesOrderService : ISalesOrderService
+    public sealed partial class SalesOrderService : ISalesOrderService
     {
         private readonly AppDbContext _db;
         private readonly ICurrentUser _user;
@@ -73,6 +73,12 @@ namespace AgfAdmin.Services
             if (errors.Count > 0)
             {
                 return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
+            }
+
+            var refusedPackaging = await ResolvePackagingAsync(candidate, cancellationToken);
+            if (refusedPackaging != null)
+            {
+                return (refusedPackaging, false);
             }
 
             var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
@@ -256,9 +262,14 @@ namespace AgfAdmin.Services
             }
 
             var lines = new List<SalesOrderLine>();
-            if (request.Lines == null || request.Lines.Count == 0)
+            // Goederen, emballage of allebei: een order met alleen emballage (pallets, kratten) mag ook.
+            var packagingLines = BuildPackagingLines(request.PackagingLines, errors);
+            if ((request.Lines?.Count ?? 0) == 0)
             {
-                ValidationErrors.Add(errors, "lines", "At least one line is required.");
+                if ((request.PackagingLines?.Count ?? 0) == 0)
+                {
+                    ValidationErrors.Add(errors, "lines", "At least one line is required.");
+                }
             }
             else if (request.Lines.Count > ReservationRules.MaxOrderLines)
             {
@@ -338,7 +349,8 @@ namespace AgfAdmin.Services
                 ActorReference = actor,
                 CreatedAt = now,
                 UpdatedAt = now,
-                Lines = lines
+                Lines = lines,
+                PackagingLines = packagingLines
             };
         }
 
@@ -357,6 +369,7 @@ namespace AgfAdmin.Services
                 && string.Equals(existing.InternalNote, candidate.InternalNote, StringComparison.Ordinal)
                 && existing.RequestedDeliveryDate.Ticks == candidate.RequestedDeliveryDate.Ticks
                 && string.Equals(existing.ActorReference, candidate.ActorReference, StringComparison.Ordinal)
+                && SamePackaging(existing, candidate)
                 && existingLines.Count == candidateLines.Count
                 && existingLines.Zip(candidateLines).All(pair =>
                     pair.First.ProductVariantId == pair.Second.ProductVariantId
@@ -447,6 +460,7 @@ namespace AgfAdmin.Services
                     || (partijKey != null && o.SalesPartij != null && o.SalesPartij.NumberKey.Contains(partijKey))
                     || (o.CustomerReference != null && o.CustomerReference.ToLower().Contains(q))
                     || o.Customer.Name.ToLower().Contains(q)
+                    || o.PackagingLines.Any(p => p.CostArticle.Name.ToLower().Contains(q))
                     || o.Lines.Any(l => l.ProductVariant.Name.ToLower().Contains(q) || l.ProductVariant.Product.Name.ToLower().Contains(q)
                         || l.Reservations.Any(r => (r.PalletContentLine != null && r.PalletContentLine.LotNumber.ToLower().Contains(q))
                             || (r.SupplyCommitmentLine.LotNumber != null && r.SupplyCommitmentLine.LotNumber.ToLower().Contains(q)))));
@@ -923,6 +937,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeCorrectionLine)
+                .Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
                 .AsSplitQuery();
 
         // Bevestigd afgeleverd op een regel: uitsluitend Consumed reserveringen waarvan de bijbehorende verzending een bevestiging heeft.
@@ -963,6 +978,7 @@ namespace AgfAdmin.Services
             Fulfilled = order.Lines.Count > 0 && order.Lines.All(l => l.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed).Sum(r => r.Quantity) == l.Quantity),
             // Per regel in de eigen eenheid; nooit één ordertotaal over box en colli heen.
             Delivered = order.Lines.Count > 0 && order.Lines.All(l => DeliveredQuantity(l) == l.Quantity),
+            PackagingLines = order.PackagingLines.OrderBy(l => l.Id).Select(ToPackagingDto).ToList(),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
                 // Gereserveerd = Active Physical; toegewezen = Active DirectTrade; verzonden = Consumed. Open trekt alle drie af.

@@ -4313,6 +4313,46 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderPackagingLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CostArticleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("VatPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CostArticleId");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("SalesOrderPackagingLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesOrderPackagingLines_Values", "\"Quantity\" > 0 AND (\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0) AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Shipment", b =>
                 {
                     b.Property<int>("Id")
@@ -5969,6 +6009,25 @@ namespace AgfAdmin.Migrations
                     b.Navigation("SalesOrder");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderPackagingLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.CostArticle", "CostArticle")
+                        .WithMany()
+                        .HasForeignKey("CostArticleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany("PackagingLines")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CostArticle");
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.ShipmentDeliveryConfirmation", b =>
                 {
                     b.HasOne("AgfAdmin.Models.DirectTradeShipment", "DirectTradeShipment")
@@ -6407,6 +6466,8 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("PackagingLines");
 
                     b.Navigation("SalesPartij");
                 });
