@@ -18,6 +18,8 @@ export interface CreateSupplyCommitmentLineRequest {
     // Verwachte bruto kg en de bron van de kg; alleen meegestuurd als er kg is.
     expectedGrossWeightKg?: number;
     weightSource?: WeightSource;
+    // Prijs per verpakking excl. btw (optioneel; alleen meegestuurd als er een prijs is).
+    unitPrice?: number;
 }
 
 export interface CreateSupplyCommitmentRequest {
