@@ -19,7 +19,7 @@ public sealed class CliTests : IDisposable
         Assert.Contains("| fake-goed | 2 | 2 | 100,0% |", md);
         Assert.Contains("| fake-slordig | 2 | 2 |", md);
         Assert.Contains("regels[0].bedrag | 1250.00 | 1250.00 ✓ | 1251.00", File.ReadAllText(Path.Combine(outDir, "oneens.md")));
-        Assert.True(File.Exists(Path.Combine(outDir, "ruw", "fake-slordig", "voorbeeld-bon-es.pdf.json")));
+        Assert.Single(Directory.GetFiles(Path.Combine(outDir, "ruw", "fake-slordig"), "voorbeeld-bon-es.pdf.*.json"));
         Assert.DoesNotContain("Doorgaan?", output.ToString());
     }
 
@@ -48,6 +48,7 @@ public sealed class CliTests : IDisposable
         Assert.True(File.Exists(Path.Combine(root, "Software-AGF.sln")));
         var samples = Path.Combine(root, "AgfAiBenchmark", "samples");
         Assert.Null(Cli.RepoGuard(Path.Combine(samples, "docs"), Path.Combine(samples, "truth"), dir));
+        Assert.StartsWith("--docs ligt in de repo", Cli.RepoGuard(Path.Combine(root, "docs", "samples"), dir, dir));
         Assert.StartsWith("--docs ligt in de repo", Cli.RepoGuard(Path.Combine(root, "docs"), dir, dir));
         Assert.StartsWith("--out ligt in de repo", Cli.RepoGuard(dir, dir, Path.Combine(root, "resultaten")));
     }

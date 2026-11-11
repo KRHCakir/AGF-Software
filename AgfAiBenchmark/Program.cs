@@ -78,9 +78,13 @@ public static class Cli
                 if (File.Exists(Path.Combine(dir.FullName, "Software-AGF.sln"))) return dir.FullName;
             return null;
         }
-        // De verzonnen voorbeelden: AgfAiBenchmark/samples, en hun kopie in de testuitvoer.
-        static bool InSamples(string path, string root) =>
-            Path.GetRelativePath(root, Path.GetFullPath(path)).Split(Path.DirectorySeparatorChar).Contains("samples");
+        // Alleen de verzonnen voorbeelden: AgfAiBenchmark/samples, en hun kopie in de uitvoer van het testproject.
+        static bool InSamples(string path, string root)
+        {
+            var relative = Path.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/') + "/";
+            return relative.StartsWith("AgfAiBenchmark/samples/", StringComparison.Ordinal)
+                || (relative.StartsWith("AgfAiBenchmark.Tests/bin/", StringComparison.Ordinal) && relative.Contains("/samples/"));
+        }
 
         foreach (var (name, path) in new[] { ("--docs", docsDir), ("--truth", truthDir) })
             if (RepoRoot(path) is { } root && !InSamples(path, root)) return $"{name} ligt in de repo ({path}); zet echte documenten en antwoorden erbuiten, bijvoorbeeld in {BenchHome}.";
