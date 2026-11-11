@@ -123,6 +123,7 @@ public static class Cli
             JsonObject o => o.All(p => Empty(p.Value)),
             JsonArray a => a.All(Empty),
             JsonValue v => v.TryGetValue(out string? text) && string.IsNullOrWhiteSpace(text),
+            _ => false,
         };
         return truth.Where(p => p.Key is not ("_meta" or "soort")).All(p => Empty(p.Value));
     }
