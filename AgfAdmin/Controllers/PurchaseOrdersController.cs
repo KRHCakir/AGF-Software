@@ -21,8 +21,12 @@ namespace AgfAdmin.Controllers
 
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] int? vendorId,
-            [FromQuery] int page = 1, [FromQuery] int pageSize = PurchaseOrderRules.DefaultPageSize) =>
-            this.ToActionResult(await _service.ListAsync(query, status, vendorId, page, pageSize, HttpContext?.RequestAborted ?? default));
+            [FromQuery] int page = 1, [FromQuery] int pageSize = PurchaseOrderRules.DefaultPageSize, [FromQuery] string supplierReference = null) =>
+            this.ToActionResult(await _service.ListAsync(query, status, vendorId, page, pageSize, supplierReference, HttpContext?.RequestAborted ?? default));
+
+        [HttpGet("by-supplier-reference")]
+        public async Task<IActionResult> BySupplierReference([FromQuery] string supplierReference, [FromQuery] int vendorId) =>
+            Ok(await _service.FindBySupplierReferenceAsync(supplierReference, vendorId, HttpContext?.RequestAborted ?? default));
 
         [HttpGet("by-invoice-number")]
         public async Task<IActionResult> ByInvoiceNumber([FromQuery] string invoiceNumber, [FromQuery] int? vendorId) =>

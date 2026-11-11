@@ -31,6 +31,9 @@ describe('purchase order chain', () => {
         assert.deepEqual(steps.map((s) => s.key), CHAIN_STEPS);
         assert.equal(step(steps, 'order').current, true);
         assert.deepEqual(hrefs(step(steps, 'order')), ['/purchase-orders?id=3']);
+        // Zonder ordernummer van de leverancier het eigen IO-nummer; met, dat nummer (het hoofdnummer).
+        assert.equal(step(steps, 'order').links[0].label, 'IO-2026-0003');
+        assert.equal(step(purchaseOrderChain(order({ supplierReference: '45-21' }), 'order'), 'order').links[0].label, '45-21');
         assert.equal(step(steps, 'receipt').state, 'open');
         assert.deepEqual(hrefs(step(steps, 'receipt')), ['/receipts?order=3']);
         assert.equal(step(steps, 'inspection').state, 'empty');

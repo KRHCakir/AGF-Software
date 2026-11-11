@@ -12,7 +12,7 @@ namespace AgfAdmin.Services
         public const int MaxPageSize = 200;
 
         private sealed record LineFact(int PartijId, int LineId, int OrderId, string OrderNumber, string OrderStatus, DateOnly OrderedOn, DateTime? ExpectedAt,
-            string SupplierLotReference, string VendorName, string Product, decimal Expected, string Unit);
+            string SupplierLotReference, string VendorName, string Product, decimal Expected, string Unit, string SupplierReference);
         private sealed record ContentFact(int PartijId, int Id, int PalletId, string PalletReference, string PalletStatus, int LineId, int OrderId, string OrderNumber,
             string ProductName, string VariantName, string LotNumber, decimal Quantity, decimal Dispatched, decimal SplitOff, string Unit, decimal NetWeightKg,
             string QualityStatus, bool FromCorrection, bool FromSplit, DateTime CreatedAt);
@@ -130,7 +130,7 @@ namespace AgfAdmin.Services
                 var received = facts.Contents.Where(c => c.OrderId == g.Key && IsPhysicalReceipt(c)).Sum(c => c.Quantity);
                 return new PartijOrderDto
                 {
-                    Id = g.Key, OrderNumber = first.OrderNumber, VendorName = first.VendorName, OrderedOn = first.OrderedOn, SupplierLotReference = first.SupplierLotReference,
+                    Id = g.Key, OrderNumber = first.OrderNumber, SupplierReference = first.SupplierReference, VendorName = first.VendorName, OrderedOn = first.OrderedOn, SupplierLotReference = first.SupplierLotReference,
                     ExpectedAt = first.ExpectedAt == null ? null : DateTime.SpecifyKind(first.ExpectedAt.Value, DateTimeKind.Utc),
                     Unit = SingleUnit(g.Select(l => l.Unit)), ExpectedQuantity = expected, ReceivedQuantity = received,
                     Status = orderStatuses.TryGetValue(g.Key, out var orderStatus) ? orderStatus : OrderStatus(first.OrderStatus, expected, received)
@@ -221,7 +221,7 @@ namespace AgfAdmin.Services
                 .Where(l => l.PartijId != null && ids.Contains(l.PartijId.Value))
                 .Select(l => new LineFact(l.PartijId.Value, l.Id, l.SupplyCommitmentId, l.SupplyCommitment.OrderNumber, l.SupplyCommitment.Status, l.SupplyCommitment.OrderedOn,
                     l.SupplyCommitment.ExpectedAt, l.SupplyCommitment.SupplierLotReference, l.SupplyCommitment.Vendor.Name,
-                    l.ProductVariant.Product.Name + " " + l.ProductVariant.Name, l.ExpectedQuantity, l.ExpectedUnit))
+                    l.ProductVariant.Product.Name + " " + l.ProductVariant.Name, l.ExpectedQuantity, l.ExpectedUnit, l.SupplyCommitment.SupplierReference))
                 .ToListAsync(cancellationToken);
             var contents = await _db.PalletContentLines.AsNoTracking()
                 .Where(c => c.PartijId != null && ids.Contains(c.PartijId.Value))

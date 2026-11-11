@@ -35,6 +35,8 @@ namespace AgfAdmin.DTOs
         public string Status { get; set; }
         public int SupplyCommitmentId { get; set; }
         public string OrderNumber { get; set; }
+        // Ordernummer van de leverancier: zo noemt de vraag de order als het er is.
+        public string SupplierReference { get; set; }
         public int OriginalLineId { get; set; }
         public ReceiptDeviationVariantDto Expected { get; set; }
         public ReceiptDeviationVariantDto Received { get; set; }

@@ -114,6 +114,7 @@ namespace AgfAdmin.Services
                 Status = status,
                 SupplyCommitmentId = line.SupplyCommitmentId,
                 OrderNumber = line.SupplyCommitment.OrderNumber,
+                SupplierReference = line.SupplyCommitment.SupplierReference,
                 OriginalLineId = line.Id,
                 Expected = ToDto(expected),
                 Received = ToDto(received),

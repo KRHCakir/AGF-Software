@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { invoiceIndicator, isFullyRejected, labelKey, lineAmountParts, normalizeInvoiceNumber, orderStatus, ORDER_STATUS_LABEL_KEYS } from './purchaseOrderRules.ts';
+import { invoiceIndicator, isFullyRejected, labelKey, lineAmountParts, normalizeInvoiceNumber, orderNumbers, orderStatus, ORDER_STATUS_LABEL_KEYS, supplierReferenceKey } from './purchaseOrderRules.ts';
 
 // Dezelfde gevallen als PurchaseOrderServiceTests in de backend (het ordernummer zelf komt altijd van de server).
 
@@ -47,5 +47,21 @@ describe('purchaseOrderRules', () => {
             { key: 'po_line_ordered', quantity: 5, kg: null },
             { key: 'po_line_received', quantity: 0, kg: null },
         ]);
+    });
+
+    // Zelfde gevallen als PurchaseOrderSupplierReferenceTests.Key_IgnoresCaseSpacesAndDashes.
+    test('supplier order number key ignores case, spaces and dashes; empty is no number', () => {
+        assert.equal(supplierReferenceKey('45-21'), '4521');
+        assert.equal(supplierReferenceKey(' 45 21 '), '4521');
+        assert.equal(supplierReferenceKey('ab-12 x'), 'AB12X');
+        assert.equal(supplierReferenceKey(' - '), null);
+        assert.equal(supplierReferenceKey(null), null);
+    });
+
+    test('main number: the supplier order number with the own IO number as internal number; without it the IO number alone', () => {
+        assert.deepEqual(orderNumbers({ orderNumber: 'IO-2026-0001', supplierReference: '45-21' }), { main: '45-21', internal: 'IO-2026-0001' });
+        assert.deepEqual(orderNumbers({ orderNumber: 'IO-2026-0001', supplierReference: null }), { main: 'IO-2026-0001', internal: null });
+        assert.deepEqual(orderNumbers({ orderNumber: 'IO-2026-0001', supplierReference: '   ' }), { main: 'IO-2026-0001', internal: null });
+        assert.deepEqual(orderNumbers({ id: 9, orderNumber: null }), { main: '#9', internal: null });
     });
 });

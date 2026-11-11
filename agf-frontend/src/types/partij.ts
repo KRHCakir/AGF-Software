@@ -73,6 +73,7 @@ export interface PartijList {
 export interface PartijOrder {
     id: number;
     orderNumber: string;
+    supplierReference?: string | null;
     vendorName: string | null;
     status: string;
     orderedOn: string;

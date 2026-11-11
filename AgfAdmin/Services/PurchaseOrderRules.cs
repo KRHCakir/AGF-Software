@@ -18,6 +18,11 @@ namespace AgfAdmin.Services
         public static string InvoiceNumberKey(string invoiceNumber) =>
             string.IsNullOrWhiteSpace(invoiceNumber) ? null : invoiceNumber.Trim().ToLowerInvariant();
 
+        // Vergelijkingssleutel van het ordernummer van de leverancier: dezelfde regel als het partijnummer (hoofdletterongevoelig, zonder
+        // spaties en streepjes), zodat 4521, "45 21" en "45-21" één nummer zijn. Leeg = null. Voor zoeken en de dubbelcontrole; opgeslagen
+        // wordt de invoer zoals getypt. De query's doen hetzelfde met upper en replace (spatie en streepje; tabs komen in de invoer niet voor).
+        public static string SupplierReferenceKey(string reference) => PartijRules.NumberKey(reference);
+
         public static bool IsChannel(string value) => value != null && Channels.Contains(value, StringComparer.Ordinal);
 
         // "IO-2026-0001": minstens vier cijfers; boven 9999 groeit het nummer gewoon door (IO-2026-10000).

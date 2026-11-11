@@ -1,5 +1,7 @@
 // Inkooporder (spiegel van AgfAdmin/Services/PurchaseOrderRules*.cs): ordernummer, weergavestatus en factuurindicator.
 // Afkeuren: purchaseOrderRejection.ts. Pure module zonder React of i18n, zodat ze met node:test te toetsen is.
+import { partijNumberKey } from './partijRules.ts';
+
 export type PurchaseOrderStatus = 'Ordered' | 'PartiallyReceived' | 'Received' | 'Rejected' | 'Cancelled';
 export const PURCHASE_ORDER_STATUSES: readonly PurchaseOrderStatus[] = ['Ordered', 'PartiallyReceived', 'Received', 'Rejected', 'Cancelled'];
 export type PurchaseOrderStatusFilter = 'open' | 'all' | PurchaseOrderStatus;
@@ -12,6 +14,18 @@ export type RejectionDecision = 'ReturnToSupplier' | 'ClaimDiscount' | 'Dispose'
 
 export const MAX_SUPPLIER_REFERENCE_LENGTH = 100;
 export const MAX_INVOICE_NUMBER_LENGTH = 100;
+
+// Ordernummer van de leverancier: dezelfde sleutel als het partijnummer (hoofdletterongevoelig, zonder spaties en streepjes), zodat
+// 4521, "45 21" en "45-21" één nummer zijn. Spiegel van PurchaseOrderRules.SupplierReferenceKey. Leeg = null.
+export const supplierReferenceKey = partijNumberKey;
+
+// Het hoofdnummer van een inkooporder in beeld: het ordernummer van de leverancier als dat er is, met het eigen IO-nummer als intern
+// nummer; zonder leveranciersnummer het IO-nummer zelf (en geen intern nummer). Zonder IO-nummer (oude order) "#id".
+export function orderNumbers(order: { id?: number; orderNumber?: string | null; supplierReference?: string | null }): { main: string; internal: string | null } {
+    const own = order.orderNumber ?? (order.id === undefined ? '–' : `#${order.id}`);
+    const reference = order.supplierReference?.trim() ?? '';
+    return reference === '' ? { main: own, internal: null } : { main: reference, internal: own };
+}
 
 // Delivered (DirectTrade afgeleverd) telt voor de inkoop als ontvangen; ontvangen in de eenheid van de regel.
 export function orderStatus(storedStatus: string, lines: readonly { expected: number; received: number }[]): PurchaseOrderStatus {
