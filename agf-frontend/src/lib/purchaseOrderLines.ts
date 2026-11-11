@@ -83,7 +83,8 @@ export function purchaseLinePayloads(lines: readonly PurchaseLineDraft[], articl
     errors: { index: number; error: PurchaseLineError }[];
 } {
     const filled = lines.map((line, index) => ({ line, index })).filter(({ line }) => !isBlankPurchaseLine(line));
-    const chosen = filled.length > 0 ? filled : lines.map((line, index) => ({ line, index }));
+    // Alleen lege regels: alleen de eerste krijgt de meldingen (product en aantal verplicht), niet elke lege regel dezelfde.
+    const chosen = filled.length > 0 ? filled : lines.slice(0, 1).map((line, index) => ({ line, index }));
     const errors: { index: number; error: PurchaseLineError }[] = [];
     const payloads = chosen.map(({ line, index }) => {
         const row = purchaseLineRow(line, articleOf(Number(line.productVariantId)));

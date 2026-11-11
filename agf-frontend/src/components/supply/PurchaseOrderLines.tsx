@@ -67,7 +67,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         if (!line.grossKgEntered) onChange(line.key, { grossKg: row.weight?.grossWeightKg == null ? '' : formatQuantity(row.weight.grossWeightKg, locale) });
         setTimeout(() => document.getElementById(`lines[${lines.indexOf(line)}].expectedGrossWeightKg-input`)?.focus(), 0);
     };
-    // Alt+B en Alt+R in een veld van de regel: dezelfde acties als de knoppen.
+    // Alt+B, Alt+A en Alt+R in een veld van de regel: dezelfde acties als de knoppen.
     const onRowKey = (event: KeyboardEvent<HTMLTableRowElement>, line: PurchaseLineDraft, row: PurchaseLineRow, index: number) => {
         if (locked) return;
         const action = matchShortcut(event, isMac);
