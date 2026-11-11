@@ -19,6 +19,8 @@ namespace AgfAdmin.Services.DocumentAi
         public const string Unreadable = "unreadable";
 
         private const int MaxImageSide = 2000;
+        // Grens vóór het uitpakken: een klein bestand met enorme afmetingen zou anders veel geheugen kosten (zeker een telefoonfoto: 50 MP).
+        private const long MaxImagePixels = 60_000_000;
         private const int MaxImageBytesForAi = 3_500_000;
         private static readonly string[] HeifBrands = ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"];
 
@@ -45,11 +47,16 @@ namespace AgfAdmin.Services.DocumentAi
             if (mediaType == "application/pdf")
             {
                 // Een PDF met wachtwoord of beveiliging kan de aanbieder niet lezen: zeg dat meteen in plaats van een fout terug te krijgen.
-                if (Encoding.Latin1.GetString(bytes).Contains("/Encrypt", StringComparison.Ordinal)) return (null, Encrypted);
+                var text = Encoding.Latin1.GetString(bytes);
+                if (text.Contains("/Encrypt", StringComparison.Ordinal)) return (null, Encrypted);
+                // Een afgekapte PDF (zonder %%EOF aan het eind) kan de aanbieder niet lezen: meteen "onleesbaar".
+                if (!text[Math.Max(0, text.Length - 2048)..].Contains("%%EOF", StringComparison.Ordinal)) return (null, Unreadable);
                 return (new PreparedDocument(bytes, mediaType, ".pdf", hash, new DocumentInput(name, bytes, mediaType), null, null), null);
             }
             try
             {
+                var info = new MagickImageInfo(bytes);
+                if ((long)info.Width * info.Height > MaxImagePixels) return (null, Unreadable);
                 using var image = new MagickImage(bytes);
                 var heic = mediaType == "image/heic";
                 var large = Math.Max(image.Width, image.Height) > MaxImageSide || bytes.Length > MaxImageBytesForAi;
