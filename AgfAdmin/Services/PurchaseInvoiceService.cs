@@ -455,6 +455,19 @@ namespace AgfAdmin.Services
                         return;
                     }
 
+                    // Te veel factureren: pas hier, onder de lock, controleren; eerder gelezen hoeveelheden kunnen door een gelijktijdige factuur achterhaald zijn.
+                    if (linked != null)
+                    {
+                        var overErrors = new Dictionary<string, List<string>>();
+                        await orderLinks.CheckOverInvoicingAsync(linked, request, overErrors, cancellationToken);
+                        if (overErrors.Count > 0)
+                        {
+                            await transaction.RollbackAsync(cancellationToken);
+                            outcome = Validation<PurchaseInvoiceDto>(overErrors);
+                            return;
+                        }
+                    }
+
                     _db.IncomingInvoices.Add(candidate);
                     if (approval != null)
                     {

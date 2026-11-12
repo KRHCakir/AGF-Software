@@ -82,21 +82,8 @@ namespace AgfAdmin.Services
             }
             if (errors.Count > 0) return null;
 
-            // Meer dan besteld of ontvangen: alleen na de waarschuwing (AcceptOverInvoicing). Wat al op andere facturen staat telt mee.
-            var quantities = await _orders.LineQuantitiesAsync(linked.Select(l => l.OrderLine.SupplyCommitmentId).Distinct().ToList(), null, cancellationToken);
-            if (request.AcceptOverInvoicing != true)
-            {
-                foreach (var link in linked)
-                {
-                    var q = quantities.GetValueOrDefault(link.OrderLine.Id) ?? new PurchaseOrderService.LineQuantities(link.OrderLine.ExpectedQuantity, 0m, 0m);
-                    var basis = PurchaseInvoiceOrderLinkRules.InvoiceBasis(q.Expected, q.Received);
-                    if (q.Invoiced + link.Line.Quantity > basis)
-                    {
-                        ValidationErrors.Add(errors, $"lines[{link.Index}].quantity",
-                            $"Invoiced {q.Invoiced + link.Line.Quantity:0.###} in total, more than the {basis:0.###} {(q.Received > 0m ? "received" : "ordered")} on purchase order {OrderName(link.OrderLine.SupplyCommitment)}; confirm to save anyway.");
-                    }
-                }
-            }
+            // De controle op te veel factureren (CheckOverInvoicingAsync) gebeurt niet hier maar in de opslagtransactie, onder de lock per
+            // leverancier, zodat gelijktijdige facturen de al gefactureerde hoeveelheid van elkaar zien.
 
             // Een prijsverschil vraagt een keuze, eenmaal per factuur; zonder verschil wordt er niets gekozen.
             var differing = linked.Where(l => l.Differs).ToList();
@@ -123,6 +110,25 @@ namespace AgfAdmin.Services
                 }
             }
             return errors.Count > 0 ? null : new Prepared(linked, decision);
+        }
+
+        // Meer dan besteld of ontvangen: alleen na de waarschuwing (AcceptOverInvoicing). Wat al op andere facturen staat telt mee. Aan te roepen
+        // binnen de opslagtransactie nadat de lock per leverancier is genomen: de hoeveelheden worden hier vers gelezen, vóór het opslaan van
+        // de factuur, zodat een gelijktijdige factuur voor dezelfde orderregel al zichtbaar is.
+        public async Task CheckOverInvoicingAsync(Prepared prepared, CreatePurchaseInvoiceDto request, Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
+        {
+            if (prepared == null || request.AcceptOverInvoicing == true) return;
+            var quantities = await _orders.LineQuantitiesAsync(prepared.Lines.Select(l => l.OrderLine.SupplyCommitmentId).Distinct().ToList(), null, cancellationToken);
+            foreach (var link in prepared.Lines)
+            {
+                var q = quantities.GetValueOrDefault(link.OrderLine.Id) ?? new PurchaseOrderService.LineQuantities(link.OrderLine.ExpectedQuantity, 0m, 0m);
+                var basis = PurchaseInvoiceOrderLinkRules.InvoiceBasis(q.Expected, q.Received);
+                if (q.Invoiced + link.Line.Quantity > basis)
+                {
+                    ValidationErrors.Add(errors, $"lines[{link.Index}].quantity",
+                        $"Invoiced {q.Invoiced + link.Line.Quantity:0.###} in total, more than the {basis:0.###} {(q.Received > 0m ? "received" : "ordered")} on purchase order {OrderName(link.OrderLine.SupplyCommitment)}; confirm to save anyway.");
+                }
+            }
         }
 
         // Na het opslaan van de factuur, in dezelfde transactie. Elke stap is een eigen save: regel 29 staat een aanpassing en het
