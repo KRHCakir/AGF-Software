@@ -35,6 +35,7 @@ namespace AgfAdmin.Configuration
             services.AddScoped<PaymentConditionService>();
             services.AddScoped<PurchaseOrderService>();
             services.AddScoped<LoadingSlipService>();
+            services.AddScoped<SalesOrderTransportService>();
             services.AddScoped<PartijService>();
             services.AddScoped<CostArticleService>();
             services.AddScoped<PartijCostService>();

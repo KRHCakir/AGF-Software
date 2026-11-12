@@ -39,7 +39,8 @@ namespace AgfAdmin.Services
             order.LoadAt = Utc(request?.LoadAt);
             order.LicensePlate = plate;
             order.UpdatedAt = now;
-            AddVersion(order, await SettingsAsync(cancellationToken), 1, SalesOrderDocumentRules.ReasonConfirmed, now);
+            // De laadbon, en de transportopdracht als er transport is ingevuld: beide versie 1.
+            AddChangedVersions(order, await SettingsAsync(cancellationToken), now);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -81,13 +82,9 @@ namespace AgfAdmin.Services
             order.LoadAt = Utc(request?.LoadAt);
             order.LicensePlate = plate;
             order.UpdatedAt = DateTime.UtcNow;
-            // Laadgegevens en de nieuwe versie van de bon in één save: nooit opgeslagen gegevens zonder de bon die erbij hoort.
-            var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
-            var snapshot = LoadingSlipBuilder.Build(order, await SettingsAsync(cancellationToken));
-            if (latest == null || latest.ContentHash != LoadingSlipBuilder.Hash(snapshot))
-            {
-                AddVersion(order, snapshot, (latest?.Version ?? 0) + 1, latest == null ? SalesOrderDocumentRules.ReasonConfirmed : SalesOrderDocumentRules.ReasonChanged, DateTime.UtcNow);
-            }
+            // Laadgegevens en de nieuwe versies van de documenten (laadbon, transportopdracht) in één save: nooit opgeslagen gegevens zonder
+            // de documenten die erbij horen.
+            AddChangedVersions(order, await SettingsAsync(cancellationToken), DateTime.UtcNow);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -135,10 +132,7 @@ namespace AgfAdmin.Services
             db.ChangeTracker.Clear();
             var order = await LoadAsync(orderId, cancellationToken);
             if (order?.ConfirmedAt == null || order.Status == ReservationRules.OrderStatusCancelled) return false;
-            var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
-            var snapshot = LoadingSlipBuilder.Build(order, await SettingsAsync(cancellationToken));
-            if (latest != null && latest.ContentHash == LoadingSlipBuilder.Hash(snapshot)) return false;
-            AddVersion(order, snapshot, (latest?.Version ?? 0) + 1, latest == null ? SalesOrderDocumentRules.ReasonConfirmed : SalesOrderDocumentRules.ReasonChanged, DateTime.UtcNow);
+            if (AddChangedVersions(order, await SettingsAsync(cancellationToken), DateTime.UtcNow) == 0) return false;
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -231,39 +225,64 @@ namespace AgfAdmin.Services
         // De snapshot van één versie (voor de PDF), of null.
         public async Task<(SalesOrderDocument Document, LoadingSlipSnapshot Snapshot)?> SnapshotAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
         {
-            var document = await db.SalesOrderDocuments.AsNoTracking().SingleOrDefaultAsync(d => d.Id == documentId && d.SalesOrderId == orderId, cancellationToken);
+            // Alleen de laadbon; de PDF van de transportopdracht volgt.
+            var document = await db.SalesOrderDocuments.AsNoTracking().SingleOrDefaultAsync(d => d.Id == documentId && d.SalesOrderId == orderId && d.Kind == SalesOrderDocumentRules.KindLoadingSlip, cancellationToken);
             return document == null ? null : (document, LoadingSlipBuilder.Deserialize(document.SnapshotJson));
         }
 
-        private void AddVersion(SalesOrder order, CompanySettings settings, int version, string reason, DateTime now) =>
-            AddVersion(order, LoadingSlipBuilder.Build(order, settings), version, reason, now);
+        // Een nieuwe versie van elk document waarvan de inhoud veranderd is (vingerafdruk): de laadbon altijd, de transportopdracht alleen als er
+        // transport is ingevuld. De eerste versie heet "bevestigd", de volgende "gewijzigd". Geeft het aantal nieuwe versies.
+        private int AddChangedVersions(SalesOrder order, CompanySettings settings, DateTime now)
+        {
+            var added = 0;
+            var slip = LoadingSlipBuilder.Build(order, settings);
+            if (AddIfChanged(order, SalesOrderDocumentRules.KindLoadingSlip, LoadingSlipBuilder.Serialize(slip), LoadingSlipBuilder.Hash(slip), now)) added++;
+            if (order.Transport != null)
+            {
+                var transport = TransportOrderBuilder.Build(order, settings);
+                if (AddIfChanged(order, SalesOrderDocumentRules.KindTransportOrder, TransportOrderBuilder.Serialize(transport), TransportOrderBuilder.Hash(transport), now)) added++;
+            }
+            return added;
+        }
 
-        private void AddVersion(SalesOrder order, LoadingSlipSnapshot snapshot, int version, string reason, DateTime now) =>
+        private bool AddIfChanged(SalesOrder order, string kind, string json, string hash, DateTime now)
+        {
+            var latest = order.Documents.Where(d => d.Kind == kind).OrderByDescending(d => d.Version).FirstOrDefault();
+            if (latest != null && latest.ContentHash == hash) return false;
             db.SalesOrderDocuments.Add(new SalesOrderDocument
             {
-                SalesOrderId = order.Id, Kind = SalesOrderDocumentRules.KindLoadingSlip, Number = SalesOrderDocumentRules.Number(order.OrderNumber), Version = version,
-                Reason = reason, SnapshotJson = LoadingSlipBuilder.Serialize(snapshot), ContentHash = LoadingSlipBuilder.Hash(snapshot), CreatedAt = now, CreatedBy = Actor(),
+                SalesOrderId = order.Id, Kind = kind, Number = SalesOrderDocumentRules.NumberFor(kind, order.OrderNumber), Version = (latest?.Version ?? 0) + 1,
+                Reason = latest == null ? SalesOrderDocumentRules.ReasonConfirmed : SalesOrderDocumentRules.ReasonChanged,
+                SnapshotJson = json, ContentHash = hash, CreatedAt = now, CreatedBy = Actor(),
             });
+            return true;
+        }
 
         private async Task<SalesOrderDocumentsDto> DocumentsDtoAsync(SalesOrder order, CancellationToken cancellationToken)
         {
-            var documents = await db.SalesOrderDocuments.AsNoTracking().Where(d => d.SalesOrderId == order.Id).OrderByDescending(d => d.Version).ToListAsync(cancellationToken);
-            var latest = documents.Count == 0 ? 0 : documents.Max(d => d.Version);
+            var documents = await db.SalesOrderDocuments.AsNoTracking().Where(d => d.SalesOrderId == order.Id).OrderBy(d => d.Kind).ThenByDescending(d => d.Version).ToListAsync(cancellationToken);
+            // De nieuwste versie per soort document (laadbon, transportopdracht).
+            var latest = documents.GroupBy(d => d.Kind).ToDictionary(g => g.Key, g => g.Max(d => d.Version));
+            List<SalesOrderDocument> OfKind(string kind) => documents.Where(d => d.Kind == kind).ToList();
             return new SalesOrderDocumentsDto
             {
                 SalesOrderId = order.Id, ConfirmedAt = UtcKind(order.ConfirmedAt), ConfirmedBy = order.ConfirmedBy, LoadAt = UtcKind(order.LoadAt), LicensePlate = order.LicensePlate,
-                NeedsResend = SalesOrderDocumentRules.NeedsResend(documents),
+                NeedsResend = SalesOrderDocumentRules.NeedsResend(OfKind(SalesOrderDocumentRules.KindLoadingSlip)),
+                TransportOrderNeedsResend = SalesOrderDocumentRules.NeedsResend(OfKind(SalesOrderDocumentRules.KindTransportOrder)),
+                HasTransport = order.Transport != null,
                 Documents = documents.Select(d => new SalesOrderDocumentDto
                 {
                     Id = d.Id, Kind = d.Kind, Number = d.Number, Version = d.Version, Reason = d.Reason, CreatedAt = UtcKind(d.CreatedAt).Value, CreatedBy = d.CreatedBy,
-                    SentAt = UtcKind(d.SentAt), SentBy = d.SentBy, Latest = d.Version == latest,
+                    SentAt = UtcKind(d.SentAt), SentBy = d.SentBy, Latest = d.Version == latest[d.Kind],
                 }).ToList(),
             };
         }
 
         private Task<SalesOrder> LoadAsync(int orderId, CancellationToken cancellationToken) =>
             db.SalesOrders
-                .Include(o => o.Customer).Include(o => o.SalesPartij).Include(o => o.Documents)
+                .Include(o => o.Customer).ThenInclude(c => c.Relation).ThenInclude(r => r.Addresses).Include(o => o.SalesPartij).Include(o => o.Documents)
+                .Include(o => o.Transport).ThenInclude(t => t.CarrierRelation).ThenInclude(r => r.Addresses)
+                .Include(o => o.Transport).ThenInclude(t => t.UnloadingAddress)
                 .Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
