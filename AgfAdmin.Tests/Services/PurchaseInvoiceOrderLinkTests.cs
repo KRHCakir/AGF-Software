@@ -95,6 +95,10 @@ public class PurchaseInvoiceOrderLinkTests : IDisposable
         var refused = await SaveAsync(Invoice("F-4B-2", lineId, price: 12.50m));
         Assert.Equal(ServiceResultStatus.Validation, refused.Status);
         Assert.Contains("orderPriceDecision", refused.Errors.Keys);
+        // Ook een korting die op twee decimalen wegvalt (0,01% op 13,50) is een verschil dat een keuze vraagt.
+        var tinyDiscount = Invoice("F-4B-2", lineId);
+        tinyDiscount.Lines[0].DiscountPercentage = 0.01m;
+        Assert.Contains("orderPriceDecision", (await SaveAsync(tinyDiscount)).Errors.Keys);
         Assert.Equal("Open", (await OrderDetailAsync(order.Id)).DocumentStatus);
 
         var saved = await SaveAsync(Invoice("F-4B-2", lineId, price: 12.50m, decision: PurchaseInvoiceOrderLinkRules.RecordDifference));

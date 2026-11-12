@@ -88,7 +88,10 @@ public class PurchaseInvoiceOrderLinkRulesTests : IDisposable
         Assert.Equal("Full", PurchaseInvoiceOrderLinkRules.BillingStatus(new[] { (264m, 0m, 0m) }, true));
         Assert.Equal("Partial", PurchaseInvoiceOrderLinkRules.BillingStatus(new[] { (264m, 0m, 200m), (10m, 0m, 0m) }, false));
         Assert.Equal("Full", PurchaseInvoiceOrderLinkRules.BillingStatus(new[] { (264m, 250m, 250m) }, false));
-        Assert.Equal((12.35m, true, false), (PurchaseInvoiceOrderLinkRules.InvoiceUnitPrice(13m, 5m), PurchaseInvoiceOrderLinkRules.HasPriceDifference(null, 1m), PurchaseInvoiceOrderLinkRules.HasPriceDifference(1m, 1m)));
+        Assert.Equal((12.35m, true, false), (PurchaseInvoiceOrderLinkRules.InvoiceUnitPrice(13m, 5m), PurchaseInvoiceOrderLinkRules.HasPriceDifference(null, 1m, 0m), PurchaseInvoiceOrderLinkRules.HasPriceDifference(1m, 1m, 0m)));
+        // Een kleine korting die op twee decimalen wegvalt is toch een verschil (264 × 13,50 met 0,01% korting is niet 3.564,00).
+        Assert.True(PurchaseInvoiceOrderLinkRules.HasPriceDifference(13.50m, 13.50m, 0.01m));
+        Assert.False(PurchaseInvoiceOrderLinkRules.HasPriceDifference(12.35m, 13m, 5m));
         // Bon 13,50, factuur 12,50 voor 264: −264,00; zonder prijs op de bon geen verschil in bedrag.
         Assert.Equal((-264.00m, (decimal?)null, 3564.00m), (PurchaseInvoiceOrderLinkRules.Difference(3300m, 264m, 13.50m), PurchaseInvoiceOrderLinkRules.Difference(3300m, 264m, null), PurchaseInvoiceOrderLinkRules.OrderAmount(264m, 13.50m)));
     }

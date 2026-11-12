@@ -30,12 +30,29 @@ namespace AgfAdmin.Services
         public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, string supplierReference = null,
             CancellationToken cancellationToken = default, string document = null, string billing = null)
         {
+            var all = await ListAllAsync(query, status, vendorId, supplierReference, cancellationToken, document, billing);
+            if (all.Status != ServiceResultStatus.Ok) return ServiceResult<PurchaseOrderListDto>.Validation(all.Errors);
+            page = Math.Max(1, page);
+            pageSize = pageSize <= 0 ? PurchaseOrderRules.DefaultPageSize : Math.Min(pageSize, PurchaseOrderRules.MaxPageSize);
+            return ServiceResult<PurchaseOrderListDto>.Ok(new PurchaseOrderListDto
+            {
+                Total = all.Value.Count,
+                Page = page,
+                PageSize = pageSize,
+                Items = all.Value.Skip((page - 1) * pageSize).Take(pageSize).ToList()
+            });
+        }
+
+        // De gefilterde en gesorteerde lijst zonder paginering (ListAsync pagineert; de factuurkandidaten hebben alles nodig).
+        private async Task<ServiceResult<List<PurchaseOrderListItemDto>>> ListAllAsync(string query, string status, int? vendorId, string supplierReference,
+            CancellationToken cancellationToken, string document = null, string billing = null)
+        {
             // Gefactureerd (stap 4b): leeg = alle, anders None, Partial of Full (hoofdletterongevoelig).
             var billingFilter = string.IsNullOrWhiteSpace(billing) ? null
                 : PurchaseInvoiceOrderLinkRules.BillingStatuses.FirstOrDefault(s => string.Equals(s, billing.Trim(), StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(billing) && billingFilter == null)
             {
-                return ServiceResult<PurchaseOrderListDto>.Validation(new Dictionary<string, string[]>
+                return ServiceResult<List<PurchaseOrderListItemDto>>.Validation(new Dictionary<string, string[]>
                 {
                     ["billing"] = new[] { $"Billing status must be one of: {string.Join(", ", PurchaseInvoiceOrderLinkRules.BillingStatuses)}." }
                 });
@@ -45,7 +62,7 @@ namespace AgfAdmin.Services
                 : PurchaseOrderDocumentRules.Statuses.FirstOrDefault(s => string.Equals(s, document.Trim(), StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(document) && documentFilter == null)
             {
-                return ServiceResult<PurchaseOrderListDto>.Validation(new Dictionary<string, string[]>
+                return ServiceResult<List<PurchaseOrderListItemDto>>.Validation(new Dictionary<string, string[]>
                 {
                     ["document"] = new[] { $"Document status must be one of: {string.Join(", ", PurchaseOrderDocumentRules.Statuses)}." }
                 });
@@ -55,14 +72,11 @@ namespace AgfAdmin.Services
                 : new[] { "open", "all" }.Concat(PurchaseOrderRules.OrderStatuses).FirstOrDefault(s => string.Equals(s, status.Trim(), StringComparison.OrdinalIgnoreCase));
             if (statusFilter == null)
             {
-                return ServiceResult<PurchaseOrderListDto>.Validation(new Dictionary<string, string[]>
+                return ServiceResult<List<PurchaseOrderListItemDto>>.Validation(new Dictionary<string, string[]>
                 {
                     ["status"] = new[] { $"Status must be open, all or one of: {string.Join(", ", PurchaseOrderRules.OrderStatuses)}." }
                 });
             }
-            page = Math.Max(1, page);
-            pageSize = pageSize <= 0 ? PurchaseOrderRules.DefaultPageSize : Math.Min(pageSize, PurchaseOrderRules.MaxPageSize);
-
             var commitments = _db.SupplyCommitments.AsNoTracking();
             if (vendorId != null) commitments = commitments.Where(c => c.VendorId == vendorId);
             if (documentFilter != null) commitments = commitments.Where(c => c.DocumentStatus == documentFilter);
@@ -138,13 +152,7 @@ namespace AgfAdmin.Services
                 .OrderByDescending(i => i.Year).ThenByDescending(i => i.Sequence).ThenByDescending(i => i.Dto.Id)
                 .ToList();
 
-            return ServiceResult<PurchaseOrderListDto>.Ok(new PurchaseOrderListDto
-            {
-                Total = items.Count,
-                Page = page,
-                PageSize = pageSize,
-                Items = items.Skip((page - 1) * pageSize).Take(pageSize).Select(i => i.Dto).ToList()
-            });
+            return ServiceResult<List<PurchaseOrderListItemDto>>.Ok(items.Select(i => i.Dto).ToList());
         }
 
         // Orders waaraan dit factuurnummer hangt (via de sleutel: zonder hoofdletters en spaties aan de randen); met leverancier alleen diens orders.
