@@ -73,7 +73,7 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
 }
 
 // onChanged: de order zelf veranderde (bevestigd, of laden op en kenteken): de pagina haalt de order opnieuw op, met de nieuwe versie.
-// reloadKey: verandert als het transport is opgeslagen (de order zelf hoeft dan niet te veranderen), zodat de documenten opnieuw komen.
+// reloadKey: verandert als het transport is opgeslagen (de order zelf hoeft dan niet te veranderen), zodat de transportopdracht verschijnt.
 export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }: { order: SalesOrder; onChanged?: () => void; reloadKey?: number }) {
     const { t, locale } = useTranslation();
     const [loaded, setLoaded] = useState<{ documents: Documents; version: number } | null>(null);
@@ -90,6 +90,7 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
     const [loadAt, setLoadAt] = useState('');
     const [plate, setPlate] = useState('');
     const [showOlder, setShowOlder] = useState(false);
+    const [showOlderTransport, setShowOlderTransport] = useState(false);
     const [popupBlocked, setPopupBlocked] = useState(false);
     const cancelled = order.status === 'Cancelled';
 
@@ -156,6 +157,9 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
     const slips = (data?.documents ?? []).filter((document) => document.kind === 'LoadingSlip');
     const latest = slips.find((document) => document.latest) ?? null;
     const older = slips.filter((document) => !document.latest);
+    const transportOrders = (data?.documents ?? []).filter((document) => document.kind === 'TransportOrder');
+    const transportLatest = transportOrders.find((document) => document.latest) ?? null;
+    const transportOlder = transportOrders.filter((document) => !document.latest);
     const delivery = formatCalendarDate(order.requestedDeliveryDate, locale);
 
     const loadingFields = (
@@ -255,6 +259,44 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
                                     {older.map((document) => (
                                         <li key={document.id} className="flex flex-wrap items-center gap-2 text-gray-700">
                                             <span>{t('so_slip_name', { number: document.number, version: String(document.version) })} · {formatDateTime(document.createdAt, locale)}</span>
+                                            <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'view')}>{t('so_slip_view')}</button>
+                                            <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'download')}>{t('so_slip_download')}</button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                    {/* De transportopdracht (documenten deel 2): alleen met transport op de order. */}
+                    {!cancelled && data.hasTransport === false && <p className="text-sm text-gray-700" data-testid="so-transport-order-missing">{t('so_transport_order_missing')}</p>}
+                    {transportLatest && data.transportOrderNeedsResend && !cancelled && (
+                        <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-950" data-testid="so-transport-order-changed">
+                            ⚠ {t('so_transport_order_changed', { version: String(transportLatest.version) })}
+                            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void run(() => markDocumentSent(order.id, transportLatest.id))} data-tour="so-transport-order-sent">{t('so_slip_sent')}</button>
+                        </p>
+                    )}
+                    {transportLatest && (
+                        <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="so-transport-order-latest" data-tour="so-transport-order">
+                            <span className="font-semibold">{t('so_transport_order_name', { number: transportLatest.number, version: String(transportLatest.version) })}</span>
+                            <span className="text-gray-600">{formatDateTime(transportLatest.createdAt, locale)} · {transportLatest.createdBy}</span>
+                            {transportLatest.sentAt && <span className="text-xs text-gray-600">{t('so_slip_sent_by', { date: formatDateTime(transportLatest.sentAt, locale), name: transportLatest.sentBy ?? '–' })}</span>}
+                            <span className="ml-auto flex flex-wrap gap-2">
+                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(transportLatest, 'view')} data-tour="so-transport-order-view">{t('so_slip_view')}</button>
+                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(transportLatest, 'download')} data-tour="so-transport-order-download">{t('so_slip_download')}</button>
+                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(transportLatest, 'print')} data-tour="so-transport-order-print">{t('so_slip_print')}</button>
+                            </span>
+                        </div>
+                    )}
+                    {transportOlder.length > 0 && (
+                        <div className="text-sm">
+                            <button type="button" className="text-blue-800 underline underline-offset-2" aria-expanded={showOlderTransport} onClick={() => setShowOlderTransport((open) => !open)}>
+                                {t(showOlderTransport ? 'so_slip_older_hide' : 'so_slip_older', { count: String(transportOlder.length) })}
+                            </button>
+                            {showOlderTransport && (
+                                <ul className="mt-1 space-y-1" data-testid="so-transport-order-older">
+                                    {transportOlder.map((document) => (
+                                        <li key={document.id} className="flex flex-wrap items-center gap-2 text-gray-700">
+                                            <span>{t('so_transport_order_name', { number: document.number, version: String(document.version) })} · {formatDateTime(document.createdAt, locale)}</span>
                                             <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'view')}>{t('so_slip_view')}</button>
                                             <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'download')}>{t('so_slip_download')}</button>
                                         </li>

@@ -22,6 +22,9 @@ export interface SalesOrderDocuments {
     licensePlate: string | null;
     // Er is een nieuwere versie van de laadbon dan de eerste en die is nog niet doorgegeven of verstuurd.
     needsResend: boolean;
+    // Documenten deel 2: hetzelfde voor de transportopdracht, en of er transport is ingevuld (zonder transport geen opdracht).
+    transportOrderNeedsResend?: boolean;
+    hasTransport?: boolean;
     documents: SalesOrderDocument[];
 }
 

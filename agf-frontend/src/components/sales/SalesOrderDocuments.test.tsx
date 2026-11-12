@@ -116,6 +116,26 @@ describe('sales order documents (loading slip)', () => {
         assert.equal($('[data-testid="so-loading-form"]'), null);
     });
 
+    test('the transport order sits next to the loading slip; without transport the block says how to get one', async () => {
+        answer = () => json(200, confirmed(1, { hasTransport: false }));
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} />);
+        await settle();
+        assert.ok($('[data-testid="so-transport-order-missing"]')!.textContent!.includes('so_transport_order_missing'));
+        const transportOrder = (version: number, latest: boolean) => slip(version, { id: 200 + version, kind: 'TransportOrder', number: 'TO-2026-0012', latest });
+        answer = () => json(200, confirmed(1, { hasTransport: true, transportOrderNeedsResend: true, documents: [slip(1, { latest: true }), transportOrder(2, true), transportOrder(1, false)] }));
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} reloadKey={1} />);
+        await settle();
+        assert.equal($('[data-testid="so-transport-order-missing"]'), null);
+        assert.ok($('[data-testid="so-transport-order-latest"]')!.textContent!.includes('so_transport_order_name'));
+        assert.ok($('[data-testid="so-slip-latest"]'), 'the loading slip stays');
+        assert.equal($('[data-testid="so-slip-changed"]'), null, 'the loading slip itself did not change');
+        assert.ok($('[data-testid="so-transport-order-changed"]'));
+        answer = () => json(200, confirmed(1, { hasTransport: true, transportOrderNeedsResend: false, documents: [slip(1, { latest: true }), transportOrder(2, true), transportOrder(1, false)] }));
+        await act(async () => { $('[data-tour="so-transport-order-sent"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="so-transport-order-changed"]') === null, 'notice gone');
+        assert.ok(calls.some((call) => call.method === 'POST' && call.url.endsWith('/sales-orders/12/documents/202/sent')));
+    });
+
     test('a blocked pop-up says so instead of silently doing nothing', async () => {
         answer = () => json(200, confirmed());
         const originalOpen = window.open;

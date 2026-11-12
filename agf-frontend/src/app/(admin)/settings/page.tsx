@@ -5,6 +5,7 @@ import CostArticlesAdmin from '../../../components/settings/CostArticlesAdmin';
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
 import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
 import LoadingSlipSetting from '../../../components/settings/LoadingSlipSetting';
+import TransportOrderSetting from '../../../components/settings/TransportOrderSetting';
 import PaymentConditionsAdmin from '../../../components/settings/PaymentConditionsAdmin';
 import { useTranslation } from '../../../i18n/LanguageContext';
 
@@ -22,6 +23,7 @@ export default function SettingsPage() {
             </div>
             <PartijNumberingSetting />
             <LoadingSlipSetting />
+            <TransportOrderSetting />
             <PaymentConditionsAdmin />
             <CostArticlesAdmin />
             <GlobalGapPortalSetting />
