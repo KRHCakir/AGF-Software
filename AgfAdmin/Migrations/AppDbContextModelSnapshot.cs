@@ -288,6 +288,9 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<string>("LoadingSlipWarehouseAddress")
+                        .HasColumnType("text");
+
                     b.Property<string>("LogoPath")
                         .HasColumnType("text");
 

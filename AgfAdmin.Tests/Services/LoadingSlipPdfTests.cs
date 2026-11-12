@@ -21,7 +21,7 @@ public class LoadingSlipPdfTests
         };
         for (var i = 0; i < extraRows; i++) rows.Add(new(10m, "colli", 10m / 80m, "Mango", "Kent", "12x125 gr", null, null, "BR", 40m, "Fruitimport Zuid · 2611004", $"P-9{i:000}"));
         var pallets = rows.Sum(r => r.Pallets ?? 0m);
-        return new LoadingSlipSnapshot("en", showCustomer, showSupplier, "Kwekerij Voorbeeld B.V.", "Loodsweg 1, 2991 Barendrecht", null,
+        return new LoadingSlipSnapshot("en", showCustomer, showSupplier, "Kwekerij Voorbeeld B.V.", "Loodsweg 1, 2991 Barendrecht", null, null,
             showCustomer ? "Groothandel Noord" : null, "261140", "VO-2026-0012", "PO-778", new DateTime(2026, 11, 13, 0, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 11, 13, 5, 30, 0, DateTimeKind.Utc), null, rows, new List<LoadingSlipPackagingRow> { new(3, "Euro-pallet") },
             rows.Sum(r => r.Quantity), pallets, rows.Where(r => r.NetKg != null).Sum(r => r.NetKg), new DateTime(2026, 11, 12, 9, 0, 0, DateTimeKind.Utc), "Jan");

@@ -200,7 +200,7 @@ namespace AgfAdmin.Services
         public async Task<LoadingSlipSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
         {
             var settings = await SettingsAsync(cancellationToken);
-            return new LoadingSlipSettingsDto { Language = settings.LoadingSlipLanguage, ShowCustomer = settings.LoadingSlipShowCustomer, ShowSupplier = settings.LoadingSlipShowSupplier };
+            return new LoadingSlipSettingsDto { Language = settings.LoadingSlipLanguage, ShowCustomer = settings.LoadingSlipShowCustomer, ShowSupplier = settings.LoadingSlipShowSupplier, WarehouseAddress = settings.LoadingSlipWarehouseAddress };
         }
 
         // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot (en dus haar kolommen).
@@ -216,6 +216,7 @@ namespace AgfAdmin.Services
             settings.LoadingSlipLanguage = language;
             settings.LoadingSlipShowCustomer = request.ShowCustomer;
             settings.LoadingSlipShowSupplier = request.ShowSupplier;
+            settings.LoadingSlipWarehouseAddress = string.IsNullOrWhiteSpace(request.WarehouseAddress) ? null : request.WarehouseAddress.Trim();
             await db.SaveChangesAsync(cancellationToken);
             return ServiceResult<LoadingSlipSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
         }

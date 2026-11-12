@@ -34,6 +34,7 @@ namespace AgfAdmin.Services
     public sealed record LoadingSlipSnapshot(
         string Language, bool ShowCustomer, bool ShowSupplier,
         string CompanyName, string CompanyAddress, string LogoImage,
+        string WarehouseAddress,
         string CustomerName, string Position, string OrderNumber, string CustomerReference,
         DateTime RequestedDeliveryDate, DateTime? LoadAt, string LicensePlate,
         List<LoadingSlipRow> Rows, List<LoadingSlipPackagingRow> Packaging,
@@ -91,6 +92,7 @@ namespace AgfAdmin.Services
                 SalesOrderDocumentRules.Languages.Contains(settings.LoadingSlipLanguage) ? settings.LoadingSlipLanguage : SalesOrderDocumentRules.LanguageEnglish,
                 settings.LoadingSlipShowCustomer, settings.LoadingSlipShowSupplier,
                 settings.CompanyName, Blank(settings.Address), LogoImageOf(settings.LogoPath),
+                Blank(settings.LoadingSlipWarehouseAddress),
                 settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.SalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
                 Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : Second(order.LoadAt.Value), Blank(order.LicensePlate),
                 rows, packaging, rows.Sum(r => r.Quantity), pallets.Count == 0 ? null : pallets.Sum(), kgs.Count == 0 ? null : kgs.Sum(),
