@@ -77,7 +77,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         if (action === 'adjustGross' && line.productVariantId !== '') {
             event.preventDefault();
             openGross(line, row);
-        } else if (action === 'newArticle' && onNewArticle) {
+        } else if (action === 'newArticle' && onNewArticle && !limits(line.key).articleFixed) {
             event.preventDefault();
             onNewArticle(line.key);
         } else if (action === 'removeLine' && lines.length > 1 && limits(line.key).removable) {
