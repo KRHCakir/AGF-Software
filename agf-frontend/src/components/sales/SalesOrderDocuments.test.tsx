@@ -73,6 +73,7 @@ describe('sales order documents (loading slip)', () => {
         await mounted.render(<SalesOrderDocuments order={order({ status: 'Cancelled', version: 4 })} />);
         await settle();
         assert.equal($('[data-tour="so-confirm"]'), null);
+        assert.ok($('[data-testid="so-slip-cancelled"]'), 'cancelled, never confirmed: do not load');
     });
 
     test('a changed slip says so until passed on; older versions stay available', async () => {
@@ -88,20 +89,36 @@ describe('sales order documents (loading slip)', () => {
         assert.ok(calls.some((call) => call.method === 'POST' && call.url.endsWith('/sales-orders/12/documents/102/sent')));
     });
 
+    test('a blocked pop-up says so instead of silently doing nothing', async () => {
+        answer = () => json(200, confirmed());
+        const originalOpen = window.open;
+        window.open = (() => null) as typeof window.open;
+        try {
+            await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} />);
+            await settle();
+            await act(async () => { $('[data-tour="so-slip-view"]')!.click(); });
+            await mounted.waitFor(() => $('[data-testid="so-slip-popup-blocked"]') !== null, 'blocked notice');
+        } finally {
+            window.open = originalOpen;
+        }
+    });
+
     test('View opens the PDF of that version, Download saves it, Print loads it in a frame', async () => {
         answer = (method, url) => (url.endsWith('/pdf') ? new Response(new Blob(['%PDF-1.7'], { type: 'application/pdf' }), { status: 200 }) : json(200, confirmed()));
         const opened: string[] = [];
         const created: string[] = [];
         const originalOpen = window.open;
         const originalCreate = URL.createObjectURL;
-        window.open = ((url: string) => { opened.push(url); return null; }) as typeof window.open;
+        // Het venster gaat meteen open (bij de klik); de PDF komt erin zodra die er is.
+        const fakeWindow = { location: { href: '' }, close: () => undefined };
+        window.open = (() => { opened.push('window'); return fakeWindow; }) as unknown as typeof window.open;
         URL.createObjectURL = (() => { created.push('blob:pdf'); return 'blob:pdf'; }) as typeof URL.createObjectURL;
         try {
             await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} />);
             await settle();
             await act(async () => { $('[data-tour="so-slip-view"]')!.click(); });
-            await mounted.waitFor(() => opened.length === 1, 'opened');
-            assert.deepEqual(opened, ['blob:pdf']);
+            await mounted.waitFor(() => fakeWindow.location.href === 'blob:pdf', 'pdf in the window opened on click');
+            assert.deepEqual(opened, ['window']);
             assert.ok(calls.some((call) => call.url.endsWith('/sales-orders/12/documents/101/pdf')));
             await act(async () => { $('[data-tour="so-slip-print"]')!.click(); });
             await mounted.waitFor(() => window.document.querySelector('iframe[src="blob:pdf"]') !== null, 'print frame');
