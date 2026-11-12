@@ -73,8 +73,7 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
 }
 
 // onChanged: de order zelf veranderde (bevestigd, of laden op en kenteken): de pagina haalt de order opnieuw op, met de nieuwe versie.
-// reloadKey: verandert als het transport is opgeslagen (de order zelf hoeft dan niet te veranderen), zodat de documenten opnieuw komen.
-export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }: { order: SalesOrder; onChanged?: () => void; reloadKey?: number }) {
+export default function SalesOrderDocuments({ order, onChanged }: { order: SalesOrder; onChanged?: () => void }) {
     const { t, locale } = useTranslation();
     const [loaded, setLoaded] = useState<{ documents: Documents; version: number } | null>(null);
     // Alleen gegevens van de getoonde order en precies de getoonde orderversie: na een orderwissel of -wijziging is de laadbon tot een
@@ -115,7 +114,7 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
             .then((found) => { setLoaded({ documents: found, version }); setLoadError(null); })
             .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setLoadError(apiError); });
         return () => controller.abort();
-    }, [order.id, order.version, reloadToken, reloadKey]);
+    }, [order.id, order.version, reloadToken]);
 
     const run = async (call: () => Promise<Documents>, after?: () => void) => {
         if (busy) return;
@@ -204,7 +203,7 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
                         : (
                             <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-sm text-gray-700">{t('so_not_confirmed')}</p>
-                                <button type="button" className={primaryButtonClass} data-tour="so-confirm" onClick={() => { setLoadAt(inputFromLoadAt(data.loadAt)); setPlate(''); setAsking(true); }}>{t('so_confirm')}</button>
+                                <button type="button" className={primaryButtonClass} data-tour="so-confirm" onClick={() => { setLoadAt(''); setPlate(''); setAsking(true); }}>{t('so_confirm')}</button>
                             </div>
                         )
             )}

@@ -140,7 +140,8 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
                     <div><dt className="text-xs text-gray-600">{t('so_transport_unloading_place')}</dt><dd>{shown.unloadingPlace ?? (shown.unloadingAddressId != null ? shown.unloadingAddresses.find((address) => address.id === shown.unloadingAddressId)?.text : null) ?? shown.defaultUnloadingPlace}</dd></div>
                 </dl>
             )}
-            {editing && transport && (
+            {/* Geannuleerd terwijl het formulier openstond: niets meer op te slaan of weg te halen. */}
+            {editing && transport && !cancelled && (
                 <form onSubmit={save} className="space-y-3" data-testid="so-transport-form">
                     <fieldset disabled={busy} className="space-y-3">
                         <fieldset>
