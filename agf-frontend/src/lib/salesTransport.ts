@@ -1,9 +1,7 @@
 import type { SalesOrderTransport, SaveSalesOrderTransport, TransportMode } from '../types/salesOrderTransport';
 import { formatDecimalInput, parseLocaleDecimal } from './decimal.ts';
 
-// Het blok Transport op de verkooporder (documenten deel 2) als concept in het formulier: van en naar wat de API geeft en verwacht. Leeg
-// laten = de standaard van de server. Laden op is één tijdstip (datum en tijd, in de tijd van de browser, zoals bij de laadbon). Geen React:
-// met node:test te toetsen.
+// Het blok Transport als concept in het formulier, van en naar de API (leeg = de standaard van de server). Met node:test te toetsen.
 
 export const OTHER_ADDRESS = 'other';
 export const DEFAULT_ADDRESS = '';

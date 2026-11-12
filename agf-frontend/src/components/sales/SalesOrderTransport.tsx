@@ -19,10 +19,7 @@ import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 
-// Blok Transport op de verkooporder (documenten deel 2): alleen invullen als er transport is. Vervoerder (een relatie met de rol
-// vervoerder, zoeken of snel aanmaken) of eigen transport / klant haalt op; laden op (dezelfde als op de laadbon), losdatum, temperatuur,
-// laad- en losplaats (leeg = de standaard), referenties, soort pallet en opmerkingen. Na opslaan haalt de pagina de order en de
-// documenten opnieuw op: een bevestigde order krijgt zo de transportopdracht of een nieuwe versie. Nooit een prijs of tarief.
+// Blok Transport op de verkooporder (documenten deel 2): alleen invullen als er transport is. Na opslaan haalt de pagina order en documenten opnieuw op.
 export default function SalesOrderTransport({ order, onChanged }: { order: SalesOrder; onChanged?: () => void }) {
     const { t, locale } = useTranslation();
     const [loaded, setLoaded] = useState<{ orderId: number; transport: Transport } | null>(null);
@@ -33,8 +30,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     const [error, setError] = useState<ApiError | null>(null);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<TransportDraft>(() => draftFrom(null));
-    // De versie waarmee het formulier openging: opslaan en weghalen sturen die mee, zodat een tussentijdse wijziging een conflict geeft (409)
-    // in plaats van stil overschreven te worden, ook als het transport intussen opnieuw is opgehaald.
+    // De versie waarmee het formulier openging: een tussentijdse wijziging geeft dan een conflict (409), nooit stil overschrijven.
     const [opened, setOpened] = useState<{ version: number | null; loadAt: boolean }>({ version: null, loadAt: false });
     const [problems, setProblems] = useState<TransportProblem[]>([]);
     const [busy, setBusy] = useState(false);

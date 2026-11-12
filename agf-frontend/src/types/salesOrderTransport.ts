@@ -50,7 +50,6 @@ export interface SaveSalesOrderTransport {
     palletKind: string | null;
 }
 
-export interface TransportOrderSettings { language: 'en' | 'nl'; palletKind: string }
 
 const isAddress = (value: unknown): value is TransportAddressOption => isObject(value) && isNumber(value.id) && isString(value.purpose) && isNullableString(value.text);
 
@@ -61,8 +60,4 @@ export function isSalesOrderTransport(value: unknown): value is SalesOrderTransp
         && isArrayOf(value.unloadingAddresses, isAddress) && isNullableString(value.loadAt) && isNullableString(value.unloadDate) && isNullableNumber(value.temperatureC)
         && isNullableString(value.loadingReference) && isNullableString(value.unloadingReference) && isNullableString(value.remarks) && isNullableString(value.palletKind)
         && isNumber(value.version) && typeof value.hasTransportOrder === 'boolean';
-}
-
-export function isTransportOrderSettings(value: unknown): value is TransportOrderSettings {
-    return isObject(value) && (value.language === 'en' || value.language === 'nl') && isString(value.palletKind);
 }
