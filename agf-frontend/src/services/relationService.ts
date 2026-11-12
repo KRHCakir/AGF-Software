@@ -55,8 +55,22 @@ export async function updateRelation(id: number, request: SaveRelationRequest, s
     return json;
 }
 
+// Snel een vervoerder aanmaken (documenten deel 2): alleen de naam en de rol vervoerder. Gelijkende namen zijn een gewone uitkomst; dan
+// kiest de gebruiker een bestaande relatie (rol erbij) of maakt toch een nieuwe (acknowledgeSimilarNames).
+export async function createCarrier(name: string, requestId: string, acknowledgeSimilarNames: boolean, signal?: AbortSignal): Promise<SaveRelationOutcome> {
+    try {
+        const { status, json } = await postJson('/relations', { requestId, name, carrier: true, isActive: true, acknowledgeSimilarNames }, signal);
+        if (!isRelation(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het aanmaken van de vervoerder.');
+        return { outcome: status === 200 ? 'replayed' : 'created', relation: json };
+    } catch (caught) {
+        const similar = similarFrom(caught);
+        if (similar) return { outcome: 'similar-names', similar };
+        throw caught;
+    }
+}
+
 // Tweede rol toevoegen zonder tweede onderneming (201 nieuw, 200 als de rol al bestond).
-export async function addRelationRole(id: number, role: 'customer' | 'vendor', signal?: AbortSignal): Promise<Relation> {
+export async function addRelationRole(id: number, role: 'customer' | 'vendor' | 'carrier', signal?: AbortSignal): Promise<Relation> {
     const { json } = await postJson(`/relations/${id}/roles/${role}`, {}, signal);
     if (!isRelation(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het toevoegen van de rol.');
     return json;

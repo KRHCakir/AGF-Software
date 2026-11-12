@@ -28,6 +28,7 @@ import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
 import SalesOrderDocuments from './SalesOrderDocuments';
+import SalesOrderTransport from './SalesOrderTransport';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
@@ -47,6 +48,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
     const { commands } = usePendingCommands();
     const [cancelling, setCancelling] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    // Telt het opslaan van het transport: dan haalt het blok Documenten opnieuw op (de transportopdracht of een nieuwe versie).
+    const [transportSaves, setTransportSaves] = useState(0);
     const [historyToken, setHistoryToken] = useState(0);
     const [cancelNotice, setCancelNotice] = useState(false);
     // Telt alleen op na een geslaagde, bewuste herlaadactie vanuit het annuleringspaneel: dan vervalt de lokale
@@ -393,8 +396,9 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     </div>
                 )}
             </header>
-            {/* Bevestigen en de laadbon (documenten deel 1). */}
-            <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} />
+            {/* Bevestigen, de laadbon (documenten deel 1) en het transport met de transportopdracht (deel 2). */}
+            <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} reloadKey={transportSaves} />
+            <SalesOrderTransport order={order} onChanged={() => { setTransportSaves((n) => n + 1); void onOrderChanged(); }} />
             <SalesStepBar order={order} />
 
             {dispatchNotice && (

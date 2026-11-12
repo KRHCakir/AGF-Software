@@ -8,7 +8,7 @@ export const ADDRESS_PURPOSES = ['Main', 'Billing', 'Delivery'] as const;
 export type AddressPurpose = (typeof ADDRESS_PURPOSES)[number];
 export const CHANNEL_KINDS = ['Phone', 'Email'] as const;
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];
-export type RelationRoleFilter = 'all' | 'customer' | 'vendor';
+export type RelationRoleFilter = 'all' | 'customer' | 'vendor' | 'carrier';
 
 export interface RelationListItem {
     id: number;
@@ -17,6 +17,8 @@ export interface RelationListItem {
     tradeName: string | null;
     customerId: number | null;
     vendorId: number | null;
+    // Rol vervoerder (documenten deel 2); oudere antwoorden kennen het veld niet.
+    isCarrier?: boolean;
     isActive: boolean;
     city: string | null;
     countryCode: string | null;
