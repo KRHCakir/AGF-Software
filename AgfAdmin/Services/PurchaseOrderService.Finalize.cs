@@ -65,6 +65,13 @@ namespace AgfAdmin.Services
             var blocked = PurchaseOrderDocumentRules.CorrectionBlockedReason(order, _db.BusinessCalendar.Today());
             if (blocked != null) return Conflict(LockedCode, blocked);
 
+            // Eerst alle regels controleren, pas daarna iets wijzigen: een geweigerde correctie laat de order in de context ongemoeid.
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (order.Lines.All(l => l.Id != lines[i]?.Id)) AddError(errors, $"lines[{i}]", $"Line {lines[i]?.Id} does not belong to purchase order {id}.");
+            }
+            if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);
+
             var fields = new List<PurchaseOrderChangeField>();
             if (request.SupplierReference != null && !string.Equals(order.SupplierReference, reference, StringComparison.Ordinal))
             {
@@ -78,19 +85,16 @@ namespace AgfAdmin.Services
             }
             for (var i = 0; i < lines.Count; i++)
             {
-                if (errors.ContainsKey($"lines[{i}]")) continue;
-                var line = order.Lines.SingleOrDefault(l => l.Id == lines[i]?.Id);
-                if (line == null)
-                {
-                    AddError(errors, $"lines[{i}]", $"Line {lines[i]?.Id} does not belong to purchase order {id}.");
-                    continue;
-                }
+                var line = order.Lines.Single(l => l.Id == lines[i].Id);
                 if (lines[i].UnitPrice == null || line.UnitPrice == lines[i].UnitPrice) continue;
                 fields.Add(new(PurchaseOrderDocumentRules.FieldUnitPrice, line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(line.UnitPrice), Number(lines[i].UnitPrice)));
                 line.UnitPrice = lines[i].UnitPrice;
             }
-            if (errors.Count == 0 && fields.Count == 0) AddError(errors, "correction", "Change at least one price, the supplier's order number or the note.");
-            if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);
+            if (fields.Count == 0)
+            {
+                AddError(errors, "correction", "Change at least one price, the supplier's order number or the note.");
+                return Validation<PurchaseOrderDetailDto>(errors);
+            }
             return await SaveChangeAsync(order, request.RequestId!.Value, PurchaseOrderDocumentRules.KindCorrection, reason, fields, cancellationToken);
         }
     }

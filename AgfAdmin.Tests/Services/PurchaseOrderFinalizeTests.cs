@@ -43,6 +43,14 @@ public class PurchaseOrderFinalizeTests : IDisposable
         Assert.Equal(("Correction", "Prijsafspraak na levering", 3), (correction.Kind, correction.Reason, correction.Fields.Count));
         Assert.Contains(corrected.Value.History, h => h.Type == "Corrected" && h.Reason == "Prijsafspraak na levering");
 
+        // Een regel van een andere order: geweigerd, en er verandert niets (ook niet het ordernummer of de notitie uit hetzelfde verzoek).
+        var foreign = Correction("Verkeerde regel");
+        foreign.ExpectedVersion = corrected.Value.EditVersion;
+        foreign.SupplierReference = "NP-11";
+        foreign.Lines.Add(new CorrectPurchaseOrderLineDto { Id = 999_999, UnitPrice = 1m });
+        Assert.Contains("lines[1]", (await _h.RunAsync(s => s.CorrectAsync(order.Id, foreign))).Errors.Keys);
+        Assert.Equal("NP-10", (await _h.DetailAsync(order.Id)).SupplierReference);
+
         var nothing = Correction("Niets");
         nothing.ExpectedVersion = corrected.Value.EditVersion;
         Assert.Contains("correction", (await _h.RunAsync(s => s.CorrectAsync(order.Id, nothing))).Errors.Keys);
