@@ -16,7 +16,8 @@ te laden: geen prijzen, geen bedragen, geen btw. Er wordt niets verstuurd; maile
 5. **Instellingen › Laadbon:**
    - de taal van de kopteksten (Engels, of Nederlands);
    - klantnaam op de bon (standaard aan);
-   - kolom leverancier (standaard aan).
+   - kolom leverancier (standaard aan);
+   - de loods op de bon: naam en adres van waar geladen wordt. Leeg betekent de bedrijfsnaam en het adres.
 
    Dit geldt voor nieuwe versies.
 
@@ -25,10 +26,10 @@ te laden: geen prijzen, geen bedragen, geen btw. Er wordt niets verstuurd; maile
 | Deel | Wat |
 |---|---|
 | Titel | **Laadbon**, met nummer (LB-2026-0012, uit het VO-nummer) en versie |
-| Kop | Bedrijfsnaam en logo; **Customer** (instelling); **Position** = het verkoop-partijnummer, met het VO-nummer; **Load on** (datum en tijd, Nederlandse tijd); **License plate** (of een lijn om in te vullen); **Warehouse** (bedrijfsnaam en adres); **Reference** (ordernummer van de klant) |
+| Kop | Bedrijfsnaam en logo; **Customer** (instelling); **Position** = het verkoop-partijnummer, met het VO-nummer; **Load on** (datum en tijd, Nederlandse tijd); **License plate** (of een lijn om in te vullen); **Warehouse** (de loods uit de instelling, anders bedrijfsnaam en adres); **Reference** (ordernummer van de klant) |
 | Tabel | **Quantity** (colli), **Pallet** (twee decimalen, niet afgerond: colli gedeeld door colli per pallet, zoals op de orderregel), **Description**, **Variety** (ras), **Packaging** (inhoud), **Brand**, **Size**, **Origin** (landcode), **Net kg**, **Supplier** (leverancier en inkooppartij, instelling) |
 | Rijen | Een rij per orderregel en per pallet of partij waar die al gereserveerd is; wat nog niet gereserveerd is een eigen rij ("not reserved yet") |
-| Totaal | Totaal colli, pallets (twee decimalen) en netto kg, alleen aan het eind |
+| Totaal | Totaal colli, pallets (twee decimalen) en netto kg, alleen aan het eind. Heeft een regel nog geen gewicht (nog niet gereserveerd), dan staat erbij dat het netto kg alleen dat van de regels met een gewicht is. |
 | Emballage | "Packaging material going along": aantal en naam (Euro-pallet, Krat), zonder prijs |
 | Onderaan | Regel voor opmerkingen; vakken voor naam chauffeur, handtekening en datum |
 | Opmaak | A4, zwart-wit leesbaar, afwisselende rijkleur. De kop van de tabel herhaalt op elke pagina. Getallen in Nederlandse notatie (6.890 colli, 23,81 pallets), zoals het voorbeeld. Geen ligaturen, zodat zoeken en kopiëren in de PDF werkt. |
@@ -37,7 +38,8 @@ te laden: geen prijzen, geen bedragen, geen btw. Er wordt niets verstuurd; maile
 
 - Een versie is een **snapshot** van de gegevens op dat moment. De PDF wordt altijd uit die snapshot gemaakt, dus een oude versie ziet er later precies zo uit.
 - **Nieuwe versies ontstaan op twee manieren.** Na elke geslaagde opdracht op een verkooporder (POST of PUT) controleert het systeem of de bon veranderd is. Ophalen van de documenten doet dezelfde controle, als vangnet.
-- **Vingerafdruk:** dezelfde inhoud geeft nooit een nieuwe versie.
+- **Vingerafdruk:** dezelfde inhoud geeft nooit een nieuwe versie. Lege velden tellen niet mee. Komt er later een veld bij de bon, dan krijgt een bestaande bon zo geen onterechte nieuwe versie.
+- **Doorgegeven** geldt voor precies de versie die je doorgaf. Verandert de order op hetzelfde moment, dan staat er meteen een nieuwere versie en vraagt de order weer om opnieuw versturen.
 - **TraceabilityGuard regel 31:**
   - wie en wanneer bevestigde ligt vast;
   - een versie verandert of verdwijnt nooit; alleen "doorgegeven" wordt één keer gezet;
@@ -51,6 +53,8 @@ Migratie `AddSalesOrderConfirmationAndDocuments` (59):
 - `CompanySettings`: `LoadingSlipLanguage` (`en`), `LoadingSlipShowCustomer` en `LoadingSlipShowSupplier` (aan);
 - nieuwe tabel `SalesOrderDocuments`.
 
+Migratie `AddLoadingSlipWarehouseAddress` (60): `CompanySettings.LoadingSlipWarehouseAddress`, maximaal 300 tekens, leeg toegestaan.
+
 Bestaande orders zijn niet bevestigd en hebben geen document.
 
 ## Wat er al was en wat ik hergebruikte
@@ -60,7 +64,7 @@ Bestaande orders zijn niet bevestigd en hebben geen document.
 - **Artikelkenmerken uit stap 2:** product, variant (= ras), verpakking, merk, maat, landcode en colli per pallet.
 - **Position:** de verkoop-partij uit P2.
 - **Emballage:** de emballageregels stonden al op main.
-- **Loods:** er is geen aparte voorraadlocatie. De bon gebruikt de bedrijfsgegevens; de plek van een pallet in de loods ("Cel 3") staat op de pallet.
+- **Loods:** er was geen voorraadlocatie met naam en adres. Daarom is er nu één instelling voor de loods op de bon; leeg betekent de bedrijfsgegevens. Meer loodsen per bedrijf, met een loods per pallet, is een latere stap. De plek van een pallet in de loods ("Cel 3") staat op de pallet.
 
 ## Bewust niet gebouwd
 
@@ -86,4 +90,4 @@ Gemaakt in Chrome op een lege testdatabase, met verzonnen gegevens:
 | `04-laadbon-gewijzigd-versie-2-desktop.png` | Na een extra reservering (versie 2) en een ander kenteken (versie 3): "Laadbon gewijzigd, opnieuw versturen" en de eerdere versies |
 | `05-documenten-op-de-telefoon-390.png` | Hetzelfde blok op 390 px (geen horizontale scroll) |
 | `06-laadbon-pdf-versie-3.png` | Pagina 1 van de PDF |
-| `laadbon-versie-1.pdf`, `laadbon-versie-3.pdf` | De PDF's van de proef: versie 1 met 300 bessen, versie 3 met 384 en het nieuwe kenteken |
+| `laadbon-versie-1.pdf`, `laadbon-versie-3.pdf` | De PDF's van de proef. Versie 1 heeft 300 bessen gereserveerd; de andere 84 staan als "not reserved yet", en het totaal zegt dat het netto kg alleen dat van de regels met een gewicht is. Versie 3 heeft 384 bessen en het nieuwe kenteken. |
