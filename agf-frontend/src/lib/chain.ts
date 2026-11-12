@@ -67,7 +67,9 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
     const sales = order.salesOrders ?? [];
     const steps: Omit<ChainStep, 'current'>[] = [];
 
-    steps.push({ key: 'order', state: 'done', parts: [{ key: 'chain_order_vendor', params: { vendor: order.vendorName ?? '–' } }],
+    // Documentstatus (stap 4a): Open (aanpasbaar) of Definitief; een oudere server zonder het veld laat het weg.
+    const document = order.documentStatus === undefined ? [] : [{ key: order.documentStatus === 'Definitive' ? 'chain_order_document_definitive' : 'chain_order_document_open' }];
+    steps.push({ key: 'order', state: 'done', parts: [{ key: 'chain_order_vendor', params: { vendor: order.vendorName ?? '–' } }, ...document],
         // Het ordernummer van de leverancier als het er is (het hoofdnummer), anders het eigen IO-nummer.
         links: [{ label: orderNumbers(order).main, href: `/purchase-orders?id=${order.id}` },
             ...(order.partijId ? [partijLink(order.partijId, order.partijNumber ?? `#${order.partijId}`)] : [])] });

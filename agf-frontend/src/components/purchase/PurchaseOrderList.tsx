@@ -4,7 +4,9 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
-import { DeviationBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import Link from 'next/link';
+import { DeviationBadge, DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import { listEditable } from '../../lib/purchaseOrderEdit';
 import { listRowClass, rowClick } from '../../lib/listRows';
 import { orderNumbers } from '../../lib/purchaseOrderRules';
 import OrderNumberText from './OrderNumberText';
@@ -55,7 +57,14 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                 <td className={`${th} font-mono`}>{item.partijNumber ? <span data-tour="po-list-partij">{item.partijNumber}</span> : '–'}</td>
                                 <td className={`${th} whitespace-nowrap`}>{formatDateOnly(item.orderedOn, locale)}</td>
                                 <td className={`${th} whitespace-nowrap`}>{expected(item)}</td>
-                                <td className={th}><OrderStatusBadge status={item.status} />{item.hasDeviation && <span className="ml-1"><DeviationBadge /></span>}{rejected(item)}</td>
+                                <td className={th}>
+                                    <span className="flex flex-wrap items-center gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} />{item.hasDeviation && <DeviationBadge />}</span>
+                                    {rejected(item)}
+                                    {listEditable(item) && (
+                                        <Link href={`/purchase-orders/edit?id=${item.id}`} onClick={(event) => event.stopPropagation()} data-tour="po-list-edit" data-tour-key={item.orderNumber}
+                                            className="mt-1 inline-block text-xs font-medium text-blue-800 underline underline-offset-2">{t('po_edit')}</Link>
+                                    )}
+                                </td>
                                 <td className={`${th} text-right font-mono`}>{formatQuantity(item.expectedQuantity, locale)}</td>
                                 <td className={`${th} whitespace-nowrap text-right font-mono`}>{kg(item)}</td>
                                 <td className={th}>
@@ -75,7 +84,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                             className={`w-full rounded-md border bg-white p-3 text-left text-sm ${item.id === selectedId ? 'border-blue-500' : 'border-gray-200'}`}>
                             <span className="flex items-start justify-between gap-2">
                                 <span className="min-w-0 font-semibold text-blue-800"><OrderNumberText orderNumber={item.orderNumber} supplierReference={item.supplierReference} stacked truncate /></span>
-                                <span className="flex shrink-0 flex-wrap justify-end gap-1"><OrderStatusBadge status={item.status} />{item.hasDeviation && <DeviationBadge />}</span>
+                                <span className="flex shrink-0 flex-wrap justify-end gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} />{item.hasDeviation && <DeviationBadge />}</span>
                             </span>
                             <span className="mt-1 block break-words font-medium text-gray-900">{item.vendorName ?? '–'}{item.linesOrigin && <span className="font-normal text-gray-700"> · {item.linesOrigin}</span>}</span>
                             {item.partijNumber && <span className="block break-words text-gray-700">{t('partij_field')} <span className="font-mono">{item.partijNumber}</span></span>}
@@ -87,6 +96,9 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                 {item.invoiceIndicator !== 'None' && <InvoiceIndicatorBadge indicator={item.invoiceIndicator} />}
                             </span>
                         </button>
+                        {listEditable(item) && (
+                            <Link href={`/purchase-orders/edit?id=${item.id}`} className="mt-1 inline-block px-1 text-xs font-medium text-blue-800 underline underline-offset-2">{t('po_edit')}</Link>
+                        )}
                     </li>
                 ))}
             </ul>

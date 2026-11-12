@@ -12,6 +12,10 @@ import type { PackageUnit } from '../types/availability';
 export const DOCUMENT_OPEN = 'Open';
 export const DOCUMENT_DEFINITIVE = 'Definitive';
 
+// In de lijst: Aanpassen zolang de order Open is, voor het eigen magazijn en niet geannuleerd (zoals editable op het detail).
+export const listEditable = (item: { documentStatus?: string | null; route: string; status: string }): boolean =>
+    !isDefinitive(item) && item.route === 'Warehouse' && item.status !== 'Cancelled';
+
 // Een oudere server zonder documentstatus: Open.
 export const documentStatusOf = (order: { documentStatus?: string | null }): string => order.documentStatus ?? DOCUMENT_OPEN;
 export const isDefinitive = (order: { documentStatus?: string | null }): boolean => documentStatusOf(order) === DOCUMENT_DEFINITIVE;
