@@ -28,7 +28,7 @@ export const TOUR_PRODUCT = 'Avocado';
 export const TOUR_VARIANT = 'Hass';
 export const TOUR_ORIGIN = 'PE';
 // De afwijking bij ontvangst: een ander land van herkomst dan besteld.
-export const TOUR_OTHER_ORIGIN = 'CL';
+export const TOUR_OTHER_ORIGIN = 'ZA';
 export const TOUR_ORDER_QUANTITY = 20;
 export const TOUR_SALES_QUANTITY = 4;
 // Afwijkend gewicht: 5% meer kg per colli dan besteld (de grens van "Klopt dit?" is 2%).
