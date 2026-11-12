@@ -70,6 +70,15 @@ public class LoadingSlipPdfTests
     }
 
     [Fact]
+    public void A_net_kg_total_with_rows_without_a_weight_says_it_is_incomplete()
+    {
+        // De mango is nog niet gereserveerd en heeft dus geen gewicht: het totaal is alleen dat van de andere regels.
+        Assert.Contains("net kg of the rows with a weight only", Read(Slip()).Text);
+        var weighed = Slip() with { Rows = Slip().Rows.Where(r => r.NetKg != null).ToList() };
+        Assert.DoesNotContain("with a weight only", Read(weighed).Text);
+    }
+
+    [Fact]
     public void Pallets_have_two_decimals_like_the_order_line_never_whole_pallets()
     {
         // Zoals de orderregel: twee decimalen, half van nul af, nooit naar hele pallets.

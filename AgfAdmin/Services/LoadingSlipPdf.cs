@@ -27,7 +27,7 @@ namespace AgfAdmin.Services
                 ["variety"] = "Variety", ["packaging"] = "Packaging", ["brand"] = "Brand", ["size"] = "Size", ["origin"] = "Origin", ["netKg"] = "Net kg",
                 ["supplier"] = "Supplier", ["total"] = "Total", ["packages"] = "packages", ["pallets"] = "pallets", ["material"] = "Packaging material going along",
                 ["driver"] = "Driver name", ["signature"] = "Signature", ["date"] = "Date", ["remarks"] = "Remarks", ["version"] = "version", ["page"] = "page",
-                ["created"] = "made", ["notReserved"] = "not reserved yet",
+                ["created"] = "made", ["notReserved"] = "not reserved yet", ["kgPartial"] = "net kg of the rows with a weight only",
             },
             [SalesOrderDocumentRules.LanguageDutch] = new()
             {
@@ -36,7 +36,7 @@ namespace AgfAdmin.Services
                 ["variety"] = "Ras", ["packaging"] = "Inhoud", ["brand"] = "Merk", ["size"] = "Maat", ["origin"] = "Herkomst", ["netKg"] = "Netto kg",
                 ["supplier"] = "Leverancier", ["total"] = "Totaal", ["packages"] = "colli", ["pallets"] = "pallets", ["material"] = "Emballage die mee gaat",
                 ["driver"] = "Naam chauffeur", ["signature"] = "Handtekening", ["date"] = "Datum", ["remarks"] = "Opmerkingen", ["version"] = "versie", ["page"] = "pagina",
-                ["created"] = "gemaakt", ["notReserved"] = "nog niet gereserveerd",
+                ["created"] = "gemaakt", ["notReserved"] = "nog niet gereserveerd", ["kgPartial"] = "netto kg alleen van de regels met een gewicht",
             },
         };
 
@@ -81,8 +81,6 @@ namespace AgfAdmin.Services
                     {
                         // Het logo komt uit de snapshot (bytes van het moment van die versie), niet uit een bestand dat later kan veranderen.
                         if (!string.IsNullOrWhiteSpace(slip.LogoImage)) company.Item().Width(110).Image(Convert.FromBase64String(slip.LogoImage));
-                        // Oudere snapshots hebben alleen het pad (LogoPath): dan het bestand lezen als het er nog is.
-                        else if (!string.IsNullOrWhiteSpace(slip.LogoPath) && File.Exists(slip.LogoPath)) company.Item().Width(110).Image(File.ReadAllBytes(slip.LogoPath));
                         company.Item().Text(slip.CompanyName).Bold().FontSize(11);
                         if (slip.CompanyAddress != null) company.Item().Text(slip.CompanyAddress).FontSize(8);
                     });
@@ -151,7 +149,13 @@ namespace AgfAdmin.Services
                     IContainer Total(IContainer cell) => cell.BorderTop(1.5f).PaddingVertical(4).PaddingHorizontal(2);
                     table.Cell().Element(Total).AlignRight().Text(Quantity(slip.TotalQuantity)).Bold();
                     table.Cell().Element(Total).AlignRight().Text(Pallets(slip.TotalPallets)).Bold();
-                    table.Cell().ColumnSpan(6).Element(Total).Text($"{L("total")}: {Quantity(slip.TotalQuantity)} {L("packages")} · {Pallets(slip.TotalPallets)} {L("pallets")}").Bold();
+                    // Heeft een regel nog geen gewicht (nog niet gereserveerd), dan is het totaal netto kg onvolledig: dat staat er dan bij.
+                    var kgPartial = slip.TotalNetKg != null && slip.Rows.Any(r => r.NetKg == null);
+                    table.Cell().ColumnSpan(6).Element(Total).Text(text =>
+                    {
+                        text.Span($"{L("total")}: {Quantity(slip.TotalQuantity)} {L("packages")} · {Pallets(slip.TotalPallets)} {L("pallets")}").Bold();
+                        if (kgPartial) text.Span($" · {L("kgPartial")}").FontSize(8);
+                    });
                     table.Cell().Element(Total).AlignRight().Text(Kg(slip.TotalNetKg)).Bold();
                     if (slip.ShowSupplier) table.Cell().Element(Total);
                 });
