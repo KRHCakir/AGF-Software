@@ -128,6 +128,15 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"Purchase order {orderId} becomes definitive exactly together with its Finalize change, and only then.");
                 }
+                if (finalizing && (current.FinalizedAt == null || string.IsNullOrWhiteSpace(current.FinalizedBy)
+                    || (current.FinalizedVia != PurchaseOrderDocumentRules.ViaManual && current.FinalizedVia != PurchaseOrderDocumentRules.ViaInvoice)))
+                {
+                    throw new TraceabilityViolationException($"Making purchase order {orderId} definitive records who, when and how.");
+                }
+                if (change != null && deviationOrders.Contains(orderId))
+                {
+                    throw new TraceabilityViolationException($"Purchase order {orderId} is never finalized, edited or corrected in the same save as a receipt deviation.");
+                }
                 if (finalizing && (fields.Count > 0 || lines.Count > 0))
                 {
                     throw new TraceabilityViolationException($"Making purchase order {orderId} definitive changes nothing else in the same save.");
@@ -135,10 +144,6 @@ namespace AgfAdmin.Data
                 if (fields.Count == 0 && lines.Count == 0)
                 {
                     continue;
-                }
-                if (change != null && deviationOrders.Contains(orderId))
-                {
-                    throw new TraceabilityViolationException($"Purchase order {orderId} is never edited or corrected in the same save as a receipt deviation.");
                 }
                 if (before.DocumentStatus == PurchaseOrderDocumentRules.StatusOpen)
                 {
