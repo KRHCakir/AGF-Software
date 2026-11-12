@@ -74,9 +74,12 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
 
 export default function SalesOrderDocuments({ order, onConfirmed }: { order: SalesOrder; onConfirmed?: () => void }) {
     const { t, locale } = useTranslation();
-    const [loaded, setData] = useState<Documents | null>(null);
-    // Alleen gegevens van de getoonde order; na een orderwissel blijven die van de vorige order nooit zichtbaar.
-    const data = loaded !== null && loaded.salesOrderId === order.id ? loaded : null;
+    const [loaded, setLoaded] = useState<{ documents: Documents; version: number } | null>(null);
+    // Alleen gegevens van de getoonde order en precies de getoonde orderversie: na een orderwissel of -wijziging is de laadbon tot een
+    // geslaagde verversing onbeschikbaar (anders zou een verouderde bon bruikbaar of doorgeefbaar blijven).
+    const data = loaded !== null && loaded.documents.salesOrderId === order.id && loaded.version === order.version ? loaded.documents : null;
+    const setData = (documents: Documents) => setLoaded({ documents, version: order.version });
+    const [reloadToken, setReloadToken] = useState(0);
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
@@ -90,7 +93,7 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
 
     // Een andere order: formulierstatus en meldingen van de vorige order wissen.
     useEffect(() => {
-        setData(null);
+        setLoaded(null);
         setLoadError(null);
         setError(null);
         setPopupBlocked(false);
@@ -104,11 +107,13 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
     // Opnieuw ophalen na elke wijziging van de order (versie): een nieuwe reservering kan een nieuwe versie van de laadbon geven.
     useEffect(() => {
         const controller = new AbortController();
+        const version = order.version;
+        setLoadError(null);
         getSalesOrderDocuments(order.id, controller.signal)
-            .then((found) => { setData(found); setLoadError(null); })
+            .then((found) => { setLoaded({ documents: found, version }); setLoadError(null); })
             .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setLoadError(apiError); });
         return () => controller.abort();
-    }, [order.id, order.version]);
+    }, [order.id, order.version, reloadToken]);
 
     const run = async (call: () => Promise<Documents>, after?: () => void) => {
         if (busy) return;
@@ -172,7 +177,9 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
                 <h3 id={`documents-${order.id}`} className="font-semibold text-gray-900">{t('so_documents')}</h3>
                 {data?.confirmedAt && <span className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900" data-testid="so-confirmed">{t('so_confirmed_badge')}</span>}
             </div>
-            {loadError && <ErrorNotice error={loadError} />}
+            {loadError && data === null && (
+                <ErrorNotice error={loadError} actions={<button type="button" className={secondaryButtonClass} onClick={() => setReloadToken((n) => n + 1)} data-testid="so-documents-retry">{t('availability_retry')}</button>} />
+            )}
             {error && <ErrorNotice error={error} />}
             {popupBlocked && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="so-slip-popup-blocked">{t('so_slip_popup_blocked')}</p>}
             {/* Geannuleerd: niet laden, ook als de order nooit bevestigd was. */}
