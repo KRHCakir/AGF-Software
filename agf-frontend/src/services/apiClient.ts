@@ -123,3 +123,42 @@ export function putJson(path: string, body: unknown, signal?: AbortSignal): Prom
 export function deleteJson(path: string, signal?: AbortSignal): Promise<JsonResponse> {
     return request('DELETE', path, undefined, signal);
 }
+
+// Een bestand versturen (multipart): de browser zet zelf het Content-Type met de grens. Fouten zoals bij JSON.
+export async function postForm(path: string, form: FormData, signal?: AbortSignal): Promise<JsonResponse> {
+    return send(path, { method: 'POST', body: form, headers: { Accept: 'application/json' } }, signal, async (response) => {
+        try {
+            return { status: response.status, json: (await response.json()) as unknown };
+        } catch {
+            throw new ApiError('shape', 'Antwoord is geen geldige JSON.');
+        }
+    });
+}
+
+// Een document ophalen als bestand (PDF of afbeelding), voor de weergave naast het voorstel.
+export async function getBlob(path: string, signal?: AbortSignal): Promise<Blob> {
+    return send(path, { method: 'GET', headers: { Accept: '*/*' } }, signal, (response) => response.blob());
+}
+
+async function send<T>(path: string, init: RequestInit, signal: AbortSignal | undefined, read: (response: Response) => Promise<T>): Promise<T> {
+    let baseUrl: string;
+    try {
+        baseUrl = getApiBaseUrl();
+    } catch (error) {
+        throw new ApiError('config', error instanceof ApiConfigError ? error.message : 'API-adres niet ingesteld.');
+    }
+    let response: Response;
+    try {
+        response = await fetch(`${baseUrl}${path}`, { ...init, signal, cache: 'no-store' });
+    } catch (error) {
+        if (signal?.aborted) throw new ApiError('aborted', 'Verzoek afgebroken.');
+        throw new ApiError('network', error instanceof Error ? error.message : 'Netwerkfout');
+    }
+    if (!response.ok) {
+        let errorBody: unknown = null;
+        try { errorBody = await response.json(); } catch { errorBody = null; }
+        const { message, fieldErrors } = readErrorBody(errorBody);
+        throw new ApiError('http', message ?? `HTTP ${response.status}`, response.status, fieldErrors, errorBody);
+    }
+    return read(response);
+}
