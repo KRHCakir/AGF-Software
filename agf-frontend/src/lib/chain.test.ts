@@ -142,6 +142,13 @@ describe('sales order chain', () => {
         assert.equal(step(steps, 'invoice').state, 'unavailable');
     });
 
+    test('a confirmed order says so in the sales step (the loading slip is in Documents); a cancelled one does not', () => {
+        const confirmed = { ...salesOrder([salesLine({})]), confirmedAt: '2026-11-12T09:00:00Z' };
+        assert.ok(step(salesOrderChain(confirmed), 'sales').parts.some((part) => part.key === 'chain_sales_confirmed'));
+        assert.ok(!step(salesOrderChain(salesOrder([salesLine({})])), 'sales').parts.some((part) => part.key === 'chain_sales_confirmed'));
+        assert.ok(!step(salesOrderChain({ ...confirmed, status: 'Cancelled' }), 'sales').parts.some((part) => part.key === 'chain_sales_confirmed'));
+    });
+
     test('shipped and delivered: stock shows what came from stock; released reservations never count', () => {
         const shipped = salesLine({ reservedQuantity: 0, dispatchedQuantity: 10, deliveredQuantity: 10, openQuantity: 0, fulfilled: true, delivered: true,
             reservations: [reservation({ status: 'Consumed', quantity: 10 }), reservation({ id: 2, status: 'Released', supplyCommitmentId: 9, supplyOrderNumber: 'IO-2026-0009' })] });

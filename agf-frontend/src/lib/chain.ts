@@ -228,6 +228,8 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
             parts: [
                 order.status === 'Cancelled' ? { key: 'chain_cancelled' } : qty(mixed, { key: 'chain_demand', params: { quantity: demand, unit } }),
                 ...(shortage > 0 ? [qty(mixed, { key: 'chain_shortage', params: { quantity: shortage, unit } })] : []),
+                // Bevestigd (documenten deel 1): de laadbon staat klaar in het blok Documenten op de order.
+                ...(order.confirmedAt && order.status !== 'Cancelled' ? [{ key: 'chain_sales_confirmed' }] : []),
             ],
             // De verkoop-partij (1-op-1 met de order) naast het VO-nummer, met link naar het partijdetail.
             links: [{ label: orderLabel(order), href: `/sales-orders?orderId=${order.id}` },

@@ -27,6 +27,7 @@ import { PackagingLinesView } from './PackagingLines';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
+import SalesOrderDocuments from './SalesOrderDocuments';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
@@ -288,6 +289,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                 <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: orderLabel(order) })} · {order.customerName ?? t('availability_unknown')}</h2>
                     <OrderStatusBadge status={order.status} />
+                    {order.confirmedAt && <span className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900" data-testid="order-confirmed">{t('so_confirmed_badge')}</span>}
                     {progress.onHoldCount > 0 && <OnHoldBadge />}
                     {progress.allocatedLines > 0 && <ExpectedAllocationBadge />}
                     {!cancelled && order.shortage && <span className="rounded border border-red-300 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-800" data-testid="order-shortage">{t('sales_shortage')}</span>}
@@ -391,6 +393,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     </div>
                 )}
             </header>
+            {/* Bevestigen en de laadbon (documenten deel 1). */}
+            <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} />
             <SalesStepBar order={order} />
 
             {dispatchNotice && (

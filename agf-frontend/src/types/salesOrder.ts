@@ -338,6 +338,9 @@ export interface SalesOrder {
     createdAt: string;
     version: number;
     // Alleen gevuld bij status Cancelled; rechtstreeks uit de server, nooit afgeleid.
+    // Bevestigd (documenten deel 1): wanneer en door wie; ontbreekt bij een oudere server.
+    confirmedAt?: string | null;
+    confirmedBy?: string | null;
     cancelledAt: string | null;
     cancelReason: string | null;
     cancelledBy: string | null;
