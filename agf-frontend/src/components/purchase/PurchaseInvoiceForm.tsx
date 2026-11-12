@@ -18,7 +18,7 @@ import { createPurchaseInvoice } from '../../services/purchaseInvoiceService';
 import type { ProductOption } from '../../types/referenceData';
 import type { CostArticle } from '../../types/costArticle';
 import { costArticleGroup, itemValue, pickedItem } from '../../lib/costArticles';
-import type { PurchaseInvoice, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../../types/purchaseInvoice';
+import type { OrderPriceDecision, PurchaseInvoice, PurchaseInvoiceSettings, PurchaseOptionalField, PurchaseVendor } from '../../types/purchaseInvoice';
 import NumberEcho from '../shared/NumberEcho';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import UnitSelect from '../shared/UnitSelect';
@@ -34,6 +34,10 @@ import CurrencyField from '../shared/CurrencyField';
 import ExchangeRatePreview from './ExchangeRatePreview';
 import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
 import { problemsByField } from '../../lib/aiProposal';
+import { addOrderLines, linkCheck } from '../../lib/invoiceOrderLink';
+import { listInvoiceCandidates } from '../../services/purchaseOrderService';
+import type { InvoiceCandidate } from '../../types/purchaseOrder';
+import { InvoiceOrderLineInfo, InvoiceOrderPicker, InvoicePriceQuestion } from './InvoiceOrderLink';
 import type { AiExtraction } from '../../types/aiReading';
 
 // Een AI-voorstel in het formulier (stap 7a): de lezing, de bevestigde inkooporder en Afwijzen / Handmatig verder. Opslaan heet dan
@@ -93,6 +97,9 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     const [activeLine, setActiveLine] = useState<string | null>(null);
     // Laatst opgeslagen document bij "Opslaan en nieuw": korte bevestiging boven het lege formulier.
     const [lastSaved, setLastSaved] = useState<{ invoice: PurchaseInvoice; replayed: boolean } | null>(null);
+    // Koppelen aan de bon (stap 4b): de vraag bij een prijsverschil of te veel gefactureerd, eenmaal per opslaan; open zolang er niets verandert.
+    const [question, setQuestion] = useState<'save' | 'saveAndNew' | null>(null);
+    const [linkError, setLinkError] = useState(false);
     const inFlight = useRef(false);
     const vendorInput = useRef<HTMLInputElement | null>(null);
     const itemInputs = useRef(new Map<string, HTMLInputElement>());
@@ -148,6 +155,22 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
         setDraft(next);
         setErrors({});
         setServerError(null);
+        setQuestion(null);
+    };
+    // De open regels van een order van deze leverancier als factuurregels, met de prijs op de bon.
+    const addOrder = (order: InvoiceCandidate) => update(addOrderLines(draft, order, settings.defaultVatPercentage));
+    // "Hoort bij order …" (factuurnummer al op een order): de regels van die order echt overnemen, zodat de koppeling wordt opgeslagen.
+    const takeOrder = (orderId: number) => {
+        if (locked || draft.header.vendorId === '') return;
+        setLinkError(false);
+        listInvoiceCandidates(Number(draft.header.vendorId), '', orderId)
+            .then((found) => {
+                if (!found[0]) { setLinkError(true); return; }
+                setDraft((current) => addOrderLines(current, found[0], settings.defaultVatPercentage));
+                setErrors({});
+                setQuestion(null);
+            })
+            .catch(() => setLinkError(true));
     };
     const updateHeader = (field: 'invoiceNumber' | 'internalNote', value: string) => update({ ...draft, header: { ...draft.header, [field]: value } });
     const updateExtra = (field: PurchaseOptionalField, value: string) => update({ ...draft, header: { ...draft.header, extra: { ...draft.header.extra, [field]: value } } });
@@ -164,7 +187,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
         if (locked) return;
         const source = draft.lines.find((line) => line.key === key);
         if (!source) return;
-        const copy = { ...source, key: newLineKey() };
+        // Een kopie factureert geen orderregel: één factuurregel per orderregel.
+        const copy = { ...source, key: newLineKey(), orderLine: undefined };
         const index = draft.lines.indexOf(source) + 1;
         focusLine.current = copy.key;
         update({ ...draft, lines: [...draft.lines.slice(0, index), copy, ...draft.lines.slice(index)] });
@@ -193,7 +217,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
         setTimeout(() => vendorInput.current?.focus(), 0);
     };
 
-    const submit = async (mode: 'save' | 'saveAndNew') => {
+    const submit = async (mode: 'save' | 'saveAndNew', answer?: { decision: OrderPriceDecision | null }) => {
         if (inFlight.current || busy || result !== null) return;
         let command = pending;
         if (command === null) {
@@ -204,11 +228,22 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 focusFirstError(grouped);
                 return;
             }
+            // Verschil met de bon of meer dan besteld/ontvangen: eerst de vraag, eenmaal per opslaan; nooit stilletjes.
+            const check = linkCheck(draft);
+            if (check.needsQuestion && answer === undefined) {
+                setQuestion(mode);
+                return;
+            }
+            setQuestion(null);
+            const linkPart = {
+                ...(answer?.decision ? { orderPriceDecision: answer.decision } : {}),
+                ...(check.over.length > 0 ? { acceptOverInvoicing: true } : {}),
+            };
             const requestId = newRequestId();
             // De orderkoppeling gaat alleen mee als de order bij de gekozen leverancier hoort (de banner haalt hem anders al weg).
             const linkedOrder = ai?.extraction.matches?.orderCandidates.find((order) => order.id === ai.linkOrderId) ?? null;
             const aiPart = ai === null ? {} : { aiExtractionId: ai.extraction.id, linkPurchaseOrderId: linkedOrder !== null && String(linkedOrder.vendorId) === draft.header.vendorId ? linkedOrder.id : null };
-            command = { requestId, payload: { requestId, ...built.value, ...aiPart }, mode, attempts: 0, lastError: null, frozenAt: new Date().toISOString() };
+            command = { requestId, payload: { requestId, ...built.value, ...aiPart, ...linkPart }, mode, attempts: 0, lastError: null, frozenAt: new Date().toISOString() };
             savePending(command);
             setPending(command);
         }
@@ -388,7 +423,9 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} data-tour="pinvoice-number" value={draft.header.invoiceNumber} maxLength={100} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} className={inputClass} />
                     <FieldError id="invoiceNumber" messages={e('invoiceNumber')} />
                     <AiFieldHint codes={aiProblems.invoiceNumber} />
-                    <InvoiceOrderNotice invoiceNumber={draft.header.invoiceNumber} vendorId={draft.header.vendorId === '' ? null : Number(draft.header.vendorId)} />
+                    <InvoiceOrderNotice invoiceNumber={draft.header.invoiceNumber} vendorId={draft.header.vendorId === '' ? null : Number(draft.header.vendorId)}
+                        onUseOrder={locked || draft.header.vendorId === '' ? undefined : takeOrder} />
+                    {linkError && <p role="alert" className="mt-1 text-xs text-red-800">{t('invoice_link_load_failed')}</p>}
                 </div>
                 <div className={aiFieldClass(aiProblems.invoiceDate)}>
                     <label htmlFor="invoiceDate-input" className="text-xs font-medium text-gray-700">{t('invoice_date')} *</label>
@@ -453,6 +490,9 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 </section>
             )}
 
+            {/* Koppelen aan de bon (stap 4b): de open orders van deze leverancier */}
+            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} />}
+
             {/* Regels */}
             <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -482,7 +522,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                 <tr key={line.key} data-line-key={line.key} className="align-top" onKeyDown={(event) => onLineKeyDown(event, line)} onFocusCapture={() => setActiveLine(line.key)}>
                                     <td className={`w-80 px-2 py-1.5 ${aiFieldClass(aiLine('item'))}`}>
                                         <ProductVariantPicker id={`${prefix}.item`} dataTour={`pinvoice-line-item-${index}`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={pickerProducts} value={itemValue(line)}
-                                            allowFreeText freeText={line.description} disabled={locked} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`) || !!e(`${prefix}.costArticleId`)}
+                                            allowFreeText freeText={line.description} disabled={locked || line.orderLine !== undefined} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`) || !!e(`${prefix}.costArticleId`)}
                                             describedBy={e(`${prefix}.description`) ? `${prefix}.description` : undefined}
                                             inputRef={(element) => { if (element) itemInputs.current.set(line.key, element); else itemInputs.current.delete(line.key); }}
                                             onChange={(variantId) => {
@@ -502,6 +542,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                         {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t(costArticles.find((article) => String(article.id) === line.costArticleId)?.kind === 'Packaging' ? 'packaging_line_hint' : 'cost_article_line_hint')}</span>}
                                         <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`) ?? e(`${prefix}.costArticleId`)} />
                                         <AiFieldHint codes={aiLine('item')} />
+                                        <InvoiceOrderLineInfo line={line} prefix={prefix} currency={draft.header.currency} />
+                                        <FieldError id={`${prefix}.supplyCommitmentLineId`} messages={e(`${prefix}.supplyCommitmentLineId`)} />
                                         {/* Voorstel van een kostenartikel: nooit automatisch, de gebruiker neemt het over. */}
                                         {suggestedCost && !line.costArticleId && line.productVariantId === '' && (
                                             <span className="block text-xs text-blue-900" data-testid={`${prefix}.ai-cost`}>
@@ -518,7 +560,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                         <AiFieldHint codes={aiLine('quantity')} />
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
-                                        <UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked} emptyLabel="–" className="mt-1 w-full"
+                                        <UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked || line.orderLine !== undefined} emptyLabel="–" className="mt-1 w-full"
                                             onChange={(unit) => updateLine(line.key, { unit })} />
                                     </td>
                                     <td className={`w-28 px-2 py-1.5 ${aiFieldClass(aiLine('unitPrice'))}`}>
@@ -574,6 +616,12 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 <dd className="col-span-2"><AiFieldHint codes={[...new Set([...(aiProblems.totalNet ?? []), ...(aiProblems.totalVat ?? []), ...(aiProblems.totalGross ?? [])])]} /></dd>
             </dl>
             </div>
+
+            {question !== null && (
+                <InvoicePriceQuestion check={linkCheck(draft)} currency={draft.header.currency}
+                    onAnswer={(decision) => void submit(question, { decision })} onCancel={() => setQuestion(null)} />
+            )}
+            <FieldError id="orderPriceDecision" messages={e('orderPriceDecision')} />
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
                 <button type="submit" className={primaryButtonClass} disabled={busy || (locked && !unknown)} data-tour="pinvoice-save">{submitting ? t('supply_saving') : t(ai !== null ? 'ai_approve' : 'purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
