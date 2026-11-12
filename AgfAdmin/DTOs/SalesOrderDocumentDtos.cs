@@ -32,6 +32,9 @@ namespace AgfAdmin.DTOs
         public string LicensePlate { get; set; }
         // Er is een nieuwere versie van de laadbon dan de eerste en die is nog niet doorgegeven of verstuurd.
         public bool NeedsResend { get; set; }
+        // Hetzelfde voor de transportopdracht (documenten deel 2), en of er transport is ingevuld (zonder transport geen opdracht).
+        public bool TransportOrderNeedsResend { get; set; }
+        public bool HasTransport { get; set; }
         public List<SalesOrderDocumentDto> Documents { get; set; } = new();
     }
 

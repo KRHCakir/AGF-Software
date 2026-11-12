@@ -65,7 +65,7 @@ namespace AgfAdmin.Services
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
         // Voor de vingerafdruk zonder lege velden: komt er later een veld bij de bon, dan geeft een bestaande bon zonder dat veld dezelfde
         // vingerafdruk en dus geen onterechte nieuwe versie. Niet meer wijzigen zodra er laadbonnen bewaard zijn.
-        private static readonly JsonSerializerOptions HashJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+        internal static readonly JsonSerializerOptions HashJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
         // De order moet geladen zijn met klant, verkoop-partij, regels (artikel, product, reserveringen met pallet, partij en de leverancier
         // van de inkooporder) en emballage (kostenartikel).
@@ -120,14 +120,14 @@ namespace AgfAdmin.Services
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot, HashJson)))).ToLowerInvariant();
 
         // Op de seconde en als UTC: een datum uit de database (zonder Kind, met minder precisie) geeft zo dezelfde bon en dus geen nieuwe versie.
-        private static DateTime Second(DateTime value) =>
+        internal static DateTime Second(DateTime value) =>
             DateTime.SpecifyKind(new DateTime(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
 
         // De inhoud van het logo (base64) gaat mee in de snapshot, zodat een oude versie niet verandert als het bestand wordt vervangen of verdwijnt.
-        private static string LogoImageOf(string path) =>
+        internal static string LogoImageOf(string path) =>
             !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? Convert.ToBase64String(File.ReadAllBytes(path)) : null;
 
-        private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        internal static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         private static string Join(string vendor, string lot) =>
             (Blank(vendor), Blank(lot)) switch { (null, null) => null, (var v, null) => v, (null, var l) => l, (var v, var l) => $"{v} · {l}" };
     }
