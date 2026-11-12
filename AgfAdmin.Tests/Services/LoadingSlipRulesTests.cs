@@ -56,6 +56,30 @@ public class LoadingSlipRulesTests : IDisposable
         Assert.Equal("LB-2026-0012", SalesOrderDocumentRules.Number("VO-2026-0012"));
     }
 
+    [Fact]
+    public async Task A_physical_reservation_shows_the_supplier_from_the_pallet_content()
+    {
+        var seed = await SalesTestData.SeedAsync(_factory);
+        var (orderId, boxLineId, _) = await SalesTestData.SeedOrderAsync(_factory, seed, 40m, 10m);
+        await using (var db = _factory.CreateContext())
+        {
+            var sourceId = await SalesTestData.SupplyLineOfAsync(db, seed.ApprovedBox);
+            db.Add(new StockReservation
+            {
+                RequestId = Guid.NewGuid(), SalesOrderLineId = boxLineId, PalletContentLineId = seed.ApprovedBox, SupplyCommitmentLineId = sourceId,
+                Quantity = 40m, Unit = "box", NetWeightKg = 160m, Source = "Physical", Status = "Active"
+            });
+            await db.SaveChangesAsync();
+        }
+        await using var read = _factory.CreateContext();
+        // Alleen de palletinhoud is geladen, niet de bronregel van de reservering zelf.
+        var order = await read.SalesOrders.Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
+            .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
+            .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product).AsSplitQuery().SingleAsync(o => o.Id == orderId);
+        var slip = LoadingSlipBuilder.Build(order, new CompanySettings { CompanyName = "X", LoadingSlipShowSupplier = true });
+        Assert.Equal(("Supplier B · LOT-A", "P-WH"), (slip.Rows[0].Supplier, slip.Rows[0].PalletReference));
+    }
+
     private static SalesOrderDocument Version(int orderId, int version) => new()
     {
         SalesOrderId = orderId, Kind = SalesOrderDocumentRules.KindLoadingSlip, Number = "LB-1", Version = version, Reason = version == 1 ? "Confirmed" : "Changed",

@@ -73,7 +73,8 @@ namespace AgfAdmin.Services
                 {
                     var first = group.First();
                     var content = first.PalletContentLine;
-                    var supplyLine = first.SupplyCommitmentLine;
+                    // Bij een fysieke reservering komt de herkomst ook via de palletinhoud (zelfde bronregel als de reservering, guardregel 1).
+                    var supplyLine = first.SupplyCommitmentLine ?? content?.SupplyCommitmentLine;
                     var quantity = group.Sum(r => r.Quantity);
                     var kg = group.All(r => r.NetWeightKg != null) ? group.Sum(r => r.NetWeightKg.Value) : Share(quantity);
                     var lot = content?.Partij?.Number ?? Blank(content?.LotNumber) ?? supplyLine?.Partij?.Number ?? supplyLine?.SupplyCommitment?.Partij?.Number;
