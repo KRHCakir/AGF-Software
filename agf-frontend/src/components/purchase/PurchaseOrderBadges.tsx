@@ -34,3 +34,15 @@ export function InvoiceIndicatorBadge({ indicator }: { indicator: string }) {
         : indicator === 'Received' ? 'border-green-300 bg-green-50 text-green-900' : 'border-gray-200 bg-white text-gray-600';
     return <span className={`${badge} ${style}`}>{key ? t(key) : indicator}</span>;
 }
+
+// Documentstatus (stap 4a): Open = aanpasbaar (rustig), Definitief = alleen nog corrigeren (valt op).
+export function DocumentStatusBadge({ status }: { status: string | undefined }) {
+    const { t } = useTranslation();
+    const definitive = status === 'Definitive';
+    return (
+        <span className={`${badge} ${definitive ? 'border-slate-500 bg-slate-700 text-white' : 'border-sky-300 bg-sky-50 text-sky-900'}`}
+            data-tour="po-document-status" data-tour-key={definitive ? 'Definitive' : 'Open'}>
+            {t(definitive ? 'po_document_definitive' : 'po_document_open')}
+        </span>
+    );
+}

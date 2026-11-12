@@ -1,7 +1,10 @@
-import { ApiError, getJson, postJson } from './apiClient';
+import { ApiError, getJson, postJson, putJson } from './apiClient';
 import type { SaveResult } from './supplyService';
 import {
     AddInvoiceRefRequest,
+    CorrectPurchaseOrderRequest,
+    FinalizePurchaseOrderRequest,
+    UpdatePurchaseOrderRequest,
     PurchaseOrderDetail,
     PurchaseOrderInvoiceMatch,
     PurchaseOrderList,
@@ -25,6 +28,8 @@ export interface PurchaseOrderQuery {
     pageSize: number;
     // Filter "Ordernummer leverancier" (deel van het nummer, zonder spaties en streepjes vergeleken).
     supplierReference?: string;
+    // Documentstatus: leeg = alle, anders Open of Definitive.
+    document?: string;
 }
 
 export async function listPurchaseOrders(query: PurchaseOrderQuery, signal?: AbortSignal): Promise<PurchaseOrderList> {
@@ -32,6 +37,7 @@ export async function listPurchaseOrders(query: PurchaseOrderQuery, signal?: Abo
     if (query.query.trim() !== '') params.set('query', query.query.trim());
     if (query.vendorId !== null) params.set('vendorId', String(query.vendorId));
     if ((query.supplierReference ?? '').trim() !== '') params.set('supplierReference', query.supplierReference!.trim());
+    if ((query.document ?? '') !== '') params.set('document', query.document!);
     const json = await getJson(`/purchase-orders?${params.toString()}`, signal);
     if (!isPurchaseOrderList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de inkooporders.');
     return json;
@@ -69,4 +75,23 @@ export async function rejectReceipt(orderId: number, request: RejectRequest, sig
     const { status, json } = await postJson(`/purchase-orders/${orderId}/rejections`, request, signal);
     if (!isPurchaseOrderDetail(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het afkeuren.');
     return { value: json, replayed: status === 200 };
+}
+
+// Aanpassen zolang de order Open is (stap 4a). 200 met de order; 409 met code (stale, definitive, notEditable) en 400 met veldfouten.
+export async function updatePurchaseOrder(orderId: number, request: UpdatePurchaseOrderRequest, signal?: AbortSignal): Promise<PurchaseOrderDetail> {
+    const { json } = await putJson(`/purchase-orders/${orderId}`, request, signal);
+    if (!isPurchaseOrderDetail(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het aanpassen van de inkooporder.');
+    return json;
+}
+
+export async function finalizePurchaseOrder(orderId: number, request: FinalizePurchaseOrderRequest, signal?: AbortSignal): Promise<PurchaseOrderDetail> {
+    const { json } = await postJson(`/purchase-orders/${orderId}/finalize`, request, signal);
+    if (!isPurchaseOrderDetail(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het definitief maken van de inkooporder.');
+    return json;
+}
+
+export async function correctPurchaseOrder(orderId: number, request: CorrectPurchaseOrderRequest, signal?: AbortSignal): Promise<PurchaseOrderDetail> {
+    const { json } = await postJson(`/purchase-orders/${orderId}/corrections`, request, signal);
+    if (!isPurchaseOrderDetail(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de correctie van de inkooporder.');
+    return json;
 }
