@@ -62,3 +62,9 @@ export function isSalesOrderTransport(value: unknown): value is SalesOrderTransp
         && isNullableString(value.defaultUnloadingReference) && isNullableString(value.defaultPalletKind)
         && isNumber(value.version) && typeof value.hasTransportOrder === 'boolean';
 }
+
+export interface TransportOrderSettings { language: 'en' | 'nl'; palletKind: string }
+
+export function isTransportOrderSettings(value: unknown): value is TransportOrderSettings {
+    return isObject(value) && (value.language === 'en' || value.language === 'nl') && isString(value.palletKind);
+}

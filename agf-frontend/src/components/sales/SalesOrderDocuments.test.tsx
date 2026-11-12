@@ -6,6 +6,7 @@ import { Mounted, json, setValue } from '../../test/reactHarness.ts';
 import type { SalesOrder } from '../../types/salesOrder';
 import type { SalesOrderDocuments as Documents } from '../../types/salesOrderDocument';
 import LoadingSlipSetting from '../settings/LoadingSlipSetting';
+import TransportOrderSetting from '../settings/TransportOrderSetting';
 import SalesOrderDocuments, { inputFromLoadAt, loadAtFromInput } from './SalesOrderDocuments';
 
 // Documenten deel 1 op de verkooporder: Bevestigen (met laden op en kenteken) maakt de laadbon; Bekijken, Downloaden en Afdrukken halen de
@@ -116,6 +117,26 @@ describe('sales order documents (loading slip)', () => {
         assert.equal($('[data-testid="so-loading-form"]'), null);
     });
 
+    test('the transport order sits next to the loading slip; without transport the block says how to get one', async () => {
+        answer = () => json(200, confirmed(1, { hasTransport: false }));
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} />);
+        await settle();
+        assert.ok($('[data-testid="so-transport-order-missing"]')!.textContent!.includes('so_transport_order_missing'));
+        const transportOrder = (version: number, latest: boolean) => slip(version, { id: 200 + version, kind: 'TransportOrder', number: 'TO-2026-0012', latest });
+        answer = () => json(200, confirmed(1, { hasTransport: true, transportOrderNeedsResend: true, documents: [slip(1, { latest: true }), transportOrder(2, true), transportOrder(1, false)] }));
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} reloadKey={1} />);
+        await settle();
+        assert.equal($('[data-testid="so-transport-order-missing"]'), null);
+        assert.ok($('[data-testid="so-transport-order-latest"]')!.textContent!.includes('so_transport_order_name'));
+        assert.ok($('[data-testid="so-slip-latest"]'), 'the loading slip stays');
+        assert.equal($('[data-testid="so-slip-changed"]'), null, 'the loading slip itself did not change');
+        assert.ok($('[data-testid="so-transport-order-changed"]'));
+        answer = () => json(200, confirmed(1, { hasTransport: true, transportOrderNeedsResend: false, documents: [slip(1, { latest: true }), transportOrder(2, true), transportOrder(1, false)] }));
+        await act(async () => { $('[data-tour="so-transport-order-sent"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="so-transport-order-changed"]') === null, 'notice gone');
+        assert.ok(calls.some((call) => call.method === 'POST' && call.url.endsWith('/sales-orders/12/documents/202/sent')));
+    });
+
     test('a blocked pop-up says so instead of silently doing nothing', async () => {
         answer = () => json(200, confirmed());
         const originalOpen = window.open;
@@ -178,5 +199,19 @@ describe('sales order documents (loading slip)', () => {
         await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
         await mounted.waitFor(() => calls.filter((call) => call.method === 'PUT').length === 2, 'saved again');
         assert.equal(JSON.parse(calls.filter((call) => call.method === 'PUT')[1].body!).warehouseAddress, 'Loods 2, Industrieweg 10, Barendrecht');
+    });
+
+    test('the transport order settings load (language and pallet kind) and save trimmed', async () => {
+        answer = (method) => json(200, method === 'PUT' ? { language: 'nl', palletKind: 'Europallet + Corners' } : { language: 'en', palletKind: 'Europallet' });
+        await mounted.render(<TransportOrderSetting />);
+        await settle();
+        assert.ok(calls[0].url.endsWith('/settings/transport-order'));
+        const kind = mounted.container.querySelector<HTMLInputElement>('#transport-order-pallet-kind')!;
+        assert.equal(kind.value, 'Europallet');
+        await act(async () => { const select = mounted.container.querySelector<HTMLSelectElement>('#transport-order-language')!; select.value = 'nl'; select.dispatchEvent(new window.Event('change', { bubbles: true })); });
+        await act(async () => { setValue(kind, ' Europallet + Corners '); });
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => mounted.hasText('loading_slip_saved'), 'saved');
+        assert.deepEqual(JSON.parse(calls.find((call) => call.method === 'PUT')!.body!), { language: 'nl', palletKind: 'Europallet + Corners' });
     });
 });
