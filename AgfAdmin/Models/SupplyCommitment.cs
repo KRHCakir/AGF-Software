@@ -43,6 +43,17 @@ namespace AgfAdmin.Models
         // partij van de order kan later gekoppeld, herkoppeld of gecorrigeerd worden. Leeg bij orders van vóór deze kolom.
         public string RequestPartijKey { get; set; }
 
+        // Documentstatus (los van de ontvangststatus hierboven): Open = aanpasbaar, Definitive = alleen nog corrigeren met een reden.
+        // Wie, wanneer en waardoor (Manual: knop Definitief maken; Invoice: een gekoppelde factuur) staan vast zodra hij definitief is
+        // (regel 29, zie PurchaseOrderDocumentRules).
+        public string DocumentStatus { get; set; } = Services.PurchaseOrderDocumentRules.StatusOpen;
+        public DateTime? FinalizedAt { get; set; }
+        public string FinalizedBy { get; set; }
+        public string FinalizedVia { get; set; }
+        // Versie van het document: elke aanpassing, Definitief maken en correctie verhoogt hem (concurrency-token), zodat twee mensen
+        // die tegelijk dezelfde order aanpassen elkaars wijziging nooit stil overschrijven. Ontvangsten raken hem niet.
+        public int EditVersion { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
