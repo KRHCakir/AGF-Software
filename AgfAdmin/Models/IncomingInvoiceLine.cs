@@ -39,6 +39,14 @@ namespace AgfAdmin.Models
         [Column(TypeName = "decimal(18,2)")]
         public decimal VATAmount { get; set; }
 
+        // Koppeling aan de orderregel (stap 4b): welke regel van welke inkooporder deze factuurregel factureert, met de prijs die op de
+        // bon stond toen de factuur werd ingevoerd (het verschil met de factuur blijft zo zichtbaar, ook als de order later wordt
+        // aangepast). Leeg bij een factuurregel zonder bon (kosten, P2). Vast na opslaan (TraceabilityGuard regel 30).
+        public int? SupplyCommitmentLineId { get; set; }
+        public SupplyCommitmentLine? SupplyCommitmentLine { get; set; }
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? OrderUnitPrice { get; set; }
+
         // Versie van de verdeling over partijen (PartijCost): bij elke wijziging +1, concurrency-token, zodat twee gelijktijdige
         // herverdelingen nooit stil over elkaar heen gaan.
         public int AllocationVersion { get; set; }
