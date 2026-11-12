@@ -59,10 +59,12 @@ public class LoadingSlipPdfTests
     }
 
     [Fact]
-    public void Pallets_are_cut_off_at_two_decimals_never_rounded()
+    public void Pallets_have_two_decimals_like_the_order_line_never_whole_pallets()
     {
-        Assert.Equal("0,95", LoadingSlipPdf.Pallets(0.959m));
-        Assert.Equal("23,81", LoadingSlipPdf.Pallets(23.819m));
+        // Zoals de orderregel: twee decimalen, half van nul af, nooit naar hele pallets.
+        Assert.Equal("0,96", LoadingSlipPdf.Pallets(0.959m));
+        Assert.Equal("23,81", LoadingSlipPdf.Pallets(23.814m));
+        Assert.Equal("2,08", LoadingSlipPdf.Pallets(2.08m));
     }
 
     [Fact]

@@ -41,7 +41,10 @@ namespace AgfAdmin.Services
         };
 
         public static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "N0" : "#,##0.###", Dutch);
-        public static string Pallets(decimal? value) => value == null ? "–" : (Math.Truncate(value.Value * 100m) / 100m).ToString("N2", Dutch);
+        // Twee decimalen, nooit naar hele pallets ("niet afgerond": 2,08 blijft 2,08). Bewust dezelfde berekening als de orderregel
+        // (PurchaseLineMath.Round2), zodat de laadbon hetzelfde aantal pallets toont als de order zelf; afkappen zou 0,96 op de order en 0,95
+        // op de bon geven.
+        public static string Pallets(decimal? value) => value == null ? "–" : PurchaseLineMath.Round2(value.Value).ToString("N2", Dutch);
         public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.#", Dutch);
 
         private static string LocalTime(DateTime utc, bool withTime) =>
