@@ -527,10 +527,11 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                         <FieldError id={`${prefix}.unitPrice`} messages={e(`${prefix}.unitPrice`)} />
                                         <AiFieldHint codes={aiLine('unitPrice')} />
                                     </td>
-                                    <td className="w-20 px-2 py-1.5">
+                                    <td className={`w-20 px-2 py-1.5 ${aiFieldClass(aiLine('discountPercentage'))}`}>
                                         <label htmlFor={`${prefix}.discountPercentage-input`} className="sr-only">{t('purchase_col_discount')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.discountPercentage`, e(`${prefix}.discountPercentage`))} inputMode="decimal" value={line.discount} disabled={locked} onChange={(event) => updateLine(line.key, { discount: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.discountPercentage`} messages={e(`${prefix}.discountPercentage`)} />
+                                        <AiFieldHint codes={aiLine('discountPercentage')} />
                                     </td>
                                     <td className={`w-20 px-2 py-1.5 ${aiFieldClass(aiLine('vatPercentage'))}`}>
                                         <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{t('purchase_col_vat')} {index + 1}</label>

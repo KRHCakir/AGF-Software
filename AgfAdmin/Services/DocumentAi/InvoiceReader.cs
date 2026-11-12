@@ -36,7 +36,7 @@ namespace AgfAdmin.Services.DocumentAi
             }
         }
 
-        public IDocumentAI Create(string model) => Demo ? new DemoInvoiceAi() : new ClaudeDocumentAi(model, Key, ExtractionSchema.Build(supplierIds: true));
+        public IDocumentAI Create(string model) => Demo ? new DemoInvoiceAi() : new ClaudeDocumentAi(model, Key, ExtractionSchema.Build(SchemaParts.Admin));
     }
 
     public sealed record ReadAttempt(string Model, string ModelVersion, long InputTokens, long OutputTokens, decimal InputPerMillionUsd,
@@ -60,7 +60,7 @@ namespace AgfAdmin.Services.DocumentAi
 
         public async Task<ReadResult> ReadAsync(DocumentInput document, string companyName, CancellationToken cancellationToken)
         {
-            var instruction = ExtractionSchema.InstructionFor(companyName) + ExtractionSchema.SupplierIdInstruction;
+            var instruction = ExtractionSchema.InstructionFor(companyName) + ExtractionSchema.SupplierIdInstruction + ExtractionSchema.DiscountInstruction;
             var attempts = new List<ReadAttempt>();
             // De nagebootste lezer (tests en rondleiding) leest alleen zichzelf: geen vangnet, en de lezing heet zoals ze is.
             var demo = factory.Provider == DocumentAiOptions.ReaderDemo;
@@ -105,7 +105,7 @@ namespace AgfAdmin.Services.DocumentAi
             try
             {
                 var response = await factory.Create(model).ExtractAsync(document, instruction, timeout.Token);
-                var proposal = ExtractionSchema.Validate(response.Text, supplierIds: true, out var error);
+                var proposal = ExtractionSchema.Validate(response.Text, SchemaParts.Admin, out var error);
                 Record(response.ModelVersion, response.InputTokens, response.OutputTokens, proposal == null ? "invalid" : "ok");
                 // Alleen de soort fout in het logboek, nooit de inhoud van het document of het antwoord.
                 if (proposal == null) logger.LogWarning("AI-lezing met {Model}: ongeldige uitvoer ({Reason}).", model, error?.Split(':')[0]);

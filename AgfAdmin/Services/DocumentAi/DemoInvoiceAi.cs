@@ -34,6 +34,7 @@ namespace AgfAdmin.Services.DocumentAi
                 ["totaal_excl"] = 160.00m,
                 ["btw_totaal"] = 18.60m,
                 ["totaal_incl"] = 178.60m,
+                ["korting_totaal"] = 0m,
                 ["leverancier_btw"] = "",
                 ["leverancier_kvk"] = "",
                 ["leverancier_iban"] = "",
@@ -45,7 +46,7 @@ namespace AgfAdmin.Services.DocumentAi
         private static JsonObject Line(string description, decimal quantity, string unit, decimal price, decimal vat) => new()
         {
             ["omschrijving"] = description, ["aantal"] = quantity, ["eenheid"] = unit, ["kg_netto"] = null, ["kg_bruto"] = null,
-            ["prijs"] = price, ["bedrag"] = quantity * price, ["btw_percentage"] = vat,
+            ["prijs"] = price, ["bedrag"] = quantity * price, ["btw_percentage"] = vat, ["korting_percentage"] = 0m,
         };
     }
 }

@@ -29,7 +29,9 @@ export function draftFromProposal(extraction: AiExtraction, settings: PurchaseIn
         unit: (line.unit !== null && PACKAGE_UNITS.includes(line.unit) ? line.unit : '') as PackageUnit | '',
         // Een prijs met meer dan twee decimalen blijft zichtbaar zoals gelezen; opslaan vraagt dan om afronden.
         unitPrice: line.unitPrice === null ? '' : Number.isInteger(Math.round(line.unitPrice * 10000) / 100) ? formatAmountInput(line.unitPrice) : formatDecimalInput(line.unitPrice, 4),
-        discount: '0',
+        // De korting zoals de server hem voor het formulier bepaalde (met een verdeelde korting op het totaal); meer dan twee decimalen blijft
+        // zichtbaar zoals gelezen, net als bij de prijs.
+        discount: formatDecimalInput(line.discountPercentage, 4),
         vat: line.vatPercentage === null ? '' : formatDecimalInput(line.vatPercentage, 2),
     }));
     return { ...draft, lines: lines.length === 0 ? draft.lines : lines };
@@ -48,7 +50,7 @@ export function problemsByField(extraction: AiExtraction | null): Record<string,
 }
 
 // Klopt het voorstel nog niet helemaal (een controle die het vangnet liet lezen staat nog open)? Dan een gele waarschuwing bovenaan.
-const SERIOUS = new Set(['linesMismatch', 'vatMismatch', 'grossMismatch', 'invalidDate']);
+const SERIOUS = new Set(['linesMismatch', 'vatMismatch', 'grossMismatch', 'invalidDate', 'discountNotSpread']);
 export function needsAttention(extraction: AiExtraction): boolean {
     return extraction.problems.some((problem) => SERIOUS.has(problem.code) || (problem.code === 'missing' && ['vendor', 'invoiceNumber', 'invoiceDate', 'totalNet', 'totalGross', 'lines'].includes(problem.field)));
 }

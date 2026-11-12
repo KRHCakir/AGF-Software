@@ -26,10 +26,10 @@ const extraction: AiExtraction = {
         vendorName: 'Fruitimport Zuid B.V.', vendorVatNumber: null, vendorRegistrationNumber: null, vendorIban: 'NL91ABNA0417164300', supplierOrderNumber: '45-21',
         invoiceNumber: 'F-2026-118', invoiceDate: '2026-11-10', currency: 'EUR',
         lines: [
-            { description: 'Avocado Hass 4 kg', quantity: 1250, unitText: 'dozen', unit: 'box', unitPrice: 12.5, amount: 15625, vatPercentage: 9 },
-            { description: 'Transport', quantity: 1, unitText: null, unit: null, unitPrice: 35, amount: 35, vatPercentage: 21 },
+            { description: 'Avocado Hass 4 kg', quantity: 1250, unitText: 'dozen', unit: 'box', unitPrice: 12.5, amount: 15625, vatPercentage: 9, discountPercentage: 0 },
+            { description: 'Transport', quantity: 1, unitText: null, unit: null, unitPrice: 35, amount: 35, vatPercentage: 21, discountPercentage: 0 },
         ],
-        totalNet: 15660, totalVat: 1413.6, totalGross: 17073.6,
+        totalNet: 15660, totalVat: 1413.6, totalGross: 17073.6, documentDiscount: null, documentDiscountPercentage: null,
     },
     problems: [{ field: 'invoiceDate', code: 'uncertain' }],
     matches: {

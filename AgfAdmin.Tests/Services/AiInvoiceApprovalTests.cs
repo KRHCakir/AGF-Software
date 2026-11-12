@@ -272,6 +272,22 @@ public class AiInvoiceApprovalTests : IDisposable
         Assert.DoesNotContain(none, a => a.Field == "lines[0].costArticleId");
     }
 
+    [Fact]
+    public void A_discount_the_user_changes_is_recorded_as_adjustment_an_unchanged_one_is_not()
+    {
+        var proposal = new AiInvoiceProposalDto { InvoiceNumber = "F-1", Lines = new() { new AiInvoiceLineProposalDto { Description = "Komkommers", Quantity = 180, UnitPrice = 7.60m, VatPercentage = 9, DiscountPercentage = 7.85m } } };
+        var matches = new AiMatchesDto { SuggestedVendorId = 5 };
+        CreatePurchaseInvoiceDto Request(decimal? discount) => new()
+        {
+            VendorId = 5, InvoiceNumber = "F-1",
+            Lines = new() { new CreatePurchaseInvoiceLineDto { Description = "Komkommers", Quantity = 180, UnitPrice = 7.60m, VatPercentage = 9, DiscountPercentage = discount } },
+        };
+
+        Assert.DoesNotContain(AiInvoiceApproval.Adjustments(proposal, matches, Request(7.85m), "Zuid"), a => a.Field == "lines[0].discountPercentage");
+        Assert.Contains(AiInvoiceApproval.Adjustments(proposal, matches, Request(5m), "Zuid"), a => a is { Field: "lines[0].discountPercentage", Proposed: "7.85", Final: "5" });
+        Assert.Contains(AiInvoiceApproval.Adjustments(proposal, matches, Request(null), "Zuid"), a => a is { Field: "lines[0].discountPercentage", Proposed: "7.85", Final: "0" });
+    }
+
     private sealed class AlwaysMailServer : IEmailDomainChecker
     {
         public Task<EmailDomainStatus> CheckAsync(string domain, CancellationToken cancellationToken = default) => Task.FromResult(EmailDomainStatus.HasMailServer);

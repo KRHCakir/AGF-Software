@@ -14,7 +14,7 @@ const extraction: AiExtraction = {
     model: 'claude-haiku-5-5', modelName: 'Claude Haiku 5.5', modelVersion: 'claude-haiku-5-5-20261101', usedFallback: false, costEur: 0.001,
     proposal: {
         vendorName: 'Fruitimport Zuid B.V.', vendorVatNumber: null, vendorRegistrationNumber: null, vendorIban: null, supplierOrderNumber: '45-21',
-        invoiceNumber: 'F-1', invoiceDate: '2026-11-10', currency: 'EUR', lines: [], totalNet: 10, totalVat: 0.9, totalGross: 10.9,
+        invoiceNumber: 'F-1', invoiceDate: '2026-11-10', currency: 'EUR', lines: [], totalNet: 10, totalVat: 0.9, totalGross: 10.9, documentDiscount: null, documentDiscountPercentage: null,
     },
     problems: [],
     matches: {
@@ -55,6 +55,24 @@ describe('AI proposal building blocks', () => {
         assert.equal($('[data-testid="ai-order-link"]'), null);
         assert.ok($('[data-testid="ai-order-none"]'));
         assert.deepEqual(links, [], 'showing never changes the link by itself');
+    });
+
+    test('a discount on the total is explained when spread over the lines, and yellow when the user must enter it', async () => {
+        const banner = (documentDiscount: number | null, documentDiscountPercentage: number | null) => (
+            <AiReviewBanner extraction={{ ...extraction, proposal: { ...extraction.proposal!, documentDiscount, documentDiscountPercentage } }} vendorId="3"
+                onVendor={() => undefined} linkOrderId={null} onLinkOrder={() => undefined} />
+        );
+        await mounted.render(banner(172.19, 3));
+        assert.ok($('[data-testid="ai-document-discount"]')!.textContent!.includes('ai_document_discount'));
+        assert.equal($('[data-testid="ai-document-discount-manual"]'), null);
+
+        await mounted.render(banner(50, null));
+        assert.ok($('[data-testid="ai-document-discount-manual"]')!.textContent!.includes('ai_document_discount_manual'));
+        assert.equal($('[data-testid="ai-document-discount"]'), null);
+
+        await mounted.render(banner(null, null));
+        assert.equal($('[data-testid="ai-document-discount"]'), null);
+        assert.equal($('[data-testid="ai-document-discount-manual"]'), null, 'no discount, no notice');
     });
 
     test('with only Haiku the panel names one model and no fallback', async () => {

@@ -336,7 +336,18 @@ namespace AgfAdmin.Services.DocumentAi
             };
         }
 
-        public static AiInvoiceProposalDto ToProposal(JsonObject proposal) => new()
+        public static AiInvoiceProposalDto ToProposal(JsonObject proposal)
+        {
+            var (discounts, documentPercentage) = AiReadingRules.FormDiscounts(proposal);
+            var dto = ToProposalWithoutDiscounts(proposal);
+            for (var i = 0; i < dto.Lines.Count && i < discounts.Count; i++) dto.Lines[i].DiscountPercentage = discounts[i];
+            var documentDiscount = AiReadingRules.DocumentDiscount(proposal);
+            dto.DocumentDiscount = documentDiscount > 0m ? documentDiscount : null;
+            dto.DocumentDiscountPercentage = documentPercentage;
+            return dto;
+        }
+
+        private static AiInvoiceProposalDto ToProposalWithoutDiscounts(JsonObject proposal) => new()
         {
             VendorName = AiReadingRules.Text(proposal["leverancier"]),
             VendorVatNumber = AiReadingRules.Text(proposal["leverancier_btw"]),

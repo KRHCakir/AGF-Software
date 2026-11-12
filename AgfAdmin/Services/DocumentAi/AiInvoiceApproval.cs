@@ -118,6 +118,7 @@ namespace AgfAdmin.Services.DocumentAi
                 Compare($"lines[{i}].unit", proposed.Unit, final.Unit);
                 Compare($"lines[{i}].unitPrice", Number(proposed.UnitPrice), Number(final.UnitPrice));
                 Compare($"lines[{i}].vatPercentage", Number(proposed.VatPercentage), Number(final.VatPercentage));
+                Compare($"lines[{i}].discountPercentage", Number(proposed.DiscountPercentage), Number(final.DiscountPercentage ?? 0m));
                 // Een kostenartikel wordt alleen voorgesteld, nooit door de AI toegewezen: het voorstel heeft er dus geen. Kiest de gebruiker er een
                 // (ook het voorgestelde), dan is dat een aanpassing ten opzichte van "niet toegewezen" en blijft die traceerbaar.
                 if (final.CostArticleId != null) Compare($"lines[{i}].costArticleId", null, final.CostArticleId.Value.ToString(CultureInfo.InvariantCulture));

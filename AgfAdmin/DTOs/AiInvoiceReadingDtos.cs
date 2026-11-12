@@ -140,6 +140,10 @@ namespace AgfAdmin.DTOs
         public decimal? TotalNet { get; set; }
         public decimal? TotalVat { get; set; }
         public decimal? TotalGross { get; set; }
+        // Korting op het totaal zoals op de factuur (excl. btw); null als er geen is. Het percentage alleen als die precies over de regels
+        // verdeeld is (dan zit hij in DiscountPercentage van elke regel); anders null en vult de gebruiker de kortingen zelf in.
+        public decimal? DocumentDiscount { get; set; }
+        public decimal? DocumentDiscountPercentage { get; set; }
     }
 
     public sealed class AiInvoiceLineProposalDto
@@ -152,6 +156,8 @@ namespace AgfAdmin.DTOs
         public decimal? UnitPrice { get; set; }
         public decimal? Amount { get; set; }
         public decimal? VatPercentage { get; set; }
+        // De korting voor het formulier: die op de regel, met een verdeelde korting op het totaal erbij (AiReadingRules.FormDiscounts); 0 is geen.
+        public decimal DiscountPercentage { get; set; }
     }
 
     public sealed class AiProblemDto

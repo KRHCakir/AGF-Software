@@ -34,14 +34,36 @@ Haiku. Klopt het voorstel niet, dan toont het scherm het met gele markeringen en
 Tot 12 november las Sonnet als vangnet het document één keer extra als het voorstel niet klopte. Dat staat uit en Sonnet staat niet
 meer in de instellingen. De code kan een tweede model nog alleen gebruiken als iemand dat bewust configureert (`FallbackEnabled` op
 `true`, een `FallbackModel` en een prijs onder `Models`). Wanneer Haiku's voorstel als "niet kloppend" telt (de gele markeringen):
-- de som van de regels wijkt af van het totaal excl. btw;
-- de btw rekent niet;
+- de som van de regels, min een korting op het totaal, wijkt af van het totaal excl. btw;
+- de btw rekent niet (met een korting op het totaal over de verlaagde grondslag);
 - excl. btw plus btw is niet het totaal incl. btw;
 - een verplicht veld ontbreekt (leverancier, factuurnummer, datum, totalen of regels);
 - de AI twijfelt aan een verplicht veld;
 - de uitvoer is ongeldig.
 
 Bij elk voorstel staat welk model het las.
+
+## Kortingen
+
+Haiku leest twee kortingen apart, zoals ze op de factuur staan:
+- **korting op de regel** (`korting_percentage`, in procenten): aantal × prijs min die korting is het regelbedrag. Die gaat naar het
+  kortingveld van de regel in het formulier.
+- **korting op het totaal** (`korting_totaal`, bedrag excl. btw): de regels min die korting zijn het totaal excl. btw. Een
+  betalingskorting die pas geldt bij snel betalen telt niet; die verlaagt het totaal op de factuur niet.
+
+Het factuurformulier kent alleen een korting per regel. Een korting op het totaal gaat daarom mee in de korting van elke regel, als dat
+precies kan: de korting is een percentage met hoogstens twee decimalen van de som van de regels (3% van 5.739,60 = 172,19), en elke
+samengestelde korting heeft hoogstens twee decimalen, en de regels van het formulier (per regel afgerond) komen samen op 2 cent na uit op
+de regels min de korting. Bij 5% op de regel en 3% op het totaal is dat 100 − 95 × 97 / 100 = 7,85%. De
+blauwe balk zegt dat erbij ("Korting op het totaal: 3% (€ 172,19) …"). Doordat het formulier per regel afrondt, kan het totaal een cent
+afwijken van de factuur.
+
+Kan het niet precies (een vast bedrag zoals € 50,00, 2,5% over 5% = 7,375%, of twintig regels van € 1,05 met 10% korting, die per
+regel afgerond € 19,00 geven in plaats van € 18,90), dan blijft alleen de korting op de regel staan en
+meldt de balk in geel dat de gebruiker de korting zelf verdeelt. Dat laat geen tweede model lezen.
+
+De testbench (`AgfAiBenchmark`) leest zonder kortingen en zonder leverancierskenmerken (`SchemaParts.Base`), zodat zijn eerdere runs
+vergelijkbaar blijven.
 
 ## Wat wordt vastgelegd (`AiExtractions`)
 
