@@ -66,6 +66,21 @@ export const SALES_CORE: TourStep[] = [
         { kind: 'wait', target: 'sales-reservations' },
         { kind: 'highlight', target: 'sales-reservations' },
     ]),
+    // Transport (documenten deel 2): een vervoerder, snel aangemaakt met alleen de naam (met het kenmerk van deze rondleiding, dus altijd
+    // nieuw), de temperatuur, opslaan.
+    sales('transport', [
+        { kind: 'click', target: 'so-transport-add' },
+        { kind: 'click', target: 'so-transport-mode-carrier' },
+    ]),
+    sales('carrier', [
+        { kind: 'type', target: 'so-transport-carrier', text: '{{tourRef}} Vervoerder' },
+        { kind: 'click', target: 'so-transport-carrier-new' },
+    ]),
+    sales('transport_save', [
+        { kind: 'type', target: 'so-transport-temperature', text: '2' },
+        { kind: 'click', target: 'so-transport-save' },
+        { kind: 'wait', target: 'so-transport-edit' },
+    ]),
     // Bevestigen (documenten deel 1): het systeem maakt de laadbon voor de loods, zonder prijzen; Bekijken, Downloaden en Afdrukken.
     sales('confirm', [
         { kind: 'click', target: 'so-confirm' },
@@ -76,6 +91,11 @@ export const SALES_CORE: TourStep[] = [
     sales('slip', [
         { kind: 'highlight', target: 'so-slip' },
         { kind: 'highlight', target: 'so-slip-print' },
+    ]),
+    // De transportopdracht (deel 2), op hetzelfde moment gemaakt als de laadbon: voor de vervoerder, zonder prijzen.
+    sales('transport_order', [
+        { kind: 'wait', target: 'so-transport-order' },
+        { kind: 'highlight', target: 'so-transport-order' },
     ]),
     sales('dispatch', [
         { kind: 'click', target: 'sales-dispatch' },
