@@ -146,13 +146,13 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                     <label htmlFor="correction-reference-input" className="text-xs font-medium text-gray-700">{t('po_supplier_reference')}</label>
-                    <input {...fieldProps('correction-reference', errors.supplierReference)} value={reference} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH} className={`${inputClass} font-mono`}
+                    <input {...fieldProps('correction-reference', errors.supplierReference)} value={reference} disabled={busy} maxLength={MAX_SUPPLIER_REFERENCE_LENGTH} className={`${inputClass} font-mono`}
                         onChange={(event) => { setReference(event.target.value); edited(); }} />
                     <FieldError id="correction-reference" messages={errors.supplierReference} />
                 </div>
                 <div>
                     <label htmlFor="correction-note-input" className="text-xs font-medium text-gray-700">{t('po_note')}</label>
-                    <input {...fieldProps('correction-note', errors.note)} value={note} maxLength={MAX_NOTE_LENGTH} className={inputClass}
+                    <input {...fieldProps('correction-note', errors.note)} value={note} disabled={busy} maxLength={MAX_NOTE_LENGTH} className={inputClass}
                         onChange={(event) => { setNote(event.target.value); edited(); }} />
                     <FieldError id="correction-note" messages={errors.note} />
                 </div>
@@ -163,7 +163,7 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
                         <label htmlFor={`price-${line.id}-input`} className="min-w-0 flex-1 break-words text-gray-900">
                             {[line.productName, line.productVariantName].filter(Boolean).join(' · ')} · {t('po_change_price')}
                         </label>
-                        <input {...fieldProps(`price-${line.id}`, errors[`price-${line.id}`])} inputMode="decimal" value={prices[line.id] ?? ''} data-tour="po-correction-price" data-tour-key={line.id}
+                        <input {...fieldProps(`price-${line.id}`, errors[`price-${line.id}`])} inputMode="decimal" value={prices[line.id] ?? ''} disabled={busy} data-tour="po-correction-price" data-tour-key={line.id}
                             className={`${inputClass} !mt-0 w-28 text-right`} onChange={(event) => { setPrices((current) => ({ ...current, [line.id]: event.target.value })); edited(); }} />
                         <FieldError id={`price-${line.id}`} messages={errors[`price-${line.id}`]} />
                     </li>
@@ -171,7 +171,7 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
             </ul>
             <div>
                 <label htmlFor="correction-reason-input" className="text-xs font-medium text-gray-700">{t('po_correct_reason')}</label>
-                <textarea id="correction-reason-input" value={reason} maxLength={MAX_REASON_LENGTH} rows={2} data-tour="po-correction-reason"
+                <textarea id="correction-reason-input" value={reason} disabled={busy} maxLength={MAX_REASON_LENGTH} rows={2} data-tour="po-correction-reason"
                     aria-invalid={errors.reason ? true : undefined} aria-describedby={errors.reason ? 'correction-reason' : undefined}
                     className={inputClass} onChange={(event) => { setReason(event.target.value); edited(); }} />
                 <FieldError id="correction-reason" messages={errors.reason} />
