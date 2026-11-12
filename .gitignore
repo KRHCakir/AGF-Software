@@ -579,3 +579,6 @@ AgfAdmin/appsettings.Development.json
 agf-ai-bench/
 **/resultaten/
 **/ruw/
+
+# Documenten van AI-lezen (stap 7a): nooit in git
+AgfAdmin/App_Data/

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Anthropic;
 using Anthropic.Exceptions;
 using Anthropic.Models.Messages;
@@ -7,13 +8,14 @@ using Anthropic.Models.Messages;
 namespace AgfDocumentAi;
 
 /// <summary>
-/// Claude via de officiële Anthropic SDK, met afgedwongen schema (structured output). Herhaalpogingen doet de runner,
-/// niet de SDK, zodat elke poging en elk token meetelt. Bewust geen refusal-fallback: een testbench meet precies dit model.
+/// Claude via de officiële Anthropic SDK, met afgedwongen schema (structured output). Herhaalpogingen doet de aanroeper,
+/// niet de SDK, zodat elke poging en elk token meetelt. Bewust geen refusal-fallback: een weigering is een lege uitvoer.
+/// Zonder <paramref name="schema"/> het vaste schema van de testbench (<see cref="ExtractionSchema.Build()"/>).
 /// </summary>
-public sealed class ClaudeDocumentAi(string apiModel, string apiKey) : IDocumentAI
+public sealed class ClaudeDocumentAi(string apiModel, string apiKey, JsonObject? schema = null) : IDocumentAI
 {
-    private static readonly Dictionary<string, JsonElement> Schema =
-        ExtractionSchema.Build().ToDictionary(p => p.Key, p => JsonSerializer.SerializeToElement(p.Value));
+    private readonly Dictionary<string, JsonElement> Schema =
+        (schema ?? ExtractionSchema.Build()).ToDictionary(p => p.Key, p => JsonSerializer.SerializeToElement(p.Value));
 
     private readonly AnthropicClient client = new() { ApiKey = apiKey, MaxRetries = 0 };
 

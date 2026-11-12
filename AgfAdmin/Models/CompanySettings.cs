@@ -38,5 +38,12 @@ namespace AgfAdmin.Models
         // opnieuw tellen zijn dezelfde instelling als hierboven.
         public string SalesPartijNumberFormat { get; set; } = Services.PartijRules.DefaultSalesFormat;
         public int SalesPartijSequenceDigits { get; set; } = Services.PartijRules.DefaultSequenceDigits;
+
+        // AI-lezen van inkoopfacturen (Beheer): standaard uit. Aanzetten stuurt documenten naar een externe dienst; de beheerder bevestigt
+        // dan dat de klant daarvan op de hoogte is (wie en wanneer). Boven de maandlimiet in euro pauzeert het lezen; handmatig blijft werken.
+        public bool AiReadingEnabled { get; set; }
+        public string AiReadingEnabledBy { get; set; }
+        public DateTime? AiReadingEnabledAt { get; set; }
+        public decimal AiReadingMonthlyLimitEur { get; set; } = Services.DocumentAi.AiReadingRules.DefaultMonthlyLimitEur;
     }
 }

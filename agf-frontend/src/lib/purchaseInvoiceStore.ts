@@ -1,3 +1,4 @@
+import type { AiExtraction } from '../types/aiReading';
 import type { CreatePurchaseInvoiceRequest } from '../types/purchaseInvoice';
 import type { InvoiceDraft, LineDraft } from './purchaseInvoiceRules.ts';
 
@@ -8,6 +9,12 @@ import type { InvoiceDraft, LineDraft } from './purchaseInvoiceRules.ts';
 export const DRAFT_KEY = 'agf_purchase_invoice_draft';
 export const PENDING_KEY = 'agf_purchase_invoice_pending';
 export const EXTRA_OPEN_KEY = 'agf_purchase_invoice_extra_open';
+// Een openstaand AI-voorstel (de lezing en de bevestigde order), zodat verversen het tweedelige scherm niet sluit.
+export const AI_REVIEW_KEY = 'agf_purchase_invoice_ai_review';
+
+// lineKeys: de sleutel van de formulierregel per regel van het voorstel (zelfde volgorde). Zo blijven gele markeringen en een voorgesteld
+// kostenartikel bij hun eigen regel, ook als de gebruiker regels verwijdert, dupliceert of toevoegt.
+export interface StoredAiReview { extraction: AiExtraction; linkOrderId: number | null; lineKeys: string[] }
 
 export interface PendingSave {
     requestId: string;
@@ -81,3 +88,19 @@ export function clearPending(): void { try { storage()?.removeItem(PENDING_KEY);
 
 export function loadExtraOpen(): boolean { return storage()?.getItem(EXTRA_OPEN_KEY) === '1'; }
 export function saveExtraOpen(open: boolean): void { try { storage()?.setItem(EXTRA_OPEN_KEY, open ? '1' : '0'); } catch { /* idem */ } }
+
+export function parseAiReview(raw: string | null): StoredAiReview | null {
+    if (raw === null) return null;
+    try {
+        const value: unknown = JSON.parse(raw);
+        if (!isRecord(value) || !isRecord(value.extraction) || typeof value.extraction.id !== 'number' || !isString(value.extraction.displayMediaType)
+            || !Array.isArray(value.extraction.problems) || !(value.linkOrderId === null || typeof value.linkOrderId === 'number')) return null;
+        const lineKeys = Array.isArray(value.lineKeys) ? value.lineKeys.filter(isString) : [];
+        return { ...(value as unknown as StoredAiReview), lineKeys };
+    } catch {
+        return null;
+    }
+}
+export function loadAiReview(): StoredAiReview | null { return parseAiReview(storage()?.getItem(AI_REVIEW_KEY) ?? null); }
+export function saveAiReview(review: StoredAiReview): void { try { storage()?.setItem(AI_REVIEW_KEY, JSON.stringify(review)); } catch { /* idem */ } }
+export function clearAiReview(): void { try { storage()?.removeItem(AI_REVIEW_KEY); } catch { /* idem */ } }

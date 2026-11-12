@@ -32,6 +32,21 @@ import VendorPicker from './VendorPicker';
 import SubmitErrors from '../shared/SubmitErrors';
 import CurrencyField from '../shared/CurrencyField';
 import ExchangeRatePreview from './ExchangeRatePreview';
+import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
+import { problemsByField } from '../../lib/aiProposal';
+import type { AiExtraction } from '../../types/aiReading';
+
+// Een AI-voorstel in het formulier (stap 7a): de lezing, de bevestigde inkooporder en Afwijzen / Handmatig verder. Opslaan heet dan
+// Goedkeuren en gaat via hetzelfde opslagpad, met de lezing erbij.
+export interface AiReview {
+    extraction: AiExtraction;
+    // De formulierregel per regel van het voorstel (zie StoredAiReview); een nieuwe of gedupliceerde regel heeft geen AI-gegevens.
+    lineKeys: string[];
+    linkOrderId: number | null;
+    onLinkOrder: (orderId: number | null) => void;
+    onReject: () => void;
+    onManual: () => void;
+}
 
 // Eén compacte werkplek voor een inkoopfactuur: documentkop, direct bewerkbare regels, live totalen en een ingeklapt
 // paneel "Extra gegevens". Alles werkt zonder muis (Tab, Enter, pijltjes, sneltoetsen) en blijft ook met de muis bruikbaar.
@@ -50,13 +65,18 @@ function codeKey(code: string): string {
     return `purchase_error_${code}`;
 }
 
-export default function PurchaseInvoiceForm({ vendors, products, costArticles = [], settings, onSaved }: {
+export default function PurchaseInvoiceForm({ vendors, products, costArticles = [], settings, onSaved, ai = null, seed = null, busy = false }: {
     vendors: PurchaseVendor[];
     products: ProductOption[];
     // Kostenartikelen (type Dienst): een eigen groep "Kosten" in de artikelkeuze van elke regel.
     costArticles?: CostArticle[];
     settings: PurchaseInvoiceSettings;
     onSaved?: (invoice: PurchaseInvoice) => void;
+    ai?: AiReview | null;
+    // Een nieuw concept van buiten (een AI-voorstel, of leeg na Afwijzen): vervangt het concept zodra de sleutel verandert.
+    seed?: { key: number; draft: InvoiceDraft } | null;
+    // Buiten het formulier loopt een aanvraag (AI-voorstel afsluiten): alle acties, ook Goedkeuren, zijn dan geblokkeerd.
+    busy?: boolean;
 }) {
     const { t, locale } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
@@ -83,12 +103,30 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
         return [...products, ...groups.filter((group) => group !== null)];
     }, [products, costArticles, t]);
     const totals = useMemo(() => draftTotals(draft.lines), [draft.lines]);
-    const locked = submitting || pending !== null;
+    const aiProblems = useMemo(() => problemsByField(ai?.extraction ?? null), [ai?.extraction]);
+    const aiCost = (aiIndex: number) => (aiIndex < 0 ? null : ai?.extraction.matches?.lineCostArticles.find((cost) => cost.index === aiIndex) ?? null);
+    const locked = submitting || pending !== null || busy;
+    // Een andere leverancier kiezen haalt een orderkoppeling van een andere leverancier weg; terug naar de leverancier van de order
+    // betekent opnieuw aanvinken.
+    const chooseVendor = (chosen: PurchaseVendor | null) => {
+        update(selectVendor(draft, chosen, settings));
+        const linked = ai?.extraction.matches?.orderCandidates.find((order) => order.id === ai.linkOrderId) ?? null;
+        if (ai && linked !== null && linked.vendorId !== chosen?.id) ai.onLinkOrder(null);
+    };
     const dirty = result === null && (draft.header.vendorId !== '' || draft.header.invoiceNumber.trim() !== '' || draft.lines.some((line) => !isBlankLine(line)));
 
     // Concept bewaren bij elke wijziging; na succesvol opslaan is er geen concept meer.
     useEffect(() => { if (result === null) saveDraft(draft); }, [draft, result]);
     useEffect(() => { saveExtraOpen(extraOpen); }, [extraOpen]);
+    useEffect(() => {
+        if (seed === null) return;
+        setDraft(seed.draft);
+        setErrors({});
+        setServerError(null);
+        setResult(null);
+        setLastSaved(null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen een nieuwe sleutel vervangt het concept
+    }, [seed?.key]);
     useEffect(() => {
         if (!dirty) return;
         const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
@@ -153,7 +191,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     };
 
     const submit = async (mode: 'save' | 'saveAndNew') => {
-        if (inFlight.current || result !== null) return;
+        if (inFlight.current || busy || result !== null) return;
         let command = pending;
         if (command === null) {
             const built = buildPurchaseInvoicePayload(draft, settings);
@@ -164,7 +202,10 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 return;
             }
             const requestId = newRequestId();
-            command = { requestId, payload: { requestId, ...built.value }, mode, attempts: 0, lastError: null, frozenAt: new Date().toISOString() };
+            // De orderkoppeling gaat alleen mee als de order bij de gekozen leverancier hoort (de banner haalt hem anders al weg).
+            const linkedOrder = ai?.extraction.matches?.orderCandidates.find((order) => order.id === ai.linkOrderId) ?? null;
+            const aiPart = ai === null ? {} : { aiExtractionId: ai.extraction.id, linkPurchaseOrderId: linkedOrder !== null && String(linkedOrder.vendorId) === draft.header.vendorId ? linkedOrder.id : null };
+            command = { requestId, payload: { requestId, ...built.value, ...aiPart }, mode, attempts: 0, lastError: null, frozenAt: new Date().toISOString() };
             savePending(command);
             setPending(command);
         }
@@ -282,6 +323,11 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 <h2 className="text-lg font-semibold text-green-900">{t('purchase_saved_title', { number: result.invoice.invoiceNumber ?? '' })}</h2>
                 {result.replayed && <p className="mt-1 text-sm text-green-900">{t('supply_saved_before')}</p>}
                 <p className="mt-1 text-sm text-gray-800">{t('purchase_saved_summary', { vendor: result.invoice.vendorName ?? '', total: money(result.invoice.totalAmount), currency: result.invoice.currency ?? '', status: result.invoice.status })}</p>
+                {result.invoice.aiReading && (
+                    <p className="mt-1 text-sm text-gray-800" data-testid="pinvoice-ai-approved">
+                        {t('ai_approved_by', { name: result.invoice.aiReading.approvedBy, model: result.invoice.aiReading.modelName ?? '–' })}
+                    </p>
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                     <button type="button" className={primaryButtonClass} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
                     {/* Kosten verdelen over partijen gebeurt op de opgeslagen factuur (per regel, met historie). */}
@@ -311,16 +357,21 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             )}
             {serverError && !unknown && <ErrorNotice error={serverError} />}
             {e('lines') && <FieldError id="lines" messages={e('lines')} />}
+            {ai !== null && (
+                <AiReviewBanner extraction={ai.extraction} vendorId={draft.header.vendorId} linkOrderId={ai.linkOrderId} onLinkOrder={ai.onLinkOrder}
+                    onVendor={(id) => chooseVendor(vendors.find((candidate) => candidate.id === id) ?? null)} />
+            )}
 
             {/* Documentkop */}
             <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-gray-200 bg-white p-3 md:grid-cols-7" disabled={locked}>
                 <legend className="px-1 text-sm font-semibold text-gray-900">{t('purchase_header')}</legend>
-                <div className="col-span-2">
+                <div className={`col-span-2 ${aiFieldClass(aiProblems.vendorId)}`}>
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('purchase_vendor')} *</label>
                     <VendorPicker id="vendorId" dataTour="pinvoice-vendor" ariaLabel={t('purchase_vendor')} vendors={vendors} value={draft.header.vendorId} disabled={locked} invalid={!!e('vendorId')}
                         describedBy={e('vendorId') ? 'vendorId' : undefined} inputRef={(element) => { vendorInput.current = element; }}
-                        badge={vendorTermsBadge} onChange={(chosen) => update(selectVendor(draft, chosen, settings))} />
+                        badge={vendorTermsBadge} onChange={(chosen) => chooseVendor(chosen)} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
+                    <AiFieldHint codes={aiProblems.vendorId} />
                     {/* Betalen naar een niet-bevestigde rekening is het risico: duidelijk tonen, niet blokkeren (de factuur zelf mag erin). */}
                     {vendor?.defaultBankAccountUnconfirmed && (
                         <p role="alert" className="mt-1 rounded border-2 border-red-400 bg-red-50 px-2 py-1 text-xs font-medium text-red-950" data-testid="purchase-bank-unconfirmed">
@@ -329,16 +380,18 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     )}
                     {vendor !== null && vendor.paymentConditionBasis === 'EndOfMonth' && <span className="block text-xs text-gray-600">{t('purchase_condition_end_of_month', { code: vendor.paymentConditionCode ?? '' })}</span>}
                 </div>
-                <div>
+                <div className={aiFieldClass(aiProblems.invoiceNumber)}>
                     <label htmlFor="invoiceNumber-input" className="text-xs font-medium text-gray-700">{t('invoice_number')} *</label>
                     <input {...fieldProps('invoiceNumber', e('invoiceNumber'))} data-tour="pinvoice-number" value={draft.header.invoiceNumber} maxLength={100} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} className={inputClass} />
                     <FieldError id="invoiceNumber" messages={e('invoiceNumber')} />
+                    <AiFieldHint codes={aiProblems.invoiceNumber} />
                     <InvoiceOrderNotice invoiceNumber={draft.header.invoiceNumber} vendorId={draft.header.vendorId === '' ? null : Number(draft.header.vendorId)} />
                 </div>
-                <div>
+                <div className={aiFieldClass(aiProblems.invoiceDate)}>
                     <label htmlFor="invoiceDate-input" className="text-xs font-medium text-gray-700">{t('invoice_date')} *</label>
                     <DateField {...fieldProps('invoiceDate', e('invoiceDate'))} value={draft.header.invoiceDate} onChange={(value) => update(changeInvoiceDate(draft, value))} />
                     <FieldError id="invoiceDate" messages={e('invoiceDate')} />
+                    <AiFieldHint codes={aiProblems.invoiceDate} />
                 </div>
                 <div>
                     <label htmlFor="paymentTermsDays-input" className="text-xs font-medium text-gray-700">{t('purchase_payment_terms')} *</label>
@@ -357,13 +410,14 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     )}
                     <FieldError id="dueDate" messages={e('dueDate')} />
                 </div>
-                <div>
+                <div className={aiFieldClass(aiProblems.currency)}>
                     <label htmlFor="currency-input" className="text-xs font-medium text-gray-700">{t('purchase_currency')} *</label>
                     <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} onChange={(value) => update(changeCurrency(draft, value))} />
                     {defaultsNote('currency') && <span className="block text-xs text-gray-500">{defaultsNote('currency')}</span>}
                     <span className="block text-xs text-gray-500">{t('purchase_currency_hint')}</span>
                     <ExchangeRatePreview currency={draft.header.currency} invoiceDate={draft.header.invoiceDate} net={totals.net} />
                     <FieldError id="currency" messages={e('currency')} />
+                    <AiFieldHint codes={aiProblems.currency} />
                 </div>
             </fieldset>
 
@@ -415,10 +469,15 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <tbody className="divide-y divide-gray-100">
                         {draft.lines.map((line, index) => {
                             const prefix = `lines[${index}]`;
+                            // Markeringen en voorstellen van de AI horen bij de oorspronkelijke regel van het voorstel, niet bij de plek in het formulier.
+                            const aiIndex = ai === null ? -1 : ai.lineKeys.indexOf(line.key);
+                            const aiPrefix = `lines[${aiIndex}]`;
+                            const aiLine = (field: string) => (aiIndex < 0 ? undefined : aiProblems[`${aiPrefix}.${field}`]);
+                            const suggestedCost = aiCost(aiIndex);
                             const amounts = lineAmounts(line);
                             return (
                                 <tr key={line.key} data-line-key={line.key} className="align-top" onKeyDown={(event) => onLineKeyDown(event, line)} onFocusCapture={() => setActiveLine(line.key)}>
-                                    <td className="w-80 px-2 py-1.5">
+                                    <td className={`w-80 px-2 py-1.5 ${aiFieldClass(aiLine('item'))}`}>
                                         <ProductVariantPicker id={`${prefix}.item`} dataTour={`pinvoice-line-item-${index}`} ariaLabel={`${t('purchase_col_item')} ${index + 1}`} products={pickerProducts} value={itemValue(line)}
                                             allowFreeText freeText={line.description} disabled={locked} invalid={!!e(`${prefix}.description`) || !!e(`${prefix}.productVariantId`) || !!e(`${prefix}.costArticleId`)}
                                             describedBy={e(`${prefix}.description`) ? `${prefix}.description` : undefined}
@@ -439,34 +498,46 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                             onFreeText={(text) => { if (line.productVariantId === '' && !line.costArticleId && text !== line.description) updateLine(line.key, { description: text }); }} />
                                         {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t(costArticles.find((article) => String(article.id) === line.costArticleId)?.kind === 'Packaging' ? 'packaging_line_hint' : 'cost_article_line_hint')}</span>}
                                         <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`) ?? e(`${prefix}.costArticleId`)} />
+                                        <AiFieldHint codes={aiLine('item')} />
+                                        {/* Voorstel van een kostenartikel: nooit automatisch, de gebruiker neemt het over. */}
+                                        {suggestedCost && !line.costArticleId && line.productVariantId === '' && (
+                                            <span className="block text-xs text-blue-900" data-testid={`${prefix}.ai-cost`}>
+                                                {t('ai_cost_suggestion', { name: suggestedCost.name })}{' '}
+                                                <button type="button" tabIndex={-1} className="font-medium underline" onClick={() => updateLine(line.key, { costArticleId: String(suggestedCost.costArticleId) })}>{t('ai_cost_take')}</button>
+                                            </span>
+                                        )}
                                     </td>
-                                    <td className="w-24 px-2 py-1.5">
+                                    <td className={`w-24 px-2 py-1.5 ${aiFieldClass(aiLine('quantity'))}`}>
                                         <label htmlFor={`${prefix}.quantity-input`} className="sr-only">{t('supply_quantity')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.quantity`, e(`${prefix}.quantity`))} data-tour="pinvoice-line-quantity" data-tour-key={index} inputMode="decimal" value={line.quantity} disabled={locked} onChange={(event) => updateLine(line.key, { quantity: event.target.value })} className={inputClass} />
                                         <NumberEcho value={line.quantity} unit={line.unit === '' ? undefined : t(unitLabelKey(line.unit)).toLowerCase()} testId={`${prefix}.quantity-echo`} />
                                         <FieldError id={`${prefix}.quantity`} messages={e(`${prefix}.quantity`)} />
+                                        <AiFieldHint codes={aiLine('quantity')} />
                                     </td>
                                     <td className="w-28 px-2 py-1.5">
                                         <UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked} emptyLabel="–" className="mt-1 w-full"
                                             onChange={(unit) => updateLine(line.key, { unit })} />
                                     </td>
-                                    <td className="w-28 px-2 py-1.5">
+                                    <td className={`w-28 px-2 py-1.5 ${aiFieldClass(aiLine('unitPrice'))}`}>
                                         <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('purchase_col_price')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.unitPrice`, e(`${prefix}.unitPrice`))} data-tour="pinvoice-line-price" data-tour-key={index} inputMode="decimal" value={line.unitPrice} disabled={locked} onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.unitPrice`} messages={e(`${prefix}.unitPrice`)} />
+                                        <AiFieldHint codes={aiLine('unitPrice')} />
                                     </td>
                                     <td className="w-20 px-2 py-1.5">
                                         <label htmlFor={`${prefix}.discountPercentage-input`} className="sr-only">{t('purchase_col_discount')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.discountPercentage`, e(`${prefix}.discountPercentage`))} inputMode="decimal" value={line.discount} disabled={locked} onChange={(event) => updateLine(line.key, { discount: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.discountPercentage`} messages={e(`${prefix}.discountPercentage`)} />
                                     </td>
-                                    <td className="w-20 px-2 py-1.5">
+                                    <td className={`w-20 px-2 py-1.5 ${aiFieldClass(aiLine('vatPercentage'))}`}>
                                         <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{t('purchase_col_vat')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} inputMode="decimal" value={line.vat} disabled={locked} onChange={(event) => updateLine(line.key, { vat: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.vatPercentage`} messages={e(`${prefix}.vatPercentage`)} />
+                                        <AiFieldHint codes={aiLine('vatPercentage')} />
                                     </td>
-                                    <td className="w-28 px-2 py-1.5 text-right font-mono" data-testid={`${prefix}.amount`} data-tour="pinvoice-line-amount" data-tour-key={index}>
+                                    <td className={`w-28 px-2 py-1.5 text-right font-mono ${aiFieldClass(aiLine('amount'))}`} data-testid={`${prefix}.amount`} data-tour="pinvoice-line-amount" data-tour-key={index}>
                                         {amounts === null ? <span className="text-gray-400">–</span> : <>{money(amounts.net)}<span className="block text-xs text-gray-500">{t('purchase_vat_short')} {money(amounts.vat)}</span></>}
+                                        <AiFieldHint codes={aiLine('amount')} />
                                     </td>
                                     <td className="whitespace-nowrap px-2 py-1.5">
                                         <button type="button" tabIndex={-1} onClick={() => duplicateLine(line.key)} disabled={locked} title={`${t('purchase_line_duplicate')} (${shortcutLabel('duplicateLine', isMac)})`} aria-label={`${t('purchase_line_duplicate')} ${index + 1}`} className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-40">⧉</button>
@@ -492,17 +563,27 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <span className="block text-xs text-gray-500">{t('internal_note_hint')}</span>
                     <FieldError id="internalNote" messages={e('internalNote')} />
                 </div>
-            <dl className="ml-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm" data-testid="purchase-totals" data-tour="pinvoice-totals">
+            <dl className={`ml-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm ${aiFieldClass([...(aiProblems.totalNet ?? []), ...(aiProblems.totalVat ?? []), ...(aiProblems.totalGross ?? [])])}`} data-testid="purchase-totals" data-tour="pinvoice-totals">
                 <dt className="text-gray-600">{t('purchase_total_net')}</dt><dd className="text-right font-mono" data-testid="total-net">{money(totals.net)}</dd>
                 <dt className="text-gray-600">{t('purchase_total_vat')}</dt><dd className="text-right font-mono" data-testid="total-vat">{money(totals.vat)}</dd>
                 <dt className="font-semibold text-gray-900">{t('purchase_total_gross', { currency: draft.header.currency })}</dt><dd className="text-right font-mono font-semibold" data-testid="total-gross">{money(totals.gross)}</dd>
+                <dd className="col-span-2"><AiFieldHint codes={[...new Set([...(aiProblems.totalNet ?? []), ...(aiProblems.totalVat ?? []), ...(aiProblems.totalGross ?? [])])]} /></dd>
             </dl>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={locked && !unknown} data-tour="pinvoice-save">{submitting ? t('supply_saving') : t('purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
-                <button type="button" className={secondaryButtonClass} disabled={locked && !unknown} onClick={() => void submit('saveAndNew')}>{t('purchase_save_and_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('saveAndNew', isMac)}</kbd></button>
-                <button type="button" className={secondaryButtonClass} disabled={submitting} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
+                <button type="submit" className={primaryButtonClass} disabled={busy || (locked && !unknown)} data-tour="pinvoice-save">{submitting ? t('supply_saving') : t(ai !== null ? 'ai_approve' : 'purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
+                {ai === null ? (
+                    <>
+                        <button type="button" className={secondaryButtonClass} disabled={busy || (locked && !unknown)} onClick={() => void submit('saveAndNew')}>{t('purchase_save_and_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('saveAndNew', isMac)}</kbd></button>
+                        <button type="button" className={secondaryButtonClass} disabled={submitting} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
+                    </>
+                ) : (
+                    <>
+                        <button type="button" className={secondaryButtonClass} disabled={locked} onClick={ai.onReject} data-tour="pinvoice-ai-reject">{t('ai_reject')}</button>
+                        <button type="button" className={secondaryButtonClass} disabled={locked} onClick={ai.onManual} data-tour="pinvoice-ai-manual">{t('ai_manual')}</button>
+                    </>
+                )}
                 <SubmitErrors errors={errors} moveFocus={false} />
                 <span className="text-xs text-gray-600">{t('purchase_footer_hint', { search: shortcutLabel('focusSearch', isMac) })}</span>
                 {lastSaved === null && draft.header.invoiceDate !== '' && <span className="ml-auto text-xs text-gray-500">{t('purchase_date_today_hint', { date: formatCalendarDate(`${draft.header.invoiceDate}T00:00:00`, locale) })}</span>}

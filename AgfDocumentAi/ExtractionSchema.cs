@@ -31,6 +31,16 @@ public static class ExtractionSchema
     public static readonly (string Name, FieldKind Kind)[] TotalFields =
         [("totaal_excl", FieldKind.Money), ("btw_totaal", FieldKind.Money), ("totaal_incl", FieldKind.Money)];
 
+    /// <summary>
+    /// Kenmerken van de leverancier om een relatie te vinden (alleen bij het lezen in AgfAdmin, niet in de testbench). Gewone tekst
+    /// met "" voor "niet gevonden" in plaats van null: zo tellen ze niet mee voor <see cref="MaxNullableFields"/>.
+    /// </summary>
+    public static readonly string[] SupplierIdFields = ["leverancier_btw", "leverancier_kvk", "leverancier_iban"];
+
+    public const string SupplierIdInstruction =
+        "- leverancier_btw, leverancier_kvk, leverancier_iban: het btw-nummer, KvK- of handelsregisternummer en de IBAN van de leverancier " +
+        "(de uitgever, niet wij), zoals ze op het document staan; een lege tekst als ze er niet op staan.\n";
+
     /// <summary>Grens van Anthropic voor velden met een union-type (zoals ["string","null"]) in een afgedwongen schema.</summary>
     public const int MaxNullableFields = 16;
 
@@ -54,7 +64,10 @@ public static class ExtractionSchema
     /// JSON Schema in de subset die Anthropic, Gemini en Qwen alle drie aannemen: elk veld verplicht, null toegestaan.
     /// Anthropic weigert meer dan <see cref="MaxNullableFields"/> velden met een type-lijst; daarom is plek gewone tekst.
     /// </summary>
-    public static JsonObject Build()
+    public static JsonObject Build() => Build(supplierIds: false);
+
+    /// <param name="supplierIds">Met de tekstvelden <see cref="SupplierIdFields"/> (AgfAdmin); de testbench gebruikt ze niet.</param>
+    public static JsonObject Build(bool supplierIds)
     {
         static JsonObject Field(FieldKind kind) => new() { ["type"] = new JsonArray(kind is FieldKind.Number or FieldKind.Money ? "number" : "string", "null") };
         static JsonObject Obj(IEnumerable<KeyValuePair<string, JsonNode?>> props)
@@ -76,6 +89,7 @@ public static class ExtractionSchema
                 .Concat(Props(HeaderFields))
                 .Append(new("regels", new JsonObject { ["type"] = "array", ["items"] = Obj(Props(LineFields)) }))
                 .Concat(Props(TotalFields))
+                .Concat(supplierIds ? SupplierIdFields.Select(f => new KeyValuePair<string, JsonNode?>(f, new JsonObject { ["type"] = "string" })) : [])
                 .Append(new("zekerheden", new JsonObject { ["type"] = "array", ["items"] = certainty })));
     }
 
@@ -90,7 +104,9 @@ public static class ExtractionSchema
         $"- Wij zijn {ourCompany.Trim()}. Een document dat wij ontvangen en moeten betalen is een inkoopfactuur; een document dat wij uitgeven is een verkoopfactuur; wij zijn nooit de leverancier van een inkoopfactuur.\n";
 
     /// <summary>Controleert de uitvoer van een model. Een ongeldige uitvoer telt als fout (de runner probeert één keer opnieuw).</summary>
-    public static JsonObject? Validate(string text, out string? error)
+    public static JsonObject? Validate(string text, out string? error) => Validate(text, supplierIds: false, out error);
+
+    public static JsonObject? Validate(string text, bool supplierIds, out string? error)
     {
         error = null;
         JsonNode? root;
@@ -98,7 +114,8 @@ public static class ExtractionSchema
         catch (JsonException e) { error = $"geen geldige JSON: {e.Message}"; return null; }
         if (root is not JsonObject obj) { error = "geen JSON-object"; return null; }
         if (obj["soort"] is not JsonValue soort || !soort.TryGetValue(out string? kind) || !Kinds.Contains(kind)) error = "soort ontbreekt of is onbekend";
-        else error = CheckObject(obj, [.. HeaderFields, .. TotalFields], ["soort", "regels", "zekerheden"], "")
+        else error = CheckObject(obj, [.. HeaderFields, .. TotalFields], ["soort", "regels", "zekerheden", .. (supplierIds ? SupplierIdFields : [])], "")
+            ?? (supplierIds ? SupplierIdFields.Where(f => obj[f] is not JsonValue v || !v.TryGetValue(out string? _)).Select(f => $"{f} is geen tekst").FirstOrDefault() : null)
             ?? CheckArray(obj, "regels", (item, prefix) => CheckObject(item, LineFields, [], prefix))
             ?? CheckArray(obj, "zekerheden", CheckCertainty);
         return error == null ? obj : null;

@@ -39,5 +39,7 @@ namespace AgfAdmin.Services
         public static ServiceResult<T> Conflict(string message) => new(ServiceResultStatus.Conflict, default, null, message);
         public static ServiceResult<T> Conflict(string message, object body) => new(ServiceResultStatus.Conflict, default, null, message, body);
         public static ServiceResult<T> Unavailable(string message) => new(ServiceResultStatus.Unavailable, default, null, message);
+        // 503 met een eigen lichaam (zoals een foutcode voor het scherm), net als Conflict(message, body).
+        public static ServiceResult<T> Unavailable(string message, object body) => new(ServiceResultStatus.Unavailable, default, null, message, body);
     }
 }

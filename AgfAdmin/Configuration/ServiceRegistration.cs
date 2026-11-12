@@ -1,4 +1,6 @@
 using AgfAdmin.Services;
+using AgfAdmin.Services.DocumentAi;
+using Microsoft.Extensions.Options;
 
 namespace AgfAdmin.Configuration
 {
@@ -8,9 +10,22 @@ namespace AgfAdmin.Configuration
     {
         public static IServiceCollection AddAgfServices(this IServiceCollection services, string contentRootPath)
         {
-            // AI & Email Services
+            // AI & Email Services. De oude mailroute (7b) heeft nog geen lezer: nooit nepgegevens in de gewone werking.
             services.AddScoped<IEmailIngestionService, EmailIngestionService>();
-            services.AddScoped<IAIExtractorService, MockAIExtractorService>();
+            services.AddScoped<IAIExtractorService, UnavailableAIExtractorService>();
+            // AI-lezen van inkoopfacturen (stap 7a): instellingen uit DocumentAi, documenten in DocumentAi:StoragePath.
+            services.AddOptions<DocumentAiOptions>().BindConfiguration(DocumentAiOptions.Section);
+            services.AddSingleton<IDocumentStore>(provider =>
+            {
+                var path = provider.GetRequiredService<IOptions<DocumentAiOptions>>().Value.StoragePath;
+                return new FileDocumentStore(Path.IsPathRooted(path) ? path : Path.Combine(contentRootPath, path));
+            });
+            services.AddSingleton<IDocumentAiFactory, DocumentAiFactory>();
+            services.AddSingleton<UploadRateLimiter>();
+            services.AddScoped<InvoiceReader>();
+            services.AddScoped<AiInvoiceReadingService>();
+            services.AddScoped<AiInvoiceMatching>();
+            services.AddHostedService<AiUploadCleanupService>();
             services.AddScoped<ISalesParserService, SimpleSalesParserService>();
             services.AddScoped<PurchaseInvoiceService>();
             services.AddScoped<ArticleService>();
