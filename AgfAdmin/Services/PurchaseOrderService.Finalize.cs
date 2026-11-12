@@ -25,10 +25,12 @@ namespace AgfAdmin.Services
         }
 
         // Stap 4b: een factuur wordt aan de order gekoppeld. Maakt de (gevolgde) order definitief via Invoice met de auditregel erbij; de
-        // aanroeper slaat op in zijn eigen transactie. Geeft false als de order al definitief was (dan verandert er niets).
+        // aanroeper slaat op in zijn eigen transactie. Geeft false als de order al definitief of geannuleerd was (dan verandert er niets).
         public async Task<bool> FinalizeForInvoiceAsync(int orderId, CancellationToken cancellationToken = default)
         {
             var order = await _db.SupplyCommitments.SingleAsync(c => c.Id == orderId, cancellationToken);
+            // Een geannuleerde order wordt nooit definitief, ook niet via een factuur (zelfde regel als FinalizeAsync).
+            if (order.Status == SupplyRules.StatusCancelled) return false;
             var change = PurchaseOrderDocumentRules.Finalize(order, PurchaseOrderDocumentRules.ViaInvoice, Actor(), DateTime.UtcNow, Guid.NewGuid());
             if (change == null) return false;
             _db.PurchaseOrderChanges.Add(change);
