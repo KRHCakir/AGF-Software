@@ -141,7 +141,11 @@ namespace AgfAdmin.Services
             }
             if (order.Transport != null)
             {
-                if (expectedVersion != null && expectedVersion != order.Transport.Version)
+                if (expectedVersion == null)
+                {
+                    return ServiceResult<SalesOrderTransportDto>.Validation(new Dictionary<string, string[]> { ["expectedVersion"] = new[] { "Send the version you saw (expectedVersion)." } });
+                }
+                if (expectedVersion != order.Transport.Version)
                 {
                     return ServiceResult<SalesOrderTransportDto>.Conflict("The transport was changed by someone else; reload and try again.", new { code = "stale", version = order.Transport.Version });
                 }
