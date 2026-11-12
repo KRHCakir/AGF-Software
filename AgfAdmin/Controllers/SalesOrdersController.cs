@@ -10,6 +10,7 @@ namespace AgfAdmin.Controllers
     [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     [Route("api/sales-orders")]
+    [RefreshLoadingSlip]
     public class SalesOrdersController : ControllerBase
     {
         private readonly ISalesOrderService _orders;
