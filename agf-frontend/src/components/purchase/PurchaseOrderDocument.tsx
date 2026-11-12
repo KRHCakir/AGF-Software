@@ -31,16 +31,19 @@ export default function PurchaseOrderDocument({ order, onChanged }: { order: Pur
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [correcting, setCorrecting] = useState(false);
+    // Eerst de vraag op de pagina (geen browservenster, zodat ook de rondleiding hem kan beantwoorden), dan pas versturen.
+    const [confirming, setConfirming] = useState(false);
     const finalizeRequest = useRef<string | null>(null);
 
     const finalize = async () => {
-        if (busy || !window.confirm(t('po_finalize_confirm'))) return;
+        if (busy) return;
         setBusy(true);
         setError(null);
         finalizeRequest.current ??= newRequestId();
         try {
             onChanged(await finalizePurchaseOrder(order.id, { requestId: finalizeRequest.current, expectedVersion: order.editVersion ?? 0 }));
             finalizeRequest.current = null;
+            setConfirming(false);
         } catch (caught) {
             setError(toApiError(caught));
         } finally {
@@ -67,8 +70,17 @@ export default function PurchaseOrderDocument({ order, onChanged }: { order: Pur
         <div className="mt-2 space-y-2" data-testid="po-document">
             <div className="flex flex-wrap gap-2">
                 <Link href={`/purchase-orders/edit?id=${order.id}`} className={secondaryButtonClass} data-tour="po-edit">{t('po_edit')}</Link>
-                <button type="button" className={secondaryButtonClass} data-tour="po-finalize" disabled={busy} onClick={() => void finalize()}>{t('po_finalize')}</button>
+                <button type="button" className={secondaryButtonClass} data-tour="po-finalize" disabled={busy || confirming} onClick={() => setConfirming(true)}>{t('po_finalize')}</button>
             </div>
+            {confirming && (
+                <div role="group" aria-label={t('po_finalize')} className="rounded border border-slate-400 bg-slate-50 px-3 py-2 text-sm text-slate-900" data-testid="po-finalize-question">
+                    <p>{t('po_finalize_confirm')}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                        <button type="button" className={primaryButtonClass} data-tour="po-finalize-yes" disabled={busy} onClick={() => void finalize()}>{t('po_finalize_yes')}</button>
+                        <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => { setConfirming(false); setError(null); }}>{t('cancel')}</button>
+                    </div>
+                </div>
+            )}
             {error && <p role="alert" className="text-sm text-red-800" data-testid="po-document-error">{conflictKey(error) ? t(conflictKey(error)!) : error.message}</p>}
         </div>
     );

@@ -2654,5 +2654,6 @@
   "po_edit_partij_kept": "A lot is never removed from an order; choose another lot if needed.",
   "po_not_found": "This purchase order does not exist (any more).",
   "chain_order_document_open": "Open (editable)",
-  "chain_order_document_definitive": "Definitive"
+  "chain_order_document_definitive": "Definitive",
+  "po_finalize_yes": "Yes, make definitive"
 }

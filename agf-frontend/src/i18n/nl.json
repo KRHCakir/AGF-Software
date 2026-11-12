@@ -2654,5 +2654,6 @@
   "po_edit_partij_kept": "Een partij gaat nooit van een order af; kies eventueel een andere partij.",
   "po_not_found": "Deze inkooporder bestaat niet (meer).",
   "chain_order_document_open": "Open (aanpasbaar)",
-  "chain_order_document_definitive": "Definitief"
+  "chain_order_document_definitive": "Definitief",
+  "po_finalize_yes": "Ja, definitief maken"
 }

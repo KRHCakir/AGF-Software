@@ -39,16 +39,18 @@ describe('purchase order document status', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('an open order offers Edit and Make definitive; the question comes first and only yes sends', async () => {
+    test('an open order offers Edit and Make definitive; the question comes first on the page and only yes sends', async () => {
         await mounted.render(<PurchaseOrderDocument order={order()} onChanged={(o) => changed.push(o)} />);
         assert.equal($('[data-tour="po-edit"]')!.getAttribute('href'), '/purchase-orders/edit?id=5');
-        const asked: string[] = [];
-        window.confirm = (message?: string) => { asked.push(String(message)); return false; };
         await act(async () => { $('[data-tour="po-finalize"]')!.click(); });
-        assert.deepEqual([asked, posted.length], [['po_finalize_confirm'], 0]);
+        assert.ok($('[data-testid="po-finalize-question"]')!.textContent!.includes('po_finalize_confirm'));
+        assert.equal(posted.length, 0, 'the question comes first');
+        await act(async () => { ([...mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="po-finalize-question"] button')].find((b) => b.textContent === 'cancel'))!.click(); });
+        assert.equal($('[data-testid="po-finalize-question"]'), null);
+        assert.equal(posted.length, 0);
 
-        window.confirm = () => true;
         await act(async () => { $('[data-tour="po-finalize"]')!.click(); });
+        await act(async () => { $('[data-tour="po-finalize-yes"]')!.click(); });
         await mounted.waitFor(() => changed.length === 1, 'definitive');
         assert.ok(posted[0].url.endsWith('/purchase-orders/5/finalize'));
         assert.equal(JSON.parse(posted[0].body).expectedVersion, 2);
