@@ -17,8 +17,10 @@ namespace AgfAdmin.Services
         public static decimal InvoiceUnitPrice(decimal unitPrice, decimal discountPercentage) =>
             InvoiceMath.Round2(unitPrice * (1m - discountPercentage / 100m));
 
-        // Een verschil met de bon: de bon heeft geen prijs (op afrekening), of een andere prijs per eenheid.
-        public static bool HasPriceDifference(decimal? orderUnitPrice, decimal invoiceUnitPrice) => orderUnitPrice != invoiceUnitPrice;
+        // Een verschil met de bon: de bon heeft geen prijs (op afrekening), of de factuur rekent per eenheid iets anders. Vergeleken met de
+        // prijs na korting zonder afronding: 0,01% korting op 13,50 is 13,49865 en dus een verschil, ook al rondt dat af op 13,50.
+        public static bool HasPriceDifference(decimal? orderUnitPrice, decimal unitPrice, decimal discountPercentage) =>
+            orderUnitPrice == null || unitPrice * (1m - discountPercentage / 100m) != orderUnitPrice.Value;
 
         // Het bedrag volgens de bon voor dit aantal (null zonder prijs op de bon).
         public static decimal? OrderAmount(decimal quantity, decimal? orderUnitPrice) =>
