@@ -42,6 +42,7 @@ namespace AgfAdmin.Services
             var reason = request.Reason?.Trim();
             if (string.IsNullOrEmpty(reason)) AddError(errors, "reason", "A reason is required for a correction.");
             else if (reason.Length > PurchaseOrderDocumentRules.MaxReasonLength) AddError(errors, "reason", $"The reason may have at most {PurchaseOrderDocumentRules.MaxReasonLength} characters.");
+            // Weggelaten (null) = ongewijzigd laten; een lege of witte tekst = expliciet wissen.
             var reference = Blank(request.SupplierReference);
             if (reference?.Length > PurchaseOrderRules.MaxSupplierReferenceLength) AddError(errors, "supplierReference", $"At most {PurchaseOrderRules.MaxSupplierReferenceLength} characters.");
             var note = Blank(request.Note);
@@ -50,6 +51,7 @@ namespace AgfAdmin.Services
             for (var i = 0; i < lines.Count; i++)
             {
                 if (lines[i]?.UnitPrice is { } price && !CostArticleRules.IsUnitPrice(price)) AddError(errors, $"lines[{i}].unitPrice", "Unit price, when given, must be 0 or more with at most 2 decimals.");
+                if (lines[i] != null && lines.Take(i).Any(other => other?.Id == lines[i].Id)) AddError(errors, $"lines[{i}]", $"Line {lines[i].Id} is given more than once.");
             }
             if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);
             var replay = await ReplayAsync(request.RequestId!.Value, id, PurchaseOrderDocumentRules.KindCorrection, cancellationToken);
@@ -64,25 +66,26 @@ namespace AgfAdmin.Services
             if (blocked != null) return Conflict(LockedCode, blocked);
 
             var fields = new List<PurchaseOrderChangeField>();
-            if (!string.Equals(order.SupplierReference, reference, StringComparison.Ordinal))
+            if (request.SupplierReference != null && !string.Equals(order.SupplierReference, reference, StringComparison.Ordinal))
             {
                 fields.Add(new(PurchaseOrderDocumentRules.FieldSupplierReference, null, PurchaseOrderDocumentRules.ActionChanged, order.SupplierReference, reference));
                 order.SupplierReference = reference;
             }
-            if (!string.Equals(order.Note, note, StringComparison.Ordinal))
+            if (request.Note != null && !string.Equals(order.Note, note, StringComparison.Ordinal))
             {
                 fields.Add(new(PurchaseOrderDocumentRules.FieldNote, null, PurchaseOrderDocumentRules.ActionChanged, order.Note, note));
                 order.Note = note;
             }
             for (var i = 0; i < lines.Count; i++)
             {
+                if (errors.ContainsKey($"lines[{i}]")) continue;
                 var line = order.Lines.SingleOrDefault(l => l.Id == lines[i]?.Id);
                 if (line == null)
                 {
                     AddError(errors, $"lines[{i}]", $"Line {lines[i]?.Id} does not belong to purchase order {id}.");
                     continue;
                 }
-                if (line.UnitPrice == lines[i].UnitPrice) continue;
+                if (lines[i].UnitPrice == null || line.UnitPrice == lines[i].UnitPrice) continue;
                 fields.Add(new(PurchaseOrderDocumentRules.FieldUnitPrice, line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(line.UnitPrice), Number(lines[i].UnitPrice)));
                 line.UnitPrice = lines[i].UnitPrice;
             }
