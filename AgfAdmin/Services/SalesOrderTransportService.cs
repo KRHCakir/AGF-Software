@@ -124,8 +124,10 @@ namespace AgfAdmin.Services
             return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));
         }
 
-        // Weghalen kan zolang er geen transportopdracht is.
-        public async Task<ServiceResult<SalesOrderTransportDto>> DeleteAsync(int orderId, CancellationToken cancellationToken = default)
+        // Weghalen kan zolang er geen transportopdracht is. Met de versie die de gebruiker zag (expectedVersion): een gelijktijdige wijziging
+        // gaat niet verloren. Het weghalen raakt ook de orderrij (concurrency-token): een gelijktijdige bevestiging, die de orderrij ook
+        // wijzigt, botst dan op de orderversie, zodat nooit een transportopdracht zonder transport ontstaat.
+        public async Task<ServiceResult<SalesOrderTransportDto>> DeleteAsync(int orderId, int? expectedVersion = null, CancellationToken cancellationToken = default)
         {
             var order = await LoadAsync(orderId, tracking: true, cancellationToken);
             if (order == null) return NotFound(orderId);
@@ -135,8 +137,20 @@ namespace AgfAdmin.Services
             }
             if (order.Transport != null)
             {
+                if (expectedVersion != null && expectedVersion != order.Transport.Version)
+                {
+                    return ServiceResult<SalesOrderTransportDto>.Conflict("The transport was changed by someone else; reload and try again.", new { code = "stale", version = order.Transport.Version });
+                }
                 db.SalesOrderTransports.Remove(order.Transport);
-                await db.SaveChangesAsync(cancellationToken);
+                order.UpdatedAt = DateTime.UtcNow;
+                try
+                {
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return ServiceResult<SalesOrderTransportDto>.Conflict("The sales order was changed meanwhile (for example confirmed); reload and try again.", new { code = "stale" });
+                }
             }
             db.ChangeTracker.Clear();
             return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));

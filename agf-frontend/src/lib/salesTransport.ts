@@ -1,5 +1,5 @@
 import type { SalesOrderTransport, SaveSalesOrderTransport, TransportMode } from '../types/salesOrderTransport';
-import { parseLocaleDecimal } from './decimal.ts';
+import { formatDecimalInput, parseLocaleDecimal } from './decimal.ts';
 
 // Het blok Transport op de verkooporder (documenten deel 2) als concept in het formulier: van en naar wat de API geeft en verwacht. Leeg
 // laten = de standaard van de server. Laden op is één tijdstip (datum en tijd, in de tijd van de browser, zoals bij de laadbon). Geen React:
@@ -41,7 +41,7 @@ export function draftFrom(transport: SalesOrderTransport | null): TransportDraft
         loadDate: loadAt ? `${loadAt.getFullYear()}-${pad(loadAt.getMonth() + 1)}-${pad(loadAt.getDate())}` : '',
         loadTime: loadAt ? `${pad(loadAt.getHours())}:${pad(loadAt.getMinutes())}` : '',
         unloadDate: transport?.unloadDate ? transport.unloadDate.slice(0, 10) : '',
-        temperature: transport?.temperatureC != null ? String(transport.temperatureC).replace('.', ',') : '',
+        temperature: transport?.temperatureC != null ? formatDecimalInput(transport.temperatureC, 1) : '',
         loadingReference: transport?.loadingReference ?? '',
         unloadingReference: transport?.unloadingReference ?? '',
         palletKind: transport?.palletKind ?? '',
@@ -68,7 +68,7 @@ export function requestFrom(draft: TransportDraft, version: number | null, hadLo
     if (draft.loadDate === '' && draft.loadTime.trim() !== '') problems.push(time === null ? 'loadTime' : 'loadDate');
     let temperature: number | null = null;
     if (draft.temperature.trim() !== '') {
-        const parsed = parseLocaleDecimal(draft.temperature, 'nl', { maxDecimals: 1, allowZero: true, allowNegative: true });
+        const parsed = parseLocaleDecimal(draft.temperature, undefined, { maxDecimals: 1, allowZero: true, allowNegative: true });
         if (!parsed.ok || parsed.value < -30 || parsed.value > 30) problems.push('temperature');
         else temperature = parsed.value;
     }
