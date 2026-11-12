@@ -2661,7 +2661,7 @@
   "tour_ch_orderedit_done": "Order {orderNumber}: aangepast, definitief gemaakt en gecorrigeerd met reden; alles staat in de geschiedenis.",
   "tour_orderedit_open_title": "De order openen",
   "tour_orderedit_open_what": "We openen order {orderRef} en kiezen Aanpassen.",
-  "tour_orderedit_open_why": "Een order blijft aanpasbaar tot je hem definitief maakt of er een factuur aan gekoppeld wordt.",
+  "tour_orderedit_open_why": "Een order blijft aanpasbaar tot je hem definitief maakt. Een gekoppelde factuur maakt hem nog niet definitief.",
   "tour_orderedit_edit_title": "Aanpassen",
   "tour_orderedit_edit_what": "Hetzelfde formulier als bij aanmaken, gevuld met de order: we passen de prijs aan, zetten een notitie en slaan op.",
   "tour_orderedit_edit_why": "Is er al iets ontvangen, dan ligt het artikel vast en kan het aantal niet onder wat er binnen is; dat staat dan bij het veld.",

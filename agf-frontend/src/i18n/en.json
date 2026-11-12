@@ -2661,7 +2661,7 @@
   "tour_ch_orderedit_done": "Order {orderNumber}: edited, made definitive and corrected with a reason; everything is in the history.",
   "tour_orderedit_open_title": "Open the order",
   "tour_orderedit_open_what": "We open order {orderRef} and choose Edit.",
-  "tour_orderedit_open_why": "An order stays editable until you make it definitive or an invoice is linked to it.",
+  "tour_orderedit_open_why": "An order stays editable until you make it definitive. Linking an invoice does not make it definitive yet.",
   "tour_orderedit_edit_title": "Edit",
   "tour_orderedit_edit_what": "The same form as when creating, filled with the order: we change the price, add a note and save.",
   "tour_orderedit_edit_why": "Once something has been received the article is fixed and the quantity cannot go below what arrived; the field says so.",
