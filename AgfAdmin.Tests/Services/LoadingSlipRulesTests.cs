@@ -30,13 +30,13 @@ public class LoadingSlipRulesTests : IDisposable
         return orderId;
     }
 
-    private async Task<LoadingSlipSnapshot> BuildAsync(int orderId)
+    private async Task<LoadingSlipSnapshot> BuildAsync(int orderId, string warehouse = null)
     {
         await using var db = _factory.CreateContext();
         var order = await db.SalesOrders.Include(o => o.Customer).Include(o => o.SalesPartij).Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
             .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
             .Include(o => o.Lines).ThenInclude(l => l.Reservations).AsSplitQuery().SingleAsync(o => o.Id == orderId);
-        return LoadingSlipBuilder.Build(order, new CompanySettings { CompanyName = "Kwekerij Voorbeeld B.V.", Address = "Loodsweg 1, Barendrecht" });
+        return LoadingSlipBuilder.Build(order, new CompanySettings { CompanyName = "Kwekerij Voorbeeld B.V.", Address = "Loodsweg 1, Barendrecht", LoadingSlipWarehouseAddress = warehouse });
     }
 
     [Fact]
@@ -51,9 +51,17 @@ public class LoadingSlipRulesTests : IDisposable
         Assert.Equal(new[] { (3, "Euro-pallet") }, slip.Packaging.Select(p => (p.Quantity, p.Description)));
         Assert.Equal(LoadingSlipBuilder.Hash(slip), LoadingSlipBuilder.Hash(await BuildAsync(orderId)));
         var json = LoadingSlipBuilder.Serialize(slip);
+        // Een leeg veld telt niet mee in de vingerafdruk: een bon van voor een nieuw veld geeft zo geen onterechte nieuwe versie.
+        Assert.Contains("\"warehouseAddress\":null,", json);
+        Assert.Equal(LoadingSlipBuilder.Hash(slip), LoadingSlipBuilder.Hash(LoadingSlipBuilder.Deserialize(json.Replace("\"warehouseAddress\":null,", ""))));
         Assert.DoesNotContain("price", json, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("9.5", json);
         Assert.Equal("LB-2026-0012", SalesOrderDocumentRules.Number("VO-2026-0012"));
+
+        // Een loods op een ander adres (instelling) komt in de snapshot, en is een andere bon.
+        var elsewhere = await BuildAsync(orderId, "Koelhuis Zuid, Havenweg 4, Ridderkerk");
+        Assert.Equal(("Koelhuis Zuid, Havenweg 4, Ridderkerk", (string)null), (elsewhere.WarehouseAddress, slip.WarehouseAddress));
+        Assert.NotEqual(LoadingSlipBuilder.Hash(slip), LoadingSlipBuilder.Hash(elsewhere));
     }
 
     [Fact]

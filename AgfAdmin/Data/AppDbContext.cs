@@ -483,6 +483,7 @@ namespace AgfAdmin.Data
                 b.Property(c => c.LoadingSlipLanguage).IsRequired().HasMaxLength(2).HasDefaultValue(SalesOrderDocumentRules.LanguageEnglish);
                 b.Property(c => c.LoadingSlipShowCustomer).HasDefaultValue(true);
                 b.Property(c => c.LoadingSlipShowSupplier).HasDefaultValue(true);
+                b.Property(c => c.LoadingSlipWarehouseAddress).HasMaxLength(SalesOrderDocumentRules.MaxWarehouseAddressLength);
                 b.Property(c => c.PartijNumberMode).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ModeAuto);
                 b.Property(c => c.PartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultFormat);
                 b.Property(c => c.PartijSequenceReset).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ResetYearly);

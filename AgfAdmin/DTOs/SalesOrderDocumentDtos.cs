@@ -20,6 +20,7 @@ namespace AgfAdmin.DTOs
         public string Language { get; set; }
         public bool ShowCustomer { get; set; }
         public bool ShowSupplier { get; set; }
+        public string WarehouseAddress { get; set; }
     }
 
     public sealed class SalesOrderDocumentsDto

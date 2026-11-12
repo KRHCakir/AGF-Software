@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AgfAdmin.Models;
 
 namespace AgfAdmin.Services
@@ -15,6 +16,7 @@ namespace AgfAdmin.Services
         public const string LanguageDutch = "nl";
         public static readonly IReadOnlyList<string> Languages = new[] { LanguageEnglish, LanguageDutch };
         public const int MaxLicensePlateLength = 32;
+        public const int MaxWarehouseAddressLength = 300;
         public const int MaxActorLength = 100;
 
         // Het nummer van de laadbon: het VO-nummer met LB ervoor (VO-2026-0012 → LB-2026-0012), gelijk voor alle versies.
@@ -34,6 +36,7 @@ namespace AgfAdmin.Services
     public sealed record LoadingSlipSnapshot(
         string Language, bool ShowCustomer, bool ShowSupplier,
         string CompanyName, string CompanyAddress, string LogoImage,
+        string WarehouseAddress,
         string CustomerName, string Position, string OrderNumber, string CustomerReference,
         DateTime RequestedDeliveryDate, DateTime? LoadAt, string LicensePlate,
         List<LoadingSlipRow> Rows, List<LoadingSlipPackagingRow> Packaging,
@@ -52,6 +55,9 @@ namespace AgfAdmin.Services
     public static class LoadingSlipBuilder
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+        // Voor de vingerafdruk zonder lege velden: komt er later een veld bij de bon, dan geeft een bestaande bon zonder dat veld dezelfde
+        // vingerafdruk en dus geen onterechte nieuwe versie. Niet meer wijzigen zodra er laadbonnen bewaard zijn.
+        private static readonly JsonSerializerOptions HashJson = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
         // De order moet geladen zijn met klant, verkoop-partij, regels (artikel, product, reserveringen met pallet, partij en de leverancier
         // van de inkooporder) en emballage (kostenartikel).
@@ -91,6 +97,7 @@ namespace AgfAdmin.Services
                 SalesOrderDocumentRules.Languages.Contains(settings.LoadingSlipLanguage) ? settings.LoadingSlipLanguage : SalesOrderDocumentRules.LanguageEnglish,
                 settings.LoadingSlipShowCustomer, settings.LoadingSlipShowSupplier,
                 settings.CompanyName, Blank(settings.Address), LogoImageOf(settings.LogoPath),
+                Blank(settings.LoadingSlipWarehouseAddress),
                 settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.SalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
                 Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : Second(order.LoadAt.Value), Blank(order.LicensePlate),
                 rows, packaging, rows.Sum(r => r.Quantity), pallets.Count == 0 ? null : pallets.Sum(), kgs.Count == 0 ? null : kgs.Sum(),
@@ -102,7 +109,7 @@ namespace AgfAdmin.Services
 
         // Vingerafdruk van de inhoud: dezelfde bon (ook na opnieuw opbouwen) geeft nooit een nieuwe versie.
         public static string Hash(LoadingSlipSnapshot snapshot) =>
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Serialize(snapshot)))).ToLowerInvariant();
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot, HashJson)))).ToLowerInvariant();
 
         // Op de seconde en als UTC: een datum uit de database (zonder Kind, met minder precisie) geeft zo dezelfde bon en dus geen nieuwe versie.
         private static DateTime Second(DateTime value) =>
