@@ -53,6 +53,11 @@ namespace AgfAdmin.Models
         public string? ExchangeRateSource { get; set; }
         public DateTime? ExchangeRateFetchedAt { get; set; }
 
+        // Wat er gebeurde met een prijsverschil tussen deze factuur en de gekoppelde bon(nen) (stap 4b): AdjustOrder (de prijs op de
+        // orderregel werd de factuurprijs, met auditregel) of RecordDifference (de bon bleef staan, het verschil blijft zichtbaar). Leeg
+        // zonder verschil of zonder bon. Vast na opslaan (TraceabilityGuard regel 30).
+        public string? OrderPriceDecision { get; set; }
+
         [Column(TypeName = "decimal(18,2)")]
         public decimal TotalAmount { get; set; }
 

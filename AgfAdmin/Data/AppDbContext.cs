@@ -386,6 +386,8 @@ namespace AgfAdmin.Data
                 b.Property(i => i.Transporter).HasMaxLength(200);
                 b.Property(i => i.DriverName).HasMaxLength(200);
                 b.Property(i => i.LicensePlate).HasMaxLength(32);
+                b.Property(i => i.OrderPriceDecision).HasMaxLength(20);
+                b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoices_OrderPriceDecision", "\"OrderPriceDecision\" IS NULL OR \"OrderPriceDecision\" IN ('AdjustOrder', 'RecordDifference')"));
                 b.Property(i => i.Incoterms).HasMaxLength(32);
                 b.Property(i => i.OriginCountry).HasMaxLength(200);
                 b.Property(i => i.ReceiptReference).HasMaxLength(200);
@@ -404,6 +406,10 @@ namespace AgfAdmin.Data
                 b.Property(l => l.Unit).HasMaxLength(32);
                 b.HasOne(l => l.ProductVariant).WithMany().HasForeignKey(l => l.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                // Koppeling aan de orderregel (stap 4b); een orderregel met factuurregels wordt nooit verwijderd.
+                b.HasOne(l => l.SupplyCommitmentLine).WithMany().HasForeignKey(l => l.SupplyCommitmentLineId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(l => l.SupplyCommitmentLineId);
+                b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoiceLines_OrderLink", "\"SupplyCommitmentLineId\" IS NOT NULL OR \"OrderUnitPrice\" IS NULL"));
                 b.Property(l => l.AllocationVersion).HasDefaultValue(0).IsConcurrencyToken();
                 b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoiceLines_ArticleOrCost", "\"ProductVariantId\" IS NULL OR \"CostArticleId\" IS NULL"));
             });

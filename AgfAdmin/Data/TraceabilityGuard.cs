@@ -111,6 +111,8 @@ namespace AgfAdmin.Data
     //    historie blijft staan en houdt artikel en eenheid, nooit onder ontvangen; leverancier vast na ontvangst). Finalize maakt haar
     //    Definitive (met wie/wanneer/waardoor, nooit terug); daarna verandert ze alleen nog met een Correction met reden (prijs,
     //    ordernummer van de leverancier en notitie). Auditregels zijn append-only. Regel 18 blijft voor afwijkingen ongewijzigd.
+    // 30. factuur gekoppeld aan de bon (zie TraceabilityGuard.InvoiceOrderLinks.cs): een factuurregel factureert alleen een orderregel
+    //    van een order van de leverancier van de factuur; koppeling, prijs op de bon en de keuze bij een prijsverschil liggen vast.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -234,6 +236,7 @@ namespace AgfAdmin.Data
             await CheckPackagingAsync(db, async, cancellationToken);
             await CheckAiReadingAsync(db, async, cancellationToken);
             await CheckPurchaseOrderChangesAsync(db, async, cancellationToken);
+            await CheckInvoiceOrderLinksAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

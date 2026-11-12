@@ -2529,6 +2529,10 @@ namespace AgfAdmin.Migrations
                     b.Property<decimal?>("NetWeightKg")
                         .HasColumnType("decimal(18,3)");
 
+                    b.Property<string>("OrderPriceDecision")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("OriginCountry")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -2592,6 +2596,8 @@ namespace AgfAdmin.Migrations
                     b.ToTable("IncomingInvoices", t =>
                         {
                             t.HasCheckConstraint("CK_IncomingInvoices_ExchangeRate", "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateDate\" IS NOT NULL AND \"ExchangeRateSource\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_IncomingInvoices_OrderPriceDecision", "\"OrderPriceDecision\" IS NULL OR \"OrderPriceDecision\" IN ('AdjustOrder', 'RecordDifference')");
                         });
                 });
 
@@ -2624,11 +2630,17 @@ namespace AgfAdmin.Migrations
                     b.Property<decimal>("LineTotal")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("OrderUnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int?>("ProductVariantId")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("Quantity")
                         .HasColumnType("decimal(18,3)");
+
+                    b.Property<int?>("SupplyCommitmentLineId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Unit")
                         .HasMaxLength(32)
@@ -2651,9 +2663,13 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("ProductVariantId");
 
+                    b.HasIndex("SupplyCommitmentLineId");
+
                     b.ToTable("IncomingInvoiceLines", t =>
                         {
                             t.HasCheckConstraint("CK_IncomingInvoiceLines_ArticleOrCost", "\"ProductVariantId\" IS NULL OR \"CostArticleId\" IS NULL");
+
+                            t.HasCheckConstraint("CK_IncomingInvoiceLines_OrderLink", "\"SupplyCommitmentLineId\" IS NOT NULL OR \"OrderUnitPrice\" IS NULL");
                         });
                 });
 
@@ -5922,11 +5938,18 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("ProductVariantId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SupplyCommitmentLine")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("CostArticle");
 
                     b.Navigation("IncomingInvoice");
 
                     b.Navigation("ProductVariant");
+
+                    b.Navigation("SupplyCommitmentLine");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Inspection", b =>
