@@ -106,7 +106,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
         if (request === null) return;
         void call(async () => { setTransport(await saveSalesOrderTransport(order.id, request)); setEditing(false); onChanged?.(); });
     };
-    const remove = () => void call(async () => { setTransport(await deleteSalesOrderTransport(order.id)); setEditing(false); onChanged?.(); });
+    const remove = () => void call(async () => { setTransport(await deleteSalesOrderTransport(order.id, transport?.version ?? 0)); setEditing(false); onChanged?.(); });
 
     const problem = (key: TransportProblem, message: string) => problems.includes(key) && <p role="alert" className="text-xs text-red-800" data-testid={`transport-problem-${key}`}>{message}</p>;
     const defaultHint = (value: string | null | undefined) => value ? <span className="block text-xs text-gray-600">{t('so_transport_default', { value })}</span> : null;
