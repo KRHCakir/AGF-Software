@@ -72,7 +72,8 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
     }
 }
 
-export default function SalesOrderDocuments({ order, onConfirmed }: { order: SalesOrder; onConfirmed?: () => void }) {
+// onChanged: de order zelf veranderde (bevestigd, of laden op en kenteken): de pagina haalt de order opnieuw op, met de nieuwe versie.
+export default function SalesOrderDocuments({ order, onChanged }: { order: SalesOrder; onChanged?: () => void }) {
     const { t, locale } = useTranslation();
     const [loaded, setLoaded] = useState<{ documents: Documents; version: number } | null>(null);
     // Alleen gegevens van de getoonde order en precies de getoonde orderversie: na een orderwissel of -wijziging is de laadbon tot een
@@ -144,11 +145,11 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
     };
     const confirm = (event: FormEvent) => {
         event.preventDefault();
-        void run(() => confirmSalesOrder(order.id, details()), () => { setAsking(false); onConfirmed?.(); });
+        void run(() => confirmSalesOrder(order.id, details()), () => { setAsking(false); onChanged?.(); });
     };
     const saveLoading = (event: FormEvent) => {
         event.preventDefault();
-        void run(() => updateSalesOrderLoading(order.id, details()), () => setEditing(false));
+        void run(() => updateSalesOrderLoading(order.id, details()), () => { setEditing(false); onChanged?.(); });
     };
 
     const slips = (data?.documents ?? []).filter((document) => document.kind === 'LoadingSlip');

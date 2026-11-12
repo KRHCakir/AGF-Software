@@ -27,7 +27,8 @@ export interface SalesOrderDocuments {
 
 export interface LoadingDetails { loadAt: string | null; licensePlate: string | null }
 
-export interface LoadingSlipSettings { language: 'en' | 'nl'; showCustomer: boolean; showSupplier: boolean }
+// warehouseAddress: naam en adres van de loods op de laadbon; leeg (null) = bedrijfsnaam en -adres.
+export interface LoadingSlipSettings { language: 'en' | 'nl'; showCustomer: boolean; showSupplier: boolean; warehouseAddress: string | null }
 
 const isDocument = (value: unknown): value is SalesOrderDocument => isObject(value) && isNumber(value.id) && isString(value.kind) && isString(value.number)
     && isNumber(value.version) && isString(value.createdAt) && isString(value.createdBy) && isNullableString(value.sentAt) && typeof value.latest === 'boolean';
@@ -38,5 +39,6 @@ export function isSalesOrderDocuments(value: unknown): value is SalesOrderDocume
 }
 
 export function isLoadingSlipSettings(value: unknown): value is LoadingSlipSettings {
-    return isObject(value) && (value.language === 'en' || value.language === 'nl') && typeof value.showCustomer === 'boolean' && typeof value.showSupplier === 'boolean';
+    return isObject(value) && (value.language === 'en' || value.language === 'nl') && typeof value.showCustomer === 'boolean' && typeof value.showSupplier === 'boolean'
+        && (value.warehouseAddress === undefined || isNullableString(value.warehouseAddress));
 }
