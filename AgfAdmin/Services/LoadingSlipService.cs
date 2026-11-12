@@ -22,12 +22,12 @@ namespace AgfAdmin.Services
             if (errors.Count > 0) return Validation(errors);
             var order = await LoadAsync(orderId, cancellationToken);
             if (order == null) return ServiceResult<SalesOrderDocumentsDto>.NotFound($"Sales order {orderId} does not exist.");
-            // Al bevestigd: niets nieuws (een tweede klik of een herhaling), de eerste vastlegging blijft.
-            if (order.ConfirmedAt != null) return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
             if (order.Status == ReservationRules.OrderStatusCancelled)
             {
                 return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Sales order {order.OrderNumber} is cancelled and is not confirmed.", new { code = CancelledCode });
             }
+            // Al bevestigd: niets nieuws (een tweede klik of een herhaling), de eerste vastlegging blijft.
+            if (order.ConfirmedAt != null) return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
             if (order.Lines.Count == 0)
             {
                 ValidationErrors.Add(errors, "lines", $"Sales order {order.OrderNumber} has no lines: add what the customer ordered before confirming.");
@@ -40,11 +40,29 @@ namespace AgfAdmin.Services
             order.LicensePlate = plate;
             order.UpdatedAt = now;
             AddVersion(order, await SettingsAsync(cancellationToken), 1, SalesOrderDocumentRules.ReasonConfirmed, now);
-            await db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
+            {
+                // Een gelijktijdige bevestiging was eerder: die blijft staan, wij geven het resultaat daarvan terug.
+                db.ChangeTracker.Clear();
+                var winner = await LoadAsync(orderId, cancellationToken);
+                if (winner?.ConfirmedAt == null) throw;
+                if (winner.Status == ReservationRules.OrderStatusCancelled)
+                {
+                    return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Sales order {winner.OrderNumber} is cancelled and is not confirmed.", new { code = CancelledCode });
+                }
+                return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(winner, cancellationToken));
+            }
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
         }
 
-        public async Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, CancellationToken cancellationToken = default)
+        public Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, CancellationToken cancellationToken = default) =>
+            UpdateLoadingAsync(orderId, request, 0, cancellationToken);
+
+        private async Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, int attempt, CancellationToken cancellationToken)
         {
             var errors = new Dictionary<string, List<string>>();
             var plate = Plate(request?.LicensePlate, errors);
@@ -63,8 +81,23 @@ namespace AgfAdmin.Services
             order.LoadAt = Utc(request?.LoadAt);
             order.LicensePlate = plate;
             order.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-            await RefreshAsync(orderId, cancellationToken);
+            // Laadgegevens en de nieuwe versie van de bon in één save: nooit opgeslagen gegevens zonder de bon die erbij hoort.
+            var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
+            var snapshot = LoadingSlipBuilder.Build(order, await SettingsAsync(cancellationToken));
+            if (latest == null || latest.ContentHash != LoadingSlipBuilder.Hash(snapshot))
+            {
+                AddVersion(order, snapshot, (latest?.Version ?? 0) + 1, latest == null ? SalesOrderDocumentRules.ReasonConfirmed : SalesOrderDocumentRules.ReasonChanged, DateTime.UtcNow);
+            }
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < 2)
+            {
+                // Een gelijktijdige verversing nam het versienummer: opnieuw, op de actuele stand (hoogstens twee keer).
+                db.ChangeTracker.Clear();
+                return await UpdateLoadingAsync(orderId, request, attempt + 1, cancellationToken);
+            }
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(await LoadAsync(orderId, cancellationToken), cancellationToken));
         }
 
@@ -85,6 +118,18 @@ namespace AgfAdmin.Services
         // unieke versienummer: dan wint de eerste.
         public async Task<bool> RefreshAsync(int orderId, CancellationToken cancellationToken = default)
         {
+            // Verloor deze verversing de botsing op het versienummer, dan opnieuw op de actuele stand: zo blijft geen nieuwere inhoud liggen.
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var outcome = await RefreshOnceAsync(orderId, cancellationToken);
+                if (outcome != null) return outcome.Value;
+            }
+            return false;
+        }
+
+        // true = nieuwe versie, false = niets veranderd, null = versiebotsing (opnieuw proberen).
+        private async Task<bool?> RefreshOnceAsync(int orderId, CancellationToken cancellationToken)
+        {
             var order = await LoadAsync(orderId, cancellationToken);
             if (order?.ConfirmedAt == null || order.Status == ReservationRules.OrderStatusCancelled) return false;
             var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
@@ -96,16 +141,19 @@ namespace AgfAdmin.Services
                 await db.SaveChangesAsync(cancellationToken);
                 return true;
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
+                // Alleen een versiebotsing met een gelijktijdige verversing; andere databasefouten gaan naar de aanroeper.
                 db.ChangeTracker.Clear();
-                return false;
+                return null;
             }
         }
 
         // Doorgegeven aan de loods (afgedrukt of overhandigd); deel 3 zet dit bij verzenden. Alleen de nieuwste versie, één keer.
         public async Task<ServiceResult<SalesOrderDocumentsDto>> MarkSentAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
         {
+            // Eerst verversen: een verouderde bon mag niet als nieuwste worden doorgegeven. Een mislukte verversing werpt en blokkeert de doorgifte.
+            await RefreshAsync(orderId, cancellationToken);
             var order = await LoadAsync(orderId, cancellationToken);
             var document = order?.Documents.SingleOrDefault(d => d.Id == documentId);
             if (document == null) return ServiceResult<SalesOrderDocumentsDto>.NotFound($"Document {documentId} of sales order {orderId} does not exist.");
