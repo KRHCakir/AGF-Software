@@ -57,6 +57,12 @@ describe('AI proposal building blocks', () => {
         assert.deepEqual(links, [], 'showing never changes the link by itself');
     });
 
+    test('with only Haiku the panel names one model and no fallback', async () => {
+        await mounted.render(<AiUploadPanel onProposal={() => undefined} />);
+        await settle();
+        assert.ok(mounted.hasText('ai_upload_hint_single'), 'one model, no fallback named');
+    });
+
     test('a failed status check says so and can be retried', async () => {
         statusReply = () => json(500, {});
         await mounted.render(<AiUploadPanel onProposal={() => undefined} />);

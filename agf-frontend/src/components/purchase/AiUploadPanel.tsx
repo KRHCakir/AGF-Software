@@ -75,7 +75,9 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply }:
                     onChange={(event) => void choose(event.target.files?.[0])} />
                 {reading && status && <span role="status" className="font-medium text-blue-900" data-testid="ai-reading">{t('ai_reading', { model: status.primaryModel.name })}</span>}
                 {!reading && available && status && (
-                    <span className="text-gray-700">{t('ai_upload_hint', { model: status.primaryModel.name, fallback: status.fallbackModel?.name ?? '–' })}</span>
+                    <span className="text-gray-700">{status.fallbackEnabled && status.fallbackModel
+                        ? t('ai_upload_hint', { model: status.primaryModel.name, fallback: status.fallbackModel.name })
+                        : t('ai_upload_hint_single', { model: status.primaryModel.name })}</span>
                 )}
                 {statusFailed && (
                     <span role="alert" className="text-amber-950" data-testid="ai-status-failed">
