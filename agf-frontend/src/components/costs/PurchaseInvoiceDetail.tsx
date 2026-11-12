@@ -1,6 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { orderLabel } from '../../lib/invoiceOrderLink';
+import { round2 } from '../../lib/invoiceMath';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatMoney } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
@@ -126,6 +129,29 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                         {t('ai_detail_approved', { name: invoice.aiReading.approvedBy, date: formatDateTime(invoice.aiReading.approvedAt, locale), model: invoice.aiReading.modelName ?? '–', version: invoice.aiReading.modelVersion ?? '–' })}
                         {invoice.aiReading.adjustedFields > 0 && <> · {t('ai_detail_adjusted', { count: String(invoice.aiReading.adjustedFields) })}</>}
                     </p>
+                )}
+                {/* Gekoppeld aan de bon (stap 4b): de orders met link, en per regel de prijs op de bon tegenover de factuur. */}
+                {(invoice.purchaseOrders ?? []).length > 0 && (
+                    <div className="text-sm text-gray-800" data-testid="invoice-orders" data-tour="invoice-orders">
+                        <p>
+                            {t('invoice_detail_orders')}{' '}
+                            {(invoice.purchaseOrders ?? []).map((order, index) => (
+                                <span key={order.id}>{index > 0 && ', '}<Link href={`/purchase-orders?id=${order.id}`} className="font-semibold text-blue-800 underline underline-offset-2">{orderLabel(order)}</Link></span>
+                            ))}
+                            {invoice.orderPriceDecision && <> · {t(invoice.orderPriceDecision === 'AdjustOrder' ? 'invoice_detail_adjusted' : 'invoice_detail_recorded')}</>}
+                        </p>
+                        <ul className="text-xs text-gray-700">
+                            {invoice.lines.filter((line) => line.supplyCommitmentLineId != null).map((line) => {
+                                const difference = line.orderUnitPrice == null ? null : round2(line.lineTotal - round2(line.quantity * line.orderUnitPrice));
+                                return (
+                                    <li key={line.id} data-testid="invoice-order-line">
+                                        {line.description ?? '–'}: {line.orderUnitPrice == null ? t('invoice_link_no_price') : t('invoice_detail_line_prices', { order: money(line.orderUnitPrice), invoice: money(line.unitPrice) })}
+                                        {difference !== null && difference !== 0 && <span className="ml-1 font-medium text-red-800">{t('invoice_detail_line_difference', { amount: money(difference) })}</span>}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
                 )}
                 {(invoice.attachments ?? []).map((attachment) => (
                     <button key={attachment.id} type="button" className="mr-2 text-sm text-blue-800 underline underline-offset-2" data-testid="invoice-attachment"

@@ -26,8 +26,9 @@ export async function updatePurchaseInvoiceSettings(request: UpdatePurchaseInvoi
     return json;
 }
 
-export async function listPurchaseInvoices(signal?: AbortSignal): Promise<PurchaseInvoice[]> {
-    const json = await getJson('/purchase-invoices', signal);
+// Met een zoekterm: factuurnummer, leverancier of het ordernummer van een gekoppelde order (stap 4b).
+export async function listPurchaseInvoices(signal?: AbortSignal, query = ''): Promise<PurchaseInvoice[]> {
+    const json = await getJson(query.trim() === '' ? '/purchase-invoices' : `/purchase-invoices?${new URLSearchParams({ query: query.trim() }).toString()}`, signal);
     if (!isPurchaseInvoiceList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de inkoopfacturen.');
     return json;
 }

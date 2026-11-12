@@ -37,17 +37,19 @@ function PurchaseInvoicesWorkspace() {
     }, [router, pathname]);
     const [state, setState] = useState<LoadState<PurchaseInvoice[]>>({ status: 'loading' });
     const [reloadToken, setReloadToken] = useState(0);
+    // Zoeken op factuurnummer, leverancier of ordernummer (ook ?query= vanaf de order, stap 4b).
+    const [query, setQuery] = useState(() => searchParams.get('query') ?? '');
 
     useEffect(() => {
         const controller = new AbortController();
-        listPurchaseInvoices(controller.signal)
+        const timer = setTimeout(() => listPurchaseInvoices(controller.signal, query)
             .then((data) => setState({ status: 'ready', data }))
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
                 if (apiError.kind !== 'aborted') setState({ status: 'error', error: apiError });
-            });
-        return () => controller.abort();
-    }, [reloadToken]);
+            }), query === '' ? 0 : 300);
+        return () => { clearTimeout(timer); controller.abort(); };
+    }, [reloadToken, query]);
 
 
     return (
@@ -61,6 +63,11 @@ function PurchaseInvoicesWorkspace() {
                     <button type="button" onClick={() => setReloadToken((n) => n + 1)} className="rounded border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-800 hover:bg-gray-100">↻ {t('availability_refresh')}</button>
                     <Link href="/purchase-invoices/new" className={primaryButtonClass}>+ {t('purchase_new_title')}</Link>
                 </div>
+            </div>
+            <div className="max-w-md">
+                <label htmlFor="purchase-invoice-search" className="text-xs font-medium text-gray-700">{t('purchase_list_search')}</label>
+                <input id="purchase-invoice-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('purchase_list_search_placeholder')}
+                    data-tour="pinvoice-list-search" className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm" />
             </div>
             {selected !== null && <PurchaseInvoiceDetail invoiceId={selected} onClose={() => open(null)} />}
             {state.status === 'loading' && <LoadingRows label={t('purchase_loading')} />}

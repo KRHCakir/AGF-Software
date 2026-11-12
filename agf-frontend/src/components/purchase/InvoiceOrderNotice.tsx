@@ -11,7 +11,9 @@ import OrderNumberText from './OrderNumberText';
 // Bij het invoeren van een inkoopfactuur: hangt dit nummer al aan een inkooporder (van deze leverancier, als die gekozen
 // is), dan "Hoort bij order 4521" (het ordernummer van de leverancier, met het eigen IO-nummer klein erachter) met een link; anders
 // niets. Een mislukte opzoeking toont ook niets.
-export default function InvoiceOrderNotice({ invoiceNumber, vendorId }: { invoiceNumber: string; vendorId: number | null }) {
+// Stap 4b: vóór deze stap bleef het bij die melding, opslaan legde niets vast. Met onUseOrder staat er per order "Regels overnemen":
+// de regels van die order komen als gekoppelde factuurregels in het formulier en de koppeling wordt bij opslaan bewaard.
+export default function InvoiceOrderNotice({ invoiceNumber, vendorId, onUseOrder }: { invoiceNumber: string; vendorId: number | null; onUseOrder?: (orderId: number) => void }) {
     const { t } = useTranslation();
     const [matches, setMatches] = useState<PurchaseOrderInvoiceMatch[]>([]);
     const number = normalizeInvoiceNumber(invoiceNumber);
@@ -36,6 +38,9 @@ export default function InvoiceOrderNotice({ invoiceNumber, vendorId }: { invoic
                     <Link href={`/purchase-orders?id=${match.id}`} className="font-semibold underline">
                         <OrderNumberText id={match.id} orderNumber={match.orderNumber} supplierReference={match.supplierReference} />
                     </Link>
+                    {onUseOrder && (
+                        <button type="button" className="ml-1 font-medium underline" data-testid="invoice-order-notice-use" onClick={() => onUseOrder(match.id)}>{t('invoice_link_use_order')}</button>
+                    )}
                 </span>
             ))}
         </p>
