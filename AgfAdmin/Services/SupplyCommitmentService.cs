@@ -216,7 +216,8 @@ namespace AgfAdmin.Services
         private async Task<SupplyCommitmentDto> ToDtoAsync(SupplyCommitment commitment, CancellationToken cancellationToken) =>
             ToDto(commitment, await AllocatedForAsync(new[] { commitment }, cancellationToken));
 
-        private static SupplyCommitment BuildCandidate(CreateSupplyCommitmentDto request, DateOnly today, Dictionary<string, List<string>> errors)
+        // Ook gebruikt bij aanpassen (PurchaseOrderService.Edit.cs): dezelfde regels voor kop en regels.
+        internal static SupplyCommitment BuildCandidate(CreateSupplyCommitmentDto request, DateOnly today, Dictionary<string, List<string>> errors)
         {
             if (request == null)
             {

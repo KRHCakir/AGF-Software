@@ -28,8 +28,18 @@ namespace AgfAdmin.Services
         // uit ontvangen en afgekeurde hoeveelheden en wordt daarom na de SQL-filters (zoeken, leverancier) in het geheugen bepaald;
         // daarna sorteren (nieuwste eerst) en pagineren op de server.
         public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, string supplierReference = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default, string document = null)
         {
+            // Documentstatus (stap 4a): leeg = alle, anders Open of Definitive (hoofdletterongevoelig).
+            var documentFilter = string.IsNullOrWhiteSpace(document) ? null
+                : PurchaseOrderDocumentRules.Statuses.FirstOrDefault(s => string.Equals(s, document.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(document) && documentFilter == null)
+            {
+                return ServiceResult<PurchaseOrderListDto>.Validation(new Dictionary<string, string[]>
+                {
+                    ["document"] = new[] { $"Document status must be one of: {string.Join(", ", PurchaseOrderDocumentRules.Statuses)}." }
+                });
+            }
             // Hoofdletterongevoelig ("Open", "received"), maar altijd terug naar een waarde uit de toelatingslijst.
             var statusFilter = string.IsNullOrWhiteSpace(status) ? "open"
                 : new[] { "open", "all" }.Concat(PurchaseOrderRules.OrderStatuses).FirstOrDefault(s => string.Equals(s, status.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -45,6 +55,7 @@ namespace AgfAdmin.Services
 
             var commitments = _db.SupplyCommitments.AsNoTracking();
             if (vendorId != null) commitments = commitments.Where(c => c.VendorId == vendorId);
+            if (documentFilter != null) commitments = commitments.Where(c => c.DocumentStatus == documentFilter);
             // Filter "Ordernummer leverancier": deel van de sleutel, dus 4521 vindt 45-21 en 45210.
             var referenceFilter = PurchaseOrderRules.SupplierReferenceKey(supplierReference);
             if (referenceFilter != null) commitments = commitments.Where(c => c.SupplierReference != null && c.SupplierReference.ToUpper().Replace(" ", "").Replace("\t", "").Replace("\u00A0", "").Replace("-", "").Contains(referenceFilter));
@@ -71,7 +82,7 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.OrderNumber, c.OrderYear, c.OrderSequence, c.VendorId, VendorName = c.Vendor.Name, c.SupplierReference, c.OrderedOn,
-                    c.ExpectedAt, c.Route, CustomerName = c.Customer.Name, c.Status, c.PartijId, PartijNumber = c.Partij.Number, c.SupplierLotReference
+                    c.ExpectedAt, c.Route, CustomerName = c.Customer.Name, c.Status, c.PartijId, PartijNumber = c.Partij.Number, c.SupplierLotReference, c.DocumentStatus
                 })
                 .ToListAsync(cancellationToken);
             var facts = await LoadFactsAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
@@ -105,7 +116,8 @@ namespace AgfAdmin.Services
                         InvoiceNumbers = f.Refs.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
                             .Select(r => new PurchaseOrderInvoiceNumberDto { Kind = r.Kind, InvoiceNumber = r.InvoiceNumber }).ToList(),
                         InvoiceIndicator = f.InvoiceIndicator(),
-                        HasDeviation = withDeviation.Contains(h.Id)
+                        HasDeviation = withDeviation.Contains(h.Id),
+                        DocumentStatus = h.DocumentStatus
                     });
                 })
                 .Where(i => statusFilter == "all"
@@ -328,7 +340,7 @@ namespace AgfAdmin.Services
                 };
             }).ToList();
 
-            return ServiceResult<PurchaseOrderDetailDto>.Ok(new PurchaseOrderDetailDto
+            var detail = new PurchaseOrderDetailDto
             {
                 Id = commitment.Id,
                 OrderNumber = commitment.OrderNumber,
@@ -388,7 +400,10 @@ namespace AgfAdmin.Services
                 }).ToList(),
                 History = history.OrderBy(h => h.OccurredAt).ToList(),
                 SalesOrders = salesLinks
-            });
+            };
+            // Documentstatus, wat vastligt en de auditregels (stap 4a, PurchaseOrderService.Edit.cs).
+            await AddDocumentAsync(detail, commitment, cancellationToken);
+            return ServiceResult<PurchaseOrderDetailDto>.Ok(detail);
         }
 
         // ---------------- Gedeelde feiten ----------------
