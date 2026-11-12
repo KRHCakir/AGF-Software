@@ -360,6 +360,10 @@ namespace AgfAdmin.Services
                 }
             }
 
+            // Koppelen aan de bon (stap 4b): elke gekoppelde regel factureert een orderregel van deze leverancier, met de prijs op de bon.
+            var orderLinks = new PurchaseInvoiceOrderLinks(_db, _user);
+            var linked = errors.Count == 0 ? await orderLinks.PrepareAsync(request, vendor, lines, errors, cancellationToken) : null;
+
             // Goedkeuren van een AI-voorstel (stap 7a): alleen een open voorstel, en een orderkoppeling alleen bij een order van deze leverancier.
             var approval = request.AiExtractionId != null || request.LinkPurchaseOrderId != null
                 ? await new AiInvoiceApproval(_db).PrepareAsync(request, vendor, errors, cancellationToken)
@@ -399,6 +403,7 @@ namespace AgfAdmin.Services
                 CustomsValue = customsValue,
                 OriginCountry = originCountry,
                 ReceiptReference = receiptReference,
+                OrderPriceDecision = linked?.Decision,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 InvoiceLines = lines
@@ -465,6 +470,11 @@ namespace AgfAdmin.Services
                         }
                     }
                     await _db.SaveChangesAsync(cancellationToken);
+                    // Daarna de orders: verwijzing met de factuur, eventueel de prijs op de bon, en definitief (stap 4b).
+                    if (linked != null || approval?.Order != null)
+                    {
+                        await orderLinks.ApplyAsync(linked, candidate, approval?.Order?.Id, cancellationToken);
+                    }
                     await transaction.CommitAsync(cancellationToken);
                 });
             }
@@ -582,7 +592,8 @@ namespace AgfAdmin.Services
             (await Query().OrderByDescending(i => i.CreatedAt).Take(200).ToListAsync(cancellationToken)).Select(ToDto).ToList();
 
         private IQueryable<IncomingInvoice> Query() =>
-            _db.IncomingInvoices.AsNoTracking().Include(i => i.Vendor).Include(i => i.InvoiceLines).ThenInclude(l => l.CostArticle);
+            _db.IncomingInvoices.AsNoTracking().Include(i => i.Vendor).Include(i => i.InvoiceLines).ThenInclude(l => l.CostArticle)
+                .Include(i => i.InvoiceLines).ThenInclude(l => l.SupplyCommitmentLine).ThenInclude(l => l.SupplyCommitment).AsSplitQuery();
 
         private static DateTime? AsUtcDate(DateTime? value) => PurchaseInvoiceRules.AsUtcDate(value);
 
@@ -634,8 +645,17 @@ namespace AgfAdmin.Services
                 DiscountPercentage = l.DiscountPercentage,
                 LineTotal = l.LineTotal,
                 VatPercentage = l.VATPercentage,
-                VatAmount = l.VATAmount
-            }).ToList()
+                VatAmount = l.VATAmount,
+                SupplyCommitmentLineId = l.SupplyCommitmentLineId,
+                PurchaseOrderId = l.SupplyCommitmentLine?.SupplyCommitmentId,
+                PurchaseOrderNumber = l.SupplyCommitmentLine?.SupplyCommitment?.OrderNumber,
+                SupplierReference = l.SupplyCommitmentLine?.SupplyCommitment?.SupplierReference,
+                OrderUnitPrice = l.OrderUnitPrice,
+            }).ToList(),
+            PurchaseOrders = (invoice.InvoiceLines ?? new List<IncomingInvoiceLine>()).Select(l => l.SupplyCommitmentLine?.SupplyCommitment).Where(o => o != null)
+                .GroupBy(o => o.Id).Select(g => g.First()).OrderBy(o => o.Id)
+                .Select(o => new PurchaseInvoiceOrderDto { Id = o.Id, OrderNumber = o.OrderNumber, SupplierReference = o.SupplierReference, DocumentStatus = o.DocumentStatus }).ToList(),
+            OrderPriceDecision = invoice.OrderPriceDecision,
         };
     }
 }

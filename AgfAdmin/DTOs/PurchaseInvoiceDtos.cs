@@ -33,6 +33,11 @@ namespace AgfAdmin.DTOs
         // koppeling aan een inkooporder (het factuurnummer komt dan op die order, zoals bij "Factuur ontvangen"). Beide optioneel.
         public int? AiExtractionId { get; set; }
         public int? LinkPurchaseOrderId { get; set; }
+
+        // Koppelen aan de bon (stap 4b): bij een prijsverschil met een gekoppelde orderregel de keuze AdjustOrder of RecordDifference
+        // (PurchaseInvoiceOrderLinkRules); meer factureren dan besteld of ontvangen alleen met AcceptOverInvoicing = true.
+        public string OrderPriceDecision { get; set; }
+        public bool? AcceptOverInvoicing { get; set; }
     }
 
     public sealed class CreatePurchaseInvoiceLineDto
@@ -46,6 +51,8 @@ namespace AgfAdmin.DTOs
         public decimal? UnitPrice { get; set; }
         public decimal? DiscountPercentage { get; set; }
         public decimal? VatPercentage { get; set; }
+        // De orderregel die deze factuurregel factureert (stap 4b); leeg bij een regel zonder bon.
+        public int? SupplyCommitmentLineId { get; set; }
     }
 
     public sealed class PurchaseInvoiceDto
@@ -79,6 +86,9 @@ namespace AgfAdmin.DTOs
         public string OriginCountry { get; set; }
         public string ReceiptReference { get; set; }
         public List<PurchaseInvoiceLineDto> Lines { get; set; } = new();
+        // Stap 4b: de gekoppelde inkooporders (via de regels) en wat er met een prijsverschil gebeurde (AdjustOrder, RecordDifference of leeg).
+        public List<PurchaseInvoiceOrderDto> PurchaseOrders { get; set; } = new();
+        public string OrderPriceDecision { get; set; }
         // Alleen bij het detail en na opslaan: het goedgekeurde AI-voorstel en de bijlagen (het originele document).
         public PurchaseInvoiceAiDto AiReading { get; set; }
         public List<PurchaseInvoiceAttachmentDto> Attachments { get; set; } = new();
@@ -98,6 +108,21 @@ namespace AgfAdmin.DTOs
         public decimal LineTotal { get; set; }
         public decimal VatPercentage { get; set; }
         public decimal VatAmount { get; set; }
+        // Koppeling aan de bon (stap 4b): de orderregel, de order en de prijs die op de bon stond bij het invoeren; leeg zonder bon.
+        public int? SupplyCommitmentLineId { get; set; }
+        public int? PurchaseOrderId { get; set; }
+        public string PurchaseOrderNumber { get; set; }
+        public string SupplierReference { get; set; }
+        public decimal? OrderUnitPrice { get; set; }
+    }
+
+    // Een inkooporder waaraan deze factuur gekoppeld is (via haar regels), voor de link en de keten.
+    public sealed class PurchaseInvoiceOrderDto
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; }
+        public string SupplierReference { get; set; }
+        public string DocumentStatus { get; set; }
     }
 
     // 409 bij een factuurnummer dat van deze leverancier al is ingevoerd: het scherm noemt de bestaande factuur.
