@@ -95,9 +95,9 @@ public class TransportOrderServiceTests : IDisposable
         var s = await OrderAsync();
         var confirmed = await Slips(x => x.ConfirmAsync(s.OrderId, new ConfirmSalesOrderDto()));
         Assert.Equal((false, "LoadingSlip"), (confirmed.Value.HasTransport, Assert.Single(confirmed.Value.Documents).Kind));
-        // Eigen transport na bevestigen: de verversing (filter na de PUT) maakt versie 1.
+        // Eigen transport na bevestigen: in dezelfde opslag komt versie 1.
         Assert.Equal(ServiceResultStatus.Ok, (await Transport(t => t.SaveAsync(s.OrderId, new SaveSalesOrderTransportDto { Mode = "own", CarrierRelationId = s.CarrierId }))).Status);
-        Assert.True(await Slips(x => x.RefreshAsync(s.OrderId)));
+        Assert.False(await Slips(x => x.RefreshAsync(s.OrderId)));
         var order = TransportOrderBuilder.Deserialize(Assert.Single(await VersionsAsync(s.OrderId, SalesOrderDocumentRules.KindTransportOrder)).SnapshotJson);
         Assert.Equal((true, (string)null), (order.OwnTransport, order.CarrierName));
         Assert.Equal("Customer T, DC Noord, Havenweg 4, 9723 AB Groningen, NL", order.UnloadingPlace);
@@ -115,8 +115,7 @@ public class TransportOrderServiceTests : IDisposable
         var colder = ByCarrier(s, saved.Value.Version);
         colder.TemperatureC = 1.5m;
         Assert.Equal(ServiceResultStatus.Ok, (await Transport(t => t.SaveAsync(s.OrderId, colder))).Status);
-        Assert.True(await Slips(x => x.RefreshAsync(s.OrderId)));
-        Assert.False(await Slips(x => x.RefreshAsync(s.OrderId)), "the same content never gives another version");
+        Assert.False(await Slips(x => x.RefreshAsync(s.OrderId)), "the new version came with the save; the same content never gives another");
         var documents = (await Slips(x => x.DocumentsAsync(s.OrderId))).Value;
         Assert.Equal((false, true), (documents.NeedsResend, documents.TransportOrderNeedsResend));
         Assert.Equal(new[] { ("LoadingSlip", 1, true), ("TransportOrder", 1, false), ("TransportOrder", 2, true) },
