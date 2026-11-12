@@ -240,6 +240,7 @@ namespace AgfAdmin.Data
         {
             var fields = new List<string>();
             void Check(bool changed, string name) { if (changed) fields.Add(name); }
+            Check(!string.Equals(order.Route, before.Route, StringComparison.Ordinal), nameof(SupplyCommitment.Route));
             Check(order.VendorId != before.VendorId, nameof(SupplyCommitment.VendorId));
             Check(!string.Equals(order.SupplierReference, before.SupplierReference, StringComparison.Ordinal), nameof(SupplyCommitment.SupplierReference));
             Check(order.OrderedOn != before.OrderedOn, nameof(SupplyCommitment.OrderedOn));
