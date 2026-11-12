@@ -15,8 +15,9 @@ export async function saveSalesOrderTransport(orderId: number, request: SaveSale
     return transport((await putJson(`/sales-orders/${orderId}/transport`, request, signal)).json);
 }
 
-export async function deleteSalesOrderTransport(orderId: number, signal?: AbortSignal): Promise<SalesOrderTransport> {
-    return transport((await deleteJson(`/sales-orders/${orderId}/transport`, signal)).json);
+// Met de versie die de gebruiker zag: een gelijktijdige wijziging gaat niet verloren (409).
+export async function deleteSalesOrderTransport(orderId: number, expectedVersion: number, signal?: AbortSignal): Promise<SalesOrderTransport> {
+    return transport((await deleteJson(`/sales-orders/${orderId}/transport?expectedVersion=${expectedVersion}`, signal)).json);
 }
 
 export async function getTransportOrderSettings(signal?: AbortSignal): Promise<TransportOrderSettings> {

@@ -22,8 +22,9 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Save(int id, [FromBody] SaveSalesOrderTransportDto request) =>
             this.ToActionResult(await transports.SaveAsync(id, request, HttpContext?.RequestAborted ?? default));
 
-        // Alleen zolang er geen transportopdracht is (409 anders).
+        // Alleen zolang er geen transportopdracht is, met de versie die de gebruiker zag (409 anders).
         [HttpDelete]
-        public async Task<IActionResult> Delete(int id) => this.ToActionResult(await transports.DeleteAsync(id, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> Delete(int id, [FromQuery] int? expectedVersion = null) =>
+            this.ToActionResult(await transports.DeleteAsync(id, expectedVersion, HttpContext?.RequestAborted ?? default));
     }
 }
