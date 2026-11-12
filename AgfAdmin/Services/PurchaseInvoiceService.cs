@@ -1,6 +1,8 @@
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
+using AgfAdmin.Security;
+using AgfAdmin.Services.DocumentAi;
 using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
@@ -20,10 +22,13 @@ namespace AgfAdmin.Services
         private const int MaxDescriptionLength = 200;
 
         private readonly AppDbContext _db;
+        private readonly ICurrentUser _user;
 
-        public PurchaseInvoiceService(AppDbContext db)
+        // De gebruiker is nodig bij het goedkeuren van een AI-voorstel ("goedgekeurd door"); zonder gebruiker heet de actor "Onbekend".
+        public PurchaseInvoiceService(AppDbContext db, ICurrentUser user = null)
         {
             _db = db;
+            _user = user;
         }
 
         // ---- Instellingen ----
@@ -355,6 +360,11 @@ namespace AgfAdmin.Services
                 }
             }
 
+            // Goedkeuren van een AI-voorstel (stap 7a): alleen een open voorstel, en een orderkoppeling alleen bij een order van deze leverancier.
+            var approval = request.AiExtractionId != null || request.LinkPurchaseOrderId != null
+                ? await new AiInvoiceApproval(_db).PrepareAsync(request, vendor, errors, cancellationToken)
+                : null;
+
             if (errors.Count > 0)
             {
                 return Validation<PurchaseInvoiceDto>(errors);
@@ -441,6 +451,19 @@ namespace AgfAdmin.Services
                     }
 
                     _db.IncomingInvoices.Add(candidate);
+                    if (approval != null)
+                    {
+                        // Eerst de factuur opslaan, dan de lezing atomair claimen; verliest dit verzoek, dan rolt de transactie alles terug.
+                        await _db.SaveChangesAsync(cancellationToken);
+                        var claimError = await new AiInvoiceApproval(_db).ApplyAsync(approval, candidate, totals.Net, _user?.Actor(PurchaseOrderRules.MaxActorLength) ?? CurrentUserExtensions.UnknownActor, cancellationToken);
+                        if (claimError != null)
+                        {
+                            await transaction.RollbackAsync(cancellationToken);
+                            _db.ChangeTracker.Clear();
+                            outcome = ServiceResult<PurchaseInvoiceDto>.Conflict(claimError);
+                            return;
+                        }
+                    }
                     await _db.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                 });
@@ -461,8 +484,32 @@ namespace AgfAdmin.Services
                 return outcome;
             }
 
-            return ServiceResult<PurchaseInvoiceDto>.Created(ToDto(await Query().SingleAsync(i => i.Id == candidate.Id, cancellationToken)));
+            return ServiceResult<PurchaseInvoiceDto>.Created(await WithAiAsync(ToDto(await Query().SingleAsync(i => i.Id == candidate.Id, cancellationToken)), cancellationToken));
         }
+
+        // Het goedgekeurde AI-voorstel ("goedgekeurd door", model en versie) en de bijlagen bij een factuur.
+        private async Task<PurchaseInvoiceDto> WithAiAsync(PurchaseInvoiceDto dto, CancellationToken cancellationToken)
+        {
+            var reading = await _db.AiExtractions.AsNoTracking().Where(e => e.IncomingInvoiceId == dto.Id && e.Status == AiReadingRules.StatusApproved)
+                .Select(e => new { e.Id, e.Model, e.ModelVersion, e.UsedFallback, e.ApprovedBy, e.ApprovedAt, e.AdjustmentsJson }).SingleOrDefaultAsync(cancellationToken);
+            if (reading != null)
+            {
+                dto.AiReading = new PurchaseInvoiceAiDto
+                {
+                    ExtractionId = reading.Id, Model = reading.Model, ModelName = AiModelNames.Display(reading.Model), ModelVersion = reading.ModelVersion,
+                    UsedFallback = reading.UsedFallback, ApprovedBy = reading.ApprovedBy, ApprovedAt = DateTime.SpecifyKind(reading.ApprovedAt!.Value, DateTimeKind.Utc),
+                    AdjustedFields = reading.AdjustmentsJson == null ? 0 : System.Text.Json.Nodes.JsonNode.Parse(reading.AdjustmentsJson) is System.Text.Json.Nodes.JsonArray a ? a.Count : 0,
+                };
+            }
+            dto.Attachments = await _db.DocumentAttachments.AsNoTracking().Where(a => a.IncomingInvoiceId == dto.Id).OrderBy(a => a.Id)
+                .Select(a => new PurchaseInvoiceAttachmentDto { Id = a.Id, FileName = a.FileName, MediaType = a.MediaType, SizeBytes = a.SizeBytes, Sha256 = a.Sha256, CreatedAt = DateTime.SpecifyKind(a.CreatedAt, DateTimeKind.Utc) })
+                .ToListAsync(cancellationToken);
+            return dto;
+        }
+
+        // Een bijlage van een factuur (het originele document), alleen bij die factuur.
+        public async Task<DocumentAttachment> AttachmentAsync(int invoiceId, int attachmentId, CancellationToken cancellationToken = default) =>
+            await _db.DocumentAttachments.AsNoTracking().SingleOrDefaultAsync(a => a.Id == attachmentId && a.IncomingInvoiceId == invoiceId, cancellationToken);
 
         private const string LineAmountTooLarge = "The line amount (or its VAT) exceeds the supported maximum of 9,999,999,999,999,999.99.";
         private const string TotalTooLarge = "The document totals exceed the supported maximum of 9,999,999,999,999,999.99.";
@@ -528,7 +575,7 @@ namespace AgfAdmin.Services
             var invoice = await Query().SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
             return invoice == null
                 ? ServiceResult<PurchaseInvoiceDto>.NotFound($"Purchase invoice {id} does not exist.")
-                : ServiceResult<PurchaseInvoiceDto>.Ok(ToDto(invoice));
+                : ServiceResult<PurchaseInvoiceDto>.Ok(await WithAiAsync(ToDto(invoice), cancellationToken));
         }
 
         public async Task<IReadOnlyList<PurchaseInvoiceDto>> ListAsync(CancellationToken cancellationToken = default) =>

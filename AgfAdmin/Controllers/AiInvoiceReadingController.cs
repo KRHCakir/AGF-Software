@@ -1,5 +1,6 @@
 using AgfAdmin.DTOs;
 using AgfAdmin.Security;
+using AgfAdmin.Services;
 using AgfAdmin.Services.DocumentAi;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,7 @@ namespace AgfAdmin.Controllers
     [ApiController]
     [Route("api/purchase-invoices/ai")]
     [Authorize(Policy = Permissions.Purchase)]
-    public sealed class AiInvoiceReadingController(AiInvoiceReadingService service) : ControllerBase
+    public sealed class AiInvoiceReadingController(AiInvoiceReadingService service, AiInvoiceMatching matching) : ControllerBase
     {
         // Ruim boven de documentgrens (10 MB, DocumentAi:MaxFileBytes), zodat een te groot bestand een nette melding krijgt.
         private const long MaxRequestBytes = 32 * 1024 * 1024;
@@ -33,11 +34,21 @@ namespace AgfAdmin.Controllers
                 await stream.CopyToAsync(buffer, cancellationToken);
                 bytes = buffer.ToArray();
             }
-            return this.ToActionResult(await service.ReadAsync(file?.FileName, bytes, cancellationToken));
+            return this.ToActionResult(await WithMatchesAsync(await service.ReadAsync(file?.FileName, bytes, cancellationToken)));
         }
 
         [HttpGet("extractions/{id:int}")]
-        public async Task<IActionResult> Get(int id) => this.ToActionResult(await service.GetAsync(id, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> Get(int id) => this.ToActionResult(await WithMatchesAsync(await service.GetAsync(id, HttpContext?.RequestAborted ?? default)));
+
+        // Koppelen aan leverancier, inkooporder, dubbele factuur en kostenartikel: alleen voorstellen bij het voorstel.
+        private async Task<ServiceResult<AiExtractionDto>> WithMatchesAsync(ServiceResult<AiExtractionDto> result)
+        {
+            if (result.Status == ServiceResultStatus.Ok && result.Value.Proposal != null)
+            {
+                result.Value.Matches = await matching.MatchAsync(result.Value.Proposal, HttpContext?.RequestAborted ?? default);
+            }
+            return result;
+        }
 
         [HttpGet("extractions/{id:int}/document")]
         public async Task<IActionResult> Document(int id)

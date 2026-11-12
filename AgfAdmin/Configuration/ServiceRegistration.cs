@@ -24,6 +24,7 @@ namespace AgfAdmin.Configuration
             services.AddSingleton<UploadRateLimiter>();
             services.AddScoped<InvoiceReader>();
             services.AddScoped<AiInvoiceReadingService>();
+            services.AddScoped<AiInvoiceMatching>();
             services.AddHostedService<AiUploadCleanupService>();
             services.AddScoped<ISalesParserService, SimpleSalesParserService>();
             services.AddScoped<PurchaseInvoiceService>();

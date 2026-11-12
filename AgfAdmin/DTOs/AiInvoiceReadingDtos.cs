@@ -58,7 +58,73 @@ namespace AgfAdmin.DTOs
         public decimal CostEur { get; set; }
         public AiInvoiceProposalDto Proposal { get; set; }
         public List<AiProblemDto> Problems { get; set; } = new();
+        // Koppelen aan wat er al is: alleen voorstellen, de gebruiker bevestigt.
+        public AiMatchesDto Matches { get; set; }
     }
+
+    public sealed class AiMatchesDto
+    {
+        public List<AiVendorCandidateDto> VendorCandidates { get; set; } = new();
+        public int? SuggestedVendorId { get; set; }
+        public List<AiOrderCandidateDto> OrderCandidates { get; set; } = new();
+        public int? SuggestedOrderId { get; set; }
+        public AiDuplicateInvoiceDto DuplicateInvoice { get; set; }
+        public List<AiLineCostArticleDto> LineCostArticles { get; set; } = new();
+    }
+
+    public sealed class AiVendorCandidateDto
+    {
+        public int VendorId { get; set; }
+        public string Name { get; set; }
+        public List<string> MatchedOn { get; set; } = new();   // iban, kvk, vat, name
+    }
+
+    public sealed class AiOrderCandidateDto
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; }
+        public string SupplierReference { get; set; }
+        public int VendorId { get; set; }
+        public string VendorName { get; set; }
+    }
+
+    public sealed class AiDuplicateInvoiceDto
+    {
+        public int Id { get; set; }
+        public string InvoiceNumber { get; set; }
+    }
+
+    public sealed class AiLineCostArticleDto
+    {
+        public int Index { get; set; }
+        public int CostArticleId { get; set; }
+        public string Name { get; set; }
+    }
+
+    // Op een inkoopfactuur: welk AI-voorstel het startpunt was en wie het goedkeurde ("AI-voorstel goedgekeurd door ...").
+    public sealed class PurchaseInvoiceAiDto
+    {
+        public int ExtractionId { get; set; }
+        public string Model { get; set; }
+        public string ModelName { get; set; }
+        public string ModelVersion { get; set; }
+        public bool UsedFallback { get; set; }
+        public string ApprovedBy { get; set; }
+        public DateTime ApprovedAt { get; set; }
+        public int AdjustedFields { get; set; }
+    }
+
+    public sealed class PurchaseInvoiceAttachmentDto
+    {
+        public int Id { get; set; }
+        public string FileName { get; set; }
+        public string MediaType { get; set; }
+        public long SizeBytes { get; set; }
+        public string Sha256 { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public sealed record AiAdjustmentDto(string Field, string Proposed, string Final);
 
     public sealed class AiInvoiceProposalDto
     {

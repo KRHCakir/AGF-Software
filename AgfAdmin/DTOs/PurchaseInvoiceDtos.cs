@@ -29,6 +29,10 @@ namespace AgfAdmin.DTOs
         public decimal? CustomsValue { get; set; }
         public string OriginCountry { get; set; }
         public string ReceiptReference { get; set; }
+        // Goedkeuren van een AI-voorstel (stap 7a): de lezing waarvan deze invoer het voorstel is, en de door de gebruiker bevestigde
+        // koppeling aan een inkooporder (het factuurnummer komt dan op die order, zoals bij "Factuur ontvangen"). Beide optioneel.
+        public int? AiExtractionId { get; set; }
+        public int? LinkPurchaseOrderId { get; set; }
     }
 
     public sealed class CreatePurchaseInvoiceLineDto
@@ -75,6 +79,9 @@ namespace AgfAdmin.DTOs
         public string OriginCountry { get; set; }
         public string ReceiptReference { get; set; }
         public List<PurchaseInvoiceLineDto> Lines { get; set; } = new();
+        // Alleen bij het detail en na opslaan: het goedgekeurde AI-voorstel en de bijlagen (het originele document).
+        public PurchaseInvoiceAiDto AiReading { get; set; }
+        public List<PurchaseInvoiceAttachmentDto> Attachments { get; set; } = new();
     }
 
     public sealed class PurchaseInvoiceLineDto

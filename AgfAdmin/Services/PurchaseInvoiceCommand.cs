@@ -29,14 +29,14 @@ namespace AgfAdmin.Services
                 Text(request.Currency)?.ToUpperInvariant(), lines, Text(request.InternalNote),
                 Day(request.ReceivedDate), Text(request.PaymentReference), Text(request.Remarks), Number(request.GrossWeightKg), Number(request.NetWeightKg),
                 Text(request.ContainerNumber), Text(request.Transporter), Text(request.DriverName), Text(request.LicensePlate), Text(request.Incoterms),
-                Number(request.CustomsValue), Text(request.OriginCountry), Text(request.ReceiptReference));
+                Number(request.CustomsValue), Text(request.OriginCountry), Text(request.ReceiptReference), request.AiExtractionId, request.LinkPurchaseOrderId);
             return JsonSerializer.Serialize(snapshot, Options);
         }
 
         // Velden die pas na de eerste vastlegging (#43) aan de opdracht zijn toegevoegd. Een opgeslagen opdracht van vóór zo'n
         // veld heeft de sleutel niet; "ontbrekend" telt dan als null (niet ingevuld), zodat een identieke retry 200 blijft en een
         // nu wél ingevulde waarde een conflict geeft. Nieuwe velden hier toevoegen, nooit bestaande verwijderen.
-        private static readonly string[] FieldsAddedLater = { "internalNote" };
+        private static readonly string[] FieldsAddedLater = { "internalNote", "aiExtractionId", "linkPurchaseOrderId" };
         // Hetzelfde per regel (kostenartikel, P2).
         private static readonly string[] LineFieldsAddedLater = { "costArticleId" };
 
@@ -91,7 +91,8 @@ namespace AgfAdmin.Services
         private sealed record Snapshot(
             int? VendorId, string InvoiceNumber, string InvoiceDate, int? PaymentTermsDays, string DueDate, string Currency, List<LineSnapshot> Lines, string InternalNote,
             string ReceivedDate, string PaymentReference, string Remarks, decimal? GrossWeightKg, decimal? NetWeightKg, string ContainerNumber,
-            string Transporter, string DriverName, string LicensePlate, string Incoterms, decimal? CustomsValue, string OriginCountry, string ReceiptReference);
+            string Transporter, string DriverName, string LicensePlate, string Incoterms, decimal? CustomsValue, string OriginCountry, string ReceiptReference,
+            int? AiExtractionId, int? LinkPurchaseOrderId);
 
         private sealed record LineSnapshot(int? ProductVariantId, string Description, decimal? Quantity, string Unit, decimal? UnitPrice, decimal? DiscountPercentage, decimal? VatPercentage,
             int? CostArticleId);
