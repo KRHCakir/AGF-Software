@@ -18,13 +18,17 @@ namespace AgfAdmin.Data
             {
                 var ids = modifiedLines.Select(e => e.Entity.Id).ToList();
                 var stored = (await ToListAsync(db.IncomingInvoiceLines.AsNoTracking().Where(l => ids.Contains(l.Id))
-                    .Select(l => new { l.Id, l.SupplyCommitmentLineId, l.OrderUnitPrice }), async, cancellationToken)).ToDictionary(l => l.Id);
+                    .Select(l => new { l.Id, l.SupplyCommitmentLineId, l.OrderUnitPrice, l.IncomingInvoiceId }), async, cancellationToken)).ToDictionary(l => l.Id);
                 foreach (var entry in modifiedLines)
                 {
                     if (stored.TryGetValue(entry.Entity.Id, out var before)
                         && (before.SupplyCommitmentLineId != entry.Entity.SupplyCommitmentLineId || before.OrderUnitPrice != entry.Entity.OrderUnitPrice))
                     {
                         throw new TraceabilityViolationException($"Invoice line {entry.Entity.Id} keeps its purchase order line and the price that was on it.");
+                    }
+                    if (stored.TryGetValue(entry.Entity.Id, out var linkedBefore) && linkedBefore.SupplyCommitmentLineId != null && linkedBefore.IncomingInvoiceId != entry.Entity.IncomingInvoiceId)
+                    {
+                        throw new TraceabilityViolationException($"Invoice line {entry.Entity.Id} is linked to a purchase order line and stays on its invoice.");
                     }
                 }
             }
@@ -33,13 +37,47 @@ namespace AgfAdmin.Data
             if (modifiedInvoices.Count > 0)
             {
                 var ids = modifiedInvoices.Select(e => e.Entity.Id).ToList();
-                var stored = (await ToListAsync(db.IncomingInvoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.OrderPriceDecision }), async, cancellationToken))
+                var stored = (await ToListAsync(db.IncomingInvoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.OrderPriceDecision, i.VendorId }), async, cancellationToken))
                     .ToDictionary(i => i.Id);
                 foreach (var entry in modifiedInvoices)
                 {
                     if (stored.TryGetValue(entry.Entity.Id, out var before) && !string.Equals(before.OrderPriceDecision, entry.Entity.OrderPriceDecision, StringComparison.Ordinal))
                     {
                         throw new TraceabilityViolationException($"Invoice {entry.Entity.Id} keeps what was decided about a price difference with its purchase orders.");
+                    }
+                    if (stored.TryGetValue(entry.Entity.Id, out var prior) && prior.VendorId != entry.Entity.VendorId)
+                    {
+                        var invoiceId = entry.Entity.Id;
+                        var newVendor = entry.Entity.VendorId;
+                        var orderVendors = await ToListAsync(db.IncomingInvoiceLines.AsNoTracking()
+                            .Where(l => l.IncomingInvoiceId == invoiceId && l.SupplyCommitmentLineId != null)
+                            .Select(l => l.SupplyCommitmentLine!.SupplyCommitment.VendorId), async, cancellationToken);
+                        if (orderVendors.Any(v => v != newVendor))
+                        {
+                            throw new TraceabilityViolationException($"Invoice {invoiceId} keeps the supplier of the purchase orders its lines are linked to.");
+                        }
+                    }
+                }
+            }
+
+            // Ook de leverancier van de order zelf kan na het koppelen nog wijzigen (die ligt pas na ontvangst vast, regel 29).
+            var modifiedOrders = db.ChangeTracker.Entries<SupplyCommitment>().Where(e => e.State == EntityState.Modified).ToList();
+            if (modifiedOrders.Count > 0)
+            {
+                var orderIds = modifiedOrders.Select(e => e.Entity.Id).ToList();
+                var storedOrders = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.VendorId }), async, cancellationToken))
+                    .ToDictionary(o => o.Id, o => o.VendorId);
+                foreach (var entry in modifiedOrders)
+                {
+                    if (!storedOrders.TryGetValue(entry.Entity.Id, out var oldVendor) || oldVendor == entry.Entity.VendorId) continue;
+                    var orderId = entry.Entity.Id;
+                    var newOrderVendor = entry.Entity.VendorId;
+                    var invoiceVendors = await ToListAsync(db.IncomingInvoiceLines.AsNoTracking()
+                        .Where(l => l.SupplyCommitmentLine != null && l.SupplyCommitmentLine.SupplyCommitmentId == orderId)
+                        .Select(l => l.IncomingInvoice.VendorId), async, cancellationToken);
+                    if (invoiceVendors.Any(v => v != newOrderVendor))
+                    {
+                        throw new TraceabilityViolationException($"Purchase order {orderId} keeps the supplier of the invoices its lines are linked to.");
                     }
                 }
             }
