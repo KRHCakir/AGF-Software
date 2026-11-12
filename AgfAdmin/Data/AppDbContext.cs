@@ -53,6 +53,7 @@ namespace AgfAdmin.Data
 
         // Inkooporder: factuurnummers bij een order en afkeuringen van ontvangen inkoop.
         public DbSet<SupplyCommitmentInvoiceRef> SupplyCommitmentInvoiceRefs { get; set; }
+        public DbSet<PurchaseOrderChange> PurchaseOrderChanges { get; set; }
         public DbSet<SupplyRejection> SupplyRejections { get; set; }
         public DbSet<SupplyRejectionLine> SupplyRejectionLines { get; set; }
         public DbSet<SupplyReceiptDeviation> SupplyReceiptDeviations { get; set; }
@@ -600,16 +601,41 @@ namespace AgfAdmin.Data
                 b.Property(c => c.RequestPartijKey).HasMaxLength(200);
                 b.HasOne(c => c.Partij).WithMany().HasForeignKey(c => c.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(c => c.PartijId);
+                // Documentstatus (stap 4a): Open of Definitive; wie, wanneer en waardoor alleen (en altijd) bij Definitive.
+                b.Property(c => c.DocumentStatus).IsRequired().HasMaxLength(20).HasDefaultValue(PurchaseOrderDocumentRules.StatusOpen);
+                b.Property(c => c.FinalizedBy).HasMaxLength(PurchaseOrderDocumentRules.MaxActorLength);
+                b.Property(c => c.FinalizedVia).HasMaxLength(20);
+                b.Property(c => c.EditVersion).IsConcurrencyToken();
 
                 // DirectTrade is altijd klantgebonden; Warehouse-aanbod is nooit aan een klant gebonden.
                 b.ToTable(t =>
                 {
+                    t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed",
+                        "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR "
+                        + "(\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
                     t.HasCheckConstraint(
                         "CK_SupplyCommitments_Route_CustomerLink",
                         "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)");
                     t.HasCheckConstraint("CK_SupplyCommitments_OrderSequence_Positive", "\"OrderSequence\" > 0");
                     t.HasCheckConstraint("CK_SupplyCommitments_OrderChannel_Allowed",
                         "\"OrderChannel\" IS NULL OR \"OrderChannel\" IN ('Phone', 'Email', 'Portal', 'Other')");
+                });
+            });
+
+            // Auditregels van een inkooporder (regel 29, append-only): aanpassen, Definitief maken, correctie met reden.
+            modelBuilder.Entity<PurchaseOrderChange>(b =>
+            {
+                b.Property(c => c.Kind).IsRequired().HasMaxLength(16);
+                b.Property(c => c.Reason).HasMaxLength(PurchaseOrderDocumentRules.MaxReasonLength);
+                b.Property(c => c.ActorReference).IsRequired().HasMaxLength(PurchaseOrderDocumentRules.MaxActorLength);
+                b.Property(c => c.ChangesJson).IsRequired();
+                b.HasIndex(c => c.RequestId).IsUnique();
+                b.HasIndex(c => c.SupplyCommitmentId);
+                b.HasOne(c => c.SupplyCommitment).WithMany().HasForeignKey(c => c.SupplyCommitmentId).OnDelete(DeleteBehavior.Restrict);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_PurchaseOrderChanges_Kind_Allowed", "\"Kind\" IN ('Edit', 'Finalize', 'Correction')");
+                    t.HasCheckConstraint("CK_PurchaseOrderChanges_Correction_Reason", "\"Kind\" <> 'Correction' OR (\"Reason\" IS NOT NULL AND length(trim(\"Reason\")) > 0)");
                 });
             });
 

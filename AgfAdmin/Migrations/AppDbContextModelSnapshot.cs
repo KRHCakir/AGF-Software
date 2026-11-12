@@ -3716,6 +3716,56 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.PurchaseOrderChange", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActorReference")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ChangesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SupplyCommitmentId");
+
+                    b.ToTable("PurchaseOrderChanges", t =>
+                        {
+                            t.HasCheckConstraint("CK_PurchaseOrderChanges_Correction_Reason", "\"Kind\" <> 'Correction' OR (\"Reason\" IS NOT NULL AND length(trim(\"Reason\")) > 0)");
+
+                            t.HasCheckConstraint("CK_PurchaseOrderChanges_Kind_Allowed", "\"Kind\" IN ('Edit', 'Finalize', 'Correction')");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Relation", b =>
                 {
                     b.Property<int>("Id")
@@ -5004,8 +5054,30 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("DocumentStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Open");
+
+                    b.Property<int>("EditVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("ExpectedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FinalizedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FinalizedVia")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
@@ -5087,6 +5159,8 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("SupplyCommitments", t =>
                         {
+                            t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed", "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
+
                             t.HasCheckConstraint("CK_SupplyCommitments_OrderChannel_Allowed", "\"OrderChannel\" IS NULL OR \"OrderChannel\" IN ('Phone', 'Email', 'Portal', 'Other')");
 
                             t.HasCheckConstraint("CK_SupplyCommitments_OrderSequence_Positive", "\"OrderSequence\" > 0");
@@ -6072,6 +6146,17 @@ namespace AgfAdmin.Migrations
                         .IsRequired();
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.PurchaseOrderChange", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SupplyCommitment");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.RelationAddress", b =>
