@@ -25,7 +25,7 @@ export interface TransportDraft {
     remarks: string;
 }
 
-export type TransportProblem = 'mode' | 'carrier' | 'loadTime' | 'temperature';
+export type TransportProblem = 'mode' | 'carrier' | 'loadDate' | 'loadTime' | 'temperature';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -65,6 +65,7 @@ export function requestFrom(draft: TransportDraft, version: number | null): { re
     if (draft.mode === 'Carrier' && draft.carrierId === null) problems.push('carrier');
     const time = draft.loadTime.trim() === '' ? null : normalizeTime(draft.loadTime);
     if (draft.loadDate !== '' && time === null) problems.push('loadTime');
+    if (draft.loadDate === '' && draft.loadTime.trim() !== '') problems.push(time === null ? 'loadTime' : 'loadDate');
     let temperature: number | null = null;
     if (draft.temperature.trim() !== '') {
         const parsed = parseLocaleDecimal(draft.temperature, 'nl', { maxDecimals: 1, allowZero: true, allowNegative: true });

@@ -24,7 +24,10 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 // documenten opnieuw op: een bevestigde order krijgt zo de transportopdracht of een nieuwe versie. Nooit een prijs of tarief.
 export default function SalesOrderTransport({ order, onChanged }: { order: SalesOrder; onChanged?: () => void }) {
     const { t, locale } = useTranslation();
-    const [transport, setTransport] = useState<Transport | null>(null);
+    const [loaded, setLoaded] = useState<{ orderId: number; transport: Transport } | null>(null);
+    // Alleen gegevens die bij de huidige order horen: bij een orderwissel is er direct niets te zien of te bewerken.
+    const transport = loaded !== null && loaded.orderId === order.id ? loaded.transport : null;
+    const setTransport = (next: Transport) => setLoaded({ orderId: order.id, transport: next });
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [editing, setEditing] = useState(false);
@@ -41,7 +44,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
         const controller = new AbortController();
         setLoadError(null);
         getSalesOrderTransport(order.id, controller.signal)
-            .then((found) => { setTransport(found); setLoadError(null); })
+            .then((found) => { setLoaded({ orderId: order.id, transport: found }); setLoadError(null); })
             .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setLoadError(apiError); });
         return () => controller.abort();
     }, [order.id, order.version]);
@@ -52,8 +55,18 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     useEffect(() => {
         if (!editing) return;
         const controller = new AbortController();
-        listRelations({ role: 'carrier', query: '', includeInactive: false, page: 1, pageSize: 200 }, controller.signal)
-            .then((list) => setCarriers(list.items))
+        // Alle pagina's ophalen, zodat ook vervoerders na de eerste 200 te vinden zijn.
+        const pageSize = 200;
+        const fetchAll = async () => {
+            const all: RelationListItem[] = [];
+            for (let page = 1; ; page++) {
+                const list = await listRelations({ role: 'carrier', query: '', includeInactive: false, page, pageSize }, controller.signal);
+                all.push(...list.items);
+                if (list.items.length === 0 || all.length >= list.total) return all;
+            }
+        };
+        fetchAll()
+            .then((items) => setCarriers(items))
             .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
     }, [editing]);
@@ -124,7 +137,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
                     <div><dt className="text-xs text-gray-600">{t('so_transport_carrier')}</dt><dd className="font-medium">{shown.mode === 'Own' ? t('so_transport_mode_own') : shown.carrierName}</dd></div>
                     <div><dt className="text-xs text-gray-600">{t('so_transport_load_date')}</dt><dd>{shown.loadAt ? formatDateTime(shown.loadAt, locale) : '–'}{shown.unloadDate ? ` → ${formatCalendarDate(shown.unloadDate, locale)}` : ''}{shown.temperatureC != null ? ` · ${String(shown.temperatureC).replace('.', ',')} °C` : ''}</dd></div>
                     <div><dt className="text-xs text-gray-600">{t('so_transport_loading_place')}</dt><dd>{shown.loadingPlace ?? shown.defaultLoadingPlace}</dd></div>
-                    <div><dt className="text-xs text-gray-600">{t('so_transport_unloading_place')}</dt><dd>{shown.unloadingPlace ?? shown.defaultUnloadingPlace}</dd></div>
+                    <div><dt className="text-xs text-gray-600">{t('so_transport_unloading_place')}</dt><dd>{shown.unloadingPlace ?? (shown.unloadingAddressId != null ? shown.unloadingAddresses.find((address) => address.id === shown.unloadingAddressId)?.text : null) ?? shown.defaultUnloadingPlace}</dd></div>
                 </dl>
             )}
             {editing && transport && (
@@ -163,6 +176,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
                             <div>
                                 <label htmlFor={id('load-date')} className="text-xs font-medium text-gray-700">{t('so_transport_load_date')}</label>
                                 <DateField id={id('load-date')} value={draft.loadDate} onChange={(value) => change({ loadDate: value })} dataTour="so-transport-load-date" />
+                                {problem('loadDate', t('so_transport_problem_load_date'))}
                             </div>
                             <div>
                                 <label htmlFor={id('load-time')} className="text-xs font-medium text-gray-700">{t('so_transport_load_time')}</label>

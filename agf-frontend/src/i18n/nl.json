@@ -2664,6 +2664,7 @@
   "so_transport_problem_mode": "Kies een vervoerder of eigen transport.",
   "so_transport_problem_carrier": "Kies de vervoerder, of maak er een aan.",
   "so_transport_problem_load_time": "Vul ook de laadtijd in (uu:mm).",
+  "so_transport_problem_load_date": "Vul ook de laaddatum in.",
   "so_transport_problem_temperature": "Een temperatuur van −30 tot 30 °C, met hooguit één decimaal.",
   "transport_order_pallet_kind": "Standaard soort pallet (bijvoorbeeld \"Europallet + Corners + Straps\")",
   "so_slip_view": "Bekijken",
