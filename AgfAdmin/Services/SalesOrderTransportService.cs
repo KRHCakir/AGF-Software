@@ -112,11 +112,15 @@ namespace AgfAdmin.Services
                 order.LoadAt = loadAt;
                 order.UpdatedAt = now;
             }
+            // Transport en de nieuwe documentversies (bevestigde order) in één transactie: nooit opgeslagen transport zonder de opdracht erbij.
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
+                if (order.ConfirmedAt != null) await new LoadingSlipService(db, _user).RefreshAsync(orderId, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
-            catch (Exception exception) when (exception is DbUpdateConcurrencyException || (exception is DbUpdateException update && DbErrors.IsUniqueViolation(update)))
+            catch (Exception exception) when (exception is DbUpdateException || exception is System.Data.Common.DbException)
             {
                 return ServiceResult<SalesOrderTransportDto>.Conflict("The transport was changed by someone else; reload and try again.", new { code = "stale" });
             }
