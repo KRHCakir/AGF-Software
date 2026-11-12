@@ -255,6 +255,23 @@ public class AiInvoiceApprovalTests : IDisposable
         await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
     }
 
+    [Fact]
+    public void Choosing_a_cost_article_is_recorded_as_adjustment_even_when_it_equals_the_suggestion()
+    {
+        var proposal = new AiInvoiceProposalDto { InvoiceNumber = "F-1", Lines = new() { new AiInvoiceLineProposalDto { Description = "Transport", Quantity = 1, UnitPrice = 10, VatPercentage = 21 } } };
+        var matches = new AiMatchesDto { SuggestedVendorId = 5, LineCostArticles = new() { new AiLineCostArticleDto { Index = 0, CostArticleId = 7, Name = "Transport" } } };
+        CreatePurchaseInvoiceDto Request(int? costArticleId) => new()
+        {
+            VendorId = 5, InvoiceNumber = "F-1",
+            Lines = new() { new CreatePurchaseInvoiceLineDto { Description = "Transport", Quantity = 1, UnitPrice = 10, VatPercentage = 21, CostArticleId = costArticleId } },
+        };
+
+        var chosen = AiInvoiceApproval.Adjustments(proposal, matches, Request(7), "Zuid");
+        Assert.Contains(chosen, a => a.Field == "lines[0].costArticleId" && a.Proposed == null && a.Final == "7");
+        var none = AiInvoiceApproval.Adjustments(proposal, matches, Request(null), "Zuid");
+        Assert.DoesNotContain(none, a => a.Field == "lines[0].costArticleId");
+    }
+
     private sealed class AlwaysMailServer : IEmailDomainChecker
     {
         public Task<EmailDomainStatus> CheckAsync(string domain, CancellationToken cancellationToken = default) => Task.FromResult(EmailDomainStatus.HasMailServer);
