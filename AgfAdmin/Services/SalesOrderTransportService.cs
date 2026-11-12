@@ -72,7 +72,8 @@ namespace AgfAdmin.Services
                     ValidationErrors.Add(errors, "unloadingAddressId", "Choose one of the customer's addresses, or fill in a different address.");
                 }
             }
-            var loadAt = Utc(request.LoadAt);
+            // Leeg laat de laadtijd van de order staan (die geldt ook voor de laadbon); alleen ClearLoadAt wist haar.
+            var loadAt = request.ClearLoadAt ? null : Utc(request.LoadAt) ?? order.LoadAt;
             var unloadDate = request.UnloadDate?.Date;
             if (unloadDate != null && loadAt != null && DateOnly.FromDateTime(unloadDate.Value) < db.BusinessCalendar.DateOf(loadAt.Value))
             {
