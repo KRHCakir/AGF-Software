@@ -48,6 +48,8 @@ namespace AgfAdmin.DTOs
         // Er is bij deze order minstens één afwijkende ontvangst vastgelegd.
         public bool HasDeviation { get; set; }
         // Documentstatus (stap 4a): Open (aanpasbaar) of Definitive.
+        // Gefactureerd volgens de gekoppelde factuurregels (stap 4b): None, Partial of Full (PurchaseInvoiceOrderLinkRules.BillingStatus).
+        public string BillingStatus { get; set; }
         public string DocumentStatus { get; set; }
     }
 
@@ -105,6 +107,9 @@ namespace AgfAdmin.DTOs
         // Totalen onder de regels, in dezelfde kolommen (PurchaseLineMath).
         public PurchaseOrderLineTotalsDto Totals { get; set; }
         // Documentstatus (stap 4a): Open of Definitive, met wie, wanneer en waardoor (Manual of Invoice), en de versie voor aanpassen.
+        public string BillingStatus { get; set; }
+        // De ingevoerde inkoopfacturen die regels van deze order factureren, met bedrag en verschil met de bon (stap 4b).
+        public List<PurchaseOrderLinkedInvoiceDto> Invoices { get; set; } = new();
         public string DocumentStatus { get; set; }
         public DateTime? FinalizedAt { get; set; }
         public string FinalizedBy { get; set; }
@@ -207,6 +212,9 @@ namespace AgfAdmin.DTOs
         public int? ReplacesLineId { get; set; }
         public List<int> ReplacedByLineIds { get; set; } = new();
         // Ontvangen = fysieke ontvangst in de eenheid van de regel (geen correctie- of afgesplitste inhoud, geen geannuleerde pallet).
+        // Al gefactureerd (afgewezen facturen niet) en wat nog openstaat: ontvangen zodra er iets ontvangen is, anders besteld (stap 4b).
+        public decimal InvoicedQuantity { get; set; }
+        public decimal OpenToInvoiceQuantity { get; set; }
         public decimal ReceivedQuantity { get; set; }
         public decimal ReceivedNetWeightKg { get; set; }
         public decimal RejectedQuantity { get; set; }
@@ -334,5 +342,50 @@ namespace AgfAdmin.DTOs
         public string OrderNumber { get; set; }
         public string SupplierReference { get; set; }
         public DateOnly OrderedOn { get; set; }
+    }
+
+    // Een inkoopfactuur gekoppeld aan deze order (stap 4b): bedrag van de regels van deze order en het verschil met de prijs op de bon
+    // (factuur min bon, alleen regels waar de bon een prijs had); Decision = wat er bij het invoeren met een verschil gebeurde.
+    public sealed class PurchaseOrderLinkedInvoiceDto
+    {
+        public int Id { get; set; }
+        public string InvoiceNumber { get; set; }
+        public DateTime? InvoiceDate { get; set; }
+        public string Status { get; set; }
+        public string Currency { get; set; }
+        public decimal AmountExclVat { get; set; }
+        public decimal? Difference { get; set; }
+        public string Decision { get; set; }
+    }
+
+    // Een order van de leverancier om een factuur aan te koppelen (stap 4b), met per regel besteld, ontvangen, gefactureerd en open.
+    public sealed class PurchaseOrderInvoiceCandidateDto
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; }
+        public string SupplierReference { get; set; }
+        public DateOnly OrderedOn { get; set; }
+        public DateTime? ExpectedAt { get; set; }
+        public string PartijNumber { get; set; }
+        public string DocumentStatus { get; set; }
+        public string Route { get; set; }
+        public bool PriceAdjustable { get; set; }
+        public List<string> InvoiceNumbers { get; set; } = new();
+        public List<PurchaseOrderInvoiceCandidateLineDto> Lines { get; set; } = new();
+    }
+
+    public sealed class PurchaseOrderInvoiceCandidateLineDto
+    {
+        public int Id { get; set; }
+        public int ProductVariantId { get; set; }
+        public string ProductName { get; set; }
+        public string ProductVariantName { get; set; }
+        public string Unit { get; set; }
+        public decimal ExpectedQuantity { get; set; }
+        public decimal ReceivedQuantity { get; set; }
+        public decimal InvoicedQuantity { get; set; }
+        public decimal OpenQuantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public string PartijNumber { get; set; }
     }
 }

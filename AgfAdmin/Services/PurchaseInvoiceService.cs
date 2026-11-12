@@ -588,8 +588,21 @@ namespace AgfAdmin.Services
                 : ServiceResult<PurchaseInvoiceDto>.Ok(await WithAiAsync(ToDto(invoice), cancellationToken));
         }
 
-        public async Task<IReadOnlyList<PurchaseInvoiceDto>> ListAsync(CancellationToken cancellationToken = default) =>
-            (await Query().OrderByDescending(i => i.CreatedAt).Take(200).ToListAsync(cancellationToken)).Select(ToDto).ToList();
+        // De nieuwste 200; met een zoekterm alleen facturen met dat factuurnummer, die leverancier of een gekoppelde order (IO-nummer of
+        // ordernummer van de leverancier, stap 4b), zodat je vanaf de order de factuur terugvindt en andersom.
+        public async Task<IReadOnlyList<PurchaseInvoiceDto>> ListAsync(CancellationToken cancellationToken = default, string query = null)
+        {
+            var invoices = Query();
+            var term = (query ?? "").Trim().ToLowerInvariant();
+            if (term != "")
+            {
+                invoices = invoices.Where(i => (i.InvoiceNumber != null && i.InvoiceNumber.ToLower().Contains(term))
+                    || (i.Vendor != null && i.Vendor.Name.ToLower().Contains(term))
+                    || i.InvoiceLines.Any(l => l.SupplyCommitmentLine != null && (l.SupplyCommitmentLine.SupplyCommitment.OrderNumber.ToLower().Contains(term)
+                        || (l.SupplyCommitmentLine.SupplyCommitment.SupplierReference != null && l.SupplyCommitmentLine.SupplyCommitment.SupplierReference.ToLower().Contains(term)))));
+            }
+            return (await invoices.OrderByDescending(i => i.CreatedAt).Take(200).ToListAsync(cancellationToken)).Select(ToDto).ToList();
+        }
 
         private IQueryable<IncomingInvoice> Query() =>
             _db.IncomingInvoices.AsNoTracking().Include(i => i.Vendor).Include(i => i.InvoiceLines).ThenInclude(l => l.CostArticle)

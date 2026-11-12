@@ -36,7 +36,7 @@ namespace AgfAdmin.Controllers
             this.ToActionResult(await _costs.SaveLineAsync(id, lineId, request, HttpContext?.RequestAborted ?? default));
 
         [HttpGet]
-        public async Task<IActionResult> List() => Ok(await _service.ListAsync(HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> List([FromQuery] string query = null) => Ok(await _service.ListAsync(HttpContext?.RequestAborted ?? default, query));
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));

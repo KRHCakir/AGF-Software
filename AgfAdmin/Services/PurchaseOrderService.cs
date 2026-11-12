@@ -28,8 +28,18 @@ namespace AgfAdmin.Services
         // uit ontvangen en afgekeurde hoeveelheden en wordt daarom na de SQL-filters (zoeken, leverancier) in het geheugen bepaald;
         // daarna sorteren (nieuwste eerst) en pagineren op de server.
         public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, string supplierReference = null,
-            CancellationToken cancellationToken = default, string document = null)
+            CancellationToken cancellationToken = default, string document = null, string billing = null)
         {
+            // Gefactureerd (stap 4b): leeg = alle, anders None, Partial of Full (hoofdletterongevoelig).
+            var billingFilter = string.IsNullOrWhiteSpace(billing) ? null
+                : PurchaseInvoiceOrderLinkRules.BillingStatuses.FirstOrDefault(s => string.Equals(s, billing.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(billing) && billingFilter == null)
+            {
+                return ServiceResult<PurchaseOrderListDto>.Validation(new Dictionary<string, string[]>
+                {
+                    ["billing"] = new[] { $"Billing status must be one of: {string.Join(", ", PurchaseInvoiceOrderLinkRules.BillingStatuses)}." }
+                });
+            }
             // Documentstatus (stap 4a): leeg = alle, anders Open of Definitive (hoofdletterongevoelig).
             var documentFilter = string.IsNullOrWhiteSpace(document) ? null
                 : PurchaseOrderDocumentRules.Statuses.FirstOrDefault(s => string.Equals(s, document.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -72,7 +82,8 @@ namespace AgfAdmin.Services
                     || (partijKey != "" && c.Partij != null && c.Partij.NumberKey.Contains(partijKey))
                     || (partijKey != "" && c.Lines.Any(l => l.Partij != null && l.Partij.NumberKey.Contains(partijKey)))
                     || (c.Vendor.Name != null && c.Vendor.Name.ToLower().Contains(term))
-                    || _db.SupplyCommitmentInvoiceRefs.Any(r => r.SupplyCommitmentId == c.Id && r.InvoiceNumberKey.Contains(term)));
+                    || _db.SupplyCommitmentInvoiceRefs.Any(r => r.SupplyCommitmentId == c.Id && r.InvoiceNumberKey.Contains(term))
+                    || _db.IncomingInvoiceLines.Any(l => l.SupplyCommitmentLine.SupplyCommitmentId == c.Id && l.IncomingInvoice.InvoiceNumber != null && l.IncomingInvoice.InvoiceNumber.ToLower().Contains(term)));
             }
             // Voorfilter op de opgeslagen status: Geannuleerd en Afgekeurd zijn opgeslagen eindtoestanden.
             if (statusFilter == PurchaseOrderRules.OrderCancelled) commitments = commitments.Where(c => c.Status == SupplyRules.StatusCancelled);
@@ -117,11 +128,13 @@ namespace AgfAdmin.Services
                             .Select(r => new PurchaseOrderInvoiceNumberDto { Kind = r.Kind, InvoiceNumber = r.InvoiceNumber }).ToList(),
                         InvoiceIndicator = f.InvoiceIndicator(),
                         HasDeviation = withDeviation.Contains(h.Id),
-                        DocumentStatus = h.DocumentStatus
+                        DocumentStatus = h.DocumentStatus,
+                        BillingStatus = f.BillingStatus()
                     });
                 })
                 .Where(i => statusFilter == "all"
                     || (statusFilter == "open" ? PurchaseOrderRules.OpenOrderStatuses.Contains(i.Dto.Status, StringComparer.Ordinal) : i.Dto.Status == statusFilter))
+                .Where(i => billingFilter == null || i.Dto.BillingStatus == billingFilter)
                 .OrderByDescending(i => i.Year).ThenByDescending(i => i.Sequence).ThenByDescending(i => i.Dto.Id)
                 .ToList();
 
@@ -336,7 +349,9 @@ namespace AgfAdmin.Services
                     ReceivedQuantity = line.ReceivedQuantity,
                     ReceivedNetWeightKg = line.ReceivedNetWeightKg,
                     RejectedQuantity = line.RejectedQuantity,
-                    RejectedNetWeightKg = line.RejectedNetWeightKg
+                    RejectedNetWeightKg = line.RejectedNetWeightKg,
+                    InvoicedQuantity = line.InvoicedQuantity,
+                    OpenToInvoiceQuantity = line.OpenToInvoice
                 };
             }).ToList();
 
@@ -364,6 +379,8 @@ namespace AgfAdmin.Services
                 StoredStatus = commitment.Status,
                 Status = facts.Status(commitment.Status),
                 InvoiceIndicator = facts.InvoiceIndicator(),
+                BillingStatus = facts.BillingStatus(),
+                Invoices = await LinkedInvoicesAsync(commitment.Id, cancellationToken),
                 ExpectedQuantity = lines.Sum(l => l.ExpectedQuantity),
                 ExpectedNetWeightKg = lines.Any(l => l.ExpectedNetWeightKg != null) ? lines.Sum(l => l.ExpectedNetWeightKg ?? 0m) : null,
                 ReceivedQuantity = lines.Sum(l => l.ReceivedQuantity),
@@ -423,6 +440,9 @@ namespace AgfAdmin.Services
             public decimal RejectedNetWeightKg { get; set; }
             // Afgekeurd met terugsturen of vernietigen (zonder korting claimen): bepaalt "alles afgekeurd".
             public decimal RemovedQuantity { get; set; }
+            // Op ingevoerde inkoopfacturen (stap 4b), afgewezen facturen niet.
+            public decimal InvoicedQuantity { get; set; }
+            public decimal OpenToInvoice => PurchaseInvoiceOrderLinkRules.OpenQuantity(ExpectedQuantity, ReceivedQuantity, InvoicedQuantity);
         }
 
         private sealed record RefFact(int Id, int SupplyCommitmentId, string Kind, string InvoiceNumber, DateOnly? InvoiceDate, decimal? AmountExclVat, int? IncomingInvoiceId, string ActorReference, DateTime CreatedAt);
@@ -446,6 +466,11 @@ namespace AgfAdmin.Services
 
             public string InvoiceIndicator() =>
                 PurchaseOrderRules.InvoiceIndicator(Refs.Select(r => (r.Kind, r.CreatedAt)), Rejections);
+
+            // Gefactureerd volgens de factuurregels; een oude "Factuur ontvangen" zonder regels telt als gefactureerd (stap 4b).
+            public string BillingStatus() => PurchaseInvoiceOrderLinkRules.BillingStatus(
+                Lines.Where(l => l.ExpectedQuantity > 0m || l.ReceivedQuantity > 0m || l.InvoicedQuantity > 0m).Select(l => (l.ExpectedQuantity, l.ReceivedQuantity, l.InvoicedQuantity)),
+                Refs.Any(r => r.Kind == PurchaseOrderRules.KindInvoice));
         }
 
         private sealed class FactSet
@@ -523,6 +548,10 @@ namespace AgfAdmin.Services
             }
             foreach (var rejection in rejections) Order(rejection.SupplyCommitmentId).Rejections.Add((rejection.Decision, rejection.RejectedAt));
             foreach (var reference in refs) Order(reference.SupplyCommitmentId).Refs.Add(reference);
+            foreach (var (lineId, quantity) in await InvoicedByLineAsync(byLine.Keys.ToList(), null, cancellationToken))
+            {
+                if (byLine.TryGetValue(lineId, out var fact)) fact.InvoicedQuantity = quantity;
+            }
         }
 
         // Orders met minstens één vastgelegde afwijkende ontvangst (lijstaanduiding), in batches zoals LoadFactsAsync.
