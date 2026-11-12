@@ -59,6 +59,7 @@ export function isSalesOrderTransport(value: unknown): value is SalesOrderTransp
         && isNullableNumber(value.unloadingAddressId) && isNullableString(value.unloadingPlace) && isNullableString(value.defaultUnloadingPlace)
         && isArrayOf(value.unloadingAddresses, isAddress) && isNullableString(value.loadAt) && isNullableString(value.unloadDate) && isNullableNumber(value.temperatureC)
         && isNullableString(value.loadingReference) && isNullableString(value.unloadingReference) && isNullableString(value.remarks) && isNullableString(value.palletKind)
+        && isNullableString(value.defaultUnloadingReference) && isNullableString(value.defaultPalletKind)
         && isNumber(value.version) && typeof value.hasTransportOrder === 'boolean';
 }
 
