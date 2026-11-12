@@ -60,6 +60,28 @@ namespace AgfAdmin.Data
                 }
             }
 
+            // Ook de leverancier van de order zelf kan na het koppelen nog wijzigen (die ligt pas na ontvangst vast, regel 29).
+            var modifiedOrders = db.ChangeTracker.Entries<SupplyCommitment>().Where(e => e.State == EntityState.Modified).ToList();
+            if (modifiedOrders.Count > 0)
+            {
+                var orderIds = modifiedOrders.Select(e => e.Entity.Id).ToList();
+                var storedOrders = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.VendorId }), async, cancellationToken))
+                    .ToDictionary(o => o.Id, o => o.VendorId);
+                foreach (var entry in modifiedOrders)
+                {
+                    if (!storedOrders.TryGetValue(entry.Entity.Id, out var oldVendor) || oldVendor == entry.Entity.VendorId) continue;
+                    var orderId = entry.Entity.Id;
+                    var newOrderVendor = entry.Entity.VendorId;
+                    var invoiceVendors = await ToListAsync(db.IncomingInvoiceLines.AsNoTracking()
+                        .Where(l => l.SupplyCommitmentLine != null && l.SupplyCommitmentLine.SupplyCommitmentId == orderId)
+                        .Select(l => l.IncomingInvoice.VendorId), async, cancellationToken);
+                    if (invoiceVendors.Any(v => v != newOrderVendor))
+                    {
+                        throw new TraceabilityViolationException($"Purchase order {orderId} keeps the supplier of the invoices its lines are linked to.");
+                    }
+                }
+            }
+
             foreach (var entry in db.ChangeTracker.Entries<IncomingInvoice>().Where(e => e.State == EntityState.Added))
             {
                 var decision = entry.Entity.OrderPriceDecision;
