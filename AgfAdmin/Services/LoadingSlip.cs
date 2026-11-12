@@ -41,7 +41,13 @@ namespace AgfAdmin.Services
         DateTime RequestedDeliveryDate, DateTime? LoadAt, string LicensePlate,
         List<LoadingSlipRow> Rows, List<LoadingSlipPackagingRow> Packaging,
         decimal TotalQuantity, decimal? TotalPallets, decimal? TotalNetKg,
-        DateTime ConfirmedAt, string ConfirmedBy);
+        DateTime ConfirmedAt, string ConfirmedBy)
+    {
+        // Alleen om bestaande snapshots te kunnen lezen: oudere versies bewaarden het pad van het logo (LogoPath) in plaats van de inhoud.
+        // Nieuwe snapshots laten dit veld leeg (en dus weg uit de JSON, zodat de vingerafdruk gelijk blijft).
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string LogoPath { get; init; }
+    }
 
     // Eén rij: een orderregel, en per pallet of partij waar dat al vastligt (gereserveerd); wat nog niet gereserveerd is een eigen rij.
     // Pallets niet afgerond (de bon toont twee decimalen), zelfde berekening als op de orderregel (PurchaseLineMath).
