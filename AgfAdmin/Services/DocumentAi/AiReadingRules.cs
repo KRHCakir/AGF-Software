@@ -73,7 +73,8 @@ namespace AgfAdmin.Services.DocumentAi
 
         // De korting per regel voor het formulier. Het formulier kent alleen een korting per regel; een korting op het totaal gaat daarom mee in
         // elke regel (5% op de regel en 3% op het totaal is 7,85%), maar alleen als dat precies kan: de korting is een percentage met hoogstens
-        // twee decimalen van de som van de regels (3% van 5.739,60 = 172,19) en elke samengestelde korting heeft hoogstens twee decimalen. Dan
+        // twee decimalen van de som van de regels (3% van 5.739,60 = 172,19) en elke samengestelde korting heeft hoogstens twee decimalen,
+        // en de regels van het formulier (per regel afgerond) komen samen op de cent na op de factuur min de korting uit. Dan
         // ook het percentage van de korting op het totaal; anders null en blijft alleen de korting per regel staan (de controle meldt dat).
         public static (List<decimal> Lines, decimal? DocumentPercentage) FormDiscounts(JsonObject proposal)
         {
@@ -88,7 +89,16 @@ namespace AgfAdmin.Services.DocumentAi
             if (percentage <= 0m || Math.Abs(decimal.Round(sum * percentage / 100m, 2, MidpointRounding.AwayFromZero) - discount) > 0.01m) return (own, null);
             var combined = own.Select(d => 100m - (100m - d) * (100m - percentage) / 100m).ToList();
             if (combined.Any(c => decimal.Round(c, 2) != c)) return (own, null);
-            return (combined.Select(c => decimal.Round(c, 2)).ToList(), percentage);
+            // Het formulier rondt elke regel af: de afgeronde regels moeten samen (op de tolerantie na) de factuur min de korting opleveren.
+            var rounded = combined.Select(c => decimal.Round(c, 2)).ToList();
+            var formNet = 0m;
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (Number(lines[i]["aantal"]) is not decimal quantity || Number(lines[i]["prijs"]) is not decimal price) return (own, null);
+                formNet += InvoiceMath.LineNet(quantity, price, rounded[i]);
+            }
+            if (Math.Abs(formNet - (sum - discount)) > Tolerance) return (own, null);
+            return (rounded, percentage);
         }
 
         // Alle controles op een geldig voorstel (zie ExtractionSchema). Ontbrekende waarden blijven leeg: niets wordt aangevuld of verzonnen.

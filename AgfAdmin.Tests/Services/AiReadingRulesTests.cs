@@ -194,6 +194,28 @@ public class AiReadingRulesTests
     }
 
     [Fact]
+    public void A_discount_on_the_total_is_not_spread_when_the_rounded_form_lines_miss_the_invoice_total()
+    {
+        // Twintig regels van 1,05 met 10% korting: factuur 18,90, maar het formulier rondt elke regel 0,945 af op 0,95 en komt op 19,00.
+        var proposal = Proposal(p =>
+        {
+            p["regels"] = new JsonArray(Enumerable.Range(0, 20).Select(_ => (JsonNode)new JsonObject
+            {
+                ["omschrijving"] = "Artikel", ["aantal"] = 1m, ["eenheid"] = "stuks", ["kg_netto"] = null, ["kg_bruto"] = null, ["prijs"] = 1.05m, ["bedrag"] = 1.05m,
+                ["btw_percentage"] = 9m, ["korting_percentage"] = 0m,
+            }).ToArray());
+            p["korting_totaal"] = 2.10m;
+            p["totaal_excl"] = 18.90m;
+            p["btw_totaal"] = 1.70m;
+            p["totaal_incl"] = 20.60m;
+        });
+        var (lines, percentage) = AiReadingRules.FormDiscounts(proposal);
+        Assert.Null(percentage);
+        Assert.All(lines, d => Assert.Equal(0m, d));
+        Assert.Contains(AiReadingRules.Problems(proposal), p => p is { Field: "documentDiscount", Code: AiReadingRules.DiscountNotSpread, TriggersFallback: false });
+    }
+
+    [Fact]
     public void A_discount_the_AI_doubts_is_marked_on_the_discount_field()
     {
         Assert.Equal("lines[2].discountPercentage", AiReadingRules.FormField("regels[2].korting_percentage"));
