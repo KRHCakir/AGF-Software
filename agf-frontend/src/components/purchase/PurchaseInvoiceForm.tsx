@@ -100,6 +100,11 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     // Koppelen aan de bon (stap 4b): de vraag bij een prijsverschil of te veel gefactureerd, eenmaal per opslaan; open zolang er niets verandert.
     const [question, setQuestion] = useState<'save' | 'saveAndNew' | null>(null);
     const [linkError, setLinkError] = useState(false);
+    // Regels overnemen uit een ordermelding loopt asynchroon: zolang het loopt is het formulier vergrendeld, ook voor opslaan.
+    const [taking, setTaking] = useState(false);
+    const takeToken = useRef(0);
+    const takingRef = useRef(false);
+    const vendorIdRef = useRef('');
     const inFlight = useRef(false);
     const vendorInput = useRef<HTMLInputElement | null>(null);
     const itemInputs = useRef(new Map<string, HTMLInputElement>());
@@ -115,7 +120,10 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     const totals = useMemo(() => draftTotals(draft.lines), [draft.lines]);
     const aiProblems = useMemo(() => problemsByField(ai?.extraction ?? null), [ai?.extraction]);
     const aiCost = (aiIndex: number) => (aiIndex < 0 ? null : ai?.extraction.matches?.lineCostArticles.find((cost) => cost.index === aiIndex) ?? null);
-    const locked = submitting || pending !== null || busy;
+    const locked = submitting || pending !== null || busy || taking;
+    vendorIdRef.current = draft.header.vendorId;
+    // Een lopende overname vervalt (het antwoord wordt genegeerd) zodra het concept door iets anders wordt vervangen.
+    const cancelTake = () => { takeToken.current += 1; takingRef.current = false; setTaking(false); };
     // Een andere leverancier kiezen haalt een orderkoppeling van een andere leverancier weg; terug naar de leverancier van de order
     // betekent opnieuw aanvinken.
     const chooseVendor = (chosen: PurchaseVendor | null) => {
@@ -130,6 +138,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     useEffect(() => { saveExtraOpen(extraOpen); }, [extraOpen]);
     useEffect(() => {
         if (seed === null) return;
+        cancelTake();
         setDraft(seed.draft);
         setErrors({});
         setServerError(null);
@@ -162,15 +171,23 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     // "Hoort bij order …" (factuurnummer al op een order): de regels van die order echt overnemen, zodat de koppeling wordt opgeslagen.
     const takeOrder = (orderId: number) => {
         if (locked || draft.header.vendorId === '') return;
+        if (takingRef.current) return;
+        const vendorId = draft.header.vendorId;
+        const token = ++takeToken.current;
+        const current = () => token === takeToken.current && vendorIdRef.current === vendorId;
+        takingRef.current = true;
+        setTaking(true);
         setLinkError(false);
-        listInvoiceCandidates(Number(draft.header.vendorId), '', orderId)
+        listInvoiceCandidates(Number(vendorId), '', orderId)
             .then((found) => {
+                if (!current()) return;
                 if (!found[0]) { setLinkError(true); return; }
-                setDraft((current) => addOrderLines(current, found[0], settings.defaultVatPercentage));
+                setDraft((existing) => addOrderLines(existing, found[0], settings.defaultVatPercentage));
                 setErrors({});
                 setQuestion(null);
             })
-            .catch(() => setLinkError(true));
+            .catch(() => { if (current()) setLinkError(true); })
+            .finally(() => { if (token === takeToken.current) { takingRef.current = false; setTaking(false); } });
     };
     const updateHeader = (field: 'invoiceNumber' | 'internalNote', value: string) => update({ ...draft, header: { ...draft.header, [field]: value } });
     const updateExtra = (field: PurchaseOptionalField, value: string) => update({ ...draft, header: { ...draft.header, extra: { ...draft.header.extra, [field]: value } } });
@@ -207,6 +224,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     const startNew = () => {
         if (submitting) return;
         if (dirty && !window.confirm(t('purchase_confirm_discard'))) return;
+        cancelTake();
         clearDraft();
         clearPending();
         setPending(null);
@@ -218,7 +236,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     };
 
     const submit = async (mode: 'save' | 'saveAndNew', answer?: { decision: OrderPriceDecision | null }) => {
-        if (inFlight.current || busy || result !== null) return;
+        if (inFlight.current || takingRef.current || busy || result !== null) return;
         let command = pending;
         if (command === null) {
             const built = buildPurchaseInvoicePayload(draft, settings);
