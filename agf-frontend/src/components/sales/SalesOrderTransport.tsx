@@ -73,7 +73,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     }, [editing]);
 
     const change = (patch: Partial<TransportDraft>) => { setDraft((current) => ({ ...current, ...patch })); setProblems([]); };
-    const start = () => { setDraft(draftFrom(transport)); setProblems([]); setError(null); setSimilar(null); setEditing(true); };
+    const start = () => { setDraft(draftFrom(transport)); setProblems([]); setError(null); setSimilar(null); setQuery(''); setEditing(true); };
     const chooseCarrier = (carrier: { id: number; name: string }) => { change({ carrierId: carrier.id, carrierName: carrier.name }); setSimilar(null); setQuery(''); };
 
     const search = useCallback((text: string): LookupMatch<RelationListItem>[] => {
@@ -211,6 +211,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
                                 {draft.unloadingChoice === OTHER_ADDRESS
                                     ? <textarea id={id('unloadingPlace')} aria-label={t('so_transport_unloading_other')} rows={2} maxLength={300} value={draft.unloadingPlace} onChange={(event) => change({ unloadingPlace: event.target.value })} className={`${inputClass} mt-1`} />
                                     : defaultHint(transport.defaultUnloadingPlace)}
+                                {problem('unloadingPlace', t('so_transport_problem_unloading_place'))}
                             </div>
                         </div>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

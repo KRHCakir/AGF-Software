@@ -2665,6 +2665,7 @@
   "so_transport_problem_carrier": "Choose the carrier, or create one.",
   "so_transport_problem_load_time": "Also fill in the loading time (hh:mm).",
   "so_transport_problem_load_date": "Also fill in the loading date.",
+  "so_transport_problem_unloading_place": "Fill in the different address, or choose another unloading address.",
   "so_transport_problem_temperature": "A temperature from −30 to 30 °C, with at most one decimal.",
   "transport_order_pallet_kind": "Default pallet type (for example \"Europallet + Corners + Straps\")",
   "so_slip_view": "View",
