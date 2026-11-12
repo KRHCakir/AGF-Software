@@ -56,5 +56,7 @@ namespace AgfAdmin.Models
         public ICollection<SalesOrderPackagingLine> PackagingLines { get; set; } = new List<SalesOrderPackagingLine>();
         // Documenten bij deze order (laadbon, later transportopdracht), elke versie apart en nooit gewijzigd.
         public ICollection<SalesOrderDocument> Documents { get; set; } = new List<SalesOrderDocument>();
+        // Transport (documenten deel 2): leeg = geen transport ingevuld, dan geen transportopdracht.
+        public SalesOrderTransport Transport { get; set; }
     }
 }

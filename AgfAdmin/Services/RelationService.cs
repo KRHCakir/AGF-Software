@@ -17,6 +17,7 @@ namespace AgfAdmin.Services
         public const string SimilarNamesCode = "similar-names";
         public const string RoleCustomer = "customer";
         public const string RoleVendor = "vendor";
+        public const string RoleCarrier = "carrier";
         public const string DefaultVendorCurrency = "EUR";
         public const string DefaultCustomerCurrency = "EUR";
 
@@ -68,6 +69,7 @@ namespace AgfAdmin.Services
             var relations = _db.Relations.AsNoTracking().Include(r => r.Customer).Include(r => r.Vendor).AsQueryable();
             if (string.Equals(role, RoleCustomer, StringComparison.OrdinalIgnoreCase)) relations = relations.Where(r => r.Customer != null);
             else if (string.Equals(role, RoleVendor, StringComparison.OrdinalIgnoreCase)) relations = relations.Where(r => r.Vendor != null);
+            else if (string.Equals(role, RoleCarrier, StringComparison.OrdinalIgnoreCase)) relations = relations.Where(r => r.IsCarrier);
             if (!includeInactive) relations = relations.Where(r => r.IsActive);
             var term = (query ?? "").Trim().ToLowerInvariant();
             if (term != "")
@@ -88,7 +90,7 @@ namespace AgfAdmin.Services
                 .Skip((page - 1) * pageSize).Take(pageSize)
                 .Select(r => new
                 {
-                    r.Id, r.SearchCode, r.Name, r.TradeName, r.IsActive, r.Email, r.Phone, r.VatNumber, r.Version,
+                    r.Id, r.SearchCode, r.Name, r.TradeName, r.IsActive, r.IsCarrier, r.Email, r.Phone, r.VatNumber, r.Version,
                     CustomerId = r.Customer == null ? (int?)null : r.Customer.Id,
                     VendorId = r.Vendor == null ? (int?)null : r.Vendor.Id,
                     Main = r.Addresses.Where(a => a.IsActive).OrderByDescending(a => a.Purpose == AddressPurpose.Main).ThenByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).Select(a => new { a.City, a.CountryCode }).FirstOrDefault(),
@@ -103,7 +105,7 @@ namespace AgfAdmin.Services
                 Items = pageItems.Select(r => new RelationListItemDto
                 {
                     Id = r.Id, SearchCode = r.SearchCode, Name = r.Name, TradeName = r.TradeName, IsActive = r.IsActive, Email = r.Email, Phone = r.Phone,
-                    VatNumber = r.VatNumber, Version = r.Version, CustomerId = r.CustomerId, VendorId = r.VendorId,
+                    VatNumber = r.VatNumber, Version = r.Version, CustomerId = r.CustomerId, VendorId = r.VendorId, IsCarrier = r.IsCarrier,
                     City = r.Main?.City, CountryCode = r.Main?.CountryCode, PrimaryContactName = r.PrimaryContact
                 }).ToList()
             };
@@ -373,9 +375,21 @@ namespace AgfAdmin.Services
                     created = true;
                 }
             }
+            else if (string.Equals(role, RoleCarrier, StringComparison.OrdinalIgnoreCase))
+            {
+                // Vervoerder is een vlag op de relatie (geen eigen gegevens); zetten is genoeg, dubbel zetten verandert niets.
+                if (!relation.IsCarrier)
+                {
+                    relation.IsCarrier = true;
+                    relation.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync(cancellationToken);
+                    _db.ChangeTracker.Clear();
+                    return ServiceResult<RelationDto>.Created(await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == id, cancellationToken), cancellationToken));
+                }
+            }
             else
             {
-                return ServiceResult<RelationDto>.Validation(new Dictionary<string, string[]> { ["role"] = new[] { $"Role must be '{RoleCustomer}' or '{RoleVendor}'." } });
+                return ServiceResult<RelationDto>.Validation(new Dictionary<string, string[]> { ["role"] = new[] { $"Role must be '{RoleCustomer}', '{RoleVendor}' or '{RoleCarrier}'." } });
             }
             if (created)
             {
@@ -541,7 +555,9 @@ namespace AgfAdmin.Services
             string SearchCode, string Name, string TradeName, string PreferredLanguage, string Website, string Email, string Phone, string VatNumber,
             string RegistrationNumber, string RegistrationCountry, string RegistrationType, string LegalForm, string InternalNote, bool IsActive,
             CustomerRoleCommand Customer, VendorRoleCommand Vendor, List<AddressCommand> Addresses, List<ContactCommand> Contacts,
-            List<BankAccountCommand> BankAccounts, string ActorReference);
+            List<BankAccountCommand> BankAccounts, string ActorReference,
+            // Rol vervoerder: alleen meegeschreven als die aan staat, zodat de vingerafdruk van oudere aanvragen gelijk blijft.
+            [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Carrier = false);
 
         private async Task<RelationCommand> NormalizeAsync(SaveRelationDto request, Relation existing, Dictionary<string, List<string>> errors, SaveSignals signals, CancellationToken cancellationToken, int? selfId = null, bool checkSearchCodeAvailability = true)
         {
@@ -670,7 +686,9 @@ namespace AgfAdmin.Services
             var bankAccounts = NormalizeBankAccounts(request.BankAccounts, existing, errors);
 
             return errors.Count > 0 ? null : new RelationCommand(searchCode, name, tradeName, language, website, email, phone, vat,
-                registrationNumber, registrationCountry, registrationType, legalForm, note, isActive, customer, vendor, addresses, contacts, bankAccounts, actor);
+                registrationNumber, registrationCountry, registrationType, legalForm, note, isActive, customer, vendor, addresses, contacts, bankAccounts, actor,
+                // Vervoerder: aanzetten kan, een bestaande rol blijft altijd staan (net als klant en leverancier).
+                request.Carrier == true || existing?.IsCarrier == true);
         }
 
         private static RoleTermsRules.Terms TermsOf(IRoleTerms r) =>
@@ -999,6 +1017,7 @@ namespace AgfAdmin.Services
 
         private void Apply(Relation relation, RelationCommand command, RoleConditions conditions)
         {
+            if (command.Carrier) relation.IsCarrier = true;
             relation.SearchCode = command.SearchCode;
             relation.SearchCodeKey = RelationRules.SearchCodeKey(command.SearchCode);
             relation.Name = command.Name;
@@ -1318,6 +1337,7 @@ namespace AgfAdmin.Services
                 LegalForm = r.LegalForm,
                 InternalNote = r.InternalNote,
                 IsActive = r.IsActive,
+                IsCarrier = r.IsCarrier,
                 CreatedAt = DateTime.SpecifyKind(r.CreatedAt, DateTimeKind.Utc),
                 UpdatedAt = DateTime.SpecifyKind(r.UpdatedAt, DateTimeKind.Utc),
                 Version = r.Version,

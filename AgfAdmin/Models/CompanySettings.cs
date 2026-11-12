@@ -30,6 +30,9 @@ namespace AgfAdmin.Models
         public bool LoadingSlipShowSupplier { get; set; } = true;
         // De loods op de laadbon: naam en adres van waar echt geladen wordt. Leeg = de loods zit op het bedrijfsadres.
         public string LoadingSlipWarehouseAddress { get; set; }
+        // Transportopdracht (documenten deel 2): taal van de kopteksten (standaard Engels) en de standaard soort pallet.
+        public string TransportOrderLanguage { get; set; } = Services.SalesOrderDocumentRules.LanguageEnglish;
+        public string TransportOrderPalletKind { get; set; } = Services.SalesTransportRules.DefaultPalletKind;
 
         // Link naar de GLOBALG.A.P. Supply Chain Portal voor de handmatige GGN-controle (absolute https-URL; alleen een link).
         public string GlobalGapPortalUrl { get; set; } = Services.RelationRules.DefaultGlobalGapPortalUrl;

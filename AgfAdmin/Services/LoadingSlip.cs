@@ -6,10 +6,11 @@ using AgfAdmin.Models;
 
 namespace AgfAdmin.Services
 {
-    // Documenten bij een verkooporder (documenten deel 1: de laadbon). Constanten en kleine regels zonder database.
+    // Documenten bij een verkooporder (deel 1: de laadbon, deel 2: de transportopdracht). Constanten en kleine regels zonder database.
     public static class SalesOrderDocumentRules
     {
         public const string KindLoadingSlip = "LoadingSlip";
+        public const string KindTransportOrder = "TransportOrder";
         public const string ReasonConfirmed = "Confirmed";
         public const string ReasonChanged = "Changed";
         public const string LanguageEnglish = "en";
@@ -20,8 +21,15 @@ namespace AgfAdmin.Services
         public const int MaxActorLength = 100;
 
         // Het nummer van de laadbon: het VO-nummer met LB ervoor (VO-2026-0012 → LB-2026-0012), gelijk voor alle versies.
-        public static string Number(string orderNumber) =>
-            orderNumber != null && orderNumber.StartsWith("VO-", StringComparison.Ordinal) ? "LB-" + orderNumber[3..] : "LB-" + orderNumber;
+        public static string Number(string orderNumber) => Prefixed("LB-", orderNumber);
+
+        // Het nummer van de transportopdracht, op dezelfde manier: VO-2026-0012 → TO-2026-0012. Zo verwijzen de vervoerder en wij ernaar.
+        public static string TransportOrderNumber(string orderNumber) => Prefixed("TO-", orderNumber);
+
+        public static string NumberFor(string kind, string orderNumber) => kind == KindTransportOrder ? TransportOrderNumber(orderNumber) : Number(orderNumber);
+
+        private static string Prefixed(string prefix, string orderNumber) =>
+            orderNumber != null && orderNumber.StartsWith("VO-", StringComparison.Ordinal) ? prefix + orderNumber[3..] : prefix + orderNumber;
 
         // Opnieuw doorgeven: er is een nieuwere versie dan de eerste en die is nog niet doorgegeven of verstuurd.
         public static bool NeedsResend(IReadOnlyCollection<SalesOrderDocument> versions)

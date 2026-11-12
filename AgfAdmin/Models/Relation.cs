@@ -43,6 +43,8 @@ namespace AgfAdmin.Models
 
         // Inactief in plaats van verwijderen zodra documenten naar een rol verwijzen: historie blijft leesbaar, nieuwe documenten weigeren.
         public bool IsActive { get; set; } = true;
+        // Rol vervoerder (documenten deel 2): kiesbaar als vervoerder op een verkooporder. Wordt alleen gezet, nooit weggehaald.
+        public bool IsCarrier { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
