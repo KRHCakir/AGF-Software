@@ -128,8 +128,11 @@ namespace AgfAdmin.Services
         }
 
         // true = nieuwe versie, false = niets veranderd, null = versiebotsing (opnieuw proberen).
-        private async Task<bool?> RefreshOnceAsync(int orderId, CancellationToken cancellationToken, bool rethrowCollision = false)
+        private async Task<bool?> RefreshOnceAsync(int orderId, CancellationToken cancellationToken)
         {
+            // Altijd de stand in de database: een al gevolgde order (uit de opdracht ervoor, of een eerdere verversing) wordt door een
+            // nieuwe query niet bijgewerkt, en dan bleef een gelijktijdige wijziging buiten de bon. Hier staat niets onopgeslagen.
+            db.ChangeTracker.Clear();
             var order = await LoadAsync(orderId, cancellationToken);
             if (order?.ConfirmedAt == null || order.Status == ReservationRules.OrderStatusCancelled) return false;
             var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
@@ -141,79 +144,58 @@ namespace AgfAdmin.Services
                 await db.SaveChangesAsync(cancellationToken);
                 return true;
             }
-            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && !rethrowCollision)
+            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
                 // Alleen een versiebotsing met een gelijktijdige verversing; andere databasefouten gaan naar de aanroeper.
-                // Binnen een transactie (rethrowCollision) niet: die is na de fout afgebroken, daar herhaalt de aanroeper het geheel.
                 db.ChangeTracker.Clear();
                 return null;
             }
         }
 
         // Doorgegeven aan de loods (afgedrukt of overhandigd); deel 3 zet dit bij verzenden. Alleen de nieuwste versie, één keer.
+        //
+        // Gelijktijdige wijzigingen worden op inhoud gecontroleerd, niet met locks: een bon kan veranderen door elke opdracht op de order
+        // (reservering, toewijzing, emballage, laden op), en die raken verschillende tabellen. "Opnieuw versturen" hangt alleen af van de
+        // nieuwste versie, en elke andere inhoud geeft een nieuwe versie zonder doorgifte (de verversing na de opdracht, de verversing
+        // hieronder na de doorgifte, en het vangnet bij het ophalen). Komt er een wijziging tussen de controle en de doorgifte, dan is de
+        // doorgegeven versie dus meteen niet meer de nieuwste en vraagt de order weer om opnieuw versturen. Dat klopt ook: precies die
+        // versie is aan de loods gegeven.
         public async Task<ServiceResult<SalesOrderDocumentsDto>> MarkSentAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
         {
-            for (var attempt = 0; ; attempt++)
-            {
-                try
-                {
-                    return await MarkSentOnceAsync(orderId, documentId, cancellationToken);
-                }
-                catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < 2)
-                {
-                    // Een gelijktijdige verversing nam het versienummer: de transactie is teruggedraaid, opnieuw op de actuele stand.
-                    db.ChangeTracker.Clear();
-                }
-            }
-        }
-
-        private async Task<ServiceResult<SalesOrderDocumentsDto>> MarkSentOnceAsync(int orderId, int documentId, CancellationToken cancellationToken)
-        {
-            // Verversen, controleren en doorgeven in één transactie met een rijlock op de order en haar regels (FOR UPDATE): een
-            // gelijktijdige orderwijziging (die de orderrij of een orderregel wijzigt, of er via een FK naar verwijst) wacht tot de
-            // doorgifte klaar is, en een al opgeslagen wijziging is bij het verversen hieronder zichtbaar. Zo wordt geen verouderde bon als
-            // nieuwste doorgegeven. Alleen PostgreSQL (productie) kent deze lock; SQLite (tests) serialiseert schrijvers zelf.
-            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-            if (db.Database.IsNpgsql())
-            {
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SalesOrders\" WHERE \"Id\" = {orderId} FOR UPDATE", cancellationToken);
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SalesOrderLines\" WHERE \"SalesOrderId\" = {orderId} FOR UPDATE", cancellationToken);
-            }
-            // Eerst verversen: een verouderde bon mag niet als nieuwste worden doorgegeven. Een mislukte verversing werpt en blokkeert de doorgifte.
-            await RefreshOnceAsync(orderId, cancellationToken, rethrowCollision: true);
+            // Eerst verversen, los opgeslagen: ook als de gevraagde versie daarna niet de nieuwste blijkt, blijft de nieuwe versie bewaard.
+            await RefreshAsync(orderId, cancellationToken);
             var order = await LoadAsync(orderId, cancellationToken);
             var document = order?.Documents.SingleOrDefault(d => d.Id == documentId);
             if (document == null) return ServiceResult<SalesOrderDocumentsDto>.NotFound($"Document {documentId} of sales order {orderId} does not exist.");
-            var latest = order.Documents.Where(d => d.Kind == document.Kind).Max(d => d.Version);
-            if (document.Version != latest)
-            {
-                return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Version {document.Version} is not the latest ({latest}); pass on the latest version.", new { code = "notLatest" });
-            }
+            var newest = order.Documents.Where(d => d.Kind == document.Kind).Max(d => d.Version);
+            if (document.Version != newest) return NotLatest(document.Version, newest);
             if (document.SentAt == null)
             {
-                // Voorwaardelijke update in één statement: alleen als er nu nog geen nieuwere versie is en nog niet doorgegeven is.
-                // Een gelijktijdige nieuwe versie kan zo niet meer tussen de controle en het opslaan komen.
-                var sentAt = DateTime.UtcNow;
-                var sentBy = Actor();
+                // In één statement, alleen als die versie nog niet doorgegeven is en er geen nieuwere is. Het zet alleen SentAt en SentBy, één
+                // keer: de eis van TraceabilityGuard regel 31. Een update in één statement gaat buiten de guard om, daarom staat die eis hier
+                // in de voorwaarde.
                 var kind = document.Kind;
                 var version = document.Version;
+                var sentAt = DateTime.UtcNow;
+                var sentBy = Actor();
                 var updated = await db.SalesOrderDocuments
                     .Where(d => d.Id == documentId && d.SalesOrderId == orderId && d.SentAt == null
                         && !db.SalesOrderDocuments.Any(n => n.SalesOrderId == orderId && n.Kind == kind && n.Version > version))
                     .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)sentAt).SetProperty(d => d.SentBy, sentBy), cancellationToken);
                 if (updated == 0)
                 {
-                    // Intussen doorgegeven (idempotent) of er is een nieuwere versie bij gekomen.
-                    var newest = await db.SalesOrderDocuments.AsNoTracking().Where(d => d.SalesOrderId == orderId && d.Kind == kind).MaxAsync(d => d.Version, cancellationToken);
-                    if (version != newest)
-                    {
-                        return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Version {version} is not the latest ({newest}); pass on the latest version.", new { code = "notLatest" });
-                    }
+                    // Intussen al doorgegeven (dan is dit een herhaling) of er kwam net een nieuwere versie bij.
+                    var current = await db.SalesOrderDocuments.AsNoTracking().Where(d => d.SalesOrderId == orderId && d.Kind == kind).MaxAsync(d => d.Version, cancellationToken);
+                    if (current != version) return NotLatest(version, current);
                 }
             }
-            await transaction.CommitAsync(cancellationToken);
-            return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
+            // Daarna opnieuw verversen: een wijziging die na de eerste verversing opgeslagen werd, staat zo meteen als nieuwe versie klaar.
+            await RefreshAsync(orderId, cancellationToken);
+            return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(await LoadAsync(orderId, cancellationToken), cancellationToken));
         }
+
+        private static ServiceResult<SalesOrderDocumentsDto> NotLatest(int version, int newest) =>
+            ServiceResult<SalesOrderDocumentsDto>.Conflict($"Version {version} is not the latest ({newest}); pass on the latest version.", new { code = "notLatest" });
 
         // De snapshot van één versie (voor de PDF), of null.
         public async Task<(SalesOrderDocument Document, LoadingSlipSnapshot Snapshot)?> SnapshotAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
