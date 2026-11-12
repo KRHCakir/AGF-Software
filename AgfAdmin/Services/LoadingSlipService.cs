@@ -197,6 +197,37 @@ namespace AgfAdmin.Services
         private static ServiceResult<SalesOrderDocumentsDto> NotLatest(int version, int newest) =>
             ServiceResult<SalesOrderDocumentsDto>.Conflict($"Version {version} is not the latest ({newest}); pass on the latest version.", new { code = "notLatest" });
 
+        public async Task<LoadingSlipSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
+        {
+            var settings = await SettingsAsync(cancellationToken);
+            return new LoadingSlipSettingsDto { Language = settings.LoadingSlipLanguage, ShowCustomer = settings.LoadingSlipShowCustomer, ShowSupplier = settings.LoadingSlipShowSupplier, WarehouseAddress = settings.LoadingSlipWarehouseAddress };
+        }
+
+        // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot (en dus haar kolommen).
+        public async Task<ServiceResult<LoadingSlipSettingsDto>> UpdateSettingsAsync(LoadingSlipSettingsDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            var language = request?.Language?.Trim().ToLowerInvariant();
+            if (language == null || !SalesOrderDocumentRules.Languages.Contains(language))
+            {
+                ValidationErrors.Add(errors, "language", $"Language must be one of: {string.Join(", ", SalesOrderDocumentRules.Languages)}.");
+            }
+            var warehouse = string.IsNullOrWhiteSpace(request?.WarehouseAddress) ? null : request.WarehouseAddress.Trim();
+            if (warehouse?.Length > SalesOrderDocumentRules.MaxWarehouseAddressLength)
+            {
+                ValidationErrors.Add(errors, "warehouseAddress", $"At most {SalesOrderDocumentRules.MaxWarehouseAddressLength} characters.");
+            }
+            if (errors.Count > 0) return ServiceResult<LoadingSlipSettingsDto>.Validation(ValidationErrors.ToArrays(errors));
+            var settings = await db.CompanySettings.OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+            if (settings == null) db.CompanySettings.Add(settings = new CompanySettings());
+            settings.LoadingSlipLanguage = language;
+            settings.LoadingSlipShowCustomer = request.ShowCustomer;
+            settings.LoadingSlipShowSupplier = request.ShowSupplier;
+            settings.LoadingSlipWarehouseAddress = warehouse;
+            await db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<LoadingSlipSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
+        }
+
         // De snapshot van één versie (voor de PDF), of null.
         public async Task<(SalesOrderDocument Document, LoadingSlipSnapshot Snapshot)?> SnapshotAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
         {
