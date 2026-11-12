@@ -76,7 +76,7 @@ function PurchaseOrderEdit() {
                 return (
                     <>
                         <p className="text-sm text-gray-700">{t('po_edit_intro', { number: orderNumbers(order).main })}</p>
-                        <PlanSupplyForm key={order.id} route="Warehouse" reference={reference} onReceive={() => undefined}
+                        <PlanSupplyForm key={order.id} route={order.route === 'DirectTrade' ? 'DirectTrade' : 'Warehouse'} reference={reference} onReceive={() => undefined}
                             editing={{ order, onSaved: (saved) => router.push(`/purchase-orders?id=${saved.id}`) }} />
                     </>
                 );
