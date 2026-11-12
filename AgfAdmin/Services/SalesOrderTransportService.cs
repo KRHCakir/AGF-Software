@@ -142,6 +142,31 @@ namespace AgfAdmin.Services
             return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));
         }
 
+        public async Task<TransportOrderSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
+        {
+            var settings = await SettingsAsync(cancellationToken);
+            return new TransportOrderSettingsDto { Language = settings.TransportOrderLanguage, PalletKind = settings.TransportOrderPalletKind };
+        }
+
+        // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot.
+        public async Task<ServiceResult<TransportOrderSettingsDto>> UpdateSettingsAsync(TransportOrderSettingsDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            var language = request?.Language?.Trim().ToLowerInvariant();
+            if (language == null || !SalesOrderDocumentRules.Languages.Contains(language))
+            {
+                ValidationErrors.Add(errors, "language", $"Language must be one of: {string.Join(", ", SalesOrderDocumentRules.Languages)}.");
+            }
+            var palletKind = ValidationErrors.OptionalText(request?.PalletKind, SalesTransportRules.MaxPalletKindLength, "palletKind", errors) ?? SalesTransportRules.DefaultPalletKind;
+            if (errors.Count > 0) return ServiceResult<TransportOrderSettingsDto>.Validation(ValidationErrors.ToArrays(errors));
+            var settings = await db.CompanySettings.OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+            if (settings == null) db.CompanySettings.Add(settings = new CompanySettings());
+            settings.TransportOrderLanguage = language;
+            settings.TransportOrderPalletKind = palletKind;
+            await db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<TransportOrderSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
+        }
+
         private async Task<SalesOrderTransportDto> ToDtoAsync(SalesOrder order, CancellationToken cancellationToken)
         {
             var settings = await SettingsAsync(cancellationToken);

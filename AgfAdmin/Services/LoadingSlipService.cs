@@ -222,13 +222,9 @@ namespace AgfAdmin.Services
             return ServiceResult<LoadingSlipSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
         }
 
-        // De snapshot van één versie (voor de PDF), of null.
-        public async Task<(SalesOrderDocument Document, LoadingSlipSnapshot Snapshot)?> SnapshotAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
-        {
-            // Alleen de laadbon; de PDF van de transportopdracht volgt.
-            var document = await db.SalesOrderDocuments.AsNoTracking().SingleOrDefaultAsync(d => d.Id == documentId && d.SalesOrderId == orderId && d.Kind == SalesOrderDocumentRules.KindLoadingSlip, cancellationToken);
-            return document == null ? null : (document, LoadingSlipBuilder.Deserialize(document.SnapshotJson));
-        }
+        // Eén versie van een document van deze order (laadbon of transportopdracht), of null.
+        public Task<SalesOrderDocument> DocumentAsync(int orderId, int documentId, CancellationToken cancellationToken = default) =>
+            db.SalesOrderDocuments.AsNoTracking().SingleOrDefaultAsync(d => d.Id == documentId && d.SalesOrderId == orderId, cancellationToken);
 
         // Een nieuwe versie van elk document waarvan de inhoud veranderd is (vingerafdruk): de laadbon altijd, de transportopdracht alleen als er
         // transport is ingevuld. De eerste versie heet "bevestigd", de volgende "gewijzigd". Geeft het aantal nieuwe versies.

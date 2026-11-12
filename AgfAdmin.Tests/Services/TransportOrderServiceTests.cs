@@ -203,6 +203,17 @@ public class TransportOrderServiceTests : IDisposable
         Assert.Equal("TO-2026-0012", SalesOrderDocumentRules.TransportOrderNumber("VO-2026-0012"));
     }
 
+    [Fact]
+    public async Task The_transport_order_settings_default_to_english_and_europallet()
+    {
+        var settings = await Transport(t => t.GetSettingsAsync());
+        Assert.Equal(("en", "Europallet"), (settings.Language, settings.PalletKind));
+        Assert.Contains("language", (await Transport(t => t.UpdateSettingsAsync(new TransportOrderSettingsDto { Language = "de" }))).Errors.Keys);
+        var updated = await Transport(t => t.UpdateSettingsAsync(new TransportOrderSettingsDto { Language = "NL", PalletKind = " Blokpallet " }));
+        Assert.Equal(("nl", "Blokpallet"), (updated.Value.Language, updated.Value.PalletKind));
+        Assert.Equal("Europallet", (await Transport(t => t.UpdateSettingsAsync(new TransportOrderSettingsDto { Language = "en", PalletKind = "" }))).Value.PalletKind);
+    }
+
     private async Task<SalesOrderTransport> LoadTransport(int orderId)
     {
         await using var db = _factory.CreateContext();
