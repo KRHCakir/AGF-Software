@@ -204,8 +204,10 @@ public class TransportOrderServiceTests : IDisposable
     public async Task Transport_can_be_removed_until_there_is_a_transport_order()
     {
         var s = await OrderAsync();
-        await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
-        var removed = await Transport(t => t.DeleteAsync(s.OrderId));
+        var saved = await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
+        // Met een verouderde versie niet; met de versie die je zag wel.
+        Assert.Equal(ServiceResultStatus.Conflict, (await Transport(t => t.DeleteAsync(s.OrderId, saved.Value.Version + 1))).Status);
+        var removed = await Transport(t => t.DeleteAsync(s.OrderId, saved.Value.Version));
         Assert.Equal((ServiceResultStatus.Ok, false), (removed.Status, removed.Value.Exists));
         await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
         await Slips(x => x.ConfirmAsync(s.OrderId, new ConfirmSalesOrderDto()));
