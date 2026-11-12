@@ -47,6 +47,8 @@ namespace AgfAdmin.DTOs
         public string InvoiceIndicator { get; set; }
         // Er is bij deze order minstens één afwijkende ontvangst vastgelegd.
         public bool HasDeviation { get; set; }
+        // Documentstatus (stap 4a): Open (aanpasbaar) of Definitive.
+        public string DocumentStatus { get; set; }
     }
 
     // Een verkooporder die van deze inkooporder reserveert (Active) of verzonden heeft (Consumed), per eenheid opgeteld.
@@ -102,6 +104,63 @@ namespace AgfAdmin.DTOs
         public List<PurchaseOrderSalesLinkDto> SalesOrders { get; set; } = new();
         // Totalen onder de regels, in dezelfde kolommen (PurchaseLineMath).
         public PurchaseOrderLineTotalsDto Totals { get; set; }
+        // Documentstatus (stap 4a): Open of Definitive, met wie, wanneer en waardoor (Manual of Invoice), en de versie voor aanpassen.
+        public string DocumentStatus { get; set; }
+        public DateTime? FinalizedAt { get; set; }
+        public string FinalizedBy { get; set; }
+        public string FinalizedVia { get; set; }
+        public int EditVersion { get; set; }
+        // Aanpassen kan (Open, eigen magazijn, niet geannuleerd); leverancier en partij liggen vast zodra er iets ontvangen is.
+        public bool Editable { get; set; }
+        public bool VendorFixed { get; set; }
+        public bool PartijFixed { get; set; }
+        // Auditregels: aanpassingen, Definitief maken en correcties, oudste eerst.
+        public List<PurchaseOrderChangeDto> Changes { get; set; } = new();
+    }
+
+    public sealed class PurchaseOrderChangeDto
+    {
+        public int Id { get; set; }
+        public string Kind { get; set; }
+        public string Reason { get; set; }
+        public string ActorReference { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public IReadOnlyList<AgfAdmin.Services.PurchaseOrderChangeField> Fields { get; set; } = Array.Empty<AgfAdmin.Services.PurchaseOrderChangeField>();
+    }
+
+    // Aanpassen van een Open order: hetzelfde als aanmaken, plus de verwachte versie en per bestaande regel haar id. Een opgeslagen regel
+    // die niet meer meekomt, wordt verwijderd; een regel zonder id is nieuw.
+    public sealed class UpdatePurchaseOrderDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedVersion { get; set; }
+        public int VendorId { get; set; }
+        public string Origin { get; set; }
+        public DateTimeOffset? ExpectedAt { get; set; }
+        public string SupplierReference { get; set; }
+        public DateOnly? OrderedOn { get; set; }
+        public string OrderChannel { get; set; }
+        public string Note { get; set; }
+        public int? PartijId { get; set; }
+        public NewPartijForOrderDto NewPartij { get; set; }
+        public string SupplierLotReference { get; set; }
+        public List<UpdatePurchaseOrderLineDto> Lines { get; set; }
+    }
+
+    public sealed class UpdatePurchaseOrderLineDto
+    {
+        public int? Id { get; set; }
+        public int ProductVariantId { get; set; }
+        public decimal? ExpectedQuantity { get; set; }
+        public string ExpectedUnit { get; set; }
+        public decimal? ExpectedNetWeightKg { get; set; }
+        public decimal? ExpectedGrossWeightKg { get; set; }
+        public string WeightSource { get; set; }
+        public string LotNumber { get; set; }
+        public decimal? PalletCount { get; set; }
+        public decimal? PackagesPerPallet { get; set; }
+        public decimal? LoosePackages { get; set; }
+        public decimal? UnitPrice { get; set; }
     }
 
     public sealed class PurchaseOrderLineTotalsDto
@@ -152,6 +211,12 @@ namespace AgfAdmin.DTOs
         public decimal ReceivedNetWeightKg { get; set; }
         public decimal RejectedQuantity { get; set; }
         public decimal RejectedNetWeightKg { get; set; }
+        // Aanpassen (stap 4a): de eigen palletinvoer zoals opgeslagen (voor een ongewijzigde regel), en of er iets aan de regel hangt
+        // (ontvangst, afwijking, vervanging, reservering, afkeuring): dan blijft ze staan met haar artikel, nooit onder ontvangen.
+        public decimal? PalletInputCount { get; set; }
+        public decimal? PalletInputPackagesPerPallet { get; set; }
+        public decimal? PalletInputLoose { get; set; }
+        public bool InUse { get; set; }
     }
 
     // Ontvangen inhoud van de order (ook teruggeboekte en afgesplitste regels), met wat er nu nog afgekeurd kan worden.
@@ -229,7 +294,7 @@ namespace AgfAdmin.DTOs
     public sealed class PurchaseOrderHistoryEventDto
     {
         public DateTime OccurredAt { get; set; }
-        public string Type { get; set; }      // Ordered, Received, QualityChanged, InvoiceRecorded, CreditNoteRecorded, Rejected, DeviationRecorded
+        public string Type { get; set; }      // Ordered, Received, QualityChanged, InvoiceRecorded, CreditNoteRecorded, Rejected, DeviationRecorded, Edited, Finalized, Corrected
         public string ActorReference { get; set; }
         public string InspectedBy { get; set; } // QualityChanged: wie het product keurde (naast de ingelogde gebruiker)
         public string Reference { get; set; } // leveranciersreferentie, pallet of factuurnummer

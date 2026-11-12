@@ -21,8 +21,9 @@ namespace AgfAdmin.Controllers
 
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] int? vendorId,
-            [FromQuery] int page = 1, [FromQuery] int pageSize = PurchaseOrderRules.DefaultPageSize, [FromQuery] string supplierReference = null) =>
-            this.ToActionResult(await _service.ListAsync(query, status, vendorId, page, pageSize, supplierReference, HttpContext?.RequestAborted ?? default));
+            [FromQuery] int page = 1, [FromQuery] int pageSize = PurchaseOrderRules.DefaultPageSize, [FromQuery] string supplierReference = null,
+            [FromQuery] string document = null) =>
+            this.ToActionResult(await _service.ListAsync(query, status, vendorId, page, pageSize, supplierReference, HttpContext?.RequestAborted ?? default, document));
 
         [HttpGet("by-supplier-reference")]
         public async Task<IActionResult> BySupplierReference([FromQuery] string supplierReference, [FromQuery] int vendorId) =>
@@ -35,6 +36,11 @@ namespace AgfAdmin.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id) =>
             this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
+
+        // Aanpassen zolang de order Open is (stap 4a): 200 met de order, 400 validatie, 409 definitief, verouderde versie of niet aanpasbaar.
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdatePurchaseOrderDto request) =>
+            this.ToActionResult(await _service.UpdateAsync(id, request, HttpContext?.RequestAborted ?? default));
 
         [HttpPost("{id:int}/invoice-refs")]
         public async Task<IActionResult> AddInvoiceRef(int id, [FromBody] AddPurchaseOrderInvoiceRefDto request) =>
