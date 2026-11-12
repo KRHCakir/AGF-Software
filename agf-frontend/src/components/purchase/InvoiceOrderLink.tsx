@@ -29,16 +29,19 @@ export function InvoiceOrderPicker({ vendorId, lines, disabled, onAdd }: {
 }) {
     const { t, locale } = useTranslation();
     const [query, setQuery] = useState('');
-    const [orders, setOrders] = useState<InvoiceCandidate[] | null>(null);
-    const [failed, setFailed] = useState(false);
+    // De resultaten horen bij de leverancier waarvoor ze zijn opgehaald; bij een andere leverancier worden ze niet getoond.
+    const [result, setResult] = useState<{ vendorId: number; orders: InvoiceCandidate[] | null; failed: boolean } | null>(null);
+    const current = result !== null && result.vendorId === vendorId ? result : null;
+    const orders = current?.orders ?? null;
+    const failed = current?.failed ?? false;
     const added = new Set(lines.map((line) => line.orderLine?.lineId).filter((id) => id !== undefined));
 
     useEffect(() => {
         const controller = new AbortController();
         const timer = setTimeout(() => {
             listInvoiceCandidates(vendorId, query, null, controller.signal)
-                .then((found) => { setOrders(found); setFailed(false); })
-                .catch((caught) => { if (toApiError(caught).kind !== 'aborted') setFailed(true); });
+                .then((found) => setResult({ vendorId, orders: found, failed: false }))
+                .catch((caught) => { if (toApiError(caught).kind !== 'aborted') setResult({ vendorId, orders: null, failed: true }); });
         }, query === '' ? 0 : 300);
         return () => { clearTimeout(timer); controller.abort(); };
     }, [vendorId, query]);
