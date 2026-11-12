@@ -80,7 +80,10 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
 }) {
     const { t, locale } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
-    const [draft, setDraft] = useState<InvoiceDraft>(() => loadDraft() ?? emptyDraft(todayIso(), settings));
+    // Een nieuwe factuur begint altijd leeg: geen leverancier of andere waarde van een eerder, niet-opgeslagen concept in dit tabblad.
+    // Alleen wat bij een lopende handeling hoort komt terug: een verstuurde opslag zonder bevestiging (die hoort bij precies dit concept
+    // en raakt nooit los) of een open AI-voorstel met de aanpassingen die de gebruiker al deed.
+    const [draft, setDraft] = useState<InvoiceDraft>(() => (ai !== null || loadPending() !== null ? loadDraft() : null) ?? emptyDraft(todayIso(), settings));
     const [pending, setPending] = useState<PendingSave | null>(() => loadPending());
     const [errors, setErrors] = useState<FieldErrors>({});
     const [serverError, setServerError] = useState<ApiError | null>(null);
