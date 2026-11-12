@@ -5,7 +5,7 @@ import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
 import Link from 'next/link';
-import { DeviationBadge, DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import { DeviationBadge, DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge, BillingStatusBadge } from './PurchaseOrderBadges';
 import { listEditable } from '../../lib/purchaseOrderEdit';
 import { listRowClass, rowClick } from '../../lib/listRows';
 import { orderNumbers } from '../../lib/purchaseOrderRules';
@@ -58,7 +58,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                 <td className={`${th} whitespace-nowrap`}>{formatDateOnly(item.orderedOn, locale)}</td>
                                 <td className={`${th} whitespace-nowrap`}>{expected(item)}</td>
                                 <td className={th}>
-                                    <span className="flex flex-wrap items-center gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} />{item.hasDeviation && <DeviationBadge />}</span>
+                                    <span className="flex flex-wrap items-center gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} /><BillingStatusBadge status={item.billingStatus} />{item.hasDeviation && <DeviationBadge />}</span>
                                     {rejected(item)}
                                     {listEditable(item) && (
                                         <Link href={`/purchase-orders/edit?id=${item.id}`} onClick={(event) => event.stopPropagation()} data-tour="po-list-edit" data-tour-key={item.orderNumber}
@@ -84,7 +84,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                             className={`w-full rounded-md border bg-white p-3 text-left text-sm ${item.id === selectedId ? 'border-blue-500' : 'border-gray-200'}`}>
                             <span className="flex items-start justify-between gap-2">
                                 <span className="min-w-0 font-semibold text-blue-800"><OrderNumberText orderNumber={item.orderNumber} supplierReference={item.supplierReference} stacked truncate /></span>
-                                <span className="flex shrink-0 flex-wrap justify-end gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} />{item.hasDeviation && <DeviationBadge />}</span>
+                                <span className="flex shrink-0 flex-wrap justify-end gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} /><BillingStatusBadge status={item.billingStatus} />{item.hasDeviation && <DeviationBadge />}</span>
                             </span>
                             <span className="mt-1 block break-words font-medium text-gray-900">{item.vendorName ?? '–'}{item.linesOrigin && <span className="font-normal text-gray-700"> · {item.linesOrigin}</span>}</span>
                             {item.partijNumber && <span className="block break-words text-gray-700">{t('partij_field')} <span className="font-mono">{item.partijNumber}</span></span>}

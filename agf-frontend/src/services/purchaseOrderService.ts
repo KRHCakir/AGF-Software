@@ -32,6 +32,8 @@ export interface PurchaseOrderQuery {
     supplierReference?: string;
     // Documentstatus: leeg = alle, anders Open of Definitive.
     document?: string;
+    // Gefactureerd (stap 4b): leeg = alle, anders None, Partial of Full.
+    billing?: string;
 }
 
 export async function listPurchaseOrders(query: PurchaseOrderQuery, signal?: AbortSignal): Promise<PurchaseOrderList> {
@@ -40,6 +42,7 @@ export async function listPurchaseOrders(query: PurchaseOrderQuery, signal?: Abo
     if (query.vendorId !== null) params.set('vendorId', String(query.vendorId));
     if ((query.supplierReference ?? '').trim() !== '') params.set('supplierReference', query.supplierReference!.trim());
     if ((query.document ?? '') !== '') params.set('document', query.document!);
+    if ((query.billing ?? '') !== '') params.set('billing', query.billing!);
     const json = await getJson(`/purchase-orders?${params.toString()}`, signal);
     if (!isPurchaseOrderList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de inkooporders.');
     return json;

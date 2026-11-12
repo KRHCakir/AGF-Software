@@ -57,6 +57,18 @@ const partijLink = (id: number, number: string): ChainLink => ({ label: number, 
 
 const invoiceStep = (): Omit<ChainStep, 'current'> => ({ key: 'invoice', state: 'unavailable', parts: [{ key: 'chain_not_yet' }], links: [] });
 
+// Inkoopfactuur bij een inkooporder (stap 4b): de gekoppelde facturen met link, en Gefactureerd / Deels / Niet. Zonder die gegevens (een
+// oudere server) blijft het "nog niet".
+const purchaseInvoiceStep = (order: PurchaseOrderDetail): Omit<ChainStep, 'current'> => {
+    if (order.billingStatus === undefined) return invoiceStep();
+    return {
+        key: 'invoice',
+        state: order.billingStatus === 'Full' ? 'done' : order.billingStatus === 'Partial' ? 'partial' : 'empty',
+        parts: [{ key: `chain_billing_${order.billingStatus.toLowerCase()}` }],
+        links: (order.invoices ?? []).slice(0, MAX_LINKS).map((invoice) => ({ label: invoice.invoiceNumber ?? `#${invoice.id}`, href: `/purchase-invoices?id=${invoice.id}` })),
+    };
+};
+
 // Vanaf de inkooporder (detail) of vanaf een ontvangst van die order.
 export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' | 'receipt'): ChainStep[] {
     const direct = order.route === 'DirectTrade';
@@ -138,7 +150,7 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
         links: unique(sales.filter((link) => link.shippedQuantity > 0).map((link) => link.salesOrderId)).slice(0, MAX_LINKS)
             .map((id) => salesLinks.find((link) => link.href === `/sales-orders?orderId=${id}`) ?? { label: `#${id}`, href: `/sales-orders?orderId=${id}` }),
     });
-    steps.push(invoiceStep());
+    steps.push(purchaseInvoiceStep(order));
     const at: ChainStepKey = current === 'order' ? 'order' : 'receipt';
     return steps.map((step) => ({ ...step, current: step.key === at }));
 }

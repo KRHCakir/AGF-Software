@@ -69,17 +69,37 @@ export const ORDER_CHAPTER: TourChapter = {
             { kind: 'assert', target: 'po-detail-number', text: '{{tourRef}}' },
             { kind: 'assert', target: 'po-detail-number', text: '{{orderNumber}}' },
         ]),
+        // Factuur koppelen (stap 4b): "Factuur invoeren" op de order opent de inkoopfactuur met de leverancier en de regels van de bon
+        // (aantal en prijs voorgevuld). De factuur zegt 12,00 in plaats van 12,50: het verschil staat in rood en bij opslaan komt eenmaal
+        // de vraag; Bon aanpassen zet de factuurprijs op de order (met auditregel) en de order wordt definitief.
         order('invoice', '/purchase-orders', [
-            { kind: 'click', target: 'po-add-invoice:Invoice' },
-            { kind: 'type', target: 'po-invoice-number', text: 'F-{{tourRef}}' },
-            { kind: 'click', target: 'po-invoice-save' },
-            { kind: 'wait', target: 'po-invoice-ref:F-{{tourRef}}' },
-            { kind: 'highlight', target: 'po-invoice-ref:F-{{tourRef}}' },
+            { kind: 'highlight', target: 'po-invoice-enter' },
+            { kind: 'click', target: 'po-invoice-enter' },
+            // In dezelfde stap wachten tot de regels uit de bon er staan: anders navigeert de volgende stap al naar de lege invoer.
+            { kind: 'wait', target: 'pinvoice-order-info:0' },
+        ]),
+        order('invoice-lines', '/purchase-invoices/new', [
+            { kind: 'highlight', target: 'pinvoice-order-info:0' },
+            { kind: 'type', target: 'pinvoice-number', text: 'F-{{tourRef}}' },
+            { kind: 'type', target: 'pinvoice-line-price:0', text: '12,00' },
+            { kind: 'wait', target: 'pinvoice-order-difference:0' },
+            { kind: 'highlight', target: 'pinvoice-order-difference:0' },
+        ]),
+        order('invoice-question', '/purchase-invoices/new', [
+            { kind: 'click', target: 'pinvoice-save' },
+            { kind: 'wait', target: 'pinvoice-price-question' },
+            { kind: 'highlight', target: 'pinvoice-adjust-order' },
+            { kind: 'click', target: 'pinvoice-adjust-order' },
+            { kind: 'wait', target: 'pinvoice-saved' },
         ]),
         order('by-invoice', '/purchase-orders', [
             { kind: 'type', target: 'po-search', text: 'F-{{tourRef}}' },
             { kind: 'wait', target: 'po-open:{{orderNumber}}' },
-            { kind: 'highlight', target: 'po-open:{{orderNumber}}' },
+            { kind: 'click', target: 'po-open:{{orderNumber}}' },
+            { kind: 'wait', target: 'po-linked-invoice:F-{{tourRef}}' },
+            { kind: 'highlight', target: 'po-linked-invoice:F-{{tourRef}}' },
+            { kind: 'wait', target: 'po-definitive' },
+            { kind: 'highlight', target: 'po-definitive' },
         ]),
         // Voorraad › Partijen: de partij van deze order, met de order erin.
         order('lot', '/partijen', [

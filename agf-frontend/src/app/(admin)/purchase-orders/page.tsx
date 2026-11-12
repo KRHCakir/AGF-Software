@@ -6,6 +6,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import { FirstStepLink } from '../../../components/shared/FirstStep';
 import InvoiceRefActions from '../../../components/purchase/InvoiceRefActions';
+import { BILLING_STATUSES } from '../../../types/purchaseOrder';
 import PurchaseOrderDetail from '../../../components/purchase/PurchaseOrderDetail';
 import PurchaseOrderList from '../../../components/purchase/PurchaseOrderList';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
@@ -56,6 +57,7 @@ function PurchaseOrdersWorkspace() {
     const [status, setStatus] = useState(query.trim() === '' ? 'open' : 'all');
     // Documentstatus (stap 4a): leeg = alle, anders Open of Definitive.
     const [documentFilter, setDocumentFilter] = useState('');
+    const [billingFilter, setBillingFilter] = useState('');
     const [vendorId, setVendorId] = useState('');
     // Filter "Ordernummer leverancier": alleen op dat nummer (zonder spaties en streepjes), los van het brede zoekveld.
     const [reference, setReference] = useState('');
@@ -82,7 +84,7 @@ function PurchaseOrdersWorkspace() {
         const handle = setTimeout(() => { setDebounced(query.trim()); setDebouncedReference(reference.trim()); }, 250);
         return () => clearTimeout(handle);
     }, [query, reference]);
-    useEffect(() => { setPage(1); }, [debounced, debouncedReference, status, vendorId, documentFilter]);
+    useEffect(() => { setPage(1); }, [debounced, debouncedReference, status, vendorId, documentFilter, billingFilter]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -93,11 +95,11 @@ function PurchaseOrdersWorkspace() {
     useEffect(() => {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        listPurchaseOrders({ query: debounced, status, vendorId: vendorId === '' ? null : Number(vendorId), supplierReference: debouncedReference, document: documentFilter, page, pageSize: PAGE_SIZE }, controller.signal)
+        listPurchaseOrders({ query: debounced, status, vendorId: vendorId === '' ? null : Number(vendorId), supplierReference: debouncedReference, document: documentFilter, billing: billingFilter, page, pageSize: PAGE_SIZE }, controller.signal)
             .then((data) => setList({ status: 'ready', data }))
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [debounced, debouncedReference, status, vendorId, documentFilter, page, reloadToken]);
+    }, [debounced, debouncedReference, status, vendorId, documentFilter, billingFilter, page, reloadToken]);
 
     useEffect(() => {
         if (selectedId === null) { setDetail(null); return; }
@@ -159,6 +161,13 @@ function PurchaseOrdersWorkspace() {
                         <option value="">{t('po_document_filter_all')}</option>
                         <option value="Open">{t('po_document_open')}</option>
                         <option value="Definitive">{t('po_document_definitive')}</option>
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="po-billing" className="text-xs font-medium text-gray-700">{t('po_billing_filter')}</label>
+                    <select id="po-billing" data-tour="po-filter-billing" value={billingFilter} onChange={(event) => setBillingFilter(event.target.value)} className={inputClass}>
+                        <option value="">{t('po_document_filter_all')}</option>
+                        {BILLING_STATUSES.map((value) => <option key={value} value={value}>{t(`po_billing_${value.toLowerCase()}`)}</option>)}
                     </select>
                 </div>
                 <div>

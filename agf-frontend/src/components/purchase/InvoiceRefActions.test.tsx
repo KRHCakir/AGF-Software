@@ -35,23 +35,25 @@ describe('InvoiceRefActions', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('records an invoice number with date and amount; a duplicate is refused clearly', async () => {
+    test('an invoice is entered from the order as a purchase invoice (step 4b); a credit note number with date and amount, a duplicate refused clearly', async () => {
         const done: unknown[] = [];
         await mounted.render(view((updated) => done.push(updated)));
-        await click(mounted.button('+ po_invoice_received_action')!);
+        assert.equal(mounted.container.querySelector('[data-tour="po-invoice-enter"]')!.getAttribute('href'), '/purchase-invoices/new?orderId=7');
+        assert.equal(mounted.button('+ po_invoice_received_action'), null, 'no loose invoice number any more');
+        await click(mounted.button('+ po_credit_note_received_action')!);
         await click(mounted.button('po_invoice_save')!);
         assert.equal(posted.length, 0);
         assert.ok(mounted.hasText('supply_error_required'));
 
-        await act(async () => { setValue(input('invoiceRef-Invoice-number'), ' F-4711 '); setValue(input('invoiceRef-Invoice-date'), '2026-10-27'); setValue(input('invoiceRef-Invoice-amount'), '1.234,50'); });
+        await act(async () => { setValue(input('invoiceRef-CreditNote-number'), ' F-4711 '); setValue(input('invoiceRef-CreditNote-date'), '2026-10-27'); setValue(input('invoiceRef-CreditNote-amount'), '1.234,50'); });
         answers.push(async () => json(409, { message: 'Invoice F-4711 is already recorded on this purchase order.', code: 'INVOICE_REF_DUPLICATE' }));
         await click(mounted.button('po_invoice_save')!);
         await mounted.waitFor(() => mounted.hasText('po_invoice_duplicate'), 'duplicate notice');
         const body = JSON.parse(posted[0].body);
         assert.match(posted[0].url, /\/purchase-orders\/7\/invoice-refs$/);
-        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', kind: 'Invoice', invoiceNumber: 'F-4711', invoiceDate: '2026-10-27', amountExclVat: 1234.5 });
+        assert.deepEqual({ ...body, requestId: 'x' }, { requestId: 'x', kind: 'CreditNote', invoiceNumber: 'F-4711', invoiceDate: '2026-10-27', amountExclVat: 1234.5 });
 
-        await act(async () => { setValue(input('invoiceRef-Invoice-number'), 'F-4712'); });
+        await act(async () => { setValue(input('invoiceRef-CreditNote-number'), 'F-4712'); });
         answers.push(async () => json(201, order));
         await click(mounted.button('po_invoice_save')!);
         await mounted.waitFor(() => posted.length === 2, 'second POST');

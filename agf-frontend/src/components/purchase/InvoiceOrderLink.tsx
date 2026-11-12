@@ -86,7 +86,7 @@ export function InvoiceOrderPicker({ vendorId, lines, disabled, onAdd }: {
 }
 
 // Onder een regel uit de bon: wat de bon zegt, wat al gefactureerd en open is, en het verschil met de factuur in kleur.
-export function InvoiceOrderLineInfo({ line, prefix, currency }: { line: LineDraft; prefix: string; currency: string }) {
+export function InvoiceOrderLineInfo({ line, prefix, index, currency }: { line: LineDraft; prefix: string; index: number; currency: string }) {
     const { t, locale } = useTranslation();
     const link = line.orderLine;
     const comparison = compareLine(line);
@@ -94,7 +94,7 @@ export function InvoiceOrderLineInfo({ line, prefix, currency }: { line: LineDra
     const money = (value: number) => formatMoney(value, null, locale);
     const unit = unitWord(t, link.unit);
     return (
-        <div className="mt-1 space-y-0.5 text-xs" data-testid={`${prefix}.order-info`}>
+        <div className="mt-1 space-y-0.5 text-xs" data-testid={`${prefix}.order-info`} data-tour="pinvoice-order-info" data-tour-key={index}>
             <p className="text-gray-700">
                 {t('invoice_link_on_order', { order: orderLabel(link) })}{': '}
                 {comparison.quantity !== null && link.orderUnitPrice !== null
@@ -103,7 +103,7 @@ export function InvoiceOrderLineInfo({ line, prefix, currency }: { line: LineDra
                 {' · '}{t('invoice_link_counts', { invoiced: formatQuantity(link.invoicedQuantity, locale), open: formatQuantity(link.openQuantity, locale), unit })}
             </p>
             {comparison.differs && (
-                <p className="font-medium text-red-800" data-testid={`${prefix}.order-difference`}>
+                <p className="font-medium text-red-800" data-testid={`${prefix}.order-difference`} data-tour="pinvoice-order-difference" data-tour-key={index}>
                     {link.orderUnitPrice === null
                         ? t('invoice_link_price_set', { price: money(comparison.invoiceUnitPrice ?? 0), currency })
                         : t('invoice_link_difference', {

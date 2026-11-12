@@ -46,3 +46,11 @@ export function DocumentStatusBadge({ status }: { status: string | undefined }) 
         </span>
     );
 }
+
+// Gefactureerd volgens de gekoppelde factuurregels (stap 4b): Niet, Deels of Gefactureerd. Ontbreekt de waarde (oudere server): niets.
+export function BillingStatusBadge({ status }: { status: string | undefined }) {
+    const { t } = useTranslation();
+    if (status !== 'None' && status !== 'Partial' && status !== 'Full') return null;
+    const style = status === 'Full' ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : status === 'Partial' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-gray-300 bg-white text-gray-700';
+    return <span className={`${badge} ${style}`} data-tour="po-billing-status" data-tour-key={status}>{t(`po_billing_${status.toLowerCase()}`)}</span>;
+}

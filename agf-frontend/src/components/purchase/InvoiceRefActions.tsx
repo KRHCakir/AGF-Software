@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { isDateOnly } from '../../lib/calendarDate';
@@ -22,7 +23,9 @@ import SubmitErrors from '../shared/SubmitErrors';
 type Kind = AddInvoiceRefRequest['kind'];
 const KINDS: readonly Kind[] = ['Invoice', 'CreditNote'];
 
-// "Factuur ontvangen" en "Creditnota ontvangen": nummer (verplicht), datum en bedrag excl. btw (optioneel) bij de order.
+// "Creditnota ontvangen": nummer (verplicht), datum en bedrag excl. btw (optioneel) bij de order. Een factuur voer je sinds stap 4b in
+// als inkoopfactuur vanuit de bon ("Factuur invoeren": regels en prijs voorgevuld, de koppeling wordt opgeslagen); alleen een nog
+// openstaande "Factuur ontvangen"-opdracht van vóór die stap komt hier nog terug, zodat ze afgemaakt kan worden.
 // Een opdracht met onbekende uitkomst staat in de opslag per tabblad en houdt haar formulier open (ook na weg- en
 // terugnavigeren): alleen exact dezelfde herhaling. Een dubbel nummer is een definitieve weigering.
 export default function InvoiceRefActions({ orderId, orderNumber, onDone }: { orderId: number; orderNumber: string; onDone: (order: PurchaseOrderDetail) => void }) {
@@ -40,7 +43,8 @@ export default function InvoiceRefActions({ orderId, orderNumber, onDone }: { or
             ))}
             {open.length === 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                    {KINDS.map((kind) => <button key={kind} type="button" data-tour="po-add-invoice" data-tour-key={kind} className={secondaryButtonClass} onClick={() => setOpened(kind)}>+ {label(kind)}</button>)}
+                    <Link href={`/purchase-invoices/new?orderId=${orderId}`} data-tour="po-invoice-enter" className={secondaryButtonClass}>+ {t('po_invoice_enter')}</Link>
+                    <button type="button" data-tour="po-add-invoice" data-tour-key="CreditNote" className={secondaryButtonClass} onClick={() => setOpened('CreditNote')}>+ {label('CreditNote')}</button>
                 </div>
             )}
         </>
