@@ -5159,7 +5159,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("SupplyCommitments", t =>
                         {
-                            t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed", "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
+                            t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed", "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
 
                             t.HasCheckConstraint("CK_SupplyCommitments_OrderChannel_Allowed", "\"OrderChannel\" IS NULL OR \"OrderChannel\" IN ('Phone', 'Email', 'Portal', 'Other')");
 
