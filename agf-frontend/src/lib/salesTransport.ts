@@ -27,8 +27,27 @@ export type TransportProblem = 'mode' | 'carrier' | 'loadDate' | 'loadTime' | 't
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
+// Laadtijden zijn Nederlandse tijd, welke tijdzone de browser ook heeft: datum en tijd in Europe/Amsterdam, van en naar UTC.
+const AMSTERDAM = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+export function amsterdamParts(iso: string): { date: string; time: string } {
+    const part = Object.fromEntries(AMSTERDAM.formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
+    return { date: `${part.year}-${part.month}-${part.day}`, time: `${part.hour}:${part.minute}` };
+}
+
+const offsetAt = (ms: number) => {
+    const { date, time } = amsterdamParts(new Date(ms).toISOString());
+    return Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)), Number(time.slice(0, 2)), Number(time.slice(3, 5))) - ms;
+};
+
+export function amsterdamToUtc(date: string, time: string): string {
+    const wall = Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)), Number(time.slice(0, 2)), Number(time.slice(3, 5)));
+    const first = wall - offsetAt(wall);
+    return new Date(wall - offsetAt(first)).toISOString();
+}
+
 export function draftFrom(transport: SalesOrderTransport | null): TransportDraft {
-    const loadAt = transport?.loadAt ? new Date(transport.loadAt) : null;
+    const loadAt = transport?.loadAt ? amsterdamParts(transport.loadAt) : null;
     return {
         mode: transport?.mode ?? '',
         carrierId: transport?.carrierRelationId ?? null,
@@ -36,8 +55,8 @@ export function draftFrom(transport: SalesOrderTransport | null): TransportDraft
         loadingPlace: transport?.loadingPlace ?? '',
         unloadingChoice: transport?.unloadingPlace ? OTHER_ADDRESS : transport?.unloadingAddressId != null ? String(transport.unloadingAddressId) : DEFAULT_ADDRESS,
         unloadingPlace: transport?.unloadingPlace ?? '',
-        loadDate: loadAt ? `${loadAt.getFullYear()}-${pad(loadAt.getMonth() + 1)}-${pad(loadAt.getDate())}` : '',
-        loadTime: loadAt ? `${pad(loadAt.getHours())}:${pad(loadAt.getMinutes())}` : '',
+        loadDate: loadAt?.date ?? '',
+        loadTime: loadAt?.time ?? '',
         unloadDate: transport?.unloadDate ? transport.unloadDate.slice(0, 10) : '',
         temperature: transport?.temperatureC != null ? formatDecimalInput(transport.temperatureC, 1) : '',
         loadingReference: transport?.loadingReference ?? '',
@@ -83,7 +102,7 @@ export function requestFrom(draft: TransportDraft, version: number | null, hadLo
             loadingPlace: text(draft.loadingPlace),
             unloadingAddressId: !other && draft.unloadingChoice !== DEFAULT_ADDRESS ? Number(draft.unloadingChoice) : null,
             unloadingPlace: other ? text(draft.unloadingPlace) : null,
-            loadAt: draft.loadDate !== '' && time !== null ? new Date(`${draft.loadDate}T${time}:00`).toISOString() : null,
+            loadAt: draft.loadDate !== '' && time !== null ? amsterdamToUtc(draft.loadDate, time) : null,
             unloadDate: draft.unloadDate === '' ? null : draft.unloadDate,
             temperatureC: temperature,
             loadingReference: text(draft.loadingReference),
