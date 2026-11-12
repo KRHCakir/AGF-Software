@@ -2677,6 +2677,7 @@
   "so_transport_problem_carrier": "Kies de vervoerder, of maak er een aan.",
   "so_transport_problem_load_time": "Vul ook de laadtijd in (uu:mm).",
   "so_transport_problem_load_date": "Vul ook de laaddatum in.",
+  "so_transport_problem_unloading_place": "Vul het afwijkende adres in, of kies een ander losadres.",
   "so_transport_problem_temperature": "Een temperatuur van −30 tot 30 °C, met hooguit één decimaal.",
   "so_transport_order_name": "Transportopdracht {number} · versie {version}",
   "so_transport_order_changed": "Transportopdracht gewijzigd (versie {version}): opnieuw versturen naar de vervoerder.",

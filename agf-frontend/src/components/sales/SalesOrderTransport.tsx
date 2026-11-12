@@ -19,10 +19,7 @@ import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 
-// Blok Transport op de verkooporder (documenten deel 2): alleen invullen als er transport is. Vervoerder (een relatie met de rol
-// vervoerder, zoeken of snel aanmaken) of eigen transport / klant haalt op; laden op (dezelfde als op de laadbon), losdatum, temperatuur,
-// laad- en losplaats (leeg = de standaard), referenties, soort pallet en opmerkingen. Na opslaan haalt de pagina de order en de
-// documenten opnieuw op: een bevestigde order krijgt zo de transportopdracht of een nieuwe versie. Nooit een prijs of tarief.
+// Blok Transport op de verkooporder (documenten deel 2): alleen invullen als er transport is. Na opslaan haalt de pagina order en documenten opnieuw op.
 export default function SalesOrderTransport({ order, onChanged }: { order: SalesOrder; onChanged?: () => void }) {
     const { t, locale } = useTranslation();
     const [loaded, setLoaded] = useState<{ orderId: number; transport: Transport } | null>(null);
@@ -33,6 +30,8 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     const [error, setError] = useState<ApiError | null>(null);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<TransportDraft>(() => draftFrom(null));
+    // De versie waarmee het formulier openging: een tussentijdse wijziging geeft dan een conflict (409), nooit stil overschrijven.
+    const [opened, setOpened] = useState<{ version: number | null; loadAt: boolean }>({ version: null, loadAt: false });
     const [problems, setProblems] = useState<TransportProblem[]>([]);
     const [busy, setBusy] = useState(false);
     const [carriers, setCarriers] = useState<RelationListItem[]>([]);
@@ -73,7 +72,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     }, [editing]);
 
     const change = (patch: Partial<TransportDraft>) => { setDraft((current) => ({ ...current, ...patch })); setProblems([]); };
-    const start = () => { setDraft(draftFrom(transport)); setProblems([]); setError(null); setSimilar(null); setEditing(true); };
+    const start = () => { setDraft(draftFrom(transport)); setOpened({ version: transport?.exists ? transport.version : null, loadAt: transport?.loadAt != null }); setProblems([]); setError(null); setSimilar(null); setQuery(''); setEditing(true); };
     const chooseCarrier = (carrier: { id: number; name: string }) => { change({ carrierId: carrier.id, carrierName: carrier.name }); setSimilar(null); setQuery(''); };
 
     const search = useCallback((text: string): LookupMatch<RelationListItem>[] => {
@@ -101,12 +100,12 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
 
     const save = (event: FormEvent) => {
         event.preventDefault();
-        const { request, problems: found } = requestFrom(draft, transport?.exists ? transport.version : null, transport?.loadAt != null);
+        const { request, problems: found } = requestFrom(draft, opened.version, opened.loadAt);
         setProblems(found);
         if (request === null) return;
         void call(async () => { setTransport(await saveSalesOrderTransport(order.id, request)); setEditing(false); onChanged?.(); });
     };
-    const remove = () => void call(async () => { setTransport(await deleteSalesOrderTransport(order.id, transport?.version ?? 0)); setEditing(false); onChanged?.(); });
+    const remove = () => void call(async () => { setTransport(await deleteSalesOrderTransport(order.id, opened.version ?? 0)); setEditing(false); onChanged?.(); });
 
     const problem = (key: TransportProblem, message: string) => problems.includes(key) && <p role="alert" className="text-xs text-red-800" data-testid={`transport-problem-${key}`}>{message}</p>;
     const defaultHint = (value: string | null | undefined) => value ? <span className="block text-xs text-gray-600">{t('so_transport_default', { value })}</span> : null;
@@ -211,6 +210,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
                                 {draft.unloadingChoice === OTHER_ADDRESS
                                     ? <textarea id={id('unloadingPlace')} aria-label={t('so_transport_unloading_other')} rows={2} maxLength={300} value={draft.unloadingPlace} onChange={(event) => change({ unloadingPlace: event.target.value })} className={`${inputClass} mt-1`} />
                                     : defaultHint(transport.defaultUnloadingPlace)}
+                                {problem('unloadingPlace', t('so_transport_problem_unloading_place'))}
                             </div>
                         </div>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
