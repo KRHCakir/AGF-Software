@@ -87,6 +87,8 @@ namespace AgfAdmin.Services.DocumentAi
                 if (quantity == null) Add($"lines[{i}].quantity", Missing, false);
                 if (price == null) Add($"lines[{i}].unitPrice", Missing, false);
                 if (amount == null) Add($"lines[{i}].amount", Missing, false);
+                // Zonder btw-percentage wordt de btw-controle overgeslagen: markeren, geen vangnet (verlegde btw/export kent geen percentage).
+                if (Number(line["btw_percentage"]) == null) Add($"lines[{i}].vatPercentage", Missing, false);
                 // Een korting op de regel kan het bedrag lager maken dan aantal x prijs: alleen markeren, geen vangnet.
                 if (quantity != null && price != null && amount != null && Math.Abs(quantity.Value * price.Value - amount.Value) > Math.Max(Tolerance, Math.Abs(amount.Value) * 0.005m))
                 {
@@ -99,6 +101,8 @@ namespace AgfAdmin.Services.DocumentAi
             var gross = Number(proposal["totaal_incl"]);
             if (net == null) Add("totalNet", Missing, true);
             if (gross == null) Add("totalGross", Missing, true);
+            // Zonder btw-totaal worden de btw- en bruto-controle overgeslagen: markeren. Geen vangnet, want een factuur zonder btw (verlegd, export) heeft dit veld legitiem niet.
+            if (vat == null) Add("totalVat", Missing, false);
             var amounts = lines.Select(l => Number(l["bedrag"])).ToList();
             if (net != null && lines.Count > 0 && amounts.All(a => a != null) && Math.Abs(amounts.Sum(a => a.Value) - net.Value) > Tolerance)
             {
