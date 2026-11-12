@@ -86,7 +86,7 @@ namespace AgfAdmin.Services
         }
 
         public static RelationAddress DeliveryAddress(Relation relation) =>
-            relation?.Addresses.Where(a => a.IsActive && a.Purpose == AddressPurpose.Delivery).OrderByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).ThenBy(a => a.Id).FirstOrDefault()
+            relation?.Addresses.Where(a => a.IsActive && a.Purpose == AddressPurpose.Delivery && a.IsDefault).OrderBy(a => a.SortOrder).ThenBy(a => a.Id).FirstOrDefault()
             ?? MainAddress(relation);
 
         public static RelationAddress MainAddress(Relation relation) =>
