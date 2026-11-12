@@ -59,7 +59,7 @@ export function normalizeTime(value: string): string | null {
     return hours < 24 && minutes < 60 ? `${pad(hours)}:${pad(minutes)}` : null;
 }
 
-export function requestFrom(draft: TransportDraft, version: number | null): { request: SaveSalesOrderTransport | null; problems: TransportProblem[] } {
+export function requestFrom(draft: TransportDraft, version: number | null, hadLoadAt = false): { request: SaveSalesOrderTransport | null; problems: TransportProblem[] } {
     const problems: TransportProblem[] = [];
     if (draft.mode === '') problems.push('mode');
     if (draft.mode === 'Carrier' && draft.carrierId === null) problems.push('carrier');
@@ -78,6 +78,7 @@ export function requestFrom(draft: TransportDraft, version: number | null): { re
         problems,
         request: {
             expectedVersion: version,
+            clearLoadAt: hadLoadAt && draft.loadDate === '',
             mode: draft.mode,
             carrierRelationId: draft.mode === 'Carrier' ? draft.carrierId : null,
             loadingPlace: text(draft.loadingPlace),

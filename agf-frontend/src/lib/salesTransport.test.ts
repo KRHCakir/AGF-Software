@@ -25,6 +25,9 @@ describe('sales order transport draft', () => {
         assert.deepEqual(problems, []);
         assert.equal(request!.loadAt, '2026-11-13T06:15:00.000Z');
         assert.deepEqual([request!.loadingReference, request!.unloadingAddressId, request!.unloadingPlace, request!.temperatureC, request!.expectedVersion], [null, 3, null, -1.5, 4]);
+        // De laaddatum leeggemaakt: expliciet wissen; nooit ingevuld: niets wissen (de server laat de laadtijd van de order staan).
+        assert.deepEqual([request!.clearLoadAt, requestFrom({ ...draftFrom(transport()), loadDate: '', loadTime: '' }, 4, true).request!.clearLoadAt,
+            requestFrom({ ...draftFrom(transport()), loadDate: '', loadTime: '' }, 4, false).request!.clearLoadAt], [false, true, false]);
         const own = requestFrom({ ...draftFrom(transport()), mode: 'Own', unloadingChoice: OTHER_ADDRESS, unloadingPlace: ' Elders 9 ' }, 4).request!;
         assert.deepEqual([own.carrierRelationId, own.unloadingAddressId, own.unloadingPlace], [null, null, 'Elders 9']);
     });

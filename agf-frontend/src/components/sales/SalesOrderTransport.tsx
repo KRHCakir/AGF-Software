@@ -100,7 +100,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
 
     const save = (event: FormEvent) => {
         event.preventDefault();
-        const { request, problems: found } = requestFrom(draft, transport?.exists ? transport.version : null);
+        const { request, problems: found } = requestFrom(draft, transport?.exists ? transport.version : null, transport?.loadAt != null);
         setProblems(found);
         if (request === null) return;
         void call(async () => { setTransport(await saveSalesOrderTransport(order.id, request)); setEditing(false); onChanged?.(); });
