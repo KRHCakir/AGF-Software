@@ -53,11 +53,13 @@ Haiku leest twee kortingen apart, zoals ze op de factuur staan:
 
 Het factuurformulier kent alleen een korting per regel. Een korting op het totaal gaat daarom mee in de korting van elke regel, als dat
 precies kan: de korting is een percentage met hoogstens twee decimalen van de som van de regels (3% van 5.739,60 = 172,19), en elke
-samengestelde korting heeft hoogstens twee decimalen. Bij 5% op de regel en 3% op het totaal is dat 100 − 95 × 97 / 100 = 7,85%. De
+samengestelde korting heeft hoogstens twee decimalen, en de regels van het formulier (per regel afgerond) komen samen op 2 cent na uit op
+de regels min de korting. Bij 5% op de regel en 3% op het totaal is dat 100 − 95 × 97 / 100 = 7,85%. De
 blauwe balk zegt dat erbij ("Korting op het totaal: 3% (€ 172,19) …"). Doordat het formulier per regel afrondt, kan het totaal een cent
 afwijken van de factuur.
 
-Kan het niet precies (een vast bedrag zoals € 50,00, of 2,5% over 5% = 7,375%), dan blijft alleen de korting op de regel staan en
+Kan het niet precies (een vast bedrag zoals € 50,00, 2,5% over 5% = 7,375%, of twintig regels van € 1,05 met 10% korting, die per
+regel afgerond € 19,00 geven in plaats van € 18,90), dan blijft alleen de korting op de regel staan en
 meldt de balk in geel dat de gebruiker de korting zelf verdeelt. Dat laat geen tweede model lezen.
 
 De testbench (`AgfAiBenchmark`) leest zonder kortingen en zonder leverancierskenmerken (`SchemaParts.Base`), zodat zijn eerdere runs
