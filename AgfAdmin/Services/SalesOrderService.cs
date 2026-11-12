@@ -972,6 +972,8 @@ namespace AgfAdmin.Services
             ActorReference = order.ActorReference,
             CreatedAt = DateTime.SpecifyKind(order.CreatedAt, DateTimeKind.Utc),
             Version = order.Version,
+            ConfirmedAt = order.ConfirmedAt == null ? null : DateTime.SpecifyKind(order.ConfirmedAt.Value, DateTimeKind.Utc),
+            ConfirmedBy = order.ConfirmedBy,
             CancelledAt = order.CancelledAt == null ? null : DateTime.SpecifyKind(order.CancelledAt.Value, DateTimeKind.Utc),
             CancelReason = order.CancelReason,
             CancelledBy = order.Status == ReservationRules.OrderStatusCancelled ? cancelledBy : null,
