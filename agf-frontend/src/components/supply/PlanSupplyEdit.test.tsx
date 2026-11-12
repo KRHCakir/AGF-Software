@@ -95,6 +95,10 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         assert.ok(testId('po-edit-vendor-fixed'));
         assert.ok(testId('po-edit-partij-fixed'));
 
+        // Alt+A (Nieuw artikel) opent bij een vast artikel niets: ook via de sneltoets wijzigt het artikel niet.
+        await act(async () => { field('lines[0].expectedQuantity-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, bubbles: true, cancelable: true })); });
+        assert.equal(mounted.container.querySelector('[data-tour="supply-new-article"]'), null, 'no new-article panel on a fixed article');
+
         await type('lines[0].expectedQuantity-input', '39');
         await submit();
         assert.equal(puts.length, 0);

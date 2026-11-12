@@ -60,7 +60,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <span className="font-medium">{order.vendorName ?? '–'}</span>
                 </p>
                 {/* Documentstatus (stap 4a): Aanpassen en Definitief maken, of definitief met Correctie. */}
-                <PurchaseOrderDocument order={order} onChanged={onChanged} />
+                <PurchaseOrderDocument key={order.id} order={order} onChanged={onChanged} />
                 {order.partijId ? (
                     <p className="text-sm text-gray-900" data-tour="po-partij">
                         {t('partij_field')}{' '}

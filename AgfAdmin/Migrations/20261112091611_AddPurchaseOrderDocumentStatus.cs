@@ -97,7 +97,7 @@ WHERE EXISTS (SELECT 1 FROM ""SupplyCommitmentInvoiceRefs"" r WHERE r.""SupplyCo
             migrationBuilder.AddCheckConstraint(
                 name: "CK_SupplyCommitments_DocumentStatus_Allowed",
                 table: "SupplyCommitments",
-                sql: "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
+                sql: "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PurchaseOrderChanges_RequestId",

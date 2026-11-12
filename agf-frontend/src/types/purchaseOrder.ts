@@ -267,7 +267,8 @@ export interface FinalizePurchaseOrderRequest {
     expectedVersion: number;
 }
 
-// Correctie na definitief: reden verplicht; prijs per regel, ordernummer van de leverancier en notitie (volledige nieuwe waarden).
+// Correctie na definitief: reden verplicht; prijs per regel, ordernummer van de leverancier en notitie. Een tekst is de volledige
+// nieuwe waarde (leeg wist); weggelaten (null) of een regel zonder prijs laat het staan.
 export interface CorrectPurchaseOrderRequest {
     requestId: string;
     expectedVersion: number;

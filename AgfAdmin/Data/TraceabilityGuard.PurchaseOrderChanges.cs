@@ -8,7 +8,7 @@ namespace AgfAdmin.Data
     internal static partial class TraceabilityGuard
     {
         private sealed record StoredOrderDocument(int Id, string Route, int VendorId, string SupplierReference, DateOnly OrderedOn, DateTime? ExpectedAt, string Origin,
-            string Note, string SupplierLotReference, string OrderChannel, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia);
+            string Note, string SupplierLotReference, string OrderChannel, string Status, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia);
 
         private sealed record StoredOrderLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, decimal ExpectedQuantity, decimal? ExpectedNetWeightKg,
             decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, int? ReplacesLineId);
@@ -57,6 +57,20 @@ namespace AgfAdmin.Data
                 }
             }
 
+            // Een aanpassing, Definitief maken of correctie gaat nooit samen met een nieuwe ontvangst op die order in dezelfde save: de grenzen
+            // na ontvangst lezen de opgeslagen ontvangsten (de services doen nooit beide tegelijk).
+            if (changes.Count > 0)
+            {
+                var receivedLineIds = db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Added)
+                    .Select(e => e.Property(c => c.SupplyCommitmentLineId).CurrentValue).Distinct().ToList();
+                var changedOrderIds = changes.Keys.ToList();
+                if (receivedLineIds.Count > 0 && await AnyAsync(db.SupplyCommitmentLines.AsNoTracking()
+                        .Where(l => receivedLineIds.Contains(l.Id) && changedOrderIds.Contains(l.SupplyCommitmentId)), async, cancellationToken))
+                {
+                    throw new TraceabilityViolationException("A purchase order is never edited, made definitive or corrected in the same save as a new receipt on it.");
+                }
+            }
+
             var newOrderKeys = addedOrders.Select(e => e.Property(c => c.Id).CurrentValue).ToHashSet();
             var lineEntries = db.ChangeTracker.Entries<SupplyCommitmentLine>().Where(e => e.State is EntityState.Modified or EntityState.Deleted
                 || (e.State == EntityState.Added && e.Entity.ReplacesLineId == null && !newOrderKeys.Contains(e.Property(l => l.SupplyCommitmentId).CurrentValue))).ToList();
@@ -98,7 +112,7 @@ namespace AgfAdmin.Data
             var orderIds = modifiedOrders.Select(e => e.Entity.Id).Concat(changes.Keys).Concat(edited.Select(e => e.OrderId)).Distinct().ToList();
             var stored = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(c => orderIds.Contains(c.Id))
                 .Select(c => new StoredOrderDocument(c.Id, c.Route, c.VendorId, c.SupplierReference, c.OrderedOn, c.ExpectedAt, c.Origin, c.Note, c.SupplierLotReference, c.OrderChannel,
-                    c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia)), async, cancellationToken)).ToDictionary(c => c.Id);
+                    c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia)), async, cancellationToken)).ToDictionary(c => c.Id);
             var trackedOrders = modifiedOrders.ToDictionary(e => e.Entity.Id, e => e.Entity);
 
             foreach (var orderId in orderIds)
@@ -128,6 +142,19 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"Purchase order {orderId} becomes definitive exactly together with its Finalize change, and only then.");
                 }
+                if (finalizing && (current.FinalizedAt == null || string.IsNullOrWhiteSpace(current.FinalizedBy)
+                    || (current.FinalizedVia != PurchaseOrderDocumentRules.ViaManual && current.FinalizedVia != PurchaseOrderDocumentRules.ViaInvoice)))
+                {
+                    throw new TraceabilityViolationException($"Making purchase order {orderId} definitive records who, when and how.");
+                }
+                if (change != null && deviationOrders.Contains(orderId))
+                {
+                    throw new TraceabilityViolationException($"Purchase order {orderId} is never finalized, edited or corrected in the same save as a receipt deviation.");
+                }
+                if (change != null && current != null && !string.Equals(current.Status, before.Status, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"Purchase order {orderId} never changes its {nameof(SupplyCommitment.Status)} in the same save as a Finalize, Edit or Correction change.");
+                }
                 if (finalizing && (fields.Count > 0 || lines.Count > 0))
                 {
                     throw new TraceabilityViolationException($"Making purchase order {orderId} definitive changes nothing else in the same save.");
@@ -135,10 +162,6 @@ namespace AgfAdmin.Data
                 if (fields.Count == 0 && lines.Count == 0)
                 {
                     continue;
-                }
-                if (change != null && deviationOrders.Contains(orderId))
-                {
-                    throw new TraceabilityViolationException($"Purchase order {orderId} is never edited or corrected in the same save as a receipt deviation.");
                 }
                 if (before.DocumentStatus == PurchaseOrderDocumentRules.StatusOpen)
                 {
@@ -235,6 +258,7 @@ namespace AgfAdmin.Data
         {
             var fields = new List<string>();
             void Check(bool changed, string name) { if (changed) fields.Add(name); }
+            Check(!string.Equals(order.Route, before.Route, StringComparison.Ordinal), nameof(SupplyCommitment.Route));
             Check(order.VendorId != before.VendorId, nameof(SupplyCommitment.VendorId));
             Check(!string.Equals(order.SupplierReference, before.SupplierReference, StringComparison.Ordinal), nameof(SupplyCommitment.SupplierReference));
             Check(order.OrderedOn != before.OrderedOn, nameof(SupplyCommitment.OrderedOn));
