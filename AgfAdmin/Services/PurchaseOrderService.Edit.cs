@@ -28,6 +28,26 @@ namespace AgfAdmin.Services
             {
                 return Validation<PurchaseOrderDetailDto>(errors);
             }
+            // Controle en opslag in één transactie met een rijlock op de order en haar regels (FOR UPDATE): een gelijktijdige ontvangst
+            // (voegt een inhoudsregel toe, FK-lock op de orderregel) wacht tot deze wijziging klaar is, en een gelijktijdige herhaling met
+            // dezelfde requestId ziet de eerdere wijziging bij de replaycontrole. Alleen PostgreSQL (productie) kent deze lock; SQLite
+            // (tests) serialiseert schrijvers zelf.
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            if (_db.Database.IsNpgsql())
+            {
+                await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SupplyCommitments\" WHERE \"Id\" = {id} FOR UPDATE", cancellationToken);
+                await _db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SupplyCommitmentLines\" WHERE \"SupplyCommitmentId\" = {id} FOR UPDATE", cancellationToken);
+            }
+            var result = await UpdateLockedAsync(id, request, errors, cancellationToken);
+            if (result.Status == ServiceResultStatus.Ok && _db.Database.CurrentTransaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+            return result;
+        }
+
+        private async Task<ServiceResult<PurchaseOrderDetailDto>> UpdateLockedAsync(int id, UpdatePurchaseOrderDto request, Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
+        {
             var replay = await ReplayAsync(request.RequestId!.Value, id, PurchaseOrderDocumentRules.KindEdit, cancellationToken);
             if (replay != null) return replay;
 
@@ -346,7 +366,12 @@ namespace AgfAdmin.Services
                     fields.Add(new(field, id, PurchaseOrderDocumentRules.ActionChanged, before, after));
                     apply();
                 }
-                Field("article", names.GetValueOrDefault(line.ProductVariantId), names.GetValueOrDefault(wanted.ProductVariantId), () => line.ProductVariantId = wanted.ProductVariantId);
+                if (line.ProductVariantId != wanted.ProductVariantId)
+                {
+                    // Beslissen op het id (twee varianten kunnen dezelfde weergavenaam hebben); de namen alleen voor de audittekst.
+                    fields.Add(new("article", id, PurchaseOrderDocumentRules.ActionChanged, names.GetValueOrDefault(line.ProductVariantId), names.GetValueOrDefault(wanted.ProductVariantId)));
+                    line.ProductVariantId = wanted.ProductVariantId;
+                }
                 Field("expectedQuantity", Number(line.ExpectedQuantity), Number(wanted.ExpectedQuantity), () => line.ExpectedQuantity = wanted.ExpectedQuantity);
                 Field("expectedUnit", line.ExpectedUnit, wanted.ExpectedUnit, () => line.ExpectedUnit = wanted.ExpectedUnit);
                 Field(PurchaseOrderDocumentRules.FieldUnitPrice, Number(line.UnitPrice), Number(wanted.UnitPrice), () => line.UnitPrice = wanted.UnitPrice);
@@ -380,20 +405,29 @@ namespace AgfAdmin.Services
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Conflict(StaleCode, $"Purchase order {order.OrderNumber} has been changed in the meantime; reload it first.");
+                // Ook hier kan een gelijktijdige poging met dezelfde requestId de wijziging al hebben opgeslagen.
+                return await ReplayOrStaleAsync(order, requestId, $"Purchase order {order.OrderNumber} has been changed in the meantime; reload it first.", cancellationToken);
             }
             catch (DbUpdateException)
             {
                 // Een gelijktijdige herhaling (unieke requestId) of intussen een ontvangst op een te verwijderen regel.
-                _db.ChangeTracker.Clear();
-                if (await _db.PurchaseOrderChanges.AsNoTracking().AnyAsync(c => c.RequestId == requestId && c.SupplyCommitmentId == order.Id, cancellationToken))
-                {
-                    return await GetAsync(order.Id, cancellationToken);
-                }
-                return Conflict(StaleCode, $"Purchase order {order.OrderNumber} changed while saving (for example a receipt); reload it first.");
+                return await ReplayOrStaleAsync(order, requestId, $"Purchase order {order.OrderNumber} changed while saving (for example a receipt); reload it first.", cancellationToken);
             }
             _db.ChangeTracker.Clear();
             return await GetAsync(order.Id, cancellationToken);
+        }
+
+        private async Task<ServiceResult<PurchaseOrderDetailDto>> ReplayOrStaleAsync(SupplyCommitment order, Guid requestId, string staleMessage, CancellationToken cancellationToken)
+        {
+            // Een mislukte opslag breekt de PostgreSQL-transactie af: eerst terugdraaien, dan opnieuw lezen.
+            if (_db.Database.CurrentTransaction != null) await _db.Database.CurrentTransaction.RollbackAsync(cancellationToken);
+            var orderId = order.Id;
+            _db.ChangeTracker.Clear();
+            if (await _db.PurchaseOrderChanges.AsNoTracking().AnyAsync(c => c.RequestId == requestId && c.SupplyCommitmentId == orderId, cancellationToken))
+            {
+                return await GetAsync(orderId, cancellationToken);
+            }
+            return Conflict(StaleCode, staleMessage);
         }
 
         private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
