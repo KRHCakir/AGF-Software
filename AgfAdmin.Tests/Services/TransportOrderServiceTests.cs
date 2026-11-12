@@ -210,7 +210,8 @@ public class TransportOrderServiceTests : IDisposable
     {
         var s = await OrderAsync();
         var saved = await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
-        // Met een verouderde versie niet; met de versie die je zag wel.
+        // Zonder versie of met een verouderde versie niet; met de versie die je zag wel.
+        Assert.Contains("expectedVersion", (await Transport(t => t.DeleteAsync(s.OrderId))).Errors.Keys);
         Assert.Equal(ServiceResultStatus.Conflict, (await Transport(t => t.DeleteAsync(s.OrderId, saved.Value.Version + 1))).Status);
         var removed = await Transport(t => t.DeleteAsync(s.OrderId, saved.Value.Version));
         Assert.Equal((ServiceResultStatus.Ok, false), (removed.Status, removed.Value.Exists));
