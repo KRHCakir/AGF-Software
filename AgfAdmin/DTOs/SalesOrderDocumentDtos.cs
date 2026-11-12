@@ -14,6 +14,14 @@ namespace AgfAdmin.DTOs
         public string LicensePlate { get; set; }
     }
 
+    // Instellingen van de laadbon per bedrijf: taal van de kopteksten (en, nl), klantnaam en leverancierskolom.
+    public sealed class LoadingSlipSettingsDto
+    {
+        public string Language { get; set; }
+        public bool ShowCustomer { get; set; }
+        public bool ShowSupplier { get; set; }
+    }
+
     public sealed class SalesOrderDocumentsDto
     {
         public int SalesOrderId { get; set; }

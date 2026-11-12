@@ -123,6 +123,29 @@ namespace AgfAdmin.Services
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
         }
 
+        public async Task<LoadingSlipSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
+        {
+            var settings = await SettingsAsync(cancellationToken);
+            return new LoadingSlipSettingsDto { Language = settings.LoadingSlipLanguage, ShowCustomer = settings.LoadingSlipShowCustomer, ShowSupplier = settings.LoadingSlipShowSupplier };
+        }
+
+        // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot (en dus haar kolommen).
+        public async Task<ServiceResult<LoadingSlipSettingsDto>> UpdateSettingsAsync(LoadingSlipSettingsDto request, CancellationToken cancellationToken = default)
+        {
+            var language = request?.Language?.Trim().ToLowerInvariant();
+            if (language == null || !SalesOrderDocumentRules.Languages.Contains(language))
+            {
+                return ServiceResult<LoadingSlipSettingsDto>.Validation(new Dictionary<string, string[]> { ["language"] = new[] { $"Language must be one of: {string.Join(", ", SalesOrderDocumentRules.Languages)}." } });
+            }
+            var settings = await db.CompanySettings.OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+            if (settings == null) db.CompanySettings.Add(settings = new CompanySettings());
+            settings.LoadingSlipLanguage = language;
+            settings.LoadingSlipShowCustomer = request.ShowCustomer;
+            settings.LoadingSlipShowSupplier = request.ShowSupplier;
+            await db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<LoadingSlipSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
+        }
+
         // De snapshot van één versie (voor de PDF), of null.
         public async Task<(SalesOrderDocument Document, LoadingSlipSnapshot Snapshot)?> SnapshotAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
         {

@@ -177,5 +177,15 @@ public class LoadingSlipServiceTests : IDisposable
         Assert.Equal("P-WH", slip.Rows[0].PalletReference);
     }
 
+    [Fact]
+    public async Task The_loading_slip_settings_default_to_english_with_customer_and_supplier_and_refuse_an_unknown_language()
+    {
+        var settings = await RunAsync(s => s.GetSettingsAsync());
+        Assert.Equal(("en", true, true), (settings.Language, settings.ShowCustomer, settings.ShowSupplier));
+        Assert.Contains("language", (await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "de" }))).Errors.Keys);
+        var updated = await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "NL", ShowCustomer = false, ShowSupplier = true }));
+        Assert.Equal(("nl", false, true), (updated.Value.Language, updated.Value.ShowCustomer, updated.Value.ShowSupplier));
+    }
+
     private static string CurrentUserName => CurrentUser.Default.Actor(100);
 }

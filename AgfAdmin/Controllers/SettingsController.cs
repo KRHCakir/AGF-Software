@@ -35,6 +35,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateAiReading([FromServices] Services.DocumentAi.AiInvoiceReadingService ai, [FromBody] AgfAdmin.DTOs.UpdateAiReadingSettingsDto request) =>
             this.ToActionResult(await ai.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Laadbon (documenten deel 1): taal van de kopteksten, klantnaam en leverancierskolom.
+        [HttpGet("loading-slip")]
+        public async Task<IActionResult> GetLoadingSlip([FromServices] Services.LoadingSlipService slips) => Ok(await slips.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("loading-slip")]
+        public async Task<IActionResult> UpdateLoadingSlip([FromServices] Services.LoadingSlipService slips, [FromBody] AgfAdmin.DTOs.LoadingSlipSettingsDto request) =>
+            this.ToActionResult(await slips.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("partij-numbering")]
         public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
 
