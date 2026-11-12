@@ -59,7 +59,10 @@ namespace AgfAdmin.Services
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
         }
 
-        public async Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, CancellationToken cancellationToken = default)
+        public Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, CancellationToken cancellationToken = default) =>
+            UpdateLoadingAsync(orderId, request, 0, cancellationToken);
+
+        private async Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, int attempt, CancellationToken cancellationToken)
         {
             var errors = new Dictionary<string, List<string>>();
             var plate = Plate(request?.LicensePlate, errors);
@@ -78,8 +81,23 @@ namespace AgfAdmin.Services
             order.LoadAt = Utc(request?.LoadAt);
             order.LicensePlate = plate;
             order.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-            await RefreshAsync(orderId, cancellationToken);
+            // Laadgegevens en de nieuwe versie van de bon in één save: nooit opgeslagen gegevens zonder de bon die erbij hoort.
+            var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
+            var snapshot = LoadingSlipBuilder.Build(order, await SettingsAsync(cancellationToken));
+            if (latest == null || latest.ContentHash != LoadingSlipBuilder.Hash(snapshot))
+            {
+                AddVersion(order, snapshot, (latest?.Version ?? 0) + 1, latest == null ? SalesOrderDocumentRules.ReasonConfirmed : SalesOrderDocumentRules.ReasonChanged, DateTime.UtcNow);
+            }
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < 2)
+            {
+                // Een gelijktijdige verversing nam het versienummer: opnieuw, op de actuele stand (hoogstens twee keer).
+                db.ChangeTracker.Clear();
+                return await UpdateLoadingAsync(orderId, request, attempt + 1, cancellationToken);
+            }
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(await LoadAsync(orderId, cancellationToken), cancellationToken));
         }
 
@@ -100,6 +118,18 @@ namespace AgfAdmin.Services
         // unieke versienummer: dan wint de eerste.
         public async Task<bool> RefreshAsync(int orderId, CancellationToken cancellationToken = default)
         {
+            // Verloor deze verversing de botsing op het versienummer, dan opnieuw op de actuele stand: zo blijft geen nieuwere inhoud liggen.
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var outcome = await RefreshOnceAsync(orderId, cancellationToken);
+                if (outcome != null) return outcome.Value;
+            }
+            return false;
+        }
+
+        // true = nieuwe versie, false = niets veranderd, null = versiebotsing (opnieuw proberen).
+        private async Task<bool?> RefreshOnceAsync(int orderId, CancellationToken cancellationToken)
+        {
             var order = await LoadAsync(orderId, cancellationToken);
             if (order?.ConfirmedAt == null || order.Status == ReservationRules.OrderStatusCancelled) return false;
             var latest = order.Documents.Where(d => d.Kind == SalesOrderDocumentRules.KindLoadingSlip).OrderByDescending(d => d.Version).FirstOrDefault();
@@ -115,7 +145,7 @@ namespace AgfAdmin.Services
             {
                 // Alleen een versiebotsing met een gelijktijdige verversing; andere databasefouten gaan naar de aanroeper.
                 db.ChangeTracker.Clear();
-                return false;
+                return null;
             }
         }
 
