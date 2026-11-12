@@ -75,9 +75,10 @@ export const ORDER_CHAPTER: TourChapter = {
         order('invoice', '/purchase-orders', [
             { kind: 'highlight', target: 'po-invoice-enter' },
             { kind: 'click', target: 'po-invoice-enter' },
+            // In dezelfde stap wachten tot de regels uit de bon er staan: anders navigeert de volgende stap al naar de lege invoer.
+            { kind: 'wait', target: 'pinvoice-order-info:0' },
         ]),
         order('invoice-lines', '/purchase-invoices/new', [
-            { kind: 'wait', target: 'pinvoice-order-info:0' },
             { kind: 'highlight', target: 'pinvoice-order-info:0' },
             { kind: 'type', target: 'pinvoice-number', text: 'F-{{tourRef}}' },
             { kind: 'type', target: 'pinvoice-line-price:0', text: '12,00' },
