@@ -1,9 +1,7 @@
 import type { SalesOrderTransport, SaveSalesOrderTransport, TransportMode } from '../types/salesOrderTransport';
 import { formatDecimalInput, parseLocaleDecimal } from './decimal.ts';
 
-// Het blok Transport op de verkooporder (documenten deel 2) als concept in het formulier: van en naar wat de API geeft en verwacht. Leeg
-// laten = de standaard van de server. Laden op is één tijdstip (datum en tijd, in de tijd van de browser, zoals bij de laadbon). Geen React:
-// met node:test te toetsen.
+// Het blok Transport als concept in het formulier, van en naar de API (leeg = de standaard van de server). Met node:test te toetsen.
 
 export const OTHER_ADDRESS = 'other';
 export const DEFAULT_ADDRESS = '';
@@ -25,7 +23,7 @@ export interface TransportDraft {
     remarks: string;
 }
 
-export type TransportProblem = 'mode' | 'carrier' | 'loadDate' | 'loadTime' | 'temperature';
+export type TransportProblem = 'mode' | 'carrier' | 'loadDate' | 'loadTime' | 'temperature' | 'unloadingPlace';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -66,6 +64,7 @@ export function requestFrom(draft: TransportDraft, version: number | null, hadLo
     const time = draft.loadTime.trim() === '' ? null : normalizeTime(draft.loadTime);
     if (draft.loadDate !== '' && time === null) problems.push('loadTime');
     if (draft.loadDate === '' && draft.loadTime.trim() !== '') problems.push(time === null ? 'loadTime' : 'loadDate');
+    if (draft.unloadingChoice === OTHER_ADDRESS && draft.unloadingPlace.trim() === '') problems.push('unloadingPlace');
     let temperature: number | null = null;
     if (draft.temperature.trim() !== '') {
         const parsed = parseLocaleDecimal(draft.temperature, undefined, { maxDecimals: 1, allowZero: true, allowNegative: true });

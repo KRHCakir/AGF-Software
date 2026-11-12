@@ -102,6 +102,13 @@ describe('sales order transport block', () => {
         const order_ = Array.from(mounted.container.querySelectorAll<HTMLElement>('[data-tour^="so-transport-"]')).map((element) => element.dataset.tour);
         assert.deepEqual(order_.filter((name) => !['so-transport-edit'].includes(name!)).slice(0, 8),
             ['so-transport-mode-carrier', 'so-transport-mode-own', 'so-transport-load-date', 'so-transport-load-time', 'so-transport-unload-date', 'so-transport-temperature', 'so-transport-loading-place', 'so-transport-unloading']);
+        // Intussen elders gewijzigd (de order kreeg een nieuwe versie, het transport versie 3): opslaan stuurt de versie waarmee het formulier openging.
+        answer = (method, url) => (url.includes('/relations') ? json(200, carrierList) : json(200, transport({ exists: true, mode: 'Own', version: 3, hasTransportOrder: true })));
+        await mounted.render(<SalesOrderTransport order={order({ version: 5 })} />);
+        await settle();
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await settle();
+        assert.equal(JSON.parse(calls.filter((call) => call.method === 'PUT').slice(-1)[0].body!).expectedVersion, 2);
         await mounted.render(<SalesOrderTransport order={order({ status: 'Cancelled', version: 4 })} />);
         await settle();
         assert.equal($('[data-tour="so-transport-edit"]'), null);

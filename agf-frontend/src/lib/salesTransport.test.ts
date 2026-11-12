@@ -38,4 +38,9 @@ describe('sales order transport draft', () => {
         assert.deepEqual(requestFrom({ ...draftFrom(transport()), temperature: '2,25' }, 4).problems, ['temperature']);
         assert.deepEqual([normalizeTime('630'), normalizeTime('6:30'), normalizeTime('24:00'), normalizeTime('abc')], ['06:30', '06:30', null, null]);
     });
+
+    test('problem: a different unloading address chosen but left empty', () => {
+        assert.deepEqual(requestFrom({ ...draftFrom(transport()), unloadingChoice: 'other', unloadingPlace: '  ' }, 4).problems, ['unloadingPlace']);
+        assert.deepEqual(requestFrom({ ...draftFrom(transport()), unloadingChoice: 'other', unloadingPlace: 'Kade 5' }, 4).problems, []);
+    });
 });
