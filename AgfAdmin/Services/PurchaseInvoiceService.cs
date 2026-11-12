@@ -458,8 +458,11 @@ namespace AgfAdmin.Services
                     // Te veel factureren: pas hier, onder de lock, controleren; eerder gelezen hoeveelheden kunnen door een gelijktijdige factuur achterhaald zijn.
                     if (linked != null)
                     {
+                        // Eerst de orders vers lezen en opnieuw valideren (status, prijzen, keuze): wat vóór de transactie is gelezen kan achterhaald zijn.
                         var overErrors = new Dictionary<string, List<string>>();
-                        await orderLinks.CheckOverInvoicingAsync(linked, request, overErrors, cancellationToken);
+                        linked = await orderLinks.RevalidateAsync(linked, request, vendor, lines, overErrors, cancellationToken);
+                        if (linked != null) candidate.OrderPriceDecision = linked.Decision;
+                        if (linked != null) await orderLinks.CheckOverInvoicingAsync(linked, request, overErrors, cancellationToken);
                         if (overErrors.Count > 0)
                         {
                             await transaction.RollbackAsync(cancellationToken);

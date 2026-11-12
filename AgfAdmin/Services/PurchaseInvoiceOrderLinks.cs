@@ -112,6 +112,22 @@ namespace AgfAdmin.Services
             return errors.Count > 0 ? null : new Prepared(linked, decision);
         }
 
+        // Binnen de opslagtransactie, nadat de lock per leverancier is genomen: de orders en orderregels opnieuw uit de database lezen en alle
+        // controles (status, leverancier, artikel, eenheid, prijsverschil, keuze, open magazijnorder bij "Bon aanpassen") opnieuw uitvoeren,
+        // zodat een order die intussen is aangepast, geannuleerd of definitief gemaakt niet met verouderde gegevens wordt gebruikt.
+        // Aanpassingen aan een order lopen onder dezelfde leverancierslock niet gelijktijdig; de verse lezing is dus de stand waarop ApplyAsync werkt.
+        public async Task<Prepared> RevalidateAsync(Prepared prepared, CreatePurchaseInvoiceDto request, Vendor vendor, List<IncomingInvoiceLine> lines,
+            Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
+        {
+            if (prepared == null) return null;
+            foreach (var order in prepared.Lines.Select(l => l.OrderLine.SupplyCommitment).Distinct().ToList())
+            {
+                await db.Entry(order).ReloadAsync(cancellationToken);
+                foreach (var line in order.Lines.ToList()) await db.Entry(line).ReloadAsync(cancellationToken);
+            }
+            return await PrepareAsync(request, vendor, lines, errors, cancellationToken);
+        }
+
         // Meer dan besteld of ontvangen: alleen na de waarschuwing (AcceptOverInvoicing). Wat al op andere facturen staat telt mee. Aan te roepen
         // binnen de opslagtransactie nadat de lock per leverancier is genomen: de hoeveelheden worden hier vers gelezen, vóór het opslaan van
         // de factuur, zodat een gelijktijdige factuur voor dezelfde orderregel al zichtbaar is.
