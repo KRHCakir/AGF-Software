@@ -131,7 +131,7 @@ export default function NewPurchaseInvoicePage() {
                     <div className={review === null ? '' : 'grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]'}>
                         {review !== null && <AiDocumentViewer key="document" extraction={review.extraction} />}
                         <div key="form" className="min-w-0">
-                            <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} costArticles={state.data.costArticles} settings={state.data.settings} seed={seed}
+                            <PurchaseInvoiceForm vendors={state.data.vendors} products={state.data.products} costArticles={state.data.costArticles} settings={state.data.settings} seed={seed} busy={closing}
                                 onSaved={() => changeReview(null)}
                                 ai={review === null ? null : {
                                     extraction: review.extraction, lineKeys: review.lineKeys, linkOrderId: review.linkOrderId,

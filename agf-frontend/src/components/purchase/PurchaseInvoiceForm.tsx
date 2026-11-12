@@ -65,7 +65,7 @@ function codeKey(code: string): string {
     return `purchase_error_${code}`;
 }
 
-export default function PurchaseInvoiceForm({ vendors, products, costArticles = [], settings, onSaved, ai = null, seed = null }: {
+export default function PurchaseInvoiceForm({ vendors, products, costArticles = [], settings, onSaved, ai = null, seed = null, busy = false }: {
     vendors: PurchaseVendor[];
     products: ProductOption[];
     // Kostenartikelen (type Dienst): een eigen groep "Kosten" in de artikelkeuze van elke regel.
@@ -75,6 +75,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     ai?: AiReview | null;
     // Een nieuw concept van buiten (een AI-voorstel, of leeg na Afwijzen): vervangt het concept zodra de sleutel verandert.
     seed?: { key: number; draft: InvoiceDraft } | null;
+    // Buiten het formulier loopt een aanvraag (AI-voorstel afsluiten): alle acties, ook Goedkeuren, zijn dan geblokkeerd.
+    busy?: boolean;
 }) {
     const { t, locale } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
@@ -103,7 +105,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     const totals = useMemo(() => draftTotals(draft.lines), [draft.lines]);
     const aiProblems = useMemo(() => problemsByField(ai?.extraction ?? null), [ai?.extraction]);
     const aiCost = (aiIndex: number) => (aiIndex < 0 ? null : ai?.extraction.matches?.lineCostArticles.find((cost) => cost.index === aiIndex) ?? null);
-    const locked = submitting || pending !== null;
+    const locked = submitting || pending !== null || busy;
     // Een andere leverancier kiezen haalt een orderkoppeling van een andere leverancier weg; terug naar de leverancier van de order
     // betekent opnieuw aanvinken.
     const chooseVendor = (chosen: PurchaseVendor | null) => {
@@ -189,7 +191,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     };
 
     const submit = async (mode: 'save' | 'saveAndNew') => {
-        if (inFlight.current || result !== null) return;
+        if (inFlight.current || busy || result !== null) return;
         let command = pending;
         if (command === null) {
             const built = buildPurchaseInvoicePayload(draft, settings);
@@ -531,6 +533,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                         <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{t('purchase_col_vat')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} inputMode="decimal" value={line.vat} disabled={locked} onChange={(event) => updateLine(line.key, { vat: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.vatPercentage`} messages={e(`${prefix}.vatPercentage`)} />
+                                        <AiFieldHint codes={aiLine('vatPercentage')} />
                                     </td>
                                     <td className={`w-28 px-2 py-1.5 text-right font-mono ${aiFieldClass(aiLine('amount'))}`} data-testid={`${prefix}.amount`} data-tour="pinvoice-line-amount" data-tour-key={index}>
                                         {amounts === null ? <span className="text-gray-400">–</span> : <>{money(amounts.net)}<span className="block text-xs text-gray-500">{t('purchase_vat_short')} {money(amounts.vat)}</span></>}
@@ -569,10 +572,10 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             </div>
 
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
-                <button type="submit" className={primaryButtonClass} disabled={locked && !unknown} data-tour="pinvoice-save">{submitting ? t('supply_saving') : t(ai !== null ? 'ai_approve' : 'purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
+                <button type="submit" className={primaryButtonClass} disabled={busy || (locked && !unknown)} data-tour="pinvoice-save">{submitting ? t('supply_saving') : t(ai !== null ? 'ai_approve' : 'purchase_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
                 {ai === null ? (
                     <>
-                        <button type="button" className={secondaryButtonClass} disabled={locked && !unknown} onClick={() => void submit('saveAndNew')}>{t('purchase_save_and_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('saveAndNew', isMac)}</kbd></button>
+                        <button type="button" className={secondaryButtonClass} disabled={busy || (locked && !unknown)} onClick={() => void submit('saveAndNew')}>{t('purchase_save_and_new')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('saveAndNew', isMac)}</kbd></button>
                         <button type="button" className={secondaryButtonClass} disabled={submitting} onClick={startNew}>{t('purchase_new_document')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('newDocument', isMac)}</kbd></button>
                     </>
                 ) : (
