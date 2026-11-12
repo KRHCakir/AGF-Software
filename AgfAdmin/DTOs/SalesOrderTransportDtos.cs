@@ -57,4 +57,11 @@ namespace AgfAdmin.DTOs
         public string Text { get; set; }
         public bool IsDefault { get; set; }
     }
+
+    // Instellingen van de transportopdracht per bedrijf: taal van de kopteksten (en, nl) en de standaard soort pallet.
+    public sealed class TransportOrderSettingsDto
+    {
+        public string Language { get; set; }
+        public string PalletKind { get; set; }
+    }
 }

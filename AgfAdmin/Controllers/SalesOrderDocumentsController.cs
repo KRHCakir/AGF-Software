@@ -27,15 +27,17 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Documents(int id) =>
             this.ToActionResult(await slips.DocumentsAsync(id, HttpContext?.RequestAborted ?? default));
 
-        // De PDF van één versie, uit haar snapshot: inline om te bekijken of af te drukken, met download=true als bestand.
+        // De PDF van één versie (laadbon of transportopdracht), uit haar snapshot: inline om te bekijken of af te drukken, met download=true
+        // als bestand.
         [HttpGet("documents/{documentId:int}/pdf")]
         public async Task<IActionResult> Pdf(int id, int documentId, [FromQuery] bool download = false)
         {
-            var found = await slips.SnapshotAsync(id, documentId, HttpContext?.RequestAborted ?? default);
-            if (found == null) return NotFound(new { message = $"Document {documentId} of sales order {id} does not exist." });
-            var (document, snapshot) = found.Value;
-            var bytes = LoadingSlipPdf.Render(document, snapshot);
-            return download ? File(bytes, "application/pdf", LoadingSlipPdf.FileName(document)) : File(bytes, "application/pdf");
+            var document = await slips.DocumentAsync(id, documentId, HttpContext?.RequestAborted ?? default);
+            if (document == null) return NotFound(new { message = $"Document {documentId} of sales order {id} does not exist." });
+            var (bytes, name) = document.Kind == SalesOrderDocumentRules.KindTransportOrder
+                ? (TransportOrderPdf.Render(document, TransportOrderBuilder.Deserialize(document.SnapshotJson)), TransportOrderPdf.FileName(document))
+                : (LoadingSlipPdf.Render(document, LoadingSlipBuilder.Deserialize(document.SnapshotJson)), LoadingSlipPdf.FileName(document));
+            return download ? File(bytes, "application/pdf", name) : File(bytes, "application/pdf");
         }
 
         // Doorgegeven aan de loods (afgedrukt of overhandigd); in deel 3 gebeurt dit bij verzenden.

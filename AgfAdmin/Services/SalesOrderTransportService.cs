@@ -11,6 +11,7 @@ namespace AgfAdmin.Services
     public sealed class SalesOrderTransportService(AppDbContext db, ICurrentUser user = null)
     {
         public const string CancelledCode = "cancelled";
+        public const string TransportOrderExistsCode = "transportOrderExists";
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
 
         public async Task<ServiceResult<SalesOrderTransportDto>> GetAsync(int orderId, CancellationToken cancellationToken = default)
@@ -125,6 +126,67 @@ namespace AgfAdmin.Services
             }
             db.ChangeTracker.Clear();
             return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));
+        }
+
+        // Weghalen kan zolang er geen transportopdracht is. Met de versie die de gebruiker zag (expectedVersion): een gelijktijdige wijziging
+        // gaat niet verloren. Het weghalen raakt ook de orderrij (concurrency-token): een gelijktijdige bevestiging, die de orderrij ook
+        // wijzigt, botst dan op de orderversie, zodat nooit een transportopdracht zonder transport ontstaat.
+        public async Task<ServiceResult<SalesOrderTransportDto>> DeleteAsync(int orderId, int? expectedVersion = null, CancellationToken cancellationToken = default)
+        {
+            var order = await LoadAsync(orderId, tracking: true, cancellationToken);
+            if (order == null) return NotFound(orderId);
+            if (await db.SalesOrderDocuments.AnyAsync(d => d.SalesOrderId == orderId && d.Kind == SalesOrderDocumentRules.KindTransportOrder, cancellationToken))
+            {
+                return ServiceResult<SalesOrderTransportDto>.Conflict("There is already a transport order for this sales order; change the transport instead.", new { code = TransportOrderExistsCode });
+            }
+            if (order.Transport != null)
+            {
+                if (expectedVersion == null)
+                {
+                    return ServiceResult<SalesOrderTransportDto>.Validation(new Dictionary<string, string[]> { ["expectedVersion"] = new[] { "Send the version you saw (expectedVersion)." } });
+                }
+                if (expectedVersion != order.Transport.Version)
+                {
+                    return ServiceResult<SalesOrderTransportDto>.Conflict("The transport was changed by someone else; reload and try again.", new { code = "stale", version = order.Transport.Version });
+                }
+                db.SalesOrderTransports.Remove(order.Transport);
+                order.UpdatedAt = DateTime.UtcNow;
+                try
+                {
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return ServiceResult<SalesOrderTransportDto>.Conflict("The sales order was changed meanwhile (for example confirmed); reload and try again.", new { code = "stale" });
+                }
+            }
+            db.ChangeTracker.Clear();
+            return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));
+        }
+
+        public async Task<TransportOrderSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
+        {
+            var settings = await SettingsAsync(cancellationToken);
+            return new TransportOrderSettingsDto { Language = settings.TransportOrderLanguage, PalletKind = settings.TransportOrderPalletKind };
+        }
+
+        // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot.
+        public async Task<ServiceResult<TransportOrderSettingsDto>> UpdateSettingsAsync(TransportOrderSettingsDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = new Dictionary<string, List<string>>();
+            var language = request?.Language?.Trim().ToLowerInvariant();
+            if (language == null || !SalesOrderDocumentRules.Languages.Contains(language))
+            {
+                ValidationErrors.Add(errors, "language", $"Language must be one of: {string.Join(", ", SalesOrderDocumentRules.Languages)}.");
+            }
+            var palletKind = ValidationErrors.OptionalText(request?.PalletKind, SalesTransportRules.MaxPalletKindLength, "palletKind", errors) ?? SalesTransportRules.DefaultPalletKind;
+            if (errors.Count > 0) return ServiceResult<TransportOrderSettingsDto>.Validation(ValidationErrors.ToArrays(errors));
+            var settings = await db.CompanySettings.OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+            if (settings == null) db.CompanySettings.Add(settings = new CompanySettings());
+            settings.TransportOrderLanguage = language;
+            settings.TransportOrderPalletKind = palletKind;
+            await db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<TransportOrderSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
         }
 
         private async Task<SalesOrderTransportDto> ToDtoAsync(SalesOrder order, CancellationToken cancellationToken)

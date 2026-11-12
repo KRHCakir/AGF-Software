@@ -43,6 +43,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateLoadingSlip([FromServices] Services.LoadingSlipService slips, [FromBody] AgfAdmin.DTOs.LoadingSlipSettingsDto request) =>
             this.ToActionResult(await slips.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Transportopdracht (documenten deel 2): taal van de kopteksten en de standaard soort pallet.
+        [HttpGet("transport-order")]
+        public async Task<IActionResult> GetTransportOrder([FromServices] Services.SalesOrderTransportService transports) => Ok(await transports.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("transport-order")]
+        public async Task<IActionResult> UpdateTransportOrder([FromServices] Services.SalesOrderTransportService transports, [FromBody] AgfAdmin.DTOs.TransportOrderSettingsDto request) =>
+            this.ToActionResult(await transports.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("partij-numbering")]
         public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
 

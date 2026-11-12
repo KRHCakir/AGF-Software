@@ -205,6 +205,35 @@ public class TransportOrderServiceTests : IDisposable
         Assert.Null(cleared.Value.LoadAt);
     }
 
+    [Fact]
+    public async Task Transport_can_be_removed_until_there_is_a_transport_order()
+    {
+        var s = await OrderAsync();
+        var saved = await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
+        // Zonder versie of met een verouderde versie niet; met de versie die je zag wel.
+        Assert.Contains("expectedVersion", (await Transport(t => t.DeleteAsync(s.OrderId))).Errors.Keys);
+        Assert.Equal(ServiceResultStatus.Conflict, (await Transport(t => t.DeleteAsync(s.OrderId, saved.Value.Version + 1))).Status);
+        var removed = await Transport(t => t.DeleteAsync(s.OrderId, saved.Value.Version));
+        Assert.Equal((ServiceResultStatus.Ok, false), (removed.Status, removed.Value.Exists));
+        await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
+        await Slips(x => x.ConfirmAsync(s.OrderId, new ConfirmSalesOrderDto()));
+        Assert.Equal(ServiceResultStatus.Conflict, (await Transport(t => t.DeleteAsync(s.OrderId))).Status);
+        Assert.True((await Transport(t => t.GetAsync(s.OrderId))).Value.HasTransportOrder);
+        Assert.Equal("TO-", SalesOrderDocumentRules.TransportOrderNumber("VO-2026-0012")[..3]);
+        Assert.Equal("TO-2026-0012", SalesOrderDocumentRules.TransportOrderNumber("VO-2026-0012"));
+    }
+
+    [Fact]
+    public async Task The_transport_order_settings_default_to_english_and_europallet()
+    {
+        var settings = await Transport(t => t.GetSettingsAsync());
+        Assert.Equal(("en", "Europallet"), (settings.Language, settings.PalletKind));
+        Assert.Contains("language", (await Transport(t => t.UpdateSettingsAsync(new TransportOrderSettingsDto { Language = "de" }))).Errors.Keys);
+        var updated = await Transport(t => t.UpdateSettingsAsync(new TransportOrderSettingsDto { Language = "NL", PalletKind = " Blokpallet " }));
+        Assert.Equal(("nl", "Blokpallet"), (updated.Value.Language, updated.Value.PalletKind));
+        Assert.Equal("Europallet", (await Transport(t => t.UpdateSettingsAsync(new TransportOrderSettingsDto { Language = "en", PalletKind = "" }))).Value.PalletKind);
+    }
+
     private async Task<SalesOrderTransport> LoadTransport(int orderId)
     {
         await using var db = _factory.CreateContext();
