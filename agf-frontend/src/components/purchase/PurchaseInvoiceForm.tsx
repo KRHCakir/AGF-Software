@@ -542,7 +542,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                         {line.costArticleId && <span className="block text-xs text-gray-600" data-testid={`${prefix}.cost-kind`}>{t(costArticles.find((article) => String(article.id) === line.costArticleId)?.kind === 'Packaging' ? 'packaging_line_hint' : 'cost_article_line_hint')}</span>}
                                         <FieldError id={`${prefix}.description`} messages={e(`${prefix}.description`) ?? e(`${prefix}.productVariantId`) ?? e(`${prefix}.costArticleId`)} />
                                         <AiFieldHint codes={aiLine('item')} />
-                                        <InvoiceOrderLineInfo line={line} prefix={prefix} currency={draft.header.currency} />
+                                        <InvoiceOrderLineInfo line={line} prefix={prefix} index={index} currency={draft.header.currency} />
                                         <FieldError id={`${prefix}.supplyCommitmentLineId`} messages={e(`${prefix}.supplyCommitmentLineId`)} />
                                         {/* Voorstel van een kostenartikel: nooit automatisch, de gebruiker neemt het over. */}
                                         {suggestedCost && !line.costArticleId && line.productVariantId === '' && (

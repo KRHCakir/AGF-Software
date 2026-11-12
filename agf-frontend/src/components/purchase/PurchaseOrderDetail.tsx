@@ -12,7 +12,7 @@ import { getPurchaseOrder } from '../../services/purchaseOrderService';
 import PartijLinkPanel from '../partij/PartijLinkPanel';
 import ChainStrip from '../shared/ChainStrip';
 import { primaryButtonClass } from '../supply/SuccessPanel';
-import { DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import { DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge, BillingStatusBadge } from './PurchaseOrderBadges';
 import PurchaseOrderDocument, { PurchaseOrderChanges } from './PurchaseOrderDocument';
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
@@ -109,6 +109,11 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                             {(line.replacedByLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_replaced_by', { line: lineName(id) })}</span>)}
                                         </span>
                                     )}
+                                    {(line.invoicedQuantity ?? 0) > 0 && (
+                                        <span className="block text-xs text-gray-700" data-testid={`po-line-invoiced-${line.id}`}>
+                                            {t('po_line_invoiced', { invoiced: qty(line.invoicedQuantity ?? 0), open: qty(line.openToInvoiceQuantity ?? 0) })}
+                                        </span>
+                                    )}
                                     <span className="block font-mono text-xs text-gray-800">
                                         {lineAmountParts(line).map((part, partIndex) => (
                                             <span key={part.key} className={part.key === 'po_line_rejected' ? 'text-red-800' : undefined}>
@@ -148,10 +153,29 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
             {(order.deviations ?? []).length > 0 && <DeviationsSection deviations={order.deviations ?? []} />}
 
             <section className={section} aria-labelledby="po-invoices">
-                <h3 id="po-invoices" className={h3}>{t('po_invoices')}</h3>
-                {order.invoiceRefs.length === 0 && <p className="text-sm text-gray-600">{t('po_no_invoices')}</p>}
+                <h3 id="po-invoices" className={`${h3} flex flex-wrap items-center gap-2`}>{t('po_invoices')} <BillingStatusBadge status={order.billingStatus} /></h3>
+                {order.invoiceRefs.length === 0 && (order.invoices ?? []).length === 0 && <p className="text-sm text-gray-600">{t('po_no_invoices')}</p>}
+                {/* Ingevoerde inkoopfacturen die regels van deze order factureren (stap 4b), met het verschil met de bon. */}
+                {(order.invoices ?? []).length > 0 && (
+                    <ul className="text-sm" data-testid="po-linked-invoices">
+                        {(order.invoices ?? []).map((invoice) => (
+                            <li key={invoice.id} data-tour="po-linked-invoice" data-tour-key={invoice.invoiceNumber ?? String(invoice.id)} className="break-words py-0.5">
+                                <span className="font-medium">{t('po_invoice')}</span>{' '}
+                                <Link href={`/purchase-invoices?id=${invoice.id}`} className="font-mono text-blue-800 underline underline-offset-2">{invoice.invoiceNumber ?? `#${invoice.id}`}</Link>
+                                {invoice.invoiceDate && <> · {formatCalendarDate(invoice.invoiceDate, locale)}</>}
+                                {' · '}{t('po_amount_excl_vat_value', { amount: formatMoney(invoice.amountExclVat, null, locale) })}
+                                {invoice.difference !== null && invoice.difference !== 0 && (
+                                    <span className={`ml-1 font-medium ${invoice.decision === 'AdjustOrder' ? 'text-gray-700' : 'text-red-800'}`} data-testid="po-invoice-difference">
+                                        {t(invoice.decision === 'AdjustOrder' ? 'po_invoice_difference_adjusted' : 'po_invoice_difference_recorded', { amount: formatMoney(invoice.difference, null, locale) })}
+                                    </span>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
                 <ul className="text-sm">
-                    {order.invoiceRefs.map((ref) => (
+                    {/* Een verwijzing die al bij een ingevoerde factuur hoort staat hierboven; alleen de rest ("Factuur ontvangen", creditnota's). */}
+                    {order.invoiceRefs.filter((ref) => ref.incomingInvoiceId == null || !(order.invoices ?? []).some((invoice) => invoice.id === ref.incomingInvoiceId)).map((ref) => (
                         <li key={ref.id} data-tour="po-invoice-ref" data-tour-key={ref.invoiceNumber} className="break-words py-0.5">
                             <span className="font-medium">{ref.kind === 'CreditNote' ? t('po_credit_note') : t('po_invoice')}</span>{' '}
                             <span className="font-mono">{ref.invoiceNumber}</span>

@@ -147,12 +147,13 @@ describe('Purchase orders page', () => {
         assert.equal(mounted.container.querySelector('form[aria-label="po_reject_title"]'), null);
         await mounted.waitFor(() => listUrls.length >= 2, 'list reloaded');
     });
-    test('"Factuur ontvangen" records the number on the order and the list shows it right away', async () => {
+    test('"Factuur invoeren" opens the invoice from the order; "Creditnota ontvangen" records the number and the list shows it right away', async () => {
         navigate('/purchase-orders?id=7');
         await mounted.render(<PurchaseOrdersPage />);
         await mounted.waitFor(() => mounted.container.querySelector('#po-detail-title')?.textContent?.includes('IO-2026-0007'), 'detail');
-        await click(mounted.button('+ po_invoice_received_action')!);
-        await act(async () => { setValue(input('invoiceRef-Invoice-number'), 'F-4712'); });
+        assert.equal(mounted.container.querySelector('[data-tour="po-invoice-enter"]')!.getAttribute('href'), '/purchase-invoices/new?orderId=7');
+        await click(mounted.button('+ po_credit_note_received_action')!);
+        await act(async () => { setValue(input('invoiceRef-CreditNote-number'), 'F-4712'); });
         await click(mounted.button('po_invoice_save')!);
         await mounted.waitFor(() => posted.length === 1, 'POST');
         assert.match(posted[0].url, /\/purchase-orders\/7\/invoice-refs$/);

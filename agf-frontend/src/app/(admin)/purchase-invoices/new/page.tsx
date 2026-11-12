@@ -7,8 +7,10 @@ import PurchaseInvoiceForm from '../../../../components/purchase/PurchaseInvoice
 import AiDocumentViewer from '../../../../components/purchase/AiDocumentViewer';
 import AiUploadPanel from '../../../../components/purchase/AiUploadPanel';
 import { draftFromProposal } from '../../../../lib/aiProposal';
-import { type InvoiceDraft, emptyDraft, isBlankLine } from '../../../../lib/purchaseInvoiceRules';
-import { type StoredAiReview, clearAiReview, clearDraft, loadAiReview, loadDraft, saveAiReview } from '../../../../lib/purchaseInvoiceStore';
+import { type InvoiceDraft, emptyDraft, isBlankLine, selectVendor } from '../../../../lib/purchaseInvoiceRules';
+import { addOrderLines } from '../../../../lib/invoiceOrderLink';
+import { getPurchaseOrder, listInvoiceCandidates } from '../../../../services/purchaseOrderService';
+import { type StoredAiReview, clearAiReview, clearDraft, loadAiReview, loadDraft, loadPending, saveAiReview } from '../../../../lib/purchaseInvoiceStore';
 import { todayInAmsterdam } from '../../../../lib/calendarDate';
 import { closeAiExtraction } from '../../../../services/aiReadingService';
 import type { AiExtraction } from '../../../../types/aiReading';
@@ -97,6 +99,31 @@ export default function NewPurchaseInvoicePage() {
             });
         return () => controller.abort();
     }, [reloadToken]);
+
+    // "Factuur invoeren" vanaf de order (stap 4b, ?orderId=): de leverancier en de open regels van die bon, met de prijs op de bon. Niet
+    // tijdens een AI-voorstel of een verstuurde opslag zonder bevestiging; daarna gaat de parameter uit de adresbalk (verversen vult niet
+    // opnieuw voor).
+    const ready = state.status === 'ready' ? state.data : null;
+    useEffect(() => {
+        if (ready === null || review !== null || loadPending() !== null) return;
+        const orderId = Number(new URLSearchParams(window.location.search).get('orderId'));
+        if (!Number.isInteger(orderId) || orderId <= 0) return;
+        const controller = new AbortController();
+        getPurchaseOrder(orderId, controller.signal)
+            .then(async (order) => {
+                const vendor = ready.vendors.find((candidate) => candidate.id === order.vendorId) ?? null;
+                if (vendor === null) return;
+                const [found] = await listInvoiceCandidates(vendor.id, '', orderId, controller.signal);
+                if (!found) return;
+                const start = selectVendor(emptyDraft(todayInAmsterdam(), ready.settings), vendor, ready.settings);
+                clearDraft();
+                setSeed({ key: Date.now(), draft: addOrderLines(start, found, ready.settings.defaultVatPercentage) });
+                window.history.replaceState(window.history.state, '', window.location.pathname);
+            })
+            .catch(() => undefined);
+        return () => controller.abort();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- eenmaal zodra de referentiedata er is
+    }, [ready === null]);
 
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">

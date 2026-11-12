@@ -37,6 +37,23 @@ export interface PurchaseOrderListItem {
     hasDeviation?: boolean;
     // Documentstatus (stap 4a): Open (aanpasbaar) of Definitive; ontbreekt bij een oudere server (dan Open).
     documentStatus?: string;
+    // Gefactureerd (stap 4b): None, Partial of Full; ontbreekt bij een oudere server.
+    billingStatus?: BillingStatus;
+}
+
+export type BillingStatus = 'None' | 'Partial' | 'Full';
+export const BILLING_STATUSES: readonly BillingStatus[] = ['None', 'Partial', 'Full'];
+
+// Een ingevoerde inkoopfactuur die regels van deze order factureert (stap 4b): bedrag van die regels en het verschil met de bon.
+export interface PurchaseOrderLinkedInvoice {
+    id: number;
+    invoiceNumber: string | null;
+    invoiceDate: string | null;
+    status: string;
+    currency: string | null;
+    amountExclVat: number;
+    difference: number | null;
+    decision: 'AdjustOrder' | 'RecordDifference' | null;
 }
 
 export interface PurchaseOrderList {
@@ -58,6 +75,9 @@ export interface PurchaseOrderLine {
     lotNumber: string | null;
     partijId?: number | null;
     partijNumber?: string | null;
+    // Stap 4b (ontbreekt bij een oudere server): al gefactureerd en nog open om te factureren.
+    invoicedQuantity?: number;
+    openToInvoiceQuantity?: number;
     expectedQuantity: number;
     unit: string | null;
     expectedNetWeightKg: number | null;
@@ -219,6 +239,9 @@ export interface PurchaseOrderDetail {
     salesOrders?: PurchaseOrderSalesLink[];
     // Totalen onder de regels (PurchaseLineMath); ontbreekt bij een oudere server.
     totals?: PurchaseLineTotalsDto;
+    // Stap 4b (ontbreekt bij een oudere server): gefactureerd volgens de factuurregels en de gekoppelde facturen.
+    billingStatus?: BillingStatus;
+    invoices?: PurchaseOrderLinkedInvoice[];
     // Documentstatus (stap 4a): Open of Definitive, met wie, wanneer en waardoor; de versie voor aanpassen; wat vastligt; de auditregels.
     documentStatus?: string;
     finalizedAt?: string | null;
