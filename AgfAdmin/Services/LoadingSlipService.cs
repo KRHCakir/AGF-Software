@@ -128,7 +128,7 @@ namespace AgfAdmin.Services
         }
 
         // true = nieuwe versie, false = niets veranderd, null = versiebotsing (opnieuw proberen).
-        private async Task<bool?> RefreshOnceAsync(int orderId, CancellationToken cancellationToken)
+        private async Task<bool?> RefreshOnceAsync(int orderId, CancellationToken cancellationToken, bool rethrowCollision = false)
         {
             var order = await LoadAsync(orderId, cancellationToken);
             if (order?.ConfirmedAt == null || order.Status == ReservationRules.OrderStatusCancelled) return false;
@@ -141,9 +141,10 @@ namespace AgfAdmin.Services
                 await db.SaveChangesAsync(cancellationToken);
                 return true;
             }
-            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
+            catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && !rethrowCollision)
             {
                 // Alleen een versiebotsing met een gelijktijdige verversing; andere databasefouten gaan naar de aanroeper.
+                // Binnen een transactie (rethrowCollision) niet: die is na de fout afgebroken, daar herhaalt de aanroeper het geheel.
                 db.ChangeTracker.Clear();
                 return null;
             }
@@ -152,8 +153,34 @@ namespace AgfAdmin.Services
         // Doorgegeven aan de loods (afgedrukt of overhandigd); deel 3 zet dit bij verzenden. Alleen de nieuwste versie, één keer.
         public async Task<ServiceResult<SalesOrderDocumentsDto>> MarkSentAsync(int orderId, int documentId, CancellationToken cancellationToken = default)
         {
+            for (var attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    return await MarkSentOnceAsync(orderId, documentId, cancellationToken);
+                }
+                catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < 2)
+                {
+                    // Een gelijktijdige verversing nam het versienummer: de transactie is teruggedraaid, opnieuw op de actuele stand.
+                    db.ChangeTracker.Clear();
+                }
+            }
+        }
+
+        private async Task<ServiceResult<SalesOrderDocumentsDto>> MarkSentOnceAsync(int orderId, int documentId, CancellationToken cancellationToken)
+        {
+            // Verversen, controleren en doorgeven in één transactie met een rijlock op de order en haar regels (FOR UPDATE): een
+            // gelijktijdige orderwijziging (die de orderrij of een orderregel wijzigt, of er via een FK naar verwijst) wacht tot de
+            // doorgifte klaar is, en een al opgeslagen wijziging is bij het verversen hieronder zichtbaar. Zo wordt geen verouderde bon als
+            // nieuwste doorgegeven. Alleen PostgreSQL (productie) kent deze lock; SQLite (tests) serialiseert schrijvers zelf.
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            if (db.Database.IsNpgsql())
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SalesOrders\" WHERE \"Id\" = {orderId} FOR UPDATE", cancellationToken);
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"SalesOrderLines\" WHERE \"SalesOrderId\" = {orderId} FOR UPDATE", cancellationToken);
+            }
             // Eerst verversen: een verouderde bon mag niet als nieuwste worden doorgegeven. Een mislukte verversing werpt en blokkeert de doorgifte.
-            await RefreshAsync(orderId, cancellationToken);
+            await RefreshOnceAsync(orderId, cancellationToken, rethrowCollision: true);
             var order = await LoadAsync(orderId, cancellationToken);
             var document = order?.Documents.SingleOrDefault(d => d.Id == documentId);
             if (document == null) return ServiceResult<SalesOrderDocumentsDto>.NotFound($"Document {documentId} of sales order {orderId} does not exist.");
@@ -184,6 +211,7 @@ namespace AgfAdmin.Services
                     }
                 }
             }
+            await transaction.CommitAsync(cancellationToken);
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
         }
 
