@@ -164,9 +164,25 @@ namespace AgfAdmin.Services
             }
             if (document.SentAt == null)
             {
-                document.SentAt = DateTime.UtcNow;
-                document.SentBy = Actor();
-                await db.SaveChangesAsync(cancellationToken);
+                // Voorwaardelijke update in één statement: alleen als er nu nog geen nieuwere versie is en nog niet doorgegeven is.
+                // Een gelijktijdige nieuwe versie kan zo niet meer tussen de controle en het opslaan komen.
+                var sentAt = DateTime.UtcNow;
+                var sentBy = Actor();
+                var kind = document.Kind;
+                var version = document.Version;
+                var updated = await db.SalesOrderDocuments
+                    .Where(d => d.Id == documentId && d.SalesOrderId == orderId && d.SentAt == null
+                        && !db.SalesOrderDocuments.Any(n => n.SalesOrderId == orderId && n.Kind == kind && n.Version > version))
+                    .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)sentAt).SetProperty(d => d.SentBy, sentBy), cancellationToken);
+                if (updated == 0)
+                {
+                    // Intussen doorgegeven (idempotent) of er is een nieuwere versie bij gekomen.
+                    var newest = await db.SalesOrderDocuments.AsNoTracking().Where(d => d.SalesOrderId == orderId && d.Kind == kind).MaxAsync(d => d.Version, cancellationToken);
+                    if (version != newest)
+                    {
+                        return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Version {version} is not the latest ({newest}); pass on the latest version.", new { code = "notLatest" });
+                    }
+                }
             }
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
         }
