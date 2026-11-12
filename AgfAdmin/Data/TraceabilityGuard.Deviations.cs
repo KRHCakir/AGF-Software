@@ -40,10 +40,18 @@ namespace AgfAdmin.Data
                         l.SupplyCommitment.Route, l.UnitPrice)), async, cancellationToken))
                 .ToDictionary(l => l.Id);
 
+            // Een aanpassing of correctie van de order (met haar auditregel in dezelfde save, zonder afwijking op die regel) valt onder
+            // regel 29, die dezelfde velden met eigen grenzen controleert. Voor een afwijkende ontvangst verandert hier niets.
+            var editedOrders = db.ChangeTracker.Entries<PurchaseOrderChange>().Where(e => e.State == EntityState.Added)
+                .Select(e => e.Entity.SupplyCommitmentId).ToHashSet();
             foreach (var entry in lines.Where(e => e.State == EntityState.Modified))
             {
                 var line = entry.Entity;
                 var before = stored[line.Id];
+                if (editedOrders.Contains(before.SupplyCommitmentId) && !deviations.Any(d => OriginalOf(d) == line.Id))
+                {
+                    continue;
+                }
                 if (before.SupplyCommitmentId != line.SupplyCommitmentId || before.ProductVariantId != line.ProductVariantId
                     || !string.Equals(before.ExpectedUnit, line.ExpectedUnit, StringComparison.Ordinal) || before.ReplacesLineId != line.ReplacesLineId
                     || before.UnitPrice != line.UnitPrice)
