@@ -3,6 +3,7 @@ import type { CreatePurchaseInvoiceLineRequest, CreatePurchaseInvoiceRequest, Op
 import { parseLocaleDecimal, parsePositiveDecimal } from './decimal.ts';
 import { PaymentConditionBasis, conditionDueDate } from './paymentCondition.ts';
 import { fitsAmount, lineNet, lineVat, totals } from './invoiceMath.ts';
+import type { OrderLineLink } from './invoiceOrderLink.ts';
 
 // Pure regels van de inkoopfactuurwerkplek, los van React en i18n (node:test). Spiegelt PurchaseInvoiceService:
 // leveranciersdefaults zijn voorstellen die op het document worden bewaard; handmatige invoer wordt nooit overschreven;
@@ -20,6 +21,8 @@ export interface LineDraft {
     unitPrice: string;
     discount: string;
     vat: string;
+    // Regel uit de bon (stap 4b): de orderregel die deze regel factureert, met wat er op de bon staat (lib/invoiceOrderLink.ts).
+    orderLine?: OrderLineLink;
 }
 
 export interface HeaderDraft {
@@ -278,6 +281,7 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
             unitPrice: price.ok ? price.value : 0,
             discountPercentage: discount.ok ? discount.value : 0,
             vatPercentage: vat.ok ? vat.value : 0,
+            ...(line.orderLine && hasProduct ? { supplyCommitmentLineId: line.orderLine.lineId } : {}),
         });
     }
 

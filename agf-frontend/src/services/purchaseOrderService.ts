@@ -4,12 +4,14 @@ import {
     AddInvoiceRefRequest,
     CorrectPurchaseOrderRequest,
     FinalizePurchaseOrderRequest,
+    InvoiceCandidate,
     UpdatePurchaseOrderRequest,
     PurchaseOrderDetail,
     PurchaseOrderInvoiceMatch,
     PurchaseOrderList,
     PurchaseOrderSupplierReferenceMatch,
     RejectRequest,
+    isInvoiceCandidateList,
     isInvoiceMatchList,
     isPurchaseOrderDetail,
     isPurchaseOrderList,
@@ -54,6 +56,17 @@ export async function findOrdersByInvoiceNumber(invoiceNumber: string, vendorId:
     if (vendorId !== null) params.set('vendorId', String(vendorId));
     const json = await getJson(`/purchase-orders/by-invoice-number?${params.toString()}`, signal);
     if (!isInvoiceMatchList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het opzoeken van het factuurnummer.');
+    return json;
+}
+
+// Orders van deze leverancier om een inkoopfactuur aan te koppelen (stap 4b): zonder zoekterm die met iets open, met zoekterm alles wat
+// erbij past; met orderId precies die order.
+export async function listInvoiceCandidates(vendorId: number, query: string, orderId: number | null, signal?: AbortSignal): Promise<InvoiceCandidate[]> {
+    const params = new URLSearchParams({ vendorId: String(vendorId) });
+    if (query.trim() !== '') params.set('query', query.trim());
+    if (orderId !== null) params.set('orderId', String(orderId));
+    const json = await getJson(`/purchase-orders/invoice-candidates?${params.toString()}`, signal);
+    if (!isInvoiceCandidateList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het ophalen van de orders om te factureren.');
     return json;
 }
 

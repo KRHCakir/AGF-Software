@@ -35,7 +35,8 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 
 function isLineDraft(value: unknown): value is LineDraft {
     return isRecord(value) && isString(value.key) && isString(value.productVariantId) && isString(value.description) && isString(value.quantity)
-        && isString(value.unit) && isString(value.unitPrice) && isString(value.discount) && isString(value.vat);
+        && isString(value.unit) && isString(value.unitPrice) && isString(value.discount) && isString(value.vat)
+        && (value.orderLine === undefined || (isRecord(value.orderLine) && typeof value.orderLine.lineId === 'number' && typeof value.orderLine.orderId === 'number'));
 }
 
 export function parseDraft(raw: string | null): InvoiceDraft | null {

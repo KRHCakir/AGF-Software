@@ -56,6 +56,8 @@ export interface CreatePurchaseInvoiceLineRequest {
     unitPrice: number;
     discountPercentage: number;
     vatPercentage: number;
+    // De orderregel die deze regel factureert (stap 4b); alleen bij een regel uit de bon.
+    supplyCommitmentLineId?: number;
 }
 
 export type OptionalFieldValues = Partial<Record<PurchaseOptionalField, string | number | null>>;
@@ -74,7 +76,13 @@ export interface CreatePurchaseInvoiceRequest extends OptionalFieldValues {
     // Goedkeuren van een AI-voorstel: de lezing en de door de gebruiker bevestigde inkooporder (alleen bij AI).
     aiExtractionId?: number;
     linkPurchaseOrderId?: number | null;
+    // Koppelen aan de bon (stap 4b): de keuze bij een prijsverschil, en de bevestiging bij meer dan besteld of ontvangen.
+    orderPriceDecision?: OrderPriceDecision;
+    acceptOverInvoicing?: boolean;
 }
+
+// Bij een prijsverschil met de bon: de prijs op de orderregel wordt de factuurprijs, of de bon blijft staan en het verschil wordt vastgelegd.
+export type OrderPriceDecision = 'AdjustOrder' | 'RecordDifference';
 
 export interface PurchaseInvoiceLine {
     id: number;
@@ -90,7 +98,15 @@ export interface PurchaseInvoiceLine {
     lineTotal: number;
     vatPercentage: number;
     vatAmount: number;
+    // Stap 4b (ontbreekt in oudere antwoorden): de orderregel en order die deze regel factureert, met de prijs die op de bon stond.
+    supplyCommitmentLineId?: number | null;
+    purchaseOrderId?: number | null;
+    purchaseOrderNumber?: string | null;
+    supplierReference?: string | null;
+    orderUnitPrice?: number | null;
 }
+
+export interface PurchaseInvoiceOrder { id: number; orderNumber: string; supplierReference: string | null; documentStatus: string }
 
 // Op een factuur uit een AI-voorstel: wie het goedkeurde, met welk model (ontbreekt in oudere antwoorden en bij handmatige invoer).
 export interface PurchaseInvoiceAiReading {
@@ -125,6 +141,9 @@ export interface PurchaseInvoice extends OptionalFieldValues {
     createdAt: string;
     internalNote: string | null;
     lines: PurchaseInvoiceLine[];
+    // Stap 4b (ontbreekt in oudere antwoorden): de gekoppelde inkooporders en wat er met een prijsverschil gebeurde.
+    purchaseOrders?: PurchaseInvoiceOrder[];
+    orderPriceDecision?: OrderPriceDecision | null;
 }
 
 export function isPurchaseVendor(value: unknown): value is PurchaseVendor {
