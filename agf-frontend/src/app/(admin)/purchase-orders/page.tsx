@@ -54,6 +54,8 @@ function PurchaseOrdersWorkspace() {
     const [query, setQuery] = useState(searchParams.get('query') ?? '');
     const [debounced, setDebounced] = useState(query.trim());
     const [status, setStatus] = useState(query.trim() === '' ? 'open' : 'all');
+    // Documentstatus (stap 4a): leeg = alle, anders Open of Definitive.
+    const [documentFilter, setDocumentFilter] = useState('');
     const [vendorId, setVendorId] = useState('');
     // Filter "Ordernummer leverancier": alleen op dat nummer (zonder spaties en streepjes), los van het brede zoekveld.
     const [reference, setReference] = useState('');
@@ -80,7 +82,7 @@ function PurchaseOrdersWorkspace() {
         const handle = setTimeout(() => { setDebounced(query.trim()); setDebouncedReference(reference.trim()); }, 250);
         return () => clearTimeout(handle);
     }, [query, reference]);
-    useEffect(() => { setPage(1); }, [debounced, debouncedReference, status, vendorId]);
+    useEffect(() => { setPage(1); }, [debounced, debouncedReference, status, vendorId, documentFilter]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -91,11 +93,11 @@ function PurchaseOrdersWorkspace() {
     useEffect(() => {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        listPurchaseOrders({ query: debounced, status, vendorId: vendorId === '' ? null : Number(vendorId), supplierReference: debouncedReference, page, pageSize: PAGE_SIZE }, controller.signal)
+        listPurchaseOrders({ query: debounced, status, vendorId: vendorId === '' ? null : Number(vendorId), supplierReference: debouncedReference, document: documentFilter, page, pageSize: PAGE_SIZE }, controller.signal)
             .then((data) => setList({ status: 'ready', data }))
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [debounced, debouncedReference, status, vendorId, page, reloadToken]);
+    }, [debounced, debouncedReference, status, vendorId, documentFilter, page, reloadToken]);
 
     useEffect(() => {
         if (selectedId === null) { setDetail(null); return; }
@@ -138,7 +140,7 @@ function PurchaseOrdersWorkspace() {
 
             <PendingCommandsBanner commands={commands} onGoTo={(command) => { if (isPurchaseCommand(command)) open(command.orderId); }} />
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6">
                 <div className="sm:col-span-2">
                     <label htmlFor="po-search" className="text-xs font-medium text-gray-700">{t('po_search')}</label>
                     <input id="po-search" data-tour="po-search" type="search" value={query} onChange={(event) => changeQuery(event.target.value)} placeholder={t('po_search_placeholder')} className={inputClass} />
@@ -149,6 +151,14 @@ function PurchaseOrdersWorkspace() {
                         <option value="open">{t('po_filter_open')}</option>
                         <option value="all">{t('po_filter_all')}</option>
                         {PURCHASE_ORDER_STATUSES.map((value) => <option key={value} value={value}>{t(ORDER_STATUS_LABEL_KEYS[value])}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor="po-document" className="text-xs font-medium text-gray-700">{t('po_document_filter')}</label>
+                    <select id="po-document" data-tour="po-filter-document" value={documentFilter} onChange={(event) => setDocumentFilter(event.target.value)} className={inputClass}>
+                        <option value="">{t('po_document_filter_all')}</option>
+                        <option value="Open">{t('po_document_open')}</option>
+                        <option value="Definitive">{t('po_document_definitive')}</option>
                     </select>
                 </div>
                 <div>
@@ -165,7 +175,7 @@ function PurchaseOrdersWorkspace() {
 
             {list.status === 'loading' && <LoadingRows label={t('po_loading')} />}
             {list.status === 'error' && <ErrorState error={list.error} onRetry={() => setReloadToken((n) => n + 1)} />}
-            {list.status === 'ready' && list.data.items.length === 0 && (debounced === '' && debouncedReference === '' && vendorId === '' && (status === 'open' || status === 'all')
+            {list.status === 'ready' && list.data.items.length === 0 && (debounced === '' && debouncedReference === '' && vendorId === '' && documentFilter === '' && (status === 'open' || status === 'all')
                 // Nog niets gezocht of gefilterd: er zijn (open) inkooporders nog niet, de eerste stap is er een aanmaken.
                 ? <EmptyState testId="po-empty" title={t(status === 'open' ? 'po_empty_open_title' : 'po_empty_title')} description={t('po_empty_text')}
                     action={<FirstStepLink href="/purchase-orders/new" label={t('nav_purchase_order_new')} />} />

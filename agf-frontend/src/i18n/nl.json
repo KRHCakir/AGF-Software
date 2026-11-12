@@ -2647,10 +2647,12 @@
   "po_change_added": "toegevoegd",
   "po_change_removed": "verwijderd",
   "po_change_empty": "leeg",
-  "po_history_edited": "Aangepast door {actor} ({count} wijzigingen)",
-  "po_history_finalized": "Definitief gemaakt door {actor}",
-  "po_history_finalized_invoice": "Definitief door een gekoppelde factuur ({actor})",
-  "po_history_corrected": "Correctie door {actor}: {reason}",
+  "po_history_edited": "Aangepast ({count} wijzigingen)",
+  "po_history_finalized": "Definitief gemaakt",
+  "po_history_finalized_invoice": "Definitief door een gekoppelde factuur",
+  "po_history_corrected": "Correctie: {reason}",
   "po_edit_partij_kept": "Een partij gaat nooit van een order af; kies eventueel een andere partij.",
-  "po_not_found": "Deze inkooporder bestaat niet (meer)."
+  "po_not_found": "Deze inkooporder bestaat niet (meer).",
+  "chain_order_document_open": "Open (aanpasbaar)",
+  "chain_order_document_definitive": "Definitief"
 }

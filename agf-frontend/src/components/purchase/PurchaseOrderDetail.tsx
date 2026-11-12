@@ -12,7 +12,8 @@ import { getPurchaseOrder } from '../../services/purchaseOrderService';
 import PartijLinkPanel from '../partij/PartijLinkPanel';
 import ChainStrip from '../shared/ChainStrip';
 import { primaryButtonClass } from '../supply/SuccessPanel';
-import { InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import { DocumentStatusBadge, InvoiceIndicatorBadge, OrderStatusBadge } from './PurchaseOrderBadges';
+import PurchaseOrderDocument, { PurchaseOrderChanges } from './PurchaseOrderDocument';
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
@@ -53,11 +54,13 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     {receivable && (
                         <Link href={`/receipts?order=${order.id}`} data-tour="po-receive" className={`${primaryButtonClass} ml-auto`}>{t('po_receive')}</Link>
                     )}
-                    <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><span data-tour="po-invoice-indicator" data-tour-key={order.invoiceIndicator}><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span></span>
+                    <span className="flex flex-wrap gap-1"><OrderStatusBadge status={order.status} /><DocumentStatusBadge status={order.documentStatus} /><span data-tour="po-invoice-indicator" data-tour-key={order.invoiceIndicator}><InvoiceIndicatorBadge indicator={order.invoiceIndicator} /></span></span>
                 </div>
                 <p className="mt-1 break-words text-sm text-gray-900">
                     <span className="font-medium">{order.vendorName ?? '–'}</span>
                 </p>
+                {/* Documentstatus (stap 4a): Aanpassen en Definitief maken, of definitief met Correctie. */}
+                <PurchaseOrderDocument order={order} onChanged={onChanged} />
                 {order.partijId ? (
                     <p className="text-sm text-gray-900" data-tour="po-partij">
                         {t('partij_field')}{' '}
@@ -190,6 +193,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                         </li>
                     ))}
                 </ol>
+                <PurchaseOrderChanges order={order} />
             </section>
         </article>
     );
@@ -208,6 +212,9 @@ function historyText(event: PurchaseOrderHistoryEvent, t: (key: string, values?:
         case 'CreditNoteRecorded': return t('po_history_credit_note', { number: event.reference ?? '–' });
         case 'Rejected': return t('po_history_rejected', { quantity: qty(event.quantity ?? 0), reason: label(REASON_LABEL_KEYS, event.reason), decision: label(DECISION_LABEL_KEYS, event.decision) });
         case 'DeviationRecorded': return t('po_history_deviation', { quantity: qty(event.quantity ?? 0), pallet: event.reference ?? '–' });
+        case 'Edited': return t('po_history_edited', { actor: event.actorReference ?? '–', count: String(event.quantity ?? 0) });
+        case 'Finalized': return t(event.reference === 'Invoice' ? 'po_history_finalized_invoice' : 'po_history_finalized', { actor: event.actorReference ?? '–' });
+        case 'Corrected': return t('po_history_corrected', { actor: event.actorReference ?? '–', reason: event.reason ?? '–' });
         default: return event.type;
     }
 }

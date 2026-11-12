@@ -2647,10 +2647,12 @@
   "po_change_added": "added",
   "po_change_removed": "removed",
   "po_change_empty": "empty",
-  "po_history_edited": "Edited by {actor} ({count} changes)",
-  "po_history_finalized": "Made definitive by {actor}",
-  "po_history_finalized_invoice": "Definitive by a linked invoice ({actor})",
-  "po_history_corrected": "Correction by {actor}: {reason}",
+  "po_history_edited": "Edited ({count} changes)",
+  "po_history_finalized": "Made definitive",
+  "po_history_finalized_invoice": "Definitive by a linked invoice",
+  "po_history_corrected": "Correction: {reason}",
   "po_edit_partij_kept": "A lot is never removed from an order; choose another lot if needed.",
-  "po_not_found": "This purchase order does not exist (any more)."
+  "po_not_found": "This purchase order does not exist (any more).",
+  "chain_order_document_open": "Open (editable)",
+  "chain_order_document_definitive": "Definitive"
 }
