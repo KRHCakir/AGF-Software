@@ -49,6 +49,8 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         answer = () => json(200, order({ editVersion: 3 }));
         globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
             if (init?.method === 'PUT') { puts.push({ url: String(input), body: String(init.body) }); return answer(); }
+            // De dubbelcontrole van het ordernummer vindt de order zelf: bij aanpassen is dat geen dubbel.
+            if (String(input).includes('/by-supplier-reference')) return json(200, [{ id: 5, orderNumber: 'IO-2026-0005', supplierReference: '45-21', orderedOn: '2026-11-10' }]);
             return json(200, { suggestion: null, format: 'Own' });
         }) as typeof fetch;
         mounted = new Mounted();
@@ -62,6 +64,8 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         assert.equal(field('lines[0].expectedQuantity-input').value, '221');
         assert.equal(field('lines[0].unitPrice-input').value, '12,50');
         assert.ok(mounted.hasText('po_edit_save'));
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 400)); });
+        assert.equal(testId('supplier-reference-duplicate'), null, 'its own number is no duplicate');
 
         await type('lines[0].unitPrice-input', '13');
         await act(async () => { field('lines[0].unitPrice-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });

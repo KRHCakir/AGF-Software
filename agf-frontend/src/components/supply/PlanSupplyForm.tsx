@@ -436,7 +436,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                         onChange={(event) => updateHeader('supplierReference', event.target.value)} className={`${inputClass} font-mono`} aria-describedby="supplierReference-hint" />
                     <span id="supplierReference-hint" className="block text-xs text-gray-500">{t('po_supplier_reference_hint')}</span>
                     <FieldError id="supplierReference" messages={e('supplierReference')} />
-                    <SupplierReferenceNotice supplierReference={header.supplierReference} vendorId={header.vendorId === '' ? null : Number(header.vendorId)} />
+                    <SupplierReferenceNotice supplierReference={header.supplierReference} vendorId={header.vendorId === '' ? null : Number(header.vendorId)} excludeOrderId={edit?.orderId ?? null} />
                 </div>
                 <div>
                     <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
