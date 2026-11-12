@@ -42,6 +42,16 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Update(int id, [FromBody] UpdatePurchaseOrderDto request) =>
             this.ToActionResult(await _service.UpdateAsync(id, request, HttpContext?.RequestAborted ?? default));
 
+        [HttpPost("{id:int}/finalize")]
+        public async Task<IActionResult> Finalize(int id, [FromBody] FinalizePurchaseOrderDto request) =>
+            this.ToActionResult(await _service.FinalizeAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // Correctie na definitief: reden verplicht; prijs per regel, ordernummer van de leverancier en notitie. Beleid Inkoop (nu mag
+        // elke gebruiker alles; een aparte beheerdersrol kan hier later op).
+        [HttpPost("{id:int}/corrections")]
+        public async Task<IActionResult> Correct(int id, [FromBody] CorrectPurchaseOrderDto request) =>
+            this.ToActionResult(await _service.CorrectAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         [HttpPost("{id:int}/invoice-refs")]
         public async Task<IActionResult> AddInvoiceRef(int id, [FromBody] AddPurchaseOrderInvoiceRefDto request) =>
             this.ToActionResult(await _service.AddInvoiceRefAsync(id, request, HttpContext?.RequestAborted ?? default));
