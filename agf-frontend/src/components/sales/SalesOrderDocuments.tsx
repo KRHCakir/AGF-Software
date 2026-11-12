@@ -17,6 +17,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 // verstuurd: dat doet deel 3. Bekijken, Downloaden en Afdrukken halen de PDF van precies die versie op.
 
 const MAX_PLATE = 32;
+const CLEANUP_MS = 60_000;
 
 // "2026-11-13T06:30" (datetime-local, tijd van de browser) naar een UTC-tijdstip; leeg = de leverdatum zonder tijd.
 export function loadAtFromInput(value: string): string | null {
@@ -44,6 +45,9 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
         target?.close();
         throw caught;
     }
+    // De URL en een eventueel afdrukframe worden na een minuut opgeruimd: de browser heeft de PDF dan al geladen.
+    let frame: HTMLIFrameElement | null = null;
+    setTimeout(() => { URL.revokeObjectURL(url); frame?.remove(); }, CLEANUP_MS);
     if (mode === 'view') {
         target!.location.href = url;
     } else if (mode === 'download') {
@@ -53,20 +57,23 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
         link.click();
     } else {
         // Afdrukken: de PDF in een onzichtbaar frame laden en de afdrukdialoog van de browser openen.
-        const frame = window.document.createElement('iframe');
-        frame.style.position = 'fixed';
-        frame.style.width = '0';
-        frame.style.height = '0';
-        frame.style.border = '0';
-        frame.src = url;
-        frame.onload = () => frame.contentWindow?.print();
-        window.document.body.appendChild(frame);
+        const printFrame = window.document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        printFrame.src = url;
+        printFrame.onload = () => printFrame.contentWindow?.print();
+        window.document.body.appendChild(printFrame);
+        frame = printFrame;
     }
 }
 
 export default function SalesOrderDocuments({ order, onConfirmed }: { order: SalesOrder; onConfirmed?: () => void }) {
     const { t, locale } = useTranslation();
-    const [data, setData] = useState<Documents | null>(null);
+    const [loaded, setData] = useState<Documents | null>(null);
+    // Alleen gegevens van de getoonde order; na een orderwissel blijven die van de vorige order nooit zichtbaar.
+    const data = loaded !== null && loaded.salesOrderId === order.id ? loaded : null;
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
@@ -75,7 +82,21 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
     const [loadAt, setLoadAt] = useState('');
     const [plate, setPlate] = useState('');
     const [showOlder, setShowOlder] = useState(false);
+    const [popupBlocked, setPopupBlocked] = useState(false);
     const cancelled = order.status === 'Cancelled';
+
+    // Een andere order: formulierstatus en meldingen van de vorige order wissen.
+    useEffect(() => {
+        setData(null);
+        setLoadError(null);
+        setError(null);
+        setPopupBlocked(false);
+        setAsking(false);
+        setEditing(false);
+        setLoadAt('');
+        setPlate('');
+        setShowOlder(false);
+    }, [order.id]);
 
     // Opnieuw ophalen na elke wijziging van de order (versie): een nieuwe reservering kan een nieuwe versie van de laadbon geven.
     useEffect(() => {
@@ -99,7 +120,6 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
             setBusy(false);
         }
     };
-    const [popupBlocked, setPopupBlocked] = useState(false);
     const pdf = (document: SalesOrderDocument, mode: 'view' | 'download' | 'print') => {
         setError(null);
         setPopupBlocked(false);
