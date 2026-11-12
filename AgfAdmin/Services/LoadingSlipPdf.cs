@@ -45,7 +45,7 @@ namespace AgfAdmin.Services
         // (PurchaseLineMath.Round2), zodat de laadbon hetzelfde aantal pallets toont als de order zelf; afkappen zou 0,96 op de order en 0,95
         // op de bon geven.
         public static string Pallets(decimal? value) => value == null ? "–" : PurchaseLineMath.Round2(value.Value).ToString("N2", Dutch);
-        public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.#", Dutch);
+        public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.###", Dutch);
 
         private static string LocalTime(DateTime utc, bool withTime) =>
             TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), AmsterdamBusinessCalendar.Zone).ToString(withTime ? "dd-MM-yyyy HH:mm" : "dd-MM-yyyy", Dutch);
@@ -81,6 +81,8 @@ namespace AgfAdmin.Services
                     {
                         // Het logo komt uit de snapshot (bytes van het moment van die versie), niet uit een bestand dat later kan veranderen.
                         if (!string.IsNullOrWhiteSpace(slip.LogoImage)) company.Item().Width(110).Image(Convert.FromBase64String(slip.LogoImage));
+                        // Oudere snapshots hebben alleen het pad (LogoPath): dan het bestand lezen als het er nog is.
+                        else if (!string.IsNullOrWhiteSpace(slip.LogoPath) && File.Exists(slip.LogoPath)) company.Item().Width(110).Image(File.ReadAllBytes(slip.LogoPath));
                         company.Item().Text(slip.CompanyName).Bold().FontSize(11);
                         if (slip.CompanyAddress != null) company.Item().Text(slip.CompanyAddress).FontSize(8);
                     });
