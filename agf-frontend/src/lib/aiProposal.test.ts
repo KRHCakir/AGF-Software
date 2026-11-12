@@ -16,10 +16,10 @@ export const extraction = (over: Partial<AiExtraction> = {}): AiExtraction => ({
         vendorName: 'Fruitimport Zuid B.V.', vendorVatNumber: null, vendorRegistrationNumber: null, vendorIban: 'NL91ABNA0417164300', supplierOrderNumber: '45-21',
         invoiceNumber: 'F-2026-118', invoiceDate: '2026-11-10', currency: 'USD',
         lines: [
-            { description: 'Avocado Hass 4 kg', quantity: 1250, unitText: 'dozen', unit: 'box', unitPrice: 12.5, amount: 15625, vatPercentage: 9 },
-            { description: null, quantity: 1, unitText: null, unit: null, unitPrice: 0.1234, amount: 0.12, vatPercentage: null },
+            { description: 'Avocado Hass 4 kg', quantity: 1250, unitText: 'dozen', unit: 'box', unitPrice: 12.5, amount: 15625, vatPercentage: 9, discountPercentage: 0 },
+            { description: null, quantity: 1, unitText: null, unit: null, unitPrice: 0.1234, amount: 0.12, vatPercentage: null, discountPercentage: 0 },
         ],
-        totalNet: 15625.12, totalVat: 1406.25, totalGross: 17031.37,
+        totalNet: 15625.12, totalVat: 1406.25, totalGross: 17031.37, documentDiscount: null, documentDiscountPercentage: null,
     },
     problems: [{ field: 'lines[1].description', code: 'missing' }, { field: 'vendor', code: 'uncertain' }, { field: 'vendor', code: 'uncertain' }],
     matches: { vendorCandidates: [{ vendorId: 3, name: 'Leverancier 3', matchedOn: ['iban'] }], suggestedVendorId: 3, orderCandidates: [], suggestedOrderId: null, duplicateInvoice: null, lineCostArticles: [] },
@@ -43,6 +43,16 @@ describe('aiProposal', () => {
         assert.deepEqual(draftFromProposal(extraction({ proposal: null }), settings, [], '2026-11-12').lines.length, 1);
     });
 
+    test('the discount per line goes into the form, also when a discount on the total was spread over the lines', () => {
+        const base = extraction().proposal!;
+        const withDiscount = extraction({ proposal: { ...base, documentDiscount: 172.19, documentDiscountPercentage: 3,
+            lines: [{ ...base.lines[0], discountPercentage: 7.85 }, { ...base.lines[1], discountPercentage: 3 }] } });
+        assert.deepEqual(draftFromProposal(withDiscount, settings, [vendor(3)], '2026-11-12').lines.map((line) => line.discount), ['7,85', '3']);
+        assert.deepEqual(draftFromProposal(extraction(), settings, [vendor(3)], '2026-11-12').lines.map((line) => line.discount), ['0', '0'], 'no discount stays 0');
+        const odd = extraction({ proposal: { ...base, lines: [{ ...base.lines[0], discountPercentage: 33.3333 }] } });
+        assert.equal(draftFromProposal(odd, settings, [vendor(3)], '2026-11-12').lines[0].discount, '33,3333', 'more than two decimals stays visible as read');
+    });
+
     test('problems are keyed by the input field, once per code; the description sits in the item field', () => {
         assert.deepEqual(problemsByField(extraction()), { 'lines[1].item': ['missing'], vendorId: ['uncertain'] });
         assert.deepEqual(problemsByField(null), {});
@@ -52,5 +62,7 @@ describe('aiProposal', () => {
         assert.equal(needsAttention(extraction()), false);
         assert.equal(needsAttention(extraction({ problems: [{ field: 'totalNet', code: 'linesMismatch' }] })), true);
         assert.equal(needsAttention(extraction({ problems: [{ field: 'invoiceNumber', code: 'missing' }] })), true);
+        assert.equal(needsAttention(extraction({ problems: [{ field: 'documentDiscount', code: 'discountNotSpread' }] })), true, 'a discount on the total that was not spread');
+        assert.deepEqual(problemsByField(extraction({ problems: [{ field: 'lines[0].discountPercentage', code: 'uncertain' }] })), { 'lines[0].discountPercentage': ['uncertain'] });
     });
 });

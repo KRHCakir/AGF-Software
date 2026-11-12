@@ -25,6 +25,7 @@ namespace AgfAdmin.Services.DocumentAi
         public const string GrossMismatch = "grossMismatch"; // excl. + btw is niet het totaal incl.
         public const string LineMismatch = "lineMismatch";   // aantal x prijs is niet het regelbedrag
         public const string InvalidDate = "invalidDate";
+        public const string DiscountNotSpread = "discountNotSpread"; // korting op het totaal niet precies over de regels te verdelen
 
         public const decimal DefaultMonthlyLimitEur = 25m;
         public const decimal MaxMonthlyLimitEur = 100_000m;
@@ -34,11 +35,12 @@ namespace AgfAdmin.Services.DocumentAi
         {
             ["leverancier"] = "vendor", ["factuurnummer"] = "invoiceNumber", ["datum"] = "invoiceDate", ["valuta"] = "currency",
             ["ordernummer_leverancier"] = "supplierOrderNumber", ["totaal_excl"] = "totalNet", ["btw_totaal"] = "totalVat", ["totaal_incl"] = "totalGross",
-            ["leverancier_btw"] = "vendor", ["leverancier_kvk"] = "vendor", ["leverancier_iban"] = "vendor",
+            ["leverancier_btw"] = "vendor", ["leverancier_kvk"] = "vendor", ["leverancier_iban"] = "vendor", ["korting_totaal"] = "documentDiscount",
         };
         private static readonly Dictionary<string, string> LineKeys = new()
         {
             ["omschrijving"] = "description", ["aantal"] = "quantity", ["eenheid"] = "unit", ["prijs"] = "unitPrice", ["bedrag"] = "amount", ["btw_percentage"] = "vatPercentage",
+            ["korting_percentage"] = "discountPercentage",
         };
         // Een twijfel bij deze velden of het ontbreken ervan laat het vangnet lezen; de rest is alleen een gele markering.
         private static readonly HashSet<string> Required = new() { "vendor", "invoiceNumber", "invoiceDate", "totalNet", "totalGross" };
@@ -62,6 +64,32 @@ namespace AgfAdmin.Services.DocumentAi
         public static decimal? Number(JsonNode node) => node is JsonValue value && value.TryGetValue(out decimal number) ? number : null;
         public static DateOnly? Date(JsonNode node) =>
             DateOnly.TryParseExact(Text(node) ?? "", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+
+        // De korting op een regel zoals gelezen (0 als er geen staat of als het geen geldig percentage is: dan rekent de controle zonder).
+        public static decimal LineDiscount(JsonObject line) => Number(line["korting_percentage"]) is decimal d && d > 0m && d < 100m ? d : 0m;
+
+        // De korting op het totaal zoals gelezen (excl. btw); 0 als er geen is.
+        public static decimal DocumentDiscount(JsonObject proposal) => Number(proposal["korting_totaal"]) is decimal d && d > 0m ? d : 0m;
+
+        // De korting per regel voor het formulier. Het formulier kent alleen een korting per regel; een korting op het totaal gaat daarom mee in
+        // elke regel (5% op de regel en 3% op het totaal is 7,85%), maar alleen als dat precies kan: de korting is een percentage met hoogstens
+        // twee decimalen van de som van de regels (3% van 5.739,60 = 172,19) en elke samengestelde korting heeft hoogstens twee decimalen. Dan
+        // ook het percentage van de korting op het totaal; anders null en blijft alleen de korting per regel staan (de controle meldt dat).
+        public static (List<decimal> Lines, decimal? DocumentPercentage) FormDiscounts(JsonObject proposal)
+        {
+            var lines = (proposal["regels"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().ToList();
+            var own = lines.Select(LineDiscount).ToList();
+            var discount = DocumentDiscount(proposal);
+            var amounts = lines.Select(l => Number(l["bedrag"])).ToList();
+            if (discount == 0m || lines.Count == 0 || amounts.Any(a => a == null)) return (own, null);
+            var sum = amounts.Sum(a => a.Value);
+            if (sum <= 0m || discount >= sum) return (own, null);
+            var percentage = decimal.Round(discount / sum * 100m, 2, MidpointRounding.AwayFromZero);
+            if (percentage <= 0m || Math.Abs(decimal.Round(sum * percentage / 100m, 2, MidpointRounding.AwayFromZero) - discount) > 0.01m) return (own, null);
+            var combined = own.Select(d => 100m - (100m - d) * (100m - percentage) / 100m).ToList();
+            if (combined.Any(c => decimal.Round(c, 2) != c)) return (own, null);
+            return (combined.Select(c => decimal.Round(c, 2)).ToList(), percentage);
+        }
 
         // Alle controles op een geldig voorstel (zie ExtractionSchema). Ontbrekende waarden blijven leeg: niets wordt aangevuld of verzonnen.
         public static List<ReadingProblem> Problems(JsonObject proposal)
@@ -89,8 +117,9 @@ namespace AgfAdmin.Services.DocumentAi
                 if (amount == null) Add($"lines[{i}].amount", Missing, false);
                 // Zonder btw-percentage wordt de btw-controle overgeslagen: markeren, geen vangnet (verlegde btw/export kent geen percentage).
                 if (Number(line["btw_percentage"]) == null) Add($"lines[{i}].vatPercentage", Missing, false);
-                // Een korting op de regel kan het bedrag lager maken dan aantal x prijs: alleen markeren, geen vangnet.
-                if (quantity != null && price != null && amount != null && Math.Abs(quantity.Value * price.Value - amount.Value) > Math.Max(Tolerance, Math.Abs(amount.Value) * 0.005m))
+                // Aantal x prijs, min de korting op de regel, is het regelbedrag. Klopt dat niet: alleen markeren, geen vangnet.
+                if (quantity != null && price != null && amount != null
+                    && Math.Abs(quantity.Value * price.Value * (1m - LineDiscount(line) / 100m) - amount.Value) > Math.Max(Tolerance, Math.Abs(amount.Value) * 0.005m))
                 {
                     Add($"lines[{i}].amount", LineMismatch, false);
                 }
@@ -103,16 +132,22 @@ namespace AgfAdmin.Services.DocumentAi
             if (gross == null) Add("totalGross", Missing, true);
             // Zonder btw-totaal worden de btw- en bruto-controle overgeslagen: markeren. Geen vangnet, want een factuur zonder btw (verlegd, export) heeft dit veld legitiem niet.
             if (vat == null) Add("totalVat", Missing, false);
+            // De regels min de korting op het totaal zijn het totaal excl. btw.
             var amounts = lines.Select(l => Number(l["bedrag"])).ToList();
-            if (net != null && lines.Count > 0 && amounts.All(a => a != null) && Math.Abs(amounts.Sum(a => a.Value) - net.Value) > Tolerance)
+            var documentDiscount = DocumentDiscount(proposal);
+            var linesSum = amounts.All(a => a != null) ? amounts.Sum(a => a.Value) : 0m;
+            if (net != null && lines.Count > 0 && amounts.All(a => a != null) && Math.Abs(linesSum - documentDiscount - net.Value) > Tolerance)
             {
                 Add("totalNet", LinesMismatch, true);
             }
+            if (documentDiscount > 0m && FormDiscounts(proposal).DocumentPercentage == null) Add("documentDiscount", DiscountNotSpread, false);
             var rates = lines.Select(l => Number(l["btw_percentage"])).ToList();
             if (vat != null && lines.Count > 0 && amounts.All(a => a != null) && rates.All(r => r != null))
             {
-                // Btw per regel afgerond; afronding op documentniveau mag één cent per regel schelen.
-                var expected = amounts.Zip(rates, (a, r) => decimal.Round(a.Value * r.Value / 100m, 2, MidpointRounding.AwayFromZero)).Sum();
+                // Btw per regel afgerond; afronding op documentniveau mag één cent per regel schelen. Een korting op het totaal verlaagt de
+                // grondslag van elke regel naar verhouding (de btw over 5.177,96 in plaats van 5.338,10).
+                var factor = documentDiscount > 0m && linesSum > 0m ? (linesSum - documentDiscount) / linesSum : 1m;
+                var expected = amounts.Zip(rates, (a, r) => decimal.Round(a.Value * factor * r.Value / 100m, 2, MidpointRounding.AwayFromZero)).Sum();
                 if (Math.Abs(expected - vat.Value) > Math.Max(Tolerance, 0.01m * lines.Count)) Add("totalVat", VatMismatch, true);
             }
             if (net != null && vat != null && gross != null && Math.Abs(net.Value + vat.Value - gross.Value) > Tolerance) Add("totalGross", GrossMismatch, true);

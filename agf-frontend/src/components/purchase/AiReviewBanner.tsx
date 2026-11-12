@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatMoney } from '../../lib/availability';
+import { formatDecimalInput } from '../../lib/decimal';
 import { needsAttention } from '../../lib/aiProposal';
 import type { AiExtraction } from '../../types/aiReading';
 import OrderNumberText from './OrderNumberText';
@@ -79,6 +80,14 @@ export default function AiReviewBanner({ extraction, vendorId, onVendor, linkOrd
                     {t('ai_document_totals', { net: money(proposal.totalNet), vat: money(proposal.totalVat), gross: money(proposal.totalGross), currency: proposal.currency ?? '' })}
                 </p>
             )}
+            {/* Korting op het totaal: het formulier kent alleen een korting per regel. Verdeeld: uitleg; niet precies te verdelen: geel, de gebruiker vult hem in. */}
+            {proposal && proposal.documentDiscount !== null && (proposal.documentDiscountPercentage !== null
+                ? <p className="text-xs text-gray-700" data-testid="ai-document-discount">
+                    {t('ai_document_discount', { percentage: formatDecimalInput(proposal.documentDiscountPercentage, 2), amount: money(proposal.documentDiscount), currency: proposal.currency ?? '' })}
+                </p>
+                : <p role="alert" className="rounded border border-amber-300 bg-amber-100 px-2 py-1 text-xs text-amber-950" data-testid="ai-document-discount-manual">
+                    ⚠ {t('ai_document_discount_manual', { amount: money(proposal.documentDiscount), currency: proposal.currency ?? '' })}
+                </p>)}
         </section>
     );
 }

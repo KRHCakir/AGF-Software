@@ -28,6 +28,8 @@ export interface AiLineProposal {
     unitPrice: number | null;
     amount: number | null;
     vatPercentage: number | null;
+    // De korting voor het formulier: die op de regel, met een verdeelde korting op het totaal erbij; 0 is geen.
+    discountPercentage: number;
 }
 
 export interface AiInvoiceProposal {
@@ -43,6 +45,9 @@ export interface AiInvoiceProposal {
     totalNet: number | null;
     totalVat: number | null;
     totalGross: number | null;
+    // Korting op het totaal zoals op de factuur (excl. btw), of null. Het percentage alleen als die over de regels verdeeld is.
+    documentDiscount: number | null;
+    documentDiscountPercentage: number | null;
 }
 
 export interface AiProblem { field: string; code: string }
@@ -77,11 +82,12 @@ export interface AiExtraction {
 }
 
 const isLine = (value: unknown): value is AiLineProposal => isObject(value) && isNullableString(value.description) && isNullableNumber(value.quantity)
-    && isNullableNumber(value.unitPrice) && isNullableNumber(value.amount) && isNullableNumber(value.vatPercentage);
+    && isNullableNumber(value.unitPrice) && isNullableNumber(value.amount) && isNullableNumber(value.vatPercentage) && isNumber(value.discountPercentage);
 
 const isProposal = (value: unknown): value is AiInvoiceProposal => isObject(value) && isNullableString(value.vendorName) && isNullableString(value.invoiceNumber)
     && isNullableString(value.invoiceDate) && isNullableString(value.currency) && isArrayOf(value.lines, isLine)
-    && isNullableNumber(value.totalNet) && isNullableNumber(value.totalVat) && isNullableNumber(value.totalGross);
+    && isNullableNumber(value.totalNet) && isNullableNumber(value.totalVat) && isNullableNumber(value.totalGross)
+    && isNullableNumber(value.documentDiscount) && isNullableNumber(value.documentDiscountPercentage);
 
 const isMatches = (value: unknown): value is AiMatches => isObject(value)
     && isArrayOf(value.vendorCandidates, (c): c is AiVendorCandidate => isObject(c) && isNumber(c.vendorId) && isString(c.name) && isArrayOf(c.matchedOn, isString))

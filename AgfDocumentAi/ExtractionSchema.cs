@@ -8,6 +8,13 @@ namespace AgfDocumentAi;
 public enum FieldKind { Text, Number, Money, Date }
 
 /// <summary>
+/// De delen van het schema bovenop de basis van de testbench: kenmerken van de leverancier en kortingen (alleen AgfAdmin). De testbench
+/// gebruikt alleen de basis, zodat zijn vingerafdruk (<see cref="ExtractionSchema.PromptHash"/>) en eerdere runs gelijk blijven.
+/// </summary>
+[Flags]
+public enum SchemaParts { Base = 0, SupplierIds = 1, Discounts = 2, Admin = SupplierIds | Discounts }
+
+/// <summary>
 /// Het vaste uitvoerformaat voor alle modellen: dezelfde velden, dezelfde namen, een ontbrekend veld is null.
 /// Het schema wordt afgedwongen waar de aanbieder dat kan (structured output); <see cref="Validate"/> controleert het daarnaast altijd.
 /// </summary>
@@ -41,6 +48,20 @@ public static class ExtractionSchema
         "- leverancier_btw, leverancier_kvk, leverancier_iban: het btw-nummer, KvK- of handelsregisternummer en de IBAN van de leverancier " +
         "(de uitgever, niet wij), zoals ze op het document staan; een lege tekst als ze er niet op staan.\n";
 
+    /// <summary>
+    /// Kortingen (alleen AgfAdmin): per regel de korting in procenten, op de factuur de korting op het totaal als bedrag excl. btw. Een
+    /// getal, nooit null (0 is "geen korting"): zo tellen ze niet mee voor <see cref="MaxNullableFields"/>, dat met de basis al vol is.
+    /// </summary>
+    public const string LineDiscountField = "korting_percentage";
+    public const string DocumentDiscountField = "korting_totaal";
+
+    public const string DiscountInstruction =
+        "- korting_percentage (per regel): de korting in procenten die bij die regel staat (5 voor 5%), 0 als er geen staat; bedrag is dan " +
+        "het regelbedrag na die korting, zoals op de factuur.\n" +
+        "- korting_totaal: een korting op het totaal van de factuur (onder de regels, vóór de btw) als positief bedrag excl. btw, zoals op de " +
+        "factuur; 0 als die er niet is. Alleen als het totaal excl. btw daardoor lager is, dus geen betalingskorting die pas geldt bij snel " +
+        "betalen. Zet zo'n korting nooit als regel.\n";
+
     /// <summary>Grens van Anthropic voor velden met een union-type (zoals ["string","null"]) in een afgedwongen schema.</summary>
     public const int MaxNullableFields = 16;
 
@@ -64,11 +85,14 @@ public static class ExtractionSchema
     /// JSON Schema in de subset die Anthropic, Gemini en Qwen alle drie aannemen: elk veld verplicht, null toegestaan.
     /// Anthropic weigert meer dan <see cref="MaxNullableFields"/> velden met een type-lijst; daarom is plek gewone tekst.
     /// </summary>
-    public static JsonObject Build() => Build(supplierIds: false);
+    public static JsonObject Build() => Build(SchemaParts.Base);
 
-    /// <param name="supplierIds">Met de tekstvelden <see cref="SupplierIdFields"/> (AgfAdmin); de testbench gebruikt ze niet.</param>
-    public static JsonObject Build(bool supplierIds)
+    /// <param name="parts">Met de tekstvelden <see cref="SupplierIdFields"/> en/of de kortingen (AgfAdmin); de testbench gebruikt ze niet.</param>
+    public static JsonObject Build(SchemaParts parts)
     {
+        var supplierIds = parts.HasFlag(SchemaParts.SupplierIds);
+        var discounts = parts.HasFlag(SchemaParts.Discounts);
+        static JsonObject PlainNumber() => new() { ["type"] = "number" };
         static JsonObject Field(FieldKind kind) => new() { ["type"] = new JsonArray(kind is FieldKind.Number or FieldKind.Money ? "number" : "string", "null") };
         static JsonObject Obj(IEnumerable<KeyValuePair<string, JsonNode?>> props)
         {
@@ -87,8 +111,9 @@ public static class ExtractionSchema
         return Obj(
             new KeyValuePair<string, JsonNode?>[] { new("soort", Enum(Kinds)) }
                 .Concat(Props(HeaderFields))
-                .Append(new("regels", new JsonObject { ["type"] = "array", ["items"] = Obj(Props(LineFields)) }))
+                .Append(new("regels", new JsonObject { ["type"] = "array", ["items"] = Obj(Props(LineFields).Concat(discounts ? [new KeyValuePair<string, JsonNode?>(LineDiscountField, PlainNumber())] : Array.Empty<KeyValuePair<string, JsonNode?>>())) }))
                 .Concat(Props(TotalFields))
+                .Concat(discounts ? [new KeyValuePair<string, JsonNode?>(DocumentDiscountField, PlainNumber())] : Array.Empty<KeyValuePair<string, JsonNode?>>())
                 .Concat(supplierIds ? SupplierIdFields.Select(f => new KeyValuePair<string, JsonNode?>(f, new JsonObject { ["type"] = "string" })) : [])
                 .Append(new("zekerheden", new JsonObject { ["type"] = "array", ["items"] = certainty })));
     }
@@ -104,19 +129,24 @@ public static class ExtractionSchema
         $"- Wij zijn {ourCompany.Trim()}. Een document dat wij ontvangen en moeten betalen is een inkoopfactuur; een document dat wij uitgeven is een verkoopfactuur; wij zijn nooit de leverancier van een inkoopfactuur.\n";
 
     /// <summary>Controleert de uitvoer van een model. Een ongeldige uitvoer telt als fout (de runner probeert één keer opnieuw).</summary>
-    public static JsonObject? Validate(string text, out string? error) => Validate(text, supplierIds: false, out error);
+    public static JsonObject? Validate(string text, out string? error) => Validate(text, SchemaParts.Base, out error);
 
-    public static JsonObject? Validate(string text, bool supplierIds, out string? error)
+    public static JsonObject? Validate(string text, SchemaParts parts, out string? error)
     {
+        var supplierIds = parts.HasFlag(SchemaParts.SupplierIds);
+        var discounts = parts.HasFlag(SchemaParts.Discounts);
+        string[] lineNumbers = discounts ? [LineDiscountField] : [];
+        string[] documentNumbers = discounts ? [DocumentDiscountField] : [];
         error = null;
         JsonNode? root;
         try { root = JsonNode.Parse(StripFence(text)); }
         catch (JsonException e) { error = $"geen geldige JSON: {e.Message}"; return null; }
         if (root is not JsonObject obj) { error = "geen JSON-object"; return null; }
         if (obj["soort"] is not JsonValue soort || !soort.TryGetValue(out string? kind) || !Kinds.Contains(kind)) error = "soort ontbreekt of is onbekend";
-        else error = CheckObject(obj, [.. HeaderFields, .. TotalFields], ["soort", "regels", "zekerheden", .. (supplierIds ? SupplierIdFields : [])], "")
+        else error = CheckObject(obj, [.. HeaderFields, .. TotalFields], ["soort", "regels", "zekerheden", .. (supplierIds ? SupplierIdFields : []), .. documentNumbers], "")
             ?? (supplierIds ? SupplierIdFields.Where(f => obj[f] is not JsonValue v || !v.TryGetValue(out string? _)).Select(f => $"{f} is geen tekst").FirstOrDefault() : null)
-            ?? CheckArray(obj, "regels", (item, prefix) => CheckObject(item, LineFields, [], prefix))
+            ?? CheckNumbers(obj, documentNumbers, "")
+            ?? CheckArray(obj, "regels", (item, prefix) => CheckObject(item, LineFields, lineNumbers, prefix) ?? CheckNumbers(item, lineNumbers, prefix))
             ?? CheckArray(obj, "zekerheden", CheckCertainty);
         return error == null ? obj : null;
     }
@@ -137,6 +167,10 @@ public static class ExtractionSchema
         }
         return null;
     }
+
+    // Velden die altijd een getal zijn (de kortingen): null of tekst is fout.
+    private static string? CheckNumbers(JsonObject obj, string[] names, string prefix) =>
+        names.Where(name => obj[name] is not JsonValue value || value.GetValueKind() != JsonValueKind.Number).Select(name => $"{prefix}{name} is geen getal").FirstOrDefault();
 
     private static string? CheckArray(JsonObject obj, string name, Func<JsonObject, string, string?> checkItem)
     {

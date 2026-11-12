@@ -50,6 +50,7 @@ public sealed class FakeDocumentAi : IDocumentAiFactory, IDocumentAI
         Calls.Add(_model);
         LastDocument = document;
         Assert.Contains("leverancier_iban", instruction);
+        Assert.Contains("korting_totaal", instruction);
         return Task.FromResult(_script[_model].Dequeue()());
     }
 }
