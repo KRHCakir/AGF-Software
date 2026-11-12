@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using AgfAdmin.Controllers;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
@@ -210,6 +211,17 @@ public class IncomingInvoicesControllerTests
         var stock = Assert.Single(await verify.Inventory.ToListAsync());
         Assert.Equal(inventoryId, stock.Id);
         Assert.Equal(10, stock.Quantity);
+    }
+
+    // De oude upload gaf nagebootste gegevens; die route is weg (410) en maakt niets aan: uploaden gaat via Inkoopfactuur invoeren.
+    [Fact]
+    public async Task Upload_Is_Gone_And_Creates_No_Mock_Invoice()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        await using var db = CreateContext(databaseName);
+        var result = Assert.IsType<ObjectResult>(CreateController(db).UploadInvoice(null));
+        Assert.Equal(StatusCodes.Status410Gone, result.StatusCode);
+        Assert.Empty(db.IncomingInvoices);
     }
 
     [Fact]

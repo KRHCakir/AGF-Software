@@ -58,23 +58,10 @@ namespace AgfAdmin.Controllers
 
         // POST: api/IncomingInvoices/upload
         [HttpPost("upload")]
-        public async Task<ActionResult<IncomingInvoice>> UploadInvoice(IFormFile file)
-        {
-            if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
-
-            // Simulation: Save file to temp path
-            var tempPath = Path.GetTempFileName() + Path.GetExtension(file.FileName);
-            using (var stream = new FileStream(tempPath, FileMode.Create))
-            {
-                await file.CopyToAsync(stream);
-            }
-
-            // Process
-            var invoice = await _emailService.ProcessEmailAttachmentAsync(tempPath, "manual-upload@user.com");
-            
-            return CreatedAtAction("GetIncomingInvoice", new { id = invoice.Id }, invoice);
-        }
+        public ActionResult UploadInvoice(IFormFile file) =>
+            // De oude upload gaf nagebootste gegevens; uploaden en laten lezen gaat nu via Inkoopfactuur invoeren
+            // (POST api/purchase-invoices/ai/extractions), met een voorstel dat de gebruiker goedkeurt.
+            StatusCode(StatusCodes.Status410Gone, new { message = "Upload a purchase invoice at Inkoopfactuur invoeren (POST api/purchase-invoices/ai/extractions)." });
 
         // POST: api/IncomingInvoices/manual
         [HttpPost("manual")]
