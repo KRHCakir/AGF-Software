@@ -139,7 +139,7 @@ namespace AgfAdmin.Services
             return new SalesOrderTransportDto
             {
                 SalesOrderId = order.Id, Exists = transport != null, Mode = transport?.Mode, CarrierRelationId = transport?.CarrierRelationId,
-                CarrierName = transport?.CarrierRelation?.Name, CarrierAddress = TransportOrderBuilder.AddressText(TransportOrderBuilder.MainAddress(transport?.CarrierRelation)),
+                CarrierName = transport?.CarrierRelation?.Name, CarrierAddress = TransportOrderBuilder.AddressText(TransportOrderBuilder.CarrierAddress(transport?.CarrierRelation)),
                 LoadingPlace = transport?.LoadingPlace, DefaultLoadingPlace = TransportOrderBuilder.LoadingPlace(null, settings),
                 UnloadingAddressId = transport?.UnloadingAddressId, UnloadingPlace = transport?.UnloadingPlace,
                 DefaultUnloadingPlace = TransportOrderBuilder.UnloadingPlace(order, new SalesOrderTransport { UnloadingAddress = transport?.UnloadingAddress }),

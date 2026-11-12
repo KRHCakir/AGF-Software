@@ -79,6 +79,12 @@ public class TransportOrderServiceTests : IDisposable
         var order = TransportOrderBuilder.Deserialize(json);
         Assert.Equal(("Transport Zeeland B.V.", "Kade 1, 4382 AA Vlissingen, NL", false), (order.CarrierName, order.CarrierAddress, order.OwnTransport));
         Assert.Equal("Customer T, DC Noord, Havenweg 4, 9723 AB Groningen, NL", order.UnloadingPlace);
+        // Alleen een standaard afleveradres of een hoofdadres als terugval: een ander afleveradres nooit.
+        await using (var db = _factory.CreateContext())
+        {
+            var other = await db.Relations.Include(r => r.Addresses).SingleAsync(r => r.Name == "Iemand anders");
+            Assert.Null(TransportOrderBuilder.DeliveryAddress(other));
+        }
         Assert.Equal(("PO-778", "LR-55", 2m, "Europallet"), (order.UnloadingReference, order.LoadingReference, order.TemperatureC, order.PalletKind));
         // Een rij per orderregel: 50 dozen en 10 colli bij 252 per pallet (niet afgerond); bruto uit het artikel (4,3 kg per verpakking).
         Assert.Equal(new[] { (50m, "Avocado · Hass · 4kg Box", "I", "PE", (decimal?)(50m / 252m), (decimal?)215m), (10m, "Avocado · Hass · 4kg Box", "I", "PE", 10m / 252m, 43m) },
