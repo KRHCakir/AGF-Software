@@ -7,6 +7,7 @@ namespace AgfAdmin.DTOs
     }
 
     // Correctie van een definitieve order: reden verplicht; alleen prijs per regel, ordernummer van de leverancier en notitie.
+    // Een weggelaten (null) veld blijft ongewijzigd; een lege tekst wist ordernummer of notitie. Een regel zonder prijs blijft ongewijzigd.
     public sealed class CorrectPurchaseOrderDto
     {
         public Guid? RequestId { get; set; }

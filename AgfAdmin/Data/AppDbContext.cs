@@ -612,7 +612,7 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed",
                         "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR "
-                        + "(\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
+                        + "(\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
                     t.HasCheckConstraint(
                         "CK_SupplyCommitments_Route_CustomerLink",
                         "(\"Route\" <> 'DirectTrade' OR \"CustomerId\" IS NOT NULL) AND (\"Route\" <> 'Warehouse' OR \"CustomerId\" IS NULL)");
