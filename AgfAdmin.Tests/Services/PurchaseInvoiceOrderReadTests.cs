@@ -1,4 +1,5 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Models;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 
@@ -120,5 +121,23 @@ public class PurchaseInvoiceOrderReadTests : IDisposable
         // Een nieuwe open magazijnorder kan bij een verschil worden aangepast.
         await OrderAsync("NP-FRESH");
         Assert.True((await WithOrdersAsync(s => s.InvoiceCandidatesAsync(_seed.VendorId, "NP-FRESH", null))).Single().PriceAdjustable);
+    }
+
+    [Fact]
+    public async Task An_order_with_only_an_old_invoice_reference_is_not_offered_without_a_search_term()
+    {
+        var legacy = await OrderAsync("NP-LEGACY");
+        await using (var db = _factory.CreateContext())
+        {
+            db.SupplyCommitmentInvoiceRefs.Add(new SupplyCommitmentInvoiceRef
+            {
+                RequestId = Guid.NewGuid(), SupplyCommitmentId = legacy.Id, Kind = PurchaseOrderRules.KindInvoice, InvoiceNumber = "F-OLD", InvoiceNumberKey = "F-OLD",
+                ActorReference = "test", CreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Empty(await WithOrdersAsync(s => s.InvoiceCandidatesAsync(_seed.VendorId, null, null)));
+        Assert.Equal(new[] { legacy.Id }, (await WithOrdersAsync(s => s.InvoiceCandidatesAsync(_seed.VendorId, "NP-LEGACY", null))).Select(c => c.Id));
     }
 }
