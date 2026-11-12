@@ -5,8 +5,7 @@ using AgfAdmin.Models;
 
 namespace AgfAdmin.Services
 {
-    // De transportopdracht (documenten deel 2) voor de vervoerder: wat er waar geladen en gelost wordt. Een snapshot per versie, zoals de
-    // laadbon; de PDF komt altijd uit die snapshot. Nooit een prijs, bedrag, tarief of btw: alleen aantallen, pallets en kilo's.
+    // De transportopdracht (documenten deel 2): een snapshot per versie, zoals de laadbon. Nooit een prijs, bedrag, tarief of btw.
     public sealed record TransportOrderSnapshot(
         string Language, string CompanyName, string CompanyAddress, string LogoImage,
         bool OwnTransport, string CarrierName, string CarrierAddress,
@@ -25,8 +24,7 @@ namespace AgfAdmin.Services
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-        // De order moet geladen zijn met klant (relatie met adressen), regels (artikel, product), emballage (kostenartikel) en het transport
-        // (vervoerder met adressen, gekozen losadres). Zonder transport is er geen opdracht.
+        // De order is geladen met klant (relatie, adressen), regels, emballage en transport (vervoerder, losadres).
         public static TransportOrderSnapshot Build(SalesOrder order, CompanySettings settings)
         {
             var transport = order.Transport ?? throw new InvalidOperationException($"Sales order {order.OrderNumber} has no transport.");
@@ -73,8 +71,7 @@ namespace AgfAdmin.Services
             LoadingSlipBuilder.Blank(transport?.LoadingPlace) ?? LoadingSlipBuilder.Blank(settings.LoadingSlipWarehouseAddress)
             ?? string.Join(", ", new[] { settings.CompanyName, settings.Address }.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()));
 
-        // De losplaats: een afwijkend adres gaat voor; anders het gekozen adres van de klant, anders haar standaard afleveradres, anders haar
-        // hoofdadres. Altijd met de naam van de klant ervoor.
+        // De losplaats: een afwijkend adres, anders het gekozen adres, het standaard afleveradres of het hoofdadres, met de klantnaam ervoor.
         public static string UnloadingPlace(SalesOrder order, SalesOrderTransport transport)
         {
             var free = LoadingSlipBuilder.Blank(transport?.UnloadingPlace);

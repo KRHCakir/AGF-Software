@@ -6,9 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AgfAdmin.Services
 {
-    // Transport op een verkooporder (documenten deel 2): vervoerder of eigen transport, laad- en losplaats en de gegevens voor de
-    // transportopdracht. Na opslaan maakt de verversing van de documenten (filter op de controller) de opdracht of een nieuwe versie,
-    // als de order bevestigd is. Wie en wanneer komt uit CurrentUser, nooit van de client.
+    // Transport op een verkooporder (documenten deel 2). Na opslaan maakt het filter op de controller de transportopdracht of een nieuwe
+    // versie (als de order bevestigd is). Wie en wanneer komt uit CurrentUser.
     public sealed class SalesOrderTransportService(AppDbContext db, ICurrentUser user = null)
     {
         public const string CancelledCode = "cancelled";
@@ -125,7 +124,7 @@ namespace AgfAdmin.Services
             return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));
         }
 
-        // Transport weghalen kan zolang er nog geen transportopdracht is; daarna alleen nog wijzigen (een nieuwe versie).
+        // Weghalen kan zolang er geen transportopdracht is.
         public async Task<ServiceResult<SalesOrderTransportDto>> DeleteAsync(int orderId, CancellationToken cancellationToken = default)
         {
             var order = await LoadAsync(orderId, tracking: true, cancellationToken);
