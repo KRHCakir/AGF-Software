@@ -59,6 +59,13 @@ public class LoadingSlipPdfTests
     }
 
     [Fact]
+    public void Pallets_are_cut_off_at_two_decimals_never_rounded()
+    {
+        Assert.Equal("0,95", LoadingSlipPdf.Pallets(0.959m));
+        Assert.Equal("23,81", LoadingSlipPdf.Pallets(23.819m));
+    }
+
+    [Fact]
     public void Customer_and_supplier_column_follow_the_setting_and_an_empty_plate_is_a_line_to_fill_in()
     {
         var (text, _) = Read(Slip(showCustomer: false, showSupplier: false));

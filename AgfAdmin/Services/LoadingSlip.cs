@@ -33,7 +33,7 @@ namespace AgfAdmin.Services
     // prijzen, bedragen of btw (ook niet van de emballage): die horen niet op een document voor de loods.
     public sealed record LoadingSlipSnapshot(
         string Language, bool ShowCustomer, bool ShowSupplier,
-        string CompanyName, string CompanyAddress, string LogoPath,
+        string CompanyName, string CompanyAddress, string LogoImage,
         string CustomerName, string Position, string OrderNumber, string CustomerReference,
         DateTime RequestedDeliveryDate, DateTime? LoadAt, string LicensePlate,
         List<LoadingSlipRow> Rows, List<LoadingSlipPackagingRow> Packaging,
@@ -89,7 +89,7 @@ namespace AgfAdmin.Services
             return new LoadingSlipSnapshot(
                 SalesOrderDocumentRules.Languages.Contains(settings.LoadingSlipLanguage) ? settings.LoadingSlipLanguage : SalesOrderDocumentRules.LanguageEnglish,
                 settings.LoadingSlipShowCustomer, settings.LoadingSlipShowSupplier,
-                settings.CompanyName, Blank(settings.Address), Blank(settings.LogoPath),
+                settings.CompanyName, Blank(settings.Address), LogoImageOf(settings.LogoPath),
                 settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.SalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
                 Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : Second(order.LoadAt.Value), Blank(order.LicensePlate),
                 rows, packaging, rows.Sum(r => r.Quantity), pallets.Count == 0 ? null : pallets.Sum(), kgs.Count == 0 ? null : kgs.Sum(),
@@ -106,6 +106,10 @@ namespace AgfAdmin.Services
         // Op de seconde en als UTC: een datum uit de database (zonder Kind, met minder precisie) geeft zo dezelfde bon en dus geen nieuwe versie.
         private static DateTime Second(DateTime value) =>
             DateTime.SpecifyKind(new DateTime(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+
+        // De inhoud van het logo (base64) gaat mee in de snapshot, zodat een oude versie niet verandert als het bestand wordt vervangen of verdwijnt.
+        private static string LogoImageOf(string path) =>
+            !string.IsNullOrWhiteSpace(path) && File.Exists(path) ? Convert.ToBase64String(File.ReadAllBytes(path)) : null;
 
         private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         private static string Join(string vendor, string lot) =>
