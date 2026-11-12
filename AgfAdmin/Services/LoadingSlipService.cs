@@ -36,7 +36,8 @@ namespace AgfAdmin.Services
             var now = DateTime.UtcNow;
             order.ConfirmedAt = now;
             order.ConfirmedBy = Actor();
-            order.LoadAt = Utc(request?.LoadAt);
+            // Een eerder ingevulde laadtijd (via het transport) blijft staan als bij bevestigen geen nieuwe is opgegeven.
+            order.LoadAt = Utc(request?.LoadAt) ?? order.LoadAt;
             order.LicensePlate = plate;
             order.UpdatedAt = now;
             // De laadbon, en de transportopdracht als er transport is ingevuld: beide versie 1.

@@ -39,8 +39,11 @@ namespace AgfAdmin.Services
                     LoadingSlipBuilder.Blank(variant?.OriginCountryCode) ?? LoadingSlipBuilder.Blank(variant?.Origin), PurchaseLineMath.Pallets(line.Quantity, perPallet), GrossKg(line));
             }).ToList();
             var packaging = order.PackagingLines.OrderBy(p => p.Id).Select(p => new LoadingSlipPackagingRow(p.Quantity, p.CostArticle?.Name)).ToList();
+            // Een totaal alleen als alle regels een waarde hebben; anders zou een deelsom als totaal van de hele zending gelden.
             var spaces = rows.Where(r => r.PalletSpaces != null).Select(r => r.PalletSpaces.Value).ToList();
             var gross = rows.Where(r => r.GrossKg != null).Select(r => r.GrossKg.Value).ToList();
+            var spacesComplete = rows.Count > 0 && spaces.Count == rows.Count;
+            var grossComplete = rows.Count > 0 && gross.Count == rows.Count;
             var own = transport.Mode == SalesTransportRules.ModeOwn;
             return new TransportOrderSnapshot(
                 SalesOrderDocumentRules.Languages.Contains(settings.TransportOrderLanguage) ? settings.TransportOrderLanguage : SalesOrderDocumentRules.LanguageEnglish,
@@ -51,7 +54,7 @@ namespace AgfAdmin.Services
                 transport.UnloadDate == null ? null : DateTime.SpecifyKind(transport.UnloadDate.Value.Date, DateTimeKind.Utc), transport.TemperatureC,
                 LoadingSlipBuilder.Blank(transport.LoadingReference), LoadingSlipBuilder.Blank(transport.UnloadingReference) ?? LoadingSlipBuilder.Blank(order.CustomerReference),
                 LoadingSlipBuilder.Blank(transport.Remarks), LoadingSlipBuilder.Blank(transport.PalletKind) ?? LoadingSlipBuilder.Blank(settings.TransportOrderPalletKind) ?? SalesTransportRules.DefaultPalletKind,
-                rows, packaging, rows.Sum(r => r.Quantity), spaces.Count == 0 ? null : spaces.Sum(), gross.Count == 0 ? null : gross.Sum(),
+                rows, packaging, rows.Sum(r => r.Quantity), spacesComplete ? spaces.Sum() : null, grossComplete ? gross.Sum() : null,
                 LoadingSlipBuilder.Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy);
         }
 
