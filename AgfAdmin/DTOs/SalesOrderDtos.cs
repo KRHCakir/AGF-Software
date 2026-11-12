@@ -83,6 +83,9 @@ namespace AgfAdmin.DTOs
         public string ActorReference { get; set; }
         public DateTime CreatedAt { get; set; }
         public int Version { get; set; }
+        // Bevestigd (documenten deel 1): wanneer en door wie; leeg zolang de order niet bevestigd is.
+        public DateTime? ConfirmedAt { get; set; }
+        public string ConfirmedBy { get; set; }
         // Alleen gevuld bij Status Cancelled; de actor komt uit het SalesOrderCancelled-event.
         public DateTime? CancelledAt { get; set; }
         public string CancelReason { get; set; }

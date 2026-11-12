@@ -38,6 +38,13 @@ namespace AgfAdmin.Models
         // Idempotentiesleutel van het annuleringscommando (uniek); de vrijgaven die eruit volgen dragen deze sleutel in hun event-snapshot.
         public Guid? CancelRequestId { get; set; }
 
+        // Bevestigd (documenten deel 1): wanneer en door wie (CurrentUser); daarna maakt het systeem de laadbon (SalesOrderDocument). Vast
+        // zodra gezet (TraceabilityGuard regel 31). Laden op en kenteken staan op de laadbon en mogen daarna nog veranderen (nieuwe versie).
+        public DateTime? ConfirmedAt { get; set; }
+        public string ConfirmedBy { get; set; }
+        public DateTime? LoadAt { get; set; }            // UTC, datum en tijd van laden; leeg = de leverdatum zonder tijd
+        public string LicensePlate { get; set; }         // kenteken; leeg = met de hand invullen op de bon
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -47,5 +54,7 @@ namespace AgfAdmin.Models
         public ICollection<SalesOrderLine> Lines { get; set; } = new List<SalesOrderLine>();
         // Emballage (pallets, kratten) naast de goederen; doet niets met de voorraad (zie SalesOrderPackagingLine).
         public ICollection<SalesOrderPackagingLine> PackagingLines { get; set; } = new List<SalesOrderPackagingLine>();
+        // Documenten bij deze order (laadbon, later transportopdracht), elke versie apart en nooit gewijzigd.
+        public ICollection<SalesOrderDocument> Documents { get; set; } = new List<SalesOrderDocument>();
     }
 }

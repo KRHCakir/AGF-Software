@@ -932,6 +932,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Partij)
+                .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.Partij)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DispatchLine).ThenInclude(d => d.SalesDispatch).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
@@ -972,6 +973,8 @@ namespace AgfAdmin.Services
             ActorReference = order.ActorReference,
             CreatedAt = DateTime.SpecifyKind(order.CreatedAt, DateTimeKind.Utc),
             Version = order.Version,
+            ConfirmedAt = order.ConfirmedAt == null ? null : DateTime.SpecifyKind(order.ConfirmedAt.Value, DateTimeKind.Utc),
+            ConfirmedBy = order.ConfirmedBy,
             CancelledAt = order.CancelledAt == null ? null : DateTime.SpecifyKind(order.CancelledAt.Value, DateTimeKind.Utc),
             CancelReason = order.CancelReason,
             CancelledBy = order.Status == ReservationRules.OrderStatusCancelled ? cancelledBy : null,

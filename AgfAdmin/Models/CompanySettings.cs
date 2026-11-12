@@ -24,6 +24,11 @@ namespace AgfAdmin.Models
         public int PurchaseInvoiceDefaultPaymentTermsDays { get; set; } = Services.PurchaseInvoiceRules.DefaultPaymentTermsDays;
         public string PurchaseInvoiceDefaultCurrency { get; set; } = Services.PurchaseInvoiceRules.DefaultCurrency;
 
+        // Laadbon (documenten deel 1): taal van de kopteksten (en, voor later ook nl), klantnaam en leverancierskolom op de bon.
+        public string LoadingSlipLanguage { get; set; } = Services.SalesOrderDocumentRules.LanguageEnglish;
+        public bool LoadingSlipShowCustomer { get; set; } = true;
+        public bool LoadingSlipShowSupplier { get; set; } = true;
+
         // Link naar de GLOBALG.A.P. Supply Chain Portal voor de handmatige GGN-controle (absolute https-URL; alleen een link).
         public string GlobalGapPortalUrl { get; set; } = Services.RelationRules.DefaultGlobalGapPortalUrl;
 

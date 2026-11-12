@@ -271,6 +271,23 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("KvkNumber")
                         .HasColumnType("text");
 
+                    b.Property<string>("LoadingSlipLanguage")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasDefaultValue("en");
+
+                    b.Property<bool>("LoadingSlipShowCustomer")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("LoadingSlipShowSupplier")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("LogoPath")
                         .HasColumnType("text");
 
@@ -4407,6 +4424,13 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfirmedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4420,6 +4444,13 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("InternalNote")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("LicensePlate")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("LoadAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("OrderNumber")
                         .IsRequired()
@@ -4474,6 +4505,8 @@ namespace AgfAdmin.Migrations
                         {
                             t.HasCheckConstraint("CK_SalesOrders_CancelledConsistent", "\"Status\" <> 'Cancelled' OR (\"CancelledAt\" IS NOT NULL AND \"CancelReason\" IS NOT NULL AND length(trim(\"CancelReason\")) > 0)");
 
+                            t.HasCheckConstraint("CK_SalesOrders_Confirmed", "(\"ConfirmedAt\" IS NULL) = (\"ConfirmedBy\" IS NULL)");
+
                             t.HasCheckConstraint("CK_SalesOrders_OrderSequence_Positive", "\"OrderSequence\" > 0");
 
                             t.HasCheckConstraint("CK_SalesOrders_Status_Allowed", "\"Status\" IN ('Open', 'Cancelled')");
@@ -4526,6 +4559,72 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("SalesOrderId");
 
                     b.ToTable("SalesOrderAuditEvents");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SentBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesOrderId", "Kind", "Version")
+                        .IsUnique();
+
+                    b.ToTable("SalesOrderDocuments", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesOrderDocuments_Sent", "(\"SentAt\" IS NULL) = (\"SentBy\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_SalesOrderDocuments_Version", "\"Version\" >= 1");
+                        });
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
@@ -6367,6 +6466,17 @@ namespace AgfAdmin.Migrations
                     b.Navigation("SalesOrder");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderDocument", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany("Documents")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
                 {
                     b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
@@ -6842,6 +6952,8 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
                 {
+                    b.Navigation("Documents");
+
                     b.Navigation("Lines");
 
                     b.Navigation("PackagingLines");

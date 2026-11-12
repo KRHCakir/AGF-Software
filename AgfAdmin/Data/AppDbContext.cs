@@ -70,6 +70,7 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
         public DbSet<SalesOrderPackagingLine> SalesOrderPackagingLines { get; set; }
+        public DbSet<SalesOrderDocument> SalesOrderDocuments { get; set; }
         public DbSet<SalesOrderAuditEvent> SalesOrderAuditEvents { get; set; }
         public DbSet<SalesDispatch> SalesDispatches { get; set; }
         public DbSet<SalesDispatchLine> SalesDispatchLines { get; set; }
@@ -479,6 +480,9 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
                 b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
                 b.Property(c => c.GlobalGapPortalUrl).IsRequired().HasMaxLength(500).HasDefaultValue(RelationRules.DefaultGlobalGapPortalUrl);
+                b.Property(c => c.LoadingSlipLanguage).IsRequired().HasMaxLength(2).HasDefaultValue(SalesOrderDocumentRules.LanguageEnglish);
+                b.Property(c => c.LoadingSlipShowCustomer).HasDefaultValue(true);
+                b.Property(c => c.LoadingSlipShowSupplier).HasDefaultValue(true);
                 b.Property(c => c.PartijNumberMode).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ModeAuto);
                 b.Property(c => c.PartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultFormat);
                 b.Property(c => c.PartijSequenceReset).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ResetYearly);
@@ -1092,6 +1096,25 @@ namespace AgfAdmin.Data
                 b.ToTable(t => t.HasCheckConstraint("CK_VendorGgns_Ggn_Length", "length(\"Ggn\") = 13"));
             });
 
+            // Documenten bij een verkooporder (documenten deel 1): één rij per versie, append-only (regel 31).
+            modelBuilder.Entity<SalesOrderDocument>(b =>
+            {
+                b.Property(d => d.Kind).IsRequired().HasMaxLength(32);
+                b.Property(d => d.Number).IsRequired().HasMaxLength(32);
+                b.Property(d => d.Reason).IsRequired().HasMaxLength(32);
+                b.Property(d => d.SnapshotJson).IsRequired();
+                b.Property(d => d.ContentHash).IsRequired().HasMaxLength(64);
+                b.Property(d => d.CreatedBy).IsRequired().HasMaxLength(100);
+                b.Property(d => d.SentBy).HasMaxLength(100);
+                b.HasOne(d => d.SalesOrder).WithMany(o => o.Documents).HasForeignKey(d => d.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(d => new { d.SalesOrderId, d.Kind, d.Version }).IsUnique();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesOrderDocuments_Version", "\"Version\" >= 1");
+                    t.HasCheckConstraint("CK_SalesOrderDocuments_Sent", "(\"SentAt\" IS NULL) = (\"SentBy\" IS NULL)");
+                });
+            });
+
             modelBuilder.Entity<SalesOrder>(b =>
             {
                 b.Property(o => o.Status).IsRequired().HasMaxLength(32);
@@ -1103,6 +1126,9 @@ namespace AgfAdmin.Data
                 b.Property(o => o.InternalNote).HasMaxLength(1000);
                 b.Property(o => o.ActorReference).IsRequired().HasMaxLength(100);
                 b.Property(o => o.CancelReason).HasMaxLength(500);
+                b.Property(o => o.ConfirmedBy).HasMaxLength(100);
+                b.Property(o => o.LicensePlate).HasMaxLength(32);
+                b.ToTable(t => t.HasCheckConstraint("CK_SalesOrders_Confirmed", "(\"ConfirmedAt\" IS NULL) = (\"ConfirmedBy\" IS NULL)"));
                 b.Property(o => o.Version).IsConcurrencyToken();
                 b.HasIndex(o => o.RequestId).IsUnique();
                 // NULL telt als verschillend: alleen geannuleerde orders hebben een sleutel.
