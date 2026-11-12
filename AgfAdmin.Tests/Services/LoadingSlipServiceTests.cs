@@ -185,8 +185,11 @@ public class LoadingSlipServiceTests : IDisposable
         var settings = await RunAsync(s => s.GetSettingsAsync());
         Assert.Equal(("en", true, true), (settings.Language, settings.ShowCustomer, settings.ShowSupplier));
         Assert.Contains("language", (await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "de" }))).Errors.Keys);
-        var updated = await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "NL", ShowCustomer = false, ShowSupplier = true }));
-        Assert.Equal(("nl", false, true), (updated.Value.Language, updated.Value.ShowCustomer, updated.Value.ShowSupplier));
+        var updated = await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "NL", ShowCustomer = false, ShowSupplier = true, WarehouseAddress = "  Koelhuis Zuid, Havenweg 4, Ridderkerk " }));
+        Assert.Equal(("nl", false, true, "Koelhuis Zuid, Havenweg 4, Ridderkerk"), (updated.Value.Language, updated.Value.ShowCustomer, updated.Value.ShowSupplier, updated.Value.WarehouseAddress));
+        Assert.Contains("warehouseAddress", (await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "en", WarehouseAddress = new string('A', 301) }))).Errors.Keys);
+        // Leeg = weer het bedrijfsadres.
+        Assert.Null((await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "en", WarehouseAddress = " " }))).Value.WarehouseAddress);
     }
 
     [Fact]

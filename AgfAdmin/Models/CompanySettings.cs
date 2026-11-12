@@ -28,8 +28,8 @@ namespace AgfAdmin.Models
         public string LoadingSlipLanguage { get; set; } = Services.SalesOrderDocumentRules.LanguageEnglish;
         public bool LoadingSlipShowCustomer { get; set; } = true;
         public bool LoadingSlipShowSupplier { get; set; } = true;
-        // Waar de goederen daadwerkelijk geladen worden (naam en adres van de loods). Leeg = de loods zit op het bedrijfsadres.
-        public string? LoadingSlipWarehouseAddress { get; set; }
+        // De loods op de laadbon: naam en adres van waar echt geladen wordt. Leeg = de loods zit op het bedrijfsadres.
+        public string LoadingSlipWarehouseAddress { get; set; }
 
         // Link naar de GLOBALG.A.P. Supply Chain Portal voor de handmatige GGN-controle (absolute https-URL; alleen een link).
         public string GlobalGapPortalUrl { get; set; } = Services.RelationRules.DefaultGlobalGapPortalUrl;

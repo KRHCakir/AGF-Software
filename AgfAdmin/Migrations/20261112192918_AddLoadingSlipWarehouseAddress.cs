@@ -1,14 +1,10 @@
-using AgfAdmin.Data;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace AgfAdmin.Migrations
 {
     /// <inheritdoc />
-    [DbContext(typeof(AppDbContext))]
-    [Migration("20261112200000_AddLoadingSlipWarehouseAddress")]
     public partial class AddLoadingSlipWarehouseAddress : Migration
     {
         /// <inheritdoc />
@@ -17,7 +13,8 @@ namespace AgfAdmin.Migrations
             migrationBuilder.AddColumn<string>(
                 name: "LoadingSlipWarehouseAddress",
                 table: "CompanySettings",
-                type: "text",
+                type: "character varying(300)",
+                maxLength: 300,
                 nullable: true);
         }
 
