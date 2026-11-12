@@ -8,6 +8,7 @@ import { parseUnitPrice } from '../../lib/packaging';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { type PurchaseArticle, type PurchaseLineDraft, type PurchaseLineRow, isBlankPurchaseLine, purchaseLineTotals } from '../../lib/purchaseOrderLines';
+import { type LineLimits, lineLimits } from '../../lib/purchaseOrderEdit';
 import { unitLabelKey } from '../../lib/units';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
 import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
@@ -23,8 +24,9 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // maakt een nieuwe regel en zet de cursor in haar productveld; een lege regel telt bij opslaan niet mee. De knoppen (Bruto aanpassen,
 // Bruto van het artikel, ✕) staan buiten de Tab-volgorde, zoals de eigenaar wil en net als ⧉ en ✕ bij de inkoopfactuur; met het
 // toetsenbord bereik je ze vanuit elk veld van de regel met Alt+B (Bruto aanpassen), Alt+A (Nieuw artikel) en Alt+R (regel verwijderen), wat onder de tabel
-// staat. Een aangepaste bruto leegmaken zet de regel terug op de bruto van het artikel.
-export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra }: {
+// staat. Een aangepaste bruto leegmaken zet de regel terug op de bruto van het artikel. Bij aanpassen (stap 4a) zegt `limits` per regel
+// wat vastligt na ontvangst: dan staat de uitleg bij het veld (artikel vast, nooit onder ontvangen, regel blijft staan).
+export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined) }: {
     lines: PurchaseLineDraft[];
     rows: PurchaseLineRow[];
     products: ProductOption[];
@@ -37,6 +39,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
     onRemove: (key: string) => void;
     onNewArticle?: (key: string) => void;
     productExtra: (line: PurchaseLineDraft, index: number) => ReactNode;
+    limits?: (key: string) => LineLimits;
 }) {
     const { t, locale } = useTranslation();
     const labels = usePurchaseLineLabels();
@@ -77,7 +80,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         } else if (action === 'newArticle' && onNewArticle) {
             event.preventDefault();
             onNewArticle(line.key);
-        } else if (action === 'removeLine' && lines.length > 1) {
+        } else if (action === 'removeLine' && lines.length > 1 && limits(line.key).removable) {
             event.preventDefault();
             onRemove(line.key);
             const next = Math.min(index, lines.length - 2);
@@ -103,16 +106,20 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         const variant = line.productVariantId === '' ? undefined : variantOf(Number(line.productVariantId));
                         const editingGross = line.grossKgEntered === true || grossOpen.has(line.key);
                         const last = isDirect ? 'lot' : 'price';
+                        const limit = limits(line.key);
                         return (
                             <tr key={line.key} className={purchaseLineRowClass(index)} data-tour="supply-line" data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
                                 <td {...lineCell('product', labels.product, 'w-64 max-md:w-auto', true)}>
                                     <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
                                     <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
-                                        value={line.productVariantId} disabled={locked} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
+                                        value={line.productVariantId} disabled={locked || limit.articleFixed} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
                                         describedBy={(errors(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
                                         onChange={(variantId) => onChange(line.key, { productVariantId: variantId })} />
                                     <FieldError id={`${prefix}.productVariantId`} messages={errors(`${prefix}.productVariantId`)} />
                                     <FieldError id={prefix} messages={errors(prefix)} />
+                                    {limit.articleFixed && (
+                                        <span className="mt-1 block text-xs text-gray-700" data-testid={`${prefix}.article-fixed`}>{t('po_edit_article_fixed')} {t('po_edit_not_removable')}</span>
+                                    )}
                                     {productExtra(line, index)}
                                 </td>
                                 <td {...lineCell('brand', labels.brand)} data-testid={`${prefix}.brand`}>{text(variant?.brand)}</td>
@@ -159,6 +166,9 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                                 {row.pallets === null ? t('po_line_no_packages_per_pallet') : t(palletWordKey(row.pallets), { pallets: formatPallets(row.pallets, locale) })}
                                             </span>
                                         )}
+                                        {limit.minimumQuantity !== null && (
+                                            <span className="block text-xs text-gray-700" data-testid={`${prefix}.minimum`}>{t('po_edit_min_quantity', { received: formatQuantity(limit.minimumQuantity, locale) })}</span>
+                                        )}
                                         <FieldError id={`${prefix}.expectedQuantity`} messages={errors(`${prefix}.expectedQuantity`)} />
                                         <FieldError id={`${prefix}.expectedUnit`} messages={errors(`${prefix}.expectedUnit`)} />
                                     </div>
@@ -183,7 +193,8 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     </td>
                                 )}
                                 <td className="px-2 py-1.5 max-md:block max-md:px-0 max-md:pt-1 max-md:text-right">
-                                    <button type="button" tabIndex={-1} title={`${t('supply_remove_line_n', { n: String(index + 1) })} (${shortcutLabel('removeLine', isMac)})`} onClick={() => onRemove(line.key)} disabled={locked || lines.length <= 1}
+                                    <button type="button" tabIndex={-1} title={limit.removable ? `${t('supply_remove_line_n', { n: String(index + 1) })} (${shortcutLabel('removeLine', isMac)})` : t('po_edit_not_removable')}
+                                        onClick={() => onRemove(line.key)} disabled={locked || lines.length <= 1 || !limit.removable}
                                         className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
                                 </td>
                             </tr>

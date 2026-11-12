@@ -13,6 +13,8 @@ export type RejectionReason = 'Quality' | 'Ripeness' | 'Temperature' | 'Damaged'
 export type RejectionDecision = 'ReturnToSupplier' | 'ClaimDiscount' | 'Dispose';
 
 export const MAX_SUPPLIER_REFERENCE_LENGTH = 100;
+// Notitie bij de order (PurchaseOrderRules.MaxNoteLength).
+export const MAX_NOTE_LENGTH = 1000;
 export const MAX_INVOICE_NUMBER_LENGTH = 100;
 
 // Ordernummer van de leverancier: dezelfde sleutel als het partijnummer (hoofdletterongevoelig, zonder spaties en streepjes), zodat
