@@ -56,6 +56,7 @@ namespace AgfAdmin.Services
         // deze stap nog niet; alleen de migratie zette orders met een factuurnummer al op definitief.
         public static PurchaseOrderChange Finalize(SupplyCommitment order, string via, string actor, DateTime now, Guid requestId)
         {
+            if (via != ViaManual && via != ViaInvoice) throw new ArgumentException($"A purchase order becomes definitive via {ViaManual} or {ViaInvoice}, not '{via}'.", nameof(via));
             if (IsDefinitive(order))
             {
                 return null;
