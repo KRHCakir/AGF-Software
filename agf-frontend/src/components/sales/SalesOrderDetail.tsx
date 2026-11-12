@@ -28,6 +28,7 @@ import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
 import SalesOrderDocuments from './SalesOrderDocuments';
+import SalesOrderTransport from './SalesOrderTransport';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
@@ -393,8 +394,9 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     </div>
                 )}
             </header>
-            {/* Bevestigen en de laadbon (documenten deel 1). */}
+            {/* Bevestigen, de laadbon (documenten deel 1) en het transport met de transportopdracht (deel 2). */}
             <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} />
+            <SalesOrderTransport order={order} onChanged={() => void onOrderChanged()} />
             <SalesStepBar order={order} />
 
             {dispatchNotice && (
