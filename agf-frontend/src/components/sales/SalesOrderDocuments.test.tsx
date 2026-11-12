@@ -6,6 +6,7 @@ import { Mounted, json, setValue } from '../../test/reactHarness.ts';
 import type { SalesOrder } from '../../types/salesOrder';
 import type { SalesOrderDocuments as Documents } from '../../types/salesOrderDocument';
 import LoadingSlipSetting from '../settings/LoadingSlipSetting';
+import TransportOrderSetting from '../settings/TransportOrderSetting';
 import SalesOrderDocuments, { inputFromLoadAt, loadAtFromInput } from './SalesOrderDocuments';
 
 // Documenten deel 1 op de verkooporder: Bevestigen (met laden op en kenteken) maakt de laadbon; Bekijken, Downloaden en Afdrukken halen de
@@ -198,5 +199,19 @@ describe('sales order documents (loading slip)', () => {
         await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
         await mounted.waitFor(() => calls.filter((call) => call.method === 'PUT').length === 2, 'saved again');
         assert.equal(JSON.parse(calls.filter((call) => call.method === 'PUT')[1].body!).warehouseAddress, 'Loods 2, Industrieweg 10, Barendrecht');
+    });
+
+    test('the transport order settings load (language and pallet kind) and save trimmed', async () => {
+        answer = (method) => json(200, method === 'PUT' ? { language: 'nl', palletKind: 'Europallet + Corners' } : { language: 'en', palletKind: 'Europallet' });
+        await mounted.render(<TransportOrderSetting />);
+        await settle();
+        assert.ok(calls[0].url.endsWith('/settings/transport-order'));
+        const kind = mounted.container.querySelector<HTMLInputElement>('#transport-order-pallet-kind')!;
+        assert.equal(kind.value, 'Europallet');
+        await act(async () => { const select = mounted.container.querySelector<HTMLSelectElement>('#transport-order-language')!; select.value = 'nl'; select.dispatchEvent(new window.Event('change', { bubbles: true })); });
+        await act(async () => { setValue(kind, ' Europallet + Corners '); });
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => mounted.hasText('loading_slip_saved'), 'saved');
+        assert.deepEqual(JSON.parse(calls.find((call) => call.method === 'PUT')!.body!), { language: 'nl', palletKind: 'Europallet + Corners' });
     });
 });
