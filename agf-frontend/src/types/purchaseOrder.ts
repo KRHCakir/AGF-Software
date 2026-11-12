@@ -372,3 +372,43 @@ export function isSupplierReferenceMatchList(value: unknown): value is PurchaseO
 export function isInvoiceMatchList(value: unknown): value is PurchaseOrderInvoiceMatch[] {
     return isArrayOf(value, (item): item is PurchaseOrderInvoiceMatch => isObject(item) && isNumber(item.id) && isString(item.orderNumber) && isString(item.kind));
 }
+
+// Orders van een leverancier om een inkoopfactuur aan te koppelen (GET purchase-orders/invoice-candidates, stap 4b): per regel besteld,
+// ontvangen, al gefactureerd en open, met de prijs op de bon. PriceAdjustable: bij een verschil kan de bon de factuurprijs krijgen.
+export interface InvoiceCandidateLine {
+    id: number;
+    productVariantId: number;
+    productName: string;
+    productVariantName: string;
+    unit: string | null;
+    expectedQuantity: number;
+    receivedQuantity: number;
+    invoicedQuantity: number;
+    openQuantity: number;
+    unitPrice: number | null;
+    partijNumber: string | null;
+}
+
+export interface InvoiceCandidate {
+    id: number;
+    orderNumber: string;
+    supplierReference: string | null;
+    orderedOn: string;
+    expectedAt: string | null;
+    partijNumber: string | null;
+    documentStatus: string;
+    route: string;
+    priceAdjustable: boolean;
+    invoiceNumbers: string[];
+    lines: InvoiceCandidateLine[];
+}
+
+const isCandidateLine = (value: unknown): value is InvoiceCandidateLine => typeof value === 'object' && value !== null
+    && typeof (value as InvoiceCandidateLine).id === 'number' && typeof (value as InvoiceCandidateLine).productVariantId === 'number'
+    && typeof (value as InvoiceCandidateLine).openQuantity === 'number' && typeof (value as InvoiceCandidateLine).invoicedQuantity === 'number';
+
+export function isInvoiceCandidateList(value: unknown): value is InvoiceCandidate[] {
+    return Array.isArray(value) && value.every((order) => typeof order === 'object' && order !== null && typeof (order as InvoiceCandidate).id === 'number'
+        && typeof (order as InvoiceCandidate).orderNumber === 'string' && typeof (order as InvoiceCandidate).priceAdjustable === 'boolean'
+        && Array.isArray((order as InvoiceCandidate).lines) && (order as InvoiceCandidate).lines.every(isCandidateLine));
+}
