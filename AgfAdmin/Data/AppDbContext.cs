@@ -71,6 +71,7 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
         public DbSet<SalesOrderPackagingLine> SalesOrderPackagingLines { get; set; }
         public DbSet<SalesOrderDocument> SalesOrderDocuments { get; set; }
+        public DbSet<SalesOrderTransport> SalesOrderTransports { get; set; }
         public DbSet<SalesOrderAuditEvent> SalesOrderAuditEvents { get; set; }
         public DbSet<SalesDispatch> SalesDispatches { get; set; }
         public DbSet<SalesDispatchLine> SalesDispatchLines { get; set; }
@@ -298,6 +299,11 @@ namespace AgfAdmin.Data
                 entry.Property(r => r.Version).CurrentValue = entry.Property(r => r.Version).OriginalValue + 1;
             }
 
+            foreach (var entry in ChangeTracker.Entries<SalesOrderTransport>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(t => t.Version).CurrentValue = entry.Property(t => t.Version).OriginalValue + 1;
+            }
+
             foreach (var entry in ChangeTracker.Entries<SalesOrder>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(o => o.Version).CurrentValue = entry.Property(o => o.Version).OriginalValue + 1;
@@ -484,6 +490,8 @@ namespace AgfAdmin.Data
                 b.Property(c => c.LoadingSlipShowCustomer).HasDefaultValue(true);
                 b.Property(c => c.LoadingSlipShowSupplier).HasDefaultValue(true);
                 b.Property(c => c.LoadingSlipWarehouseAddress).HasMaxLength(SalesOrderDocumentRules.MaxWarehouseAddressLength);
+                b.Property(c => c.TransportOrderLanguage).IsRequired().HasMaxLength(2).HasDefaultValue(SalesOrderDocumentRules.LanguageEnglish);
+                b.Property(c => c.TransportOrderPalletKind).IsRequired().HasMaxLength(SalesTransportRules.MaxPalletKindLength).HasDefaultValue(SalesTransportRules.DefaultPalletKind);
                 b.Property(c => c.PartijNumberMode).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ModeAuto);
                 b.Property(c => c.PartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultFormat);
                 b.Property(c => c.PartijSequenceReset).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ResetYearly);
@@ -1113,6 +1121,34 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_SalesOrderDocuments_Version", "\"Version\" >= 1");
                     t.HasCheckConstraint("CK_SalesOrderDocuments_Sent", "(\"SentAt\" IS NULL) = (\"SentBy\" IS NULL)");
+                });
+            });
+
+            // Transport van een verkooporder (documenten deel 2): hooguit één per order. Een vervoerder bij Carrier, nooit bij Own. Het
+            // gekozen losadres mag later van de klant verdwijnen (dan leeg); de transportopdracht bewaart haar eigen snapshot.
+            modelBuilder.Entity<SalesOrderTransport>(b =>
+            {
+                b.HasKey(t => t.SalesOrderId);
+                b.HasOne(t => t.SalesOrder).WithOne(o => o.Transport).HasForeignKey<SalesOrderTransport>(t => t.SalesOrderId).OnDelete(DeleteBehavior.Cascade);
+                b.HasOne(t => t.CarrierRelation).WithMany().HasForeignKey(t => t.CarrierRelationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(t => t.UnloadingAddress).WithMany().HasForeignKey(t => t.UnloadingAddressId).OnDelete(DeleteBehavior.SetNull);
+                b.Property(t => t.Mode).IsRequired().HasMaxLength(16);
+                b.Property(t => t.LoadingPlace).HasMaxLength(SalesTransportRules.MaxPlaceLength);
+                b.Property(t => t.UnloadingPlace).HasMaxLength(SalesTransportRules.MaxPlaceLength);
+                b.Property(t => t.UnloadDate).HasColumnType("date");
+                b.Property(t => t.TemperatureC).HasColumnType("decimal(4,1)");
+                b.Property(t => t.LoadingReference).HasMaxLength(SalesTransportRules.MaxReferenceLength);
+                b.Property(t => t.UnloadingReference).HasMaxLength(SalesTransportRules.MaxReferenceLength);
+                b.Property(t => t.Remarks).HasMaxLength(SalesTransportRules.MaxRemarksLength);
+                b.Property(t => t.PalletKind).HasMaxLength(SalesTransportRules.MaxPalletKindLength);
+                b.Property(t => t.CreatedBy).IsRequired().HasMaxLength(100);
+                b.Property(t => t.UpdatedBy).IsRequired().HasMaxLength(100);
+                b.Property(t => t.Version).IsConcurrencyToken();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesOrderTransports_Mode", "\"Mode\" IN ('Carrier', 'Own')");
+                    t.HasCheckConstraint("CK_SalesOrderTransports_Carrier", "(\"Mode\" = 'Carrier') = (\"CarrierRelationId\" IS NOT NULL)");
+                    t.HasCheckConstraint("CK_SalesOrderTransports_Temperature", "\"TemperatureC\" IS NULL OR (\"TemperatureC\" >= -30 AND \"TemperatureC\" <= 30)");
                 });
             });
 

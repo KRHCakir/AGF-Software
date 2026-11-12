@@ -12,6 +12,7 @@ namespace AgfAdmin.DTOs
         public string TradeName { get; set; }
         public int? CustomerId { get; set; }
         public int? VendorId { get; set; }
+        public bool IsCarrier { get; set; }      // rol vervoerder
         public bool IsActive { get; set; }
         public string City { get; set; }
         public string CountryCode { get; set; }
@@ -57,6 +58,7 @@ namespace AgfAdmin.DTOs
         public int Version { get; set; }
         public CustomerRoleDto Customer { get; set; }   // null = geen klantrol
         public VendorRoleDto Vendor { get; set; }       // null = geen leveranciersrol
+        public bool IsCarrier { get; set; }             // rol vervoerder (documenten deel 2)
         public List<RelationAddressDto> Addresses { get; set; } = new();
         public List<RelationContactDto> Contacts { get; set; } = new();
         // Bankrekeningen (actief en inactief, op volgorde) en de laatste 50 auditregels van bankgegevens (nieuwste eerst).
@@ -271,6 +273,8 @@ namespace AgfAdmin.DTOs
         public bool AcknowledgeSimilarNames { get; set; }
         public SaveCustomerRoleDto Customer { get; set; }
         public SaveVendorRoleDto Vendor { get; set; }
+        // true = rol vervoerder aanzetten; leeg of false laat een bestaande rol staan (een rol verdwijnt nooit).
+        public bool? Carrier { get; set; }
         public List<RelationAddressDto> Addresses { get; set; }
         public List<RelationContactDto> Contacts { get; set; }
         // null = ongewijzigd laten; een lijst moet alle opgeslagen rekeningen bevatten (nooit verwijderen, inactief zetten).

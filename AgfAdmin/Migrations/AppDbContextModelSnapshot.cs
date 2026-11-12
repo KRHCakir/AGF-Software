@@ -359,6 +359,20 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(3);
 
+                    b.Property<string>("TransportOrderLanguage")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
+                        .HasDefaultValue("en");
+
+                    b.Property<string>("TransportOrderPalletKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("Europallet");
+
                     b.Property<string>("VatNumber")
                         .HasColumnType("text");
 
@@ -3825,6 +3839,9 @@ namespace AgfAdmin.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsCarrier")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("LegalForm")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -4754,6 +4771,88 @@ namespace AgfAdmin.Migrations
                     b.ToTable("SalesOrderPackagingLines", t =>
                         {
                             t.HasCheckConstraint("CK_SalesOrderPackagingLines_Values", "\"Quantity\" > 0 AND (\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0) AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderTransport", b =>
+                {
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CarrierRelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LoadingPlace")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("LoadingReference")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("PalletKind")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("TemperatureC")
+                        .HasColumnType("decimal(4,1)");
+
+                    b.Property<DateTime?>("UnloadDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("UnloadingAddressId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UnloadingPlace")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("UnloadingReference")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("SalesOrderId");
+
+                    b.HasIndex("CarrierRelationId");
+
+                    b.HasIndex("UnloadingAddressId");
+
+                    b.ToTable("SalesOrderTransports", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesOrderTransports_Carrier", "(\"Mode\" = 'Carrier') = (\"CarrierRelationId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SalesOrderTransports_Mode", "\"Mode\" IN ('Carrier', 'Own')");
+
+                            t.HasCheckConstraint("CK_SalesOrderTransports_Temperature", "\"TemperatureC\" IS NULL OR (\"TemperatureC\" >= -30 AND \"TemperatureC\" <= 30)");
                         });
                 });
 
@@ -6519,6 +6618,31 @@ namespace AgfAdmin.Migrations
                     b.Navigation("SalesOrder");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderTransport", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "CarrierRelation")
+                        .WithMany()
+                        .HasForeignKey("CarrierRelationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithOne("Transport")
+                        .HasForeignKey("AgfAdmin.Models.SalesOrderTransport", "SalesOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.RelationAddress", "UnloadingAddress")
+                        .WithMany()
+                        .HasForeignKey("UnloadingAddressId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CarrierRelation");
+
+                    b.Navigation("SalesOrder");
+
+                    b.Navigation("UnloadingAddress");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.ShipmentDeliveryConfirmation", b =>
                 {
                     b.HasOne("AgfAdmin.Models.DirectTradeShipment", "DirectTradeShipment")
@@ -6963,6 +7087,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("PackagingLines");
 
                     b.Navigation("SalesPartij");
+
+                    b.Navigation("Transport");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
