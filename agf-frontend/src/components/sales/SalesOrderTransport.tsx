@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
+import { formatDecimalInput } from '../../lib/decimal';
 import { newRequestId } from '../../lib/requestId';
 import { DEFAULT_ADDRESS, OTHER_ADDRESS, type TransportDraft, type TransportProblem, draftFrom, requestFrom } from '../../lib/salesTransport';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -135,7 +136,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
             {shown && !editing && (
                 <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2" data-testid="so-transport-summary">
                     <div><dt className="text-xs text-gray-600">{t('so_transport_carrier')}</dt><dd className="font-medium">{shown.mode === 'Own' ? t('so_transport_mode_own') : shown.carrierName}</dd></div>
-                    <div><dt className="text-xs text-gray-600">{t('so_transport_load_date')}</dt><dd>{shown.loadAt ? formatDateTime(shown.loadAt, locale) : '–'}{shown.unloadDate ? ` → ${formatCalendarDate(shown.unloadDate, locale)}` : ''}{shown.temperatureC != null ? ` · ${String(shown.temperatureC).replace('.', ',')} °C` : ''}</dd></div>
+                    <div><dt className="text-xs text-gray-600">{t('so_transport_load_date')}</dt><dd>{shown.loadAt ? formatDateTime(shown.loadAt, locale) : '–'}{shown.unloadDate ? ` → ${formatCalendarDate(shown.unloadDate, locale)}` : ''}{shown.temperatureC != null ? ` · ${formatDecimalInput(shown.temperatureC, 1, locale)} °C` : ''}</dd></div>
                     <div><dt className="text-xs text-gray-600">{t('so_transport_loading_place')}</dt><dd>{shown.loadingPlace ?? shown.defaultLoadingPlace}</dd></div>
                     <div><dt className="text-xs text-gray-600">{t('so_transport_unloading_place')}</dt><dd>{shown.unloadingPlace ?? (shown.unloadingAddressId != null ? shown.unloadingAddresses.find((address) => address.id === shown.unloadingAddressId)?.text : null) ?? shown.defaultUnloadingPlace}</dd></div>
                 </dl>
@@ -155,7 +156,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
                             <div className="max-w-md">
                                 <label htmlFor={`${id('carrier')}-input`} className="text-xs font-medium text-gray-700">{t('so_transport_carrier')}</label>
                                 <LookupField<RelationListItem> id={id('carrier')} dataTour="so-transport-carrier" ariaLabel={t('so_transport_carrier')} selected={selected} search={search}
-                                    onSelect={chooseCarrier} onClear={() => change({ carrierId: null, carrierName: '' })} onQueryChange={setQuery} takeHighlighted
+                                    onSelect={chooseCarrier} onClear={() => change({ carrierId: null, carrierName: '' })} onQueryChange={(value) => { setQuery(value); setSimilar(null); }} takeHighlighted
                                     placeholderKey="so_transport_carrier_placeholder" hintKey="so_transport_carrier_hint" noneKey="so_transport_carrier_none" moreKey="product_picker_more" changeKey="so_transport_carrier_change" />
                                 {noMatch && similar === null && (
                                     <button type="button" className={`${secondaryButtonClass} mt-1 px-2 py-1 text-xs`} onClick={() => createNew(false)} data-tour="so-transport-carrier-new">
