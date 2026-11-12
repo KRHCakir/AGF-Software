@@ -38,6 +38,9 @@ describe('allowed navigation', () => {
         assert.ok(isAllowedDemoHref('/inspection?search=DEMO-REP'));
         assert.ok(isAllowedDemoHref('/purchase-orders'));
         assert.ok(isAllowedDemoHref('/purchase-orders?id=57'));
+        assert.ok(isAllowedDemoHref('/purchase-orders/edit?id=57'));
+        assert.equal(isAllowedDemoHref('/purchase-orders/edit'), false);
+        assert.equal(isAllowedDemoHref('/purchase-orders/edit?id=57&x=1'), false);
         assert.ok(isAllowedDemoHref('/purchase-orders?query=DEMO-TOUR-007'));
         assert.ok(isAllowedDemoHref('/availability?productVariantId=10'));
         for (const href of ['https://evil.example', '//evil.example', 'javascript:alert(1)', '/orders', '/sales-orders?orderId=1;x', '/sales-orders?orderId=0', '/supply/../orders', '/sales-orders?orderId=13&x=1', '/inspection?search=', '/inspection?search=a b', '/inspection?search=x&y=1',

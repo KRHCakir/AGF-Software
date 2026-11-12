@@ -243,6 +243,26 @@ export async function lookupDeviation(vars: Readonly<Record<string, string>>, si
 
 export const precheckDeviation = (signal: AbortSignal) => precheckOpenOrder(signal, {});
 
+// Order aanpassen en definitief maken (stap 4a): de nieuwste demo-inkooporder (DEMO-TOUR-…) die nog Open is, voor het eigen magazijn en
+// niet geannuleerd; zonder zo'n order maakt het hoofdstuk er eerst een aan (stamgegevens en Inkooporder aanmaken).
+async function editableTourOrder(signal: AbortSignal) {
+    const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'all', vendorId: null, page: 1, pageSize: 50, document: 'Open' }, signal);
+    return newestFirst(list.items.filter((item) => isTour(item.supplierReference) && item.route === 'Warehouse' && item.status !== 'Cancelled'))[0] ?? null;
+}
+
+export async function precheckOrderEdit(signal: AbortSignal): Promise<TourPrecheck> {
+    const [data, order] = await Promise.all([masterData(signal), editableTourOrder(signal)]);
+    return { missing: [], vars: { ...masterFlags(data, {}), needOrder: flag(order === null) } };
+}
+
+export async function lookupOrderEdit(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const order = await editableTourOrder(signal);
+    if (!order) return { missing: [missingOpenOrder] };
+    const detail = await getPurchaseOrder(order.id, signal);
+    if (detail.lines.length === 0) return { missing: [missingOpenOrder] };
+    return { missing: [], vars: { orderId: String(order.id), orderNumber: order.orderNumber, orderRef: order.supplierReference ?? order.orderNumber, lineId: String(detail.lines[0].id) } };
+}
+
 // Na de afwijkende ontvangst: de variant waar de voorraad nu op staat (de exacte variant, niet de bestelde).
 export async function lookupDeviationStock(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
     const products = await getProductsWithVariants(signal);
