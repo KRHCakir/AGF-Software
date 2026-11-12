@@ -30,7 +30,7 @@ export interface LoadingDetails { loadAt: string | null; licensePlate: string | 
 export interface LoadingSlipSettings { language: 'en' | 'nl'; showCustomer: boolean; showSupplier: boolean }
 
 const isDocument = (value: unknown): value is SalesOrderDocument => isObject(value) && isNumber(value.id) && isString(value.kind) && isString(value.number)
-    && isNumber(value.version) && isString(value.createdAt) && isNullableString(value.sentAt) && typeof value.latest === 'boolean';
+    && isNumber(value.version) && isString(value.createdAt) && isString(value.createdBy) && isNullableString(value.sentAt) && typeof value.latest === 'boolean';
 
 export function isSalesOrderDocuments(value: unknown): value is SalesOrderDocuments {
     return isObject(value) && isNumber(value.salesOrderId) && isNullableString(value.confirmedAt) && isNullableString(value.licensePlate)

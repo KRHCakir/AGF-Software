@@ -54,7 +54,10 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
         const link = window.document.createElement('a');
         link.href = url;
         link.download = `Laadbon ${document.number} v${document.version}.pdf`;
+        // Kort aan de DOM toevoegen: in o.a. Safari wordt een klik op een losstaand element niet uitgevoerd.
+        window.document.body.appendChild(link);
         link.click();
+        link.remove();
     } else {
         // Afdrukken: de PDF in een onzichtbaar frame laden en de afdrukdialoog van de browser openen.
         const printFrame = window.document.createElement('iframe');
