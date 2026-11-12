@@ -11,7 +11,6 @@ namespace AgfAdmin.Services
     public sealed class SalesOrderTransportService(AppDbContext db, ICurrentUser user = null)
     {
         public const string CancelledCode = "cancelled";
-        public const string TransportOrderExistsCode = "transportOrderExists";
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
 
         public async Task<ServiceResult<SalesOrderTransportDto>> GetAsync(int orderId, CancellationToken cancellationToken = default)
@@ -119,24 +118,6 @@ namespace AgfAdmin.Services
             catch (Exception exception) when (exception is DbUpdateConcurrencyException || (exception is DbUpdateException update && DbErrors.IsUniqueViolation(update)))
             {
                 return ServiceResult<SalesOrderTransportDto>.Conflict("The transport was changed by someone else; reload and try again.", new { code = "stale" });
-            }
-            db.ChangeTracker.Clear();
-            return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));
-        }
-
-        // Weghalen kan zolang er geen transportopdracht is.
-        public async Task<ServiceResult<SalesOrderTransportDto>> DeleteAsync(int orderId, CancellationToken cancellationToken = default)
-        {
-            var order = await LoadAsync(orderId, tracking: true, cancellationToken);
-            if (order == null) return NotFound(orderId);
-            if (await db.SalesOrderDocuments.AnyAsync(d => d.SalesOrderId == orderId && d.Kind == SalesOrderDocumentRules.KindTransportOrder, cancellationToken))
-            {
-                return ServiceResult<SalesOrderTransportDto>.Conflict("There is already a transport order for this sales order; change the transport instead.", new { code = TransportOrderExistsCode });
-            }
-            if (order.Transport != null)
-            {
-                db.SalesOrderTransports.Remove(order.Transport);
-                await db.SaveChangesAsync(cancellationToken);
             }
             db.ChangeTracker.Clear();
             return ServiceResult<SalesOrderTransportDto>.Ok(await ToDtoAsync(await LoadAsync(orderId, tracking: false, cancellationToken), cancellationToken));

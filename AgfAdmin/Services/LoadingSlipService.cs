@@ -49,6 +49,11 @@ namespace AgfAdmin.Services
             {
                 await db.SaveChangesAsync(cancellationToken);
             }
+            catch (DbUpdateConcurrencyException)
+            {
+                // De order veranderde intussen (bijvoorbeeld het transport weggehaald): opnieuw laden en bevestigen.
+                return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Sales order {order.OrderNumber} was changed meanwhile; reload and confirm again.", new { code = "stale" });
+            }
             catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
                 // Een gelijktijdige bevestiging was eerder: die blijft staan, wij geven het resultaat daarvan terug.

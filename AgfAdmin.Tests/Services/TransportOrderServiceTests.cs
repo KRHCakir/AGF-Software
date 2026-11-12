@@ -200,21 +200,6 @@ public class TransportOrderServiceTests : IDisposable
         Assert.Null(cleared.Value.LoadAt);
     }
 
-    [Fact]
-    public async Task Transport_can_be_removed_until_there_is_a_transport_order()
-    {
-        var s = await OrderAsync();
-        await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
-        var removed = await Transport(t => t.DeleteAsync(s.OrderId));
-        Assert.Equal((ServiceResultStatus.Ok, false), (removed.Status, removed.Value.Exists));
-        await Transport(t => t.SaveAsync(s.OrderId, ByCarrier(s)));
-        await Slips(x => x.ConfirmAsync(s.OrderId, new ConfirmSalesOrderDto()));
-        Assert.Equal(ServiceResultStatus.Conflict, (await Transport(t => t.DeleteAsync(s.OrderId))).Status);
-        Assert.True((await Transport(t => t.GetAsync(s.OrderId))).Value.HasTransportOrder);
-        Assert.Equal("TO-", SalesOrderDocumentRules.TransportOrderNumber("VO-2026-0012")[..3]);
-        Assert.Equal("TO-2026-0012", SalesOrderDocumentRules.TransportOrderNumber("VO-2026-0012"));
-    }
-
     private async Task<SalesOrderTransport> LoadTransport(int orderId)
     {
         await using var db = _factory.CreateContext();
