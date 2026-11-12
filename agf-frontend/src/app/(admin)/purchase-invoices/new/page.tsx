@@ -134,7 +134,7 @@ export default function NewPurchaseInvoicePage() {
             });
         return () => controller.abort();
         // eslint-disable-next-line react-hooks/exhaustive-deps -- eenmaal zodra de referentiedata er is (en bij opnieuw proberen)
-    }, [ready === null, orderToken]);
+    }, [ready === null, review === null, orderToken]);
 
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
