@@ -105,6 +105,17 @@ describe('sales order documents (loading slip)', () => {
         assert.equal(changed, 1, 'the order changed (new version), the page fetches it again');
     });
 
+    test('an order cancelled while the loading form is open no longer shows the form', async () => {
+        answer = () => json(200, confirmed());
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} />);
+        await settle();
+        await act(async () => { $('[data-tour="so-loading-edit"]')!.click(); });
+        assert.ok($('[data-testid="so-loading-form"]'));
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z', status: 'Cancelled', version: 4 })} />);
+        await settle();
+        assert.equal($('[data-testid="so-loading-form"]'), null);
+    });
+
     test('a blocked pop-up says so instead of silently doing nothing', async () => {
         answer = () => json(200, confirmed());
         const originalOpen = window.open;
