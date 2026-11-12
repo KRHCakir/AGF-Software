@@ -66,7 +66,8 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
             }
         };
         fetchAll()
-            .then((items) => setCarriers(items))
+            // Een vervoerder die net is aangemaakt terwijl de lijst nog kwam, blijft erin.
+            .then((items) => setCarriers((current) => [...items, ...current.filter((carrier) => !items.some((item) => item.id === carrier.id))]))
             .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
     }, [editing]);
