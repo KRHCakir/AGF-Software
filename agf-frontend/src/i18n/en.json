@@ -2637,6 +2637,7 @@
   "so_slip_sent_by": "passed on {date} by {name}",
   "so_slip_older": "Earlier versions ({count})",
   "so_slip_older_hide": "Hide earlier versions",
+  "so_slip_popup_blocked": "The browser blocked the new window. Allow pop-ups for this site, or use Download.",
   "so_slip_cancelled": "This order is cancelled: do not load.",
   "chain_sales_confirmed": "Confirmed, loading slip ready",
   "loading_slip_settings_title": "Loading slip",

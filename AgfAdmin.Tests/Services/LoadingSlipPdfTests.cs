@@ -59,6 +59,15 @@ public class LoadingSlipPdfTests
     }
 
     [Fact]
+    public void Pallets_have_two_decimals_like_the_order_line_never_whole_pallets()
+    {
+        // Zoals de orderregel: twee decimalen, half van nul af, nooit naar hele pallets.
+        Assert.Equal("0,96", LoadingSlipPdf.Pallets(0.959m));
+        Assert.Equal("23,81", LoadingSlipPdf.Pallets(23.814m));
+        Assert.Equal("2,08", LoadingSlipPdf.Pallets(2.08m));
+    }
+
+    [Fact]
     public void Customer_and_supplier_column_follow_the_setting_and_an_empty_plate_is_a_line_to_fill_in()
     {
         var (text, _) = Read(Slip(showCustomer: false, showSupplier: false));

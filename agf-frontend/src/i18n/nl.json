@@ -2637,6 +2637,7 @@
   "so_slip_sent_by": "doorgegeven op {date} door {name}",
   "so_slip_older": "Eerdere versies ({count})",
   "so_slip_older_hide": "Eerdere versies verbergen",
+  "so_slip_popup_blocked": "De browser hield het nieuwe venster tegen. Sta pop-ups toe voor deze site, of gebruik Downloaden.",
   "so_slip_cancelled": "Deze order is geannuleerd: niet laden.",
   "chain_sales_confirmed": "Bevestigd, laadbon klaar",
   "loading_slip_settings_title": "Laadbon",

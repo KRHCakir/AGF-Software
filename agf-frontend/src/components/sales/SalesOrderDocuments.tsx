@@ -32,10 +32,20 @@ export function inputFromLoadAt(value: string | null): string {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Bekijken opent het venster meteen bij de klik (anders blokkeert de browser het als pop-up) en zet de PDF erin zodra die er is; een
+// geblokkeerd venster geeft een melding. Downloaden en Afdrukken hebben geen nieuw venster nodig.
 async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'view' | 'download' | 'print') {
-    const url = URL.createObjectURL(await getDocumentPdf(orderId, document.id));
+    const target = mode === 'view' ? window.open('', '_blank') : null;
+    if (mode === 'view' && target === null) throw new Error('popup-blocked');
+    let url: string;
+    try {
+        url = URL.createObjectURL(await getDocumentPdf(orderId, document.id));
+    } catch (caught) {
+        target?.close();
+        throw caught;
+    }
     if (mode === 'view') {
-        window.open(url, '_blank', 'noopener');
+        target!.location.href = url;
     } else if (mode === 'download') {
         const link = window.document.createElement('a');
         link.href = url;
@@ -89,9 +99,14 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
             setBusy(false);
         }
     };
+    const [popupBlocked, setPopupBlocked] = useState(false);
     const pdf = (document: SalesOrderDocument, mode: 'view' | 'download' | 'print') => {
         setError(null);
-        openPdf(order.id, document, mode).catch((caught) => setError(toApiError(caught)));
+        setPopupBlocked(false);
+        openPdf(order.id, document, mode).catch((caught) => {
+            if (caught instanceof Error && caught.message === 'popup-blocked') setPopupBlocked(true);
+            else setError(toApiError(caught));
+        });
     };
     const details = () => ({ loadAt: loadAtFromInput(loadAt), licensePlate: plate.trim() === '' ? null : plate.trim() });
     const startEdit = () => {
@@ -136,6 +151,9 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
             </div>
             {loadError && <ErrorNotice error={loadError} />}
             {error && <ErrorNotice error={error} />}
+            {popupBlocked && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="so-slip-popup-blocked">{t('so_slip_popup_blocked')}</p>}
+            {/* Geannuleerd: niet laden, ook als de order nooit bevestigd was. */}
+            {cancelled && <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-900" data-testid="so-slip-cancelled">{t('so_slip_cancelled')}</p>}
 
             {data && data.confirmedAt === null && !cancelled && (
                 order.lines.length === 0
@@ -176,7 +194,6 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
                             </div>
                         </form>
                     )}
-                    {cancelled && <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-900">{t('so_slip_cancelled')}</p>}
                     {data.needsResend && latest && !cancelled && (
                         <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-950" data-testid="so-slip-changed">
                             ⚠ {t('so_slip_changed', { version: String(latest.version) })}

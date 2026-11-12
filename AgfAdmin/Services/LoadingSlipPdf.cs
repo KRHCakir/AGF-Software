@@ -41,6 +41,9 @@ namespace AgfAdmin.Services
         };
 
         public static string Quantity(decimal value) => value.ToString(value == decimal.Truncate(value) ? "N0" : "#,##0.###", Dutch);
+        // Twee decimalen, nooit naar hele pallets ("niet afgerond": 2,08 blijft 2,08). Bewust dezelfde berekening als de orderregel
+        // (PurchaseLineMath.Round2), zodat de laadbon hetzelfde aantal pallets toont als de order zelf; afkappen zou 0,96 op de order en 0,95
+        // op de bon geven.
         public static string Pallets(decimal? value) => value == null ? "–" : PurchaseLineMath.Round2(value.Value).ToString("N2", Dutch);
         public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.#", Dutch);
 
@@ -76,7 +79,8 @@ namespace AgfAdmin.Services
                 {
                     row.RelativeItem().Column(company =>
                     {
-                        if (!string.IsNullOrWhiteSpace(slip.LogoPath) && File.Exists(slip.LogoPath)) company.Item().Width(110).Image(slip.LogoPath);
+                        // Het logo komt uit de snapshot (bytes van het moment van die versie), niet uit een bestand dat later kan veranderen.
+                        if (!string.IsNullOrWhiteSpace(slip.LogoImage)) company.Item().Width(110).Image(Convert.FromBase64String(slip.LogoImage));
                         company.Item().Text(slip.CompanyName).Bold().FontSize(11);
                         if (slip.CompanyAddress != null) company.Item().Text(slip.CompanyAddress).FontSize(8);
                     });
