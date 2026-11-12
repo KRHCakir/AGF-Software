@@ -216,7 +216,8 @@ export default function SalesOrderDocuments({ order, onChanged }: { order: Sales
                         {' · '}{t('so_license_plate')}: {data.licensePlate ?? t('so_license_plate_empty')}
                         {!cancelled && !editing && <button type="button" className="ml-2 text-blue-800 underline underline-offset-2" onClick={startEdit} data-tour="so-loading-edit">{t('so_loading_edit')}</button>}
                     </p>
-                    {editing && (
+                    {/* Geannuleerd terwijl het formulier openstond: dan niet meer aan te passen. */}
+                    {editing && !cancelled && (
                         <form onSubmit={saveLoading} className="space-y-2 rounded border border-gray-200 bg-gray-50 px-3 py-2" data-testid="so-loading-form">
                             {loadingFields}
                             <div className="flex flex-wrap gap-2">
