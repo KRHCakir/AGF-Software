@@ -45,7 +45,7 @@ namespace AgfAdmin.Services
             return new TransportOrderSnapshot(
                 SalesOrderDocumentRules.Languages.Contains(settings.TransportOrderLanguage) ? settings.TransportOrderLanguage : SalesOrderDocumentRules.LanguageEnglish,
                 settings.CompanyName, LoadingSlipBuilder.Blank(settings.Address), LoadingSlipBuilder.LogoImageOf(settings.LogoPath),
-                own, own ? null : transport.CarrierRelation?.Name, own ? null : AddressText(MainAddress(transport.CarrierRelation)),
+                own, own ? null : transport.CarrierRelation?.Name, own ? null : AddressText(CarrierAddress(transport.CarrierRelation)),
                 order.OrderNumber, order.Customer?.Name, LoadingPlace(transport, settings), UnloadingPlace(order, transport),
                 LoadingSlipBuilder.Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : LoadingSlipBuilder.Second(order.LoadAt.Value),
                 transport.UnloadDate == null ? null : DateTime.SpecifyKind(transport.UnloadDate.Value.Date, DateTimeKind.Utc), transport.TemperatureC,
@@ -85,8 +85,13 @@ namespace AgfAdmin.Services
             relation?.Addresses.Where(a => a.IsActive && a.Purpose == AddressPurpose.Delivery && a.IsDefault).OrderBy(a => a.SortOrder).ThenBy(a => a.Id).FirstOrDefault()
             ?? MainAddress(relation);
 
+        // Alleen een echt hoofdadres (geen ander doel als terugval voor de losplaats).
         public static RelationAddress MainAddress(Relation relation) =>
-            relation?.Addresses.Where(a => a.IsActive).OrderByDescending(a => a.Purpose == AddressPurpose.Main).ThenByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).ThenBy(a => a.Id).FirstOrDefault();
+            relation?.Addresses.Where(a => a.IsActive && a.Purpose == AddressPurpose.Main).OrderByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).ThenBy(a => a.Id).FirstOrDefault();
+
+        // Het adres van de vervoerder: het hoofdadres, anders zijn eerste actieve adres.
+        public static RelationAddress CarrierAddress(Relation relation) =>
+            MainAddress(relation) ?? relation?.Addresses.Where(a => a.IsActive).OrderBy(a => a.SortOrder).ThenBy(a => a.Id).FirstOrDefault();
 
         // Eén regel: label, straat, postcode en plaats, land. Leeg als er geen adres is.
         public static string AddressText(RelationAddress address)
