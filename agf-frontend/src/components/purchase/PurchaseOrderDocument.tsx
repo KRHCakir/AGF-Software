@@ -18,6 +18,8 @@ import { decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 
 const MAX_REASON_LENGTH = 500;
+const NUMBER_FIELDS: ReadonlySet<string> = new Set(['unitPrice', 'expectedQuantity', 'expectedNetWeightKg', 'expectedGrossWeightKg']);
+const DATE_FIELDS: ReadonlySet<string> = new Set(['orderedOn', 'expectedAt']);
 const CONFLICT_KEYS: Readonly<Record<string, string>> = { stale: 'po_edit_stale', definitive: 'po_edit_definitive_now', open: 'po_edit_stale', notEditable: 'po_edit_not_editable' };
 const conflictKey = (error: ApiError) => {
     const code = (error.body as { code?: unknown } | null | undefined)?.code;
@@ -104,15 +106,17 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
         if (reason.trim() === '') found.reason = [t('po_correct_reason_required')];
         const lines: { id: number; unitPrice: number | null }[] = [];
         for (const line of order.lines) {
+            // Een leeg prijsveld laat de prijs staan (een correctie wist geen prijs); alleen een andere prijs gaat mee.
             const parsed = parseUnitPrice(prices[line.id] ?? '');
             if (!parsed.ok) { found[`price-${line.id}`] = [t(decimalErrorKey(parsed.error))]; continue; }
-            if (parsed.value !== (line.unitPrice ?? null)) lines.push({ id: line.id, unitPrice: parsed.value });
+            if (parsed.value !== null && parsed.value !== (line.unitPrice ?? null)) lines.push({ id: line.id, unitPrice: parsed.value });
         }
         const blank = (value: string) => (value.trim() === '' ? null : value.trim());
         if (lines.length === 0 && blank(reference) === (order.supplierReference ?? null) && blank(note) === (order.note ?? null)) found.correction = [t('po_correct_nothing')];
         setErrors(found);
         if (Object.keys(found).length > 0) return null;
-        return { requestId: newRequestId(), expectedVersion: order.editVersion ?? 0, reason: reason.trim(), supplierReference: blank(reference), note: blank(note), lines };
+        // De volledige nieuwe tekst; leeg wist het veld (weggelaten zou "ongewijzigd" betekenen).
+        return { requestId: newRequestId(), expectedVersion: order.editVersion ?? 0, reason: reason.trim(), supplierReference: reference.trim(), note: note.trim(), lines };
     };
 
     const save = async () => {
@@ -191,11 +195,12 @@ export function PurchaseOrderChanges({ order }: { order: PurchaseOrderDetail }) 
         const line = id === null ? undefined : order.lines.find((candidate) => candidate.id === id);
         return line ? [line.productName, line.productVariantName].filter(Boolean).join(' ') : null;
     };
-    // Getallen en datums in de notatie van de schermtaal (opgeslagen als vaste tekst: 12.5, 2026-11-14); de rest zoals vastgelegd.
+    // Getallen en datums van de bekende getal- en datumvelden in de notatie van de schermtaal (opgeslagen als vaste tekst: 12.5,
+    // 2026-11-14); alle andere velden precies zoals vastgelegd (een ordernummer "0045" blijft "0045").
     const value = (text: string | null, field = '') => {
         if (text === null || text === '') return t('po_change_empty');
-        if (/^-?\d+(\.\d+)?$/.test(text)) return field === 'unitPrice' ? formatAmountInput(Number(text)) : formatQuantity(Number(text), locale);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return formatDateOnly(text, locale);
+        if (NUMBER_FIELDS.has(field) && /^-?\d+(\.\d+)?$/.test(text)) return field === 'unitPrice' ? formatAmountInput(Number(text)) : formatQuantity(Number(text), locale);
+        if (DATE_FIELDS.has(field) && /^\d{4}-\d{2}-\d{2}$/.test(text)) return formatDateOnly(text, locale);
         return text;
     };
     const kind = (change: PurchaseOrderChange) => t(change.kind === 'Edit' ? 'po_edit' : change.kind === 'Finalize' ? 'po_finalize' : 'po_correct');

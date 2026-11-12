@@ -77,18 +77,20 @@ describe('purchase order document status', () => {
         await mounted.waitFor(() => changed.length === 1, 'corrected');
         const body = JSON.parse(posted[0].body);
         assert.ok(posted[0].url.endsWith('/purchase-orders/5/corrections'));
-        assert.deepEqual([body.reason, body.expectedVersion, body.supplierReference, body.note, body.lines], ['Prijs volgens factuur', 3, '45-21', null, [{ id: 7, unitPrice: 13.1 }]]);
+        assert.deepEqual([body.reason, body.expectedVersion, body.supplierReference, body.note, body.lines], ['Prijs volgens factuur', 3, '45-21', '', [{ id: 7, unitPrice: 13.1 }]]);
     });
 
     test('the changes list shows who and what, with numbers and dates in the screen notation', async () => {
         await mounted.render(<PurchaseOrderChanges order={order({ changes: [{
             id: 1, kind: 'Edit', reason: null, actorReference: 'Jan', createdAt: '2026-11-12T09:00:00Z',
             fields: [{ field: 'unitPrice', lineId: 7, action: 'changed', old: '12.5', new: '13' }, { field: 'expectedAt', lineId: null, action: 'changed', old: null, new: '2026-11-14' },
+                { field: 'supplierReference', lineId: null, action: 'changed', old: '0045', new: '45-21' },
                 { field: 'line', lineId: null, action: 'added', old: null, new: 'Mango Kent: 10 colli' }],
         }] })} />);
         const text = $('[data-testid="po-changes"]')!.textContent!;
         assert.ok(text.includes('po_change_price · Avocado Hass: 12,50 → 13,00'), text);
         assert.ok(text.includes('po_change_empty →'), text);
+        assert.ok(text.includes('po_supplier_reference: 0045 → 45-21'), 'a supplier number stays as recorded');
         assert.ok(text.includes('po_change_added: Mango Kent: 10 colli'), text);
     });
 
