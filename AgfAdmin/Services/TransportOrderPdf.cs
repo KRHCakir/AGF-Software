@@ -115,12 +115,11 @@ namespace AgfAdmin.Services
                     report.Item().PaddingTop(3).Table(table =>
                     {
                         table.ColumnsDefinition(c => { c.ConstantColumn(90); c.RelativeColumn(); c.ConstantColumn(90); c.RelativeColumn(); });
-                        var loading = order.LoadAt ?? order.RequestedDeliveryDate;
                         Field(table, L("order"), order.OrderNumber, true);
                         Field(table, L("temperature"), Temperature(order.TemperatureC), order.TemperatureC != null);
                         Field(table, L("loadingReference"), order.LoadingReference ?? "–");
                         Field(table, L("unloadingReference"), order.UnloadingReference ?? "–");
-                        Field(table, L("loadingDate"), Local(loading, "dd-MM-yyyy"), true);
+                        Field(table, L("loadingDate"), order.LoadAt == null ? "–" : Local(order.LoadAt.Value, "dd-MM-yyyy"), order.LoadAt != null);
                         Field(table, L("unloadingDate"), order.UnloadDate == null ? "–" : order.UnloadDate.Value.ToString("dd-MM-yyyy", Dutch), order.UnloadDate != null);
                         Field(table, L("loadingTime"), order.LoadAt == null ? "–" : Local(order.LoadAt.Value, "HH:mm"), order.LoadAt != null);
                         table.Cell(); table.Cell();

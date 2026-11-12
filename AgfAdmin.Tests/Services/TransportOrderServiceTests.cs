@@ -189,6 +189,18 @@ public class TransportOrderServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Saving_transport_without_a_load_time_keeps_the_one_on_the_order_clearing_is_explicit()
+    {
+        var s = await OrderAsync();
+        var load = new DateTime(2026, 11, 13, 5, 30, 0, DateTimeKind.Utc);
+        await Slips(x => x.ConfirmAsync(s.OrderId, new ConfirmSalesOrderDto { LoadAt = load }));
+        var own = await Transport(t => t.SaveAsync(s.OrderId, new SaveSalesOrderTransportDto { Mode = "Own" }));
+        Assert.Equal(load, own.Value.LoadAt);
+        var cleared = await Transport(t => t.SaveAsync(s.OrderId, new SaveSalesOrderTransportDto { ExpectedVersion = own.Value.Version, Mode = "Own", ClearLoadAt = true }));
+        Assert.Null(cleared.Value.LoadAt);
+    }
+
+    [Fact]
     public async Task Transport_can_be_removed_until_there_is_a_transport_order()
     {
         var s = await OrderAsync();

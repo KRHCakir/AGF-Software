@@ -69,6 +69,10 @@ public class TransportOrderPdfTests
             Assert.Contains(part, text);
         }
         Assert.DoesNotContain("Transport Zeeland", text);
+        // Geen laadtijd ingevuld: laaddatum en -tijd een streepje, nooit de leverdatum als laaddatum.
+        var (unplanned, _) = Read(Order() with { LoadAt = null });
+        Assert.DoesNotContain("13-11-2026", unplanned);
+        Assert.Contains("14-11-2026", unplanned);
     }
 
     [Fact]

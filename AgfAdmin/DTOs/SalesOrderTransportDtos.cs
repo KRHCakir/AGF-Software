@@ -10,7 +10,9 @@ namespace AgfAdmin.DTOs
         public string LoadingPlace { get; set; }
         public int? UnloadingAddressId { get; set; }
         public string UnloadingPlace { get; set; }
+        // Laden op staat op de order (ook op de laadbon): leeg laat een al ingevulde laadtijd staan; wissen gaat expliciet met ClearLoadAt.
         public DateTime? LoadAt { get; set; }
+        public bool ClearLoadAt { get; set; }
         public DateTime? UnloadDate { get; set; }
         public decimal? TemperatureC { get; set; }
         public string LoadingReference { get; set; }

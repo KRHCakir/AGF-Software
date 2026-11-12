@@ -34,9 +34,13 @@ namespace AgfAdmin.Services
                 return Validation(errors);
             }
             var now = DateTime.UtcNow;
+            // Een eerder ingevulde laadtijd (via het transport) blijft staan als bij bevestigen geen nieuwe is opgegeven.
+            var loadAt = Utc(request?.LoadAt) ?? order.LoadAt;
+            CheckUnloadAfterLoad(order, loadAt, errors);
+            if (errors.Count > 0) return Validation(errors);
             order.ConfirmedAt = now;
             order.ConfirmedBy = Actor();
-            order.LoadAt = Utc(request?.LoadAt);
+            SetLoadAt(order, loadAt, now);
             order.LicensePlate = plate;
             order.UpdatedAt = now;
             // De laadbon, en de transportopdracht als er transport is ingevuld: beide versie 1.
@@ -79,9 +83,13 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<SalesOrderDocumentsDto>.Conflict($"Sales order {order.OrderNumber} is cancelled.", new { code = CancelledCode });
             }
-            order.LoadAt = Utc(request?.LoadAt);
+            var loadAt = Utc(request?.LoadAt);
+            CheckUnloadAfterLoad(order, loadAt, errors);
+            if (errors.Count > 0) return Validation(errors);
+            var now = DateTime.UtcNow;
+            SetLoadAt(order, loadAt, now);
             order.LicensePlate = plate;
-            order.UpdatedAt = DateTime.UtcNow;
+            order.UpdatedAt = now;
             // Laadgegevens en de nieuwe versies van de documenten (laadbon, transportopdracht) in één save: nooit opgeslagen gegevens zonder
             // de documenten die erbij horen.
             AddChangedVersions(order, await SettingsAsync(cancellationToken), DateTime.UtcNow);
@@ -291,6 +299,25 @@ namespace AgfAdmin.Services
 
         private async Task<CompanySettings> SettingsAsync(CancellationToken cancellationToken) =>
             await db.CompanySettings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken) ?? new CompanySettings();
+
+        // Laden op is gedeeld met het transport: een wijziging verhoogt ook de transportversie, zodat een transport dat de gebruiker nog met
+        // de oude laadtijd open heeft staan een conflict geeft in plaats van de nieuwe laadtijd stilletjes te overschrijven.
+        private static void SetLoadAt(SalesOrder order, DateTime? loadAt, DateTime now)
+        {
+            if (order.LoadAt == loadAt) return;
+            order.LoadAt = loadAt;
+            if (order.Transport != null) order.Transport.UpdatedAt = now;
+        }
+
+        // Dezelfde regel als bij het opslaan van het transport: lossen niet vóór laden.
+        private void CheckUnloadAfterLoad(SalesOrder order, DateTime? loadAt, Dictionary<string, List<string>> errors)
+        {
+            var unloadDate = order.Transport?.UnloadDate;
+            if (unloadDate != null && loadAt != null && DateOnly.FromDateTime(unloadDate.Value.Date) < db.BusinessCalendar.DateOf(loadAt.Value))
+            {
+                ValidationErrors.Add(errors, "loadAt", "Loading cannot be after the unloading date of the transport.");
+            }
+        }
 
         private static string Plate(string value, Dictionary<string, List<string>> errors)
         {

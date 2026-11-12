@@ -25,7 +25,7 @@ export interface TransportDraft {
     remarks: string;
 }
 
-export type TransportProblem = 'mode' | 'carrier' | 'loadTime' | 'temperature';
+export type TransportProblem = 'mode' | 'carrier' | 'loadDate' | 'loadTime' | 'temperature';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -59,12 +59,13 @@ export function normalizeTime(value: string): string | null {
     return hours < 24 && minutes < 60 ? `${pad(hours)}:${pad(minutes)}` : null;
 }
 
-export function requestFrom(draft: TransportDraft, version: number | null): { request: SaveSalesOrderTransport | null; problems: TransportProblem[] } {
+export function requestFrom(draft: TransportDraft, version: number | null, hadLoadAt = false): { request: SaveSalesOrderTransport | null; problems: TransportProblem[] } {
     const problems: TransportProblem[] = [];
     if (draft.mode === '') problems.push('mode');
     if (draft.mode === 'Carrier' && draft.carrierId === null) problems.push('carrier');
     const time = draft.loadTime.trim() === '' ? null : normalizeTime(draft.loadTime);
     if (draft.loadDate !== '' && time === null) problems.push('loadTime');
+    if (draft.loadDate === '' && draft.loadTime.trim() !== '') problems.push(time === null ? 'loadTime' : 'loadDate');
     let temperature: number | null = null;
     if (draft.temperature.trim() !== '') {
         const parsed = parseLocaleDecimal(draft.temperature, 'nl', { maxDecimals: 1, allowZero: true, allowNegative: true });
@@ -77,6 +78,7 @@ export function requestFrom(draft: TransportDraft, version: number | null): { re
         problems,
         request: {
             expectedVersion: version,
+            clearLoadAt: hadLoadAt && draft.loadDate === '',
             mode: draft.mode,
             carrierRelationId: draft.mode === 'Carrier' ? draft.carrierId : null,
             loadingPlace: text(draft.loadingPlace),

@@ -34,6 +34,8 @@ export interface SalesOrderTransport {
 
 export interface SaveSalesOrderTransport {
     expectedVersion: number | null;
+    // loadAt leeg laat de laadtijd van de order staan; clearLoadAt wist haar (de gebruiker maakte de laaddatum leeg).
+    clearLoadAt: boolean;
     mode: TransportMode;
     carrierRelationId: number | null;
     loadingPlace: string | null;
