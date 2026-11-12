@@ -179,6 +179,35 @@ describe('PurchaseInvoiceForm', () => {
         assert.equal(window.sessionStorage.getItem('agf_purchase_invoice_pending'), null);
     });
 
+    // Een nieuwe factuur begint leeg, ook als dit tabblad een niet-opgeslagen concept onthield (geen leverancier vooraf ingevuld). Alleen
+    // een verstuurde opslag zonder bevestiging brengt zijn concept terug: die hoort bij precies dat document en raakt nooit los.
+    test('a new invoice always starts empty; only a save still waiting for confirmation brings its concept back', async () => {
+        const reopen = async () => {
+            await mounted.unmount();
+            mounted = new Mounted();
+            await mounted.render(<PurchaseInvoiceForm vendors={vendors} products={products} settings={settings} />);
+        };
+        await mounted.render(<PurchaseInvoiceForm vendors={vendors} products={products} settings={settings} />);
+        await chooseVendor('#7');
+        await type(input('invoiceNumber'), 'GR-9');
+        await reopen();
+        assert.equal(input('vendorId').value, '', 'no vendor from the earlier concept');
+        assert.equal(input('invoiceNumber').value, '');
+        assert.equal(mounted.container.querySelector('fieldset')!.disabled, false);
+
+        await chooseVendor('#7');
+        await type(input('invoiceNumber'), 'GR-10');
+        await type(input('lines[0].item'), 'Dozen'); await key(input('lines[0].item'), 'Tab');
+        await type(input('lines[0].quantity'), '10'); await type(input('lines[0].unitPrice'), '1');
+        nextPost = async () => { throw new TypeError('network down'); };
+        await key(input('invoiceNumber'), 's', { code: 'KeyS', ctrlKey: true });
+        await mounted.waitFor(() => text().includes('supply_error_outcome_unknown'), 'pending notice after the lost answer');
+        await reopen();
+        assert.equal(input('vendorId').value, 'The Greenery · NL001 · #7', 'the frozen save keeps its own concept');
+        assert.equal(input('invoiceNumber').value, 'GR-10');
+        assert.equal(mounted.container.querySelector('fieldset')!.disabled, true, 'still locked until the outcome is known');
+    });
+
     // Directe factuur van derden (P2): een kostenartikel in de artikelkeuze (groep "Kosten") vult de omschrijving en aantal 1; de regel stuurt
     // het kostenartikel mee en geen artikel. Hetzelfde factuurnummer van deze leverancier staat na 409 bij het factuurnummer.
     test('a cost article line: chosen from the Costs group, sent as costArticleId; a duplicate invoice number is named at the field', async () => {

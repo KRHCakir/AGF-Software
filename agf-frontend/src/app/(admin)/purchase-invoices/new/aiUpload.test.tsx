@@ -2,12 +2,9 @@ import '../../../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, json, stubFetch } from '../../../../test/reactHarness.ts';
+import { Mounted, json, setValue, stubFetch } from '../../../../test/reactHarness.ts';
 import type { Posted } from '../../../../test/reactHarness.ts';
 import type { AiExtraction, AiReadingStatus } from '../../../../types/aiReading';
-import { emptyDraft } from '../../../../lib/purchaseInvoiceRules.ts';
-import { saveDraft } from '../../../../lib/purchaseInvoiceStore.ts';
-import { todayInAmsterdam } from '../../../../lib/calendarDate.ts';
 import NewPurchaseInvoicePage from './page';
 
 // Factuur uploaden op Inkoopfactuur invoeren (stap 7a), met een nagebootste API: zonder AI een duidelijke melding en geen gegevens; een
@@ -171,12 +168,11 @@ describe('purchase invoice: upload and let AI fill in a proposal', () => {
     });
 
     test('an upload asks before replacing a draft with only a changed header field', async () => {
-        const blank = emptyDraft(todayInAmsterdam(), settings as never);
-        saveDraft({ ...blank, header: { ...blank.header, currency: 'USD' } });
         let asked = 0;
         window.confirm = () => { asked += 1; return false; };
         await mounted.render(<NewPurchaseInvoicePage />);
         await mounted.waitFor(() => $<HTMLButtonElement>('[data-testid="ai-upload-button"]') && !$<HTMLButtonElement>('[data-testid="ai-upload-button"]')!.disabled, 'upload button');
+        await act(async () => { setValue($<HTMLInputElement>('[id="currency-input"]')!, 'USD'); });
         await upload(pdf());
         assert.equal(asked, 1);
         assert.equal(posted.length, 0, 'declined: nothing is read');
