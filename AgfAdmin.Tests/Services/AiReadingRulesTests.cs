@@ -216,6 +216,14 @@ public class AiReadingRulesTests
     }
 
     [Fact]
+    public void A_free_line_with_100_percent_discount_adds_up_and_goes_into_the_form()
+    {
+        var proposal = Proposal(p => { p["regels"]![1]!["korting_percentage"] = 100m; p["regels"]![1]!["bedrag"] = 0m; p["totaal_excl"] = 125.00m; p["btw_totaal"] = 11.25m; p["totaal_incl"] = 136.25m; });
+        Assert.Empty(AiReadingRules.Problems(proposal));
+        Assert.Equal(100m, AiInvoiceReadingService.ToProposal(proposal).Lines[1].DiscountPercentage);
+    }
+
+    [Fact]
     public void A_discount_the_AI_doubts_is_marked_on_the_discount_field()
     {
         Assert.Equal("lines[2].discountPercentage", AiReadingRules.FormField("regels[2].korting_percentage"));

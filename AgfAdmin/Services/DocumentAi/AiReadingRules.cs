@@ -65,8 +65,9 @@ namespace AgfAdmin.Services.DocumentAi
         public static DateOnly? Date(JsonNode node) =>
             DateOnly.TryParseExact(Text(node) ?? "", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
 
-        // De korting op een regel zoals gelezen (0 als er geen staat of als het geen geldig percentage is: dan rekent de controle zonder).
-        public static decimal LineDiscount(JsonObject line) => Number(line["korting_percentage"]) is decimal d && d > 0m && d < 100m ? d : 0m;
+        // De korting op een regel zoals gelezen, tot en met 100% (een gratis artikel); 0 als er geen staat of als het geen geldig percentage is:
+        // dan rekent de controle zonder.
+        public static decimal LineDiscount(JsonObject line) => Number(line["korting_percentage"]) is decimal d && d > 0m && d <= 100m ? d : 0m;
 
         // De korting op het totaal zoals gelezen (excl. btw); 0 als er geen is.
         public static decimal DocumentDiscount(JsonObject proposal) => Number(proposal["korting_totaal"]) is decimal d && d > 0m ? d : 0m;
