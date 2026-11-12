@@ -53,6 +53,14 @@ public class AiReadingRulesTests
     }
 
     [Fact]
+    public void A_missing_vat_total_is_marked_without_the_fallback()
+    {
+        var problems = AiReadingRules.Problems(Proposal(p => p["btw_totaal"] = null));
+        Assert.Equal(new[] { ("totalVat", AiReadingRules.Missing) }, problems.Select(p => (p.Field, p.Code)));
+        Assert.False(AiReadingRules.NeedsFallback(problems));
+    }
+
+    [Fact]
     public void Low_certainty_is_marked_on_the_form_field_and_only_triggers_the_fallback_for_a_required_field()
     {
         var problems = AiReadingRules.Problems(Proposal(p => p["zekerheden"] = new JsonArray(
