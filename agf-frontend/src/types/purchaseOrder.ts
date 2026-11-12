@@ -35,6 +35,8 @@ export interface PurchaseOrderListItem {
     invoiceIndicator: string;
     // Minstens één afwijkende ontvangst vastgelegd (aanduiding "Afwijking" in de lijst).
     hasDeviation?: boolean;
+    // Documentstatus (stap 4a): Open (aanpasbaar) of Definitive; ontbreekt bij een oudere server (dan Open).
+    documentStatus?: string;
 }
 
 export interface PurchaseOrderList {
@@ -73,6 +75,29 @@ export interface PurchaseOrderLine {
     receivedNetWeightKg: number;
     rejectedQuantity: number;
     rejectedNetWeightKg: number;
+    // Aanpassen: de eigen palletinvoer zoals opgeslagen, en of er iets aan de regel hangt (dan blijft ze staan met haar artikel).
+    palletInputCount?: number | null;
+    palletInputPackagesPerPallet?: number | null;
+    palletInputLoose?: number | null;
+    inUse?: boolean;
+}
+
+// Eén veld van een auditregel: kopvelden zonder lineId; regels met action added, changed of removed.
+export interface PurchaseOrderChangeField {
+    field: string;
+    lineId: number | null;
+    action: string;
+    old: string | null;
+    new: string | null;
+}
+
+export interface PurchaseOrderChange {
+    id: number;
+    kind: string;
+    reason: string | null;
+    actorReference: string;
+    createdAt: string;
+    fields: PurchaseOrderChangeField[];
 }
 
 export interface PurchaseOrderReceiptLine {
@@ -194,6 +219,62 @@ export interface PurchaseOrderDetail {
     salesOrders?: PurchaseOrderSalesLink[];
     // Totalen onder de regels (PurchaseLineMath); ontbreekt bij een oudere server.
     totals?: PurchaseLineTotalsDto;
+    // Documentstatus (stap 4a): Open of Definitive, met wie, wanneer en waardoor; de versie voor aanpassen; wat vastligt; de auditregels.
+    documentStatus?: string;
+    finalizedAt?: string | null;
+    finalizedBy?: string | null;
+    finalizedVia?: string | null;
+    editVersion?: number;
+    editable?: boolean;
+    vendorFixed?: boolean;
+    partijFixed?: boolean;
+    changes?: PurchaseOrderChange[];
+}
+
+export interface UpdatePurchaseOrderLineRequest {
+    id: number | null;
+    productVariantId: number;
+    expectedQuantity: number;
+    expectedUnit: string | null;
+    expectedNetWeightKg: number | null;
+    expectedGrossWeightKg?: number | null;
+    weightSource?: string | null;
+    lotNumber: string | null;
+    palletCount: number | null;
+    packagesPerPallet: number | null;
+    loosePackages?: number | null;
+    unitPrice?: number | null;
+}
+
+// PUT /api/purchase-orders/{id}: hetzelfde als aanmaken, plus de verwachte versie en per bestaande regel haar id.
+export interface UpdatePurchaseOrderRequest {
+    requestId: string;
+    expectedVersion: number;
+    vendorId: number;
+    origin: string;
+    expectedAt: string;
+    supplierReference?: string;
+    orderedOn?: string;
+    note?: string;
+    partijId?: number;
+    newPartij?: { number: string | null };
+    supplierLotReference?: string;
+    lines: UpdatePurchaseOrderLineRequest[];
+}
+
+export interface FinalizePurchaseOrderRequest {
+    requestId: string;
+    expectedVersion: number;
+}
+
+// Correctie na definitief: reden verplicht; prijs per regel, ordernummer van de leverancier en notitie (volledige nieuwe waarden).
+export interface CorrectPurchaseOrderRequest {
+    requestId: string;
+    expectedVersion: number;
+    reason: string;
+    supplierReference: string | null;
+    note: string | null;
+    lines: { id: number; unitPrice: number | null }[];
 }
 
 export interface PurchaseLineTotalsDto {
