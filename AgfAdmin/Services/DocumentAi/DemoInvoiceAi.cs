@@ -25,7 +25,7 @@ namespace AgfAdmin.Services.DocumentAi
                 ["soort"] = "inkoopfactuur",
                 ["leverancier"] = vendor,
                 ["ordernummer_leverancier"] = order,
-                ["factuurnummer"] = order == null ? "DEMO-F-1001" : $"F-{order}",
+                ["factuurnummer"] = order == null ? "DEMO-F-1001" : $"AI-{order}",
                 ["datum"] = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 ["valuta"] = "EUR",
                 ["regels"] = new JsonArray(

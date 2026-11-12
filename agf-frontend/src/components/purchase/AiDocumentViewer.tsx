@@ -51,7 +51,7 @@ export default function AiDocumentViewer({ extraction }: { extraction: AiExtract
             {open && (
                 <div className="p-2">
                     {failed && <p className="text-sm text-gray-700">{t('ai_document_unavailable')}</p>}
-                    {url && pdf && <iframe src={url} title={extraction.fileName} className="h-[60vh] w-full rounded border border-gray-200 lg:h-[78vh]" data-testid="ai-document-pdf" />}
+                    {url && pdf && <iframe src={`${url}#navpanes=0&view=FitH`} title={extraction.fileName} className="h-[60vh] w-full rounded border border-gray-200 lg:h-[78vh]" data-testid="ai-document-pdf" />}
                     {url && !pdf && (
                         <div className="max-h-[60vh] overflow-auto rounded border border-gray-200 lg:max-h-[78vh]">
                             {/* eslint-disable-next-line @next/next/no-img-element -- een object-URL van het eigen document, geen afbeelding van de site */}

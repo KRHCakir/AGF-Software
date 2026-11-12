@@ -250,6 +250,25 @@ test('hoofdstuk Inkoopfactuur invoeren: factuur van de rondleidingsleverancier m
     await page.close();
 });
 
+// Factuur uploaden (stap 7a): met de nagebootste lezer (DocumentAi__Reader=Demo, geen echte AI-aanroep) AI-lezen aanzetten, de demofactuur
+// uploaden en het voorstel goedkeuren: de factuur heeft "goedgekeurd door" de ingelogde gebruiker, het document als bijlage, en het
+// factuurnummer staat op de demo-inkooporder (gekoppeld op het ordernummer van de leverancier).
+test('hoofdstuk Factuur uploaden: AI-voorstel van de demolezer, goedgekeurd, bijlage en orderkoppeling', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'ai-invoice');
+    expectAllSteps(result);
+    const number = /Factuur (AI-DEMO-TOUR-\d+)/.exec(result.done)?.[1];
+    const invoices = await json<{ id: number; invoiceNumber: string | null; vendorName: string | null; totalAmount: number }[]>(request, '/purchase-invoices');
+    const listed = invoices.find((candidate) => candidate.invoiceNumber === number)!;
+    expect([listed.vendorName, listed.totalAmount]).toEqual([expect.stringMatching(/^DEMO-TOUR-\d+ Kwekerij$/), 178.6]);
+    const invoice = await json<{ aiReading: { approvedBy: string; modelName: string; adjustedFields: number } | null; attachments: { fileName: string; sha256: string }[] }>(request, `/purchase-invoices/${listed.id}`);
+    expect(invoice.aiReading).toMatchObject({ approvedBy: await signedIn(request), modelName: 'Demolezer', adjustedFields: 0 });
+    expect(invoice.attachments.map((a) => [a.fileName.startsWith('demo-factuur--'), a.sha256.length])).toEqual([[true, 64]]);
+    const orders = await json<{ items: { orderNumber: string; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${encodeURIComponent(number!.slice(3))}`);
+    expect(orders.items.some((order) => order.invoiceNumbers.some((ref) => ref.invoiceNumber === number))).toBe(true);
+    await page.close();
+});
+
 // Kosten verdelen (P2): een directe factuur van derden (Handling € 5.000) zonder inkooporder; € 500 op de verkoop-partij van de rondleiding,
 // € 4.500 blijft algemene kosten, en de partij toont de kosten. Op een lege database zou het hoofdstuk eerst een verkoop aanmaken; hier
 // bestaat die al (hoofdstuk Verkooporder hierboven), dus worden die stappen overgeslagen.

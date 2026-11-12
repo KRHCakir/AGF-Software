@@ -324,7 +324,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 {result.replayed && <p className="mt-1 text-sm text-green-900">{t('supply_saved_before')}</p>}
                 <p className="mt-1 text-sm text-gray-800">{t('purchase_saved_summary', { vendor: result.invoice.vendorName ?? '', total: money(result.invoice.totalAmount), currency: result.invoice.currency ?? '', status: result.invoice.status })}</p>
                 {result.invoice.aiReading && (
-                    <p className="mt-1 text-sm text-gray-800" data-testid="pinvoice-ai-approved">
+                    <p className="mt-1 text-sm text-gray-800" data-testid="pinvoice-ai-approved" data-tour="pinvoice-ai-approved">
                         {t('ai_approved_by', { name: result.invoice.aiReading.approvedBy, model: result.invoice.aiReading.modelName ?? '–' })}
                     </p>
                 )}

@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatMoney } from '../../lib/availability';
+import { formatDateTime, formatMoney } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { formatRate, isEuro } from '../../lib/exchangeRate';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getInvoiceAllocations, getPurchaseInvoice, refreshExchangeRate } from '../../services/purchaseInvoiceService';
+import { getInvoiceAttachment } from '../../services/aiReadingService';
 import { type InvoiceAllocations, lineEuro } from '../../types/partijCost';
 import type { PurchaseInvoice } from '../../types/purchaseInvoice';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
@@ -37,6 +38,29 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
     const { t, locale } = useTranslation();
     const [state, setState] = useState<LoadState<{ invoice: PurchaseInvoice; allocations: InvoiceAllocations }>>({ status: 'loading' });
     const [reloadToken, setReloadToken] = useState(0);
+    const [attachmentFailed, setAttachmentFailed] = useState(false);
+    // Bijlage openen: het venster gaat direct bij de klik open (anders blokkeert de browser het als pop-up) en krijgt het document zodra
+    // het binnen is. Is het venster toch geblokkeerd, dan wordt het bestand gedownload; lukt ophalen niet, dan een melding.
+    const openAttachment = async (id: number, attachment: { id: number; fileName: string }) => {
+        setAttachmentFailed(false);
+        const target = window.open('', '_blank');
+        if (target !== null) target.opener = null;
+        try {
+            const url = URL.createObjectURL(await getInvoiceAttachment(id, attachment.id));
+            if (target !== null && !target.closed) {
+                target.location.href = url;
+            } else {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = attachment.fileName;
+                link.click();
+            }
+            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } catch {
+            target?.close();
+            setAttachmentFailed(true);
+        }
+    };
     const [rate, setRate] = useState<{ status: 'idle' | 'fetching' } | { status: 'unavailable' | 'none'; error: ApiError }>({ status: 'idle' });
     const rateRequest = useRef<AbortController | null>(null);
 
@@ -96,6 +120,20 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                 <p className="text-sm text-gray-800">
                     {invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'} · {t('invoice_detail_totals', { net: money(invoice.subTotal), vat: money(invoice.vatAmount), gross: money(invoice.totalAmount) })}
                 </p>
+                {/* AI-voorstel (stap 7a): wie keurde het goed, welk model las het, hoeveel velden werden aangepast; het originele document als bijlage. */}
+                {invoice.aiReading && (
+                    <p className="text-sm text-gray-800" data-testid="invoice-ai-reading" data-tour="invoice-ai-reading">
+                        {t('ai_detail_approved', { name: invoice.aiReading.approvedBy, date: formatDateTime(invoice.aiReading.approvedAt, locale), model: invoice.aiReading.modelName ?? '–', version: invoice.aiReading.modelVersion ?? '–' })}
+                        {invoice.aiReading.adjustedFields > 0 && <> · {t('ai_detail_adjusted', { count: String(invoice.aiReading.adjustedFields) })}</>}
+                    </p>
+                )}
+                {(invoice.attachments ?? []).map((attachment) => (
+                    <button key={attachment.id} type="button" className="mr-2 text-sm text-blue-800 underline underline-offset-2" data-testid="invoice-attachment"
+                        onClick={() => void openAttachment(invoice.id, attachment)}>
+                        📎 {attachment.fileName}
+                    </button>
+                ))}
+                {attachmentFailed && <p role="alert" className="text-sm text-amber-900" data-testid="invoice-attachment-failed">{t('ai_attachment_failed')}</p>}
                 {foreign && (
                     <div className="mt-1 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-sm text-sky-950" data-testid="invoice-exchange-rate" data-tour="invoice-exchange-rate">
                         {rateKnown && (

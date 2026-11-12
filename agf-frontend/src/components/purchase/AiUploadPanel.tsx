@@ -71,7 +71,7 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply }:
                 <button type="button" className={secondaryButtonClass} disabled={!available || reading} onClick={() => input.current?.click()} data-testid="ai-upload-button">
                     ⬆ {t('ai_upload_button')}
                 </button>
-                <input ref={input} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} aria-label={t('ai_upload_button')} data-testid="ai-upload-input"
+                <input ref={input} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} aria-label={t('ai_upload_button')} data-testid="ai-upload-input" data-tour="pinvoice-ai-file"
                     onChange={(event) => void choose(event.target.files?.[0])} />
                 {reading && status && <span role="status" className="font-medium text-blue-900" data-testid="ai-reading">{t('ai_reading', { model: status.primaryModel.name })}</span>}
                 {!reading && available && status && (

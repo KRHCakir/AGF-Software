@@ -3,6 +3,7 @@
 
 import { prerequisite, step } from './compose';
 import { MASTERDATA_CHAPTER } from './masterdataChapter';
+import { AI_INVOICE_CHAPTER } from './aiInvoiceChapter';
 import { DEVIATION_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER } from './purchaseChapters';
 import { lookupChain, precheckChain } from './prechecks';
 import { COSTS_CHAPTER, INVOICE_CHAPTER, PURCHASE_INVOICE_CHAPTER, SALES_CHAPTER, SALES_CORE, STOCK_FOR_SALES } from './salesChapters';
@@ -69,5 +70,5 @@ export const CHAIN_CHAPTER: TourChapter = {
 
 export const TOUR_CHAPTERS: readonly TourChapter[] = [
     SCREENS_CHAPTER, MASTERDATA_CHAPTER, ORDER_CHAPTER, RECEIVE_CHAPTER, DEVIATION_CHAPTER, PRESELL_CHAPTER, SALES_CHAPTER, CHAIN_CHAPTER,
-    PURCHASE_INVOICE_CHAPTER, COSTS_CHAPTER, INVOICE_CHAPTER,
+    PURCHASE_INVOICE_CHAPTER, AI_INVOICE_CHAPTER, COSTS_CHAPTER, INVOICE_CHAPTER,
 ];

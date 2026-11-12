@@ -1,4 +1,4 @@
-import { ApiError, getBlob, getJson, postForm, postJson } from './apiClient';
+import { ApiError, getBlob, getJson, postForm, postJson, putJson } from './apiClient';
 import { type AiExtraction, type AiReadingStatus, isAiExtraction, isAiReadingStatus } from '../types/aiReading';
 
 // /api/purchase-invoices/ai: of AI-lezen aan staat, een document laten lezen (het voorstel), het document bekijken, en het voorstel
@@ -32,4 +32,27 @@ export function aiErrorCode(error: ApiError): string {
     if (body && typeof body.code === 'string') return body.code;
     const file = error.fieldErrors.file?.[0];
     return file ? `file_${file}` : error.kind === 'network' ? 'AI_NETWORK' : 'AI_FAILED';
+}
+
+// Beheer: AI-lezen aan/uit (aanzetten alleen met de bevestiging dat de klant het weet) en de maandlimiet.
+export interface AiReadingSettings { enabled: boolean; enabledBy: string | null; enabledAt: string | null; monthlyLimitEur: number }
+
+const isSettings = (value: unknown): value is AiReadingSettings => typeof value === 'object' && value !== null
+    && typeof (value as AiReadingSettings).enabled === 'boolean' && typeof (value as AiReadingSettings).monthlyLimitEur === 'number';
+
+export async function getAiReadingSettings(signal?: AbortSignal): Promise<AiReadingSettings> {
+    const json = await getJson('/settings/ai-reading', signal);
+    if (!isSettings(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de instelling AI-lezen.');
+    return json;
+}
+
+export async function updateAiReadingSettings(request: { enabled: boolean; customerInformed: boolean; monthlyLimitEur: number }, signal?: AbortSignal): Promise<AiReadingSettings> {
+    const { json } = await putJson('/settings/ai-reading', request, signal);
+    if (!isSettings(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de instelling AI-lezen.');
+    return json;
+}
+
+// Een bijlage van een factuur (het originele document) als bestand.
+export function getInvoiceAttachment(invoiceId: number, attachmentId: number, signal?: AbortSignal): Promise<Blob> {
+    return getBlob(`/purchase-invoices/${invoiceId}/attachments/${attachmentId}`, signal);
 }
