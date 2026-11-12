@@ -47,6 +47,8 @@ export default function NewPurchaseInvoicePage() {
     const [seed, setSeed] = useState<{ key: number; draft: InvoiceDraft } | null>(null);
     const [closing, setClosing] = useState(false);
     const [closeFailed, setCloseFailed] = useState(false);
+    const [orderFailed, setOrderFailed] = useState(false);
+    const [orderToken, setOrderToken] = useState(0);
 
     const changeReview = (next: StoredAiReview | null) => {
         setReview(next);
@@ -109,21 +111,30 @@ export default function NewPurchaseInvoicePage() {
         const orderId = Number(new URLSearchParams(window.location.search).get('orderId'));
         if (!Number.isInteger(orderId) || orderId <= 0) return;
         const controller = new AbortController();
+        setOrderFailed(false);
         getPurchaseOrder(orderId, controller.signal)
             .then(async (order) => {
                 const vendor = ready.vendors.find((candidate) => candidate.id === order.vendorId) ?? null;
-                if (vendor === null) return;
+                if (vendor === null) throw new Error('vendor');
                 const [found] = await listInvoiceCandidates(vendor.id, '', orderId, controller.signal);
-                if (!found) return;
+                if (!found) throw new Error('candidate');
+                // Pas nu (na het ophalen) bepalen of er een concept is, zodat ook invoer tijdens het wachten niet stilzwijgend wordt overschreven.
+                if (hasDraft(ready.settings) && !window.confirm(t('ai_replace_confirm'))) {
+                    window.history.replaceState(window.history.state, '', window.location.pathname);
+                    return;
+                }
                 const start = selectVendor(emptyDraft(todayInAmsterdam(), ready.settings), vendor, ready.settings);
                 clearDraft();
                 setSeed({ key: Date.now(), draft: addOrderLines(start, found, ready.settings.defaultVatPercentage) });
                 window.history.replaceState(window.history.state, '', window.location.pathname);
             })
-            .catch(() => undefined);
+            .catch((caught: unknown) => {
+                if (controller.signal.aborted || toApiError(caught).kind === 'aborted') return;
+                setOrderFailed(true);
+            });
         return () => controller.abort();
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- eenmaal zodra de referentiedata er is
-    }, [ready === null]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- eenmaal zodra de referentiedata er is (en bij opnieuw proberen)
+    }, [ready === null, review === null, orderToken]);
 
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
@@ -155,6 +166,12 @@ export default function NewPurchaseInvoicePage() {
                     <MissingMasterDataNotice missing={missingMasterData({ vendors: state.data.vendors }, ['vendor'])} />
                     {review === null && <AiUploadPanel onProposal={(extraction) => propose(extraction, state.data)} beforeUpload={() => !hasDraft(state.data.settings) || window.confirm(t('ai_replace_confirm'))} />}
                     {closeFailed && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="ai-close-failed">{t('ai_close_failed')}</p>}
+                    {orderFailed && (
+                        <div role="alert" className="flex flex-wrap items-center gap-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="order-prefill-failed">
+                            <span>{t('purchase_order_prefill_failed')}</span>
+                            <button type="button" className="rounded border border-amber-400 px-2 py-0.5 font-medium" onClick={() => setOrderToken((n) => n + 1)}>{t('purchase_order_prefill_retry')}</button>
+                        </div>
+                    )}
                     <div className={review === null ? '' : 'grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]'}>
                         {review !== null && <AiDocumentViewer key="document" extraction={review.extraction} />}
                         <div key="form" className="min-w-0">

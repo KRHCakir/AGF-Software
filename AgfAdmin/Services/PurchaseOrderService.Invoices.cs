@@ -64,8 +64,9 @@ namespace AgfAdmin.Services
         // Geannuleerde orders nooit. PriceAdjustable: de prijs op de bon kan bij een verschil worden aangepast (open magazijnorder).
         public async Task<List<PurchaseOrderInvoiceCandidateDto>> InvoiceCandidatesAsync(int vendorId, string query, int? orderId, CancellationToken cancellationToken = default)
         {
-            var list = await ListAsync(query, "all", vendorId, 1, PurchaseOrderRules.MaxPageSize, null, cancellationToken);
-            var ids = list.Value.Items.Where(i => i.StoredStatus != SupplyRules.StatusCancelled && (orderId == null || i.Id == orderId)).Select(i => i.Id).ToList();
+            // De hele lijst, niet één pagina: anders vallen oudere open orders (of de gevraagde order) buiten de kandidaten.
+            var list = await ListAllAsync(query, "all", vendorId, null, cancellationToken);
+            var ids = list.Value.Where(i => i.StoredStatus != SupplyRules.StatusCancelled && (orderId == null || i.Id == orderId)).Select(i => i.Id).ToList();
             if (orderId != null && ids.Count == 0 && string.IsNullOrWhiteSpace(query)) return new List<PurchaseOrderInvoiceCandidateDto>();
             var facts = await LoadFactsAsync(ids, cancellationToken);
             var orders = await _db.SupplyCommitments.AsNoTracking().Where(c => ids.Contains(c.Id))
@@ -93,7 +94,9 @@ namespace AgfAdmin.Services
                 })
                 // Een geheel vervangen regel zonder ontvangst en zonder factuur doet niet mee.
                 .Where(l => l.ExpectedQuantity > 0m || l.ReceivedQuantity > 0m || l.InvoicedQuantity > 0m).ToList();
-                if (string.IsNullOrWhiteSpace(query) && orderId == null && lines.All(l => l.OpenQuantity <= 0m)) continue;
+                // Ook een order met alleen een oude "Factuur ontvangen"-verwijzing (zonder regels) telt als gefactureerd, net als in de orderlijst.
+                if (string.IsNullOrWhiteSpace(query) && orderId == null
+                    && (lines.All(l => l.OpenQuantity <= 0m) || facts.For(id).BillingStatus() == PurchaseInvoiceOrderLinkRules.BillingFull)) continue;
                 result.Add(new PurchaseOrderInvoiceCandidateDto
                 {
                     Id = order.Id, OrderNumber = order.OrderNumber, SupplierReference = order.SupplierReference, OrderedOn = order.OrderedOn,

@@ -92,7 +92,8 @@ export function compareLine(line: LineDraft): LineComparison | null {
         quantity, orderAmount, invoiceAmount, invoiceUnitPrice,
         perUnit: invoiceUnitPrice === null || link.orderUnitPrice === null ? null : round2(invoiceUnitPrice - link.orderUnitPrice),
         total: invoiceAmount === null || orderAmount === null ? null : round2(invoiceAmount - orderAmount),
-        differs: invoiceUnitPrice !== null && link.orderUnitPrice !== invoiceUnitPrice,
+        // Vergeleken met de prijs na korting zonder afronding: 0,01% korting op 13,50 (13,49865) is een verschil, ook al toont het 13,50.
+        differs: price !== null && discount !== null && (link.orderUnitPrice === null || Math.abs(price * (1 - discount / 100) - link.orderUnitPrice) > 1e-9),
         over: quantity !== null && link.invoicedQuantity + quantity > invoiceBasis(link) + 1e-9,
         partial: quantity !== null && quantity < link.openQuantity,
     };

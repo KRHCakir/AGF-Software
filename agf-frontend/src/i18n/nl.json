@@ -2513,6 +2513,8 @@
   "ai_status_failed": "Kon niet nagaan of AI-lezen aan staat. Handmatig invoeren werkt gewoon.",
   "ai_status_retry": "Opnieuw proberen",
   "ai_close_failed": "Het voorstel kon niet worden afgesloten; er is niets veranderd. Probeer het opnieuw.",
+  "purchase_order_prefill_failed": "De regels van de bon konden niet worden overgenomen; het formulier is nog leeg. Probeer het opnieuw.",
+  "purchase_order_prefill_retry": "Opnieuw proberen",
   "ai_attachment_failed": "De bijlage kon niet worden geopend. Probeer het opnieuw.",
   "ai_not_configured": "AI-lezen staat niet aan: {reason}",
   "ai_manual_enter": "Handmatig invoeren",

@@ -2513,6 +2513,8 @@
   "ai_status_failed": "Could not check whether AI reading is on. Manual entry still works.",
   "ai_status_retry": "Try again",
   "ai_close_failed": "The proposal could not be closed; nothing has changed. Please try again.",
+  "purchase_order_prefill_failed": "The order lines could not be loaded; the form is still empty. Please try again.",
+  "purchase_order_prefill_retry": "Try again",
   "ai_attachment_failed": "The attachment could not be opened. Please try again.",
   "ai_not_configured": "AI reading is off: {reason}",
   "ai_manual_enter": "Enter manually",

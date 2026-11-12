@@ -163,10 +163,10 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                 <span className="font-medium">{t('po_invoice')}</span>{' '}
                                 <Link href={`/purchase-invoices?id=${invoice.id}`} className="font-mono text-blue-800 underline underline-offset-2">{invoice.invoiceNumber ?? `#${invoice.id}`}</Link>
                                 {invoice.invoiceDate && <> · {formatCalendarDate(invoice.invoiceDate, locale)}</>}
-                                {' · '}{t('po_amount_excl_vat_value', { amount: formatMoney(invoice.amountExclVat, null, locale) })}
+                                {' · '}{t('po_amount_excl_vat_value', { amount: formatMoney(invoice.amountExclVat, invoice.currency, locale) })}
                                 {invoice.difference !== null && invoice.difference !== 0 && (
                                     <span className={`ml-1 font-medium ${invoice.decision === 'AdjustOrder' ? 'text-gray-700' : 'text-red-800'}`} data-testid="po-invoice-difference">
-                                        {t(invoice.decision === 'AdjustOrder' ? 'po_invoice_difference_adjusted' : 'po_invoice_difference_recorded', { amount: formatMoney(invoice.difference, null, locale) })}
+                                        {t(invoice.decision === 'AdjustOrder' ? 'po_invoice_difference_adjusted' : 'po_invoice_difference_recorded', { amount: formatMoney(invoice.difference, invoice.currency, locale) })}
                                     </span>
                                 )}
                             </li>
