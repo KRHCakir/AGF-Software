@@ -27,7 +27,7 @@ namespace AgfAdmin.Services
                 ["variety"] = "Variety", ["packaging"] = "Packaging", ["brand"] = "Brand", ["size"] = "Size", ["origin"] = "Origin", ["netKg"] = "Net kg",
                 ["supplier"] = "Supplier", ["total"] = "Total", ["packages"] = "packages", ["pallets"] = "pallets", ["material"] = "Packaging material going along",
                 ["driver"] = "Driver name", ["signature"] = "Signature", ["date"] = "Date", ["remarks"] = "Remarks", ["version"] = "version", ["page"] = "page",
-                ["created"] = "made", ["notReserved"] = "not reserved yet",
+                ["created"] = "made", ["notReserved"] = "not reserved yet", ["kgPartial"] = "net kg of the rows with a weight only",
             },
             [SalesOrderDocumentRules.LanguageDutch] = new()
             {
@@ -36,7 +36,7 @@ namespace AgfAdmin.Services
                 ["variety"] = "Ras", ["packaging"] = "Inhoud", ["brand"] = "Merk", ["size"] = "Maat", ["origin"] = "Herkomst", ["netKg"] = "Netto kg",
                 ["supplier"] = "Leverancier", ["total"] = "Totaal", ["packages"] = "colli", ["pallets"] = "pallets", ["material"] = "Emballage die mee gaat",
                 ["driver"] = "Naam chauffeur", ["signature"] = "Handtekening", ["date"] = "Datum", ["remarks"] = "Opmerkingen", ["version"] = "versie", ["page"] = "pagina",
-                ["created"] = "gemaakt", ["notReserved"] = "nog niet gereserveerd",
+                ["created"] = "gemaakt", ["notReserved"] = "nog niet gereserveerd", ["kgPartial"] = "netto kg alleen van de regels met een gewicht",
             },
         };
 
@@ -45,7 +45,7 @@ namespace AgfAdmin.Services
         // (PurchaseLineMath.Round2), zodat de laadbon hetzelfde aantal pallets toont als de order zelf; afkappen zou 0,96 op de order en 0,95
         // op de bon geven.
         public static string Pallets(decimal? value) => value == null ? "–" : PurchaseLineMath.Round2(value.Value).ToString("N2", Dutch);
-        public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.#", Dutch);
+        public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.###", Dutch);
 
         private static string LocalTime(DateTime utc, bool withTime) =>
             TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), AmsterdamBusinessCalendar.Zone).ToString(withTime ? "dd-MM-yyyy HH:mm" : "dd-MM-yyyy", Dutch);
@@ -105,7 +105,8 @@ namespace AgfAdmin.Services
                     Field(L("loadOn"), slip.LoadAt != null ? LocalTime(slip.LoadAt.Value, true) : LocalTime(slip.RequestedDeliveryDate, false), true);
                     // Kenteken: leeg = een lijn om met de hand in te vullen.
                     Field(L("plate"), slip.LicensePlate ?? "____________________", slip.LicensePlate != null);
-                    Field(L("warehouse"), slip.CompanyAddress == null ? slip.CompanyName : $"{slip.CompanyName}, {slip.CompanyAddress}");
+                    // De loods uit de snapshot (waar echt geladen wordt); alleen als die niet is ingesteld (ook oudere versies) het bedrijfsadres.
+                    Field(L("warehouse"), slip.WarehouseAddress ?? (slip.CompanyAddress == null ? slip.CompanyName : $"{slip.CompanyName}, {slip.CompanyAddress}"));
                     if (slip.CustomerReference != null) Field(L("reference"), slip.CustomerReference);
                     // Even velden per rij: een lege cel aanvullen, zodat de tabel altijd sluit.
                     var fields = (slip.ShowCustomer ? 1 : 0) + 5 + (slip.CustomerReference != null ? 1 : 0);
@@ -148,7 +149,13 @@ namespace AgfAdmin.Services
                     IContainer Total(IContainer cell) => cell.BorderTop(1.5f).PaddingVertical(4).PaddingHorizontal(2);
                     table.Cell().Element(Total).AlignRight().Text(Quantity(slip.TotalQuantity)).Bold();
                     table.Cell().Element(Total).AlignRight().Text(Pallets(slip.TotalPallets)).Bold();
-                    table.Cell().ColumnSpan(6).Element(Total).Text($"{L("total")}: {Quantity(slip.TotalQuantity)} {L("packages")} · {Pallets(slip.TotalPallets)} {L("pallets")}").Bold();
+                    // Heeft een regel nog geen gewicht (nog niet gereserveerd), dan is het totaal netto kg onvolledig: dat staat er dan bij.
+                    var kgPartial = slip.TotalNetKg != null && slip.Rows.Any(r => r.NetKg == null);
+                    table.Cell().ColumnSpan(6).Element(Total).Text(text =>
+                    {
+                        text.Span($"{L("total")}: {Quantity(slip.TotalQuantity)} {L("packages")} · {Pallets(slip.TotalPallets)} {L("pallets")}").Bold();
+                        if (kgPartial) text.Span($" · {L("kgPartial")}").FontSize(8);
+                    });
                     table.Cell().Element(Total).AlignRight().Text(Kg(slip.TotalNetKg)).Bold();
                     if (slip.ShowSupplier) table.Cell().Element(Total);
                 });

@@ -4,7 +4,9 @@ using AgfAdmin.Models;
 using AgfAdmin.Security;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace AgfAdmin.Tests.Services;
 
@@ -183,8 +185,64 @@ public class LoadingSlipServiceTests : IDisposable
         var settings = await RunAsync(s => s.GetSettingsAsync());
         Assert.Equal(("en", true, true), (settings.Language, settings.ShowCustomer, settings.ShowSupplier));
         Assert.Contains("language", (await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "de" }))).Errors.Keys);
-        var updated = await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "NL", ShowCustomer = false, ShowSupplier = true }));
-        Assert.Equal(("nl", false, true), (updated.Value.Language, updated.Value.ShowCustomer, updated.Value.ShowSupplier));
+        var updated = await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "NL", ShowCustomer = false, ShowSupplier = true, WarehouseAddress = "  Koelhuis Zuid, Havenweg 4, Ridderkerk " }));
+        Assert.Equal(("nl", false, true, "Koelhuis Zuid, Havenweg 4, Ridderkerk"), (updated.Value.Language, updated.Value.ShowCustomer, updated.Value.ShowSupplier, updated.Value.WarehouseAddress));
+        Assert.Contains("warehouseAddress", (await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "en", WarehouseAddress = new string('A', 301) }))).Errors.Keys);
+        // Leeg = weer het bedrijfsadres.
+        Assert.Null((await RunAsync(s => s.UpdateSettingsAsync(new LoadingSlipSettingsDto { Language = "en", WarehouseAddress = " " }))).Value.WarehouseAddress);
+    }
+
+    [Fact]
+    public async Task Passing_on_an_older_version_is_refused_but_the_new_version_from_the_refresh_is_kept()
+    {
+        var (seed, orderId, boxLine, _) = await OrderAsync();
+        var first = (await RunAsync(s => s.ConfirmAsync(orderId, new ConfirmSalesOrderDto()))).Value.Documents.Single();
+        // Een wijziging zonder verversing erna (alsof die nog onderweg is): de verversing bij het doorgeven maakt versie 2.
+        await using (var db = _factory.CreateContext())
+        {
+            await new StockReservationService(db).ReserveAsync(orderId, boxLine, new CreateStockReservationDto { RequestId = Guid.NewGuid(), PalletContentLineId = seed.ApprovedBox, Quantity = 30m, Unit = "box", NetWeightKg = 120m });
+        }
+        var refused = await RunAsync(s => s.MarkSentAsync(orderId, first.Id));
+        Assert.Equal(ServiceResultStatus.Conflict, refused.Status);
+        var versions = await VersionsAsync(orderId);
+        Assert.Equal(new[] { (1, (string)null), (2, (string)null) }, versions.Select(v => (v.Version, v.SentBy)));
+    }
+
+    [Fact]
+    public async Task A_change_saved_while_passing_on_gives_a_newer_version_that_asks_to_send_again()
+    {
+        var (_, orderId, _, _) = await OrderAsync();
+        var first = (await RunAsync(s => s.ConfirmAsync(orderId, new ConfirmSalesOrderDto()))).Value.Documents.Single();
+        // Een gelijktijdige wijziging van een bestaande emballageregel, opgeslagen na de controle en vlak voor de doorgifte. Die raakt de
+        // order en de orderregels niet, dus een lock daarop zou haar niet tegenhouden.
+        var change = new BeforeSentUpdate($"UPDATE \"SalesOrderPackagingLines\" SET \"Quantity\" = 5 WHERE \"SalesOrderId\" = {orderId}");
+        await using var db = _factory.CreateContext(change);
+        var sent = await new LoadingSlipService(db).MarkSentAsync(orderId, first.Id);
+
+        Assert.True(change.Ran);
+        Assert.Equal(ServiceResultStatus.Ok, sent.Status);
+        Assert.True(sent.Value.NeedsResend, "the version that was passed on is no longer the latest");
+        Assert.Equal(new[] { (2, (string)null, true), (1, CurrentUserName, false) }, sent.Value.Documents.Select(d => (d.Version, d.SentBy, d.Latest)));
+        Assert.Equal(new[] { (5, "Euro-pallet") }, LoadingSlipBuilder.Deserialize((await VersionsAsync(orderId)).Last().SnapshotJson).Packaging.Select(p => (p.Quantity, p.Description)));
+    }
+
+    // Voert één keer een wijziging uit vlak voordat de doorgifte (de update van SentAt) naar de database gaat.
+    private sealed class BeforeSentUpdate(string sql) : DbCommandInterceptor
+    {
+        public bool Ran { get; private set; }
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!Ran && command.CommandText.Contains("\"SentAt\"") && command.CommandText.StartsWith("UPDATE \"SalesOrderDocuments\"", StringComparison.Ordinal))
+            {
+                Ran = true;
+                await using var other = command.Connection!.CreateCommand();
+                other.Transaction = command.Transaction;
+                other.CommandText = sql;
+                await other.ExecuteNonQueryAsync(cancellationToken);
+            }
+            return result;
+        }
     }
 
     private static string CurrentUserName => CurrentUser.Default.Actor(100);

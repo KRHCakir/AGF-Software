@@ -17,6 +17,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 // verstuurd: dat doet deel 3. Bekijken, Downloaden en Afdrukken halen de PDF van precies die versie op.
 
 const MAX_PLATE = 32;
+const CLEANUP_MS = 60_000;
 
 // "2026-11-13T06:30" (datetime-local, tijd van de browser) naar een UTC-tijdstip; leeg = de leverdatum zonder tijd.
 export function loadAtFromInput(value: string): string | null {
@@ -44,29 +45,42 @@ async function openPdf(orderId: number, document: SalesOrderDocument, mode: 'vie
         target?.close();
         throw caught;
     }
+    // De URL en een eventueel afdrukframe worden na een minuut opgeruimd: de browser heeft de PDF dan al geladen.
+    let frame: HTMLIFrameElement | null = null;
+    setTimeout(() => { URL.revokeObjectURL(url); frame?.remove(); }, CLEANUP_MS);
     if (mode === 'view') {
         target!.location.href = url;
     } else if (mode === 'download') {
         const link = window.document.createElement('a');
         link.href = url;
         link.download = `Laadbon ${document.number} v${document.version}.pdf`;
+        // Kort aan de DOM toevoegen: in o.a. Safari wordt een klik op een losstaand element niet uitgevoerd.
+        window.document.body.appendChild(link);
         link.click();
+        link.remove();
     } else {
         // Afdrukken: de PDF in een onzichtbaar frame laden en de afdrukdialoog van de browser openen.
-        const frame = window.document.createElement('iframe');
-        frame.style.position = 'fixed';
-        frame.style.width = '0';
-        frame.style.height = '0';
-        frame.style.border = '0';
-        frame.src = url;
-        frame.onload = () => frame.contentWindow?.print();
-        window.document.body.appendChild(frame);
+        const printFrame = window.document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        printFrame.src = url;
+        printFrame.onload = () => printFrame.contentWindow?.print();
+        window.document.body.appendChild(printFrame);
+        frame = printFrame;
     }
 }
 
-export default function SalesOrderDocuments({ order, onConfirmed }: { order: SalesOrder; onConfirmed?: () => void }) {
+// onChanged: de order zelf veranderde (bevestigd, of laden op en kenteken): de pagina haalt de order opnieuw op, met de nieuwe versie.
+export default function SalesOrderDocuments({ order, onChanged }: { order: SalesOrder; onChanged?: () => void }) {
     const { t, locale } = useTranslation();
-    const [data, setData] = useState<Documents | null>(null);
+    const [loaded, setLoaded] = useState<{ documents: Documents; version: number } | null>(null);
+    // Alleen gegevens van de getoonde order en precies de getoonde orderversie: na een orderwissel of -wijziging is de laadbon tot een
+    // geslaagde verversing onbeschikbaar (anders zou een verouderde bon bruikbaar of doorgeefbaar blijven).
+    const data = loaded !== null && loaded.documents.salesOrderId === order.id && loaded.version === order.version ? loaded.documents : null;
+    const setData = (documents: Documents) => setLoaded({ documents, version: order.version });
+    const [reloadToken, setReloadToken] = useState(0);
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
@@ -75,16 +89,32 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
     const [loadAt, setLoadAt] = useState('');
     const [plate, setPlate] = useState('');
     const [showOlder, setShowOlder] = useState(false);
+    const [popupBlocked, setPopupBlocked] = useState(false);
     const cancelled = order.status === 'Cancelled';
+
+    // Een andere order: formulierstatus en meldingen van de vorige order wissen.
+    useEffect(() => {
+        setLoaded(null);
+        setLoadError(null);
+        setError(null);
+        setPopupBlocked(false);
+        setAsking(false);
+        setEditing(false);
+        setLoadAt('');
+        setPlate('');
+        setShowOlder(false);
+    }, [order.id]);
 
     // Opnieuw ophalen na elke wijziging van de order (versie): een nieuwe reservering kan een nieuwe versie van de laadbon geven.
     useEffect(() => {
         const controller = new AbortController();
+        const version = order.version;
+        setLoadError(null);
         getSalesOrderDocuments(order.id, controller.signal)
-            .then((found) => { setData(found); setLoadError(null); })
+            .then((found) => { setLoaded({ documents: found, version }); setLoadError(null); })
             .catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setLoadError(apiError); });
         return () => controller.abort();
-    }, [order.id, order.version]);
+    }, [order.id, order.version, reloadToken]);
 
     const run = async (call: () => Promise<Documents>, after?: () => void) => {
         if (busy) return;
@@ -99,7 +129,6 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
             setBusy(false);
         }
     };
-    const [popupBlocked, setPopupBlocked] = useState(false);
     const pdf = (document: SalesOrderDocument, mode: 'view' | 'download' | 'print') => {
         setError(null);
         setPopupBlocked(false);
@@ -116,11 +145,11 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
     };
     const confirm = (event: FormEvent) => {
         event.preventDefault();
-        void run(() => confirmSalesOrder(order.id, details()), () => { setAsking(false); onConfirmed?.(); });
+        void run(() => confirmSalesOrder(order.id, details()), () => { setAsking(false); onChanged?.(); });
     };
     const saveLoading = (event: FormEvent) => {
         event.preventDefault();
-        void run(() => updateSalesOrderLoading(order.id, details()), () => setEditing(false));
+        void run(() => updateSalesOrderLoading(order.id, details()), () => { setEditing(false); onChanged?.(); });
     };
 
     const slips = (data?.documents ?? []).filter((document) => document.kind === 'LoadingSlip');
@@ -149,7 +178,9 @@ export default function SalesOrderDocuments({ order, onConfirmed }: { order: Sal
                 <h3 id={`documents-${order.id}`} className="font-semibold text-gray-900">{t('so_documents')}</h3>
                 {data?.confirmedAt && <span className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900" data-testid="so-confirmed">{t('so_confirmed_badge')}</span>}
             </div>
-            {loadError && <ErrorNotice error={loadError} />}
+            {loadError && data === null && (
+                <ErrorNotice error={loadError} actions={<button type="button" className={secondaryButtonClass} onClick={() => setReloadToken((n) => n + 1)} data-testid="so-documents-retry">{t('availability_retry')}</button>} />
+            )}
             {error && <ErrorNotice error={error} />}
             {popupBlocked && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="so-slip-popup-blocked">{t('so_slip_popup_blocked')}</p>}
             {/* Geannuleerd: niet laden, ook als de order nooit bevestigd was. */}

@@ -48,7 +48,7 @@ describe('sales order documents (loading slip)', () => {
 
     test('Confirm asks for load time and plate on the page, then shows the loading slip; nothing is sent', async () => {
         let confirmedCalls = 0;
-        await mounted.render(<SalesOrderDocuments order={order()} onConfirmed={() => { confirmedCalls++; }} />);
+        await mounted.render(<SalesOrderDocuments order={order()} onChanged={() => { confirmedCalls++; }} />);
         await settle();
         assert.ok(calls[0].url.endsWith('/sales-orders/12/documents'));
         await act(async () => { $('[data-tour="so-confirm"]')!.click(); });
@@ -87,6 +87,22 @@ describe('sales order documents (loading slip)', () => {
         await act(async () => { $('[data-tour="so-slip-sent"]')!.click(); });
         await mounted.waitFor(() => $('[data-testid="so-slip-changed"]') === null, 'notice gone');
         assert.ok(calls.some((call) => call.method === 'POST' && call.url.endsWith('/sales-orders/12/documents/102/sent')));
+    });
+
+    test('changing load time or plate saves them and has the page fetch the order again', async () => {
+        let changed = 0;
+        answer = () => json(200, confirmed());
+        await mounted.render(<SalesOrderDocuments order={order({ confirmedAt: '2026-11-12T09:00:00Z' })} onChanged={() => { changed++; }} />);
+        await settle();
+        await act(async () => { $('[data-tour="so-loading-edit"]')!.click(); });
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[data-tour="so-license-plate"]')!, 'BX-44-ZZ'); });
+        answer = () => json(200, confirmed(2, { licensePlate: 'BX-44-ZZ', needsResend: true }));
+        await act(async () => { $('[data-testid="so-loading-form"] button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="so-slip-changed"]') !== null, 'new version shown');
+        const put = calls.find((call) => call.method === 'PUT')!;
+        assert.ok(put.url.endsWith('/sales-orders/12/loading'));
+        assert.deepEqual(JSON.parse(put.body!), { loadAt: null, licensePlate: 'BX-44-ZZ' });
+        assert.equal(changed, 1, 'the order changed (new version), the page fetches it again');
     });
 
     test('a blocked pop-up says so instead of silently doing nothing', async () => {
@@ -145,6 +161,11 @@ describe('sales order documents (loading slip)', () => {
         await act(async () => { mounted.container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[0].click(); });
         await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
         await mounted.waitFor(() => mounted.hasText('loading_slip_saved'), 'saved');
-        assert.deepEqual(JSON.parse(calls.find((call) => call.method === 'PUT')!.body!), { language: 'nl', showCustomer: false, showSupplier: true });
+        assert.deepEqual(JSON.parse(calls.find((call) => call.method === 'PUT')!.body!), { language: 'nl', showCustomer: false, showSupplier: true, warehouseAddress: null });
+        // De loods: bijgesneden opgeslagen; leeg blijft null (dan het bedrijfsadres).
+        await act(async () => { setValue(mounted.container.querySelector<HTMLTextAreaElement>('#loading-slip-warehouse')!, '  Loods 2, Industrieweg 10, Barendrecht '); });
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => calls.filter((call) => call.method === 'PUT').length === 2, 'saved again');
+        assert.equal(JSON.parse(calls.filter((call) => call.method === 'PUT')[1].body!).warehouseAddress, 'Loods 2, Industrieweg 10, Barendrecht');
     });
 });

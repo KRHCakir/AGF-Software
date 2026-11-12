@@ -394,7 +394,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                 )}
             </header>
             {/* Bevestigen en de laadbon (documenten deel 1). */}
-            <SalesOrderDocuments order={order} onConfirmed={() => void onOrderChanged()} />
+            <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} />
             <SalesStepBar order={order} />
 
             {dispatchNotice && (
