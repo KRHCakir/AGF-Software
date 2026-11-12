@@ -33,6 +33,9 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     const [error, setError] = useState<ApiError | null>(null);
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<TransportDraft>(() => draftFrom(null));
+    // De versie waarmee het formulier openging: opslaan en weghalen sturen die mee, zodat een tussentijdse wijziging een conflict geeft (409)
+    // in plaats van stil overschreven te worden, ook als het transport intussen opnieuw is opgehaald.
+    const [opened, setOpened] = useState<{ version: number | null; loadAt: boolean }>({ version: null, loadAt: false });
     const [problems, setProblems] = useState<TransportProblem[]>([]);
     const [busy, setBusy] = useState(false);
     const [carriers, setCarriers] = useState<RelationListItem[]>([]);
@@ -73,7 +76,7 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
     }, [editing]);
 
     const change = (patch: Partial<TransportDraft>) => { setDraft((current) => ({ ...current, ...patch })); setProblems([]); };
-    const start = () => { setDraft(draftFrom(transport)); setProblems([]); setError(null); setSimilar(null); setQuery(''); setEditing(true); };
+    const start = () => { setDraft(draftFrom(transport)); setOpened({ version: transport?.exists ? transport.version : null, loadAt: transport?.loadAt != null }); setProblems([]); setError(null); setSimilar(null); setQuery(''); setEditing(true); };
     const chooseCarrier = (carrier: { id: number; name: string }) => { change({ carrierId: carrier.id, carrierName: carrier.name }); setSimilar(null); setQuery(''); };
 
     const search = useCallback((text: string): LookupMatch<RelationListItem>[] => {
@@ -101,12 +104,12 @@ export default function SalesOrderTransport({ order, onChanged }: { order: Sales
 
     const save = (event: FormEvent) => {
         event.preventDefault();
-        const { request, problems: found } = requestFrom(draft, transport?.exists ? transport.version : null, transport?.loadAt != null);
+        const { request, problems: found } = requestFrom(draft, opened.version, opened.loadAt);
         setProblems(found);
         if (request === null) return;
         void call(async () => { setTransport(await saveSalesOrderTransport(order.id, request)); setEditing(false); onChanged?.(); });
     };
-    const remove = () => void call(async () => { setTransport(await deleteSalesOrderTransport(order.id, transport?.version ?? 0)); setEditing(false); onChanged?.(); });
+    const remove = () => void call(async () => { setTransport(await deleteSalesOrderTransport(order.id, opened.version ?? 0)); setEditing(false); onChanged?.(); });
 
     const problem = (key: TransportProblem, message: string) => problems.includes(key) && <p role="alert" className="text-xs text-red-800" data-testid={`transport-problem-${key}`}>{message}</p>;
     const defaultHint = (value: string | null | undefined) => value ? <span className="block text-xs text-gray-600">{t('so_transport_default', { value })}</span> : null;
