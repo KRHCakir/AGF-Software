@@ -82,6 +82,7 @@ namespace AgfAdmin.Data
     //    met exact haar verlaging. Een afwijking verwijst naar een opgeslagen regel en een nieuwe vervangende regel van dezelfde order,
     //    hetzelfde artikel (product en ras) maar een andere variant, met verwacht = de ontvangen hoeveelheid, en naar de nieuwe inhoudsregel
     //    op die vervangende regel; klantgebonden toewijzingen passen daarna nog op de oorspronkelijke regel. Afwijkingen zijn append-only.
+    //    Een aanpassing of correctie van de order zelf (met auditregel, zonder afwijking op die regel) valt onder regel 29.
     // 19. artikelen (zie TraceabilityGuard.Articles.cs): een artikel wordt alleen verwijderd als er nergens iets aan hangt (orders,
     //    ontvangsten via hun orderregel, afwijkingen, facturen, oude voorraad, oude bestellingen of afval), een productsoort alleen zonder
     //    artikelen; een nieuwe inkooporder-, verkooporder- of inkoopfactuurregel wijst nooit naar een gearchiveerd artikel; de
@@ -105,6 +106,11 @@ namespace AgfAdmin.Data
     //    verandert nooit; de soort van een kostenartikel verandert nooit.
     // 28. AI-lezen (zie TraceabilityGuard.AiReading.cs): een bijlage bij een factuur wordt nooit gewijzigd of verwijderd; een goedgekeurde
     //    AI-lezing ligt vast (wat de AI voorstelde, wat de gebruiker goedkeurde, wie en wanneer); geen enkele lezing wordt verwijderd.
+    // 29. inkooporder aanpassen (zie TraceabilityGuard.PurchaseOrderChanges.cs): wat regel 18 van een orderregel vastlegt, verandert
+    //    buiten een afwijking alleen samen met precies één auditregel van die order: Edit zolang ze Open is (een regel met ontvangst of
+    //    historie blijft staan en houdt artikel en eenheid, nooit onder ontvangen; leverancier vast na ontvangst). Finalize maakt haar
+    //    Definitive (met wie/wanneer/waardoor, nooit terug); daarna verandert ze alleen nog met een Correction met reden (prijs,
+    //    ordernummer van de leverancier en notitie). Auditregels zijn append-only. Regel 18 blijft voor afwijkingen ongewijzigd.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -227,6 +233,7 @@ namespace AgfAdmin.Data
             await CheckPartijCostsAsync(db, async, cancellationToken);
             await CheckPackagingAsync(db, async, cancellationToken);
             await CheckAiReadingAsync(db, async, cancellationToken);
+            await CheckPurchaseOrderChangesAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
