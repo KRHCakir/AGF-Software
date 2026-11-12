@@ -46,6 +46,20 @@ public class PurchaseOrderDocumentMigrationTests : IDisposable
         Assert.Equal(("Open", null), (orders[plain.OrderId].DocumentStatus, orders[plain.OrderId].FinalizedAt));
     }
 
+    [Fact]
+    public async Task The_Database_Refuses_Definitive_Without_How_Or_Open_With_Finalized_Data()
+    {
+        var order = await OrderAsync();
+        await using var db = _factory.CreateContext();
+        // Rechtstreeks in de database (buiten de guard om): ook een lege FinalizedVia bij Definitive weigert de check-constraint.
+        await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync(
+            $"UPDATE \"SupplyCommitments\" SET \"DocumentStatus\" = 'Definitive', \"FinalizedAt\" = '2026-11-12', \"FinalizedBy\" = 'Jan', \"FinalizedVia\" = NULL WHERE \"Id\" = {order.OrderId}"));
+        await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlRawAsync(
+            $"UPDATE \"SupplyCommitments\" SET \"FinalizedBy\" = 'Jan' WHERE \"Id\" = {order.OrderId}"));
+        var stored = await db.SupplyCommitments.SingleAsync(c => c.Id == order.OrderId);
+        Assert.Throws<ArgumentException>(() => AgfAdmin.Services.PurchaseOrderDocumentRules.Finalize(stored, "Telefoon", "Jan", DateTime.UtcNow, Guid.NewGuid()));
+    }
+
     private static SupplyCommitmentInvoiceRef InvoiceRef(int orderId, string kind, string number, DateTime at, string actor) => new()
     {
         RequestId = Guid.NewGuid(), SupplyCommitmentId = orderId, Kind = kind, InvoiceNumber = number, InvoiceNumberKey = number.ToLowerInvariant(), ActorReference = actor, CreatedAt = at,
