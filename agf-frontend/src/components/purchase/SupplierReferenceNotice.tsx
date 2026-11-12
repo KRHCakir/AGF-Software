@@ -11,8 +11,9 @@ import OrderNumberText from './OrderNumberText';
 // Bij Inkooporder aanmaken: heeft deze leverancier al een order met dit ordernummer (zonder hoofdletters, spaties en streepjes vergeleken),
 // dan een waarschuwing met een link naar die order. Geen blokkade: twee orders op dezelfde bevestiging of partij kan gewoon. Een mislukte
 // opzoeking toont niets. Bij een ander nummer of een andere leverancier verdwijnt de oude waarschuwing meteen; een afgebroken opzoeking
-// (er is intussen verder getypt) telt niet. Gezocht wordt op de sleutel, dus "45-21" en "45 21" geven geen nieuwe opzoeking.
-export default function SupplierReferenceNotice({ supplierReference, vendorId }: { supplierReference: string; vendorId: number | null }) {
+// (er is intussen verder getypt) telt niet. Gezocht wordt op de sleutel, dus "45-21" en "45 21" geven geen nieuwe opzoeking. Bij
+// aanpassen telt de order zelf niet mee (excludeOrderId): haar eigen nummer is geen dubbel.
+export default function SupplierReferenceNotice({ supplierReference, vendorId, excludeOrderId = null }: { supplierReference: string; vendorId: number | null; excludeOrderId?: number | null }) {
     const { t } = useTranslation();
     const [matches, setMatches] = useState<PurchaseOrderSupplierReferenceMatch[]>([]);
     const key = supplierReferenceKey(supplierReference);
@@ -23,11 +24,11 @@ export default function SupplierReferenceNotice({ supplierReference, vendorId }:
         const controller = new AbortController();
         const handle = setTimeout(() => {
             findOrdersBySupplierReference(key, vendorId, controller.signal)
-                .then((found) => { if (!controller.signal.aborted) setMatches(found); })
+                .then((found) => { if (!controller.signal.aborted) setMatches(found.filter((match) => match.id !== excludeOrderId)); })
                 .catch(() => { if (!controller.signal.aborted) setMatches([]); });
         }, 300);
         return () => { clearTimeout(handle); controller.abort(); };
-    }, [key, vendorId]);
+    }, [key, vendorId, excludeOrderId]);
 
     if (key === null || vendorId === null || matches.length === 0) return null;
     return (

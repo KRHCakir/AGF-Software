@@ -37,6 +37,8 @@ export interface CreateSupplyCommitmentRequest {
     partijId?: number;
     newPartij?: { number: string | null };
     supplierLotReference?: string;
+    // Notitie bij de order (intern, optioneel).
+    note?: string;
     lines: CreateSupplyCommitmentLineRequest[];
 }
 

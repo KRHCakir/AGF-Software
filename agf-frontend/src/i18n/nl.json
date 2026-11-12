@@ -2650,5 +2650,7 @@
   "po_history_edited": "Aangepast door {actor} ({count} wijzigingen)",
   "po_history_finalized": "Definitief gemaakt door {actor}",
   "po_history_finalized_invoice": "Definitief door een gekoppelde factuur ({actor})",
-  "po_history_corrected": "Correctie door {actor}: {reason}"
+  "po_history_corrected": "Correctie door {actor}: {reason}",
+  "po_edit_partij_kept": "Een partij gaat nooit van een order af; kies eventueel een andere partij.",
+  "po_not_found": "Deze inkooporder bestaat niet (meer)."
 }

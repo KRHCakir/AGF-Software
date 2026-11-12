@@ -16,6 +16,10 @@ import { ApiError, toApiError } from '../../services/apiClient';
 import OrderNumberText from '../purchase/OrderNumberText';
 import SupplierReferenceNotice from '../purchase/SupplierReferenceNotice';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
+import { updatePurchaseOrder } from '../../services/purchaseOrderService';
+import { type OrderEdit, lineLimits, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
+import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
+import { MAX_NOTE_LENGTH } from '../../lib/purchaseOrderRules';
 import { getNextPartijNumber } from '../../services/partijService';
 import { type PartijSummary, isPartijExistsConflict } from '../../types/partij';
 import { SupplyRoute } from '../../types/availability';
@@ -55,29 +59,54 @@ interface HeaderDraft {
     orderedOn: string;
     // Het eigen lotnummer van de leverancier (vrije tekst, optioneel).
     supplierLotReference: string;
+    // Notitie bij de order (intern, optioneel).
+    note: string;
 }
 
-// Bevroren verzending: exact deze payload en requestId worden bij "opnieuw proberen" verstuurd.
+// Bevroren verzending: exact deze payload en requestId worden bij "opnieuw proberen" verstuurd (aanmaken of aanpassen).
 interface PendingSubmission {
     requestId: string;
-    payload: CreateSupplyCommitmentRequest;
+    payload: CreateSupplyCommitmentRequest | UpdatePurchaseOrderRequest;
 }
 
 const MAX_LINES = 200;
-const emptyLine = (): PurchaseLineDraft => emptyPurchaseLine(newRequestId());
-const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), supplierLotReference: '' });
 
-// Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId).
-export default function PlanSupplyForm({ route, reference, onReceive }: {
+// Aanpassen: een 409 met code (iemand anders was eerder, intussen definitief, of niet aanpasbaar) in gewone taal.
+const EDIT_CONFLICTS: Readonly<Record<string, string>> = { stale: 'po_edit_stale', definitive: 'po_edit_definitive_now', notEditable: 'po_edit_not_editable' };
+function editConflict(error: ApiError): string | null {
+    const body = error.body as { code?: unknown } | null | undefined;
+    return typeof body?.code === 'string' ? EDIT_CONFLICTS[body.code] ?? null : null;
+}
+const emptyLine = (): PurchaseLineDraft => emptyPurchaseLine(newRequestId());
+const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), supplierLotReference: '', note: '' });
+
+// De partij van een order die wordt aangepast, als "bestaande partij" in het partijveld (alleen id en nummer zijn nodig).
+const orderPartij = (order: PurchaseOrderDetail): PartijChoice => order.partijId && order.partijNumber
+    ? { kind: 'existing', number: order.partijNumber, partij: { id: order.partijId, number: order.partijNumber, kind: 'Purchase', salesOrderId: null, status: 'Open', note: null, createdAt: '', createdBy: '', linked: true } }
+    : NO_PARTIJ;
+
+// Aanpassen (stap 4a): dezelfde invoer als aanmaken, gevuld met de opgeslagen order; opslaan via PUT /api/purchase-orders/{id}.
+export interface PurchaseOrderEditing {
+    order: PurchaseOrderDetail;
+    onSaved: (order: PurchaseOrderDetail) => void;
+}
+
+// Aanvoer plannen voor Warehouse of DirectTrade via POST /api/supply-commitments (idempotent via requestId). Met `editing` hetzelfde
+// formulier voor een opgeslagen inkooporder (alle sneltoetsen en de nl-notatie gelden ook hier), met de grenzen na ontvangst.
+export default function PlanSupplyForm({ route, reference, onReceive, editing = null }: {
     route: SupplyRoute;
     reference: ReferenceData;
     onReceive: (commitment: SupplyCommitment) => void;
+    editing?: PurchaseOrderEditing | null;
 }) {
     const { t, locale } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     const isDirect = route === 'DirectTrade';
-    const [header, setHeader] = useState<HeaderDraft>(emptyHeader);
-    const [lines, setLines] = useState<PurchaseLineDraft[]>(() => [emptyLine()]);
+    // Aanpassen: het formulier opent met de opgeslagen order; per regel wat vastligt (één keer bepaald bij openen).
+    const [opened] = useState(() => (editing === null ? null : orderEditOf(editing.order)));
+    const edit: OrderEdit | null = opened?.edit ?? null;
+    const [header, setHeader] = useState<HeaderDraft>(() => (opened === null ? emptyHeader() : { ...emptyHeader(), ...opened.header }));
+    const [lines, setLines] = useState<PurchaseLineDraft[]>(() => opened?.lines ?? [emptyLine()]);
     const [pending, setPending] = useState<PendingSubmission | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
@@ -90,10 +119,11 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     // Partij (kop): het voorstel volgens de bedrijfsinstelling (null in modus Eigen of als het niet te laden is), de keuze en de open
     // vraag "Partij … bestaat al, wil je die gebruiken?".
     const [suggestion, setSuggestion] = useState<string | null>(null);
-    const [partij, setPartij] = useState<PartijChoice>(NO_PARTIJ);
+    const [partij, setPartij] = useState<PartijChoice>(() => (editing === null ? NO_PARTIJ : orderPartij(editing.order)));
     const [partijExists, setPartijExists] = useState<PartijSummary | null>(null);
     const [suggestionToken, setSuggestionToken] = useState(0);
-    const partijTouched = useRef(false);
+    // Bij aanpassen nooit een voorstel over de partij van de order heen.
+    const partijTouched = useRef(editing !== null);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -147,13 +177,15 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         edited();
     };
 
+    const limitsOf = (key: string) => lineLimits(edit?.lines.get(key));
+
     const removeLine = (key: string) => {
-        if (locked || lines.length <= 1) return;
+        if (locked || lines.length <= 1 || !limitsOf(key).removable) return;
         setLines((current) => current.filter((line) => line.key !== key));
         edited();
     };
 
-    const validate = (): { payload: Omit<CreateSupplyCommitmentRequest, 'requestId'> | null; errors: FieldErrors } => {
+    const validate = (): { payload: Omit<CreateSupplyCommitmentRequest, 'requestId'> | null; errors: FieldErrors; editLines?: UpdatePurchaseOrderRequest['lines'] } => {
         const found: FieldErrors = {};
         const vendorId = Number(header.vendorId);
         if (!header.vendorId) addError(found, 'vendorId', t('supply_error_required'));
@@ -183,6 +215,10 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         const supplierLotReference = header.supplierLotReference.trim();
         if (supplierLotReference.length > MAX_SUPPLIER_LOT_REFERENCE_LENGTH) addError(found, 'supplierLotReference', t('supply_error_too_long', { max: String(MAX_SUPPLIER_LOT_REFERENCE_LENGTH) }));
         if (partij.kind === 'own' && partij.number.trim().length > MAX_PARTIJ_NUMBER_LENGTH) addError(found, 'partij', t('supply_error_too_long', { max: String(MAX_PARTIJ_NUMBER_LENGTH) }));
+        // Een partij gaat nooit van een order af (regel 23): kies eventueel een andere.
+        if (edit !== null && edit.partijId !== null && partij.kind === 'none') addError(found, 'partij', t('po_edit_partij_kept'));
+        const note = header.note.trim();
+        if (note.length > MAX_NOTE_LENGTH) addError(found, 'note', t('supply_error_too_long', { max: String(MAX_NOTE_LENGTH) }));
 
         if (lines.length === 0) addError(found, 'lines', t('supply_error_lines_required'));
         // Alleen invullen wat per regel anders is: product, aantal, prijs (en eventueel de bruto); de rest komt uit het artikel.
@@ -202,6 +238,11 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             if (seen.has(duplicateKey)) addError(found, `lines[${index}]`, t('supply_error_duplicate_line'));
             seen.add(duplicateKey);
         }
+        // Aanpassen: nooit onder wat al ontvangen is (de uitleg staat ook al bij het veld).
+        for (const { index, payload } of built.lines) {
+            const minimum = limitsOf(lines[index].key).minimumQuantity;
+            if (minimum !== null && payload.expectedQuantity < minimum) addError(found, `lines[${index}].expectedQuantity`, t('po_edit_min_quantity', { received: formatQuantity(minimum, locale) }));
+        }
         const payloadLines = built.lines.map((line) => line.payload);
 
         if (Object.keys(found).length > 0) {
@@ -219,9 +260,12 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 ...(header.orderedOn === '' ? {} : { orderedOn: header.orderedOn }),
                 ...partijPayload(partij),
                 ...(supplierLotReference === '' ? {} : { supplierLotReference }),
+                ...(note === '' ? {} : { note }),
                 lines: payloadLines,
             },
             errors: {},
+            // Aanpassen: per regel haar id; een niet aangeraakte regel gaat exact terug zoals ze was opgeslagen.
+            editLines: edit === null ? [] : built.lines.map(({ index, payload }) => updateLinePayload(lines[index], payload, edit.lines.get(lines[index].key))),
         };
     };
 
@@ -229,11 +273,20 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         if (inFlight.current || result !== null) return;
         let submission = pending;
         if (submission === null) {
-            const { payload, errors: found } = validate();
+            const { payload, errors: found, editLines } = validate();
             setErrors(found);
             if (payload === null) return;
             const requestId = newRequestId();
-            submission = { requestId, payload: { requestId, ...payload } };
+            submission = edit === null ? { requestId, payload: { requestId, ...payload } } : {
+                requestId,
+                payload: {
+                    requestId, expectedVersion: edit.version, vendorId: payload.vendorId, origin: payload.origin, expectedAt: payload.expectedAt,
+                    ...(payload.supplierReference === undefined ? {} : { supplierReference: payload.supplierReference }),
+                    ...(payload.orderedOn === undefined ? {} : { orderedOn: payload.orderedOn }), ...(payload.note === undefined ? {} : { note: payload.note }),
+                    ...partijPayload(partij), ...(payload.supplierLotReference === undefined ? {} : { supplierLotReference: payload.supplierLotReference }),
+                    lines: editLines ?? [],
+                },
+            };
             setPending(submission);
         }
 
@@ -241,7 +294,11 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
         setSubmitting(true);
         setError(null);
         try {
-            setResult(await createSupplyCommitment(submission.payload));
+            if (editing !== null && edit !== null) {
+                editing.onSaved(await updatePurchaseOrder(edit.orderId, submission.payload as UpdatePurchaseOrderRequest));
+                return;
+            }
+            setResult(await createSupplyCommitment(submission.payload as CreateSupplyCommitmentRequest));
         } catch (caught) {
             const apiError = toApiError(caught);
             // Het getypte partijnummer bestaat al (ook als een ander het net aanmaakte): dezelfde vraag als bij het verlaten van het veld.
@@ -259,14 +316,15 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
     };
 
     const startOver = () => {
-        setHeader(emptyHeader());
-        setLines([emptyLine()]);
+        // Aanpassen: terug naar de order zoals ze opende.
+        setHeader(opened === null ? emptyHeader() : { ...emptyHeader(), ...opened.header });
+        setLines(opened?.lines ?? [emptyLine()]);
         setPending(null);
         setError(null);
         setErrors({});
         setResult(null);
-        partijTouched.current = false;
-        setPartij(NO_PARTIJ);
+        partijTouched.current = editing !== null;
+        setPartij(editing === null ? NO_PARTIJ : orderPartij(editing.order));
         setPartijExists(null);
         setSuggestionToken((token) => token + 1);
     };
@@ -345,7 +403,12 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 </p>
             )}
 
-            {error && (
+            {error && editConflict(error) !== null ? (
+                <div role="alert" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="po-edit-conflict">
+                    <p>{t(editConflict(error)!)}</p>
+                    <button type="button" className={`${secondaryButtonClass} mt-2`} onClick={() => window.location.reload()}>{t('po_edit_reload')}</button>
+                </div>
+            ) : error && (
                 <ErrorNotice error={error} actions={outcomeUnknown(error) ? (
                     <>
                         <button type="submit" className={primaryButtonClass} disabled={submitting}>{t('supply_retry_same')}</button>
@@ -358,10 +421,11 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div className="col-span-2">
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
-                    <VendorPicker id="vendorId" dataTour="supply-vendor" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked}
+                    <VendorPicker id="vendorId" dataTour="supply-vendor" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked || edit?.vendorFixed === true}
                         invalid={!!e('vendorId')} describedBy={e('vendorId') ? 'vendorId' : undefined}
                         onChange={(vendor) => updateHeader('vendorId', vendor === null ? '' : String(vendor.id))} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
+                    {edit?.vendorFixed && <span className="block text-xs text-gray-700" data-testid="po-edit-vendor-fixed">{t('po_edit_vendor_fixed')}</span>}
                 </div>
             </div>
 
@@ -372,7 +436,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                         onChange={(event) => updateHeader('supplierReference', event.target.value)} className={`${inputClass} font-mono`} aria-describedby="supplierReference-hint" />
                     <span id="supplierReference-hint" className="block text-xs text-gray-500">{t('po_supplier_reference_hint')}</span>
                     <FieldError id="supplierReference" messages={e('supplierReference')} />
-                    <SupplierReferenceNotice supplierReference={header.supplierReference} vendorId={header.vendorId === '' ? null : Number(header.vendorId)} />
+                    <SupplierReferenceNotice supplierReference={header.supplierReference} vendorId={header.vendorId === '' ? null : Number(header.vendorId)} excludeOrderId={edit?.orderId ?? null} />
                 </div>
                 <div>
                     <label htmlFor="orderedOn-input" className="text-xs font-medium text-gray-700">{t('po_ordered_on')}</label>
@@ -400,8 +464,9 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <div className="sm:col-span-1 md:col-span-2">
-                    <PartijField value={partij} suggestion={suggestion} exists={partijExists} disabled={locked} errors={e('partij') ?? e('newPartij.number') ?? e('partijId')}
+                    <PartijField value={partij} suggestion={suggestion} exists={partijExists} disabled={locked || edit?.partijFixed === true} errors={e('partij') ?? e('newPartij.number') ?? e('partijId')}
                         onChange={updatePartij} onExists={setPartijExists} />
+                    {edit?.partijFixed && <span className="block text-xs text-gray-700" data-testid="po-edit-partij-fixed">{t('po_edit_partij_fixed')}</span>}
                 </div>
                 <div>
                     <label htmlFor="supplierLotReference-input" className="text-xs font-medium text-gray-700">{t('partij_supplier_lot')}</label>
@@ -411,6 +476,15 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                     <span id="supplierLotReference-hint" className="block text-xs text-gray-500">{t('partij_supplier_lot_hint')}</span>
                     <FieldError id="supplierLotReference" messages={e('supplierLotReference')} />
                 </div>
+                {!isDirect && (
+                    <div>
+                        <label htmlFor="note-input" className="text-xs font-medium text-gray-700">{t('po_note')}</label>
+                        <input {...fieldProps('note', e('note'))} data-tour="supply-note" value={header.note} disabled={locked} maxLength={MAX_NOTE_LENGTH}
+                            onChange={(event) => updateHeader('note', event.target.value)} className={inputClass} aria-describedby="note-hint" />
+                        <span id="note-hint" className="block text-xs text-gray-500">{t('po_note_hint')}</span>
+                        <FieldError id="note" messages={e('note')} />
+                    </div>
+                )}
             </div>
 
             {isDirect && (
@@ -436,7 +510,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
                 <PurchaseOrderLines lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
-                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor}
+                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor} limits={limitsOf}
                     productExtra={(line, index) => (newArticleFor === line.key ? (
                         <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
                             onUse={(variantId, created) => {
@@ -444,7 +518,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
                                 updateLine(line.key, { productVariantId: String(variantId) });
                                 setNewArticleFor(null);
                             }} />
-                    ) : !locked && (
+                    ) : !locked && !limitsOf(line.key).articleFixed && (
                         <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
                             title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
                     ))} />
@@ -455,7 +529,7 @@ export default function PlanSupplyForm({ route, reference, onReceive }: {
 
             <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-3">
                 <button type="submit" data-tour="supply-save" className={primaryButtonClass} disabled={locked}>
-                    {submitting ? t('supply_saving') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
+                    {submitting ? t('supply_saving') : editing !== null ? t('po_edit_save') : isDirect ? t('supply_save_plan_direct') : t('supply_save_plan_warehouse')}
                 </button>
                 <SubmitErrors errors={errors} />
                 {/* Zacht: zonder partij kan de order gewoon worden opgeslagen; een partij kiezen kan later op de order of bij ontvangst. */}
