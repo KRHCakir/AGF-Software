@@ -112,6 +112,24 @@ public class PurchaseOrderChangeGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Change_Record_Never_Goes_Together_With_A_New_Receipt_On_That_Order()
+    {
+        var (orderId, lineId) = await OrderAsync();
+        var refused = await RefusedAsync(async db =>
+        {
+            var order = await db.SupplyCommitments.Include(c => c.Lines).SingleAsync(c => c.Id == orderId);
+            order.Lines.Single().ExpectedQuantity = 10m;
+            db.PurchaseOrderChanges.Add(Change(orderId, PurchaseOrderDocumentRules.KindEdit));
+            db.PalletContentLines.Add(new PalletContentLine
+            {
+                RequestId = Guid.NewGuid(), Pallet = new Pallet { Reference = $"P-{Guid.NewGuid():N}"[..12], LogisticsStatus = "Received", LocationContext = "Warehouse" },
+                SupplyCommitmentLineId = lineId, LotNumber = "LOT-1", Quantity = 40m, Unit = "box", NetWeightKg = 160m, QualityStatus = "Quarantine",
+            });
+        });
+        Assert.Contains("new receipt", refused.Message);
+    }
+
+    [Fact]
     public async Task Definitive_Never_Goes_Back_And_Only_A_Correction_With_Reason_Changes_Price_Reference_And_Note()
     {
         var (orderId, lineId) = await OrderAsync();

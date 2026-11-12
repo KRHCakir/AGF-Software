@@ -57,6 +57,20 @@ namespace AgfAdmin.Data
                 }
             }
 
+            // Een aanpassing, Definitief maken of correctie gaat nooit samen met een nieuwe ontvangst op die order in dezelfde save: de grenzen
+            // na ontvangst lezen de opgeslagen ontvangsten (de services doen nooit beide tegelijk).
+            if (changes.Count > 0)
+            {
+                var receivedLineIds = db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Added)
+                    .Select(e => e.Property(c => c.SupplyCommitmentLineId).CurrentValue).Distinct().ToList();
+                var changedOrderIds = changes.Keys.ToList();
+                if (receivedLineIds.Count > 0 && await AnyAsync(db.SupplyCommitmentLines.AsNoTracking()
+                        .Where(l => receivedLineIds.Contains(l.Id) && changedOrderIds.Contains(l.SupplyCommitmentId)), async, cancellationToken))
+                {
+                    throw new TraceabilityViolationException("A purchase order is never edited, made definitive or corrected in the same save as a new receipt on it.");
+                }
+            }
+
             var newOrderKeys = addedOrders.Select(e => e.Property(c => c.Id).CurrentValue).ToHashSet();
             var lineEntries = db.ChangeTracker.Entries<SupplyCommitmentLine>().Where(e => e.State is EntityState.Modified or EntityState.Deleted
                 || (e.State == EntityState.Added && e.Entity.ReplacesLineId == null && !newOrderKeys.Contains(e.Property(l => l.SupplyCommitmentId).CurrentValue))).ToList();
