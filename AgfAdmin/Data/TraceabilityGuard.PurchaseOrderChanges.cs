@@ -8,7 +8,7 @@ namespace AgfAdmin.Data
     internal static partial class TraceabilityGuard
     {
         private sealed record StoredOrderDocument(int Id, string Route, int VendorId, string SupplierReference, DateOnly OrderedOn, DateTime? ExpectedAt, string Origin,
-            string Note, string SupplierLotReference, string OrderChannel, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia);
+            string Note, string SupplierLotReference, string OrderChannel, string Status, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia);
 
         private sealed record StoredOrderLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, decimal ExpectedQuantity, decimal? ExpectedNetWeightKg,
             decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, int? ReplacesLineId);
@@ -98,7 +98,7 @@ namespace AgfAdmin.Data
             var orderIds = modifiedOrders.Select(e => e.Entity.Id).Concat(changes.Keys).Concat(edited.Select(e => e.OrderId)).Distinct().ToList();
             var stored = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(c => orderIds.Contains(c.Id))
                 .Select(c => new StoredOrderDocument(c.Id, c.Route, c.VendorId, c.SupplierReference, c.OrderedOn, c.ExpectedAt, c.Origin, c.Note, c.SupplierLotReference, c.OrderChannel,
-                    c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia)), async, cancellationToken)).ToDictionary(c => c.Id);
+                    c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia)), async, cancellationToken)).ToDictionary(c => c.Id);
             var trackedOrders = modifiedOrders.ToDictionary(e => e.Entity.Id, e => e.Entity);
 
             foreach (var orderId in orderIds)
@@ -136,6 +136,10 @@ namespace AgfAdmin.Data
                 if (change != null && deviationOrders.Contains(orderId))
                 {
                     throw new TraceabilityViolationException($"Purchase order {orderId} is never finalized, edited or corrected in the same save as a receipt deviation.");
+                }
+                if (change != null && current != null && !string.Equals(current.Status, before.Status, StringComparison.Ordinal))
+                {
+                    throw new TraceabilityViolationException($"Purchase order {orderId} never changes its {nameof(SupplyCommitment.Status)} in the same save as a Finalize, Edit or Correction change.");
                 }
                 if (finalizing && (fields.Count > 0 || lines.Count > 0))
                 {
