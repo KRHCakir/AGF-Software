@@ -372,13 +372,24 @@ namespace AgfAdmin.Services
                     fields.Add(new("article", id, PurchaseOrderDocumentRules.ActionChanged, names.GetValueOrDefault(line.ProductVariantId), names.GetValueOrDefault(wanted.ProductVariantId)));
                     line.ProductVariantId = wanted.ProductVariantId;
                 }
-                Field("expectedQuantity", Number(line.ExpectedQuantity), Number(wanted.ExpectedQuantity), () => line.ExpectedQuantity = wanted.ExpectedQuantity);
+                // Vergelijken op de decimale waarde zelf; de opmaak (Number) alleen voor de audittekst.
+                void Amount(string field, decimal? before, decimal? after, Action apply)
+                {
+                    if (before == after) return;
+                    fields.Add(new(field, id, PurchaseOrderDocumentRules.ActionChanged, Number(before), Number(after)));
+                    apply();
+                }
+                Amount("expectedQuantity", line.ExpectedQuantity, wanted.ExpectedQuantity, () => line.ExpectedQuantity = wanted.ExpectedQuantity);
                 Field("expectedUnit", line.ExpectedUnit, wanted.ExpectedUnit, () => line.ExpectedUnit = wanted.ExpectedUnit);
-                Field(PurchaseOrderDocumentRules.FieldUnitPrice, Number(line.UnitPrice), Number(wanted.UnitPrice), () => line.UnitPrice = wanted.UnitPrice);
-                Field("expectedNetWeightKg", Number(line.ExpectedNetWeightKg), Number(wanted.ExpectedNetWeightKg), () => line.ExpectedNetWeightKg = wanted.ExpectedNetWeightKg);
-                Field("expectedGrossWeightKg", Number(line.ExpectedGrossWeightKg), Number(wanted.ExpectedGrossWeightKg), () => line.ExpectedGrossWeightKg = wanted.ExpectedGrossWeightKg);
+                Amount(PurchaseOrderDocumentRules.FieldUnitPrice, line.UnitPrice, wanted.UnitPrice, () => line.UnitPrice = wanted.UnitPrice);
+                Amount("expectedNetWeightKg", line.ExpectedNetWeightKg, wanted.ExpectedNetWeightKg, () => line.ExpectedNetWeightKg = wanted.ExpectedNetWeightKg);
+                Amount("expectedGrossWeightKg", line.ExpectedGrossWeightKg, wanted.ExpectedGrossWeightKg, () => line.ExpectedGrossWeightKg = wanted.ExpectedGrossWeightKg);
                 Field("weightSource", line.WeightSource, wanted.WeightSource, () => line.WeightSource = wanted.WeightSource);
-                Field("pallets", Pallets(line), Pallets(wanted), () => (line.PalletCount, line.PackagesPerPallet, line.LoosePackages) = (wanted.PalletCount, wanted.PackagesPerPallet, wanted.LoosePackages));
+                if ((line.PalletCount, line.PackagesPerPallet, line.LoosePackages) != (wanted.PalletCount, wanted.PackagesPerPallet, wanted.LoosePackages))
+                {
+                    fields.Add(new("pallets", id, PurchaseOrderDocumentRules.ActionChanged, Pallets(line), Pallets(wanted)));
+                    (line.PalletCount, line.PackagesPerPallet, line.LoosePackages) = (wanted.PalletCount, wanted.PackagesPerPallet, wanted.LoosePackages);
+                }
                 Field("lotNumber", line.LotNumber, wanted.LotNumber, () => line.LotNumber = wanted.LotNumber);
             }
         }
@@ -433,7 +444,7 @@ namespace AgfAdmin.Services
         private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         private static string Date(DateOnly value) => value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         private static string ExpectedDate(DateTime? value) => value == null ? null : AmsterdamBusinessCalendar.ToAmsterdamDate(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        private static string Number(decimal? value) => value?.ToString("0.###", CultureInfo.InvariantCulture);
+        private static string Number(decimal? value) => (value / 1.0000000000000000000000000000m)?.ToString(CultureInfo.InvariantCulture);
         private static string Pallets(SupplyCommitmentLine line) =>
             line.PalletCount == null ? null : $"{Number(line.PalletCount)} × {Number(line.PackagesPerPallet)}{(line.LoosePackages is > 0m ? $" + {Number(line.LoosePackages)}" : "")}";
 
