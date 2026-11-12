@@ -64,8 +64,9 @@ namespace AgfAdmin.Services
         // Geannuleerde orders nooit. PriceAdjustable: de prijs op de bon kan bij een verschil worden aangepast (open magazijnorder).
         public async Task<List<PurchaseOrderInvoiceCandidateDto>> InvoiceCandidatesAsync(int vendorId, string query, int? orderId, CancellationToken cancellationToken = default)
         {
-            var list = await ListAsync(query, "all", vendorId, 1, PurchaseOrderRules.MaxPageSize, null, cancellationToken);
-            var ids = list.Value.Items.Where(i => i.StoredStatus != SupplyRules.StatusCancelled && (orderId == null || i.Id == orderId)).Select(i => i.Id).ToList();
+            // De hele lijst, niet één pagina: anders vallen oudere open orders (of de gevraagde order) buiten de kandidaten.
+            var list = await ListAllAsync(query, "all", vendorId, null, cancellationToken);
+            var ids = list.Value.Where(i => i.StoredStatus != SupplyRules.StatusCancelled && (orderId == null || i.Id == orderId)).Select(i => i.Id).ToList();
             if (orderId != null && ids.Count == 0 && string.IsNullOrWhiteSpace(query)) return new List<PurchaseOrderInvoiceCandidateDto>();
             var facts = await LoadFactsAsync(ids, cancellationToken);
             var orders = await _db.SupplyCommitments.AsNoTracking().Where(c => ids.Contains(c.Id))
