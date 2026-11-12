@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { ErrorState, type LoadState, LoadingRows } from '../../../../components/availability/StateViews';
 import PlanSupplyForm, { type ReferenceData } from '../../../../components/supply/PlanSupplyForm';
 import { useTranslation } from '../../../../i18n/LanguageContext';
@@ -15,7 +15,7 @@ import { getCustomers, getProductsWithVariants, getVendors } from '../../../../s
 import type { PurchaseOrderDetail } from '../../../../types/purchaseOrder';
 
 // Inkooporder aanpassen (stap 4a): hetzelfde formulier als Inkooporder aanmaken, gevuld met de opgeslagen order (?id=). Een definitieve
-// order is hier alleen-lezen met de uitleg; aanpassen kan dan alleen nog als correctie met reden op de order zelf.
+// order opent meteen op de order zelf: daar staat ze volledig alleen-lezen, met de melding en Correctie (met reden).
 export default function PurchaseOrderEditPage() {
     const { t } = useTranslation();
     return (
@@ -47,6 +47,13 @@ function PurchaseOrderEdit() {
     }, [id, token]);
 
     const back = id === null ? '/purchase-orders' : `/purchase-orders?id=${id}`;
+    const definitive = state.status === 'ready' && isDefinitive(state.data.order);
+    const redirected = useRef(false);
+    useEffect(() => {
+        if (!definitive || redirected.current) return;
+        redirected.current = true;
+        router.replace(back);
+    }, [definitive, back, router]);
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
