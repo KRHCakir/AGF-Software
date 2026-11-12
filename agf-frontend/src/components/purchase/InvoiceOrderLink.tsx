@@ -60,8 +60,8 @@ export function InvoiceOrderPicker({ vendorId, lines, disabled, onAdd }: {
             {orders !== null && orders.length > 0 && (
                 <ul className="divide-y divide-gray-100 text-sm">
                     {orders.map((order) => {
-                        const all = order.lines.length > 0 && order.lines.every((line) => added.has(line.id));
                         const open = order.lines.filter((line) => line.openQuantity > 0);
+                        const all = open.length > 0 && open.every((line) => added.has(line.id));
                         return (
                             <li key={order.id} className="flex flex-wrap items-center gap-2 py-1.5" data-testid="invoice-order-candidate" data-order-id={order.id}>
                                 <span className="font-semibold text-gray-900">{orderLabel(order)}</span>
