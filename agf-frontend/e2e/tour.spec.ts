@@ -165,6 +165,24 @@ test('hoofdstuk Inkooporder aanmaken: stamgegevens bestaan al, order met ordernu
     await page.close();
 });
 
+test('hoofdstuk Order aanpassen en definitief maken: aangepast met auditregel, definitief met wie en wanneer, correctie met reden', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'order-edit');
+    expectAllSteps(result);
+    const number = /Order (IO-\d{4}-\d+)/.exec(result.done)?.[1];
+    const list = await json<{ items: { id: number; orderNumber: string; documentStatus: string }[] }>(request, `/purchase-orders?status=all&query=${number}`);
+    const order = list.items.find((item) => item.orderNumber === number)!;
+    expect(order.documentStatus).toBe('Definitive');
+    const detail = await json<{ finalizedBy: string; finalizedVia: string; lines: { unitPrice: number }[]; note: string; changes: { kind: string; actorReference: string; reason: string | null }[] }>(request, `/purchase-orders/${order.id}`);
+    const user = await signedIn(request);
+    expect([detail.finalizedBy, detail.finalizedVia]).toEqual([user, 'Manual']);
+    expect(detail.changes.map((change) => [change.kind, change.actorReference])).toEqual([['Edit', user], ['Finalize', user], ['Correction', user]]);
+    expect(detail.changes[2].reason).toBe('Prijsafspraak na levering');
+    expect(detail.lines[0].unitPrice).toBe(13.4);
+    expect(detail.note).toContain('Prijs aangepast na telefoontje');
+    await page.close();
+});
+
 test('hoofdstuk Ontvangst en keuring: blind ontvangen, goedgekeurd met Wie beoordeelt, deel teruggestuurd, creditnota verwacht', async ({ request }) => {
     const page = await context.newPage();
     const result = await play(page, 'receive');

@@ -4,7 +4,7 @@
 
 import { prerequisite, step } from './compose';
 import { ARTICLE_STEPS, VENDOR_STEPS } from './masterdataChapter';
-import { lookupDeviation, lookupDeviationStock, lookupPurchase, lookupReceive, precheckDeviation, precheckPurchase, precheckReceive } from './prechecks';
+import { lookupDeviation, lookupDeviationStock, lookupOrderEdit, lookupPurchase, lookupReceive, precheckDeviation, precheckOrderEdit, precheckPurchase, precheckReceive } from './prechecks';
 import type { TourAction, TourChapter, TourStep } from './types';
 
 const order = (id: string, route: string, actions: readonly TourAction[]) => step('order', id, route, actions);
@@ -87,6 +87,55 @@ export const ORDER_CHAPTER: TourChapter = {
             { kind: 'click', target: 'partij-open:{{partijNumber}}' },
             { kind: 'wait', target: 'partij-order:{{orderNumber}}' },
             { kind: 'highlight', target: 'partij-order:{{orderNumber}}' },
+        ]),
+    ],
+};
+
+const orderEdit = (id: string, route: string, actions: readonly TourAction[]) => step('orderedit', id, route, actions);
+
+// Order aanpassen en definitief maken (stap 4a): op een open demo-order Aanpassen (hetzelfde formulier als aanmaken), prijs en notitie
+// wijzigen en opslaan; de wijziging staat in de geschiedenis. Dan Definitief maken (vraag op de pagina) en een correctie met reden.
+export const ORDER_EDIT_CHAPTER: TourChapter = {
+    id: 'order-edit',
+    titleKey: 'tour_ch_orderedit_title',
+    summaryKey: 'tour_ch_orderedit_summary',
+    doneKey: 'tour_ch_orderedit_done',
+    writes: true,
+    precheck: precheckOrderEdit,
+    steps: [
+        ...MASTER_FOR_PURCHASE,
+        ...prerequisite(ORDER_CORE, 'o', '{{needOrder}}'),
+        orderEdit('open', '/purchase-orders', [
+            { kind: 'lookup', run: lookupOrderEdit },
+            { kind: 'navigate', href: '/purchase-orders?id={{orderId}}' },
+            { kind: 'wait', target: 'po-edit' },
+            { kind: 'highlight', target: 'po-edit' },
+            { kind: 'click', target: 'po-edit' },
+        ]),
+        orderEdit('edit', '/purchase-orders/edit?id={{orderId}}', [
+            { kind: 'wait', target: 'supply-line-price:0' },
+            { kind: 'type', target: 'supply-line-price:0', text: '13,25' },
+            { kind: 'type', target: 'supply-note', text: 'Prijs aangepast na telefoontje ({{orderRef}})' },
+            { kind: 'click', target: 'supply-save' },
+        ]),
+        orderEdit('history', '/purchase-orders?id={{orderId}}', [
+            { kind: 'wait', target: 'po-changes' },
+            { kind: 'highlight', target: 'po-changes' },
+        ]),
+        orderEdit('finalize', '/purchase-orders?id={{orderId}}', [
+            { kind: 'click', target: 'po-finalize' },
+            { kind: 'highlight', target: 'po-finalize-yes' },
+            { kind: 'click', target: 'po-finalize-yes' },
+            { kind: 'wait', target: 'po-definitive' },
+            { kind: 'highlight', target: 'po-definitive' },
+        ]),
+        orderEdit('correct', '/purchase-orders?id={{orderId}}', [
+            { kind: 'click', target: 'po-correct' },
+            { kind: 'type', target: 'po-correction-price:{{lineId}}', text: '13,40' },
+            { kind: 'type', target: 'po-correction-reason', text: 'Prijsafspraak na levering' },
+            { kind: 'click', target: 'po-correction-save' },
+            { kind: 'wait', target: 'po-correct' },
+            { kind: 'highlight', target: 'po-changes' },
         ]),
     ],
 };
