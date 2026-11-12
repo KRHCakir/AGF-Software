@@ -41,8 +41,9 @@ describe('invoice linked to the purchase order', () => {
         assert.deepEqual([same.orderAmount, same.invoiceAmount, same.differs, same.over, same.partial], [3564, 3564, false, false, false]);
         const cheaper = compareLine({ ...line, unitPrice: '12,50' })!;
         assert.deepEqual([cheaper.perUnit, cheaper.total, cheaper.differs], [-1, -264, true]);
-        // Met korting telt de prijs na korting.
+        // Met korting telt de prijs na korting; ook een korting die op twee decimalen wegvalt is een verschil.
         assert.equal(compareLine({ ...line, discount: '10' })!.invoiceUnitPrice, 12.15);
+        assert.equal(compareLine({ ...line, discount: '0,01' })!.differs, true);
         // Minder dan open is deels, meer dan besteld (zonder ontvangst) is te veel.
         assert.equal(compareLine({ ...line, quantity: '200' })!.partial, true);
         assert.equal(compareLine({ ...line, quantity: '265' })!.over, true);
