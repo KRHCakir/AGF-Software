@@ -94,7 +94,9 @@ namespace AgfAdmin.Services
                 })
                 // Een geheel vervangen regel zonder ontvangst en zonder factuur doet niet mee.
                 .Where(l => l.ExpectedQuantity > 0m || l.ReceivedQuantity > 0m || l.InvoicedQuantity > 0m).ToList();
-                if (string.IsNullOrWhiteSpace(query) && orderId == null && lines.All(l => l.OpenQuantity <= 0m)) continue;
+                // Ook een order met alleen een oude "Factuur ontvangen"-verwijzing (zonder regels) telt als gefactureerd, net als in de orderlijst.
+                if (string.IsNullOrWhiteSpace(query) && orderId == null
+                    && (lines.All(l => l.OpenQuantity <= 0m) || facts.For(id).BillingStatus() == PurchaseInvoiceOrderLinkRules.BillingFull)) continue;
                 result.Add(new PurchaseOrderInvoiceCandidateDto
                 {
                     Id = order.Id, OrderNumber = order.OrderNumber, SupplierReference = order.SupplierReference, OrderedOn = order.OrderedOn,
