@@ -2673,5 +2673,7 @@
   "tour_orderedit_finalize_why": "Daarna is de order alleen-lezen: Definitief sinds … door …. Ontvangen kan gewoon.",
   "tour_orderedit_correct_title": "Correctie met reden",
   "tour_orderedit_correct_what": "Op een definitieve order wijzigen we de prijs met Correctie, met een verplichte reden.",
-  "tour_orderedit_correct_why": "Alleen prijs, ordernummer van de leverancier en notitie; aantallen en artikelen volgen uit de ontvangst."
+  "tour_orderedit_correct_why": "Alleen prijs, ordernummer van de leverancier en notitie; aantallen en artikelen volgen uit de ontvangst.",
+  "ai_upload_hint_single": "PDF, JPG, PNG of HEIC (foto van de telefoon), maximaal 10 MB. De AI ({model}) doet een voorstel; jij controleert en keurt goed.",
+  "ai_settings_hint_single": "Met AI-lezen leest {provider} een geüploade inkoopfactuur en doet een voorstel; iemand controleert het en keurt het goed. Het document gaat daarvoor naar die dienst. Model: {model} (geen ander model)."
 }

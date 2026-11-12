@@ -58,7 +58,7 @@ export default function AiReadingSetting() {
         <form id="ai-lezen" noValidate onSubmit={(event) => void save(settings?.enabled ?? false, event)} className="space-y-2 rounded-md border border-gray-300 bg-white p-3"
             data-testid="ai-reading-setting" data-tour="ai-reading-setting">
             <h2 className="text-lg font-semibold text-gray-900">{t('ai_settings_title')}</h2>
-            <p className="text-sm text-gray-700">{t('ai_settings_hint', { provider: status?.provider === 'Demo' ? t('ai_settings_provider_demo') : t('ai_settings_provider'), model: status?.primaryModel.name ?? '–', fallback: status?.fallbackModel?.name ?? '–' })}</p>
+            <p className="text-sm text-gray-700">{t(status?.fallbackEnabled && status.fallbackModel ? 'ai_settings_hint' : 'ai_settings_hint_single', { provider: status?.provider === 'Demo' ? t('ai_settings_provider_demo') : t('ai_settings_provider'), model: status?.primaryModel.name ?? '–', fallback: status?.fallbackModel?.name ?? '–' })}</p>
             {error && <ErrorNotice error={error} />}
             {settings && (
                 <>

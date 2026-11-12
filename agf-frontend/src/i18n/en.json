@@ -2673,5 +2673,7 @@
   "tour_orderedit_finalize_why": "After that the order is read-only: Definitive since … by …. Receiving still works.",
   "tour_orderedit_correct_title": "Correction with a reason",
   "tour_orderedit_correct_what": "On a definitive order we change the price with Correction, with a required reason.",
-  "tour_orderedit_correct_why": "Only the price, the supplier's order number and the note; quantities and articles follow from the receipt."
+  "tour_orderedit_correct_why": "Only the price, the supplier's order number and the note; quantities and articles follow from the receipt.",
+  "ai_upload_hint_single": "PDF, JPG, PNG or HEIC (phone photo), at most 10 MB. The AI ({model}) makes a proposal; you check and approve it.",
+  "ai_settings_hint_single": "With AI reading, {provider} reads an uploaded purchase invoice and makes a proposal; someone checks and approves it. The document is sent to that service for this. Model: {model} (no other model)."
 }

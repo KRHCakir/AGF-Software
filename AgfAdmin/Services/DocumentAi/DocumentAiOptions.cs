@@ -13,8 +13,10 @@ namespace AgfAdmin.Services.DocumentAi
         public string Reader { get; set; } = ReaderClaude;
         public string ApiKey { get; set; }
         public string PrimaryModel { get; set; } = "claude-haiku-5-5";
-        public bool FallbackEnabled { get; set; } = true;
-        public string FallbackModel { get; set; } = "claude-sonnet-5-5";
+        // Alleen Haiku (besluit eigenaar, 12 november): geen vangnet en geen ander model. Een tweede leesbeurt met een ander model kan
+        // alleen nog als iemand die bewust configureert (FallbackEnabled en FallbackModel met een prijs onder Models).
+        public bool FallbackEnabled { get; set; }
+        public string FallbackModel { get; set; }
         // Prijs per model, gecontroleerd bij de aanbieder (CheckedOn); per leesactie vastgelegd. Zonder prijs leest het systeem niet.
         public Dictionary<string, DocumentAiModelPrice> Models { get; set; } = new();
         // Kosten in euro uit het echte verbruik in dollars, met deze koers (vastgelegd per lezing).

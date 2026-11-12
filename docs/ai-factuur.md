@@ -15,8 +15,8 @@ De aanbieder is Anthropic (Claude), met verwerking in de VS. Het document gaat a
 | `Reader` | `Claude` | `Demo`: een vaste uitkomst zonder netwerk, alleen voor tests en de rondleiding. Gebruik `Demo` nooit in de gewone werking. |
 | `ApiKey` | (leeg) | De sleutel komt uit de gebruikersgeheimen of de omgeving (`DocumentAi__ApiKey`), anders uit `ANTHROPIC_API_KEY`. Zet hem nooit in de repo. |
 | `PrimaryModel` | `claude-haiku-5-5` | Het model dat elk document leest. |
-| `FallbackEnabled`, `FallbackModel` | `true`, `claude-sonnet-5-5` | Leest het document één keer opnieuw als het voorstel niet klopt (zie hieronder). |
-| `Models` | Haiku 5.5, Sonnet 5.5 | De prijs per miljoen tokens, met de datum waarop die bij de aanbieder is gecontroleerd. Zonder prijs leest het systeem niet. |
+| `FallbackEnabled`, `FallbackModel` | `false`, (leeg) | Uit: alleen Haiku leest (besluit van de eigenaar, 12 november). Zie hieronder. |
+| `Models` | Haiku 5.5 | De prijs per miljoen tokens, met de datum waarop die bij de aanbieder is gecontroleerd. Zonder prijs leest het systeem niet. |
 | `EurPerUsd` | `0,86` | De koers waarmee het werkelijke verbruik in dollars naar euro wordt omgerekend. Die koers wordt per lezing vastgelegd. |
 | `MaxFileBytes` | 10 MB | De grootste upload. Ondersteund zijn PDF, JPEG, PNG en HEIC. |
 | `MaxUploadsPerMinute` | 6 | Het maximum per gebruiker. |
@@ -26,9 +26,14 @@ De aanbieder is Anthropic (Claude), met verwerking in de VS. Het document gaat a
 
 De **maandlimiet** in euro (standaard 25) is een instelling per bedrijf bij Instellingen. Boven de limiet pauzeert het lezen tot de volgende maand of tot de beheerder de limiet verhoogt. Handmatig invoeren blijft gewoon werken.
 
-## Vangnet
+## Alleen Haiku (geen vangnet)
 
-Haiku leest het document. Bij een tijdelijke fout probeert het systeem het één keer opnieuw. Sonnet leest het document één keer extra in deze gevallen:
+Haiku leest het document; er wordt geen ander model gebruikt. Bij een tijdelijke fout probeert het systeem het één keer opnieuw met
+Haiku. Klopt het voorstel niet, dan toont het scherm het met gele markeringen en vult de gebruiker het aan of verbetert het.
+
+Tot 12 november las Sonnet als vangnet het document één keer extra als het voorstel niet klopte. Dat staat uit en Sonnet staat niet
+meer in de instellingen. De code kan een tweede model nog alleen gebruiken als iemand dat bewust configureert (`FallbackEnabled` op
+`true`, een `FallbackModel` en een prijs onder `Models`). Wanneer Haiku's voorstel als "niet kloppend" telt (de gele markeringen):
 - de som van de regels wijkt af van het totaal excl. btw;
 - de btw rekent niet;
 - excl. btw plus btw is niet het totaal incl. btw;
@@ -36,7 +41,7 @@ Haiku leest het document. Bij een tijdelijke fout probeert het systeem het één
 - de AI twijfelt aan een verplicht veld;
 - de uitvoer is ongeldig.
 
-Klopt het voorstel ook dan nog niet, dan toont het scherm het voorstel met gele markeringen. Bij elk voorstel staat welk model het las.
+Bij elk voorstel staat welk model het las.
 
 ## Wat wordt vastgelegd (`AiExtractions`)
 
