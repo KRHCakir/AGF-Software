@@ -66,6 +66,17 @@ export const SALES_CORE: TourStep[] = [
         { kind: 'wait', target: 'sales-reservations' },
         { kind: 'highlight', target: 'sales-reservations' },
     ]),
+    // Bevestigen (documenten deel 1): het systeem maakt de laadbon voor de loods, zonder prijzen; Bekijken, Downloaden en Afdrukken.
+    sales('confirm', [
+        { kind: 'click', target: 'so-confirm' },
+        { kind: 'type', target: 'so-license-plate', text: '12-ABC-3' },
+        { kind: 'click', target: 'so-confirm-yes' },
+        { kind: 'wait', target: 'so-slip' },
+    ]),
+    sales('slip', [
+        { kind: 'highlight', target: 'so-slip' },
+        { kind: 'highlight', target: 'so-slip-print' },
+    ]),
     sales('dispatch', [
         { kind: 'click', target: 'sales-dispatch' },
         { kind: 'click', target: 'sales-dispatch-all' },
