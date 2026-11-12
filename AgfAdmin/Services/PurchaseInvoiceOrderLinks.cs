@@ -78,7 +78,7 @@ namespace AgfAdmin.Services
                 var price = PurchaseInvoiceOrderLinkRules.InvoiceUnitPrice(invoiceLine.UnitPrice, invoiceLine.DiscountPercentage);
                 invoiceLine.SupplyCommitmentLineId = id;
                 invoiceLine.OrderUnitPrice = orderLine.UnitPrice;
-                linked.Add(new LinkedLine(index, invoiceLine, orderLine, price, PurchaseInvoiceOrderLinkRules.HasPriceDifference(orderLine.UnitPrice, price)));
+                linked.Add(new LinkedLine(index, invoiceLine, orderLine, price, PurchaseInvoiceOrderLinkRules.HasPriceDifference(orderLine.UnitPrice, invoiceLine.UnitPrice, invoiceLine.DiscountPercentage)));
             }
             if (errors.Count > 0) return null;
 
