@@ -28,7 +28,7 @@ describe('DocumentRecipientsEditor', () => {
 
     test('Tab on the last field of the last filled row adds a row and moves to its name; a blank last row adds nothing', async () => {
         await mounted.render(<Harness initial={[{ ...emptyRow(['TransportOrder']), email: 'planning@zeeland.nl' }]} addresses={null} />);
-        const lastKind = mounted.container.querySelector<HTMLInputElement>('[data-tour="rec-kind-Other"]')!;
+        const lastKind = mounted.container.querySelector<HTMLInputElement>('[data-tour="rec-kind"][data-tour-key="Other"]')!;
         assert.equal(await tab(lastKind), true);
         assert.equal(latest.length, 2);
         assert.deepEqual(latest[1].kinds, ['LoadingSlip'], 'a new row starts with the default documents');

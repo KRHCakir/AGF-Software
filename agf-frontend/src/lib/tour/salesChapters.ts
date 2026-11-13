@@ -97,6 +97,11 @@ export const SALES_CORE: TourStep[] = [
         { kind: 'wait', target: 'so-transport-order' },
         { kind: 'highlight', target: 'so-transport-order' },
     ]),
+    // Te versturen (documenten deel 3): per document staat meteen een mailconcept klaar; versturen gebeurt alleen na een klik.
+    sales('mail', [
+        { kind: 'wait', target: 'so-mail-draft:TransportOrder' },
+        { kind: 'highlight', target: 'so-mail-draft:TransportOrder' },
+    ]),
     sales('dispatch', [
         { kind: 'click', target: 'sales-dispatch' },
         { kind: 'click', target: 'sales-dispatch-all' },

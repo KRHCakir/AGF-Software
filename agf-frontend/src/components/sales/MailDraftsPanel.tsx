@@ -109,7 +109,7 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
     const copy = () => void run(async () => { await navigator.clipboard.writeText(`${subject}\n\n${body}`); setCopied(true); });
 
     return (
-        <article className="space-y-2 rounded border border-gray-200 p-3" data-testid={`mail-draft-${draft.documentKind}`} data-tour={`so-mail-${draft.documentKind}`}>
+        <article className="space-y-2 rounded border border-gray-200 p-3" data-testid={`mail-draft-${draft.documentKind}`} data-tour="so-mail-draft" data-tour-key={draft.documentKind}>
             <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{name}</span>
                 <span className="rounded bg-gray-100 px-2 py-0.5 text-xs" data-testid="mail-status">{t(`mail_status_${draft.status}`)}</span>

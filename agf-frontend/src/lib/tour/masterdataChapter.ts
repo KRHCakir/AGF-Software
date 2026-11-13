@@ -18,6 +18,14 @@ const address = (postalCode: string, line1: string, city: string): TourAction[] 
     { kind: 'type', target: 'relation-address-country-code', text: 'NL' },
 ];
 
+// Een e-mailadres voor documenten (documenten deel 3): het blok openen, een regel, het adres en voor welk document.
+const recipient = (email: string, kind: string): TourAction[] => [
+    { kind: 'click', target: 'relation-section:recipients' },
+    { kind: 'click', target: 'relation-recipient-add' },
+    { kind: 'type', target: 'relation-recipient-email', text: email },
+    { kind: 'click', target: `relation-recipient-kind:${kind}` },
+];
+
 const save = (name: string): TourAction[] => [
     { kind: 'click', target: 'relation-save' },
     { kind: 'wait', target: 'relation-notice', text: name },
@@ -46,6 +54,7 @@ export const CUSTOMER_STEPS = [
         { kind: 'click', target: 'relation-role-customer' },
     ]),
     master('customer-address', '/relations', address('3016 DM', 'Fruitlaan 3', 'Rotterdam')),
+    master('customer-mail', '/relations', recipient('inkoop@groothandel.example', 'OrderConfirmation')),
     master('customer-save', '/relations', save('{{tourRef}} Groothandel')),
 ];
 
