@@ -92,6 +92,110 @@ describe('RelationForm', () => {
         assert.equal(window.sessionStorage.getItem('agf_relation_pending_create'), null, 'nothing frozen after success');
     });
 
+    test('e-mail addresses for documents are saved with the same click, right after the relation; an invalid address saves nothing', async () => {
+        respond = (call) => call.url.includes('/document-recipients')
+            ? json(200, { version: 'abc', recipients: [{ id: 1, name: 'Planning', email: 'planning@zeeland.nl', role: 'To', kinds: ['TransportOrder'], relationAddressId: null }], addresses: [], warnings: [] })
+            : json(201, saved({ id: 12, name: 'Transport Zeeland', searchCode: null, customer: null }));
+        let created: Relation | null = null;
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={(relation) => { created = relation; }} onClose={() => {}} />);
+        await type(input('name'), 'Transport Zeeland');
+        await openSection('recipients');
+        await click(mounted.button('+ recipients_add')!);
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'geen-adres');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        assert.ok(text().includes('recipients_problem_email'));
+        assert.ok(text().includes('recipients_problem_kinds'));
+        assert.equal(calls.length, 0, 'nothing is saved');
+
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-name')!, 'Planning');
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'planning@zeeland.nl');
+        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind-TransportOrder"]')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => created !== null, 'onSaved after both saves');
+        assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace(/^.*\/api/, '')}`), ['POST /relations', 'PUT /relations/12/document-recipients']);
+        assert.deepEqual(calls[1].body, { expectedVersion: '0', recipients: [{ id: null, name: 'Planning', email: 'planning@zeeland.nl', role: 'To', kinds: ['TransportOrder'], relationAddressId: null }] });
+    });
+
+    test('changed by someone else: your list stays and the notice shows the saved list; saving again keeps yours with the new version', async () => {
+        let puts = 0;
+        respond = (call) => {
+            if (call.url.includes('/document-recipients') && call.method === 'PUT') { puts++; return puts === 1 ? json(409, { message: 'stale', code: 'stale' }) : json(200, { version: 'v3', recipients: [], addresses: [], warnings: [] }); }
+            if (call.url.includes('/document-recipients')) return json(200, { version: 'v2', recipients: [{ id: 3, name: 'Collega', email: 'collega@noord.nl', role: 'To', kinds: ['Invoice'], relationAddressId: null }], addresses: [], warnings: [] });
+            return json(200, saved({ id: 7, customer: null }));
+        };
+        await mounted.render(<RelationForm relation={saved({ id: 7, customer: null })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('#recipients-0-email') !== null, 'loaded');
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'nieuw@noord.nl');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-conflict"]') !== null, 'conflict notice');
+        assert.equal(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!.value, 'nieuw@noord.nl', 'your own list stays');
+        assert.ok(mounted.container.querySelector('[data-testid="recipients-conflict"]')!.textContent!.includes('recipients_conflict'));
+        assert.ok(mounted.container.querySelector('[data-testid="recipients-conflict-list"]')!.textContent!.includes('Collega'), 'full saved rows are shown');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        assert.equal(puts, 1, 'saving is blocked until a choice is made');
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="recipients-keep-mine"]')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => puts === 2, 'saved again');
+        const again = calls.filter((call) => call.method === 'PUT' && call.url.includes('/document-recipients'))[1].body!;
+        assert.equal(again.expectedVersion, 'v2');
+        assert.deepEqual((again.recipients as { id: number | null; email: string }[]).map((r) => [r.id, r.email]), [[3, 'nieuw@noord.nl']]);
+    });
+
+    test('after a conflict the saved list can be taken instead; a row the other person removed goes along as a new row', async () => {
+        respond = (call) => {
+            if (call.url.includes('/document-recipients') && call.method === 'PUT') return json(409, { message: 'stale', code: 'stale' });
+            if (call.url.includes('/document-recipients')) {
+                return calls.filter((c) => c.url.includes('/document-recipients')).length === 1
+                    ? json(200, { version: 'v1', recipients: [{ id: 3, name: 'Oud', email: 'oud@noord.nl', role: 'To', kinds: ['Invoice'], relationAddressId: null }], addresses: [], warnings: [] })
+                    : json(200, { version: 'v2', recipients: [{ id: 4, name: 'Collega', email: 'collega@noord.nl', role: 'To', kinds: ['Invoice'], relationAddressId: null }], addresses: [], warnings: [] });
+            }
+            return json(200, saved({ id: 7, customer: null }));
+        };
+        await mounted.render(<RelationForm relation={saved({ id: 7, customer: null })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('#recipients-0-email') !== null, 'loaded');
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'nieuw@noord.nl');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-take-saved"]') !== null, 'conflict notice');
+        const puts = () => calls.filter((call) => call.method === 'PUT' && call.url.includes('/document-recipients'));
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="recipients-keep-mine"]')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => puts().length === 2, 'saved again');
+        assert.deepEqual((puts()[1].body!.recipients as { id: number | null; email: string }[]).map((r) => [r.id, r.email]), [[null, 'nieuw@noord.nl']]);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-take-saved"]') !== null, 'conflict notice again');
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="recipients-take-saved"]')!);
+        assert.equal(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!.value, 'collega@noord.nl');
+        assert.equal(mounted.container.querySelector('[data-testid="recipients-conflict"]'), null);
+    });
+
+    test('if the addresses cannot be loaded the block stays closed for editing until a reload works', async () => {
+        let gets = 0;
+        respond = (call) => {
+            if (call.url.includes('/document-recipients')) { gets++; return gets === 1 ? json(500, { message: 'boom' }) : json(200, { version: 'v1', recipients: [{ id: 3, name: 'Planning', email: 'planning@noord.nl', role: 'To', kinds: ['Invoice'], relationAddressId: null }], addresses: [], warnings: [] }); }
+            return json(200, saved({ id: 7, customer: null }));
+        };
+        await mounted.render(<RelationForm relation={saved({ id: 7, customer: null })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-reload"]') !== null, 'reload offered in the opened block');
+        assert.equal(mounted.button('+ recipients_add')!.disabled, true, 'no editing on an unknown list');
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="recipients-reload"]')!);
+        await mounted.waitFor(() => mounted.container.querySelector('#recipients-0-email') !== null, 'loaded');
+        assert.equal(mounted.button('+ recipients_add')!.disabled, false);
+        assert.equal(mounted.container.querySelector('[data-testid="recipients-reload"]'), null);
+    });
+
+    test('if the addresses cannot be saved the form stays open with the reason; the relation itself was saved', async () => {
+        respond = (call) => call.url.includes('/document-recipients') ? json(409, { message: 'Gewijzigd door iemand anders', code: 'stale' }) : json(201, saved({ id: 12, customer: null }));
+        let created: Relation | null = null;
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={(relation) => { created = relation; }} onClose={() => {}} />);
+        await type(input('name'), 'Transport Zeeland');
+        await openSection('recipients');
+        await click(mounted.button('+ recipients_add')!);
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'planning@zeeland.nl');
+        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind-LoadingSlip"]')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => text().includes('Gewijzigd door iemand anders'), 'reason shown');
+        assert.equal(created, null, 'not closed: the addresses still have to be saved');
+    });
+
     test('inline validation keeps the input, opens the right section and sends nothing', async () => {
         await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await type(input('searchCode'), 'fruit z');
