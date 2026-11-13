@@ -19,3 +19,22 @@ const isAddress = (value: unknown): value is RecipientAddressOption => isObject(
 export function isDocumentRecipients(value: unknown): value is DocumentRecipients {
     return isObject(value) && isString(value.version) && isArrayOf(value.recipients, isRecipient) && isArrayOf(value.addresses, isAddress) && Array.isArray(value.warnings);
 }
+
+// De afzender (Beheer › Mail): het wachtwoord gaat er alleen in (password), terug komt alleen hasPassword. configured = versturen kan.
+export interface MailSettings {
+    host: string | null; port: number; security: 'None' | 'StartTls' | 'SslOnConnect'; userName: string | null; password: string | null; clearPassword: boolean;
+    hasPassword: boolean; fromAddress: string | null; fromName: string | null; signature: string | null; sender: string; configured: boolean;
+}
+export interface MailTemplate { kind: string; subject: string; body: string; isDefault: boolean }
+export interface MailTemplates { templates: MailTemplate[]; placeholders: string[] }
+
+export function isMailSettings(value: unknown): value is MailSettings {
+    return isObject(value) && isNullableString(value.host) && isNumber(value.port) && isString(value.security) && isNullableString(value.userName)
+        && typeof value.hasPassword === 'boolean' && isNullableString(value.fromAddress) && isNullableString(value.fromName) && isNullableString(value.signature)
+        && isString(value.sender) && typeof value.configured === 'boolean';
+}
+
+export function isMailTemplates(value: unknown): value is MailTemplates {
+    return isObject(value) && isArrayOf(value.templates, (t): t is MailTemplate => isObject(t) && isString(t.kind) && isString(t.subject) && isString(t.body) && typeof t.isDefault === 'boolean')
+        && isArrayOf(value.placeholders, isString);
+}
