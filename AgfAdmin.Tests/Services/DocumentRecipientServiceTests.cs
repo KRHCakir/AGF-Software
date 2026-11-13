@@ -90,6 +90,24 @@ public class DocumentRecipientServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task An_unknown_id_is_refused_and_a_removed_delivery_address_makes_an_open_list_stale()
+    {
+        var (relationId, storeId, _) = await RelationAsync();
+        var unknown = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { new DocumentRecipientDto { Id = 999, Email = "a@noord.nl", Role = "To", Kinds = { "Other" } } } }));
+        Assert.Equal(new[] { "recipients[0].id" }, unknown.Errors.Keys);
+
+        var saved = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { Recipient("planning@noord.nl", "To", null, "LoadingSlip"), Recipient("winkel@noord.nl", "To", storeId, "Other") } }));
+        // Het afleveradres verdwijnt, en zijn ontvanger via cascade: wie de oude lijst nog open heeft, krijgt een 409 (de versie volgt de inhoud).
+        await using (var db = _factory.CreateContext())
+        {
+            db.RelationAddresses.Remove(await db.RelationAddresses.SingleAsync(a => a.Id == storeId));
+            await db.SaveChangesAsync();
+        }
+        var stale = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = saved.Value.Version, Recipients = { saved.Value.Recipients[0] } }));
+        Assert.Equal(ServiceResultStatus.Conflict, stale.Status);
+    }
+
+    [Fact]
     public async Task Only_delivery_addresses_are_offered_and_accepted()
     {
         int relationId, billingId;
