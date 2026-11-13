@@ -113,6 +113,31 @@ describe('mail drafts panel', () => {
         ]);
     });
 
+    test('a version conflict offers a refresh: the edit is kept with the new version, and the retry succeeds', async () => {
+        const theirs = draft({ version: 5, subject: 'Hun onderwerp' });
+        answer = (method, url, body) => {
+            if (url.endsWith('/mail-drafts/status')) return json(200, { configured: true, sender: 'Smtp' });
+            if (url.endsWith('/sales-orders/12/mail-drafts')) return json(200, [calls.some((c) => c.method === 'PUT') ? theirs : draft()]);
+            if (method === 'PUT') return body!.expectedVersion === 5 ? json(200, draft({ version: 6, subject: 'Mijn onderwerp' })) : json(409, { code: 'stale', message: 'stale' });
+            return json(404, {});
+        };
+        await mounted.render(<MailDraftsPanel order={order()} />);
+        await settle();
+        await act(async () => { setValue($<HTMLInputElement>('#mail-40-subject')!, 'Mijn onderwerp'); });
+        await act(async () => { $('[data-tour="so-mail-send"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="mail-conflict"]'), 'conflict notice');
+        await act(async () => { $('[data-testid="mail-conflict-compare"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="mail-conflict-current"]'), 'current version');
+        assert.ok($('[data-testid="mail-conflict-current"]')!.textContent!.includes('Hun onderwerp'));
+        await act(async () => { $('[data-testid="mail-conflict-keep"]')!.click(); });
+        await settle();
+        assert.equal($('[data-testid="mail-conflict"]'), null);
+        assert.equal($<HTMLInputElement>('#mail-40-subject')!.value, 'Mijn onderwerp', 'the unsaved edit is kept');
+        await act(async () => { $('[data-tour="so-mail-send"]')!.click(); });
+        await settle();
+        assert.equal(calls.filter((c) => c.method === 'PUT').at(-1)!.body!.expectedVersion, 5);
+    });
+
     test('without an address a notice links to the relation; without a sender the PDF and the text are the fallback and Send is not offered', async () => {
         answer = (method, url) => {
             if (url.endsWith('/mail-drafts/status')) return json(200, { configured: false, sender: 'Smtp' });
