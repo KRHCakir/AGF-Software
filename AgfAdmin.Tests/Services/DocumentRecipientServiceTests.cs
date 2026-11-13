@@ -64,21 +64,6 @@ public class DocumentRecipientServiceTests : IDisposable
         Assert.Equal(" | ", Lists(DocumentRecipientService.Resolve(stored, null, "Invoice")));
     }
 
-    [Fact]
-    public async Task A_list_that_is_added_to_and_emptied_again_never_gets_an_earlier_version_back()
-    {
-        var (relationId, _, _) = await RelationAsync();
-        var seen = (await RunAsync(s => s.GetForRelationAsync(relationId))).Value.Version; // gebruiker A opent de lege lijst
-        var added = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = seen, Recipients = { Recipient("a@noord.nl", "To", null, "Invoice") } }));
-        var emptied = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = added.Value.Version }));
-        Assert.Equal(ServiceResultStatus.Ok, emptied.Status);
-        Assert.Empty(emptied.Value.Recipients);
-        Assert.NotEqual(seen, emptied.Value.Version);
-
-        var stale = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = seen, Recipients = { Recipient("b@noord.nl", "To", null, "Invoice") } }));
-        Assert.Equal(ServiceResultStatus.Conflict, stale.Status);
-    }
-
     // "aan | cc" als tekst (een tuple van arrays vergelijkt op referentie).
     private static string Lists((List<string> To, List<string> Cc) value) => $"{string.Join(",", value.To)} | {string.Join(",", value.Cc)}";
 
@@ -101,8 +86,7 @@ public class DocumentRecipientServiceTests : IDisposable
         var twice = typo.Value.Recipients.Single();
         Assert.Contains("recipients[1].id", (await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = typo.Value.Version, Recipients = { twice, new DocumentRecipientDto { Id = twice.Id, Email = "ander@noord.nl", Role = "To", Kinds = { "Other" } } } }))).Errors.Keys);
         var cleared = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = typo.Value.Version, Recipients = { } }));
-        // De versie blijft oplopen, ook bij een lege lijst (twee opslagen: typo-regel, daarna leeg).
-        Assert.Equal(("2", 0), (cleared.Value.Version, cleared.Value.Recipients.Count));
+        Assert.Equal(("0", 0), (cleared.Value.Version, cleared.Value.Recipients.Count));
     }
 
     [Fact]

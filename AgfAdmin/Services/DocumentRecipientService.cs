@@ -1,4 +1,5 @@
-using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
@@ -20,11 +21,11 @@ namespace AgfAdmin.Services
         {
             var relation = await db.Relations.AsNoTracking().Include(r => r.Addresses).SingleOrDefaultAsync(r => r.Id == relationId, cancellationToken);
             if (relation == null) return ServiceResult<DocumentRecipientsDto>.NotFound($"Relation {relationId} does not exist.");
-            return ServiceResult<DocumentRecipientsDto>.Ok(Dto(await StoredAsync(DocumentMailRules.OwnerRelation, relationId, cancellationToken), await VersionAsync(DocumentMailRules.OwnerRelation, relationId, cancellationToken), relation));
+            return ServiceResult<DocumentRecipientsDto>.Ok(Dto(await StoredAsync(DocumentMailRules.OwnerRelation, relationId, cancellationToken), relation));
         }
 
         public async Task<DocumentRecipientsDto> GetWarehouseAsync(CancellationToken cancellationToken = default) =>
-            Dto(await StoredAsync(DocumentMailRules.OwnerWarehouse, null, cancellationToken), await VersionAsync(DocumentMailRules.OwnerWarehouse, null, cancellationToken), null);
+            Dto(await StoredAsync(DocumentMailRules.OwnerWarehouse, null, cancellationToken), null);
 
         public async Task<ServiceResult<DocumentRecipientsDto>> SaveForRelationAsync(int relationId, SaveDocumentRecipientsDto request, CancellationToken cancellationToken = default)
         {
@@ -66,11 +67,9 @@ namespace AgfAdmin.Services
                 await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({RecipientLockClass}, {lockKey})", cancellationToken);
             }
             var stored = await StoredAsync(ownerKind, relationId, cancellationToken, tracking: true);
-            var versionRow = await db.DocumentRecipientListVersions.SingleOrDefaultAsync(v => v.OwnerKind == ownerKind && v.OwnerId == (relationId ?? 0), cancellationToken);
-            var currentVersion = (versionRow?.Version ?? 0).ToString(CultureInfo.InvariantCulture);
-            if (request?.ExpectedVersion != currentVersion)
+            if (request?.ExpectedVersion != VersionOf(stored))
             {
-                return ServiceResult<DocumentRecipientsDto>.Conflict("The e-mail addresses were changed by someone else; reload and try again.", new { code = "stale", version = currentVersion });
+                return ServiceResult<DocumentRecipientsDto>.Conflict("The e-mail addresses were changed by someone else; reload and try again.", new { code = "stale", version = VersionOf(stored) });
             }
             var errors = new Dictionary<string, List<string>>();
             var warnings = new List<RelationWarningDto>();
@@ -136,13 +135,10 @@ namespace AgfAdmin.Services
                 row.UpdatedBy = actor;
             }
             db.DocumentRecipients.RemoveRange(stored.Where(r => !keep.Contains(r.Id)));
-            // De versie loopt bij elke opslag op en blijft bestaan, ook als de lijst leeg wordt: een eerder gezien nummer komt nooit terug.
-            if (versionRow == null) db.DocumentRecipientListVersions.Add(new DocumentRecipientListVersion { OwnerKind = ownerKind, OwnerId = relationId ?? 0, Version = 1 });
-            else versionRow.Version++;
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             db.ChangeTracker.Clear();
-            var dto = Dto(await StoredAsync(ownerKind, relationId, cancellationToken), await VersionAsync(ownerKind, relationId, cancellationToken), relation);
+            var dto = Dto(await StoredAsync(ownerKind, relationId, cancellationToken), relation);
             dto.Warnings = warnings;
             return ServiceResult<DocumentRecipientsDto>.Ok(dto);
         }
@@ -153,20 +149,20 @@ namespace AgfAdmin.Services
             return await (tracking ? query : query.AsNoTracking()).OrderBy(r => r.SortOrder).ThenBy(r => r.Id).ToListAsync(cancellationToken);
         }
 
-        private static DocumentRecipientsDto Dto(List<DocumentRecipient> stored, string version, Relation relation) => new()
+        private static DocumentRecipientsDto Dto(List<DocumentRecipient> stored, Relation relation) => new()
         {
-            Version = version,
+            Version = VersionOf(stored),
             Recipients = stored.Select(r => new DocumentRecipientDto { Id = r.Id, Name = r.Name, Email = r.Email, Role = r.Role, Kinds = DocumentMailRules.Names(r.Kinds).ToList(), RelationAddressId = r.RelationAddressId }).ToList(),
             Addresses = relation?.Addresses.Where(a => a.Purpose == AddressPurpose.Delivery && (a.IsActive || stored.Any(r => r.RelationAddressId == a.Id))).OrderBy(a => a.SortOrder).ThenBy(a => a.Id)
                 .Select(a => new RecipientAddressOptionDto { Id = a.Id, Purpose = a.Purpose, Text = TransportOrderBuilder.AddressText(a) ?? a.Label }).ToList() ?? new List<RecipientAddressOptionDto>(),
         };
 
-        // De versie van een lijst: een blijvende teller per eigenaar (nog nooit opgeslagen = "0"), zodat opslaan een gelijktijdige wijziging herkent.
-        private async Task<string> VersionAsync(string ownerKind, int? relationId, CancellationToken cancellationToken)
+        // De versie van een lijst: een korte vingerafdruk van wat er staat (leeg = "0"), zodat opslaan een gelijktijdige wijziging herkent.
+        public static string VersionOf(IReadOnlyCollection<DocumentRecipient> stored)
         {
-            var ownerId = relationId ?? 0;
-            var version = await db.DocumentRecipientListVersions.AsNoTracking().Where(v => v.OwnerKind == ownerKind && v.OwnerId == ownerId).Select(v => (long?)v.Version).SingleOrDefaultAsync(cancellationToken);
-            return (version ?? 0).ToString(CultureInfo.InvariantCulture);
+            if (stored.Count == 0) return "0";
+            var text = string.Join("\n", stored.OrderBy(r => r.Id).Select(r => $"{r.Id}|{r.Email}|{r.Name}|{r.Role}|{r.Kinds}|{r.RelationAddressId}|{r.SortOrder}"));
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..16].ToLowerInvariant();
         }
     }
 }
