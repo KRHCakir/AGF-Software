@@ -130,6 +130,10 @@ describe('RelationForm', () => {
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-conflict"]') !== null, 'conflict notice');
         assert.equal(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!.value, 'nieuw@noord.nl', 'your own list stays');
         assert.ok(mounted.container.querySelector('[data-testid="recipients-conflict"]')!.textContent!.includes('recipients_conflict'));
+        assert.ok(mounted.container.querySelector('[data-testid="recipients-conflict-list"]')!.textContent!.includes('Collega'), 'full saved rows are shown');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        assert.equal(puts, 1, 'saving is blocked until a choice is made');
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="recipients-keep-mine"]')!);
         await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
         await mounted.waitFor(() => puts === 2, 'saved again');
         const again = calls.filter((call) => call.method === 'PUT' && call.url.includes('/document-recipients'))[1].body!;
@@ -153,6 +157,7 @@ describe('RelationForm', () => {
         await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-take-saved"]') !== null, 'conflict notice');
         const puts = () => calls.filter((call) => call.method === 'PUT' && call.url.includes('/document-recipients'));
+        await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="recipients-keep-mine"]')!);
         await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
         await mounted.waitFor(() => puts().length === 2, 'saved again');
         assert.deepEqual((puts()[1].body!.recipients as { id: number | null; email: string }[]).map((r) => [r.id, r.email]), [[null, 'nieuw@noord.nl']]);
