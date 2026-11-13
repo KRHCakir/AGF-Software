@@ -37,7 +37,8 @@ namespace AgfAdmin.Services
         public static readonly IReadOnlyList<string> Securities = new[] { SecurityNone, SecurityStartTls, SecuritySslOnConnect };
 
         public const int MaxNameLength = 200;
-        public const int MaxRecipientsPerOwner = 50;
+        // 15 × 254 tekens past in het Aan- of Cc-veld van een mailconcept (MaxAddressListLength).
+        public const int MaxRecipientsPerOwner = 15;
         public const int MaxAddressListLength = 4000;
         public const int MaxSubjectLength = 300;
         public const int MaxBodyLength = 10000;

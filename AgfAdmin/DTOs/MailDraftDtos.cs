@@ -44,6 +44,8 @@ namespace AgfAdmin.DTOs
         public int? ExpectedVersion { get; set; }
         // Meer dan 10 ontvangers: alleen versturen na een uitdrukkelijke bevestiging.
         public bool ConfirmManyRecipients { get; set; }
+        // Een verzending die blijft hangen (uitkomst onbekend) gaat alleen opnieuw na uitdrukkelijke bevestiging, nadat iemand de verzonden items heeft gecontroleerd.
+        public bool ConfirmResend { get; set; }
     }
 
     // Een sjabloon per documentsoort (Subject en Body met invulvelden); IsDefault = het vaste standaardsjabloon (geen eigen versie).
