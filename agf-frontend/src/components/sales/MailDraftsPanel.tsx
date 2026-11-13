@@ -84,8 +84,8 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
             else setError(apiError);
         } finally { setBusy(false); }
     };
-    // Actuele versie van de server ophalen. "Mijn wijzigingen behouden" neemt alleen de nieuwe versie over (de velden blijven zoals de
-    // gebruiker ze heeft); anders worden de velden vervangen door de actuele tekst. Is het concept inmiddels verzonden of weg: lijst verversen.
+    // Actuele versie van de server ophalen. "Mijn wijzigingen behouden" neemt de nieuwe versie over en houdt alleen de door de gebruiker
+    // gewijzigde velden; anders worden de velden vervangen door de actuele tekst. Is het concept inmiddels verzonden of weg: lijst verversen.
     const fetchCurrent = async () => (await getOrderMailDrafts(draft.salesOrderId)).find((d) => d.id === draft.id);
     const refresh = (keepMine: boolean) => void run(async () => {
         const found = await fetchCurrent();
