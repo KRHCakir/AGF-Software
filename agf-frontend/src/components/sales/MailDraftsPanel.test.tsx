@@ -113,8 +113,8 @@ describe('mail drafts panel', () => {
         ]);
     });
 
-    test('a version conflict offers a refresh: the edit is kept with the new version, and the retry succeeds', async () => {
-        const theirs = draft({ version: 5, subject: 'Hun onderwerp' });
+    test('a version conflict offers a refresh: only the own edit is kept, the other person\'s change comes in, and the retry succeeds', async () => {
+        const theirs = draft({ version: 5, subject: 'Hun onderwerp', to: 'nieuw@zeeland.nl' });
         answer = (method, url, body) => {
             if (url.endsWith('/mail-drafts/status')) return json(200, { configured: true, sender: 'Smtp' });
             if (url.endsWith('/sales-orders/12/mail-drafts')) return json(200, [calls.some((c) => c.method === 'PUT') ? theirs : draft()]);
@@ -133,9 +133,11 @@ describe('mail drafts panel', () => {
         await settle();
         assert.equal($('[data-testid="mail-conflict"]'), null);
         assert.equal($<HTMLInputElement>('#mail-40-subject')!.value, 'Mijn onderwerp', 'the unsaved edit is kept');
+        assert.equal($<HTMLInputElement>('#mail-40-to')!.value, 'nieuw@zeeland.nl', 'a field not changed here takes the other person\'s change');
         await act(async () => { $('[data-tour="so-mail-send"]')!.click(); });
         await settle();
-        assert.equal(calls.filter((c) => c.method === 'PUT').at(-1)!.body!.expectedVersion, 5);
+        const retry = calls.filter((c) => c.method === 'PUT').at(-1)!.body!;
+        assert.deepEqual([retry.expectedVersion, retry.to, retry.subject], [5, 'nieuw@zeeland.nl', 'Mijn onderwerp']);
     });
 
     test('without an address a notice links to the relation; without a sender the PDF and the text are the fallback and Send is not offered', async () => {

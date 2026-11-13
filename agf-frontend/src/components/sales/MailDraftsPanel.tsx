@@ -84,14 +84,21 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
             else setError(apiError);
         } finally { setBusy(false); }
     };
-    // Actuele versie van de server ophalen. "Mijn wijzigingen behouden" neemt alleen de nieuwe versie over (de velden blijven zoals de
-    // gebruiker ze heeft); anders worden de velden vervangen door de actuele tekst. Is het concept inmiddels verzonden of weg: lijst verversen.
+    // Actuele versie van de server ophalen. "Mijn wijzigingen behouden" neemt de nieuwe versie over en houdt alleen de door de gebruiker
+    // gewijzigde velden; anders worden de velden vervangen door de actuele tekst. Is het concept inmiddels verzonden of weg: lijst verversen.
     const fetchCurrent = async () => (await getOrderMailDrafts(draft.salesOrderId)).find((d) => d.id === draft.id);
     const refresh = (keepMine: boolean) => void run(async () => {
         const found = await fetchCurrent();
         if (!found || (found.status !== 'Draft' && found.status !== 'Failed')) { onChanged(); return; }
-        setSaved({ version: found.version, to: found.to ?? '', cc: found.cc ?? '', subject: found.subject, body: found.body });
-        if (!keepMine) { setTo(found.to ?? ''); setCc(found.cc ?? ''); setSubject(found.subject); setBody(found.body); }
+        const current = { to: found.to ?? '', cc: found.cc ?? '', subject: found.subject, body: found.body };
+        // "Mijn wijzigingen behouden": alleen de velden die hier aangepast zijn blijven staan; de rest komt van de actuele versie, zodat een
+        // wijziging van de ander (bijvoorbeeld de ontvanger) niet ongemerkt wordt overschreven.
+        const mine = (field: keyof typeof current, value: string) => (keepMine && value !== saved[field] ? value : current[field]);
+        setTo(mine('to', to));
+        setCc(mine('cc', cc));
+        setSubject(mine('subject', subject));
+        setBody(mine('body', body));
+        setSaved({ version: found.version, ...current });
         setConfirm(null);
         setGranted(NOTHING_GRANTED);
         setConflict(null);

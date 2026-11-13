@@ -25,6 +25,10 @@ describe('document recipient rows', () => {
             emptyRow(),
         ];
         assert.deepEqual(recipientProblems(rows).map((p) => `${p.index}:${p.code}`), ['0:invalid', '1:kinds', '3:duplicate']);
+        // Een nieuwe regel met gekozen documenten of een afleveradres maar zonder adres wordt niet stil weggelaten: het adres ontbreekt.
+        const chosen = [{ ...emptyRow(), kinds: ['LoadingSlip' as const] }, { ...emptyRow(), scope: '9' }, emptyRow(['LoadingSlip']), { ...emptyRow(['LoadingSlip']), kinds: [] }];
+        assert.deepEqual(recipientProblems(chosen).map((p) => `${p.index}:${p.code}`), ['0:invalid', '1:invalid', '1:kinds', '3:invalid', '3:kinds']);
+        assert.equal(recipientsFrom(chosen).length, 3, 'only the untouched new row (with its default document) is left out');
         assert.equal(typoHint({ ...emptyRow(), email: 'planning@gmial.com' }), 'planning@gmail.com');
         assert.equal(typoHint({ ...emptyRow(), email: 'planning@gmail.com' }), null);
     });
