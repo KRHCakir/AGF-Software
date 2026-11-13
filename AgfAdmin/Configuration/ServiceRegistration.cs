@@ -39,6 +39,14 @@ namespace AgfAdmin.Configuration
             services.AddScoped<DocumentRecipientService>();
             services.AddScoped<MailDraftService>();
             services.AddScoped<MailTemplateService>();
+            // Mail versturen (documenten deel 3): Mail:Sender = Fake voor tests en de rondleiding (nooit netwerk), anders SMTP.
+            services.AddSingleton<Services.Mail.IMailSender>(provider =>
+                string.Equals(provider.GetRequiredService<IConfiguration>()["Mail:Sender"], Services.Mail.FakeMailSender.Name, StringComparison.OrdinalIgnoreCase)
+                    ? new Services.Mail.FakeMailSender() : new Services.Mail.SmtpMailSender());
+            services.AddDataProtection();
+            services.AddScoped<Services.Mail.MailSettingsService>();
+            services.AddSingleton<Services.Mail.MailSendLimiter>();
+            services.AddScoped<Services.Mail.MailSendService>();
             services.AddScoped<PartijService>();
             services.AddScoped<CostArticleService>();
             services.AddScoped<PartijCostService>();

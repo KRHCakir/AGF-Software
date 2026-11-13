@@ -50,5 +50,7 @@ namespace AgfAdmin.DTOs
         public DateTime? SentAt { get; set; }
         public string SentBy { get; set; }
         public bool Latest { get; set; }
+        // Verstuurd per mail (documenten deel 3): naar wie; leeg = niet per mail (of alleen doorgegeven).
+        public string SentTo { get; set; }
     }
 }

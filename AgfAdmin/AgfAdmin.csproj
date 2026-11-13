@@ -20,6 +20,7 @@
     <PackageReference Include="DnsClient" Version="1.8.0" />
     <!-- HEIC-foto's van de telefoon omzetten naar JPEG en grote foto's verkleinen vóór het AI-lezen (stap 7a). -->
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="15.1.0" />
+    <PackageReference Include="MailKit" Version="4.14.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.7">
