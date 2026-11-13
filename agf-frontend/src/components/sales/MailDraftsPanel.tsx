@@ -47,6 +47,9 @@ export default function MailDraftsPanel({ order, reloadKey = 0 }: { order: Sales
 }
 
 type Confirm = { kind: 'many'; count: number } | { kind: 'resend' } | null;
+// Bevestigingen die in deze verzendpoging al gegeven zijn: ze gaan samen mee, zodat de ene vraag de andere niet ongedaan maakt.
+type Granted = { many: boolean; resend: boolean };
+const NOTHING_GRANTED: Granted = { many: false, resend: false };
 
 export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDraft; configured: boolean; onChanged: () => void }) {
     const { t, locale } = useTranslation();
@@ -59,9 +62,12 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
     const [confirm, setConfirm] = useState<Confirm>(null);
     const [preview, setPreview] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    // Wat er op de server staat (na een opslag in deze kaart): de versie voor de volgende aanroep en de basis voor "aangepast".
+    const [saved, setSaved] = useState(() => ({ version: draft.version, to: draft.to ?? '', cc: draft.cc ?? '', subject: draft.subject, body: draft.body }));
+    const [granted, setGranted] = useState<Granted>(NOTHING_GRANTED);
     useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
     const open = draft.status === 'Draft' || draft.status === 'Failed';
-    const dirty = to !== (draft.to ?? '') || cc !== (draft.cc ?? '') || subject !== draft.subject || body !== draft.body;
+    const dirty = to !== saved.to || cc !== saved.cc || subject !== saved.subject || body !== saved.body;
     const id = (field: string) => `mail-${draft.id}-${field}`;
     const name = t(draft.documentKind === 'TransportOrder' ? 'so_transport_order_name' : 'so_slip_name', { number: draft.documentNumber, version: String(draft.documentVersion) });
 
@@ -71,28 +77,38 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
         setError(null);
         try { await work(); } catch (caught) { setError(toApiError(caught)); } finally { setBusy(false); }
     };
-    // Eerst eventuele aanpassingen opslaan (met de versie), dan versturen met de nieuwe versie. Een vraag om bevestiging (veel ontvangers,
-    // onbekende uitkomst) komt als knop in de kaart; pas na die tweede klik gaat de mail weg.
-    const send = (confirmManyRecipients = false, confirmResend = false) => void run(async () => {
-        let version = draft.version;
-        if (dirty) version = (await updateMailDraft(draft.id, { expectedVersion: version, to, cc, subject, body })).version;
+    // Aanpassingen opslaan (met de versie); de kaart onthoudt daarna wat er staat, zodat een bevestiging niet nog eens met de oude versie opslaat.
+    const save = async () => {
+        if (!dirty) return saved.version;
+        const updated = await updateMailDraft(draft.id, { expectedVersion: saved.version, to, cc, subject, body });
+        const next = { version: updated.version, to: updated.to ?? '', cc: updated.cc ?? '', subject: updated.subject, body: updated.body };
+        setSaved(next);
+        setTo(next.to);
+        setCc(next.cc);
+        setSubject(next.subject);
+        setBody(next.body);
+        return next.version;
+    };
+    // Eerst eventuele aanpassingen opslaan, dan versturen met de nieuwe versie. Een vraag om bevestiging (veel ontvangers, onbekende
+    // uitkomst) komt als knop in de kaart; pas na die tweede klik gaat de mail weg, met alle bevestigingen van deze poging samen.
+    const send = (allowed: Granted) => void run(async () => {
+        const version = await save();
+        setGranted(allowed);
         try {
-            await sendMailDraft(draft.id, { expectedVersion: version, confirmManyRecipients, confirmResend });
+            await sendMailDraft(draft.id, { expectedVersion: version, confirmManyRecipients: allowed.many, confirmResend: allowed.resend });
             setConfirm(null);
             onChanged();
         } catch (caught) {
             const apiError = toApiError(caught);
-            const code = (apiError.body as { code?: string; count?: number } | null)?.code;
-            if (code === 'confirmRecipients') { setConfirm({ kind: 'many', count: (apiError.body as { count: number }).count }); return; }
-            if (code === 'uncertain') { setConfirm({ kind: 'resend' }); return; }
-            if (dirty) onChanged();
+            const answer = apiError.body as { code?: string; count?: number } | null;
+            if (answer?.code === 'confirmRecipients') { setConfirm({ kind: 'many', count: answer.count ?? 0 }); return; }
+            if (answer?.code === 'uncertain') { setConfirm({ kind: 'resend' }); return; }
             throw apiError;
         }
     });
+    // Verwijderen gooit ook niet-opgeslagen aanpassingen weg: alleen de versie van wat er staat telt.
     const discard = () => void run(async () => {
-        let version = draft.version;
-        if (dirty) version = (await updateMailDraft(draft.id, { expectedVersion: version, to, cc, subject, body })).version;
-        await discardMailDraft(draft.id, version);
+        await discardMailDraft(draft.id, saved.version);
         onChanged();
     });
     const pdf = (download: boolean) => void run(async () => {
@@ -151,12 +167,12 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
             {confirm && (
                 <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="mail-confirm">
                     {confirm.kind === 'many' ? t('mail_confirm_many', { count: String(confirm.count) }) : t('mail_confirm_resend')}
-                    <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => send(confirm.kind === 'many', confirm.kind === 'resend')} data-tour="so-mail-confirm">{t('mail_send_anyway')}</button>
+                    <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => send({ ...granted, [confirm.kind]: true })} data-tour="so-mail-confirm">{t('mail_send_anyway')}</button>
                     <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => setConfirm(null)}>{t('cancel')}</button>
                 </p>
             )}
             <div className="flex flex-wrap gap-2">
-                {(open || draft.status === 'Sending') && configured && <button type="button" className={primaryButtonClass} disabled={busy || !to.trim()} onClick={() => send(false, false)} data-tour="so-mail-send">{busy ? t('supply_saving') : t('mail_send')}</button>}
+                {(open || draft.status === 'Sending') && configured && <button type="button" className={primaryButtonClass} disabled={busy || !to.trim()} onClick={() => send(NOTHING_GRANTED)} data-tour="so-mail-send">{busy ? t('supply_saving') : t('mail_send')}</button>}
                 <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => pdf(false)} data-tour="so-mail-preview">{t('mail_preview')}</button>
                 {!configured && open && <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => pdf(true)} data-testid="mail-download">{t('so_slip_download')}</button>}
                 {!configured && open && <button type="button" className={secondaryButtonClass} disabled={busy} onClick={copy} data-testid="mail-copy">{copied ? t('mail_copied') : t('mail_copy')}</button>}

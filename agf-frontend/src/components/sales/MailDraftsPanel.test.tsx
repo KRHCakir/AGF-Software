@@ -80,6 +80,39 @@ describe('mail drafts panel', () => {
         assert.ok($('[data-tour="so-mail-send"]'), 'can be sent again');
     });
 
+    test('after an edit is saved, the confirmations use the new version and are sent together (unknown outcome and many recipients)', async () => {
+        let sent = false;
+        answer = (method, url, body) => {
+            if (url.endsWith('/mail-drafts/status')) return json(200, { configured: true, sender: 'Smtp' });
+            if (url.endsWith('/sales-orders/12/mail-drafts')) return json(200, [sent ? draft({ status: 'Sent', sentAt: '2026-11-13T09:00:00Z', sentBy: 'Admin', version: 3 }) : draft()]);
+            if (method === 'PUT') return json(200, draft({ version: 2, subject: 'Transportopdracht TO-2026-0012 (spoed)' }));
+            if (url.endsWith('/send')) {
+                if (body!.expectedVersion !== 2) return json(409, { code: 'stale', message: 'stale' });
+                if (!body!.confirmResend) return json(409, { code: 'uncertain', message: 'uncertain' });
+                if (!body!.confirmManyRecipients) return json(409, { code: 'confirmRecipients', count: 12, message: 'confirm' });
+                sent = true;
+                return json(200, draft({ status: 'Sent' }));
+            }
+            return json(404, {});
+        };
+        await mounted.render(<MailDraftsPanel order={order()} />);
+        await settle();
+        await act(async () => { setValue($<HTMLInputElement>('#mail-40-subject')!, 'Transportopdracht TO-2026-0012 (spoed)'); });
+        await act(async () => { $('[data-tour="so-mail-send"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="mail-confirm"]'), 'resend question');
+        assert.ok($('[data-testid="mail-confirm"]')!.textContent!.includes('mail_confirm_resend'));
+        await act(async () => { $('[data-tour="so-mail-confirm"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="mail-confirm"]')?.textContent?.includes('mail_confirm_many'), 'many question');
+        await act(async () => { $('[data-tour="so-mail-confirm"]')!.click(); });
+        await mounted.waitFor(() => $('[data-testid="mail-sent"]'), 'sent line');
+        assert.equal(calls.filter((c) => c.method === 'PUT').length, 1, 'the edit is saved once');
+        assert.deepEqual(posts().map((p) => p.body), [
+            { expectedVersion: 2, confirmManyRecipients: false, confirmResend: false },
+            { expectedVersion: 2, confirmManyRecipients: false, confirmResend: true },
+            { expectedVersion: 2, confirmManyRecipients: true, confirmResend: true },
+        ]);
+    });
+
     test('without an address a notice links to the relation; without a sender the PDF and the text are the fallback and Send is not offered', async () => {
         answer = (method, url) => {
             if (url.endsWith('/mail-drafts/status')) return json(200, { configured: false, sender: 'Smtp' });

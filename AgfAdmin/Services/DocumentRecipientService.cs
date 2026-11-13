@@ -84,6 +84,8 @@ namespace AgfAdmin.Services
                 var key = $"recipients[{i}]";
                 // Een bestaande regel kan maar één keer in de lijst staan (anders zou de laatste stil de eerste vervangen).
                 if (item.Id is int existingId && !ids.Add(existingId)) ValidationErrors.Add(errors, $"{key}.id", "This address is listed twice.");
+                // Een id dat niet (meer) in deze lijst staat is nooit stil een nieuwe regel: de lijst die de gebruiker zag hoort niet bij deze opslag.
+                if (item.Id is int knownId && stored.All(r => r.Id != knownId)) ValidationErrors.Add(errors, $"{key}.id", "This address is not in the list; reload and try again.");
                 var email = (item.Email ?? "").Trim();
                 if (email.Length == 0 || email.Length > EmailRules.MaxLength || !EmailRules.IsStrict(email)) ValidationErrors.Add(errors, $"{key}.email", EmailRules.InvalidMessage);
                 else if (EmailRules.TypoSuggestion(email) is { } suggestion)
@@ -158,6 +160,9 @@ namespace AgfAdmin.Services
         };
 
         // De versie van een lijst: een korte vingerafdruk van wat er staat (leeg = "0"), zodat opslaan een gelijktijdige wijziging herkent.
+        // Bewust op inhoud en niet een teller: een opslag geeft een 409 precies als de lijst anders is dan wat de gebruiker zag. Ook als een
+        // afleveradres (met zijn ontvangers, via cascade) verdwijnt, verandert de vingerafdruk. Toevoegen en weer weghalen geeft dezelfde lijst
+        // en dus dezelfde versie: overschrijven verliest dan niets.
         public static string VersionOf(IReadOnlyCollection<DocumentRecipient> stored)
         {
             if (stored.Count == 0) return "0";
