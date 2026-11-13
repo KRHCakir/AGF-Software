@@ -33,7 +33,18 @@ namespace AgfAdmin.Services
             foreach (var group in documents.GroupBy(d => d.Kind))
             {
                 var latest = group.OrderByDescending(d => d.Version).First();
-                if (drafts.Any(d => d.DocumentId == latest.Id)) continue;
+                if (drafts.Any(d => d.DocumentId == latest.Id))
+                {
+                    // Is het document intussen doorgegeven, dan hoeft een open concept er niet meer te staan.
+                    if (latest.SentAt != null)
+                        foreach (var open in drafts.Where(d => d.DocumentId == latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
+                        {
+                            open.Status = DocumentMailRules.StatusSuperseded;
+                            open.UpdatedAt = now;
+                            open.UpdatedBy = actor;
+                        }
+                    continue;
+                }
                 // Een open concept van een oudere versie gaat niet meer weg: vervangen, ook als de nieuwe versie zelf geen concept krijgt.
                 foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
                 {
@@ -98,7 +109,8 @@ namespace AgfAdmin.Services
             if (request?.ExpectedVersion != draft.Version) return Stale(draft);
             var errors = new Dictionary<string, List<string>>();
             var to = Addresses(request.To, "to", errors);
-            var cc = Addresses(request.Cc, "cc", errors);
+            var toSet = DocumentMailRules.SplitAddresses(to);
+            var cc = Addresses(DocumentMailRules.JoinAddresses(DocumentMailRules.SplitAddresses(request.Cc).Where(a => !toSet.Contains(a, StringComparer.OrdinalIgnoreCase))), "cc", errors);
             var subject = ValidationErrors.RequiredText(request.Subject, DocumentMailRules.MaxSubjectLength, "subject", errors);
             var body = (request.Body ?? "").Trim();
             if (body.Length == 0) ValidationErrors.Add(errors, "body", "Write a text.");
@@ -106,6 +118,20 @@ namespace AgfAdmin.Services
             if (errors.Count > 0) return ServiceResult<MailDraftDto>.Validation(ValidationErrors.ToArrays(errors));
             draft.To = to;
             draft.Cc = cc;
+            if (toSet.Count > 0)
+            {
+                draft.MissingRecipient = null;
+                draft.MissingRelationId = null;
+            }
+            else if (draft.MissingRecipient == null)
+            {
+                var isTransport = draft.DocumentKind == SalesOrderDocumentRules.KindTransportOrder;
+                var carrier = isTransport
+                    ? await db.SalesOrders.AsNoTracking().Where(o => o.Id == draft.SalesOrderId).Select(o => o.Transport.CarrierRelation).FirstOrDefaultAsync(cancellationToken)
+                    : null;
+                draft.MissingRecipient = carrier?.Name ?? (isTransport ? "de vervoerder" : WarehouseName);
+                draft.MissingRelationId = carrier?.Id;
+            }
             draft.Subject = subject;
             draft.Body = body;
             draft.UpdatedAt = DateTime.UtcNow;
