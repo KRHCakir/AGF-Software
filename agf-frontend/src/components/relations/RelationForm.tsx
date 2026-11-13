@@ -793,7 +793,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                             </div>
                         )}
                         <DocumentRecipientsEditor idPrefix="recipients" rows={recipientRows} onChange={(rows) => { setRecipientRows(rows); setRecipientIssues([]); setRecipientError(null); }}
-                            addresses={storedRecipients.addresses.filter((a) => a.purpose === 'Delivery' || a.purpose === 'Main')} problems={recipientIssues} disabled={locked || recipientsLoading || recipientsFailed} dataTour="relation-recipient" />
+                            addresses={storedRecipients.addresses.filter((a) => a.purpose === 'Delivery')} problems={recipientIssues} disabled={locked || recipientsLoading || recipientsFailed} dataTour="relation-recipient" />
                     </div>
                 )}
             </section>

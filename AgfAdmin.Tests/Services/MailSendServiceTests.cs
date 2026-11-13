@@ -136,6 +136,20 @@ public class MailSendServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_password_that_can_no_longer_be_decrypted_fails_with_what_to_do()
+    {
+        var orderId = await ConfirmedOrderAsync();
+        // Opgeslagen met een sleutel die deze server niet (meer) heeft, zoals na een verhuizing zonder de sleutels.
+        var elsewhere = new EphemeralDataProtectionProvider();
+        await RunAsync(db => new MailSettingsService(db, _fake, elsewhere).SaveAsync(new MailSettingsDto { Host = "smtp.voorbeeld.nl", Port = 587, UserName = "verkoop", Password = "Geheim-123!", FromAddress = "verkoop@voorbeeld.nl" }));
+        var draft = await DraftAsync(orderId, "LoadingSlip");
+        var failed = await SendAsync(draft.Id, draft.Version);
+        Assert.Equal("Failed", failed.Value.Status);
+        Assert.Contains("vul het opnieuw in onder Beheer", failed.Value.LastError);
+        Assert.Empty(_fake.Sent);
+    }
+
+    [Fact]
     public async Task An_older_version_of_a_document_is_never_sent()
     {
         var orderId = await ConfirmedOrderAsync();
