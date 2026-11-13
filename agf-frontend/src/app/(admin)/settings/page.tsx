@@ -6,6 +6,9 @@ import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortal
 import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
 import LoadingSlipSetting from '../../../components/settings/LoadingSlipSetting';
 import TransportOrderSetting from '../../../components/settings/TransportOrderSetting';
+import WarehouseRecipientsSetting from '../../../components/settings/WarehouseRecipientsSetting';
+import MailSenderSetting from '../../../components/settings/MailSenderSetting';
+import MailTemplatesSetting from '../../../components/settings/MailTemplatesSetting';
 import PaymentConditionsAdmin from '../../../components/settings/PaymentConditionsAdmin';
 import { useTranslation } from '../../../i18n/LanguageContext';
 
@@ -24,6 +27,9 @@ export default function SettingsPage() {
             <PartijNumberingSetting />
             <LoadingSlipSetting />
             <TransportOrderSetting />
+            <WarehouseRecipientsSetting />
+            <MailSenderSetting />
+            <MailTemplatesSetting />
             <PaymentConditionsAdmin />
             <CostArticlesAdmin />
             <GlobalGapPortalSetting />
