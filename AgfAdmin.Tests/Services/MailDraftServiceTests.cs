@@ -64,6 +64,27 @@ public class MailDraftServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task The_global_list_adds_missing_drafts_for_older_confirmed_orders_without_bringing_back_discarded_ones()
+    {
+        var (orderId, carrierId) = await OrderAsync();
+        await CarrierAsync(orderId, carrierId);
+        await RunAsync(db => new LoadingSlipService(db).ConfirmAsync(orderId, new ConfirmSalesOrderDto { LoadAt = new DateTime(2026, 11, 13, 5, 30, 0, DateTimeKind.Utc) }));
+        // Zoals een order van vóór de conceptfunctie: documenten wel, concepten niet.
+        await using (var db = _factory.CreateContext())
+        {
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM MailDrafts");
+        }
+
+        Assert.Equal(2, await RunAsync(db => new MailDraftService(db).OpenCountAsync()));
+        var open = await RunAsync(db => new MailDraftService(db).OpenAsync(0, 10));
+        Assert.Equal(2, open.Count);
+
+        var slip = open.Single(d => d.DocumentKind == "LoadingSlip");
+        await RunAsync(db => new MailDraftService(db).DiscardAsync(slip.Id, new MailDraftActionDto { ExpectedVersion = slip.Version }));
+        Assert.Equal(1, await RunAsync(db => new MailDraftService(db).OpenCountAsync()));
+    }
+
+    [Fact]
     public async Task Without_an_address_the_draft_is_there_with_a_notice_and_own_transport_gets_none()
     {
         var (orderId, carrierId) = await OrderAsync(carrierAddresses: false, warehouseAddresses: false);

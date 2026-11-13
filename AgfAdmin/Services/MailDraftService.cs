@@ -117,13 +117,42 @@ namespace AgfAdmin.Services
             Query().Where(d => ((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
                 || d.Status == DocumentMailRules.StatusSending);
 
-        public Task<int> OpenCountAsync(CancellationToken cancellationToken = default) => OpenQuery().CountAsync(cancellationToken);
+        // Bevestigde orders van vóór de conceptfunctie hebben nog geen concept. Voor het tellen en pagineren vullen we die per gerichte batch aan:
+        // alleen orders met een nieuwste, niet doorgegeven document zonder enig concept (ook geen verwijderd of vervangen) komen in aanmerking.
+        public const int BackfillBatchSize = 50;
+
+        private async Task BackfillAsync(CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                var orderIds = await db.SalesOrderDocuments.AsNoTracking()
+                    .Where(d => d.SentAt == null && d.SalesOrder.ConfirmedAt != null
+                        && (d.Kind != SalesOrderDocumentRules.KindTransportOrder || d.SalesOrder.Transport.Mode == SalesTransportRules.ModeCarrier)
+                        && !db.MailDrafts.Any(m => m.DocumentId == d.Id)
+                        && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.Kind && x.Version > d.Version))
+                    .Select(d => d.SalesOrderId).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
+                if (orderIds.Count == 0) return;
+                var made = 0;
+                foreach (var id in orderIds) made += await EnsureDraftsAsync(id, cancellationToken);
+                // Niets aangemaakt (bijvoorbeeld door een gelijktijdige aanvraag): stoppen, anders blijven dezelfde orders terugkomen.
+                if (made == 0 || orderIds.Count < BackfillBatchSize) return;
+            }
+        }
+
+        public async Task<int> OpenCountAsync(CancellationToken cancellationToken = default)
+        {
+            await BackfillAsync(cancellationToken);
+            return await OpenQuery().CountAsync(cancellationToken);
+        }
 
         public Task<List<MailDraftDto>> OpenAsync(CancellationToken cancellationToken = default) => OpenAsync(0, MaxPageSize, cancellationToken);
 
-        public Task<List<MailDraftDto>> OpenAsync(int skip, int take, CancellationToken cancellationToken = default) =>
-            OpenQuery().OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
+        public async Task<List<MailDraftDto>> OpenAsync(int skip, int take, CancellationToken cancellationToken = default)
+        {
+            await BackfillAsync(cancellationToken);
+            return await OpenQuery().OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
                 .Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, MaxPageSize)).Select(Projection).ToListAsync(cancellationToken);
+        }
 
         public async Task<ServiceResult<MailDraftDto>> GetAsync(int id, CancellationToken cancellationToken = default)
         {
