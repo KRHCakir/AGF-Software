@@ -33,13 +33,45 @@ namespace AgfAdmin.Services
             foreach (var group in documents.GroupBy(d => d.Kind))
             {
                 var latest = group.OrderByDescending(d => d.Version).First();
-                if (drafts.Any(d => d.DocumentId == latest.Id)) continue;
-                // Een open concept van een oudere versie gaat niet meer weg: vervangen, ook als de nieuwe versie zelf geen concept krijgt.
+                // Een open concept van een oudere versie gaat altijd weg (vervangen), ook als de nieuwe versie al een concept heeft of zelf
+                // geen krijgt: zo ruimt elke ronde een concept op dat een gelijktijdige aanvraag nog voor een oudere versie maakte.
                 foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
                 {
                     old.Status = DocumentMailRules.StatusSuperseded;
                     old.UpdatedAt = now;
                     old.UpdatedBy = actor;
+                }
+                if (drafts.Any(d => d.DocumentId == latest.Id))
+                {
+                    // Is het document intussen doorgegeven, dan hoeft een open concept er niet meer te staan.
+                    if (latest.SentAt != null)
+                        foreach (var open in drafts.Where(d => d.DocumentId == latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
+                        {
+                            open.Status = DocumentMailRules.StatusSuperseded;
+                            open.UpdatedAt = now;
+                            open.UpdatedBy = actor;
+                        }
+                    else
+                    {
+                        // Is er na het aanmaken een adres bijgekomen, dan komt het in een concept dat nog geen ontvanger heeft; handmatig ingevulde Aan blijft staan.
+                        foreach (var open in drafts.Where(d => d.DocumentId == latest.Id && d.MissingRecipient != null && string.IsNullOrWhiteSpace(d.To)
+                            && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
+                        {
+                            if (latest.Kind == SalesOrderDocumentRules.KindTransportOrder && order.Transport?.Mode != SalesTransportRules.ModeCarrier) continue;
+                            var (rTo, rCc, _, _) = latest.Kind == SalesOrderDocumentRules.KindTransportOrder
+                                ? await ForRelationAsync(recipients, order.Transport.CarrierRelation, latest.Kind, cancellationToken)
+                                : await ForWarehouseAsync(recipients, latest.Kind, cancellationToken);
+                            if (rTo.Count == 0) continue;
+                            var existingCc = DocumentMailRules.SplitAddresses(open.Cc);
+                            open.To = DocumentMailRules.JoinAddresses(rTo);
+                            open.Cc = DocumentMailRules.JoinAddresses(existingCc.Concat(rCc).Where(a => !rTo.Contains(a, StringComparer.OrdinalIgnoreCase)));
+                            open.MissingRecipient = null;
+                            open.MissingRelationId = null;
+                            open.UpdatedAt = now;
+                            open.UpdatedBy = actor;
+                        }
+                    }
+                    continue;
                 }
                 if (latest.SentAt != null) continue;
                 if (latest.Kind == SalesOrderDocumentRules.KindTransportOrder && order.Transport?.Mode != SalesTransportRules.ModeCarrier) continue;
@@ -74,14 +106,56 @@ namespace AgfAdmin.Services
         public async Task<List<MailDraftDto>> ForOrderAsync(int orderId, CancellationToken cancellationToken = default)
         {
             await EnsureDraftsAsync(orderId, cancellationToken);
-            return await Query().Where(d => d.SalesOrderId == orderId && d.Status != DocumentMailRules.StatusDiscarded && d.Status != DocumentMailRules.StatusSuperseded)
+            return await Query().Where(d => d.SalesOrderId == orderId && d.Status != DocumentMailRules.StatusDiscarded && d.Status != DocumentMailRules.StatusSuperseded
+                    && (d.Status == DocumentMailRules.StatusSent || !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.DocumentKind && x.Version > d.Document.Version)))
                 .OrderBy(d => d.DocumentKind).ThenByDescending(d => d.Id).Select(Projection).ToListAsync(cancellationToken);
         }
 
         // Te versturen, over alle orders: concepten die nog open staan of mislukten, nieuwste eerst.
-        public Task<List<MailDraftDto>> OpenAsync(CancellationToken cancellationToken = default) =>
-            Query().Where(d => d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed || d.Status == DocumentMailRules.StatusSending)
-                .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Take(200).Select(Projection).ToListAsync(cancellationToken);
+        // Een concept van een document dat intussen is doorgegeven, hoort er niet meer bij. Pagineren kan met skip/take; OpenCountAsync geeft het totaal.
+        public const int MaxPageSize = 200;
+
+        // Een open concept van een oudere documentversie (een gelijktijdige aanvraag kan er nog een maken) staat er nooit tussen.
+        private IQueryable<MailDraft> OpenQuery() =>
+            Query().Where(d => (((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
+                || d.Status == DocumentMailRules.StatusSending) && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.DocumentKind && x.Version > d.Document.Version));
+
+        // Bevestigde orders van vóór de conceptfunctie hebben nog geen concept. Voor het tellen en pagineren vullen we die per gerichte batch aan:
+        // alleen orders met een nieuwste, niet doorgegeven document zonder enig concept (ook geen verwijderd of vervangen) komen in aanmerking.
+        public const int BackfillBatchSize = 50;
+
+        private async Task BackfillAsync(CancellationToken cancellationToken)
+        {
+            while (true)
+            {
+                var orderIds = await db.SalesOrderDocuments.AsNoTracking()
+                    .Where(d => d.SentAt == null && d.SalesOrder.ConfirmedAt != null
+                        && (d.Kind != SalesOrderDocumentRules.KindTransportOrder || d.SalesOrder.Transport.Mode == SalesTransportRules.ModeCarrier)
+                        && !db.MailDrafts.Any(m => m.DocumentId == d.Id)
+                        && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.Kind && x.Version > d.Version))
+                    .Select(d => d.SalesOrderId).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
+                if (orderIds.Count == 0) return;
+                var made = 0;
+                foreach (var id in orderIds) made += await EnsureDraftsAsync(id, cancellationToken);
+                // Niets aangemaakt (bijvoorbeeld door een gelijktijdige aanvraag): stoppen, anders blijven dezelfde orders terugkomen.
+                if (made == 0 || orderIds.Count < BackfillBatchSize) return;
+            }
+        }
+
+        public async Task<int> OpenCountAsync(CancellationToken cancellationToken = default)
+        {
+            await BackfillAsync(cancellationToken);
+            return await OpenQuery().CountAsync(cancellationToken);
+        }
+
+        public Task<List<MailDraftDto>> OpenAsync(CancellationToken cancellationToken = default) => OpenAsync(0, MaxPageSize, cancellationToken);
+
+        public async Task<List<MailDraftDto>> OpenAsync(int skip, int take, CancellationToken cancellationToken = default)
+        {
+            await BackfillAsync(cancellationToken);
+            return await OpenQuery().OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
+                .Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, MaxPageSize)).Select(Projection).ToListAsync(cancellationToken);
+        }
 
         public async Task<ServiceResult<MailDraftDto>> GetAsync(int id, CancellationToken cancellationToken = default)
         {
@@ -98,7 +172,8 @@ namespace AgfAdmin.Services
             if (request?.ExpectedVersion != draft.Version) return Stale(draft);
             var errors = new Dictionary<string, List<string>>();
             var to = Addresses(request.To, "to", errors);
-            var cc = Addresses(request.Cc, "cc", errors);
+            var toSet = DocumentMailRules.SplitAddresses(to);
+            var cc = Addresses(DocumentMailRules.JoinAddresses(DocumentMailRules.SplitAddresses(request.Cc).Where(a => !toSet.Contains(a, StringComparer.OrdinalIgnoreCase))), "cc", errors);
             var subject = ValidationErrors.RequiredText(request.Subject, DocumentMailRules.MaxSubjectLength, "subject", errors);
             var body = (request.Body ?? "").Trim();
             if (body.Length == 0) ValidationErrors.Add(errors, "body", "Write a text.");
@@ -106,6 +181,20 @@ namespace AgfAdmin.Services
             if (errors.Count > 0) return ServiceResult<MailDraftDto>.Validation(ValidationErrors.ToArrays(errors));
             draft.To = to;
             draft.Cc = cc;
+            if (toSet.Count > 0)
+            {
+                draft.MissingRecipient = null;
+                draft.MissingRelationId = null;
+            }
+            else if (draft.MissingRecipient == null)
+            {
+                var isTransport = draft.DocumentKind == SalesOrderDocumentRules.KindTransportOrder;
+                var carrier = isTransport
+                    ? await db.SalesOrders.AsNoTracking().Where(o => o.Id == draft.SalesOrderId).Select(o => o.Transport.CarrierRelation).FirstOrDefaultAsync(cancellationToken)
+                    : null;
+                draft.MissingRecipient = carrier?.Name ?? (isTransport ? "de vervoerder" : WarehouseName);
+                draft.MissingRelationId = carrier?.Id;
+            }
             draft.Subject = subject;
             draft.Body = body;
             draft.UpdatedAt = DateTime.UtcNow;
@@ -180,7 +269,7 @@ namespace AgfAdmin.Services
                 ["{bedrijf}"] = company.CompanyName, ["{document}"] = MailTemplateRules.DocumentName(document.Kind), ["{nummer}"] = document.Number,
                 ["{versie}"] = document.Version.ToString(), ["{order}"] = order.OrderNumber, ["{partij}"] = order.SalesPartij?.Number ?? order.OrderNumber,
                 ["{klant}"] = order.Customer?.Name, ["{datum}"] = MailTemplateRules.Date(DateTime.UtcNow, false),
-                ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : MailTemplateRules.Date(order.RequestedDeliveryDate, false),
+                ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : "nog niet bekend",
             };
             var text = MailTemplateRules.Render(body, values).Trim();
             if (!string.IsNullOrWhiteSpace(settings?.Signature)) text = $"{text}\n\n{settings.Signature.Trim()}";

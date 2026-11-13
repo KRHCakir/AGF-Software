@@ -1357,6 +1357,7 @@
   "recipients_problem_kinds": "Kies minstens één document.",
   "recipients_typo": "Bedoelt u {suggestion}?",
   "recipients_typo_use": "Overnemen",
+  "recipients_conflict": "De e-mailadressen zijn intussen door iemand anders gewijzigd. De actuele lijst staat er nu: pas aan en sla opnieuw op.",
   "relations_save_hint": "Alleen de bedrijfsnaam is verplicht. Wijzigingen raken geen opgeslagen documentwaarden.",
   "relations_saved": "Relatie opgeslagen: {name}",
   "relations_created": "Relatie aangemaakt: {name}",

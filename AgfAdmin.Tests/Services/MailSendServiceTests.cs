@@ -136,24 +136,64 @@ public class MailSendServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task At_most_ten_sends_per_minute_per_user()
+    public async Task An_older_version_of_a_document_is_never_sent()
     {
         var orderId = await ConfirmedOrderAsync();
-        var actor = CurrentUser.Default.Actor(100);
-        // Tien pogingen van deze gebruiker in de afgelopen minuut (bij tien nieuwere laadbonversies): de elfde wacht.
+        var first = await DraftAsync(orderId, "LoadingSlip");
+        await RunAsync(db => new LoadingSlipService(db).UpdateLoadingAsync(orderId, new UpdateSalesOrderLoadingDto { LicensePlate = "BX-44-ZZ" }));
+        // Normaal is het oude concept dan vervangen (en dus niet meer te versturen); nagebootst: het staat door een race nog open.
+        int version;
         await using (var db = _factory.CreateContext())
         {
-            var first = await db.SalesOrderDocuments.FirstAsync(d => d.SalesOrderId == orderId && d.Kind == "LoadingSlip");
-            for (var version = 2; version <= 11; version++)
-            {
-                var document = new SalesOrderDocument { SalesOrderId = orderId, Kind = first.Kind, Number = first.Number, Version = version, Reason = "Changed", SnapshotJson = first.SnapshotJson, ContentHash = new string('a', 62) + version.ToString("00"), CreatedAt = DateTime.UtcNow, CreatedBy = "t" };
-                db.Add(document);
-                db.Add(new MailDraft { SalesOrderId = orderId, Document = document, DocumentKind = first.Kind, Status = "Failed", To = "a@b.nl", Subject = "s", Body = "b", CreatedBy = "t", UpdatedBy = "t", Attempts = 1, LastAttemptAt = DateTime.UtcNow, LastAttemptBy = actor });
-            }
+            var stale = await db.MailDrafts.SingleAsync(d => d.Id == first.Id);
+            Assert.Equal("Superseded", stale.Status);
+            stale.Status = "Draft";
             await db.SaveChangesAsync();
+            version = stale.Version;
         }
-        var transport = await DraftAsync(orderId, "TransportOrder");
-        Assert.Equal("rateLimited", Code(await SendAsync(transport.Id, transport.Version)));
+        Assert.Equal("superseded", Code(await SendAsync(first.Id, version)));
         Assert.Empty(_fake.Sent);
+    }
+
+    [Fact]
+    public async Task At_most_ten_send_attempts_per_minute_per_user_even_on_the_same_draft()
+    {
+        var orderId = await ConfirmedOrderAsync();
+        var limiter = new MailSendLimiter();
+        var draft = await DraftAsync(orderId, "LoadingSlip");
+        var version = draft.Version;
+        // Tien mislukte pogingen op hetzelfde concept tellen als tien; de elfde wacht.
+        for (var i = 0; i < DocumentMailRules.MaxSendsPerMinute; i++)
+        {
+            _fake.FailWith = "SmtpCommandException: 550 refused";
+            var failed = await RunAsync(db => new MailSendService(db, _fake, new MailSettingsService(db, _fake, _protection), _log, null, limiter).SendAsync(draft.Id, new MailDraftActionDto { ExpectedVersion = version }));
+            Assert.Equal("Failed", failed.Value.Status);
+            version = failed.Value.Version;
+        }
+        var blocked = await RunAsync(db => new MailSendService(db, _fake, new MailSettingsService(db, _fake, _protection), _log, null, limiter).SendAsync(draft.Id, new MailDraftActionDto { ExpectedVersion = version }));
+        Assert.Equal("rateLimited", Code(blocked));
+        Assert.Empty(_fake.Sent);
+    }
+
+    [Fact]
+    public async Task An_uncertain_outcome_stays_sending_and_needs_a_confirmation_before_sending_again()
+    {
+        var orderId = await ConfirmedOrderAsync();
+        var draft = await DraftAsync(orderId, "LoadingSlip");
+        var sender = new UncertainSender();
+        var first = await SendAsync(draft.Id, draft.Version, sender: sender);
+        Assert.Equal("Sending", first.Value.Status);
+        Assert.Contains("onbekend", first.Value.LastError);
+
+        Assert.Equal("uncertain", Code(await SendAsync(draft.Id, first.Value.Version, sender: sender)));
+        var confirmed = await RunAsync(db => new MailSendService(db, _fake, new MailSettingsService(db, _fake, _protection), _log).SendAsync(draft.Id, new MailDraftActionDto { ExpectedVersion = first.Value.Version, ConfirmResend = true }));
+        Assert.Equal(("Sent", (string)null), (confirmed.Value.Status, confirmed.Value.LastError));
+    }
+
+    private sealed class UncertainSender : IMailSender
+    {
+        public string Kind => FakeMailSender.Name;
+        public Task<MailSendResult> SendAsync(OutgoingMail mail, SmtpOptions smtp, CancellationToken cancellationToken) =>
+            Task.FromResult(new MailSendResult(false, null, "IOException: connection lost", true));
     }
 }

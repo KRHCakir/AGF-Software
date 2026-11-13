@@ -25,9 +25,16 @@ namespace AgfAdmin.Controllers
         [HttpGet("api/sales-orders/{id:int}/mail-drafts")]
         public async Task<IActionResult> ForOrder(int id) => Ok(await drafts.ForOrderAsync(id, HttpContext?.RequestAborted ?? default));
 
-        // Te versturen: open en mislukte concepten over alle orders.
+        // Te versturen: open en mislukte concepten over alle orders, met skip/take; het totaal staat in de header X-Total-Count.
         [HttpGet("api/mail-drafts")]
-        public async Task<IActionResult> Open() => Ok(await drafts.OpenAsync(HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> Open([FromQuery] int skip = 0, [FromQuery] int take = MailDraftService.MaxPageSize)
+        {
+            var token = HttpContext?.RequestAborted ?? default;
+            var total = await drafts.OpenCountAsync(token);
+            var page = await drafts.OpenAsync(skip, take, token);
+            if (HttpContext != null) Response.Headers["X-Total-Count"] = total.ToString();
+            return Ok(page);
+        }
 
         [HttpGet("api/mail-drafts/{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await drafts.GetAsync(id, HttpContext?.RequestAborted ?? default));

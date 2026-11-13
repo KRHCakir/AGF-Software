@@ -83,8 +83,29 @@ public class DocumentRecipientServiceTests : IDisposable
         Assert.Equal(("recipients[0].email", "planning@gmail.com"), (typo.Value.Warnings.Single().Field, typo.Value.Warnings.Single().Suggestion));
 
         Assert.Equal(ServiceResultStatus.Conflict, (await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { } }))).Status);
+        var twice = typo.Value.Recipients.Single();
+        Assert.Contains("recipients[1].id", (await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = typo.Value.Version, Recipients = { twice, new DocumentRecipientDto { Id = twice.Id, Email = "ander@noord.nl", Role = "To", Kinds = { "Other" } } } }))).Errors.Keys);
         var cleared = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = typo.Value.Version, Recipients = { } }));
         Assert.Equal(("0", 0), (cleared.Value.Version, cleared.Value.Recipients.Count));
+    }
+
+    [Fact]
+    public async Task Only_delivery_addresses_are_offered_and_accepted()
+    {
+        int relationId, billingId;
+        await using (var db = _factory.CreateContext())
+        {
+            var relation = new Relation { Name = "Factuur BV", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            relation.Addresses.Add(new RelationAddress { Purpose = AddressPurpose.Billing, Line1 = "Postbus 1", City = "Zwolle", CountryCode = "NL" });
+            relation.Addresses.Add(new RelationAddress { Purpose = AddressPurpose.Delivery, Line1 = "Dok 2", City = "Zwolle", CountryCode = "NL" });
+            db.Add(relation);
+            await db.SaveChangesAsync();
+            relationId = relation.Id;
+            billingId = relation.Addresses.Single(a => a.Purpose == AddressPurpose.Billing).Id;
+        }
+        Assert.Equal(new[] { AddressPurpose.Delivery }, (await RunAsync(s => s.GetForRelationAsync(relationId))).Value.Addresses.Select(a => a.Purpose));
+        var refused = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { Recipient("a@b.nl", "To", billingId, "Other") } }));
+        Assert.Equal(new[] { "recipients[0].relationAddressId" }, refused.Errors.Keys);
     }
 
     [Fact]
