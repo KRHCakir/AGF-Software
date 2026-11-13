@@ -83,6 +83,8 @@ public class DocumentRecipientServiceTests : IDisposable
         Assert.Equal(("recipients[0].email", "planning@gmail.com"), (typo.Value.Warnings.Single().Field, typo.Value.Warnings.Single().Suggestion));
 
         Assert.Equal(ServiceResultStatus.Conflict, (await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { } }))).Status);
+        var twice = typo.Value.Recipients.Single();
+        Assert.Contains("recipients[1].id", (await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = typo.Value.Version, Recipients = { twice, new DocumentRecipientDto { Id = twice.Id, Email = "ander@noord.nl", Role = "To", Kinds = { "Other" } } } }))).Errors.Keys);
         var cleared = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = typo.Value.Version, Recipients = { } }));
         Assert.Equal(("0", 0), (cleared.Value.Version, cleared.Value.Recipients.Count));
     }

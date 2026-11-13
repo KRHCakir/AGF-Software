@@ -77,10 +77,13 @@ namespace AgfAdmin.Services
             if (items.Count > DocumentMailRules.MaxRecipientsPerOwner) ValidationErrors.Add(errors, "recipients", $"At most {DocumentMailRules.MaxRecipientsPerOwner} e-mail addresses.");
             var normalized = new List<(DocumentRecipientDto Item, string Email, string Name, string Role, int Kinds)>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ids = new HashSet<int>();
             for (var i = 0; i < items.Count; i++)
             {
                 var item = items[i] ?? new DocumentRecipientDto();
                 var key = $"recipients[{i}]";
+                // Een bestaande regel kan maar één keer in de lijst staan (anders zou de laatste stil de eerste vervangen).
+                if (item.Id is int existingId && !ids.Add(existingId)) ValidationErrors.Add(errors, $"{key}.id", "This address is listed twice.");
                 var email = (item.Email ?? "").Trim();
                 if (email.Length == 0 || email.Length > EmailRules.MaxLength || !EmailRules.IsStrict(email)) ValidationErrors.Add(errors, $"{key}.email", EmailRules.InvalidMessage);
                 else if (EmailRules.TypoSuggestion(email) is { } suggestion)
