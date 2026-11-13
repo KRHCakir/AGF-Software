@@ -40,7 +40,14 @@ namespace AgfAdmin.Services.Mail
                 await client.ConnectAsync(smtp.Host, smtp.Port, security, cancellationToken);
                 if (!string.IsNullOrEmpty(smtp.UserName)) await client.AuthenticateAsync(smtp.UserName, smtp.Password ?? "", cancellationToken);
                 await client.SendAsync(message, cancellationToken);
-                await client.DisconnectAsync(true, cancellationToken);
+                // De server heeft de mail nu geaccepteerd: een fout bij het netjes afsluiten maakt de verzending niet mislukt (opnieuw proberen = dubbel).
+                try
+                {
+                    await client.DisconnectAsync(true, CancellationToken.None);
+                }
+                catch (Exception)
+                {
+                }
                 return new MailSendResult(true, message.MessageId, null);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)

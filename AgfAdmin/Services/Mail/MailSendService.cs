@@ -25,6 +25,10 @@ namespace AgfAdmin.Services.Mail
                 return Conflict($"This mail is {draft.Status.ToLowerInvariant()}; it is not sent again.", "notOpen");
             }
             if (request?.ExpectedVersion != draft.Version) return Conflict("This mail was changed by someone else; reload and try again.", "stale");
+            if (stuck && request?.ConfirmResend != true)
+            {
+                return Conflict("It is unknown whether this mail was sent. Check the sent items of the sender first; only then confirm to send it again.", "uncertain");
+            }
             var to = DocumentMailRules.SplitAddresses(draft.To);
             var cc = DocumentMailRules.SplitAddresses(draft.Cc);
             if (to.Count == 0)
@@ -57,12 +61,14 @@ namespace AgfAdmin.Services.Mail
                 return Conflict("This mail was changed or sent by someone else; reload.", "stale");
             }
 
-            var smtp = settings.SmtpOf(stored);
-            var (bytes, name) = Pdf(draft.Document);
-            var mail = new OutgoingMail(stored?.FromAddress ?? "verkoop@nagebootst.agf.local", stored?.FromName, to, cc, draft.Subject, draft.Body, name, bytes);
+            SmtpOptions smtp = null;
             MailSendResult result;
             try
             {
+                // Voorbereiding (wachtwoord ontsleutelen, PDF maken) hoort bij de verzending: een fout hier wordt "mislukt" met een reden, niet "bezig".
+                smtp = settings.SmtpOf(stored);
+                var (bytes, name) = Pdf(draft.Document);
+                var mail = new OutgoingMail(stored?.FromAddress ?? "verkoop@nagebootst.agf.local", stored?.FromName, to, cc, draft.Subject, draft.Body, name, bytes);
                 result = await sender.SendAsync(mail, smtp, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
@@ -70,6 +76,7 @@ namespace AgfAdmin.Services.Mail
                 result = new MailSendResult(false, null, exception.GetType().Name);
             }
 
+            // Vanaf hier niet meer afbreken met het verzoek: de mail is mogelijk al onderweg en de uitkomst moet vastgelegd worden.
             var done = DateTime.UtcNow;
             draft.UpdatedAt = done;
             draft.UpdatedBy = actor;
@@ -80,17 +87,22 @@ namespace AgfAdmin.Services.Mail
                 draft.SentBy = actor;
                 draft.MessageId = result.MessageId;
                 draft.LastError = null;
-                await db.SaveChangesAsync(cancellationToken);
-                // Het document: verstuurd (één keer, zoals Doorgegeven; regel 31 staat alleen dat toe).
-                await db.SalesOrderDocuments.Where(d => d.Id == draft.DocumentId && d.SentAt == null)
-                    .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)done).SetProperty(d => d.SentBy, actor), cancellationToken);
+                // Concept en document samen in één transactie: beide of geen van beide.
+                await using (var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None))
+                {
+                    await db.SaveChangesAsync(CancellationToken.None);
+                    // Het document: verstuurd (één keer, zoals Doorgegeven; regel 31 staat alleen dat toe).
+                    await db.SalesOrderDocuments.Where(d => d.Id == draft.DocumentId && d.SentAt == null)
+                        .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)done).SetProperty(d => d.SentBy, actor), CancellationToken.None);
+                    await transaction.CommitAsync(CancellationToken.None);
+                }
                 logger.LogInformation("Mail {DraftId} verstuurd naar {Count} adressen via {Sender}.", draft.Id, count, sender.Kind);
             }
             else
             {
                 draft.Status = DocumentMailRules.StatusFailed;
-                draft.LastError = Mask(result.Error, smtp.Password);
-                await db.SaveChangesAsync(cancellationToken);
+                draft.LastError = Mask(result.Error, smtp?.Password);
+                await db.SaveChangesAsync(CancellationToken.None);
                 logger.LogWarning("Mail {DraftId} niet verstuurd via {Sender}; de reden staat bij het concept.", draft.Id, sender.Kind);
             }
             db.ChangeTracker.Clear();
