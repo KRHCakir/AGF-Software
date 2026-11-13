@@ -45,6 +45,7 @@ namespace AgfAdmin.Configuration
                     ? new Services.Mail.FakeMailSender() : new Services.Mail.SmtpMailSender());
             services.AddDataProtection();
             services.AddScoped<Services.Mail.MailSettingsService>();
+            services.AddSingleton<Services.Mail.MailSendLimiter>();
             services.AddScoped<Services.Mail.MailSendService>();
             services.AddScoped<PartijService>();
             services.AddScoped<CostArticleService>();

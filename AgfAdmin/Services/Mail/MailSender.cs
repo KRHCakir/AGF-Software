@@ -18,7 +18,9 @@ namespace AgfAdmin.Services.Mail
     // Wat de SMTP-afzender nodig heeft; het wachtwoord is hier al ontsleuteld en komt nooit in een log of een foutmelding.
     public sealed record SmtpOptions(string Host, int Port, string Security, string UserName, string Password);
 
-    public sealed record MailSendResult(bool Success, string MessageId, string Error);
+    // Uncertain: de uitkomst is onbekend (de verbinding viel weg tijdens het versturen); de server kan de mail wel hebben aangenomen.
+    // Dat is iets anders dan een aantoonbaar mislukte verzending (niet verbonden, aanmelden geweigerd, door de server afgewezen).
+    public sealed record MailSendResult(bool Success, string MessageId, string Error, bool Uncertain = false);
 
     public sealed class SmtpMailSender : IMailSender
     {
@@ -28,6 +30,7 @@ namespace AgfAdmin.Services.Mail
         public async Task<MailSendResult> SendAsync(OutgoingMail mail, SmtpOptions smtp, CancellationToken cancellationToken)
         {
             var message = MimeFor(mail);
+            var sending = false;
             try
             {
                 using var client = new SmtpClient { Timeout = 30_000 };
@@ -39,6 +42,7 @@ namespace AgfAdmin.Services.Mail
                 };
                 await client.ConnectAsync(smtp.Host, smtp.Port, security, cancellationToken);
                 if (!string.IsNullOrEmpty(smtp.UserName)) await client.AuthenticateAsync(smtp.UserName, smtp.Password ?? "", cancellationToken);
+                sending = true;
                 await client.SendAsync(message, cancellationToken);
                 // De server heeft de mail nu geaccepteerd: een fout bij het netjes afsluiten maakt de verzending niet mislukt (opnieuw proberen = dubbel).
                 try
@@ -53,7 +57,10 @@ namespace AgfAdmin.Services.Mail
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 // Alleen het soort fout en de melding van de server; nooit het wachtwoord (MailSendService maskeert het daarnaast nog).
-                return new MailSendResult(false, null, $"{exception.GetType().Name}: {exception.Message}");
+                // Een antwoord van de server met een foutcode (SmtpCommandException) is een aantoonbare afwijzing. Een andere fout tijdens het
+                // versturen zelf (verbinding weg, time-out) laat open of de server de mail al had aangenomen: onbekende uitkomst.
+                var uncertain = sending && exception is not SmtpCommandException;
+                return new MailSendResult(false, null, $"{exception.GetType().Name}: {exception.Message}", uncertain);
             }
         }
 

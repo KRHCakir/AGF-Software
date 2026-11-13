@@ -9,8 +9,9 @@ namespace AgfAdmin.Services.Mail
     // vast wanneer, door wie (CurrentUser), naar wie en met welk bericht-id; het document krijgt "verstuurd". Een mislukte verzending blijft
     // staan met de reden en kan opnieuw. Beperkt tot een aantal verzendingen per minuut per gebruiker; meer dan 10 ontvangers vraagt een
     // uitdrukkelijke bevestiging. Het wachtwoord van de afzender komt nooit in een foutmelding of log.
-    public sealed class MailSendService(AppDbContext db, IMailSender sender, MailSettingsService settings, ILogger<MailSendService> logger, ICurrentUser user = null)
+    public sealed class MailSendService(AppDbContext db, IMailSender sender, MailSettingsService settings, ILogger<MailSendService> logger, ICurrentUser user = null, MailSendLimiter limiter = null)
     {
+        private readonly MailSendLimiter _limiter = limiter ?? new MailSendLimiter();
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
         private static readonly TimeSpan StuckAfter = TimeSpan.FromMinutes(5);
 
@@ -19,7 +20,8 @@ namespace AgfAdmin.Services.Mail
             var draft = await db.MailDrafts.Include(d => d.Document).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
             if (draft == null) return ServiceResult<MailDraftDto>.NotFound($"Mail {id} does not exist.");
             var now = DateTime.UtcNow;
-            var stuck = draft.Status == DocumentMailRules.StatusSending && draft.LastAttemptAt < now - StuckAfter;
+            // Onzeker: te lang "bezig", of een eerdere poging eindigde met een onbekende uitkomst (dan staat de reden bij een concept in "bezig").
+            var stuck = draft.Status == DocumentMailRules.StatusSending && (draft.LastError != null || draft.LastAttemptAt < now - StuckAfter);
             if (draft.Status is not (DocumentMailRules.StatusDraft or DocumentMailRules.StatusFailed) && !stuck)
             {
                 return Conflict($"This mail is {draft.Status.ToLowerInvariant()}; it is not sent again.", "notOpen");
@@ -44,14 +46,15 @@ namespace AgfAdmin.Services.Mail
             var stored = await db.MailSettings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
             if (!settings.Configured(stored)) return Conflict("Sending mail is not set up yet (Beheer › Mail). Download the PDF and copy the text instead.", "notConfigured");
             var actor = _user.Actor(SalesOrderDocumentRules.MaxActorLength);
-            var recent = await db.MailDrafts.AsNoTracking().CountAsync(d => d.LastAttemptBy == actor && d.LastAttemptAt >= now.AddMinutes(-1), cancellationToken);
-            if (recent >= DocumentMailRules.MaxSendsPerMinute) return Conflict($"At most {DocumentMailRules.MaxSendsPerMinute} mails per minute; try again in a minute.", "rateLimited");
+            // Elke poging telt, ook herhaalde pogingen op hetzelfde concept; reserveren gebeurt atomair per gebruiker.
+            if (!_limiter.TryReserve(actor, now, DocumentMailRules.MaxSendsPerMinute)) return Conflict($"At most {DocumentMailRules.MaxSendsPerMinute} mails per minute; try again in a minute.", "rateLimited");
 
             // Eerst "bezig" vastleggen (met de versie): een tweede klik of een gelijktijdige verzending ziet dat en verstuurt niet nog eens.
             draft.Status = DocumentMailRules.StatusSending;
             draft.Attempts++;
             draft.LastAttemptAt = now;
             draft.LastAttemptBy = actor;
+            draft.LastError = null;
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -80,7 +83,14 @@ namespace AgfAdmin.Services.Mail
             var done = DateTime.UtcNow;
             draft.UpdatedAt = done;
             draft.UpdatedBy = actor;
-            if (result.Success)
+            if (result.Uncertain)
+            {
+                // Onbekende uitkomst: blijft "bezig" met de reden erbij; opnieuw versturen kan pas na controle en uitdrukkelijke bevestiging.
+                draft.LastError = Mask("Uitkomst onbekend, controleer de verzonden items van de afzender voordat u opnieuw verstuurt. " + result.Error, smtp?.Password);
+                await db.SaveChangesAsync(CancellationToken.None);
+                logger.LogWarning("Mail {DraftId} via {Sender}: uitkomst onbekend; controle nodig voor opnieuw versturen.", draft.Id, sender.Kind);
+            }
+            else if (result.Success)
             {
                 draft.Status = DocumentMailRules.StatusSent;
                 draft.SentAt = done;
@@ -123,5 +133,25 @@ namespace AgfAdmin.Services.Mail
                 : (LoadingSlipPdf.Render(document, LoadingSlipBuilder.Deserialize(document.SnapshotJson)), LoadingSlipPdf.FileName(document));
 
         private static ServiceResult<MailDraftDto> Conflict(string message, string code) => ServiceResult<MailDraftDto>.Conflict(message, new { code, message });
+    }
+
+    // Maximaal N verzendpogingen per minuut per gebruiker. Elke poging wordt apart geteld en onder een slot gereserveerd, zodat herhaalde
+    // pogingen op één concept en gelijktijdige verzoeken de limiet niet omzeilen. Geheugen van dit proces (singleton).
+    public sealed class MailSendLimiter
+    {
+        private readonly Dictionary<string, Queue<DateTime>> _attempts = new();
+        private readonly object _lock = new();
+
+        public bool TryReserve(string actor, DateTime now, int max)
+        {
+            lock (_lock)
+            {
+                if (!_attempts.TryGetValue(actor, out var queue)) _attempts[actor] = queue = new Queue<DateTime>();
+                while (queue.Count > 0 && queue.Peek() < now.AddMinutes(-1)) queue.Dequeue();
+                if (queue.Count >= max) return false;
+                queue.Enqueue(now);
+                return true;
+            }
+        }
     }
 }
