@@ -73,6 +73,7 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrderDocument> SalesOrderDocuments { get; set; }
         public DbSet<SalesOrderTransport> SalesOrderTransports { get; set; }
         public DbSet<DocumentRecipient> DocumentRecipients { get; set; }
+        public DbSet<DocumentRecipientListVersion> DocumentRecipientListVersions { get; set; }
         public DbSet<MailDraft> MailDrafts { get; set; }
         public DbSet<MailSettings> MailSettings { get; set; }
         public DbSet<MailTemplate> MailTemplates { get; set; }
@@ -1151,6 +1152,13 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_DocumentRecipients_Role", "\"Role\" IN ('To', 'Cc')");
                     t.HasCheckConstraint("CK_DocumentRecipients_Kinds", "\"Kinds\" > 0");
                 });
+            });
+
+            modelBuilder.Entity<DocumentRecipientListVersion>(b =>
+            {
+                b.Property(v => v.OwnerKind).IsRequired().HasMaxLength(16);
+                b.HasKey(v => new { v.OwnerKind, v.OwnerId });
+                b.ToTable(t => t.HasCheckConstraint("CK_DocumentRecipientListVersions_Version", "\"Version\" >= 1"));
             });
 
             // Mailconcepten (documenten deel 3): één per documentversie; verstuurd alleen na een klik (regel 32).

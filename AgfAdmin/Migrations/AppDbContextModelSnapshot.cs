@@ -2567,6 +2567,26 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.DocumentRecipientListVersion", b =>
+                {
+                    b.Property<string>("OwnerKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("OwnerKind", "OwnerId");
+
+                    b.ToTable("DocumentRecipientListVersions", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentRecipientListVersions_Version", "\"Version\" >= 1");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoice", b =>
                 {
                     b.Property<int>("Id")
