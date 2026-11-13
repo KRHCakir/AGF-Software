@@ -272,7 +272,8 @@ namespace AgfAdmin.Services
                 ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : "nog niet bekend",
             };
             var text = MailTemplateRules.Render(body, values).Trim();
-            if (!string.IsNullOrWhiteSpace(settings?.Signature)) text = $"{text}\n\n{settings.Signature.Trim()}";
+            var closing = string.IsNullOrWhiteSpace(settings?.Signature) ? MailTemplateRules.Render(MailTemplateRules.DefaultClosing, values) : settings.Signature;
+            text = $"{text}\n\n{closing.Trim()}";
             var title = MailTemplateRules.Render(subject, values).Trim();
             return (title.Length > DocumentMailRules.MaxSubjectLength ? title[..DocumentMailRules.MaxSubjectLength] : title,
                 text.Length > DocumentMailRules.MaxBodyLength ? text[..DocumentMailRules.MaxBodyLength] : text);
