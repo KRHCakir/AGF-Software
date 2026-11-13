@@ -92,6 +92,44 @@ describe('RelationForm', () => {
         assert.equal(window.sessionStorage.getItem('agf_relation_pending_create'), null, 'nothing frozen after success');
     });
 
+    test('e-mail addresses for documents are saved with the same click, right after the relation; an invalid address saves nothing', async () => {
+        respond = (call) => call.url.includes('/document-recipients')
+            ? json(200, { version: 'abc', recipients: [{ id: 1, name: 'Planning', email: 'planning@zeeland.nl', role: 'To', kinds: ['TransportOrder'], relationAddressId: null }], addresses: [], warnings: [] })
+            : json(201, saved({ id: 12, name: 'Transport Zeeland', searchCode: null, customer: null }));
+        let created: Relation | null = null;
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={(relation) => { created = relation; }} onClose={() => {}} />);
+        await type(input('name'), 'Transport Zeeland');
+        await openSection('recipients');
+        await click(mounted.button('+ recipients_add')!);
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'geen-adres');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        assert.ok(text().includes('recipients_problem_email'));
+        assert.ok(text().includes('recipients_problem_kinds'));
+        assert.equal(calls.length, 0, 'nothing is saved');
+
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-name')!, 'Planning');
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'planning@zeeland.nl');
+        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind-TransportOrder"]')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => created !== null, 'onSaved after both saves');
+        assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace(/^.*\/api/, '')}`), ['POST /relations', 'PUT /relations/12/document-recipients']);
+        assert.deepEqual(calls[1].body, { expectedVersion: '0', recipients: [{ id: null, name: 'Planning', email: 'planning@zeeland.nl', role: 'To', kinds: ['TransportOrder'], relationAddressId: null }] });
+    });
+
+    test('if the addresses cannot be saved the form stays open with the reason; the relation itself was saved', async () => {
+        respond = (call) => call.url.includes('/document-recipients') ? json(409, { message: 'Gewijzigd door iemand anders', code: 'stale' }) : json(201, saved({ id: 12, customer: null }));
+        let created: Relation | null = null;
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={(relation) => { created = relation; }} onClose={() => {}} />);
+        await type(input('name'), 'Transport Zeeland');
+        await openSection('recipients');
+        await click(mounted.button('+ recipients_add')!);
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'planning@zeeland.nl');
+        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind-LoadingSlip"]')!);
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => text().includes('Gewijzigd door iemand anders'), 'reason shown');
+        assert.equal(created, null, 'not closed: the addresses still have to be saved');
+    });
+
     test('inline validation keeps the input, opens the right section and sends nothing', async () => {
         await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
         await type(input('searchCode'), 'fruit z');
