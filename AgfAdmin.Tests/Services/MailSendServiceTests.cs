@@ -190,6 +190,43 @@ public class MailSendServiceTests : IDisposable
         Assert.Equal(("Sent", (string)null), (confirmed.Value.Status, confirmed.Value.LastError));
     }
 
+    [Fact]
+    public async Task Closing_the_page_while_sending_still_records_the_outcome_and_a_time_out_is_uncertain()
+    {
+        var orderId = await ConfirmedOrderAsync();
+        var slip = await DraftAsync(orderId, "LoadingSlip");
+        using var request = new CancellationTokenSource();
+        var aborting = new AbortingSender(request);
+        var sent = await RunAsync(db => new MailSendService(db, aborting, new MailSettingsService(db, aborting, _protection), _log).SendAsync(slip.Id, new MailDraftActionDto { ExpectedVersion = slip.Version }, request.Token));
+        Assert.True(request.IsCancellationRequested);
+        Assert.Equal(("Sent", "<afgebroken@nagebootst.agf.local>"), (sent.Value.Status, sent.Value.MessageId));
+        Assert.NotNull(await RunAsync(db => db.SalesOrderDocuments.Where(d => d.Id == slip.DocumentId).Select(d => d.SentAt).SingleAsync()));
+
+        // Een time-out van de verzending zelf: onbekende uitkomst, blijft "bezig" en vraagt een bevestiging; nooit een hangend concept zonder reden.
+        var transport = await DraftAsync(orderId, "TransportOrder");
+        var timedOut = await SendAsync(transport.Id, transport.Version, sender: new TimingOutSender());
+        Assert.Equal("Sending", timedOut.Value.Status);
+        Assert.Contains("onbekend", timedOut.Value.LastError);
+    }
+
+    // De gebruiker sluit de pagina terwijl de server de mail aanneemt: het verzoek wordt afgebroken, de verzending niet.
+    private sealed class AbortingSender(CancellationTokenSource request) : IMailSender
+    {
+        public string Kind => FakeMailSender.Name;
+        public Task<MailSendResult> SendAsync(OutgoingMail mail, SmtpOptions smtp, CancellationToken cancellationToken)
+        {
+            request.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new MailSendResult(true, "<afgebroken@nagebootst.agf.local>", null));
+        }
+    }
+
+    private sealed class TimingOutSender : IMailSender
+    {
+        public string Kind => FakeMailSender.Name;
+        public Task<MailSendResult> SendAsync(OutgoingMail mail, SmtpOptions smtp, CancellationToken cancellationToken) => throw new OperationCanceledException();
+    }
+
     private sealed class UncertainSender : IMailSender
     {
         public string Kind => FakeMailSender.Name;

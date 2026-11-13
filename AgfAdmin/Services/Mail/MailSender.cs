@@ -54,8 +54,9 @@ namespace AgfAdmin.Services.Mail
                 }
                 return new MailSendResult(true, message.MessageId, null);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception)
             {
+                // Ook een time-out (OperationCanceledException) wordt een uitkomst, nooit een uitzondering zonder vastlegging.
                 // Alleen het soort fout en de melding van de server; nooit het wachtwoord (MailSendService maskeert het daarnaast nog).
                 // Een antwoord van de server met een foutcode (SmtpCommandException) is een aantoonbare afwijzing. Een andere fout tijdens het
                 // versturen zelf (verbinding weg, time-out) laat open of de server de mail al had aangenomen: onbekende uitkomst.
