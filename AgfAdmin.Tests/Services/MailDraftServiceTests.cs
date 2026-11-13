@@ -122,6 +122,26 @@ public class MailDraftServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_draft_a_concurrent_request_made_for_an_older_version_is_never_listed_and_is_superseded_next_time()
+    {
+        var (orderId, carrierId) = await OrderAsync();
+        await CarrierAsync(orderId, carrierId);
+        await RunAsync(db => new LoadingSlipService(db).ConfirmAsync(orderId, new ConfirmSalesOrderDto()));
+        var current = await RunAsync(db => new SalesOrderTransportService(db).GetAsync(orderId));
+        await CarrierAsync(orderId, carrierId, current.Value.Version, 1.5m);
+        // Nagebootst: een tweede aanvraag zette nog een open concept op versie 1 terwijl versie 2 al een concept had.
+        await using (var db = _factory.CreateContext())
+        {
+            var first = await db.MailDrafts.SingleAsync(d => d.DocumentKind == "TransportOrder" && d.Document.Version == 1);
+            first.Status = "Draft";
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(new[] { 2 }, (await RunAsync(db => new MailDraftService(db).OpenAsync())).Where(d => d.DocumentKind == "TransportOrder").Select(d => d.DocumentVersion));
+        await RunAsync(db => new MailDraftService(db).EnsureDraftsAsync(orderId));
+        Assert.Equal("Superseded", await RunAsync(db => db.MailDrafts.Where(d => d.DocumentKind == "TransportOrder" && d.Document.Version == 1).Select(d => d.Status).SingleAsync()));
+    }
+
+    [Fact]
     public async Task A_draft_can_be_edited_or_discarded_while_open_with_valid_addresses_and_the_version_seen()
     {
         var (orderId, carrierId) = await OrderAsync();

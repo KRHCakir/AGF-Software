@@ -33,6 +33,14 @@ namespace AgfAdmin.Services
             foreach (var group in documents.GroupBy(d => d.Kind))
             {
                 var latest = group.OrderByDescending(d => d.Version).First();
+                // Een open concept van een oudere versie gaat altijd weg (vervangen), ook als de nieuwe versie al een concept heeft of zelf
+                // geen krijgt: zo ruimt elke ronde een concept op dat een gelijktijdige aanvraag nog voor een oudere versie maakte.
+                foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
+                {
+                    old.Status = DocumentMailRules.StatusSuperseded;
+                    old.UpdatedAt = now;
+                    old.UpdatedBy = actor;
+                }
                 if (drafts.Any(d => d.DocumentId == latest.Id))
                 {
                     // Is het document intussen doorgegeven, dan hoeft een open concept er niet meer te staan.
@@ -64,13 +72,6 @@ namespace AgfAdmin.Services
                         }
                     }
                     continue;
-                }
-                // Een open concept van een oudere versie gaat niet meer weg: vervangen, ook als de nieuwe versie zelf geen concept krijgt.
-                foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
-                {
-                    old.Status = DocumentMailRules.StatusSuperseded;
-                    old.UpdatedAt = now;
-                    old.UpdatedBy = actor;
                 }
                 if (latest.SentAt != null) continue;
                 if (latest.Kind == SalesOrderDocumentRules.KindTransportOrder && order.Transport?.Mode != SalesTransportRules.ModeCarrier) continue;
@@ -105,7 +106,8 @@ namespace AgfAdmin.Services
         public async Task<List<MailDraftDto>> ForOrderAsync(int orderId, CancellationToken cancellationToken = default)
         {
             await EnsureDraftsAsync(orderId, cancellationToken);
-            return await Query().Where(d => d.SalesOrderId == orderId && d.Status != DocumentMailRules.StatusDiscarded && d.Status != DocumentMailRules.StatusSuperseded)
+            return await Query().Where(d => d.SalesOrderId == orderId && d.Status != DocumentMailRules.StatusDiscarded && d.Status != DocumentMailRules.StatusSuperseded
+                    && (d.Status == DocumentMailRules.StatusSent || !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.DocumentKind && x.Version > d.Document.Version)))
                 .OrderBy(d => d.DocumentKind).ThenByDescending(d => d.Id).Select(Projection).ToListAsync(cancellationToken);
         }
 
@@ -113,9 +115,10 @@ namespace AgfAdmin.Services
         // Een concept van een document dat intussen is doorgegeven, hoort er niet meer bij. Pagineren kan met skip/take; OpenCountAsync geeft het totaal.
         public const int MaxPageSize = 200;
 
+        // Een open concept van een oudere documentversie (een gelijktijdige aanvraag kan er nog een maken) staat er nooit tussen.
         private IQueryable<MailDraft> OpenQuery() =>
-            Query().Where(d => ((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
-                || d.Status == DocumentMailRules.StatusSending);
+            Query().Where(d => (((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
+                || d.Status == DocumentMailRules.StatusSending) && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.DocumentKind && x.Version > d.Document.Version));
 
         // Bevestigde orders van vóór de conceptfunctie hebben nog geen concept. Voor het tellen en pagineren vullen we die per gerichte batch aan:
         // alleen orders met een nieuwste, niet doorgegeven document zonder enig concept (ook geen verwijderd of vervangen) komen in aanmerking.
