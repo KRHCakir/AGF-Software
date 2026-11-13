@@ -65,6 +65,7 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
     // Wat er op de server staat (na een opslag in deze kaart): de versie voor de volgende aanroep en de basis voor "aangepast".
     const [saved, setSaved] = useState(() => ({ version: draft.version, to: draft.to ?? '', cc: draft.cc ?? '', subject: draft.subject, body: draft.body }));
     const [granted, setGranted] = useState<Granted>(NOTHING_GRANTED);
+    const [conflict, setConflict] = useState<{ current: MailDraft | null } | null>(null);
     useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
     const open = draft.status === 'Draft' || draft.status === 'Failed';
     const dirty = to !== saved.to || cc !== saved.cc || subject !== saved.subject || body !== saved.body;
@@ -75,8 +76,32 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
         if (busy) return;
         setBusy(true);
         setError(null);
-        try { await work(); } catch (caught) { setError(toApiError(caught)); } finally { setBusy(false); }
+        try { await work(); } catch (caught) {
+            const apiError = toApiError(caught);
+            // Versieconflict: iemand anders heeft dit concept gewijzigd. Geen kale foutmelding, maar een verversactie.
+            const code = (apiError.body as { code?: string } | null)?.code;
+            if (apiError.kind === 'http' && apiError.status === 409 && (code === 'stale' || code === 'notOpen')) setConflict({ current: null });
+            else setError(apiError);
+        } finally { setBusy(false); }
     };
+    // Actuele versie van de server ophalen. "Mijn wijzigingen behouden" neemt alleen de nieuwe versie over (de velden blijven zoals de
+    // gebruiker ze heeft); anders worden de velden vervangen door de actuele tekst. Is het concept inmiddels verzonden of weg: lijst verversen.
+    const fetchCurrent = async () => (await getOrderMailDrafts(draft.salesOrderId)).find((d) => d.id === draft.id);
+    const refresh = (keepMine: boolean) => void run(async () => {
+        const found = await fetchCurrent();
+        if (!found || (found.status !== 'Draft' && found.status !== 'Failed')) { onChanged(); return; }
+        setSaved({ version: found.version, to: found.to ?? '', cc: found.cc ?? '', subject: found.subject, body: found.body });
+        if (!keepMine) { setTo(found.to ?? ''); setCc(found.cc ?? ''); setSubject(found.subject); setBody(found.body); }
+        setConfirm(null);
+        setGranted(NOTHING_GRANTED);
+        setConflict(null);
+    });
+    // Toont de actuele serverversie bij de eigen wijzigingen, zodat de gebruiker kan vergelijken voordat hij kiest.
+    const showCurrent = () => void run(async () => {
+        const found = await fetchCurrent();
+        if (!found) { onChanged(); return; }
+        setConflict({ current: found });
+    });
     // Aanpassingen opslaan (met de versie); de kaart onthoudt daarna wat er staat, zodat een bevestiging niet nog eens met de oude versie opslaat.
     const save = async () => {
         if (!dirty) return saved.version;
@@ -152,6 +177,23 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
             {draft.status === 'Failed' && draft.lastError && <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-900" data-testid="mail-failed">{t('mail_failed', { reason: draft.lastError })}</p>}
             {draft.status === 'Sending' && <p role="status" className="text-sm text-gray-700">{t('mail_sending')}</p>}
             {error && <ErrorNotice error={error} />}
+            {conflict && (
+                <div role="alert" className="space-y-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="mail-conflict">
+                    <p>{t('mail_conflict')}</p>
+                    {conflict.current && (
+                        <dl className="text-xs" data-testid="mail-conflict-current">
+                            <dt className="font-medium">{t('mail_to')}</dt><dd>{[conflict.current.to, conflict.current.cc].filter(Boolean).join(', ') || '–'}</dd>
+                            <dt className="font-medium">{t('mail_subject')}</dt><dd>{conflict.current.subject}</dd>
+                            <dt className="font-medium">{t('mail_body')}</dt><dd className="whitespace-pre-wrap">{conflict.current.body}</dd>
+                        </dl>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                        {!conflict.current && <button type="button" className={secondaryButtonClass} disabled={busy} onClick={showCurrent} data-testid="mail-conflict-compare">{t('mail_conflict_compare')}</button>}
+                        <button type="button" className={primaryButtonClass} disabled={busy} onClick={() => refresh(false)} data-testid="mail-conflict-reload">{t('mail_conflict_reload')}</button>
+                        <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => refresh(true)} data-testid="mail-conflict-keep">{t('mail_conflict_keep')}</button>
+                    </div>
+                </div>
+            )}
             {open && (
                 <fieldset disabled={busy} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
