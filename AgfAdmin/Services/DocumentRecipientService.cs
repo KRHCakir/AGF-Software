@@ -138,9 +138,10 @@ namespace AgfAdmin.Services
             }
             db.DocumentRecipients.RemoveRange(stored.Where(r => !keep.Contains(r.Id)));
             await db.SaveChangesAsync(cancellationToken);
+            // Het antwoord is precies wat deze opslag schreef: nog binnen de transactie (en de lock) gelezen, niet een latere opslag.
+            var dto = Dto(await StoredAsync(ownerKind, relationId, cancellationToken), relation);
             await transaction.CommitAsync(cancellationToken);
             db.ChangeTracker.Clear();
-            var dto = Dto(await StoredAsync(ownerKind, relationId, cancellationToken), relation);
             dto.Warnings = warnings;
             return ServiceResult<DocumentRecipientsDto>.Ok(dto);
         }

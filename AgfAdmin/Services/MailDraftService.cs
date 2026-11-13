@@ -134,13 +134,26 @@ namespace AgfAdmin.Services
                         && !db.MailDrafts.Any(m => m.DocumentId == d.Id)
                         && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.Kind && x.Version > d.Version))
                     .Select(d => d.SalesOrderId).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
-                if (orderIds.Count == 0) return;
+                if (orderIds.Count == 0) break;
                 var made = 0;
                 foreach (var id in orderIds) made += await EnsureDraftsAsync(id, cancellationToken);
                 // Niets aangemaakt (bijvoorbeeld door een gelijktijdige aanvraag): stoppen, anders blijven dezelfde orders terugkomen.
-                if (made == 0 || orderIds.Count < BackfillBatchSize) return;
+                if (made == 0 || orderIds.Count < BackfillBatchSize) break;
             }
+            // Een open concept zonder ontvanger, terwijl er intussen wel een adres is (loods of vervoerder): bijwerken voordat de lijst het toont.
+            var filled = await db.MailDrafts.AsNoTracking()
+                .Where(m => (m.Status == DocumentMailRules.StatusDraft || m.Status == DocumentMailRules.StatusFailed) && m.MissingRecipient != null && m.Document.SentAt == null
+                    && ((m.DocumentKind == SalesOrderDocumentRules.KindTransportOrder
+                            && db.SalesOrderTransports.Any(t => t.SalesOrderId == m.SalesOrderId && db.DocumentRecipients.Any(r => r.OwnerKind == DocumentMailRules.OwnerRelation
+                                && r.RelationId == t.CarrierRelationId && (r.Kinds & TransportOrderFlag) != 0)))
+                        || (m.DocumentKind != SalesOrderDocumentRules.KindTransportOrder
+                            && db.DocumentRecipients.Any(r => r.OwnerKind == DocumentMailRules.OwnerWarehouse && (r.Kinds & LoadingSlipFlag) != 0))))
+                .Select(m => m.SalesOrderId).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
+            foreach (var id in filled) await EnsureDraftsAsync(id, cancellationToken);
         }
+
+        private static readonly int TransportOrderFlag = DocumentMailRules.Flag(SalesOrderDocumentRules.KindTransportOrder);
+        private static readonly int LoadingSlipFlag = DocumentMailRules.Flag(SalesOrderDocumentRules.KindLoadingSlip);
 
         public async Task<int> OpenCountAsync(CancellationToken cancellationToken = default)
         {
@@ -166,7 +179,7 @@ namespace AgfAdmin.Services
         // Aan, Cc, onderwerp en tekst aanpassen, zolang het concept niet verstuurd is.
         public async Task<ServiceResult<MailDraftDto>> UpdateAsync(int id, UpdateMailDraftDto request, CancellationToken cancellationToken = default)
         {
-            var draft = await db.MailDrafts.SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
+            var draft = await db.MailDrafts.Include(d => d.Document).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
             if (draft == null) return NotFound(id);
             if (Editable(draft) is { } refused) return refused;
             if (request?.ExpectedVersion != draft.Version) return Stale(draft);
@@ -205,7 +218,7 @@ namespace AgfAdmin.Services
         // Verwijderen haalt het concept weg (status Verwijderd); het document zelf blijft.
         public async Task<ServiceResult<MailDraftDto>> DiscardAsync(int id, MailDraftActionDto request, CancellationToken cancellationToken = default)
         {
-            var draft = await db.MailDrafts.SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
+            var draft = await db.MailDrafts.Include(d => d.Document).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
             if (draft == null) return NotFound(id);
             if (Editable(draft) is { } refused) return refused;
             if (request?.ExpectedVersion != draft.Version) return Stale(draft);
@@ -228,9 +241,13 @@ namespace AgfAdmin.Services
             return await GetAsync(draft.Id, cancellationToken);
         }
 
+        // Alleen een open concept, en alleen zolang het document niet doorgegeven is (dan sluit het concept, ook als niemand de lijst opnieuw opende).
         private static ServiceResult<MailDraftDto> Editable(MailDraft draft) =>
-            draft.Status is DocumentMailRules.StatusDraft or DocumentMailRules.StatusFailed ? null
-                : ServiceResult<MailDraftDto>.Conflict($"This mail is {draft.Status.ToLowerInvariant()} and can no longer be changed.", new { code = "notOpen", status = draft.Status });
+            draft.Status is not (DocumentMailRules.StatusDraft or DocumentMailRules.StatusFailed)
+                ? ServiceResult<MailDraftDto>.Conflict($"This mail is {draft.Status.ToLowerInvariant()} and can no longer be changed.", new { code = "notOpen", status = draft.Status })
+                : draft.Document?.SentAt != null
+                    ? ServiceResult<MailDraftDto>.Conflict("This document was passed on already; the draft is closed.", new { code = "notOpen", status = draft.Status })
+                    : null;
 
         private static ServiceResult<MailDraftDto> Stale(MailDraft draft) =>
             ServiceResult<MailDraftDto>.Conflict("This mail was changed by someone else; reload and try again.", new { code = "stale", version = draft.Version });
