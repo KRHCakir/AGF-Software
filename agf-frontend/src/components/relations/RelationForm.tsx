@@ -146,6 +146,8 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     // Na het opslaan van de relatie: de e-mailadressen, als ze veranderd zijn. Mislukt dat, dan blijft het formulier open met de reden.
     const saveRecipients = async (id: number): Promise<boolean> => {
         if (recipientsFailed || !recipientsChanged(recipientRows, storedRecipients.rows)) return true;
+        // Na een conflict eerst bewust kiezen (eigen lijst bewaren of opgeslagen lijst nemen): niet stilzwijgend de wijzigingen van de ander vervangen.
+        if (recipientConflict) { setOpen((now) => ({ ...now, recipients: true })); return false; }
         try {
             const saved = await saveRelationRecipients(id, { expectedVersion: storedRecipients.version, recipients: recipientsFrom(recipientRows) });
             const rows = rowsFrom(saved.recipients);
@@ -769,9 +771,22 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                         )}
                         {recipientConflict && (
                             <div role="alert" className="space-y-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="recipients-conflict">
-                                <p>{t('recipients_conflict', { list: recipientsFrom(recipientConflict).map((r) => r.email).join(', ') || '–' })}</p>
-                                <button type="button" className="rounded border border-amber-400 bg-white px-2 py-0.5" disabled={locked}
-                                    onClick={() => { setRecipientRows(recipientConflict); setRecipientConflict(null); setRecipientIssues([]); }} data-testid="recipients-take-saved">{t('recipients_take_saved')}</button>
+                                <p>{t('recipients_conflict')}</p>
+                                <ul className="list-disc pl-4" data-testid="recipients-conflict-list">
+                                    {recipientsFrom(recipientConflict).length === 0 && <li>{t('recipients_none')}</li>}
+                                    {recipientsFrom(recipientConflict).map((r) => (
+                                        <li key={r.id ?? r.email}>
+                                            {r.name ? `${r.name} · ` : ''}{r.email} · {t(`recipients_role_${r.role}`)} · {r.kinds.map((kind) => t(`doc_kind_${kind}`)).join(', ')}
+                                            {' · '}{r.relationAddressId === null ? t('recipients_scope_relation') : (storedRecipients.addresses.find((a) => a.id === r.relationAddressId)?.text ?? `#${r.relationAddressId}`)}
+                                        </li>
+                                    ))}
+                                </ul>
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" className="rounded border border-amber-400 bg-white px-2 py-0.5" disabled={locked}
+                                        onClick={() => { setRecipientRows(recipientConflict); setRecipientConflict(null); setRecipientIssues([]); }} data-testid="recipients-take-saved">{t('recipients_take_saved')}</button>
+                                    <button type="button" className="rounded border border-amber-400 bg-white px-2 py-0.5" disabled={locked}
+                                        onClick={() => setRecipientConflict(null)} data-testid="recipients-keep-mine">{t('recipients_keep_mine')}</button>
+                                </div>
                             </div>
                         )}
                         <DocumentRecipientsEditor idPrefix="recipients" rows={recipientRows} onChange={(rows) => { setRecipientRows(rows); setRecipientIssues([]); setRecipientError(null); }}
