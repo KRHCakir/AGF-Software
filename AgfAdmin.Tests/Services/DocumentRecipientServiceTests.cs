@@ -88,6 +88,25 @@ public class DocumentRecipientServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Only_delivery_addresses_are_offered_and_accepted()
+    {
+        int relationId, billingId;
+        await using (var db = _factory.CreateContext())
+        {
+            var relation = new Relation { Name = "Factuur BV", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            relation.Addresses.Add(new RelationAddress { Purpose = AddressPurpose.Billing, Line1 = "Postbus 1", City = "Zwolle", CountryCode = "NL" });
+            relation.Addresses.Add(new RelationAddress { Purpose = AddressPurpose.Delivery, Line1 = "Dok 2", City = "Zwolle", CountryCode = "NL" });
+            db.Add(relation);
+            await db.SaveChangesAsync();
+            relationId = relation.Id;
+            billingId = relation.Addresses.Single(a => a.Purpose == AddressPurpose.Billing).Id;
+        }
+        Assert.Equal(new[] { AddressPurpose.Delivery }, (await RunAsync(s => s.GetForRelationAsync(relationId))).Value.Addresses.Select(a => a.Purpose));
+        var refused = await RunAsync(s => s.SaveForRelationAsync(relationId, new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { Recipient("a@b.nl", "To", billingId, "Other") } }));
+        Assert.Equal(new[] { "recipients[0].relationAddressId" }, refused.Errors.Keys);
+    }
+
+    [Fact]
     public async Task The_warehouse_has_its_own_addresses_without_a_relation()
     {
         var saved = await RunAsync(s => s.SaveWarehouseAsync(new SaveDocumentRecipientsDto { ExpectedVersion = "0", Recipients = { Recipient("loods@mijnagf.nl", "To", null, "LoadingSlip") } }));

@@ -13,6 +13,8 @@ namespace AgfAdmin.Services
     // bekende tikfout in het domein geeft een waarschuwing met suggestie (zoals bij de relatie), nooit een blokkade.
     public sealed class DocumentRecipientService(AppDbContext db, ICurrentUser user = null)
     {
+        private const int RecipientLockClass = 0x41504d31; // eigen lockruimte voor het opslaan van documentontvangers
+
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
 
         public async Task<ServiceResult<DocumentRecipientsDto>> GetForRelationAsync(int relationId, CancellationToken cancellationToken = default)
@@ -56,6 +58,14 @@ namespace AgfAdmin.Services
         private async Task<ServiceResult<DocumentRecipientsDto>> SaveAsync(string ownerKind, Relation relation, SaveDocumentRecipientsDto request, CancellationToken cancellationToken)
         {
             var relationId = relation?.Id;
+            // Versiecontrole en opslaan in één transactie, per eigenaar achter een lock (loods = 0): twee gelijktijdige opslagen worden
+            // na elkaar uitgevoerd, de tweede ziet de nieuwe versie en krijgt een 409. SQLite (tests) serialiseert schrijvers zelf.
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            if (db.Database.IsNpgsql())
+            {
+                var lockKey = relationId ?? 0;
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({RecipientLockClass}, {lockKey})", cancellationToken);
+            }
             var stored = await StoredAsync(ownerKind, relationId, cancellationToken, tracking: true);
             if (request?.ExpectedVersion != VersionOf(stored))
             {
@@ -92,7 +102,7 @@ namespace AgfAdmin.Services
                 {
                     var address = relation?.Addresses.SingleOrDefault(a => a.Id == item.RelationAddressId);
                     var unchanged = stored.Any(r => r.Id == item.Id && r.RelationAddressId == item.RelationAddressId);
-                    if (address == null || (!address.IsActive && !unchanged)) ValidationErrors.Add(errors, $"{key}.relationAddressId", "Choose one of this relation's active addresses, or the whole relation.");
+                    if (address == null || address.Purpose != AddressPurpose.Delivery || (!address.IsActive && !unchanged)) ValidationErrors.Add(errors, $"{key}.relationAddressId", "Choose one of this relation's active delivery addresses, or the whole relation.");
                 }
                 if (email.Length > 0 && !seen.Add($"{email}|{item.RelationAddressId}")) ValidationErrors.Add(errors, $"{key}.email", "This address is listed twice.");
                 normalized.Add((item, email, name, role, kinds));
@@ -123,6 +133,7 @@ namespace AgfAdmin.Services
             }
             db.DocumentRecipients.RemoveRange(stored.Where(r => !keep.Contains(r.Id)));
             await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             db.ChangeTracker.Clear();
             var dto = Dto(await StoredAsync(ownerKind, relationId, cancellationToken), relation);
             dto.Warnings = warnings;
@@ -139,7 +150,7 @@ namespace AgfAdmin.Services
         {
             Version = VersionOf(stored),
             Recipients = stored.Select(r => new DocumentRecipientDto { Id = r.Id, Name = r.Name, Email = r.Email, Role = r.Role, Kinds = DocumentMailRules.Names(r.Kinds).ToList(), RelationAddressId = r.RelationAddressId }).ToList(),
-            Addresses = relation?.Addresses.Where(a => a.IsActive || stored.Any(r => r.RelationAddressId == a.Id)).OrderBy(a => a.SortOrder).ThenBy(a => a.Id)
+            Addresses = relation?.Addresses.Where(a => a.Purpose == AddressPurpose.Delivery && (a.IsActive || stored.Any(r => r.RelationAddressId == a.Id))).OrderBy(a => a.SortOrder).ThenBy(a => a.Id)
                 .Select(a => new RecipientAddressOptionDto { Id = a.Id, Purpose = a.Purpose, Text = TransportOrderBuilder.AddressText(a) ?? a.Label }).ToList() ?? new List<RecipientAddressOptionDto>(),
         };
 
