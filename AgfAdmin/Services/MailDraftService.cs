@@ -43,6 +43,26 @@ namespace AgfAdmin.Services
                             open.UpdatedAt = now;
                             open.UpdatedBy = actor;
                         }
+                    else
+                    {
+                        // Is er na het aanmaken een adres bijgekomen, dan komt het in een concept dat nog geen ontvanger heeft; handmatig ingevulde Aan blijft staan.
+                        foreach (var open in drafts.Where(d => d.DocumentId == latest.Id && d.MissingRecipient != null && string.IsNullOrWhiteSpace(d.To)
+                            && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
+                        {
+                            if (latest.Kind == SalesOrderDocumentRules.KindTransportOrder && order.Transport?.Mode != SalesTransportRules.ModeCarrier) continue;
+                            var (rTo, rCc, _, _) = latest.Kind == SalesOrderDocumentRules.KindTransportOrder
+                                ? await ForRelationAsync(recipients, order.Transport.CarrierRelation, latest.Kind, cancellationToken)
+                                : await ForWarehouseAsync(recipients, latest.Kind, cancellationToken);
+                            if (rTo.Count == 0) continue;
+                            var existingCc = DocumentMailRules.SplitAddresses(open.Cc);
+                            open.To = DocumentMailRules.JoinAddresses(rTo);
+                            open.Cc = DocumentMailRules.JoinAddresses(existingCc.Concat(rCc).Where(a => !rTo.Contains(a, StringComparer.OrdinalIgnoreCase)));
+                            open.MissingRecipient = null;
+                            open.MissingRelationId = null;
+                            open.UpdatedAt = now;
+                            open.UpdatedBy = actor;
+                        }
+                    }
                     continue;
                 }
                 // Een open concept van een oudere versie gaat niet meer weg: vervangen, ook als de nieuwe versie zelf geen concept krijgt.
@@ -90,9 +110,20 @@ namespace AgfAdmin.Services
         }
 
         // Te versturen, over alle orders: concepten die nog open staan of mislukten, nieuwste eerst.
-        public Task<List<MailDraftDto>> OpenAsync(CancellationToken cancellationToken = default) =>
-            Query().Where(d => d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed || d.Status == DocumentMailRules.StatusSending)
-                .OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Take(200).Select(Projection).ToListAsync(cancellationToken);
+        // Een concept van een document dat intussen is doorgegeven, hoort er niet meer bij. Pagineren kan met skip/take; OpenCountAsync geeft het totaal.
+        public const int MaxPageSize = 200;
+
+        private IQueryable<MailDraft> OpenQuery() =>
+            Query().Where(d => ((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
+                || d.Status == DocumentMailRules.StatusSending);
+
+        public Task<int> OpenCountAsync(CancellationToken cancellationToken = default) => OpenQuery().CountAsync(cancellationToken);
+
+        public Task<List<MailDraftDto>> OpenAsync(CancellationToken cancellationToken = default) => OpenAsync(0, MaxPageSize, cancellationToken);
+
+        public Task<List<MailDraftDto>> OpenAsync(int skip, int take, CancellationToken cancellationToken = default) =>
+            OpenQuery().OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
+                .Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, MaxPageSize)).Select(Projection).ToListAsync(cancellationToken);
 
         public async Task<ServiceResult<MailDraftDto>> GetAsync(int id, CancellationToken cancellationToken = default)
         {
@@ -206,7 +237,7 @@ namespace AgfAdmin.Services
                 ["{bedrijf}"] = company.CompanyName, ["{document}"] = MailTemplateRules.DocumentName(document.Kind), ["{nummer}"] = document.Number,
                 ["{versie}"] = document.Version.ToString(), ["{order}"] = order.OrderNumber, ["{partij}"] = order.SalesPartij?.Number ?? order.OrderNumber,
                 ["{klant}"] = order.Customer?.Name, ["{datum}"] = MailTemplateRules.Date(DateTime.UtcNow, false),
-                ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : MailTemplateRules.Date(order.RequestedDeliveryDate, false),
+                ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : "nog niet bekend",
             };
             var text = MailTemplateRules.Render(body, values).Trim();
             if (!string.IsNullOrWhiteSpace(settings?.Signature)) text = $"{text}\n\n{settings.Signature.Trim()}";
