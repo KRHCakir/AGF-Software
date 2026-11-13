@@ -115,6 +115,8 @@ namespace AgfAdmin.Data
     //    van een order van de leverancier van de factuur; koppeling, prijs op de bon en de keuze bij een prijsverschil liggen vast.
     // 31. bevestigen en de laadbon (zie TraceabilityGuard.SalesOrderDocuments.cs): wie en wanneer een verkooporder bevestigde ligt vast;
     //    een documentversie verandert of verdwijnt nooit (alleen doorgegeven/verstuurd wordt één keer gezet) en versies volgen elkaar op.
+    // 32. mailconcepten (zie TraceabilityGuard.MailDrafts.cs): een concept verdwijnt nooit (verwijderen = Discarded), een verstuurd
+    //    concept verandert niet meer, en het document en de order waar het bij hoort liggen vast.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -240,6 +242,7 @@ namespace AgfAdmin.Data
             await CheckPurchaseOrderChangesAsync(db, async, cancellationToken);
             await CheckInvoiceOrderLinksAsync(db, async, cancellationToken);
             await CheckSalesOrderDocumentsAsync(db, async, cancellationToken);
+            await CheckMailDraftsAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
