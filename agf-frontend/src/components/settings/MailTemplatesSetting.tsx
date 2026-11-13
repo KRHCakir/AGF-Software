@@ -33,7 +33,14 @@ export default function MailTemplatesSetting() {
         setBusy(template.kind);
         setError(null);
         try {
-            setValue(await saveMailTemplate(template));
+            const result = await saveMailTemplate(template);
+            // Alleen het opgeslagen sjabloon overnemen; niet-opgeslagen wijzigingen in andere sjablonen blijven staan.
+            setValue((current) => {
+                if (!current) return result;
+                const fresh = result.templates.find((item) => item.kind === template.kind);
+                if (!fresh) return current;
+                return { ...current, placeholders: result.placeholders, templates: current.templates.map((item) => (item.kind === template.kind ? fresh : item)) };
+            });
             setSaved(template.kind);
         } catch (caught) {
             setError(toApiError(caught));
