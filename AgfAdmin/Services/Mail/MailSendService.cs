@@ -146,6 +146,9 @@ namespace AgfAdmin.Services.Mail
         {
             lock (_lock)
             {
+                // Opruimen: gebruikers zonder poging in de laatste minuut hoeven niet in het geheugen te blijven.
+                var cutoff = now.AddMinutes(-1);
+                foreach (var key in _attempts.Where(a => a.Key != actor && (a.Value.Count == 0 || a.Value.Last() < cutoff)).Select(a => a.Key).ToList()) _attempts.Remove(key);
                 if (!_attempts.TryGetValue(actor, out var queue)) _attempts[actor] = queue = new Queue<DateTime>();
                 while (queue.Count > 0 && queue.Peek() < now.AddMinutes(-1)) queue.Dequeue();
                 if (queue.Count >= max) return false;
