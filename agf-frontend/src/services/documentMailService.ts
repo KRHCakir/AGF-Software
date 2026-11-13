@@ -1,5 +1,5 @@
-import { ApiError, getJson, putJson } from './apiClient';
-import { type DocumentRecipients, type MailSettings, type MailTemplate, type MailTemplates, type SaveDocumentRecipients, isDocumentRecipients, isMailSettings, isMailTemplates } from '../types/documentMail';
+import { ApiError, getJson, postJson, putJson } from './apiClient';
+import { type DocumentRecipients, type MailDraft, type MailSettings, type MailStatus, type MailTemplate, type MailTemplates, type SaveDocumentRecipients, isDocumentRecipients, isMailDraft, isMailSettings, isMailStatus, isMailTemplates } from '../types/documentMail';
 
 // E-mailadressen voor documenten (documenten deel 3): van een relatie (api/relations/{id}/document-recipients) en van de loods
 // (api/settings/warehouse-recipients). Opslaan vervangt de hele lijst, met de versie die de gebruiker zag. De afzender (api/settings/mail)
@@ -47,4 +47,40 @@ export async function saveMailTemplate(template: Pick<MailTemplate, 'kind' | 'su
     const { json } = await putJson('/settings/mail-templates', template, signal);
     if (!isMailTemplates(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de mailsjablonen.');
     return json;
+}
+
+// Mailconcepten (Verkoop): lezen, aanpassen, verwijderen en versturen. Versturen gebeurt alleen hier, na een klik.
+const draft = (json: unknown): MailDraft => {
+    if (!isMailDraft(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het mailconcept.');
+    return json;
+};
+const drafts = (json: unknown): MailDraft[] => {
+    if (!Array.isArray(json) || !json.every(isMailDraft)) throw new ApiError('shape', 'Onverwacht antwoord bij de mailconcepten.');
+    return json;
+};
+
+export async function getOrderMailDrafts(orderId: number, signal?: AbortSignal): Promise<MailDraft[]> {
+    return drafts(await getJson(`/sales-orders/${orderId}/mail-drafts`, signal));
+}
+
+export async function getOpenMailDrafts(signal?: AbortSignal): Promise<MailDraft[]> {
+    return drafts(await getJson('/mail-drafts', signal));
+}
+
+export async function getMailStatus(signal?: AbortSignal): Promise<MailStatus> {
+    const json = await getJson('/mail-drafts/status', signal);
+    if (!isMailStatus(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de mailstatus.');
+    return json;
+}
+
+export async function updateMailDraft(id: number, request: { expectedVersion: number; to: string; cc: string; subject: string; body: string }, signal?: AbortSignal): Promise<MailDraft> {
+    return draft((await putJson(`/mail-drafts/${id}`, request, signal)).json);
+}
+
+export async function discardMailDraft(id: number, expectedVersion: number, signal?: AbortSignal): Promise<MailDraft> {
+    return draft((await postJson(`/mail-drafts/${id}/discard`, { expectedVersion }, signal)).json);
+}
+
+export async function sendMailDraft(id: number, request: { expectedVersion: number; confirmManyRecipients: boolean; confirmResend: boolean }, signal?: AbortSignal): Promise<MailDraft> {
+    return draft((await postJson(`/mail-drafts/${id}/send`, request, signal)).json);
 }

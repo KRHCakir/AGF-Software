@@ -38,3 +38,23 @@ export function isMailTemplates(value: unknown): value is MailTemplates {
     return isObject(value) && isArrayOf(value.templates, (t): t is MailTemplate => isObject(t) && isString(t.kind) && isString(t.subject) && isString(t.body) && typeof t.isDefault === 'boolean')
         && isArrayOf(value.placeholders, isString);
 }
+
+// Een mailconcept bij een documentversie. to/cc: adressen gescheiden door komma's. missingRecipient: geen adres voor deze soort (dan niet
+// versturen). previousSentAt: een eerdere versie is al verstuurd of doorgegeven.
+export type MailDraftStatus = 'Draft' | 'Sending' | 'Sent' | 'Failed' | 'Discarded' | 'Superseded';
+export interface MailDraft {
+    id: number; salesOrderId: number; orderNumber: string; customerName: string | null; documentId: number; documentKind: string; documentNumber: string;
+    documentVersion: number; status: MailDraftStatus; to: string | null; cc: string | null; subject: string; body: string; missingRecipient: string | null;
+    missingRelationId: number | null; previousSentAt: string | null; createdAt: string; sentAt: string | null; sentBy: string | null; messageId: string | null;
+    lastError: string | null; attempts: number; version: number;
+}
+export interface MailStatus { configured: boolean; sender: string }
+
+export function isMailDraft(value: unknown): value is MailDraft {
+    return isObject(value) && isNumber(value.id) && isNumber(value.salesOrderId) && isString(value.orderNumber) && isNumber(value.documentId) && isString(value.documentKind)
+        && isString(value.documentNumber) && isNumber(value.documentVersion) && isString(value.status) && isNullableString(value.to) && isNullableString(value.cc)
+        && isString(value.subject) && isString(value.body) && isNullableString(value.missingRecipient) && isNullableNumber(value.missingRelationId)
+        && isNullableString(value.previousSentAt) && isNullableString(value.sentAt) && isNullableString(value.lastError) && isNumber(value.version);
+}
+
+export const isMailStatus = (value: unknown): value is MailStatus => isObject(value) && typeof value.configured === 'boolean' && isString(value.sender);

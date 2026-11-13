@@ -25,6 +25,7 @@ const PATHS: Readonly<Record<string, string>> = {
     partijen: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
     'sales-orders': 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',
     'direct-trade': 'M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4',
+    'mail-drafts': 'M3 6h18v12H3zM3 6l9 7 9-7',
     relations: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 6.5M18 14a5.5 5.5 0 013.5 6',
     articles: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9',
 };

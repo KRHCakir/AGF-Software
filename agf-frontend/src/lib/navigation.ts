@@ -42,6 +42,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         id: 'sales', labelKey: 'nav_group_sales', items: [
             { id: 'sales-orders', href: '/sales-orders', labelKey: 'nav_sales_orders' },
             { id: 'direct-trade', href: '/direct-trade', labelKey: 'nav_direct_trade' },
+            { id: 'mail-drafts', href: '/mail-drafts', labelKey: 'nav_mail_drafts' },
         ],
     },
     {

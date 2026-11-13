@@ -63,13 +63,18 @@ export default function RelationsPage() {
     const total = list.status === 'ready' ? list.data.total : 0;
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+    const [section, setSection] = useState<string | null>(null);
     const openNew = () => setEditing({ relation: null, key: Date.now() });
     // Leeg nog niets gefilterd: dan zijn er echt nog geen relaties (schone start) en is de eerste stap een nieuwe relatie.
     const nothingYet = total === 0 && debounced === '' && role === 'all';
 
     // Link vanaf de Beginnen-kaart of een formulier dat een leverancier of klant mist: /relations?new=1 opent meteen een nieuwe relatie.
     useEffect(() => {
-        if (new URLSearchParams(window.location.search).get('new') === '1') setEditing({ relation: null, key: Date.now() });
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('new') === '1') setEditing({ relation: null, key: Date.now() });
+        // Vanuit een mailconcept zonder adres: /relations?open=<id>&section=recipients opent die relatie met het blok e-mailadressen.
+        const open = Number(params.get('open'));
+        if (Number.isInteger(open) && open > 0) { setSection(params.get('section')); void openRelation(open); }
     }, []);
     const openRelation = async (id: number) => {
         setOpening(id);
@@ -141,7 +146,7 @@ export default function RelationsPage() {
             )}
 
             {editing && reference.status === 'ready' && (
-                <RelationForm key={editing.key} relation={editing.relation} reference={reference.data} onSaved={onSaved} onClose={() => setEditing(null)} />
+                <RelationForm key={editing.key} relation={editing.relation} reference={reference.data} onSaved={onSaved} onClose={() => setEditing(null)} initialSection={section} />
             )}
 
             <div className="flex flex-wrap items-center gap-3">

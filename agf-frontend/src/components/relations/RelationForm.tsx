@@ -67,11 +67,13 @@ function writePending(pending: PendingCreate | null) {
 
 const codeKey = (code: string) => `relations_error_${code}`;
 
-export default function RelationForm({ relation, reference, onSaved, onClose }: {
+export default function RelationForm({ relation, reference, onSaved, onClose, initialSection = null }: {
     relation: Relation | null;
     reference: RelationReference;
     onSaved: (relation: Relation, created: boolean) => void;
     onClose: () => void;
+    // Een blok dat meteen open staat (bijvoorbeeld "recipients" vanuit een mailconcept zonder adres).
+    initialSection?: string | null;
 }) {
     const { t } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
@@ -98,6 +100,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             defaults: d.customerRole || d.vendorRole,
             note: d.internalNote !== '',
             bank: d.bankAccounts.length > 0,
+            recipients: initialSection === 'recipients',
         };
     });
     const [confirming, setConfirming] = useState<number | null>(null);
