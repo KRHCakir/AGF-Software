@@ -27,7 +27,8 @@ export function rowsFrom(recipients: readonly DocumentRecipient[]): RecipientRow
     return recipients.map((r) => ({ key: newRowKey(), id: r.id, name: r.name ?? '', email: r.email, role: r.role, kinds: [...r.kinds], scope: r.relationAddressId === null ? '' : String(r.relationAddressId) }));
 }
 
-export const isBlankRow = (row: RecipientRow) => row.name.trim() === '' && row.email.trim() === '';
+// Een bestaande regel (met id) is nooit "leeg": het adres wissen is een ongeldig adres, geen stille verwijdering (daarvoor is "Verwijderen").
+export const isBlankRow = (row: RecipientRow) => row.id === null && row.name.trim() === '' && row.email.trim() === '';
 
 export function recipientProblems(rows: readonly RecipientRow[]): RecipientProblem[] {
     const problems: RecipientProblem[] = [];
