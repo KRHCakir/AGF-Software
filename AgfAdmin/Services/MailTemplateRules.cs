@@ -11,10 +11,13 @@ namespace AgfAdmin.Services
         public static (string Subject, string Body) Default(string kind) => kind switch
         {
             SalesOrderDocumentRules.KindTransportOrder => ("Transportopdracht {nummer} – {order}",
-                "Beste,\n\nIn de bijlage transportopdracht {nummer} (versie {versie}) voor order {order} van {klant}.\nLaden op: {laaddatum}.\n\nWilt u bevestigen dat u de opdracht uitvoert?\n\nMet vriendelijke groet,\n{bedrijf}"),
+                "Beste,\n\nIn de bijlage transportopdracht {nummer} (versie {versie}) voor order {order} van {klant}.\nLaden op: {laaddatum}.\n\nWilt u bevestigen dat u de opdracht uitvoert?"),
             _ => ("Laadbon {nummer} – {order} – {klant}",
-                "Beste,\n\nIn de bijlage laadbon {nummer} (versie {versie}) voor order {order} van {klant}, partij {partij}.\nTe laden op: {laaddatum}.\n\nMet vriendelijke groet,\n{bedrijf}"),
+                "Beste,\n\nIn de bijlage laadbon {nummer} (versie {versie}) voor order {order} van {klant}, partij {partij}.\nTe laden op: {laaddatum}."),
         };
+
+        // Onder elke tekst komt één afsluiting: de handtekening uit Beheer, of zonder handtekening deze (dus nooit twee keer een groet).
+        public const string DefaultClosing = "Met vriendelijke groet,\n{bedrijf}";
 
         public static string DocumentName(string kind) => kind == SalesOrderDocumentRules.KindTransportOrder ? "Transportopdracht" : "Laadbon";
 
