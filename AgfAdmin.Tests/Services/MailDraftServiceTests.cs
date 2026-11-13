@@ -53,7 +53,8 @@ public class MailDraftServiceTests : IDisposable
         Assert.Equal(("Draft", "loods@voorbeeld.nl", "", null), (slip.Status, slip.To, slip.Cc, slip.MissingRecipient));
         Assert.StartsWith("Laadbon LB-", slip.Subject);
         Assert.Contains("Te laden op: 13-11-2026 06:30", slip.Body);
-        Assert.EndsWith("Kwekerij Voorbeeld B.V.\nLoodsweg 1, Barendrecht", slip.Body);
+        Assert.EndsWith("Te laden op: 13-11-2026 06:30.\n\nKwekerij Voorbeeld B.V.\nLoodsweg 1, Barendrecht", slip.Body);
+        Assert.DoesNotContain("groet", slip.Body); // de handtekening is de afsluiting: nooit twee keer een groet
         var transport = drafts.Single(d => d.DocumentKind == "TransportOrder");
         // Alleen de adressen voor de transportopdracht (de facturen-mail niet).
         Assert.Equal(("planning@zeeland.nl", "kantoor@zeeland.nl"), (transport.To, transport.Cc));
@@ -160,6 +161,17 @@ public class MailDraftServiceTests : IDisposable
         Assert.DoesNotContain(await DraftsAsync(orderId), d => d.Id == draft.Id);
         Assert.Equal(1, await RunAsync(db => db.SalesOrderDocuments.CountAsync(d => d.SalesOrderId == orderId && d.Kind == "LoadingSlip")));
         Assert.Equal(ServiceResultStatus.Conflict, (await RunAsync(db => new MailDraftService(db).DiscardAsync(draft.Id, new MailDraftActionDto { ExpectedVersion = discarded.Value.Version }))).Status);
+    }
+
+    [Fact]
+    public async Task Without_a_signature_the_text_ends_with_one_standard_closing()
+    {
+        var (orderId, _) = await OrderAsync();
+        await RunAsync(db => db.MailSettings.ExecuteUpdateAsync(u => u.SetProperty(m => m.Signature, (string)null)));
+        await RunAsync(db => new LoadingSlipService(db).ConfirmAsync(orderId, new ConfirmSalesOrderDto()));
+        var slip = (await DraftsAsync(orderId)).Single(d => d.DocumentKind == "LoadingSlip");
+        Assert.EndsWith(".\n\nMet vriendelijke groet,\nKwekerij Voorbeeld B.V.", slip.Body);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(slip.Body, "groet"));
     }
 
     [Fact]
