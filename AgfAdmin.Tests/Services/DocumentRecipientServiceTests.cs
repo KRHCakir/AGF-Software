@@ -106,9 +106,14 @@ public class DocumentRecipientServiceTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             var document = await db.SalesOrderDocuments.SingleAsync(d => d.SalesOrderId == orderId);
-            var draft = new MailDraft { SalesOrderId = orderId, DocumentId = document.Id, DocumentKind = document.Kind, Status = DocumentMailRules.StatusDraft, To = "loods@mijnagf.nl", Subject = "Laadbon", Body = "Tekst", CreatedBy = "Admin", UpdatedBy = "Admin" };
-            db.MailDrafts.Add(draft);
-            await db.SaveChangesAsync();
+            // Bevestigen maakt het concept al (vanaf PR 2); anders hier aanmaken.
+            var draft = await db.MailDrafts.SingleOrDefaultAsync(d => d.DocumentId == document.Id);
+            if (draft == null)
+            {
+                draft = new MailDraft { SalesOrderId = orderId, DocumentId = document.Id, DocumentKind = document.Kind, Status = DocumentMailRules.StatusDraft, To = "loods@mijnagf.nl", Subject = "Laadbon", Body = "Tekst", CreatedBy = "Admin", UpdatedBy = "Admin" };
+                db.MailDrafts.Add(draft);
+                await db.SaveChangesAsync();
+            }
             draftId = draft.Id;
             draft.Body = "Aangepast";
             await db.SaveChangesAsync();

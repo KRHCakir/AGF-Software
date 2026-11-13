@@ -66,8 +66,12 @@ namespace AgfAdmin.Services
                 }
                 return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(winner, cancellationToken));
             }
+            await DraftsAsync(orderId, cancellationToken);
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(order, cancellationToken));
         }
+
+        // Bij elke nieuwe documentversie meteen een mailconcept (documenten deel 3). Er wordt hier nooit iets verstuurd.
+        private Task<int> DraftsAsync(int orderId, CancellationToken cancellationToken) => new MailDraftService(db, _user).EnsureDraftsAsync(orderId, cancellationToken);
 
         public Task<ServiceResult<SalesOrderDocumentsDto>> UpdateLoadingAsync(int orderId, UpdateSalesOrderLoadingDto request, CancellationToken cancellationToken = default) =>
             UpdateLoadingAsync(orderId, request, 0, cancellationToken);
@@ -108,6 +112,7 @@ namespace AgfAdmin.Services
                 db.ChangeTracker.Clear();
                 return await UpdateLoadingAsync(orderId, request, attempt + 1, cancellationToken);
             }
+            await DraftsAsync(orderId, cancellationToken);
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(await LoadAsync(orderId, cancellationToken), cancellationToken));
         }
 
@@ -120,6 +125,7 @@ namespace AgfAdmin.Services
                 return ServiceResult<SalesOrderDocumentsDto>.NotFound($"Sales order {orderId} does not exist.");
             }
             await RefreshAsync(orderId, cancellationToken);
+            await DraftsAsync(orderId, cancellationToken);
             return ServiceResult<SalesOrderDocumentsDto>.Ok(await DocumentsDtoAsync(await LoadAsync(orderId, cancellationToken), cancellationToken));
         }
 
@@ -149,6 +155,7 @@ namespace AgfAdmin.Services
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
+                await DraftsAsync(orderId, cancellationToken);
                 return true;
             }
             catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
