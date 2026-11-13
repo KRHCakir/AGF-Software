@@ -13,7 +13,6 @@ namespace AgfAdmin.Services.Mail
     {
         private readonly MailSendLimiter _limiter = limiter ?? new MailSendLimiter();
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
-        private static readonly TimeSpan StuckAfter = TimeSpan.FromMinutes(5);
 
         public async Task<ServiceResult<MailDraftDto>> SendAsync(int id, MailDraftActionDto request, CancellationToken cancellationToken = default)
         {
@@ -21,7 +20,8 @@ namespace AgfAdmin.Services.Mail
             if (draft == null) return ServiceResult<MailDraftDto>.NotFound($"Mail {id} does not exist.");
             var now = DateTime.UtcNow;
             // Onzeker: te lang "bezig", of een eerdere poging eindigde met een onbekende uitkomst (dan staat de reden bij een concept in "bezig").
-            var stuck = draft.Status == DocumentMailRules.StatusSending && (draft.LastError != null || draft.LastAttemptAt < now - StuckAfter);
+            // Een poging duurt hoogstens SendTimeout; "bezig" langer dan StuckAfter (ruim daarboven) is een verlaten poging, geen actieve.
+            var stuck = draft.Status == DocumentMailRules.StatusSending && (draft.LastError != null || draft.LastAttemptAt < now - DocumentMailRules.StuckAfter);
             if (draft.Status is not (DocumentMailRules.StatusDraft or DocumentMailRules.StatusFailed) && !stuck)
             {
                 return Conflict($"This mail is {draft.Status.ToLowerInvariant()}; it is not sent again.", "notOpen");
@@ -71,17 +71,21 @@ namespace AgfAdmin.Services.Mail
 
             SmtpOptions smtp = null;
             MailSendResult result;
+            // Vanaf de claim niet meer afbreken met het verzoek: wie de pagina sluit terwijl de server de mail aanneemt, mag geen "bezig" zonder
+            // uitkomst achterlaten. De verzending heeft haar eigen, begrensde time-out.
+            using var sendLimit = new CancellationTokenSource(DocumentMailRules.SendTimeout);
             try
             {
                 // Voorbereiding (wachtwoord ontsleutelen, PDF maken) hoort bij de verzending: een fout hier wordt "mislukt" met een reden, niet "bezig".
                 smtp = settings.SmtpOf(stored);
                 var (bytes, name) = Pdf(draft.Document);
                 var mail = new OutgoingMail(stored?.FromAddress ?? "verkoop@nagebootst.agf.local", stored?.FromName, to, cc, draft.Subject, draft.Body, name, bytes);
-                result = await sender.SendAsync(mail, smtp, cancellationToken);
+                result = await sender.SendAsync(mail, smtp, sendLimit.Token);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (Exception exception)
             {
-                result = new MailSendResult(false, null, exception.GetType().Name);
+                // Een afzender die toch een fout gooit (ook een time-out): mislukt met het soort fout; onzeker als de time-out afging.
+                result = new MailSendResult(false, null, exception.GetType().Name, exception is OperationCanceledException);
             }
 
             // Vanaf hier niet meer afbreken met het verzoek: de mail is mogelijk al onderweg en de uitkomst moet vastgelegd worden.
@@ -103,13 +107,21 @@ namespace AgfAdmin.Services.Mail
                 draft.MessageId = result.MessageId;
                 draft.LastError = null;
                 // Concept en document samen in één transactie: beide of geen van beide.
-                await using (var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None))
+                try
                 {
+                    await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
                     await db.SaveChangesAsync(CancellationToken.None);
                     // Het document: verstuurd (één keer, zoals Doorgegeven; regel 31 staat alleen dat toe).
                     await db.SalesOrderDocuments.Where(d => d.Id == draft.DocumentId && d.SentAt == null)
                         .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)done).SetProperty(d => d.SentBy, actor), CancellationToken.None);
                     await transaction.CommitAsync(CancellationToken.None);
+                }
+                catch (Exception exception)
+                {
+                    // Verstuurd maar niet vastgelegd (database weg): het concept blijft "bezig" en geldt na StuckAfter als onzeker, dus opnieuw
+                    // versturen vraagt dan een uitdrukkelijke bevestiging. Het bericht-id staat in het log om het terug te vinden.
+                    logger.LogError(exception, "Mail {DraftId} is verstuurd (bericht-id {MessageId}) maar kon niet worden vastgelegd.", draft.Id, result.MessageId);
+                    throw;
                 }
                 logger.LogInformation("Mail {DraftId} verstuurd naar {Count} adressen via {Sender}.", draft.Id, count, sender.Kind);
             }
@@ -121,7 +133,7 @@ namespace AgfAdmin.Services.Mail
                 logger.LogWarning("Mail {DraftId} niet verstuurd via {Sender}; de reden staat bij het concept.", draft.Id, sender.Kind);
             }
             db.ChangeTracker.Clear();
-            return await new MailDraftService(db, _user).GetAsync(draft.Id, cancellationToken);
+            return await new MailDraftService(db, _user).GetAsync(draft.Id, CancellationToken.None);
         }
 
         // Een foutmelding nooit met het wachtwoord erin, en kort.

@@ -44,6 +44,9 @@ namespace AgfAdmin.Services
         public const int MaxBodyLength = 10000;
         public const int MaxErrorLength = 500;
         public const int ConfirmAboveRecipients = 10;
+        // Eén verzending duurt nooit langer dan dit (eigen time-out, los van het verzoek); "bezig" langer dan StuckAfter is dus echt verlaten.
+        public static readonly TimeSpan SendTimeout = TimeSpan.FromMinutes(2);
+        public static readonly TimeSpan StuckAfter = TimeSpan.FromMinutes(5);
         public const int MaxSendsPerMinute = 10;
 
         // Adressen in een veld Aan of Cc: gescheiden door komma, puntkomma of regeleinde; dubbele (hoofdletterongevoelig) één keer.
