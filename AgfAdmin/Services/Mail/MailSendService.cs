@@ -27,6 +27,11 @@ namespace AgfAdmin.Services.Mail
                 return Conflict($"This mail is {draft.Status.ToLowerInvariant()}; it is not sent again.", "notOpen");
             }
             if (request?.ExpectedVersion != draft.Version) return Conflict("This mail was changed by someone else; reload and try again.", "stale");
+            // Nooit een oudere versie van het document versturen: er is intussen een nieuwere, met een eigen concept.
+            if (await db.SalesOrderDocuments.AnyAsync(x => x.SalesOrderId == draft.SalesOrderId && x.Kind == draft.DocumentKind && x.Version > draft.Document.Version, cancellationToken))
+            {
+                return Conflict("There is a newer version of this document; send that one.", "superseded");
+            }
             if (stuck && request?.ConfirmResend != true)
             {
                 return Conflict("It is unknown whether this mail was sent. Check the sent items of the sender first; only then confirm to send it again.", "uncertain");

@@ -136,6 +136,26 @@ public class MailSendServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task An_older_version_of_a_document_is_never_sent()
+    {
+        var orderId = await ConfirmedOrderAsync();
+        var first = await DraftAsync(orderId, "LoadingSlip");
+        await RunAsync(db => new LoadingSlipService(db).UpdateLoadingAsync(orderId, new UpdateSalesOrderLoadingDto { LicensePlate = "BX-44-ZZ" }));
+        // Normaal is het oude concept dan vervangen (en dus niet meer te versturen); nagebootst: het staat door een race nog open.
+        int version;
+        await using (var db = _factory.CreateContext())
+        {
+            var stale = await db.MailDrafts.SingleAsync(d => d.Id == first.Id);
+            Assert.Equal("Superseded", stale.Status);
+            stale.Status = "Draft";
+            await db.SaveChangesAsync();
+            version = stale.Version;
+        }
+        Assert.Equal("superseded", Code(await SendAsync(first.Id, version)));
+        Assert.Empty(_fake.Sent);
+    }
+
+    [Fact]
     public async Task At_most_ten_send_attempts_per_minute_per_user_even_on_the_same_draft()
     {
         var orderId = await ConfirmedOrderAsync();
