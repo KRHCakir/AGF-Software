@@ -2733,7 +2733,7 @@
   "mail_from_name": "From name",
   "mail_signature": "Signature (below every mail)",
   "mail_templates_title": "Templates for mail drafts",
-  "mail_templates_text": "Plain text with placeholders; applies to new drafts.",
+  "mail_templates_text": "Plain text with placeholders; applies to new drafts. Do not add a closing: the signature (without a signature: Met vriendelijke groet and the company name) always goes below it.",
   "mail_template_default": "standard text",
   "mail_template_reset": "Standard text",
   "mail_subject": "Subject",

@@ -2733,7 +2733,7 @@
   "mail_from_name": "Van-naam",
   "mail_signature": "Handtekening (onder elke mail)",
   "mail_templates_title": "Sjablonen voor mailconcepten",
-  "mail_templates_text": "Platte tekst met invulvelden; geldt voor nieuwe concepten.",
+  "mail_templates_text": "Platte tekst met invulvelden; geldt voor nieuwe concepten. Zet er geen groet onder: de handtekening (zonder handtekening: Met vriendelijke groet en de bedrijfsnaam) komt er altijd onder.",
   "mail_template_default": "standaardtekst",
   "mail_template_reset": "Standaardtekst",
   "mail_subject": "Onderwerp",
