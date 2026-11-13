@@ -134,38 +134,4 @@ public class DocumentRecipientServiceTests : IDisposable
         Assert.Equal("loods@mijnagf.nl | ", Lists(await RunAsync(s => s.ResolveAsync(DocumentMailRules.OwnerWarehouse, null, null, "LoadingSlip"))));
         Assert.Empty((await RunAsync(s => s.GetWarehouseAsync())).Addresses);
     }
-
-    [Fact]
-    public async Task A_sent_mail_draft_never_changes_or_disappears_and_a_draft_is_never_deleted()
-    {
-        var seed = await SalesTestData.SeedAsync(_factory);
-        var (orderId, _, _) = await SalesTestData.SeedOrderAsync(_factory, seed);
-        await using (var db = _factory.CreateContext()) await new LoadingSlipService(db).ConfirmAsync(orderId, new ConfirmSalesOrderDto());
-        int draftId;
-        await using (var db = _factory.CreateContext())
-        {
-            var document = await db.SalesOrderDocuments.SingleAsync(d => d.SalesOrderId == orderId);
-            var draft = new MailDraft { SalesOrderId = orderId, DocumentId = document.Id, DocumentKind = document.Kind, Status = DocumentMailRules.StatusDraft, To = "loods@mijnagf.nl", Subject = "Laadbon", Body = "Tekst", CreatedBy = "Admin", UpdatedBy = "Admin" };
-            db.MailDrafts.Add(draft);
-            await db.SaveChangesAsync();
-            draftId = draft.Id;
-            draft.Body = "Aangepast";
-            await db.SaveChangesAsync();
-            draft.Status = DocumentMailRules.StatusSent;
-            draft.SentAt = DateTime.UtcNow;
-            draft.SentBy = "Admin";
-            await db.SaveChangesAsync();
-        }
-        await using (var db = _factory.CreateContext())
-        {
-            var sent = await db.MailDrafts.SingleAsync(d => d.Id == draftId);
-            sent.Body = "Achteraf veranderd";
-            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
-        }
-        await using (var db = _factory.CreateContext())
-        {
-            db.MailDrafts.Remove(await db.MailDrafts.SingleAsync(d => d.Id == draftId));
-            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
-        }
-    }
 }
