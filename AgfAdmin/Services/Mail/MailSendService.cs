@@ -82,6 +82,11 @@ namespace AgfAdmin.Services.Mail
                 var mail = new OutgoingMail(stored?.FromAddress ?? "verkoop@nagebootst.agf.local", stored?.FromName, to, cc, draft.Subject, draft.Body, name, bytes);
                 result = await sender.SendAsync(mail, smtp, sendLimit.Token);
             }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                // De sleutel van het opgeslagen wachtwoord is weg (bijvoorbeeld een nieuwe server): zeggen wat er moet gebeuren.
+                result = new MailSendResult(false, null, "Het mailwachtwoord kon niet worden ontsleuteld; vul het opnieuw in onder Beheer › Mail versturen.");
+            }
             catch (Exception exception)
             {
                 // Een afzender die toch een fout gooit (ook een time-out): mislukt met het soort fout; onzeker als de time-out afging.
