@@ -51,6 +51,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateTransportOrder([FromServices] Services.SalesOrderTransportService transports, [FromBody] AgfAdmin.DTOs.TransportOrderSettingsDto request) =>
             this.ToActionResult(await transports.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // De sjablonen van het mailconcept per documentsoort (documenten deel 3): tekst met invulvelden.
+        [HttpGet("mail-templates")]
+        public async Task<IActionResult> GetMailTemplates([FromServices] Services.MailTemplateService templates) => Ok(await templates.GetAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("mail-templates")]
+        public async Task<IActionResult> SaveMailTemplate([FromServices] Services.MailTemplateService templates, [FromBody] AgfAdmin.DTOs.MailTemplateDto request) =>
+            this.ToActionResult(await templates.SaveAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("partij-numbering")]
         public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
 

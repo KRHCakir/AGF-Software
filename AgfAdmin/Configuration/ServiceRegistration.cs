@@ -37,6 +37,8 @@ namespace AgfAdmin.Configuration
             services.AddScoped<LoadingSlipService>();
             services.AddScoped<SalesOrderTransportService>();
             services.AddScoped<DocumentRecipientService>();
+            services.AddScoped<MailDraftService>();
+            services.AddScoped<MailTemplateService>();
             services.AddScoped<PartijService>();
             services.AddScoped<CostArticleService>();
             services.AddScoped<PartijCostService>();
