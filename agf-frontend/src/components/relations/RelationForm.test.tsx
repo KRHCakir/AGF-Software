@@ -116,6 +116,25 @@ describe('RelationForm', () => {
         assert.deepEqual(calls[1].body, { expectedVersion: '0', recipients: [{ id: null, name: 'Planning', email: 'planning@zeeland.nl', role: 'To', kinds: ['TransportOrder'], relationAddressId: null }] });
     });
 
+    test('changed by someone else: the current list comes in and saving again with its version works', async () => {
+        let puts = 0;
+        respond = (call) => {
+            if (call.url.includes('/document-recipients') && call.method === 'PUT') { puts++; return puts === 1 ? json(409, { message: 'stale', code: 'stale' }) : json(200, { version: 'v3', recipients: [], addresses: [], warnings: [] }); }
+            if (call.url.includes('/document-recipients')) return json(200, { version: 'v2', recipients: [{ id: 3, name: 'Collega', email: 'collega@noord.nl', role: 'To', kinds: ['Invoice'], relationAddressId: null }], addresses: [], warnings: [] });
+            return json(200, saved({ id: 7, customer: null }));
+        };
+        await mounted.render(<RelationForm relation={saved({ id: 7, customer: null })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('#recipients-0-email') !== null, 'loaded');
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'nieuw@noord.nl');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="recipients-conflict"]') !== null, 'conflict notice');
+        assert.equal(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!.value, 'collega@noord.nl', 'the current list is shown');
+        await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'nieuw@noord.nl');
+        await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+        await mounted.waitFor(() => puts === 2, 'saved again');
+        assert.equal(calls.filter((call) => call.method === 'PUT' && call.url.includes('/document-recipients'))[1].body!.expectedVersion, 'v2');
+    });
+
     test('if the addresses cannot be saved the form stays open with the reason; the relation itself was saved', async () => {
         respond = (call) => call.url.includes('/document-recipients') ? json(409, { message: 'Gewijzigd door iemand anders', code: 'stale' }) : json(201, saved({ id: 12, customer: null }));
         let created: Relation | null = null;

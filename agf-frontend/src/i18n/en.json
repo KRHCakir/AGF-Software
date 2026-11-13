@@ -1357,6 +1357,7 @@
   "recipients_problem_kinds": "Choose at least one document.",
   "recipients_typo": "Did you mean {suggestion}?",
   "recipients_typo_use": "Use it",
+  "recipients_conflict": "The e-mail addresses were changed by someone else meanwhile. The current list is shown now: adjust it and save again.",
   "relations_save_hint": "Only the company name is required. Changes never touch stored document values.",
   "relations_saved": "Relation saved: {name}",
   "relations_created": "Relation created: {name}",

@@ -106,6 +106,9 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     const [storedRecipients, setStoredRecipients] = useState<{ rows: RecipientRow[]; version: string; addresses: RecipientAddressOption[] }>({ rows: [], version: '0', addresses: [] });
     const [recipientIssues, setRecipientIssues] = useState<RecipientProblem[]>([]);
     const [recipientError, setRecipientError] = useState<ApiError | null>(null);
+    // Zolang de opgeslagen adressen nog laden is het blok dicht voor invoer: een laat antwoord overschrijft nooit wat de gebruiker typte.
+    const [recipientsLoading, setRecipientsLoading] = useState(relation !== null);
+    const [recipientNotice, setRecipientNotice] = useState<string | null>(null);
     const [creditRefresh, setCreditRefresh] = useState(0);
     const inFlight = useRef(false);
     const firstInput = useRef<HTMLInputElement | null>(null);
@@ -116,14 +119,16 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
     // Net hier aangemaakt: de adressen staan al in het formulier (en gaan zo mee); niet opnieuw ophalen, anders kan een oudere lijst erover.
     const createdHere = useRef<number | null>(null);
     useEffect(() => {
-        if (relationId === null || createdHere.current === relationId) return;
+        if (relationId === null || createdHere.current === relationId) { setRecipientsLoading(false); return; }
         const controller = new AbortController();
+        setRecipientsLoading(true);
         getRelationRecipients(relationId, controller.signal).then((found) => {
             const rows = rowsFrom(found.recipients);
             setStoredRecipients({ rows, version: found.version, addresses: found.addresses });
             setRecipientRows(rows);
             if (rows.length > 0) setOpen((now) => ({ ...now, recipients: true }));
-        }).catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setRecipientError(apiError); });
+        }).catch((caught) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setRecipientError(apiError); })
+            .finally(() => { if (!controller.signal.aborted) setRecipientsLoading(false); });
         return () => controller.abort();
     }, [relationId]);
 
@@ -138,8 +143,24 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
             setRecipientError(null);
             return true;
         } catch (caught) {
-            setRecipientError(toApiError(caught));
+            const apiError = toApiError(caught);
             setOpen((now) => ({ ...now, recipients: true }));
+            if (apiError.status === 409) {
+                // Intussen door iemand anders gewijzigd: de actuele lijst (met haar versie) komt in het blok; aanpassen en opnieuw opslaan lost het op.
+                try {
+                    const found = await getRelationRecipients(id);
+                    const rows = rowsFrom(found.recipients);
+                    setStoredRecipients({ rows, version: found.version, addresses: found.addresses });
+                    setRecipientRows(rows);
+                    setRecipientError(null);
+                    setRecipientNotice(t('recipients_conflict'));
+                    return false;
+                } catch (reload) {
+                    setRecipientError(toApiError(reload));
+                    return false;
+                }
+            }
+            setRecipientError(apiError);
             return false;
         }
     };
@@ -728,8 +749,9 @@ export default function RelationForm({ relation, reference, onSaved, onClose }: 
                     <div id="relation-recipients" className="space-y-2 border-t border-gray-200 p-3">
                         <p className="text-xs text-gray-600">{t('relations_recipients_intro')}</p>
                         {recipientError && <ErrorNotice error={recipientError} />}
-                        <DocumentRecipientsEditor idPrefix="recipients" rows={recipientRows} onChange={(rows) => { setRecipientRows(rows); setRecipientIssues([]); setRecipientError(null); }}
-                            addresses={storedRecipients.addresses.filter((a) => a.purpose === 'Delivery' || a.purpose === 'Main')} problems={recipientIssues} disabled={locked} dataTour="relation-recipient" />
+                        {recipientNotice && <p role="alert" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="recipients-conflict">{recipientNotice}</p>}
+                        <DocumentRecipientsEditor idPrefix="recipients" rows={recipientRows} onChange={(rows) => { setRecipientRows(rows); setRecipientIssues([]); setRecipientError(null); setRecipientNotice(null); }}
+                            addresses={storedRecipients.addresses.filter((a) => a.purpose === 'Delivery' || a.purpose === 'Main')} problems={recipientIssues} disabled={locked || recipientsLoading} dataTour="relation-recipient" />
                     </div>
                 )}
             </section>
