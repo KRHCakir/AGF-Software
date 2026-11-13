@@ -72,6 +72,10 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrderPackagingLine> SalesOrderPackagingLines { get; set; }
         public DbSet<SalesOrderDocument> SalesOrderDocuments { get; set; }
         public DbSet<SalesOrderTransport> SalesOrderTransports { get; set; }
+        public DbSet<DocumentRecipient> DocumentRecipients { get; set; }
+        public DbSet<MailDraft> MailDrafts { get; set; }
+        public DbSet<MailSettings> MailSettings { get; set; }
+        public DbSet<MailTemplate> MailTemplates { get; set; }
         public DbSet<SalesOrderAuditEvent> SalesOrderAuditEvents { get; set; }
         public DbSet<SalesDispatch> SalesDispatches { get; set; }
         public DbSet<SalesDispatchLine> SalesDispatchLines { get; set; }
@@ -302,6 +306,11 @@ namespace AgfAdmin.Data
             foreach (var entry in ChangeTracker.Entries<SalesOrderTransport>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(t => t.Version).CurrentValue = entry.Property(t => t.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<MailDraft>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(d => d.Version).CurrentValue = entry.Property(d => d.Version).OriginalValue + 1;
             }
 
             foreach (var entry in ChangeTracker.Entries<SalesOrder>().Where(e => e.State == EntityState.Modified))
@@ -1122,6 +1131,75 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_SalesOrderDocuments_Version", "\"Version\" >= 1");
                     t.HasCheckConstraint("CK_SalesOrderDocuments_Sent", "(\"SentAt\" IS NULL) = (\"SentBy\" IS NULL)");
                 });
+            });
+
+            // Documentontvangers (documenten deel 3): van een relatie (eventueel voor één adres) of van de loods (zonder relatie).
+            modelBuilder.Entity<DocumentRecipient>(b =>
+            {
+                b.Property(r => r.OwnerKind).IsRequired().HasMaxLength(16);
+                b.Property(r => r.Name).HasMaxLength(DocumentMailRules.MaxNameLength);
+                b.Property(r => r.Email).IsRequired().HasMaxLength(EmailRules.MaxLength);
+                b.Property(r => r.Role).IsRequired().HasMaxLength(8);
+                b.Property(r => r.CreatedBy).IsRequired().HasMaxLength(100);
+                b.Property(r => r.UpdatedBy).IsRequired().HasMaxLength(100);
+                b.HasOne(r => r.Relation).WithMany().HasForeignKey(r => r.RelationId).OnDelete(DeleteBehavior.Cascade);
+                b.HasOne(r => r.RelationAddress).WithMany().HasForeignKey(r => r.RelationAddressId).OnDelete(DeleteBehavior.Cascade);
+                b.HasIndex(r => new { r.OwnerKind, r.RelationId, r.RelationAddressId });
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_DocumentRecipients_Owner", "(\"OwnerKind\" = 'Relation' AND \"RelationId\" IS NOT NULL) OR (\"OwnerKind\" = 'Warehouse' AND \"RelationId\" IS NULL AND \"RelationAddressId\" IS NULL)");
+                    t.HasCheckConstraint("CK_DocumentRecipients_Role", "\"Role\" IN ('To', 'Cc')");
+                    t.HasCheckConstraint("CK_DocumentRecipients_Kinds", "\"Kinds\" > 0");
+                });
+            });
+
+            // Mailconcepten (documenten deel 3): één per documentversie; verstuurd alleen na een klik (regel 32).
+            modelBuilder.Entity<MailDraft>(b =>
+            {
+                b.Property(d => d.DocumentKind).IsRequired().HasMaxLength(32);
+                b.Property(d => d.Status).IsRequired().HasMaxLength(16);
+                b.Property(d => d.To).HasMaxLength(DocumentMailRules.MaxAddressListLength);
+                b.Property(d => d.Cc).HasMaxLength(DocumentMailRules.MaxAddressListLength);
+                b.Property(d => d.Subject).IsRequired().HasMaxLength(DocumentMailRules.MaxSubjectLength);
+                b.Property(d => d.Body).IsRequired().HasMaxLength(DocumentMailRules.MaxBodyLength);
+                b.Property(d => d.MissingRecipient).HasMaxLength(DocumentMailRules.MaxNameLength);
+                b.Property(d => d.CreatedBy).IsRequired().HasMaxLength(100);
+                b.Property(d => d.UpdatedBy).IsRequired().HasMaxLength(100);
+                b.Property(d => d.SentBy).HasMaxLength(100);
+                b.Property(d => d.LastAttemptBy).HasMaxLength(100);
+                b.Property(d => d.MessageId).HasMaxLength(300);
+                b.Property(d => d.LastError).HasMaxLength(DocumentMailRules.MaxErrorLength);
+                b.Property(d => d.Version).IsConcurrencyToken();
+                b.HasOne(d => d.SalesOrder).WithMany().HasForeignKey(d => d.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.Document).WithMany().HasForeignKey(d => d.DocumentId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(d => d.DocumentId).IsUnique();
+                b.HasIndex(d => new { d.Status, d.SalesOrderId });
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_MailDrafts_Status", "\"Status\" IN ('Draft', 'Sending', 'Sent', 'Failed', 'Discarded', 'Superseded')");
+                    t.HasCheckConstraint("CK_MailDrafts_Sent", "(\"Status\" = 'Sent') = (\"SentAt\" IS NOT NULL AND \"SentBy\" IS NOT NULL)");
+                });
+            });
+
+            modelBuilder.Entity<MailSettings>(b =>
+            {
+                b.Property(m => m.Host).HasMaxLength(255);
+                b.Property(m => m.Security).IsRequired().HasMaxLength(16);
+                b.Property(m => m.UserName).HasMaxLength(255);
+                b.Property(m => m.FromAddress).HasMaxLength(EmailRules.MaxLength);
+                b.Property(m => m.FromName).HasMaxLength(DocumentMailRules.MaxNameLength);
+                b.Property(m => m.Signature).HasMaxLength(2000);
+                b.Property(m => m.UpdatedBy).HasMaxLength(100);
+                b.ToTable(t => t.HasCheckConstraint("CK_MailSettings_Port", "\"Port\" > 0 AND \"Port\" <= 65535"));
+            });
+
+            modelBuilder.Entity<MailTemplate>(b =>
+            {
+                b.HasKey(m => m.Kind);
+                b.Property(m => m.Kind).HasMaxLength(32);
+                b.Property(m => m.Subject).IsRequired().HasMaxLength(DocumentMailRules.MaxSubjectLength);
+                b.Property(m => m.Body).IsRequired().HasMaxLength(DocumentMailRules.MaxBodyLength);
+                b.Property(m => m.UpdatedBy).HasMaxLength(100);
             });
 
             // Transport van een verkooporder (documenten deel 2): hooguit één per order. Een vervoerder bij Carrier, nooit bij Own. Het

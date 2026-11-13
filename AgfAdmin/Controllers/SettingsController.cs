@@ -51,6 +51,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateTransportOrder([FromServices] Services.SalesOrderTransportService transports, [FromBody] AgfAdmin.DTOs.TransportOrderSettingsDto request) =>
             this.ToActionResult(await transports.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // De e-mailadressen van de loods (documenten deel 3): de laadbon gaat daarheen.
+        [HttpGet("warehouse-recipients")]
+        public async Task<IActionResult> GetWarehouseRecipients([FromServices] Services.DocumentRecipientService recipients) => Ok(await recipients.GetWarehouseAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("warehouse-recipients")]
+        public async Task<IActionResult> SaveWarehouseRecipients([FromServices] Services.DocumentRecipientService recipients, [FromBody] AgfAdmin.DTOs.SaveDocumentRecipientsDto request) =>
+            this.ToActionResult(await recipients.SaveWarehouseAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("partij-numbering")]
         public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
 

@@ -53,6 +53,16 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> ConfirmBankAccount(int id, int bankAccountId, [FromBody] ConfirmBankAccountDto request) =>
             this.ToActionResult(await _service.ConfirmBankAccountAsync(id, bankAccountId, request, HttpContext?.RequestAborted ?? default));
 
+        // E-mailadressen voor documenten (documenten deel 3): per adres de documentsoorten en Aan of Cc, eventueel per afleveradres.
+        [HttpGet("{id:int}/document-recipients")]
+        public async Task<IActionResult> GetDocumentRecipients(int id, [FromServices] DocumentRecipientService recipients) =>
+            this.ToActionResult(await recipients.GetForRelationAsync(id, HttpContext?.RequestAborted ?? default));
+
+        // Vervangt de hele lijst, met de versie die de gebruiker zag (409 bij een gelijktijdige wijziging).
+        [HttpPut("{id:int}/document-recipients")]
+        public async Task<IActionResult> SaveDocumentRecipients(int id, [FromBody] SaveDocumentRecipientsDto request, [FromServices] DocumentRecipientService recipients) =>
+            this.ToActionResult(await recipients.SaveForRelationAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         // Tweede rol toevoegen zonder tweede onderneming: role = customer | vendor. 201 nieuw, 200 als de rol al bestond.
         [HttpPost("{id:int}/roles/{role}")]
         public async Task<IActionResult> AddRole(int id, string role)

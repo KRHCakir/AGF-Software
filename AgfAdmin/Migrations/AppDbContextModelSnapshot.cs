@@ -2494,6 +2494,79 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.DocumentRecipient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<int>("Kinds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OwnerKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("RelationAddressId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationAddressId");
+
+                    b.HasIndex("RelationId");
+
+                    b.HasIndex("OwnerKind", "RelationId", "RelationAddressId");
+
+                    b.ToTable("DocumentRecipients", t =>
+                        {
+                            t.HasCheckConstraint("CK_DocumentRecipients_Kinds", "\"Kinds\" > 0");
+
+                            t.HasCheckConstraint("CK_DocumentRecipients_Owner", "(\"OwnerKind\" = 'Relation' AND \"RelationId\" IS NOT NULL) OR (\"OwnerKind\" = 'Warehouse' AND \"RelationId\" IS NULL AND \"RelationAddressId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_DocumentRecipients_Role", "\"Role\" IN ('To', 'Cc')");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoice", b =>
                 {
                     b.Property<int>("Id")
@@ -2899,6 +2972,202 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("ProductVariantId");
 
                     b.ToTable("InvoiceLine");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.MailDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)");
+
+                    b.Property<string>("Cc")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DocumentKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastAttemptBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("MessageId")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("MissingRecipient")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("MissingRelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PreviousSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SentBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("To")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("Status", "SalesOrderId");
+
+                    b.ToTable("MailDrafts", t =>
+                        {
+                            t.HasCheckConstraint("CK_MailDrafts_Sent", "(\"Status\" = 'Sent') = (\"SentAt\" IS NOT NULL AND \"SentBy\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_MailDrafts_Status", "\"Status\" IN ('Draft', 'Sending', 'Sent', 'Failed', 'Discarded', 'Superseded')");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.MailSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FromAddress")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("FromName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Host")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProtectedPassword")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Security")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Signature")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MailSettings", t =>
+                        {
+                            t.HasCheckConstraint("CK_MailSettings_Port", "\"Port\" > 0 AND \"Port\" <= 65535");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.MailTemplate", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Kind");
+
+                    b.ToTable("MailTemplates");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Order", b =>
@@ -6113,6 +6382,23 @@ namespace AgfAdmin.Migrations
                     b.Navigation("IncomingInvoice");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.DocumentRecipient", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.RelationAddress", "RelationAddress")
+                        .WithMany()
+                        .HasForeignKey("RelationAddressId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany()
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Relation");
+
+                    b.Navigation("RelationAddress");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.IncomingInvoice", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Vendor", "Vendor")
@@ -6212,6 +6498,25 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Invoice");
 
                     b.Navigation("ProductVariant");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.MailDraft", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.SalesOrderDocument", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+
+                    b.Navigation("SalesOrder");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Order", b =>
