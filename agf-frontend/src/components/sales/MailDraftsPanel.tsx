@@ -41,7 +41,7 @@ export default function MailDraftsPanel({ order, reloadKey = 0 }: { order: Sales
             {error && <ErrorNotice error={error} />}
             {status && !status.configured && <p role="status" className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-950" data-testid="mail-not-configured">{t('mail_not_configured')}</p>}
             {status?.sender === 'Fake' && <p className="text-xs text-gray-600" data-testid="mail-fake-sender">{t('mail_sender_fake')}</p>}
-            {shown.map((draft) => <MailDraftCard key={`${draft.id}-${draft.version}`} draft={draft} configured={status?.configured ?? false} onChanged={() => setToken((n) => n + 1)} />)}
+            {shown.map((draft) => <MailDraftCard key={`${draft.id}-${draft.version}-${draft.status}-${draft.attempts}`} draft={draft} configured={status?.configured ?? false} onChanged={() => setToken((n) => n + 1)} />)}
         </section>
     );
 }
@@ -103,9 +103,18 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
             const answer = apiError.body as { code?: string; count?: number } | null;
             if (answer?.code === 'confirmRecipients') { setConfirm({ kind: 'many', count: answer.count ?? 0 }); return; }
             if (answer?.code === 'uncertain') { setConfirm({ kind: 'resend' }); return; }
+            // Uitkomst onzeker (verbinding weg, time-out, serverfout): de server kan de mail al hebben verwerkt. Haal het concept opnieuw
+            // op, zodat de actuele status en versie (en de vraag over een onbekende uitkomst) getoond worden.
+            if (apiError.kind !== 'http' || apiError.status === null || apiError.status >= 500) onChanged();
             throw apiError;
         }
     });
+    // Een bevestiging hoort bij de ontvangers waarvoor ze gevraagd is: wijzigen ze, dan vervalt de vraag en is een nieuwe nodig.
+    const changeRecipients = (set: (value: string) => void) => (value: string) => {
+        set(value);
+        setConfirm((current) => (current?.kind === 'many' ? null : current));
+        setGranted((current) => ({ ...current, many: false }));
+    };
     // Verwijderen gooit ook niet-opgeslagen aanpassingen weg: alleen de versie van wat er staat telt.
     const discard = () => void run(async () => {
         await discardMailDraft(draft.id, saved.version);
@@ -147,11 +156,11 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
                 <fieldset disabled={busy} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <div>
                         <label htmlFor={id('to')} className="text-xs font-medium text-gray-700">{t('mail_to')}</label>
-                        <input id={id('to')} value={to} onChange={(event) => setTo(event.target.value)} className={inputClass} data-tour="so-mail-to" />
+                        <input id={id('to')} value={to} onChange={(event) => changeRecipients(setTo)(event.target.value)} className={inputClass} data-tour="so-mail-to" />
                     </div>
                     <div>
                         <label htmlFor={id('cc')} className="text-xs font-medium text-gray-700">{t('mail_cc')}</label>
-                        <input id={id('cc')} value={cc} onChange={(event) => setCc(event.target.value)} className={inputClass} />
+                        <input id={id('cc')} value={cc} onChange={(event) => changeRecipients(setCc)(event.target.value)} className={inputClass} />
                     </div>
                     <div className="sm:col-span-2">
                         <label htmlFor={id('subject')} className="text-xs font-medium text-gray-700">{t('mail_subject')}</label>
