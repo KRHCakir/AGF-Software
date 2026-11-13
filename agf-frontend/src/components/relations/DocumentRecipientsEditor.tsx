@@ -79,7 +79,7 @@ export default function DocumentRecipientsEditor({ idPrefix, rows, onChange, add
                                     <label key={kind} className="flex items-center gap-1">
                                         <input type="checkbox" checked={row.kinds.includes(kind)} onChange={() => toggleKind(row, kind)}
                                             onKeyDown={!showScope && k === DOCUMENT_KINDS.length - 1 ? (event) => tabOnLast(event, index) : undefined}
-                                            data-tour={index === 0 ? `${dataTour}-kind-${kind}` : undefined} />
+                                            data-tour={index === 0 ? `${dataTour}-kind` : undefined} data-tour-key={index === 0 ? kind : undefined} />
                                         {t(`doc_kind_${kind}`)}
                                     </label>
                                 ))}

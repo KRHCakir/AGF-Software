@@ -109,7 +109,7 @@ describe('RelationForm', () => {
 
         await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-name')!, 'Planning');
         await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'planning@zeeland.nl');
-        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind-TransportOrder"]')!);
+        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind"][data-tour-key="TransportOrder"]')!);
         await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
         await mounted.waitFor(() => created !== null, 'onSaved after both saves');
         assert.deepEqual(calls.map((call) => `${call.method} ${call.url.replace(/^.*\/api/, '')}`), ['POST /relations', 'PUT /relations/12/document-recipients']);
@@ -190,7 +190,7 @@ describe('RelationForm', () => {
         await openSection('recipients');
         await click(mounted.button('+ recipients_add')!);
         await type(mounted.container.querySelector<HTMLInputElement>('#recipients-0-email')!, 'planning@zeeland.nl');
-        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind-LoadingSlip"]')!);
+        await click(mounted.container.querySelector<HTMLInputElement>('[data-tour="relation-recipient-kind"][data-tour-key="LoadingSlip"]')!);
         await click(mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!);
         await mounted.waitFor(() => text().includes('Gewijzigd door iemand anders'), 'reason shown');
         assert.equal(created, null, 'not closed: the addresses still have to be saved');

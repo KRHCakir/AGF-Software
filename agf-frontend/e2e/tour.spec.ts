@@ -247,11 +247,23 @@ test('hoofdstuk Verkooporder: VO-nummer, gereserveerd met inkooporder, partij en
     const result = await play(page, 'sales');
     expectAllSteps(result);
     const number = /Verkooporder (VO-\d{4}-\d+)/.exec(result.done)?.[1];
-    const orders = await json<{ orderNumber: string; customerReference: string | null; actorReference: string; lines: { quantity: number; dispatchedQuantity: number }[] }[]>(request, `/sales-orders?q=${number}`);
+    const orders = await json<{ id: number; orderNumber: string; customerReference: string | null; actorReference: string; lines: { quantity: number; dispatchedQuantity: number }[] }[]>(request, `/sales-orders?q=${number}`);
     const order = orders.find((candidate) => candidate.orderNumber === number)!;
     expect(order.customerReference).toMatch(/^DEMO-TOUR-\d+$/);
     expect(order.actorReference).toBe(await signedIn(request));
     expect(order.lines.map((line) => [line.quantity, line.dispatchedQuantity])).toEqual([[4, 4]]);
+    // Documenten deel 3: per document een mailconcept; de nieuw aangemaakte vervoerder heeft nog geen adres. Controleren en versturen met
+    // de nagebootste afzender (de API draait met Mail__Sender=Fake): er gaat geen echte mail weg.
+    const drafts = await json<{ id: number; documentKind: string; status: string; missingRecipient: string | null }[]>(request, `/sales-orders/${order.id}/mail-drafts`);
+    expect(drafts.map((draft) => draft.documentKind).sort()).toEqual(['LoadingSlip', 'TransportOrder']);
+    const transport = drafts.find((draft) => draft.documentKind === 'TransportOrder')!;
+    expect(transport.missingRecipient).toMatch(/Vervoerder$/);
+    const card = page.locator('[data-tour="so-mail-draft"][data-tour-key="TransportOrder"]');
+    await card.locator('[data-tour="so-mail-to"]').fill('planning@vervoerder.example');
+    await card.locator('[data-tour="so-mail-send"]').click();
+    await expect(card.locator('[data-testid="mail-sent"]')).toBeVisible();
+    const after = await json<{ id: number; status: string; to: string; sentBy: string }[]>(request, `/sales-orders/${order.id}/mail-drafts`);
+    expect(after.find((draft) => draft.id === transport.id)).toMatchObject({ status: 'Sent', to: 'planning@vervoerder.example', sentBy: await signedIn(request) });
     await expectActorBack(page);
     await page.close();
 });
