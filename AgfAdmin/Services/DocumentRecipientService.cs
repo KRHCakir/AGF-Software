@@ -20,11 +20,11 @@ namespace AgfAdmin.Services
         {
             var relation = await db.Relations.AsNoTracking().Include(r => r.Addresses).SingleOrDefaultAsync(r => r.Id == relationId, cancellationToken);
             if (relation == null) return ServiceResult<DocumentRecipientsDto>.NotFound($"Relation {relationId} does not exist.");
-            return ServiceResult<DocumentRecipientsDto>.Ok(Dto(await StoredAsync(DocumentMailRules.OwnerRelation, relationId, cancellationToken), await VersionAsync(DocumentMailRules.OwnerRelation, relationId, cancellationToken), relation));
+            return ServiceResult<DocumentRecipientsDto>.Ok(Dto(await SnapshotAsync(DocumentMailRules.OwnerRelation, relationId, cancellationToken), relation));
         }
 
         public async Task<DocumentRecipientsDto> GetWarehouseAsync(CancellationToken cancellationToken = default) =>
-            Dto(await StoredAsync(DocumentMailRules.OwnerWarehouse, null, cancellationToken), await VersionAsync(DocumentMailRules.OwnerWarehouse, null, cancellationToken), null);
+            Dto(await SnapshotAsync(DocumentMailRules.OwnerWarehouse, null, cancellationToken), null);
 
         public async Task<ServiceResult<DocumentRecipientsDto>> SaveForRelationAsync(int relationId, SaveDocumentRecipientsDto request, CancellationToken cancellationToken = default)
         {
@@ -142,7 +142,7 @@ namespace AgfAdmin.Services
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             db.ChangeTracker.Clear();
-            var dto = Dto(await StoredAsync(ownerKind, relationId, cancellationToken), await VersionAsync(ownerKind, relationId, cancellationToken), relation);
+            var dto = Dto(await SnapshotAsync(ownerKind, relationId, cancellationToken), relation);
             dto.Warnings = warnings;
             return ServiceResult<DocumentRecipientsDto>.Ok(dto);
         }
@@ -153,13 +153,24 @@ namespace AgfAdmin.Services
             return await (tracking ? query : query.AsNoTracking()).OrderBy(r => r.SortOrder).ThenBy(r => r.Id).ToListAsync(cancellationToken);
         }
 
-        private static DocumentRecipientsDto Dto(List<DocumentRecipient> stored, string version, Relation relation) => new()
+        private static DocumentRecipientsDto Dto((List<DocumentRecipient> Stored, string Version) snapshot, Relation relation) => BuildDto(snapshot.Stored, snapshot.Version, relation);
+
+        private static DocumentRecipientsDto BuildDto(List<DocumentRecipient> stored, string version, Relation relation) => new()
         {
             Version = version,
             Recipients = stored.Select(r => new DocumentRecipientDto { Id = r.Id, Name = r.Name, Email = r.Email, Role = r.Role, Kinds = DocumentMailRules.Names(r.Kinds).ToList(), RelationAddressId = r.RelationAddressId }).ToList(),
             Addresses = relation?.Addresses.Where(a => a.Purpose == AddressPurpose.Delivery && (a.IsActive || stored.Any(r => r.RelationAddressId == a.Id))).OrderBy(a => a.SortOrder).ThenBy(a => a.Id)
                 .Select(a => new RecipientAddressOptionDto { Id = a.Id, Purpose = a.Purpose, Text = TransportOrderBuilder.AddressText(a) ?? a.Label }).ToList() ?? new List<RecipientAddressOptionDto>(),
         };
+
+        // Lijst en versie horen bij elkaar: de versie wordt eerst gelezen, daarna de lijst. Een opslag verhoogt de versie en wijzigt de lijst in
+        // één transactie, dus de lijst is nooit ouder dan de versie. Valt er een opslag tussen de twee reads, dan is de lijst nieuwer dan de
+        // versie en geeft de volgende PUT een 409 (veilig) in plaats van dat een wijziging stil wordt overschreven.
+        private async Task<(List<DocumentRecipient> Stored, string Version)> SnapshotAsync(string ownerKind, int? relationId, CancellationToken cancellationToken)
+        {
+            var version = await VersionAsync(ownerKind, relationId, cancellationToken);
+            return (await StoredAsync(ownerKind, relationId, cancellationToken), version);
+        }
 
         // De versie van een lijst: een blijvende teller per eigenaar (nog nooit opgeslagen = "0"), zodat opslaan een gelijktijdige wijziging herkent.
         private async Task<string> VersionAsync(string ownerKind, int? relationId, CancellationToken cancellationToken)
