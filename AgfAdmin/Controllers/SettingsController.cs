@@ -51,14 +51,6 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateTransportOrder([FromServices] Services.SalesOrderTransportService transports, [FromBody] AgfAdmin.DTOs.TransportOrderSettingsDto request) =>
             this.ToActionResult(await transports.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
-        // De e-mailadressen van de loods (documenten deel 3): de laadbon gaat daarheen.
-        [HttpGet("warehouse-recipients")]
-        public async Task<IActionResult> GetWarehouseRecipients([FromServices] Services.DocumentRecipientService recipients) => Ok(await recipients.GetWarehouseAsync(HttpContext?.RequestAborted ?? default));
-
-        [HttpPut("warehouse-recipients")]
-        public async Task<IActionResult> SaveWarehouseRecipients([FromServices] Services.DocumentRecipientService recipients, [FromBody] AgfAdmin.DTOs.SaveDocumentRecipientsDto request) =>
-            this.ToActionResult(await recipients.SaveWarehouseAsync(request, HttpContext?.RequestAborted ?? default));
-
         // De sjablonen van het mailconcept per documentsoort (documenten deel 3): tekst met invulvelden.
         [HttpGet("mail-templates")]
         public async Task<IActionResult> GetMailTemplates([FromServices] Services.MailTemplateService templates) => Ok(await templates.GetAsync(HttpContext?.RequestAborted ?? default));
