@@ -29,6 +29,7 @@ import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './Reserv
 import ChainStrip from '../shared/ChainStrip';
 import SalesOrderDocuments from './SalesOrderDocuments';
 import SalesOrderTransport from './SalesOrderTransport';
+import MailDraftsPanel from './MailDraftsPanel';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
 import { salesOrderChain } from '../../lib/chain';
@@ -399,6 +400,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
             {/* Bevestigen, de laadbon (documenten deel 1) en het transport met de transportopdracht (deel 2). */}
             <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} reloadKey={transportSaves} />
             <SalesOrderTransport order={order} onChanged={() => { setTransportSaves((n) => n + 1); void onOrderChanged(); }} />
+            {/* Te versturen (documenten deel 3): het mailconcept per document; alleen versturen na een klik. */}
+            <MailDraftsPanel order={order} reloadKey={transportSaves} />
             <SalesStepBar order={order} />
 
             {dispatchNotice && (

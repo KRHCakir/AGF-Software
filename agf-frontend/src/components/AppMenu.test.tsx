@@ -30,7 +30,7 @@ describe('AppMenu', () => {
             assert.ok(link.querySelector('svg[data-nav-icon]'), `${link.getAttribute('href')} has an icon`);
         }
         assert.deepEqual(links().slice(-2).map((a) => a.getAttribute('href')), ['/settings', '/help']);
-        assert.equal(links().length, 1 + 5 + 2 + 2 + 2 + 2);
+        assert.equal(links().length, 1 + 5 + 2 + 3 + 2 + 2);
         assert.equal(mounted.container.querySelector('button'), null);
         assert.equal(mounted.hasText('legacy'), false);
     });
