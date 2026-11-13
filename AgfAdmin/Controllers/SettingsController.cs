@@ -67,6 +67,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> SaveMailTemplate([FromServices] Services.MailTemplateService templates, [FromBody] AgfAdmin.DTOs.MailTemplateDto request) =>
             this.ToActionResult(await templates.SaveAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // De afzender via SMTP (documenten deel 3). Het wachtwoord gaat er alleen in, nooit terug.
+        [HttpGet("mail")]
+        public async Task<IActionResult> GetMail([FromServices] Services.Mail.MailSettingsService mail) => Ok(await mail.GetAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("mail")]
+        public async Task<IActionResult> SaveMail([FromServices] Services.Mail.MailSettingsService mail, [FromBody] AgfAdmin.DTOs.MailSettingsDto request) =>
+            this.ToActionResult(await mail.SaveAsync(request, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("partij-numbering")]
         public async Task<IActionResult> GetPartijNumbering() => Ok(await _partijen.GetSettingsAsync(HttpContext?.RequestAborted ?? default));
 

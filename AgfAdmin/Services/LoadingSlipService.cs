@@ -280,6 +280,8 @@ namespace AgfAdmin.Services
             // De nieuwste versie per soort document (laadbon, transportopdracht).
             var latest = documents.GroupBy(d => d.Kind).ToDictionary(g => g.Key, g => g.Max(d => d.Version));
             List<SalesOrderDocument> OfKind(string kind) => documents.Where(d => d.Kind == kind).ToList();
+            var sentTo = await db.MailDrafts.AsNoTracking().Where(d => d.SalesOrderId == order.Id && d.Status == DocumentMailRules.StatusSent)
+                .Select(d => new { d.DocumentId, d.To, d.Cc }).ToListAsync(cancellationToken);
             return new SalesOrderDocumentsDto
             {
                 SalesOrderId = order.Id, ConfirmedAt = UtcKind(order.ConfirmedAt), ConfirmedBy = order.ConfirmedBy, LoadAt = UtcKind(order.LoadAt), LicensePlate = order.LicensePlate,
@@ -290,6 +292,7 @@ namespace AgfAdmin.Services
                 {
                     Id = d.Id, Kind = d.Kind, Number = d.Number, Version = d.Version, Reason = d.Reason, CreatedAt = UtcKind(d.CreatedAt).Value, CreatedBy = d.CreatedBy,
                     SentAt = UtcKind(d.SentAt), SentBy = d.SentBy, Latest = d.Version == latest[d.Kind],
+                    SentTo = sentTo.Where(m => m.DocumentId == d.Id).Select(m => string.IsNullOrEmpty(m.Cc) ? m.To : $"{m.To}, {m.Cc}").FirstOrDefault(),
                 }).ToList(),
             };
         }

@@ -11,6 +11,16 @@ namespace AgfAdmin.Controllers
     [ApiController]
     public class MailDraftsController(MailDraftService drafts) : ControllerBase
     {
+        // Versturen: alleen hier, na een klik. 409 met een code als het niet kan (geen adres, niet ingesteld, te veel ontvangers zonder
+        // bevestiging, te vaak per minuut, al verstuurd); een mislukte verzending is 200 met status Failed en de reden.
+        [HttpPost("api/mail-drafts/{id:int}/send")]
+        public async Task<IActionResult> Send(int id, [FromBody] MailDraftActionDto request, [FromServices] Services.Mail.MailSendService sending) =>
+            this.ToActionResult(await sending.SendAsync(id, request, HttpContext?.RequestAborted ?? default));
+
+        // Of versturen is ingesteld (anders biedt het scherm PDF downloaden en tekst kopiëren).
+        [HttpGet("api/mail-drafts/status")]
+        public async Task<IActionResult> Status([FromServices] Services.Mail.MailSettingsService mail) => Ok(await mail.StatusAsync(HttpContext?.RequestAborted ?? default));
+
         // De concepten van één order (maakt een ontbrekend concept voor een nieuw document alsnog aan).
         [HttpGet("api/sales-orders/{id:int}/mail-drafts")]
         public async Task<IActionResult> ForOrder(int id) => Ok(await drafts.ForOrderAsync(id, HttpContext?.RequestAborted ?? default));
