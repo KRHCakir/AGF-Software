@@ -95,12 +95,33 @@ public class MailDraftServiceTests : IDisposable
         Assert.Equal(("de loods", (int?)null), (drafts.Single(d => d.DocumentKind == "LoadingSlip").MissingRecipient, drafts.Single(d => d.DocumentKind == "LoadingSlip").MissingRelationId));
         Assert.Equal(("Transport Zeeland B.V.", (int?)carrierId, ""), (drafts.Single(d => d.DocumentKind == "TransportOrder").MissingRecipient, drafts.Single(d => d.DocumentKind == "TransportOrder").MissingRelationId, drafts.Single(d => d.DocumentKind == "TransportOrder").To));
 
+        // Komt er later een adres bij de loods, dan werkt de lijst Te versturen het open concept bij, zonder dat iemand de order opent.
+        await using (var db = _factory.CreateContext())
+        {
+            db.DocumentRecipients.Add(new DocumentRecipient { OwnerKind = "Warehouse", Name = "Loods", Email = "loods@voorbeeld.nl", Role = "To", Kinds = 2, CreatedBy = "t", UpdatedBy = "t" });
+            await db.SaveChangesAsync();
+        }
+        var listed = (await RunAsync(db => new MailDraftService(db).OpenAsync())).Single(d => d.SalesOrderId == orderId && d.DocumentKind == "LoadingSlip");
+        Assert.Equal(("loods@voorbeeld.nl", (string)null), (listed.To, listed.MissingRecipient));
+
         var (ownOrder, _) = (orderId + 0, 0);
         var transport = await RunAsync(db => new SalesOrderTransportService(db).GetAsync(ownOrder));
         await RunAsync(db => new SalesOrderTransportService(db).SaveAsync(ownOrder, new SaveSalesOrderTransportDto { ExpectedVersion = transport.Value.Version, Mode = "Own", TemperatureC = 3m }));
         // Eigen transport: geen vervoerder om naar te mailen; het concept van de vorige versie (naar de vervoerder) is vervangen.
         Assert.Equal(new[] { "LoadingSlip" }, (await DraftsAsync(orderId)).Select(d => d.DocumentKind));
         Assert.Equal(1, await RunAsync(db => db.MailDrafts.CountAsync(d => d.DocumentKind == "TransportOrder" && d.Status == "Superseded")));
+    }
+
+    [Fact]
+    public async Task A_draft_of_a_document_that_was_passed_on_can_no_longer_be_changed_or_discarded()
+    {
+        var (orderId, _) = await OrderAsync();
+        await RunAsync(db => new LoadingSlipService(db).ConfirmAsync(orderId, new ConfirmSalesOrderDto()));
+        var slip = (await DraftsAsync(orderId)).Single(d => d.DocumentKind == "LoadingSlip");
+        await RunAsync(db => db.SalesOrderDocuments.Where(d => d.Id == slip.DocumentId).ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, DateTime.UtcNow).SetProperty(d => d.SentBy, "Admin")));
+        var edit = await RunAsync(db => new MailDraftService(db).UpdateAsync(slip.Id, new UpdateMailDraftDto { ExpectedVersion = slip.Version, To = "loods@voorbeeld.nl", Subject = "s", Body = "b" }));
+        var discard = await RunAsync(db => new MailDraftService(db).DiscardAsync(slip.Id, new MailDraftActionDto { ExpectedVersion = slip.Version }));
+        Assert.Equal((ServiceResultStatus.Conflict, ServiceResultStatus.Conflict), (edit.Status, discard.Status));
     }
 
     [Fact]
