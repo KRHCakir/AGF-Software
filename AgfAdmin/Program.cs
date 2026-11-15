@@ -20,16 +20,21 @@ builder.Services.AddSwaggerGen();
 // Domeinservices (gedeeld met de tests die de echte API op een lege database starten).
 builder.Services.AddAgfServices(builder.Environment.ContentRootPath);
 
-// Database configuratie
+// Database configuratie. In de demo-omgeving (AGF_DEMO_ENVIRONMENT=true) eerst de bewaking: alleen een database die met agf_demo
+// begint, zodat de demo nooit op agf_smoke of een echte database draait (en daar dus ook niets migreert).
 var connectionString = DatabaseConfiguration.GetRequiredConnectionString(builder.Configuration);
+DemoEnvironment.EnsureAllowedDatabase(builder.Configuration, connectionString);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // CORS configuratie: standaard alleen de frontend op :3000. Een tweede lokale frontend (zoals de e2e-tests van de
-// rondleiding op :3001) zet Cors__Origins__0=... in de omgeving van de API.
-var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() is { Length: > 0 } configured
-    ? configured
-    : new[] { "http://localhost:3000" };
+// rondleiding op :3001) zet Cors__Origins__0=... in de omgeving van de API. In de demo-omgeving praat de browser via de website zelf
+// (zelfde adres, /api): daar staat CORS geen enkele andere herkomst toe, ook niet als Cors:Origins iets zegt.
+var corsOrigins = DemoEnvironment.IsEnabled(builder.Configuration)
+    ? Array.Empty<string>()
+    : builder.Configuration.GetSection("Cors:Origins").Get<string[]>() is { Length: > 0 } configured
+        ? configured
+        : new[] { "http://localhost:3000" };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend",
@@ -55,6 +60,12 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+// Gezondheidscontrole voor Docker Compose en een eenvoudige externe bewaking: de API draait en de database antwoordt.
+app.MapGet("/health", async (AppDbContext db, CancellationToken cancellationToken) =>
+        await db.Database.CanConnectAsync(cancellationToken)
+            ? Results.Ok(new { status = "ok" })
+            : Results.Json(new { status = "database unavailable" }, statusCode: StatusCodes.Status503ServiceUnavailable))
+    .AllowAnonymous();
 
 // 3. Database migratie en optionele demo-data (alleen Development + Development:SeedDemoData=true)
 using (var scope = app.Services.CreateScope())

@@ -19,6 +19,8 @@ namespace AgfAdmin.Services.DocumentAi
         private readonly DocumentAiOptions _options = options.Value;
         private bool Demo => string.Equals(_options.Reader, DocumentAiOptions.ReaderDemo, StringComparison.OrdinalIgnoreCase);
         private string Key => string.IsNullOrWhiteSpace(_options.ApiKey) ? configuration["ANTHROPIC_API_KEY"] : _options.ApiKey;
+        // De demo-omgeving online: daar nooit de nagebootste lezer (die geeft vaste voorbeeldgegevens), alleen echt lezen met een sleutel.
+        private bool DemoEnvironmentOn => Configuration.DemoEnvironment.IsEnabled(configuration);
 
         public string Provider => Demo ? DocumentAiOptions.ReaderDemo : "Anthropic";
 
@@ -26,8 +28,12 @@ namespace AgfAdmin.Services.DocumentAi
         {
             get
             {
-                if (Demo) return null;
-                if (string.IsNullOrWhiteSpace(Key)) return "Er is geen sleutel voor de AI-dienst ingesteld (DocumentAi:ApiKey of ANTHROPIC_API_KEY).";
+                if (Demo) return DemoEnvironmentOn ? "het is niet beschikbaar in deze demo (de nagebootste lezer met vaste voorbeeldgegevens staat hier uit)." : null;
+                if (string.IsNullOrWhiteSpace(Key))
+                {
+                    return DemoEnvironmentOn ? "het is niet beschikbaar in deze demo (er is geen sleutel ingesteld)."
+                        : "Er is geen sleutel voor de AI-dienst ingesteld (DocumentAi:ApiKey of ANTHROPIC_API_KEY).";
+                }
                 if (string.IsNullOrWhiteSpace(_options.PrimaryModel) || (_options.FallbackEnabled && string.IsNullOrWhiteSpace(_options.FallbackModel)))
                     return "Het model of het vangnetmodel ontbreekt in de instellingen (DocumentAi:PrimaryModel, DocumentAi:FallbackModel).";
                 var models = new[] { _options.PrimaryModel }.Concat(_options.FallbackEnabled ? new[] { _options.FallbackModel } : Array.Empty<string>());
@@ -36,7 +42,11 @@ namespace AgfAdmin.Services.DocumentAi
             }
         }
 
-        public IDocumentAI Create(string model) => Demo ? new DemoInvoiceAi() : new ClaudeDocumentAi(model, Key, ExtractionSchema.Build(SchemaParts.Admin));
+        public IDocumentAI Create(string model)
+        {
+            if (Demo && DemoEnvironmentOn) throw new InvalidOperationException("De nagebootste lezer is uit in de demo-omgeving.");
+            return Demo ? new DemoInvoiceAi() : new ClaudeDocumentAi(model, Key, ExtractionSchema.Build(SchemaParts.Admin));
+        }
     }
 
     public sealed record ReadAttempt(string Model, string ModelVersion, long InputTokens, long OutputTokens, decimal InputPerMillionUsd,

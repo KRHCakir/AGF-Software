@@ -39,10 +39,18 @@ namespace AgfAdmin.Configuration
             services.AddScoped<DocumentRecipientService>();
             services.AddScoped<MailDraftService>();
             services.AddScoped<MailTemplateService>();
-            // Mail versturen (documenten deel 3): Mail:Sender = Fake voor tests en de rondleiding (nooit netwerk), anders SMTP.
+            // Demo-omgeving online (AGF_DEMO_ENVIRONMENT=true): limieten voor AI-lezen; zie DemoEnvironment en docs/demo-online.md.
+            services.AddSingleton(provider => DemoEnvironment.From(provider.GetRequiredService<IConfiguration>()));
+            // Mail versturen (documenten deel 3): Mail:Sender = Fake voor tests en de rondleiding (nooit netwerk), anders SMTP. In de
+            // demo-omgeving altijd de nagebootste afzender: de SMTP-klasse wordt dan niet gebouwd, ook niet als Mail:Sender of de
+            // SMTP-instellingen onder Beheer iets anders zeggen. Vanuit de demo gaat nooit echte mail weg.
             services.AddSingleton<Services.Mail.IMailSender>(provider =>
-                string.Equals(provider.GetRequiredService<IConfiguration>()["Mail:Sender"], Services.Mail.FakeMailSender.Name, StringComparison.OrdinalIgnoreCase)
-                    ? new Services.Mail.FakeMailSender() : new Services.Mail.SmtpMailSender());
+            {
+                var configuration = provider.GetRequiredService<IConfiguration>();
+                return DemoEnvironment.IsEnabled(configuration)
+                    || string.Equals(configuration["Mail:Sender"], Services.Mail.FakeMailSender.Name, StringComparison.OrdinalIgnoreCase)
+                    ? new Services.Mail.FakeMailSender() : new Services.Mail.SmtpMailSender();
+            });
             services.AddDataProtection();
             services.AddScoped<Services.Mail.MailSettingsService>();
             services.AddSingleton<Services.Mail.MailSendLimiter>();

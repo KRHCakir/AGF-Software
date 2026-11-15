@@ -79,11 +79,13 @@ namespace AgfAdmin.Services.Mail
         }
     }
 
-    // Nagebootste afzender: bewaart wat er verstuurd zou zijn, in het geheugen, en zegt "verstuurd". Nooit netwerk. Voor tests en de
-    // rondleiding (Mail:Sender = Fake); FailWith laat de volgende verzending mislukken.
+    // Nagebootste afzender: bewaart wat er verstuurd zou zijn, in het geheugen, en zegt "verstuurd". Nooit netwerk. Voor tests, de
+    // rondleiding (Mail:Sender = Fake) en de demo-omgeving; FailWith laat de volgende verzending mislukken. In de demo draait hij weken
+    // achter elkaar: alleen de laatste MaxKept mails (met PDF) blijven in het geheugen.
     public sealed class FakeMailSender : IMailSender
     {
         public const string Name = "Fake";
+        public const int MaxKept = 50;
         public string Kind => Name;
         public ConcurrentQueue<OutgoingMail> Sent { get; } = new();
         public string FailWith { get; set; }
@@ -96,6 +98,9 @@ namespace AgfAdmin.Services.Mail
                 return Task.FromResult(new MailSendResult(false, null, error));
             }
             Sent.Enqueue(mail);
+            while (Sent.Count > MaxKept && Sent.TryDequeue(out _))
+            {
+            }
             return Task.FromResult(new MailSendResult(true, $"<{Guid.NewGuid():N}@nagebootst.agf.local>", null));
         }
     }
