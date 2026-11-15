@@ -52,7 +52,10 @@ namespace AgfAdmin.Security
         private static readonly TimeSpan MinRefresh = TimeSpan.FromMinutes(5);
         private readonly SemaphoreSlim _lock = new(1, 1);
         private IReadOnlyCollection<SecurityKey> _keys = Array.Empty<SecurityKey>();
+        private static readonly TimeSpan RetryAfterFailure = TimeSpan.FromMinutes(1);
         private DateTimeOffset _fetchedAt = DateTimeOffset.MinValue;
+        private DateTimeOffset _attemptedAt = DateTimeOffset.MinValue;
+        private bool _lastFailed;
 
         public async Task<IReadOnlyCollection<SecurityKey>> GetAsync(bool refresh, CancellationToken cancellationToken)
         {
@@ -61,17 +64,28 @@ namespace AgfAdmin.Security
             try
             {
                 if (Fresh(refresh)) return _keys;
+                _lastFailed = true;
                 try
                 {
                     var json = await http.CreateClient(HttpClientName).GetStringAsync(options.CertsUrl, cancellationToken);
-                    _keys = new JsonWebKeySet(json).GetSigningKeys().ToArray();
+                    var fetched = new JsonWebKeySet(json).GetSigningKeys().ToArray();
+                    if (fetched.Length == 0)
+                    {
+                        logger.LogWarning("Cloudflare Access: het antwoord bevat geen ondertekeningssleutels; de vorige blijven gelden.");
+                    }
+                    else
+                    {
+                        _keys = fetched;
+                        _fetchedAt = clock.GetUtcNow();
+                        _lastFailed = false;
+                    }
                 }
                 catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or ArgumentException or System.Text.Json.JsonException)
                 {
                     logger.LogWarning("Cloudflare Access: sleutels ophalen lukte niet ({Error}); de vorige blijven gelden.", exception.GetType().Name);
                 }
                 // Ook na een mislukte poging even wachten, zodat een storing bij Cloudflare niet elk verzoek laat ophalen.
-                _fetchedAt = clock.GetUtcNow();
+                _attemptedAt = clock.GetUtcNow();
                 return _keys;
             }
             finally
@@ -80,7 +94,15 @@ namespace AgfAdmin.Security
             }
         }
 
-        private bool Fresh(bool refresh) => clock.GetUtcNow() - _fetchedAt < (refresh || _keys.Count == 0 ? MinRefresh : CacheFor);
+        // Na een mislukte poging korter wachten (RetryAfterFailure), zodat herstel snel wordt opgepikt; _fetchedAt is alleen de laatste geslaagde ophaling.
+        private bool Fresh(bool refresh)
+        {
+            var now = clock.GetUtcNow();
+            var sinceAttempt = now - _attemptedAt;
+            if (_keys.Count == 0) return sinceAttempt < RetryAfterFailure;
+            if (refresh) return sinceAttempt < (_lastFailed ? RetryAfterFailure : MinRefresh);
+            return now - _fetchedAt < CacheFor || sinceAttempt < RetryAfterFailure && _lastFailed;
+        }
     }
 
     public sealed record AccessCheck(bool Allowed, string Email, string Reason);
