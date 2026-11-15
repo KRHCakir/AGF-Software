@@ -48,6 +48,8 @@ var app = builder.Build();
 // QuestPDF License
 QuestPDF.Settings.License = LicenseType.Community;
 
+// Online achter Cloudflare Access: alleen verzoeken met een geldig Access-jeton (niet ingesteld = geen controle, zoals lokaal).
+app.UseMiddleware<CloudflareAccessMiddleware>();
 app.UseCors("AllowFrontend");
 app.UseStaticFiles();
 // 2. Middleware pipeline

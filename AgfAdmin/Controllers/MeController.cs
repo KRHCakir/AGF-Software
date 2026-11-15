@@ -24,6 +24,8 @@ namespace AgfAdmin.Controllers
             DisplayName = _user.DisplayName,
             Roles = _user.Roles.ToArray(),
             Permissions = _user.Permissions.ToArray(),
+            // Alleen online achter Cloudflare Access: het e-mailadres uit het gecontroleerde jeton, om in de demo-balk te tonen.
+            AccessUser = HttpContext?.Items[CloudflareAccessMiddleware.EmailItem] as string,
         });
     }
 
@@ -33,5 +35,6 @@ namespace AgfAdmin.Controllers
         public string DisplayName { get; set; }
         public string[] Roles { get; set; }
         public string[] Permissions { get; set; }
+        public string AccessUser { get; set; }
     }
 }

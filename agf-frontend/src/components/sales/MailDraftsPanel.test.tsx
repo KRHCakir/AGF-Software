@@ -57,6 +57,17 @@ describe('mail drafts panel', () => {
         assert.ok($('[data-testid="mail-sent"]')!.textContent!.includes('mail_sent_line'));
     });
 
+    test('a mail sent by the simulated sender (tour, demo) says nothing was really sent', async () => {
+        answer = (method, url) => {
+            if (url.endsWith('/mail-drafts/status')) return json(200, { configured: true, sender: 'Fake' });
+            if (url.endsWith('/sales-orders/12/mail-drafts')) return json(200, [draft({ status: 'Sent', sentAt: '2026-11-13T09:00:00Z', sentBy: 'Admin', messageId: '<0f3a@nagebootst.agf.local>' })]);
+            return json(404, {});
+        };
+        await mounted.render(<MailDraftsPanel order={order()} />);
+        await settle();
+        assert.ok($('[data-testid="mail-sent"]')!.textContent!.includes('mail_sent_line_simulated'));
+    });
+
     test('more than ten recipients needs a second click; a failed send shows the reason and can be sent again', async () => {
         let attempt = 0;
         answer = (method, url, body) => {

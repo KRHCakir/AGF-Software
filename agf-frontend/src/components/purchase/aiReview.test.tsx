@@ -2,6 +2,8 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { act } from 'react';
+import { ApiError } from '../../services/apiClient';
+import { aiErrorCode } from '../../services/aiReadingService';
 import { Mounted, json, stubFetch } from '../../test/reactHarness.ts';
 import type { AiExtraction } from '../../types/aiReading';
 import AiReviewBanner from './AiReviewBanner';
@@ -79,6 +81,28 @@ describe('AI proposal building blocks', () => {
         await mounted.render(<AiUploadPanel onProposal={() => undefined} />);
         await settle();
         assert.ok(mounted.hasText('ai_upload_hint_single'), 'one model, no fallback named');
+    });
+
+    test('in the demo environment the panel asks for made-up invoices only, and a demo limit refusal has its own text', async () => {
+        await mounted.render(<AiUploadPanel onProposal={() => undefined} demo />);
+        await settle();
+        assert.ok($('[data-testid="ai-demo-notice"]')!.textContent!.includes('ai_demo_upload_notice'));
+        await mounted.render(<AiUploadPanel onProposal={() => undefined} demo={false} />);
+        assert.equal($('[data-testid="ai-demo-notice"]'), null);
+        assert.equal(aiErrorCode(new ApiError('http', 'limiet', 503, {}, { code: 'AI_DEMO_DAILY_LIMIT', message: 'limiet' })), 'AI_DEMO_DAILY_LIMIT');
+    });
+
+    test('in the demo environment AI off or without a key says it is not available in this demo, without a link to the settings', async () => {
+        for (const reply of [{ ...status, enabled: false }, { ...status, configured: false, notConfiguredReason: 'geen sleutel' }]) {
+            statusReply = () => json(200, reply);
+            await mounted.unmount();
+            mounted = new Mounted();
+            await mounted.render(<AiUploadPanel onProposal={() => undefined} demo />);
+            await settle();
+            assert.equal($('[data-testid="ai-unavailable"]')!.textContent!.trim(), 'ai_demo_unavailable');
+            assert.equal($('[data-testid="ai-unavailable"] a'), null);
+            assert.equal(($('[data-testid="ai-upload-button"]') as HTMLButtonElement).disabled, true);
+        }
     });
 
     test('a failed status check says so and can be retried', async () => {

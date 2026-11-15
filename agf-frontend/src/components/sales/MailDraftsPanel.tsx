@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime } from '../../lib/availability';
+import { isSimulatedSend } from '../../lib/demoEnvironment';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { discardMailDraft, getMailStatus, getOrderMailDrafts, sendMailDraft, updateMailDraft } from '../../services/documentMailService';
 import { getDocumentPdf } from '../../services/salesOrderDocumentService';
@@ -172,7 +173,7 @@ export function MailDraftCard({ draft, configured, onChanged }: { draft: MailDra
                 <span className="rounded bg-gray-100 px-2 py-0.5 text-xs" data-testid="mail-status">{t(`mail_status_${draft.status}`)}</span>
             </div>
             {draft.status === 'Sent' && (
-                <p className="text-sm text-emerald-900" data-testid="mail-sent">{t('mail_sent_line', { date: draft.sentAt ? formatDateTime(draft.sentAt, locale) : '–', to: [draft.to, draft.cc].filter(Boolean).join(', '), name: draft.sentBy ?? '–' })}</p>
+                <p className="text-sm text-emerald-900" data-testid="mail-sent">{t(isSimulatedSend(draft.messageId) ? 'mail_sent_line_simulated' : 'mail_sent_line', { date: draft.sentAt ? formatDateTime(draft.sentAt, locale) : '–', to: [draft.to, draft.cc].filter(Boolean).join(', '), name: draft.sentBy ?? '–' })}</p>
             )}
             {open && draft.previousSentAt && <p role="status" className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-sm text-blue-950">{t('mail_previous_sent', { date: formatDateTime(draft.previousSentAt, locale) })}</p>}
             {open && draft.missingRecipient && (
