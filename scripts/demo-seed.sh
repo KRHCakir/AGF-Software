@@ -48,9 +48,15 @@ call() {
 }
 
 echo "Demo-gegevens invullen via $api"
+# Alleen een nieuwe database: geen relaties, artikelen, inkooporders, verkooporders of inkoopfacturen. Pas daarna worden de
+# bedrijfs- en mailinstellingen gezet (die zouden anders bestaande instellingen overschrijven).
 relations="$(call GET '/relations?includeInactive=true' | jq -r '.total')"
-if [[ "$relations" != 0 ]]; then
-    echo "Weigering: deze database heeft al $relations relaties. Dit script vult alleen een nieuwe, lege demo-database (scripts/demo-reset.sh)." >&2
+articles="$(call GET /articles | jq 'length')"
+purchase_orders="$(call GET /supply-commitments | jq 'length')"
+sales_orders="$(call GET /sales-orders | jq 'length')"
+invoices="$(call GET /purchase-invoices | jq 'length')"
+if [[ "$relations$articles$purchase_orders$sales_orders$invoices" != 00000 ]]; then
+    echo "Weigering: deze database is niet leeg ($relations relaties, $articles artikelen, $purchase_orders inkooporders, $sales_orders verkooporders, $invoices inkoopfacturen). Dit script vult alleen een nieuwe, lege demo-database (scripts/demo-reset.sh)." >&2
     exit 2
 fi
 
