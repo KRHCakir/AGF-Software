@@ -1,0 +1,19 @@
+# Wat nooit in een image hoort (deploy/api.Dockerfile, deploy/web.Dockerfile; de build begint in de hoofdmap van de repo).
+# Geheimen: geen enkel .env-bestand (ook niet .env.local met sleutels); de demo krijgt zijn instellingen uit deploy/.env via Compose.
+**/.env
+**/.env.*
+deploy/backups
+**/*.dump
+.git
+.github
+docs
+**/bin
+**/obj
+**/node_modules
+**/.next
+**/.test-build
+**/test-results
+**/playwright-report
+**/App_Data
+**/appsettings.Development.json
+**/*.user

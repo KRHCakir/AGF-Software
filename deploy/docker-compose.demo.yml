@@ -1,0 +1,150 @@
+# De demo-omgeving op één kleine server (docs/demo-online.md). Starten vanuit de hoofdmap van de repo:
+#   docker compose -f deploy/docker-compose.demo.yml --env-file deploy/.env up -d --build
+#
+# Er staan geen poorten open naar het internet: alleen cloudflared (Cloudflare Tunnel) maakt een verbinding naar buiten, en
+# Cloudflare Access is de toegangspoort. De database staat op een intern netwerk zonder internet. Instellingen in deploy/.env
+# (niet in de repo; voorbeeld: deploy/.env.demo.example). Geheugengrenzen passen samen op een server met 4 GB.
+name: agf-demo
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    image: postgres:18.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER ontbreekt in deploy/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD ontbreekt in deploy/.env}
+      POSTGRES_DB: postgres
+    volumes:
+      # Vanaf PostgreSQL 18 staat de data in een submap per versie onder /var/lib/postgresql.
+      - db_data:/var/lib/postgresql
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 768m
+    logging: *logging
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    image: agf-demo-api:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${AGF_DEMO_DATABASE:?AGF_DEMO_DATABASE ontbreekt in deploy/.env};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      # Demo-modus: start alleen op een agf_demo-database, alleen de nagebootste mailafzender, AI-limieten (DemoEnvironment.cs).
+      AGF_DEMO_ENVIRONMENT: "true"
+      AGF_DEMO_AI_DAILY_LIMIT: ${AGF_DEMO_AI_DAILY_LIMIT:-20}
+      AGF_DEMO_AI_MONTHLY_LIMIT_EUR: ${AGF_DEMO_AI_MONTHLY_LIMIT_EUR:-5}
+      DocumentAi__Reader: Claude
+      DocumentAi__ApiKey: ${AGF_DEMO_ANTHROPIC_API_KEY:-}
+      Mail__Sender: Fake
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+    volumes:
+      - documents:/data/documents
+    networks: [backend, frontend]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # De eerste start migreert de database; dat mag even duren.
+      start_period: 120s
+    mem_limit: 1g
+    logging: *logging
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        API_INTERNAL_URL: http://api:8080
+        NEXT_PUBLIC_DEMO_ENVIRONMENT: "true"
+        NEXT_PUBLIC_DEMO_ASSISTANT: "true"
+        NEXT_PUBLIC_DEMO_TOUR: "true"
+    image: agf-demo-web:latest
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 512m
+    logging: *logging
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN ontbreekt in deploy/.env}
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [frontend]
+    mem_limit: 128m
+    logging: *logging
+
+  # Elke nacht (AGF_DEMO_BACKUP_TIME, standaard 03:00 Nederlandse tijd) een back-up van de huidige demo-database naar deploy/backups,
+  # 7 dagen bewaard. Op een vaste tijd en niet bij het starten: na een reset is de nieuwe database dan al gevuld. Geen productieback-up:
+  # alleen voor het geval de klant iets belangrijks invoert. Terugzetten: zie docs/demo-online.md.
+  backup:
+    image: postgres:18.4
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      AGF_DEMO_DATABASE: ${AGF_DEMO_DATABASE}
+      KEEP_DAYS: ${AGF_DEMO_BACKUP_DAYS:-7}
+      BACKUP_TIME: ${AGF_DEMO_BACKUP_TIME:-03:00}
+      TZ: Europe/Amsterdam
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "Back-up van $${AGF_DEMO_DATABASE} elke dag om $${BACKUP_TIME}"
+        while true; do
+          now=$$(date +%s)
+          next=$$(date -d "today $${BACKUP_TIME}" +%s)
+          [ "$$next" -gt "$$now" ] || next=$$(date -d "tomorrow $${BACKUP_TIME}" +%s)
+          sleep $$((next - now))
+          file="/backups/$${AGF_DEMO_DATABASE}_$$(date +%Y%m%d_%H%M).dump"
+          if pg_dump -Fc -d "$${AGF_DEMO_DATABASE}" -f "$$file.tmp"; then mv "$$file.tmp" "$$file"; echo "Back-up gemaakt: $$file"; else rm -f "$$file.tmp"; echo "Back-up mislukt"; fi
+          find /backups -name 'agf_demo*.dump' -mtime +"$${KEEP_DAYS}" -print -delete
+        done
+    volumes:
+      - ./backups:/backups
+    networks: [backend]
+    mem_limit: 256m
+    logging: *logging
+
+networks:
+  # Intern: database, API en back-up; geen verbinding met het internet.
+  backend:
+    internal: true
+  # Website, API (AI-dienst en ECB-koersen) en de tunnel naar Cloudflare.
+  frontend: {}
+
+volumes:
+  db_data:
+  documents:

@@ -1,0 +1,9 @@
+# Alleen om de demo-stapel op je eigen computer te proberen, zonder Cloudflare (docs/demo-online.md, "Eerst lokaal proberen"):
+#   docker compose -f deploy/docker-compose.demo.yml -f deploy/docker-compose.local.yml --env-file deploy/.env.local-test up -d --build
+# De website staat dan alleen op deze computer (127.0.0.1), de tunnel start niet. Nooit op de server gebruiken.
+services:
+  web:
+    ports:
+      - "127.0.0.1:${AGF_DEMO_LOCAL_PORT:-3080}:3000"
+  cloudflared:
+    profiles: ["tunnel"]
