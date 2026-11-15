@@ -10,6 +10,11 @@ namespace AgfAdmin.Security
             services.Configure<DefaultUserOptions>(configuration.GetSection(DefaultUserOptions.Section));
             services.AddHttpContextAccessor();
             services.AddScoped<ICurrentUser, HttpCurrentUser>();
+            // Extra laag voor de demo online: alleen met CF_ACCESS_AUD en CF_ACCESS_TEAM_DOMAIN (CloudflareAccessMiddleware in Program.cs).
+            services.AddSingleton(CloudflareAccessOptions.From(configuration));
+            services.AddHttpClient(CloudflareAccessSigningKeys.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5));
+            services.AddSingleton<IAccessSigningKeys, CloudflareAccessSigningKeys>();
+            services.AddSingleton<CloudflareAccessValidator>();
             services.AddAuthentication(DefaultUserAuthenticationHandler.Scheme)
                 .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, DefaultUserAuthenticationHandler>(DefaultUserAuthenticationHandler.Scheme, null);
             services.AddSingleton<IAuthorizationHandler, ReadsForAllHandler>();

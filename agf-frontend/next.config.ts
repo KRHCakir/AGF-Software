@@ -13,6 +13,12 @@ const nextConfig: NextConfig = {
     // 2 minuten (DocumentMailRules.SendTimeout); daarom ruim daarboven.
     proxyTimeout: 180_000,
   },
+  // Demo-omgeving (NEXT_PUBLIC_DEMO_ENVIRONMENT=true, bij de build): zoekmachines nemen niets op. robots.txt weigert altijd alles.
+  async headers() {
+    return process.env.NEXT_PUBLIC_DEMO_ENVIRONMENT === "true"
+      ? [{ source: "/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] }]
+      : [];
+  },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${apiInternalUrl}/api/:path*` }];
   },

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
+import { demoEnvironmentEnabled } from '../../lib/demoEnvironment';
 import { toApiError } from '../../services/apiClient';
 import { aiErrorCode, getAiReadingStatus, readInvoiceDocument } from '../../services/aiReadingService';
 import type { AiExtraction, AiReadingStatus } from '../../types/aiReading';
@@ -14,8 +15,10 @@ import { secondaryButtonClass } from '../supply/SuccessPanel';
 const ACCEPT = '.pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/jpeg,image/png,image/heic,image/heif';
 const ALLOWED = /\.(pdf|jpe?g|png|heic|heif)$/i;
 
-export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply }: {
+export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, demo = demoEnvironmentEnabled() }: {
     onProposal: (extraction: AiExtraction) => void;
+    // De demo-omgeving online: een vaste melding dat alleen verzonnen of geanonimiseerde facturen horen.
+    demo?: boolean;
     // Vraagt de gebruiker of het huidige concept vervangen mag worden; false = niet uploaden.
     beforeUpload?: () => boolean;
     // Na het lezen, vlak voor het toepassen: het formulier kan tijdens het lezen zijn aangepast. Vraag opnieuw (of weiger) als dat zo is;
@@ -92,6 +95,7 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply }:
                     </span>
                 )}
             </div>
+            {demo && <p className="mt-2 font-medium text-amber-950" data-testid="ai-demo-notice">{t('ai_demo_upload_notice')}</p>}
             {error && (
                 <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-950" data-testid="ai-error">
                     <span>{t(`ai_error_${error}`)}</span>

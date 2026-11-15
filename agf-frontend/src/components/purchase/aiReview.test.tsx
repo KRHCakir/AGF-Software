@@ -2,6 +2,8 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { act } from 'react';
+import { ApiError } from '../../services/apiClient';
+import { aiErrorCode } from '../../services/aiReadingService';
 import { Mounted, json, stubFetch } from '../../test/reactHarness.ts';
 import type { AiExtraction } from '../../types/aiReading';
 import AiReviewBanner from './AiReviewBanner';
@@ -79,6 +81,15 @@ describe('AI proposal building blocks', () => {
         await mounted.render(<AiUploadPanel onProposal={() => undefined} />);
         await settle();
         assert.ok(mounted.hasText('ai_upload_hint_single'), 'one model, no fallback named');
+    });
+
+    test('in the demo environment the panel asks for made-up invoices only, and a demo limit refusal has its own text', async () => {
+        await mounted.render(<AiUploadPanel onProposal={() => undefined} demo />);
+        await settle();
+        assert.ok($('[data-testid="ai-demo-notice"]')!.textContent!.includes('ai_demo_upload_notice'));
+        await mounted.render(<AiUploadPanel onProposal={() => undefined} demo={false} />);
+        assert.equal($('[data-testid="ai-demo-notice"]'), null);
+        assert.equal(aiErrorCode(new ApiError('http', 'limiet', 503, {}, { code: 'AI_DEMO_DAILY_LIMIT', message: 'limiet' })), 'AI_DEMO_DAILY_LIMIT');
     });
 
     test('a failed status check says so and can be retried', async () => {

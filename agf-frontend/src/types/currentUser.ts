@@ -5,6 +5,8 @@ export interface CurrentUser {
     displayName: string;
     roles: string[];
     permissions: string[];
+    // Alleen online achter Cloudflare Access: het e-mailadres waarmee de klant binnenkwam (weergave in de demo-balk).
+    accessUser?: string | null;
 }
 
 const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string');
@@ -12,5 +14,6 @@ const isStringList = (value: unknown): value is string[] => Array.isArray(value)
 export function isCurrentUser(value: unknown): value is CurrentUser {
     if (typeof value !== 'object' || value === null) return false;
     const user = value as Record<string, unknown>;
-    return typeof user.userId === 'string' && typeof user.displayName === 'string' && isStringList(user.roles) && isStringList(user.permissions);
+    return typeof user.userId === 'string' && typeof user.displayName === 'string' && isStringList(user.roles) && isStringList(user.permissions)
+        && (user.accessUser === undefined || user.accessUser === null || typeof user.accessUser === 'string');
 }
