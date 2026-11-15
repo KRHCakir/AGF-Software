@@ -1,4 +1,5 @@
 import { ApiMessage } from './apiTypes';
+import { getApiBaseUrl } from './apiConfig';
 
 export interface OrderLineDto {
     id: number;
@@ -38,17 +39,15 @@ export interface CreateOrderDto {
     }[];
 }
 
-const API_BASE_URL = 'http://localhost:5197/api';
-
 export const OrderService = {
     async getAll(): Promise<OrderDto[]> {
-        const res = await fetch(`${API_BASE_URL}/order`);
+        const res = await fetch(`${getApiBaseUrl()}/order`);
         if (!res.ok) throw new Error('Failed to fetch orders');
         return res.json();
     },
 
     async create(data: CreateOrderDto): Promise<OrderDto> {
-        const res = await fetch(`${API_BASE_URL}/order`, {
+        const res = await fetch(`${getApiBaseUrl()}/order`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
@@ -61,7 +60,7 @@ export const OrderService = {
     },
 
     async generateInvoice(id: number): Promise<{ invoiceNumber: string }> {
-        const res = await fetch(`${API_BASE_URL}/order/${id}/generate-invoice`, {
+        const res = await fetch(`${getApiBaseUrl()}/order/${id}/generate-invoice`, {
             method: 'POST',
         });
         if (!res.ok) {
@@ -72,7 +71,7 @@ export const OrderService = {
     },
 
     async deleteOrder(id: number): Promise<ApiMessage> {
-        const res = await fetch(`${API_BASE_URL}/order/${id}`, {
+        const res = await fetch(`${getApiBaseUrl()}/order/${id}`, {
             method: 'DELETE',
         });
         if (!res.ok) {

@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-Configure the API address first: copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` (including `/api`). The Availability page (`/availability`) shows a configuration error when it is missing or invalid; it never falls back to a hardcoded address.
+The browser calls the API at `/api` on this website by default; Next.js forwards that to `API_INTERNAL_URL` (default `http://localhost:5197`, see `next.config.ts`). So with the API on port 5197 no setting is needed. `NEXT_PUBLIC_API_URL` may still be a full address including `/api` (then the browser calls the API directly and the API must allow this origin in CORS), see `.env.example`. An invalid value shows a configuration error; there are no hardcoded addresses in `src` (a test checks this).
 
 First, run the development server:
 

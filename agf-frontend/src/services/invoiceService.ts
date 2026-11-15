@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { getApiBaseUrl } from './apiConfig';
+
 export interface CreateManualInvoiceDto {
     customerId: number;
     invoiceDate: string; // ISO
@@ -14,11 +16,9 @@ export interface CreateManualInvoiceLineDto {
     vatPercentage: number;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5197/api';
-
 export const InvoiceService = {
     async createManual(data: CreateManualInvoiceDto): Promise<any> {
-        const res = await fetch(`${API_BASE_URL}/invoice/manual`, {
+        const res = await fetch(`${getApiBaseUrl()}/invoice/manual`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
@@ -31,13 +31,13 @@ export const InvoiceService = {
     },
 
     async getAll(): Promise<any[]> {
-        const res = await fetch(`${API_BASE_URL}/invoice`);
+        const res = await fetch(`${getApiBaseUrl()}/invoice`);
         if (!res.ok) throw new Error('Failed to fetch invoices');
         return res.json();
     },
 
     async getCustomers(): Promise<any[]> {
-        const res = await fetch(`${API_BASE_URL}/sales/customers`);
+        const res = await fetch(`${getApiBaseUrl()}/sales/customers`);
         if (!res.ok) throw new Error('Failed to fetch customers');
         return res.json();
     }
