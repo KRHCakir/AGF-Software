@@ -74,6 +74,14 @@ if [[ "$(sql "select count(*) from pg_database where datname = '$name'")" != 0 ]
     exit 2
 fi
 
+# Eerst de images van de API en de website opnieuw bouwen op de huidige code (na een git pull): `up -d` bouwt bestaande images
+# niet opnieuw, dus anders blijft de oude versie draaien of mist de API de nieuwe migraties. Mislukt de build, dan is er nog niets veranderd.
+echo "Images van API en website bouwen (huidige code)…"
+if ! compose build api web; then
+    echo "Gestopt: de build is mislukt. Er is niets veranderd (geen nieuwe database, deploy/.env ongewijzigd)." >&2
+    exit 1
+fi
+
 # template0: nooit iets meenemen dat iemand in template1 heeft gezet. De API migreert hem bij het opstarten.
 compose exec -T db createdb -U "$pg_user" -T template0 "$name"
 echo "Nieuwe lege database $name gemaakt."
@@ -87,7 +95,7 @@ else
     echo "AGF_DEMO_DATABASE=$name" >>"$env_file"
 fi
 
-echo "Containers herstarten op $name; de API migreert de nieuwe database (de eerste keer bouwt Docker ook de images)…"
+echo "Containers herstarten op $name; de API migreert de nieuwe database…"
 compose up -d
 for _ in $(seq 1 120); do
     compose exec -T api curl -fsS http://localhost:8080/health >/dev/null 2>&1 && break
