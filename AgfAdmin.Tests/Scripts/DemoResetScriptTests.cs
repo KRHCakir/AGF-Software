@@ -14,8 +14,12 @@ public class DemoResetScriptTests : IDisposable
     public DemoResetScriptTests()
     {
         var bin = Directory.CreateDirectory(Path.Combine(_work, "bin")).FullName;
+        // Antwoordt op de vragen van het script: bestaat de database, hoeveel migraties; het vulscript slaagt of faalt (FAKE_SEED_EXIT).
         File.WriteAllText(Path.Combine(bin, "docker"),
-            "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_DOCKER_LOG\"\ncase \"$*\" in *'from pg_database where datname'*) echo \"${FAKE_EXISTS:-0}\" ;; esac\nexit 0\n");
+            "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_DOCKER_LOG\"\ncase \"$*\" in\n"
+            + "  *'from pg_database where datname'*) echo \"${FAKE_EXISTS:-0}\" ;;\n"
+            + "  *'__EFMigrationsHistory'*) echo \"${FAKE_MIGRATIONS:-0}\" ;;\n"
+            + "  *demo-seed.sh*) exit \"${FAKE_SEED_EXIT:-0}\" ;;\nesac\nexit 0\n");
         File.SetUnixFileMode(Path.Combine(bin, "docker"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         File.WriteAllText(EnvFile, "POSTGRES_USER=agf\nPOSTGRES_PASSWORD=geheim\nAGF_DEMO_DATABASE=agf_demo_20261101\n");
     }
@@ -29,7 +33,12 @@ public class DemoResetScriptTests : IDisposable
         return dir?.FullName ?? throw new InvalidOperationException("De hoofdmap van de repo is niet gevonden.");
     }
 
-    private (int Exit, string Error) Run(string envFile, string exists, params string[] args)
+    private static string Migrations() => Directory.GetFiles(Path.Combine(RepoRoot(), "AgfAdmin", "Migrations"), "*.cs")
+        .Count(f => !f.EndsWith(".Designer.cs") && !f.EndsWith("ModelSnapshot.cs")).ToString();
+
+    private (int Exit, string Error) Run(string envFile, string exists, params string[] args) => RunSeeding(envFile, exists, "0", args);
+
+    private (int Exit, string Error) RunSeeding(string envFile, string exists, string seedExit, params string[] args)
     {
         var start = new ProcessStartInfo("bash") { RedirectStandardError = true, RedirectStandardOutput = true };
         start.ArgumentList.Add(Path.Combine(RepoRoot(), "scripts", "demo-reset.sh"));
@@ -38,6 +47,8 @@ public class DemoResetScriptTests : IDisposable
         start.Environment["AGF_DEMO_ENV_FILE"] = envFile;
         start.Environment["FAKE_DOCKER_LOG"] = Log;
         start.Environment["FAKE_EXISTS"] = exists;
+        start.Environment["FAKE_MIGRATIONS"] = Migrations();
+        start.Environment["FAKE_SEED_EXIT"] = seedExit;
         using var process = Process.Start(start)!;
         var error = process.StandardError.ReadToEndAsync();
         process.StandardOutput.ReadToEnd();
@@ -76,6 +87,32 @@ public class DemoResetScriptTests : IDisposable
         Assert.DoesNotContain(" up -d\n", DockerCalls.Replace(" up -d db", ""));
         Assert.Equal(before, File.ReadAllText(EnvFile));
         Assert.False(File.Exists(EnvFile + ".vorige"));
+    }
+
+    [Fact]
+    public void A_reset_makes_a_new_database_switches_the_settings_keeps_the_old_one_and_fills_it()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var (exit, error) = Run(EnvFile, "0", "agf_demo_20261115");
+        Assert.True(exit == 0, error);
+        var calls = DockerCalls;
+        Assert.True(calls.IndexOf("build api web", StringComparison.Ordinal) < calls.IndexOf("createdb", StringComparison.Ordinal), "eerst bouwen, dan pas iets veranderen");
+        Assert.Contains("createdb -U agf -T template0 agf_demo_20261115", calls);
+        Assert.Contains("/app/scripts/demo-seed.sh", calls);
+        Assert.DoesNotContain("dropdb", calls);
+        Assert.DoesNotContain("DROP", calls, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("AGF_DEMO_DATABASE=agf_demo_20261115", File.ReadAllText(EnvFile));
+        Assert.Contains("AGF_DEMO_DATABASE=agf_demo_20261101", File.ReadAllText(EnvFile + ".vorige"));
+    }
+
+    [Fact]
+    public void When_filling_fails_the_script_stops_and_says_how_to_go_back()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var (exit, error) = RunSeeding(EnvFile, "0", "1", "agf_demo_20261115");
+        Assert.Equal(1, exit);
+        Assert.Contains("half gevulde agf_demo_20261115", error);
+        Assert.Contains("AGF_DEMO_DATABASE=agf_demo_20261101", error);
     }
 
     [Fact]

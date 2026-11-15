@@ -115,7 +115,11 @@ if [[ "$applied" != "$expected" ]]; then
 fi
 
 echo "Demo-gegevens invullen…"
-compose exec -T api /app/scripts/demo-seed.sh http://localhost:8080/api ${seed_args[@]+"${seed_args[@]}"}
+if ! compose exec -T api /app/scripts/demo-seed.sh http://localhost:8080/api ${seed_args[@]+"${seed_args[@]}"}; then
+    echo "Gestopt: het vullen lukte niet (de melding staat hierboven). De demo draait nu op een half gevulde $name." >&2
+    echo "Terug naar de vorige demo: zet AGF_DEMO_DATABASE=$current in $env_file en doe 'up -d'; of reset opnieuw met een nieuwe naam (${name}_2)." >&2
+    exit 1
+fi
 
 echo
 if [[ -n "$current" && "$(sql "select count(*) from pg_database where datname = '$current'")" == 1 ]]; then
