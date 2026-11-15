@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgfAdmin.Configuration;
 using AgfAdmin.Data;
 using AgfAdmin.DTOs;
 using AgfAdmin.Models;
@@ -13,12 +14,14 @@ namespace AgfAdmin.Services.DocumentAi
     // gelezen en de lezing vastgelegd (model, versie, verbruik, kosten). Opslaan als factuur gebeurt pas als een gebruiker goedkeurt, via
     // het gewone opslagpad van de inkoopfactuur. Zonder AI aan of zonder sleutel: een duidelijke melding, nooit nepgegevens.
     public sealed class AiInvoiceReadingService(AppDbContext db, IDocumentAiFactory factory, InvoiceReader reader, IDocumentStore store,
-        UploadRateLimiter rateLimiter, IOptions<DocumentAiOptions> options, ICurrentUser user, TimeProvider clock)
+        UploadRateLimiter rateLimiter, IOptions<DocumentAiOptions> options, ICurrentUser user, TimeProvider clock, DemoEnvironment demo = null)
     {
         public const string CodeOff = "AI_OFF";
         public const string CodeNotConfigured = "AI_NOT_CONFIGURED";
         public const string CodeRateLimit = "AI_RATE_LIMIT";
         public const string CodeMonthlyLimit = "AI_MONTHLY_LIMIT";
+        // Alleen in de demo-omgeving: het aantal lezingen per dag (DemoEnvironment.AiDailyLimit).
+        public const string CodeDemoDailyLimit = "AI_DEMO_DAILY_LIMIT";
         public const string CodeUnavailable = "AI_UNAVAILABLE";
         public const string CodeInvalid = "AI_INVALID";
         public const string CodeUnsupported = "AI_UNSUPPORTED";
@@ -26,6 +29,7 @@ namespace AgfAdmin.Services.DocumentAi
         private const int MaxActorLength = 100;
 
         private readonly DocumentAiOptions _options = options.Value;
+        private readonly DemoEnvironment _demo = demo ?? DemoEnvironment.Off;
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
         // ---- Status en instellingen ----
@@ -34,6 +38,7 @@ namespace AgfAdmin.Services.DocumentAi
         {
             var settings = await SettingsAsync(cancellationToken);
             var spent = await MonthSpentEurAsync(cancellationToken);
+            var limit = _demo.MonthlyLimitEur(settings.AiReadingMonthlyLimitEur);
             var reason = factory.NotConfiguredReason;
             var demo = factory.Provider == DocumentAiOptions.ReaderDemo;
             return new AiReadingStatusDto
@@ -46,8 +51,8 @@ namespace AgfAdmin.Services.DocumentAi
                 FallbackEnabled = _options.FallbackEnabled && !demo,
                 FallbackModel = _options.FallbackEnabled && !demo ? ModelDto(_options.FallbackModel) : null,
                 MonthSpentEur = decimal.Round(spent, 2),
-                MonthlyLimitEur = settings.AiReadingMonthlyLimitEur,
-                LimitReached = spent >= settings.AiReadingMonthlyLimitEur,
+                MonthlyLimitEur = limit,
+                LimitReached = spent >= limit,
                 MaxFileBytes = _options.MaxFileBytes,
             };
         }
@@ -110,9 +115,15 @@ namespace AgfAdmin.Services.DocumentAi
             // Bewust geen vergrendeling rond het lezen (5 tot 20 seconden): gelijktijdige uploads van verschillende gebruikers wachten niet op
             // elkaar. De maandlimiet pauzeert het lezen zodra het verbruik haar haalt; gelijktijdige lezingen kunnen haar daardoor met hooguit
             // een paar cent overschrijden (een lezing kost ongeveer een tiende cent, met vangnet enkele centen).
-            if (await MonthSpentEurAsync(cancellationToken) >= settings.AiReadingMonthlyLimitEur)
+            // In de demo-omgeving daarnaast een vaste grens per dag, en nooit een hogere maandlimiet dan die van de demo.
+            if (_demo.Enabled && await TodayCountAsync(cancellationToken) >= _demo.AiDailyLimit)
             {
-                return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({settings.AiReadingMonthlyLimitEur:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
+                return Refused(CodeDemoDailyLimit, $"Voor de demo is de limiet voor vandaag bereikt ({_demo.AiDailyLimit} documenten per dag). Morgen kan het weer; handmatig invoeren werkt gewoon.");
+            }
+            var limit = _demo.MonthlyLimitEur(settings.AiReadingMonthlyLimitEur);
+            if (await MonthSpentEurAsync(cancellationToken) >= limit)
+            {
+                return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({limit:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
             }
             return await ReadDocumentAsync(fileName, document, settings, cancellationToken);
         }
@@ -281,6 +292,15 @@ namespace AgfAdmin.Services.DocumentAi
             var recent = await db.AiExtractions.AsNoTracking().Where(e => e.CreatedAt >= clock.GetUtcNow().UtcDateTime.AddDays(-32))
                 .Select(e => new { e.CreatedAt, e.CostEur }).ToListAsync(cancellationToken);
             return recent.Where(e => AmsterdamBusinessCalendar.ToAmsterdamDate(e.CreatedAt) is var day && day.Year == today.Year && day.Month == today.Month).Sum(e => e.CostEur);
+        }
+
+        // Lezingen van vandaag (Europe/Amsterdam), ook mislukte: voor de daglimiet van de demo-omgeving. Uit de database, dus ook na een herstart.
+        private async Task<int> TodayCountAsync(CancellationToken cancellationToken)
+        {
+            var today = AmsterdamBusinessCalendar.ToAmsterdamDate(clock.GetUtcNow().UtcDateTime);
+            var recent = await db.AiExtractions.AsNoTracking().Where(e => e.CreatedAt >= clock.GetUtcNow().UtcDateTime.AddDays(-2))
+                .Select(e => e.CreatedAt).ToListAsync(cancellationToken);
+            return recent.Count(createdAt => AmsterdamBusinessCalendar.ToAmsterdamDate(createdAt) == today);
         }
 
         private async Task<CompanySettings> SettingsAsync(CancellationToken cancellationToken)
