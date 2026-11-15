@@ -1,6 +1,5 @@
 import { ApiMessage } from './apiTypes';
-
-const API_BASE_URL = 'http://localhost:5197/api';
+import { getApiBaseUrl } from './apiConfig';
 
 export interface InventoryItem {
     id: number;
@@ -25,20 +24,20 @@ export interface Shipment {
 export const InventoryService = {
     // Basic fetches
     async getInventory(): Promise<InventoryItem[]> {
-        const res = await fetch(`${API_BASE_URL}/inventory`); // Requires creating endpoint if missing
+        const res = await fetch(`${getApiBaseUrl()}/inventory`); // Requires creating endpoint if missing
         if (!res.ok) throw new Error('Failed to fetch inventory');
         return res.json();
     },
 
     async getShipments(): Promise<Shipment[]> {
-        const res = await fetch(`${API_BASE_URL}/shipments`); // Requires creating endpoint if missing
+        const res = await fetch(`${getApiBaseUrl()}/shipments`); // Requires creating endpoint if missing
         if (!res.ok) throw new Error('Failed to fetch shipments');
         return res.json();
     },
 
     // Ghost sweep trigger
     async receiveShipment(id: number, productVariantId: number, quantityReceived: number, weightKg?: number): Promise<ApiMessage> {
-        const res = await fetch(`${API_BASE_URL}/shipments/${id}/receive`, {
+        const res = await fetch(`${getApiBaseUrl()}/shipments/${id}/receive`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ productVariantId, quantityReceived, totalWeightKg: weightKg })
@@ -51,7 +50,7 @@ export const InventoryService = {
     },
 
     async registerWaste(id: number, quantityDumped: number, weightDumpedKg?: number, reason: string = "Spoilage"): Promise<ApiMessage> {
-        const res = await fetch(`${API_BASE_URL}/inventory/${id}/waste`, {
+        const res = await fetch(`${getApiBaseUrl()}/inventory/${id}/waste`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ quantityDumped, weightDumpedKg, reason })
@@ -64,13 +63,13 @@ export const InventoryService = {
     },
 
     async freezeBatch(id: number): Promise<ApiMessage> {
-        const res = await fetch(`${API_BASE_URL}/inventory/${id}/freeze`, { method: 'POST' });
+        const res = await fetch(`${getApiBaseUrl()}/inventory/${id}/freeze`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         return res.json();
     },
 
     async unfreezeBatch(id: number): Promise<ApiMessage> {
-        const res = await fetch(`${API_BASE_URL}/inventory/${id}/unfreeze`, { method: 'POST' });
+        const res = await fetch(`${getApiBaseUrl()}/inventory/${id}/unfreeze`, { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
         return res.json();
     }

@@ -1,12 +1,11 @@
 import { ApiError, postJson } from './apiClient';
 import { CreateCustomerRequest, CreatedCustomer, SimilarCustomer, isCreatedCustomer, isSimilarCustomerList } from '../types/referenceData';
-
-const API_BASE_URL = 'http://localhost:5197/api';
+import { getApiBaseUrl } from './apiConfig';
 
 // Bestaande service van de mobiele verkoopflow (app/sales/[sellerId]); ongewijzigd gelaten.
 export const CustomerService = {
     async getStanding(id: number): Promise<unknown> {
-        const res = await fetch(`${API_BASE_URL}/customers/${id}/standing`);
+        const res = await fetch(`${getApiBaseUrl()}/customers/${id}/standing`);
         if (!res.ok) throw new Error(await res.text());
         return res.json();
     }

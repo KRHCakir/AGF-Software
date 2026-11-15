@@ -1,4 +1,5 @@
 import { Shipment } from './inventoryService';
+import { getApiBaseUrl } from './apiConfig';
 
 export interface DashboardRecentOrder {
     id: number;
@@ -20,11 +21,9 @@ export interface DashboardData {
     shipments: Shipment[];
 }
 
-const API_BASE_URL = 'http://localhost:5197/api';
-
 export const DashboardService = {
     async getDashboardData(): Promise<DashboardData> {
-        const res = await fetch(`${API_BASE_URL}/dashboard`);
+        const res = await fetch(`${getApiBaseUrl()}/dashboard`);
         if (!res.ok) throw new Error('Failed to fetch dashboard data');
         return res.json();
     }

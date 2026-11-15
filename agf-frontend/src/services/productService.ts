@@ -1,16 +1,15 @@
 import { ApiMessage } from './apiTypes';
-
-const API_BASE_URL = 'http://localhost:5197/api';
+import { getApiBaseUrl } from './apiConfig';
 
 export const ProductService = {
     async getAll(): Promise<Product[]> {
-        const res = await fetch(`${API_BASE_URL}/products?includeVariants=true`);
+        const res = await fetch(`${getApiBaseUrl()}/products?includeVariants=true`);
         if (!res.ok) throw new Error(await res.text());
         return res.json();
     },
 
     async updateShortcut(variantId: number, shortcutCode: string | null): Promise<ApiMessage> {
-        const res = await fetch(`${API_BASE_URL}/products/variants/${variantId}/shortcut`, {
+        const res = await fetch(`${getApiBaseUrl()}/products/variants/${variantId}/shortcut`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ shortcutCode })
@@ -30,7 +29,7 @@ export const ProductService = {
         sizeCategory?: string;
         shortcutCode: string;
     }): Promise<ApiMessage & { variantId: number }> {
-        const res = await fetch(`${API_BASE_URL}/products/quick-shortcut`, {
+        const res = await fetch(`${getApiBaseUrl()}/products/quick-shortcut`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
