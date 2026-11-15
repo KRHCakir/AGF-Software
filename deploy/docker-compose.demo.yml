@@ -102,8 +102,8 @@ services:
     mem_limit: 128m
     logging: *logging
 
-  # Elke nacht (AGF_DEMO_BACKUP_TIME, standaard 03:00 Nederlandse tijd) een back-up van de huidige demo-database naar deploy/backups,
-  # 7 dagen bewaard. Op een vaste tijd en niet bij het starten: na een reset is de nieuwe database dan al gevuld. Geen productieback-up:
+  # Elke nacht (AGF_DEMO_BACKUP_TIME, standaard 03:00 Nederlandse tijd) een back-up van de huidige demo-database en de documenten naar
+  # deploy/backups, 7 dagen bewaard (opgeruimd wordt alleen na een geslaagde back-up). Op een vaste tijd en niet bij het starten: na een reset is de nieuwe database dan al gevuld. Geen productieback-up:
   # alleen voor het geval de klant iets belangrijks invoert. Terugzetten: zie docs/demo-online.md.
   backup:
     image: postgres:18.4
@@ -128,12 +128,22 @@ services:
           next=$$(date -d "today $${BACKUP_TIME}" +%s)
           [ "$$next" -gt "$$now" ] || next=$$(date -d "tomorrow $${BACKUP_TIME}" +%s)
           sleep $$((next - now))
-          file="/backups/$${AGF_DEMO_DATABASE}_$$(date +%Y%m%d_%H%M).dump"
-          if pg_dump -Fc -d "$${AGF_DEMO_DATABASE}" -f "$$file.tmp"; then mv "$$file.tmp" "$$file"; echo "Back-up gemaakt: $$file"; else rm -f "$$file.tmp"; echo "Back-up mislukt"; fi
-          find /backups -name 'agf_demo*.dump' -mtime +"$${KEEP_DAYS}" -print -delete
+          stamp="/backups/$${AGF_DEMO_DATABASE}_$$(date +%Y%m%d_%H%M)"
+          # De database en de geüploade documenten (AI-upload, bijlagen) horen bij elkaar: samen bewaren, samen terugzetten.
+          if pg_dump -Fc -d "$${AGF_DEMO_DATABASE}" -f "$$stamp.dump.tmp" && tar -czf "$$stamp.documenten.tar.gz.tmp" -C /data documents; then
+            mv "$$stamp.dump.tmp" "$$stamp.dump"
+            mv "$$stamp.documenten.tar.gz.tmp" "$$stamp.documenten.tar.gz"
+            echo "Back-up gemaakt: $$stamp.dump en $$stamp.documenten.tar.gz"
+            # Alleen na een geslaagde back-up oude opruimen: bij een aanhoudende fout (volle schijf) blijven de laatste goede staan.
+            find /backups -name 'agf_demo*' -mtime +"$${KEEP_DAYS}" -print -delete
+          else
+            rm -f "$$stamp.dump.tmp" "$$stamp.documenten.tar.gz.tmp"
+            echo "Back-up mislukt; de oude back-ups blijven staan"
+          fi
         done
     volumes:
       - ./backups:/backups
+      - documents:/data/documents:ro
     networks: [backend]
     mem_limit: 256m
     logging: *logging

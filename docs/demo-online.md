@@ -187,16 +187,21 @@ demo logs --tail 100 api            # of web, db, cloudflared, backup
 demo logs -f api                    # meelezen; stoppen met Ctrl+C
 ```
 
-**Back-up terugzetten.** Elke nacht om 03:00 (`AGF_DEMO_BACKUP_TIME`) maakt de container `backup` een kopie van de huidige
-demo-database in `deploy/backups/` (7 dagen bewaard, `AGF_DEMO_BACKUP_DAYS`). Terugzetten gaat altijd naar een **nieuwe** database:
+**Back-up terugzetten.** Elke nacht om 03:00 (`AGF_DEMO_BACKUP_TIME`) maakt de container `backup` in `deploy/backups/` een kopie van de
+huidige demo-database (`….dump`) en van de geüploade documenten (`….documenten.tar.gz`). Ze blijven 7 dagen staan
+(`AGF_DEMO_BACKUP_DAYS`); oude back-ups worden alleen opgeruimd na een geslaagde nieuwe. Terugzetten gaat altijd naar een **nieuwe**
+database, en de documenten van hetzelfde tijdstip gaan mee terug:
 
 ```bash
 ls deploy/backups/
 demo exec -T db createdb -U agf -T template0 agf_demo_terug_20261120
-demo exec -T db pg_restore -U agf -d agf_demo_terug_20261120 --no-owner < deploy/backups/agf_demo_20261115_0900.dump
+demo exec -T db pg_restore -U agf -d agf_demo_terug_20261120 --no-owner < deploy/backups/agf_demo_20261115_20261120_0300.dump
+demo exec -T api tar -xzf - -C /data < deploy/backups/agf_demo_20261115_20261120_0300.documenten.tar.gz
 nano deploy/.env                    # AGF_DEMO_DATABASE=agf_demo_terug_20261120
 demo up -d
 ```
+
+Het uitpakken van de documenten voegt bestanden toe en overschrijft alleen bestanden met dezelfde naam; andere documenten blijven staan.
 
 Dit is geen productieback-up (niet versleuteld, niet buiten de server); alleen voor het geval de klant iets belangrijks invoert.
 
