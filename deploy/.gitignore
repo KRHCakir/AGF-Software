@@ -1,0 +1,5 @@
+# Instellingen met wachtwoorden en sleutels, en de back-ups van de demo: nooit in de repo.
+.env
+.env.*
+!.env.demo.example
+backups/
