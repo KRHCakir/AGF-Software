@@ -2577,6 +2577,7 @@
   "ai_error_AI_MONTHLY_LIMIT": "The monthly limit for AI reading has been reached; reading is paused. Manual entry still works.",
   "ai_error_AI_DEMO_DAILY_LIMIT": "The demo limit for today has been reached. Try again tomorrow; manual entry still works.",
   "ai_demo_upload_notice": "Only upload made-up or anonymised invoices.",
+  "ai_demo_unavailable": "AI reading is not available in this demo. Enter the invoice manually.",
   "ai_error_AI_UNAVAILABLE": "The AI service cannot be reached, not even on a second attempt. Enter the invoice manually or try again later.",
   "ai_error_AI_INVALID": "The AI gave no usable proposal for this document. Enter the invoice manually.",
   "ai_error_AI_UNSUPPORTED": "The AI cannot read this document. Enter the invoice manually.",

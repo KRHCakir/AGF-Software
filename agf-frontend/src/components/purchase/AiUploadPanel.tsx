@@ -45,7 +45,9 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, d
     }, [statusAttempt]);
 
     const available = status !== null && status.enabled && status.configured && !status.limitReached;
-    const reason = status === null ? null : !status.enabled ? t('ai_off') : !status.configured ? t('ai_not_configured', { reason: status.notConfiguredReason ?? '' })
+    // In de demo-omgeving: staat AI-lezen uit of is er geen sleutel, dan gewoon "niet beschikbaar in deze demo" (aanzetten doet de eigenaar).
+    const reason = status === null ? null : demo && (!status.enabled || !status.configured) ? t('ai_demo_unavailable')
+        : !status.enabled ? t('ai_off') : !status.configured ? t('ai_not_configured', { reason: status.notConfiguredReason ?? '' })
         : status.limitReached ? t('ai_error_AI_MONTHLY_LIMIT') : null;
 
     const choose = async (file: File | undefined) => {
@@ -91,7 +93,7 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, d
                 {!reading && reason && (
                     <span className="text-gray-800" data-testid="ai-unavailable">
                         {reason}{' '}
-                        {!status?.enabled && <Link href="/settings#ai-lezen" className="font-medium text-blue-800 underline underline-offset-2">{t('ai_off_admin')}</Link>}
+                        {!demo && !status?.enabled && <Link href="/settings#ai-lezen" className="font-medium text-blue-800 underline underline-offset-2">{t('ai_off_admin')}</Link>}
                     </span>
                 )}
             </div>

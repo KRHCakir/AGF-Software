@@ -2577,6 +2577,7 @@
   "ai_error_AI_MONTHLY_LIMIT": "De maandlimiet voor AI-lezen is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.",
   "ai_error_AI_DEMO_DAILY_LIMIT": "Voor de demo is de limiet voor vandaag bereikt. Morgen kan het weer; handmatig invoeren werkt gewoon.",
   "ai_demo_upload_notice": "Upload alleen verzonnen of geanonimiseerde facturen.",
+  "ai_demo_unavailable": "AI-lezen is niet beschikbaar in deze demo. Voer de factuur handmatig in.",
   "ai_error_AI_UNAVAILABLE": "De AI-dienst is nu niet bereikbaar, ook niet na een tweede poging. Voer de factuur handmatig in of probeer het later opnieuw.",
   "ai_error_AI_INVALID": "De AI gaf geen bruikbaar voorstel voor dit document. Voer de factuur handmatig in.",
   "ai_error_AI_UNSUPPORTED": "Dit document kan de AI niet lezen. Voer de factuur handmatig in.",
