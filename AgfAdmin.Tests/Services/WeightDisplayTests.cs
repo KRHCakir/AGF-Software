@@ -57,6 +57,11 @@ public class WeightDisplayTests : IDisposable
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(new WeightDisplaySettingsDto { Decimals = 2 })).Status);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(new WeightDisplaySettingsDto { Decimals = -1 })).Status);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(null)).Status);
+        // Een verzoek zonder het veld ({}) wijzigt niets: het wordt nooit stil 0.
+        await service.UpdateAsync(new WeightDisplaySettingsDto { Decimals = 1 });
+        Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(new WeightDisplaySettingsDto())).Status);
+        Assert.Equal(1, (await service.GetAsync()).Decimals);
+        await service.UpdateAsync(new WeightDisplaySettingsDto { Decimals = 0 });
         Assert.Equal(1, (await service.UpdateAsync(new WeightDisplaySettingsDto { Decimals = 1 })).Value.Decimals);
         Assert.Equal(1, (await service.GetAsync()).Decimals);
         Assert.Equal(0, (await service.UpdateAsync(new WeightDisplaySettingsDto { Decimals = 0 })).Value.Decimals);
