@@ -2,10 +2,9 @@
 
 import Link from 'next/link';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatQuantity } from '../../lib/availability';
 import { formatDecimalInput } from '../../lib/decimal';
 import { type KgField, type LineKgRow, type LineWeightDraft, isEntered, kgPerPackage } from '../../lib/lineWeight';
-import { formatKgPerPackage, roundWeight, weightDecimals } from '../../lib/weightDisplay';
+import { formatKgPerPackage, formatPerPackage, roundWeight, weightDecimals } from '../../lib/weightDisplay';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 
 // Een berekend gewicht in het veld: hele kilo's of één decimaal, in de notatie waarin het veld ook leest.
@@ -56,7 +55,7 @@ export default function LineKgInput({ id, label, index, field, line, calculated,
             {state !== 'empty' && (
                 <span className={`block text-xs ${state === 'calculated' ? 'text-gray-500' : 'text-gray-900'}`} data-testid={`${id}-state`}>
                     {state === 'calculated' && perPackage !== null
-                        ? t('line_kg_calculated_per', { perPackage: formatQuantity(perPackage, locale) })
+                        ? t('line_kg_calculated_per', { perPackage: formatPerPackage(perPackage, locale) })
                         : t(state === 'calculated' ? 'line_kg_calculated' : 'line_kg_entered')}
                 </span>
             )}

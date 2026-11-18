@@ -35,6 +35,8 @@ export interface PurchaseLineAmounts {
     grossKg: number | null;
     total: number | null;
     pallets: number | null;
+    // Bruto is zelf ingevuld en staat in het veld zoals getypt: het telt exact mee in het getoonde totaal.
+    grossEntered?: boolean;
 }
 
 export interface PurchaseLineTotals {
@@ -70,7 +72,7 @@ export function sumLines(lines: readonly PurchaseLineAmounts[]): PurchaseLineTot
         netKg: sum((line) => line.netKg, 3),
         grossKg: sum((line) => line.grossKg, 3),
         shownNetKg: raw((line) => line.netKg) === null ? null : shownKgTotal(lines.map((line) => line.netKg)),
-        shownGrossKg: raw((line) => line.grossKg) === null ? null : shownKgTotal(lines.map((line) => line.grossKg)),
+        shownGrossKg: raw((line) => line.grossKg) === null ? null : shownKgTotal(lines.map((line) => line.grossKg), lines.map((line) => line.grossEntered === true)),
         amount: sum((line) => line.total, 2),
         pallets: exactPallets === null ? null : round2(exactPallets),
         linesWithoutNet: lines.filter((line) => line.netKg === null).length,

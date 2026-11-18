@@ -33,14 +33,14 @@ describe('QuantityInput', () => {
         assert.equal(mounted.container.querySelectorAll('input[type="radio"]').length, 0);
         assert.equal(shown('l.unit-suffix'), 'colli');
         await type('quantity', '1.560');
-        assert.equal(shown('l.quantity-kg'), '1.560 colli × 10 kg = 15.600 kg netto · 16.068 kg bruto');
+        assert.equal(shown('l.quantity-kg'), '1.560 colli × 10,00 kg = 15.600 kg netto · 16.068 kg bruto');
         assert.ok(!mounted.hasText('fysieke pallets') && !mounted.hasText('pallet_input_hint'));
     });
 
     test('only net without gross per colli; without net per colli (weighed) just the echo', async () => {
         await render({ defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: null });
         await type('quantity', '1560');
-        assert.equal(shown('l.quantity-kg'), '1.560 colli × 10 kg = 15.600 kg netto');
+        assert.equal(shown('l.quantity-kg'), '1.560 colli × 10,00 kg = 15.600 kg netto');
         await mounted.render(<LanguageProvider><Line key="weighed" kg={{ defaultNetKgPerPackage: null }} /></LanguageProvider>);
         await type('quantity', '1560');
         assert.equal(shown('l.quantity-kg'), null);
@@ -56,7 +56,7 @@ describe('QuantityInput', () => {
         await type('palletCount', '3');
         await type('loosePackages', '15');
         assert.equal(shown('l.pallet-calculation'), '3 pallets × 120 colli + 15 losse colli = 375 colli');
-        assert.equal(shown('l.quantity-kg'), '375 colli × 10 kg = 3.750 kg netto · 3.863 kg bruto');
+        assert.equal(shown('l.quantity-kg'), '375 colli × 10,00 kg = 3.750 kg netto · 3.863 kg bruto');
         await press('l.plain-quantity');
         assert.equal(mode, 'packages');
         assert.equal(input('quantity')!.value, '375');

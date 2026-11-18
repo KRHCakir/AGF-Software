@@ -74,7 +74,8 @@ export function purchaseLineRow(line: PurchaseLineDraft, article: PurchaseArticl
 }
 
 export function purchaseLineTotals(rows: readonly PurchaseLineRow[]): PurchaseLineTotals {
-    return sumLines(rows.map((row) => ({ quantity: row.quantity, netKg: row.weight?.netWeightKg ?? null, grossKg: row.weight?.grossWeightKg ?? null, total: row.total, pallets: row.pallets })));
+    return sumLines(rows.map((row) => ({ quantity: row.quantity, netKg: row.weight?.netWeightKg ?? null, grossKg: row.weight?.grossWeightKg ?? null, total: row.total, pallets: row.pallets,
+        grossEntered: row.weight?.weightSource === 'Entered' })));
 }
 
 // De regels die worden opgeslagen (met hun plek in het formulier, voor de foutsleutels lines[i].veld) en hun payload.

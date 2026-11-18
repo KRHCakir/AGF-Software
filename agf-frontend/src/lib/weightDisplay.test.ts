@@ -46,6 +46,14 @@ describe('showing weights', () => {
         ]);
         assert.deepEqual([totals.netKg, totals.grossKg], [21, 22.8], 'the real sums, not rounded');
         assert.deepEqual([totals.shownNetKg, totals.shownGrossKg], [22, 22], 'shown: 11 + 11 and 11 + 11');
+        // Zelf ingevuld staat in het veld zoals getypt (10,50 en 10,50) en telt exact mee: 21, niet 22.
+        assert.equal(shownKgTotal([10.5, 10.5], [true, true]), 21);
+        assert.equal(shownKgTotal([2272.5, 2020.4], [false, true]), 4293, 'calculated 2.273 + entered 2.020,40 = 4.293,4, shown as 4.293');
+        const mixed = lineWeightTotals([
+            { quantity: 505, unit: 'colli', netWeightKg: 2020.4, grossWeightKg: 2272.5, netEntered: true },
+            { quantity: 3, unit: 'colli', netWeightKg: 10.5, grossWeightKg: 10.5, netEntered: true, grossEntered: true },
+        ]);
+        assert.deepEqual([mixed.shownNetKg, mixed.shownGrossKg], [2031, 2284], '2.020,40 + 10,50 = 2.030,9 and 2.273 + 10,50 = 2.283,5');
         setWeightDecimals(1);
         assert.equal(shownKgTotal([10.55, 10.55]), 21.2, '10,6 + 10,6');
         assert.deepEqual([lineWeightTotals([{ quantity: 1, unit: 'colli', netWeightKg: 10.5, grossWeightKg: null }]).shownNetKg], [10.5]);

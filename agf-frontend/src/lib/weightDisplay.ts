@@ -31,13 +31,19 @@ export function formatKg(kg: number, locale: string): string {
     return `${formatWeight(kg, locale)} kg`;
 }
 
-// Gewicht per colli of verpakking: minstens twee decimalen (4,00 kg; 1,50 kg; 1,125 kg), want daar zijn decimalen juist nodig.
-export function formatKgPerPackage(kg: number, locale: string): string {
-    return `${new Intl.NumberFormat(numberLocale(locale), { minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(kg)} kg`;
+// Gewicht per colli of verpakking: minstens twee decimalen (4,00; 1,50; 1,125), want daar zijn decimalen juist nodig.
+export function formatPerPackage(kg: number, locale: string): string {
+    return new Intl.NumberFormat(numberLocale(locale), { minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(kg);
 }
 
-// Het totaal zoals het optelt: de som van de getoonde (afgeronde) regels; regels zonder gewicht tellen niet mee.
-export function shownKgTotal(values: readonly (number | null | undefined)[]): number {
-    const factor = 10 ** decimals;
-    return Math.round(values.reduce<number>((sum, kg) => (kg === null || kg === undefined ? sum : sum + roundWeight(kg)), 0) * factor) / factor;
+export function formatKgPerPackage(kg: number, locale: string): string {
+    return `${formatPerPackage(kg, locale)} kg`;
+}
+
+// Het totaal zoals het optelt: de som van de regels zoals ze er staan; regels zonder gewicht tellen niet mee. Een regel staat
+// afgerond (hele kilo's of één decimaal), behalve een zelf ingevuld gewicht in een invoerveld: dat staat er zoals getypt
+// (2.020,40) en telt dus exact mee (`exact`). Het totaal zelf wordt daarna getoond als hele kilo's of met één decimaal.
+export function shownKgTotal(values: readonly (number | null | undefined)[], exact?: readonly boolean[]): number {
+    const sum = values.reduce<number>((total, kg, index) => (kg === null || kg === undefined ? total : total + (exact?.[index] ? kg : roundWeight(kg))), 0);
+    return roundWeight(Math.round(sum * 1000) / 1000);
 }
