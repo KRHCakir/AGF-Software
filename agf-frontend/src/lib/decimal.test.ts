@@ -68,7 +68,7 @@ describe('parseLocaleDecimal', () => {
     test('while typing, a dot with 1 or 2 digits becomes a comma at once; a typed thousands number gets its dot back at the third digit', () => {
         assert.deepEqual(['7', '7.', '7.5', '7.50', '0.79', '.5', '-7.5', '15.000', '7.500', '2.272.5', '7,5', '1.2.3', 'abc'].map((text) => typedDecimalSeparator(text, 'nl')),
             ['7', '7.', '7,5', '7,50', '0,79', ',5', '-7,5', '15.000', '7.500', '2.272.5', '7,5', '1.2.3', 'abc']);
-        assert.deepEqual(['15,000', '7,500', '0,500', '15,00', '1234,567', '15,0000'].map((text) => typedThousands(text, 'nl')), ['15.000', '7.500', '0,500', '15,00', '1234,567', '15,0000']);
+        assert.deepEqual(['15,000', '7,500', '0,500', '15,00', '1234,567', '15,0000'].map((text) => typedThousands(text, 'nl')), ['15.000', '7.500', '0.500', '15,00', '1234.567', '15,0000']);
         assert.equal(typedDecimalSeparator('7,5', 'en'), '7.5');
         assert.equal(typedThousands('15.000', 'en'), '15,000');
     });

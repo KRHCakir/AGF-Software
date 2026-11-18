@@ -140,10 +140,11 @@ export function typedDecimalSeparator(text: string, locale: NumberLocale = input
 }
 
 // Wie een duizendtal met de punt typt (15.000) komt onderweg langs 15.0 en 15.00, die al een komma kregen. Zodra er precies drie
-// cijfers achter staan en het een kloppend duizendtal is, wordt het weer de punt die getypt is: 15,000 -> 15.000.
+// cijfers achter staan, wordt het weer de punt die getypt is: 15,000 -> 15.000. Ook als dat geen kloppend duizendtal is (0.500,
+// 1234.567): de punt blijft dan staan en de invoer is ongeldig, net als bij plakken; nooit stilzwijgend een ander geldig getal.
 export function typedThousands(text: string, locale: NumberLocale = inputLocale): string {
     const [decimal, group] = separators(locale);
-    const match = new RegExp(`^(\\s*[-−]?\\s*[1-9]\\d{0,2})${escape(decimal)}(\\d{3})$`).exec(text);
+    const match = new RegExp(`^(\\s*[-−]?\\s*\\d+)${escape(decimal)}(\\d{3})$`).exec(text);
     return match ? `${match[1]}${group}${match[2]}` : text;
 }
 
@@ -178,10 +179,13 @@ export function reformatDecimalFieldsOnBlur(root: Document): () => void {
         const input = decimalField(event.target, view);
         if (!input) return;
         const typed = typedDecimalSeparator(input.value);
-        const before = fromGroup.get(input);
+        // Plakken of slepen (InputEvent.inputType "insertFrom…") is nooit het begin van een getypt duizendtal: 7.50 plakken wordt
+        // 7,50 en blijft dat, ook als er daarna een cijfer achter getypt wordt.
+        const pasted = /^insertFrom/.test((event as InputEvent).inputType ?? '');
+        const before = pasted ? undefined : fromGroup.get(input);
         const oneDigitMore = before !== undefined && input.value.length === before.length + 1 && input.value.startsWith(before) && /\d$/.test(input.value);
         const next = typed !== input.value ? typed : oneDigitMore ? typedThousands(input.value) : input.value;
-        if (typed !== input.value) fromGroup.set(input, typed);
+        if (typed !== input.value && !pasted) fromGroup.set(input, typed);
         else if (oneDigitMore && next === input.value) fromGroup.set(input, input.value);
         else fromGroup.delete(input);
         if (next === input.value) return;
