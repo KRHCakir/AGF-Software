@@ -95,7 +95,8 @@ export interface WeightTotals {
     linesWithoutGross: number;
 }
 
-export function lineWeightTotals(lines: { quantity: number | null; unit: string; netWeightKg: number | null; grossWeightKg: number | null }[]): WeightTotals {
+// netEntered en grossEntered: het gewicht is zelf ingevuld en staat in het veld zoals getypt; het telt dan exact mee in het getoonde totaal.
+export function lineWeightTotals(lines: { quantity: number | null; unit: string; netWeightKg: number | null; grossWeightKg: number | null; netEntered?: boolean; grossEntered?: boolean }[]): WeightTotals {
     const byUnit = new Map<string, number>();
     let netKg = 0;
     let grossKg = 0;
@@ -112,8 +113,8 @@ export function lineWeightTotals(lines: { quantity: number | null; unit: string;
         quantities: Array.from(byUnit, ([unit, quantity]) => ({ unit, quantity })),
         netKg: Math.round(netKg * 1000) / 1000,
         grossKg: Math.round(grossKg * 1000) / 1000,
-        shownNetKg: shownKgTotal(lines.map((line) => line.netWeightKg)),
-        shownGrossKg: shownKgTotal(lines.map((line) => line.grossWeightKg)),
+        shownNetKg: shownKgTotal(lines.map((line) => line.netWeightKg), lines.map((line) => line.netEntered === true)),
+        shownGrossKg: shownKgTotal(lines.map((line) => line.grossWeightKg), lines.map((line) => line.grossEntered === true)),
         linesWithoutNet,
         linesWithoutGross,
     };
@@ -141,6 +142,7 @@ export function lineKgRows(lines: (LineWeightDraft & PalletInputDraft & { produc
     });
     const totals = lineWeightTotals(lines.map((line, index) => ({
         quantity: rows[index].quantity, unit: line.unit, netWeightKg: rows[index].weight?.netWeightKg ?? null, grossWeightKg: rows[index].weight?.grossWeightKg ?? null,
+        netEntered: isEntered(line, 'net'), grossEntered: isEntered(line, 'gross'),
     })));
     return { rows, totals };
 }

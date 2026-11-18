@@ -167,7 +167,9 @@ export function setFieldValue(input: HTMLInputElement, value: string, announce =
 export function reformatDecimalFieldsOnBlur(root: Document): () => void {
     const view = root.defaultView!;
     const atFocus = new WeakMap<HTMLInputElement, string>();
-    const fromGroup = new WeakSet<HTMLInputElement>();
+    // Per veld de tekst die hier van een getypte punt een komma kreeg. Alleen als de gebruiker daar daarna precies één cijfer achter
+    // typt, hoort het nog bij dezelfde invoer; vervangen of plakken (15,000 over 7,5 heen) begint opnieuw en wordt nooit omgezet.
+    const fromGroup = new WeakMap<HTMLInputElement, string>();
     const onFocusIn = (event: Event) => {
         const input = decimalField(event.target, view);
         if (input) atFocus.set(input, input.value);
@@ -176,9 +178,12 @@ export function reformatDecimalFieldsOnBlur(root: Document): () => void {
         const input = decimalField(event.target, view);
         if (!input) return;
         const typed = typedDecimalSeparator(input.value);
-        const next = typed !== input.value ? typed : fromGroup.has(input) ? typedThousands(input.value) : input.value;
-        if (typed !== input.value) fromGroup.add(input);
-        else if (next !== input.value || !/^\s*[-−]?\s*\d*[.,]\d{0,2}$/.test(input.value)) fromGroup.delete(input);
+        const before = fromGroup.get(input);
+        const oneDigitMore = before !== undefined && input.value.length === before.length + 1 && input.value.startsWith(before) && /\d$/.test(input.value);
+        const next = typed !== input.value ? typed : oneDigitMore ? typedThousands(input.value) : input.value;
+        if (typed !== input.value) fromGroup.set(input, typed);
+        else if (oneDigitMore && next === input.value) fromGroup.set(input, input.value);
+        else fromGroup.delete(input);
         if (next === input.value) return;
         const [start, end] = [input.selectionStart, input.selectionEnd];
         // Zonder eigen event: dit loopt vóór de onChange van het veld, die daarna de nieuwe tekst leest.
