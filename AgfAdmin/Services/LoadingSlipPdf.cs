@@ -45,7 +45,11 @@ namespace AgfAdmin.Services
         // (PurchaseLineMath.Round2), zodat de laadbon hetzelfde aantal pallets toont als de order zelf; afkappen zou 0,96 op de order en 0,95
         // op de bon geven.
         public static string Pallets(decimal? value) => value == null ? "–" : PurchaseLineMath.Round2(value.Value).ToString("N2", Dutch);
-        public static string Kg(decimal? value) => value == null ? "–" : value.Value.ToString("#,##0.###", Dutch);
+        // Hele kilo's (of één decimaal) zoals de versie is vastgelegd; een bon van vóór die instelling houdt haar oude weergave.
+        public static string Kg(decimal? value, int? weightDecimals) => WeightDisplay.Kg(value, weightDecimals);
+        // Het totaal is de som van de getoonde regels, zodat de bon op papier optelt.
+        public static decimal? TotalKg(decimal? stored, IEnumerable<decimal?> rows, int? weightDecimals) =>
+            weightDecimals == null ? stored : WeightDisplay.DisplayedTotal(rows, weightDecimals.Value);
 
         private static string LocalTime(DateTime utc, bool withTime) =>
             TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), AmsterdamBusinessCalendar.Zone).ToString(withTime ? "dd-MM-yyyy HH:mm" : "dd-MM-yyyy", Dutch);
@@ -142,7 +146,7 @@ namespace AgfAdmin.Services
                         table.Cell().Element(Cell).Text(row.Brand ?? "");
                         table.Cell().Element(Cell).Text(row.Size ?? "");
                         table.Cell().Element(Cell).Text(row.Origin ?? "");
-                        table.Cell().Element(Cell).AlignRight().Text(Kg(row.NetKg));
+                        table.Cell().Element(Cell).AlignRight().Text(Kg(row.NetKg, slip.WeightDecimals));
                         if (slip.ShowSupplier) table.Cell().Element(Cell).Text(row.Supplier ?? (row.PalletReference == null ? L("notReserved") : row.PalletReference)).FontSize(8);
                     }
                     // Het totaal alleen aan het eind (geen tabelvoet: die zou op elke pagina staan).
@@ -156,7 +160,7 @@ namespace AgfAdmin.Services
                         text.Span($"{L("total")}: {Quantity(slip.TotalQuantity)} {L("packages")} · {Pallets(slip.TotalPallets)} {L("pallets")}").Bold();
                         if (kgPartial) text.Span($" · {L("kgPartial")}").FontSize(8);
                     });
-                    table.Cell().Element(Total).AlignRight().Text(Kg(slip.TotalNetKg)).Bold();
+                    table.Cell().Element(Total).AlignRight().Text(Kg(TotalKg(slip.TotalNetKg, slip.Rows.Select(r => r.NetKg), slip.WeightDecimals), slip.WeightDecimals)).Bold();
                     if (slip.ShowSupplier) table.Cell().Element(Total);
                 });
 

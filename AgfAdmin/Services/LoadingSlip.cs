@@ -49,7 +49,9 @@ namespace AgfAdmin.Services
         DateTime RequestedDeliveryDate, DateTime? LoadAt, string LicensePlate,
         List<LoadingSlipRow> Rows, List<LoadingSlipPackagingRow> Packaging,
         decimal TotalQuantity, decimal? TotalPallets, decimal? TotalNetKg,
-        DateTime ConfirmedAt, string ConfirmedBy);
+        DateTime ConfirmedAt, string ConfirmedBy,
+        // Met hoeveel decimalen deze versie haar gewichten toont (0 of 1); null = een bon van vóór deze instelling, met de oude weergave.
+        int? WeightDecimals = null);
 
     // Eén rij: een orderregel, en per pallet of partij waar dat al vastligt (gereserveerd); wat nog niet gereserveerd is een eigen rij.
     // Pallets niet afgerond (de bon toont twee decimalen), zelfde berekening als op de orderregel (PurchaseLineMath).
@@ -109,15 +111,16 @@ namespace AgfAdmin.Services
                 settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.SalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
                 Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : Second(order.LoadAt.Value), Blank(order.LicensePlate),
                 rows, packaging, rows.Sum(r => r.Quantity), pallets.Count == 0 ? null : pallets.Sum(), kgs.Count == 0 ? null : kgs.Sum(),
-                Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy);
+                Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals));
         }
 
         public static string Serialize(LoadingSlipSnapshot snapshot) => JsonSerializer.Serialize(snapshot, Json);
         public static LoadingSlipSnapshot Deserialize(string json) => JsonSerializer.Deserialize<LoadingSlipSnapshot>(json, Json);
 
-        // Vingerafdruk van de inhoud: dezelfde bon (ook na opnieuw opbouwen) geeft nooit een nieuwe versie.
+        // Vingerafdruk van de inhoud: dezelfde bon (ook na opnieuw opbouwen) geeft nooit een nieuwe versie. Hoe gewichten getoond worden
+        // telt niet mee: de instelling wijzigen maakt van een bestaande bon geen nieuwe versie.
         public static string Hash(LoadingSlipSnapshot snapshot) =>
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot, HashJson)))).ToLowerInvariant();
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot with { WeightDecimals = null }, HashJson)))).ToLowerInvariant();
 
         // Op de seconde en als UTC: een datum uit de database (zonder Kind, met minder precisie) geeft zo dezelfde bon en dus geen nieuwe versie.
         internal static DateTime Second(DateTime value) =>

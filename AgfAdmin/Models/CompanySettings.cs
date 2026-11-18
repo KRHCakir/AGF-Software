@@ -55,5 +55,8 @@ namespace AgfAdmin.Models
         public string AiReadingEnabledBy { get; set; }
         public DateTime? AiReadingEnabledAt { get; set; }
         public decimal AiReadingMonthlyLimitEur { get; set; } = Services.DocumentAi.AiReadingRules.DefaultMonthlyLimitEur;
+
+        // Gewichten tonen met 0 of 1 decimaal (fixes 5a). Alleen weergave: de opslag houdt drie decimalen.
+        public int WeightDisplayDecimals { get; set; } = Services.WeightDisplay.DefaultDecimals;
     }
 }
