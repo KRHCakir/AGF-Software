@@ -54,7 +54,7 @@ export default function CustomerCreditSection({ customerId, credit, onChange, re
     const amountInput = (field: 'creditLimit' | 'insuredLimit', labelKey: string, required = false) => (
         <div>
             <label htmlFor={`customer.${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{required ? ' *' : ''}</label>
-            <input {...fieldProps(`customer.${field}`, e(field))} inputMode="decimal" value={credit[field]} maxLength={20} disabled={locked} placeholder="0,00"
+            <input {...fieldProps(`customer.${field}`, e(field))} inputMode="decimal" data-decimals={2} value={credit[field]} maxLength={20} disabled={locked} placeholder="0,00"
                 onChange={(event) => onChange({ [field]: event.target.value })} className={inputClass} />
             <FieldError id={`customer.${field}`} messages={e(field)} />
         </div>

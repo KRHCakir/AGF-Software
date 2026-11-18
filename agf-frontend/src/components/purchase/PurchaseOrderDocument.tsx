@@ -163,7 +163,7 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
                         <label htmlFor={`price-${line.id}-input`} className="min-w-0 flex-1 break-words text-gray-900">
                             {[line.productName, line.productVariantName].filter(Boolean).join(' · ')} · {t('po_change_price')}
                         </label>
-                        <input {...fieldProps(`price-${line.id}`, errors[`price-${line.id}`])} inputMode="decimal" value={prices[line.id] ?? ''} disabled={busy} data-tour="po-correction-price" data-tour-key={line.id}
+                        <input {...fieldProps(`price-${line.id}`, errors[`price-${line.id}`])} inputMode="decimal" data-decimals={2} value={prices[line.id] ?? ''} disabled={busy} data-tour="po-correction-price" data-tour-key={line.id}
                             className={`${inputClass} !mt-0 w-28 text-right`} onChange={(event) => { setPrices((current) => ({ ...current, [line.id]: event.target.value })); edited(); }} />
                         <FieldError id={`price-${line.id}`} messages={errors[`price-${line.id}`]} />
                     </li>
