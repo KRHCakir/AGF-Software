@@ -1,17 +1,29 @@
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { setWeightDecimals } from '../../lib/weightDisplay';
 import { getWeightDecimals } from '../../services/weightDisplayService';
 
-// Laadt één keer hoe het bedrijf gewichten toont (hele kilo's of één decimaal) en zet dat voor alle schermen (lib/weightDisplay.ts).
-// De schermen wachten even op het antwoord, zodat een gewicht nooit eerst anders staat; antwoordt de API niet, dan hele kilo's.
+// Laadt hoe het bedrijf gewichten toont (hele kilo's of één decimaal) en zet dat voor alle schermen (lib/weightDisplay.ts).
+// Bij elk scherm dat wordt geopend wordt de instelling opnieuw gelezen, zodat een wijziging van een collega snel zichtbaar wordt.
+// Alleen de eerste keer wachten de schermen op het antwoord (max. 5 seconden); faalt of hangt de API dan, dan hele kilo's.
+// Een latere mislukte lezing laat de laatst bekende instelling staan.
+const TIMEOUT_MS = 5000;
+
 export default function WeightDisplayProvider({ children }: { children: ReactNode }) {
+    const pathname = usePathname();
     const [ready, setReady] = useState(false);
+    const loaded = useRef(false);
     useEffect(() => {
         const controller = new AbortController();
-        getWeightDecimals(controller.signal).then(setWeightDecimals).catch(() => setWeightDecimals(0)).finally(() => { if (!controller.signal.aborted) setReady(true); });
-        return () => controller.abort();
-    }, []);
+        let cancelled = false;
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        getWeightDecimals(controller.signal)
+            .then((decimals) => { if (!cancelled) { setWeightDecimals(decimals); loaded.current = true; } })
+            .catch(() => { if (!cancelled && !loaded.current) setWeightDecimals(0); })
+            .finally(() => { clearTimeout(timer); if (!cancelled) setReady(true); });
+        return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
+    }, [pathname]);
     return ready ? <>{children}</> : null;
 }
