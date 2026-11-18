@@ -2,7 +2,8 @@
 
 import { useId, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDateTime, formatKg } from '../../lib/availability';
+import { formatDateTime } from '../../lib/availability';
+import { formatKgPerPackage } from '../../lib/weightDisplay';
 import type { VariantOption } from '../../types/referenceData';
 import { secondaryButtonClass } from './SuccessPanel';
 
@@ -43,7 +44,7 @@ export default function ExpectedAttributes({ lineId, variant, kgPerPackage, show
                         <div><dt className="inline text-gray-600">{t('receipt_attr_packaging')}: </dt><dd className="inline text-gray-900">{value(variant?.packaging)}</dd></div>
                         <div><dt className="inline text-gray-600">{t('receipt_attr_trade_class')}: </dt><dd className="inline text-gray-900">{value(variant?.tradeClass)}</dd></div>
                         <div><dt className="inline text-gray-600">{t('receipt_attr_brand')}: </dt><dd className="inline text-gray-900">{value(variant?.brand)}</dd></div>
-                        <div><dt className="inline text-gray-600">{t('receive_expected_kg')}: </dt><dd className="inline text-gray-900">{kgPerPackage === null ? none : formatKg(kgPerPackage, locale)}</dd></div>
+                        <div><dt className="inline text-gray-600">{t('receive_expected_kg')}: </dt><dd className="inline text-gray-900">{kgPerPackage === null ? none : formatKgPerPackage(kgPerPackage, locale)}</dd></div>
                     </dl>
                     <p className="mt-1 text-gray-600">{t('receive_expected_note')}</p>
                 </div>

@@ -4,6 +4,7 @@
 // Pure module zonder React (node:test); imports met .ts-extensie.
 
 import { round2 } from './invoiceMath.ts';
+import { shownKgTotal } from './weightDisplay.ts';
 
 export function lineTotal(quantity: number | null, unitPrice: number | null): number | null {
     return quantity === null || unitPrice === null ? null : round2(quantity * unitPrice);
@@ -40,6 +41,10 @@ export interface PurchaseLineTotals {
     quantity: number;
     netKg: number | null;
     grossKg: number | null;
+    // Zoals getoond onder de regels: de som van de afgeronde regels (hele kilo's of één decimaal). Zonder (een totaal van de server
+    // zonder regels erbij) wordt het echte totaal afgerond getoond.
+    shownNetKg?: number | null;
+    shownGrossKg?: number | null;
     amount: number | null;
     pallets: number | null;
     linesWithoutNet: number;
@@ -64,6 +69,8 @@ export function sumLines(lines: readonly PurchaseLineAmounts[]): PurchaseLineTot
         quantity: sum((line) => line.quantity, 3) ?? 0,
         netKg: sum((line) => line.netKg, 3),
         grossKg: sum((line) => line.grossKg, 3),
+        shownNetKg: raw((line) => line.netKg) === null ? null : shownKgTotal(lines.map((line) => line.netKg)),
+        shownGrossKg: raw((line) => line.grossKg) === null ? null : shownKgTotal(lines.map((line) => line.grossKg)),
         amount: sum((line) => line.total, 2),
         pallets: exactPallets === null ? null : round2(exactPallets),
         linesWithoutNet: lines.filter((line) => line.netKg === null).length,

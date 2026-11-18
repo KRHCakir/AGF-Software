@@ -5,8 +5,11 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatDecimalInput } from '../../lib/decimal';
 import { type KgField, type LineKgRow, type LineWeightDraft, isEntered, kgPerPackage } from '../../lib/lineWeight';
-import { formatKgOneDecimal } from '../../lib/quantityKg';
+import { formatKgPerPackage, roundWeight, weightDecimals } from '../../lib/weightDisplay';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
+
+// Een berekend gewicht in het veld: hele kilo's of één decimaal, in de notatie waarin het veld ook leest.
+const weightText = (kg: number) => formatDecimalInput(roundWeight(kg), weightDecimals(), undefined, weightDecimals());
 
 // Eén kg-veld (netto of bruto) op een order- of aanvoerregel. Met een standaard van het artikel staat er live aantal × standaard
 // in grijs ("berekend"); zelf typen maakt het zwart ("ingevuld") en dan volgt het het aantal niet meer; ↺ zet het terug.
@@ -31,7 +34,8 @@ export default function LineKgInput({ id, label, index, field, line, calculated,
     const enteredKey = field === 'net' ? 'netKgEntered' : 'grossKgEntered';
     const entered = isEntered(line, field);
     const typing = line[enteredKey] === true;
-    const shown = typing ? line[textKey] ?? '' : calculated !== null ? formatDecimalInput(calculated) : '';
+    // Berekend: een gewichtstotaal, dus hele kilo's (alleen weergave; verstuurd wordt de echte berekende waarde).
+    const shown = typing ? line[textKey] ?? '' : calculated !== null ? weightText(calculated) : '';
     const state = entered ? 'entered' : calculated !== null ? 'calculated' : 'empty';
 
     return (
@@ -45,7 +49,7 @@ export default function LineKgInput({ id, label, index, field, line, calculated,
                     className={`${inputClass} !mt-0 min-w-0 flex-1 text-right ${state === 'calculated' ? 'text-gray-500' : 'text-gray-900'}`} />
                 {entered && calculated !== null && (
                     <button type="button" disabled={locked} onClick={() => onChange({ [textKey]: '', [enteredKey]: false })}
-                        aria-label={t('line_kg_reset', { kg: formatDecimalInput(calculated) })} title={t('line_kg_reset', { kg: formatDecimalInput(calculated) })}
+                        aria-label={t('line_kg_reset', { kg: weightText(calculated) })} title={t('line_kg_reset', { kg: weightText(calculated) })}
                         className="shrink-0 rounded border border-gray-300 px-1.5 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40">↺</button>
                 )}
             </div>
@@ -76,7 +80,7 @@ export function LineKgHint({ variantId, hasDefault, netKg, quantity, unit, testI
     if (variantId === null || hasDefault) return null;
     return (
         <span className="block text-xs text-gray-600" data-testid={testId}>
-            {perPackage !== null && <span className="block font-medium text-gray-900" data-testid={`${testId}-per-package`}>{t('line_kg_per_package', { kg: formatKgOneDecimal(perPackage, locale), unit })}</span>}
+            {perPackage !== null && <span className="block font-medium text-gray-900" data-testid={`${testId}-per-package`}>{t('line_kg_per_package', { kg: formatKgPerPackage(perPackage, locale), unit })}</span>}
             {t('line_kg_no_default', { unit })}{' '}
             <Link href={`/articles?article=${variantId}`} target="_blank" rel="noopener" className="text-blue-700 underline decoration-dotted">{t('line_kg_open_article')}</Link>
         </span>

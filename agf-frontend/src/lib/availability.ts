@@ -11,6 +11,7 @@ import {
     VariantAvailability,
     WarehouseSupply,
 } from '../types/availability';
+import { formatKg as formatWeightKg } from './weightDisplay';
 
 // Pure hulpfuncties voor de beschikbaarheidspagina. Geen conversies tussen eenheden en geen geschatte gewichten:
 // alleen optellen binnen één categorie van één variant + eenheid, voor weergave.
@@ -105,8 +106,9 @@ export function formatMoney(value: number, currency: string | null, locale: stri
     return currency ? `${amount} ${currency}` : amount;
 }
 
+// Een gewichtstotaal: hele kilo's of één decimaal volgens de instelling van het bedrijf (lib/weightDisplay.ts).
 export function formatKg(value: number, locale: string): string {
-    return `${new Intl.NumberFormat(numberLocale(locale), { maximumFractionDigits: 3 }).format(value)} kg`;
+    return formatWeightKg(value, locale);
 }
 
 export function formatDateTime(value: string, locale: string): string {

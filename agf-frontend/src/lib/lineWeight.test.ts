@@ -42,7 +42,7 @@ test('kg per package check and totals per unit without merging units', () => {
         { quantity: 1560, unit: 'colli', netWeightKg: 15600, grossWeightKg: 16068 },
         { quantity: 221, unit: 'colli', netWeightKg: 2210, grossWeightKg: null },
         { quantity: 30, unit: 'box', netWeightKg: null, grossWeightKg: null },
-    ]), { quantities: [{ unit: 'colli', quantity: 1781 }, { unit: 'box', quantity: 30 }], netKg: 17810, grossKg: 16068, linesWithoutNet: 1, linesWithoutGross: 2 });
+    ]), { quantities: [{ unit: 'colli', quantity: 1781 }, { unit: 'box', quantity: 30 }], netKg: 17810, grossKg: 16068, shownNetKg: 17810, shownGrossKg: 16068, linesWithoutNet: 1, linesWithoutGross: 2 });
 });
 
 test('form rows: the net kg for the per-colli check stays available while gross has an error', () => {

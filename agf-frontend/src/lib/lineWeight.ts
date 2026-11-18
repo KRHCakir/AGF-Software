@@ -2,6 +2,7 @@ import type { WeightSource } from '../types/salesOrder';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { resolvePalletInput, type PalletInputDraft } from './palletInput.ts';
 import { times, type PackageKgDefaults } from './quantityKg.ts';
+import { shownKgTotal } from './weightDisplay.ts';
 
 // Netto en bruto kg op een order- of aanvoerregel, spiegel van LineWeightRules in de backend; de server blijft leidend.
 // Per veld: met een standaard kg per verpakking van het artikel volgt het veld live aantal × standaard ("berekend"), tot de
@@ -87,6 +88,9 @@ export interface WeightTotals {
     quantities: { unit: string; quantity: number }[];
     netKg: number;
     grossKg: number;
+    // Zoals getoond: de som van de afgeronde regels (hele kilo's of één decimaal), zodat het totaal onder de regels optelt.
+    shownNetKg: number;
+    shownGrossKg: number;
     linesWithoutNet: number;
     linesWithoutGross: number;
 }
@@ -108,6 +112,8 @@ export function lineWeightTotals(lines: { quantity: number | null; unit: string;
         quantities: Array.from(byUnit, ([unit, quantity]) => ({ unit, quantity })),
         netKg: Math.round(netKg * 1000) / 1000,
         grossKg: Math.round(grossKg * 1000) / 1000,
+        shownNetKg: shownKgTotal(lines.map((line) => line.netWeightKg)),
+        shownGrossKg: shownKgTotal(lines.map((line) => line.grossWeightKg)),
         linesWithoutNet,
         linesWithoutGross,
     };

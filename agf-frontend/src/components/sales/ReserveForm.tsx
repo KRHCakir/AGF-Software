@@ -5,6 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { calculatedReservationKg } from '../../lib/weight';
+import { formatKgPerPackage } from '../../lib/weightDisplay';
 import { formatDecimalInput, formatKgInput, parsePositiveDecimal } from '../../lib/decimal';
 import { ReserveCommand, reserveKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
@@ -175,7 +176,7 @@ export default function ReserveForm({ orderId, line, stock, onSucceeded, onReloa
                     <input {...fieldProps(`${idPrefix}-kg`, fieldErrors.netWeightKg)} inputMode="decimal" data-decimals={2} value={effectiveNetKg} disabled={locked || calculated !== null} readOnly={calculated !== null}
                         onChange={(event) => edit(setNetKg)(event.target.value)} className={inputClass} />
                     <span className="block text-xs text-gray-500">
-                        {calculated === null ? t('sales_reserve_kg_hint') : t('sales_reserve_kg_calculated_hint', { kg: formatKg(calculated, locale), unit: t(unitLabelKey(line.unit)).toLowerCase() })}
+                        {calculated === null ? t('sales_reserve_kg_hint') : t('sales_reserve_kg_calculated_hint', { kg: formatKgPerPackage(calculated, locale), unit: t(unitLabelKey(line.unit)).toLowerCase() })}
                     </span>
                     <FieldError id={`${idPrefix}-kg`} messages={fieldErrors.netWeightKg} />
                 </div>

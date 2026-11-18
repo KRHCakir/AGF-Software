@@ -3,7 +3,7 @@
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
-import { formatAmountInput } from '../../lib/decimal';
+import { formatAmountInput, formatKgInput } from '../../lib/decimal';
 import { parseUnitPrice } from '../../lib/packaging';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
@@ -67,7 +67,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
 
     const openGross = (line: PurchaseLineDraft, row: PurchaseLineRow) => {
         setGrossOpen((current) => new Set(current).add(line.key));
-        if (!line.grossKgEntered) onChange(line.key, { grossKg: row.weight?.grossWeightKg == null ? '' : formatQuantity(row.weight.grossWeightKg, locale) });
+        if (!line.grossKgEntered) onChange(line.key, { grossKg: row.weight?.grossWeightKg == null ? '' : formatKgInput(row.weight.grossWeightKg) });
         setTimeout(() => document.getElementById(`lines[${lines.indexOf(line)}].expectedGrossWeightKg-input`)?.focus(), 0);
     };
     // Alt+B, Alt+A en Alt+R in een veld van de regel: dezelfde acties als de knoppen.

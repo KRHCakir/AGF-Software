@@ -3,7 +3,8 @@
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { parsePositiveDecimal } from '../../lib/decimal';
-import { type PackageKgDefaults, formatKgOneDecimal, packageKg } from '../../lib/quantityKg';
+import { type PackageKgDefaults, packageKg } from '../../lib/quantityKg';
+import { formatKg } from '../../lib/weightDisplay';
 import NumberEcho from './NumberEcho';
 
 // Onder een aantal: met netto kg per verpakking van het artikel de live rekenregel ("1.560 colli × 10 kg = 15.600,0 kg netto
@@ -18,8 +19,8 @@ export default function QuantityKgLine({ value, quantity: given, unit, defaults,
     return (
         <p className="mt-0.5 text-xs text-gray-700" data-testid={`${testId}-kg`} aria-live="polite">
             {t('quantity_kg_line', { quantity: formatQuantity(quantity, locale), unit, perPackage: formatQuantity(kg.netKgPerPackage, locale) })}{' '}
-            <strong className="font-semibold text-gray-900">{t('quantity_kg_net', { net: formatKgOneDecimal(kg.netKg, locale) })}</strong>
-            {kg.grossKg !== null && <> · {t('quantity_kg_gross', { gross: formatKgOneDecimal(kg.grossKg, locale) })}</>}
+            <strong className="font-semibold text-gray-900">{t('quantity_kg_net', { net: formatKg(kg.netKg, locale) })}</strong>
+            {kg.grossKg !== null && <> · {t('quantity_kg_gross', { gross: formatKg(kg.grossKg, locale) })}</>}
         </p>
     );
 }

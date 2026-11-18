@@ -18,6 +18,7 @@ import { EnteredAttributes, articleVariants, emptyEntered, matchVariant } from '
 import { newRequestId } from '../../lib/requestId';
 import { WEIGHT_METHODS, WeightMethod, calculatedTotalKg } from '../../lib/weight';
 import { isValidSscc } from '../../lib/sscc';
+import { formatKgPerPackage } from '../../lib/weightDisplay';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createArticleFromEntry, existingArticle } from '../../services/articleService';
 import { getAvailabilityVariant } from '../../services/availabilityService';
@@ -967,7 +968,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                                     const quantity = parsePositiveDecimal(draft.quantity);
                                                     const perPackage = parsePositiveDecimal(draft.kgPerPackage);
                                                     return quantity.ok && perPackage.ok
-                                                        ? t('supply_calculated_total', { quantity: formatQuantity(quantity.value, locale), kg: formatKg(perPackage.value, locale), total: formatKg(calculatedTotalKg(quantity.value, perPackage.value), locale) })
+                                                        ? t('supply_calculated_total', { quantity: formatQuantity(quantity.value, locale), kg: formatKgPerPackage(perPackage.value, locale), total: formatKg(calculatedTotalKg(quantity.value, perPackage.value), locale) })
                                                         : t('supply_calculated_total_pending');
                                                 })()}
                                             </span>
