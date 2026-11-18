@@ -106,6 +106,18 @@ describe('number input rule for every decimal field', () => {
         assert.equal(field('price').value, '15.000', 'typing on digit by digit still gives the thousands number');
     });
 
+    test('a pasted 7.50 is never the start of a typed thousands number: typing one more digit gives 7,500', async () => {
+        await focus('price');
+        await act(async () => {
+            const input = field('price');
+            Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '7.50');
+            input.dispatchEvent(new window.InputEvent('input', { bubbles: true, inputType: 'insertFromPaste' }));
+        });
+        assert.equal(field('price').value, '7,50');
+        await typeKeys('price', '0');
+        assert.equal(field('price').value, '7,500', 'not 7.500 (7500)');
+    });
+
     test('an invalid number shows "Ongeldig getal. Bedoel je …?" with Overnemen; the total waits until the field is right', async () => {
         await focus('price');
         await type('price', '2.272.5');
