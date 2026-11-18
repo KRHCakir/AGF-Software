@@ -8,6 +8,29 @@ let decimals = 0;
 
 export function setWeightDecimals(value: number) {
     decimals = value === 1 ? 1 : 0;
+    queued = null;
+    revision += 1;
+}
+
+// Een instelling die later opnieuw is gelezen (een collega wijzigde haar) geldt pas vanaf het volgende scherm. Zo verandert een
+// gewicht nooit van vorm terwijl iemand in een scherm werkt, en wordt er niets opnieuw opgebouwd. Is de instelling intussen hier
+// zelf gezet (opgeslagen onder Instellingen), dan vervalt een lezing van daarvoor.
+let queued: number | null = null;
+let revision = 0;
+
+export function weightRevision(): number {
+    return revision;
+}
+
+export function queueWeightDecimals(value: number, readSinceRevision: number) {
+    if (readSinceRevision === revision) queued = value === 1 ? 1 : 0;
+}
+
+export function applyQueuedWeightDecimals() {
+    if (queued === null) return;
+    decimals = queued;
+    queued = null;
+    revision += 1;
 }
 
 export function weightDecimals(): number {

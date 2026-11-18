@@ -47,6 +47,8 @@ De opslag verandert niet: bedragen 2 decimalen, hoeveelheden en gewichten 3.
   pallets rekenen met de echte waarde.
 - Een totaal naast zijn regels (orderregels, inkoopregels, verzenden, laadbon, transportopdracht) is de **som van de getoonde regels**,
   zodat het op papier optelt. Een totaal dat zonder regels van de server komt (een orderlijst), is het echte totaal, afgerond.
+- Opslaan onder Instellingen geldt voor jezelf direct. Wijzigt een collega de instelling, dan zie je dat vanaf het tweede scherm dat je
+  daarna opent: het scherm waarin je werkt, wordt nooit opnieuw opgebouwd.
 - **Uitzondering:** het gewicht **per colli** houdt minstens twee decimalen (`1,50 kg`, `4,00 kg`), want daar zijn decimalen juist nodig.
 - **Documenten:** een versie van de laadbon of de transportopdracht legt vast met hoeveel decimalen ze haar gewichten toont. Een
   bestaande versie houdt haar eigen weergave, en de instelling wijzigen maakt geen nieuwe versie.

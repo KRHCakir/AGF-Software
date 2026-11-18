@@ -1,8 +1,10 @@
 import '../../test/setupDom.ts';
+import '../../test/nextNavigationStub.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { formatKg, setWeightDecimals, weightDecimals } from '../../lib/weightDisplay';
+import { navigate } from '../../test/nextNavigationStub.ts';
 import { Mounted, json } from '../../test/reactHarness.ts';
 import WeightDisplayProvider from '../shared/WeightDisplayProvider';
 import WeightDisplaySetting from './WeightDisplaySetting';
@@ -57,6 +59,39 @@ describe('weight display setting', () => {
         await mounted.render(<WeightDisplayProvider><p id="page">{'pagina'}</p></WeightDisplayProvider>);
         await settle();
         assert.ok($('#page'));
+        assert.equal(weightDecimals(), 0);
+    });
+
+    test('a setting changed by a colleague applies from the next screen; the open screen is never rebuilt and keeps its input', async () => {
+        let mounts = 0;
+        function Page() {
+            useEffect(() => { mounts += 1; }, []);
+            return <input id="typed" defaultValue="" />;
+        }
+        navigate('/sales-orders');
+        await mounted.render(<WeightDisplayProvider><Page /></WeightDisplayProvider>);
+        await settle();
+        assert.equal(weightDecimals(), 0);
+        $<HTMLInputElement>('#typed')!.value = 'half ingevuld';
+
+        // Een collega zet de instelling op één decimaal; hier opent iemand een volgend scherm.
+        stored = 1;
+        await act(async () => { navigate('/purchase-orders'); });
+        await settle();
+        assert.equal(weightDecimals(), 0, 'the screen that was just opened keeps the notation it was drawn with');
+        assert.equal(mounts, 1, 'nothing was rebuilt');
+        assert.equal($<HTMLInputElement>('#typed')!.value, 'half ingevuld');
+
+        await act(async () => { navigate('/receipts'); });
+        await settle();
+        assert.equal(weightDecimals(), 1, 'from the next screen on');
+        assert.equal(mounts, 1);
+        assert.equal($<HTMLInputElement>('#typed')!.value, 'half ingevuld');
+
+        // Zelf opslaan onder Instellingen geldt direct; een lezing van daarvoor vervalt.
+        setWeightDecimals(0);
+        await act(async () => { navigate('/dashboard'); });
+        await settle();
         assert.equal(weightDecimals(), 0);
     });
 });
