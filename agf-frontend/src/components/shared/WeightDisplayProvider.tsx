@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { Fragment, ReactNode, useEffect, useRef, useState } from 'react';
 import { setWeightDecimals } from '../../lib/weightDisplay';
 import { getWeightDecimals } from '../../services/weightDisplayService';
 
@@ -14,16 +14,18 @@ const TIMEOUT_MS = 5000;
 export default function WeightDisplayProvider({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const [ready, setReady] = useState(false);
+    const [decimals, setDecimals] = useState(0);
     const loaded = useRef(false);
     useEffect(() => {
         const controller = new AbortController();
         let cancelled = false;
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
         getWeightDecimals(controller.signal)
-            .then((decimals) => { if (!cancelled) { setWeightDecimals(decimals); loaded.current = true; } })
-            .catch(() => { if (!cancelled && !loaded.current) setWeightDecimals(0); })
+            .then((d) => { if (!cancelled) { setWeightDecimals(d); setDecimals(d); loaded.current = true; } })
+            .catch(() => { if (!cancelled && !loaded.current) { setWeightDecimals(0); setDecimals(0); } })
             .finally(() => { clearTimeout(timer); if (!cancelled) setReady(true); });
         return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
     }, [pathname]);
-    return ready ? <>{children}</> : null;
+    // De schermen lezen de globale formatter; de key laat ze opnieuw renderen als de instelling wijzigt.
+    return ready ? <Fragment key={decimals}>{children}</Fragment> : null;
 }
