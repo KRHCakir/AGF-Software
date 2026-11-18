@@ -86,6 +86,26 @@ describe('number input rule for every decimal field', () => {
         assert.equal(field('price').value, '1.250,25', 'after leaving in screen notation');
     });
 
+    test('a typed 7.5 followed by pasting 15,000 over it stays 15 (never silently 15.000); only one more typed digit continues the typed number', async () => {
+        await focus('price');
+        await typeKeys('price', '7.5');
+        assert.equal(field('price').value, '7,5');
+        await type('price', '15,000');
+        assert.equal(field('price').value, '15,000', 'pasted over the field: a comma with three decimals, not a thousands number');
+        await type('price', '');
+        await typeKeys('price', '7.5');
+        await type('price', '7,500');
+        assert.equal(field('price').value, '7,500', 'two digits at once is a paste, not typing on');
+        await type('price', '');
+        await typeKeys('price', '1.5');
+        await type('price', '1,');
+        await typeKeys('price', '500');
+        assert.equal(field('price').value, '1,500', 'after deleting, the comma is the user\'s own');
+        await type('price', '');
+        await typeKeys('price', '15.000');
+        assert.equal(field('price').value, '15.000', 'typing on digit by digit still gives the thousands number');
+    });
+
     test('an invalid number shows "Ongeldig getal. Bedoel je …?" with Overnemen; the total waits until the field is right', async () => {
         await focus('price');
         await type('price', '2.272.5');
