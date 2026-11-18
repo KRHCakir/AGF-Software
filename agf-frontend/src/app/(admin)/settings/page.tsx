@@ -4,6 +4,7 @@ import AiReadingSetting from '../../../components/settings/AiReadingSetting';
 import CostArticlesAdmin from '../../../components/settings/CostArticlesAdmin';
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
 import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
+import WeightDisplaySetting from '../../../components/settings/WeightDisplaySetting';
 import LoadingSlipSetting from '../../../components/settings/LoadingSlipSetting';
 import TransportOrderSetting from '../../../components/settings/TransportOrderSetting';
 import WarehouseRecipientsSetting from '../../../components/settings/WarehouseRecipientsSetting';
@@ -25,6 +26,7 @@ export default function SettingsPage() {
                 <p className="text-sm text-gray-600">{t('settings_subtitle')}</p>
             </div>
             <PartijNumberingSetting />
+            <WeightDisplaySetting />
             <LoadingSlipSetting />
             <TransportOrderSetting />
             <WarehouseRecipientsSetting />
