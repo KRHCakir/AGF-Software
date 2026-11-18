@@ -179,10 +179,13 @@ export function reformatDecimalFieldsOnBlur(root: Document): () => void {
         const input = decimalField(event.target, view);
         if (!input) return;
         const typed = typedDecimalSeparator(input.value);
-        const before = fromGroup.get(input);
+        // Plakken of slepen (InputEvent.inputType "insertFrom…") is nooit het begin van een getypt duizendtal: 7.50 plakken wordt
+        // 7,50 en blijft dat, ook als er daarna een cijfer achter getypt wordt.
+        const pasted = /^insertFrom/.test((event as InputEvent).inputType ?? '');
+        const before = pasted ? undefined : fromGroup.get(input);
         const oneDigitMore = before !== undefined && input.value.length === before.length + 1 && input.value.startsWith(before) && /\d$/.test(input.value);
         const next = typed !== input.value ? typed : oneDigitMore ? typedThousands(input.value) : input.value;
-        if (typed !== input.value) fromGroup.set(input, typed);
+        if (typed !== input.value && !pasted) fromGroup.set(input, typed);
         else if (oneDigitMore && next === input.value) fromGroup.set(input, input.value);
         else fromGroup.delete(input);
         if (next === input.value) return;
