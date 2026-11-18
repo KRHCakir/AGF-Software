@@ -15,22 +15,25 @@ const OWN_PARSING: [RegExp, string][] = [
     [/\.replace\(\s*(?:'[.,]'|"[.,]"|\/\\?[.,]\/g?)\s*,[^)]*\?\s*'[.,]'\s*:\s*'[.,]'/, 'komma en punt verwisselen'],
 ];
 
-// Bewuste uitzonderingen, elk met de reden. Een nieuw bestand hoort hier niet bij: gebruik de gedeelde parser.
-const ALLOWED: Record<string, string> = {
+// Bewuste uitzonderingen: per bestand alleen de genoemde vormen, elk met de reden. Een andere vorm in hetzelfde bestand faalt
+// gewoon; een nieuw bestand hoort hier niet bij: gebruik de gedeelde parser.
+const ALLOWED: Record<string, { why: string; forms: string[] }> = {
     // Oude schermen (Oude flows en de pagina voor de telefoon): type="number", de browser leest het getal. Niet meer in ontwikkeling.
-    'components/DumpWasteModal.tsx': 'oud scherm',
-    'components/ReceiveShipmentModal.tsx': 'oud scherm',
-    'components/QuickSellModal.tsx': 'oud scherm',
-    'components/ManualInvoiceModal.tsx': 'oud scherm',
-    'app/sales/[sellerId]/page.tsx': 'oud scherm (telefoon)',
-    'app/(admin)/incoming-invoices/[id]/review/page.tsx': 'oud scherm',
-    'app/(admin)/incoming-invoices/page.tsx': 'oud scherm',
+    'components/DumpWasteModal.tsx': { why: 'oud scherm', forms: ['parseFloat', 'parseInt'] },
+    'components/ReceiveShipmentModal.tsx': { why: 'oud scherm', forms: ['parseFloat', 'parseInt'] },
+    'components/QuickSellModal.tsx': { why: 'oud scherm', forms: ['Number(veld.value)'] },
+    'components/ManualInvoiceModal.tsx': { why: 'oud scherm', forms: ['Number(veld.value)'] },
+    'app/sales/[sellerId]/page.tsx': { why: 'oud scherm (telefoon)', forms: ['parseFloat', 'parseInt', 'toFixed'] },
+    'app/(admin)/incoming-invoices/[id]/review/page.tsx': { why: 'oud scherm', forms: ['parseFloat', 'toFixed'] },
+    'app/(admin)/incoming-invoices/page.tsx': { why: 'oud scherm', forms: ['toFixed'] },
     // Hele getallen in een veld dat alleen cijfers toelaat (poort, aantal cijfers van een volgnummer).
-    'components/settings/MailSenderSetting.tsx': 'poortnummer, alleen cijfers',
-    'components/settings/PartijNumberingSetting.tsx': 'aantal cijfers, alleen hele getallen',
+    'components/settings/MailSenderSetting.tsx': { why: 'poortnummer, alleen cijfers', forms: ['Number(veld.value)'] },
+    'components/settings/PartijNumberingSetting.tsx': { why: 'aantal cijfers, alleen hele getallen', forms: ['Number(veld.value)'] },
     // Rekenwerk, geen invoer: afronden op centen zoals de server.
-    'lib/exchangeRate.ts': 'afronden op centen',
+    'lib/exchangeRate.ts': { why: 'afronden op centen', forms: ['toFixed'] },
 };
+// De gedeelde parser zelf valt buiten de controle: daar hoort het lezen en schrijven van getallen juist thuis.
+const SHARED_PARSER = 'lib/decimal.ts';
 
 function sourceFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -48,17 +51,20 @@ describe('numbers typed by a user are read by the shared parser only', () => {
         assert.ok(files.length > 100, `the source was found (${files.length} files in ${src})`);
         const found = files.flatMap((file) => {
             const name = relative(src, file).split('\\').join('/');
-            if (name in ALLOWED) return [];
+            if (name === SHARED_PARSER) return [];
+            const allowed = ALLOWED[name]?.forms ?? [];
             return readFileSync(file, 'utf8').split('\n').flatMap((line, index) =>
-                OWN_PARSING.filter(([pattern]) => pattern.test(line)).map(([, what]) => `${name}:${index + 1}: ${what}: ${line.trim().slice(0, 120)}`));
+                OWN_PARSING.filter(([pattern, what]) => !allowed.includes(what) && pattern.test(line)).map(([, what]) => `${name}:${index + 1}: ${what}: ${line.trim().slice(0, 120)}`));
         });
         assert.deepEqual(found, []);
     });
 
     test('every exception still exists and still needs to be one (the list cannot grow stale)', () => {
-        for (const name of Object.keys(ALLOWED)) {
-            const text = readFileSync(join(src, name), 'utf8');
-            assert.ok(OWN_PARSING.some(([pattern]) => text.split('\n').some((line) => pattern.test(line))), `${name} no longer needs its exception (${ALLOWED[name]})`);
+        for (const [name, { why, forms }] of Object.entries(ALLOWED)) {
+            const lines = readFileSync(join(src, name), 'utf8').split('\n');
+            for (const form of forms) {
+                assert.ok(OWN_PARSING.some(([pattern, what]) => what === form && lines.some((line) => pattern.test(line))), `${name} no longer needs its exception for ${form} (${why})`);
+            }
         }
     });
 
