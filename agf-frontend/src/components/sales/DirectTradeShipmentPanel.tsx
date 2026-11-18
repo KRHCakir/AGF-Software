@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, todayInAmsterdam } from '../../lib/calendarDate';
-import { formatDecimalInput } from '../../lib/decimal';
+import { formatKgInput } from '../../lib/decimal';
 import { ShipDirectTradeCommand, blockedBy, shipDirectTradeKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { RuleError, isShippableAllocation, isShippedAllocation, lotDeviates, normalizeDispatchReference, validateShipmentLine, validateShippedOn } from '../../lib/salesOrderRules';
@@ -42,7 +42,7 @@ export default function DirectTradeShipmentPanel({ order, onShipped, onReload, o
     const [pending, setPending, clearPending] = usePendingCommand<ShipDirectTradeCommand>(shipDirectTradeKey(order.id));
     const [selectedIds, setSelectedIds] = useState<number[]>(() => pending?.payload.lines.map((line) => line.stockReservationId) ?? []);
     const [inputs, setInputs] = useState<Record<number, RowInput>>(() => Object.fromEntries((pending?.payload.lines ?? []).map((line) => [line.stockReservationId, {
-        netKg: formatDecimalInput(line.netWeightKg), lotNumber: line.lotNumber, lotDeviationReason: line.lotDeviationReason ?? '',
+        netKg: formatKgInput(line.netWeightKg), lotNumber: line.lotNumber, lotDeviationReason: line.lotDeviationReason ?? '',
     }])));
     const [shippedOn, setShippedOn] = useState(() => pending?.payload.shippedOn ?? today);
     const [reference, setReference] = useState(() => pending?.payload.reference ?? '');
@@ -220,7 +220,7 @@ export default function DirectTradeShipmentPanel({ order, onShipped, onReload, o
                                         <div className="mt-2 grid grid-cols-3 gap-3 pl-6">
                                             <div>
                                                 <label htmlFor={`${idPrefix}-kg-${reservation.id}`} className="text-xs font-medium text-gray-700">{t('sales_ship_kg')} *</label>
-                                                <input id={`${idPrefix}-kg-${reservation.id}`} inputMode="decimal" value={input.netKg} disabled={locked}
+                                                <input id={`${idPrefix}-kg-${reservation.id}`} inputMode="decimal" data-decimals={2} value={input.netKg} disabled={locked}
                                                     onChange={(event) => editRow(reservation, 'netKg', event.target.value)} aria-invalid={fieldErrors[`${key}.netWeightKg`] !== undefined} className={inputClass} />
                                                 <span className="block text-xs text-gray-500">{t('sales_ship_kg_hint')}</span>
                                                 <FieldError id={`${idPrefix}-kg-${reservation.id}-error`} messages={fieldErrors[`${key}.netWeightKg`]} />

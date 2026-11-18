@@ -5,7 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { unitLabelKey } from '../../lib/units';
 import { calculatedReservationKg } from '../../lib/weight';
-import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, formatKgInput, parsePositiveDecimal } from '../../lib/decimal';
 import { ReserveCommand, reserveKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { MAX_REASON_LENGTH, fullRemainderFits, normalizeReason, remainingAfter, validateReservationInput } from '../../lib/salesOrderRules';
@@ -37,7 +37,7 @@ export default function ReserveForm({ orderId, line, stock, onSucceeded, onReloa
     const { t, locale } = useTranslation();
     const [pending, setPending, clearPending] = usePendingCommand<ReserveCommand>(reserveKey(orderId, line.id));
     const [quantity, setQuantity] = useState(() => (pending === null ? '' : formatDecimalInput(pending.payload.quantity)));
-    const [netKg, setNetKg] = useState(() => (pending === null ? '' : formatDecimalInput(pending.payload.netWeightKg)));
+    const [netKg, setNetKg] = useState(() => (pending === null ? '' : formatKgInput(pending.payload.netWeightKg)));
     const [reason, setReason] = useState(() => pending?.payload.reason ?? '');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
@@ -56,7 +56,7 @@ export default function ReserveForm({ orderId, line, stock, onSucceeded, onReloa
     const remaining = parsedQuantity.ok ? remainingAfter(line.openQuantity, parsedQuantity.value) : null;
     // Berekend gewicht: de kg volgt het aantal (aantal × kg per verpakking) en is niet vrij in te vullen; nooit "gewogen".
     const calculated = stock !== null && stock.weightMethod === 'Calculated' && stock.netKgPerPackage !== null ? stock.netKgPerPackage : null;
-    const effectiveNetKg = calculated === null || stock === null ? netKg : parsedQuantity.ok ? formatDecimalInput(calculatedReservationKg(parsedQuantity.value, calculated, stock.availableQuantity, stock.availableNetWeightKg)) : '';
+    const effectiveNetKg = calculated === null || stock === null ? netKg : parsedQuantity.ok ? formatKgInput(calculatedReservationKg(parsedQuantity.value, calculated, stock.availableQuantity, stock.availableNetWeightKg)) : '';
 
     const edit = (setter: (value: string) => void) => (value: string) => {
         if (locked) return;
@@ -68,7 +68,7 @@ export default function ReserveForm({ orderId, line, stock, onSucceeded, onReloa
     const copyFullRemainder = () => {
         if (locked || !fits || stock === null) return;
         setQuantity(formatDecimalInput(stock.availableQuantity));
-        setNetKg(formatDecimalInput(stock.availableNetWeightKg));
+        setNetKg(formatKgInput(stock.availableNetWeightKg));
         setError(null);
         setFieldErrors({});
     };
@@ -172,7 +172,7 @@ export default function ReserveForm({ orderId, line, stock, onSucceeded, onReloa
                 </div>
                 <div>
                     <label htmlFor={`${idPrefix}-kg-input`} className="text-xs font-medium text-gray-700">{t('sales_reserve_kg')} *</label>
-                    <input {...fieldProps(`${idPrefix}-kg`, fieldErrors.netWeightKg)} inputMode="decimal" value={effectiveNetKg} disabled={locked || calculated !== null} readOnly={calculated !== null}
+                    <input {...fieldProps(`${idPrefix}-kg`, fieldErrors.netWeightKg)} inputMode="decimal" data-decimals={2} value={effectiveNetKg} disabled={locked || calculated !== null} readOnly={calculated !== null}
                         onChange={(event) => edit(setNetKg)(event.target.value)} className={inputClass} />
                     <span className="block text-xs text-gray-500">
                         {calculated === null ? t('sales_reserve_kg_hint') : t('sales_reserve_kg_calculated_hint', { kg: formatKg(calculated, locale), unit: t(unitLabelKey(line.unit)).toLowerCase() })}

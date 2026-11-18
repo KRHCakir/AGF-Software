@@ -959,7 +959,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                     {draft.method === 'Calculated' ? (
                                         <div className="mt-1">
                                             <label htmlFor={`${key('netKgPerPackage')}-input`} className="text-xs font-medium text-gray-700">{t('supply_kg_per_package')} *</label>
-                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" disabled={!editable || creating(id)}
+                                            <input {...fieldProps(key('netKgPerPackage'), e(key('netKgPerPackage')))} data-tour="receive-kg-per-package" data-tour-key={id} value={draft.kgPerPackage} inputMode="decimal" data-decimals={2} disabled={!editable || creating(id)}
                                                 onChange={(event) => editLine(id, 'kgPerPackage', event.target.value)} className={inputClass} />
                                             <span className="block text-xs text-gray-500">{t('supply_kg_per_package_hint')}</span>
                                             <span className="block text-xs font-medium text-amber-900" data-testid={`calculated-total-${id}`}>
@@ -977,7 +977,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                     ) : (
                                         <div className="mt-1">
                                             <label htmlFor={`${key('netWeightKg')}-input`} className="text-xs font-medium text-gray-700">{t('supply_actual_net_kg')} *</label>
-                                            <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} data-tour="receive-net-kg" data-tour-key={id} value={draft.netKg} inputMode="decimal" disabled={!editable}
+                                            <input {...fieldProps(key('netWeightKg'), e(key('netWeightKg')))} data-tour="receive-net-kg" data-tour-key={id} value={draft.netKg} inputMode="decimal" data-decimals={2} disabled={!editable}
                                                 onChange={(event) => editLine(id, 'netKg', event.target.value)} className={inputClass} />
                                             <NumberEcho value={draft.netKg} unit="kg" testId={`${key('netWeightKg')}-echo`} />
                                             <span className="block text-xs text-gray-500">{t('supply_actual_net_kg_hint')}</span>

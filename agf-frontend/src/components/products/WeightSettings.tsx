@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, formatKgInput, parsePositiveDecimal } from '../../lib/decimal';
 import { WEIGHT_METHODS, WeightMethod, isWeightMethod } from '../../lib/weight';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { updatePackagingSettings, updateWeightSettings } from '../../services/weightSettingsService';
@@ -20,7 +20,7 @@ export default function WeightSettings({ variantId, weightMethod, defaultNetKgPe
 }) {
     const { t } = useTranslation();
     const [method, setMethod] = useState<WeightMethod>(weightMethod);
-    const [kg, setKg] = useState(defaultNetKgPerPackage === null ? '' : formatDecimalInput(defaultNetKgPerPackage));
+    const [kg, setKg] = useState(defaultNetKgPerPackage === null ? '' : formatKgInput(defaultNetKgPerPackage));
     const [perPallet, setPerPallet] = useState(defaultPackagesPerPallet === null ? '' : formatDecimalInput(defaultPackagesPerPallet));
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -67,7 +67,7 @@ export default function WeightSettings({ variantId, weightMethod, defaultNetKgPe
             </label>
             <label className="flex flex-col gap-0.5 text-gray-700">
                 {t('products_weight_default_kg')}
-                <input value={kg} inputMode="decimal" onChange={(event) => { setKg(event.target.value); setSaved(false); }} className={`${inputClass} mt-0 w-28`} aria-label={t('products_weight_default_kg')} />
+                <input value={kg} inputMode="decimal" data-decimals={2} onChange={(event) => { setKg(event.target.value); setSaved(false); }} className={`${inputClass} mt-0 w-28`} aria-label={t('products_weight_default_kg')} />
             </label>
             <label className="flex flex-col gap-0.5 text-gray-700">
                 {t('products_packages_per_pallet')}
