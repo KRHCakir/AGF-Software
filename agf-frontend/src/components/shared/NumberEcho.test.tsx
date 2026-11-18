@@ -34,10 +34,12 @@ describe('NumberEcho and reformat on blur', () => {
         assert.equal(echo(), '= 15.000 unit_box', '15.000 stays fifteen thousand, not fifteen');
     });
 
-    test('an invalid dot shows the separator message and stays as typed after blur', async () => {
+    test('a dot with 1 or 2 digits is the decimal sign; an invalid dot shows the separator message and stays as typed after blur', async () => {
         await type('15.5');
+        assert.equal(echo(), '= 15,5 unit_box');
+        await type('2.272.5');
         assert.equal(echo(), 'supply_error_decimal_separator');
         await blur();
-        assert.equal(input().value, '15.5');
+        assert.equal(input().value, '2.272.5');
     });
 });

@@ -18,3 +18,9 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Een getalveld met een ongeldige vorm (2.272.5): duidelijk gemarkeerd; de melding met Overnemen komt van NumberInputAssist. */
+input[data-number-invalid="true"] {
+  border-color: #b45309;
+  box-shadow: 0 0 0 1px #b45309;
+}
