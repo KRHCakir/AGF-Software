@@ -37,7 +37,8 @@ namespace AgfAdmin.Services
 
     public sealed class WeightDisplaySettingsDto
     {
-        public int Decimals { get; set; }
+        // Nullable: een verzoek zonder dit veld is onvolledig en wijzigt niets (het wordt nooit stil 0).
+        public int? Decimals { get; set; }
     }
 
     // De instelling per bedrijf onder Beheer: gewichten tonen met 0 of 1 decimaal (standaard 0).
@@ -52,15 +53,15 @@ namespace AgfAdmin.Services
         // Geldt voor schermen meteen en voor nieuwe versies van documenten; een bestaande versie houdt haar eigen weergave.
         public async Task<ServiceResult<WeightDisplaySettingsDto>> UpdateAsync(WeightDisplaySettingsDto request, CancellationToken cancellationToken = default)
         {
-            if (request == null || !WeightDisplay.IsAllowed(request.Decimals))
+            if (request?.Decimals is not int decimals || !WeightDisplay.IsAllowed(decimals))
             {
                 return ServiceResult<WeightDisplaySettingsDto>.Validation(new Dictionary<string, string[]> { ["decimals"] = new[] { $"Decimals must be 0 or {WeightDisplay.MaxDecimals}." } });
             }
             var settings = await db.CompanySettings.OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
             if (settings == null) db.CompanySettings.Add(settings = new CompanySettings());
-            settings.WeightDisplayDecimals = request.Decimals;
+            settings.WeightDisplayDecimals = decimals;
             await db.SaveChangesAsync(cancellationToken);
-            return ServiceResult<WeightDisplaySettingsDto>.Ok(new WeightDisplaySettingsDto { Decimals = request.Decimals });
+            return ServiceResult<WeightDisplaySettingsDto>.Ok(new WeightDisplaySettingsDto { Decimals = decimals });
         }
     }
 }
