@@ -35,7 +35,7 @@ export default function WeightDisplayProvider({ children }: { children: ReactNod
                 else setWeightDecimals(decimals);
                 loaded.current = true;
             })
-            .catch(() => { if (!cancelled && !loaded.current) setWeightDecimals(0); })
+            .catch(() => { if (!cancelled && !loaded.current) { setWeightDecimals(0); loaded.current = true; } })
             .finally(() => { clearTimeout(timer); if (!cancelled) setReady(true); });
         return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
     }, [pathname]);

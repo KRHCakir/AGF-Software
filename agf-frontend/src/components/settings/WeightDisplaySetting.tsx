@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatKg, setWeightDecimals } from '../../lib/weightDisplay';
+import { formatKgWithDecimals, setWeightDecimals } from '../../lib/weightDisplay';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getWeightDecimals, updateWeightDecimals } from '../../services/weightDisplayService';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -54,7 +54,7 @@ export default function WeightDisplaySetting() {
                     </label>
                 ))}
             </fieldset>
-            {decimals !== null && <p className="text-xs text-gray-600" data-testid="weight-display-example">{t('settings_weight_example', { shown: formatKg(2272.5, locale) })}</p>}
+            {decimals !== null && <p className="text-xs text-gray-600" data-testid="weight-display-example">{t('settings_weight_example', { shown: formatKgWithDecimals(2272.5, locale, decimals) })}</p>}
             {saved && <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900">{t('settings_weight_saved')}</p>}
         </section>
     );
