@@ -14,6 +14,7 @@ import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 // Beheer van betalingscondities (Instellingen). Lijst met inactieve op verzoek, toevoegen, wijzigen op versie, (de)activeren en
 // verwijderen. Verwijderen kan alleen als geen klant of leverancier de conditie gebruikt; anders meldt de server de aantallen
@@ -42,6 +43,8 @@ export default function PaymentConditionsAdmin() {
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [editing, setEditing] = useState<Editing | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
+    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
+    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [serverError, setServerError] = useState<ApiError | null>(null);
     const [pending, setPending] = useState<Pending | null>(null);
     const [busy, setBusy] = useState(false);
@@ -95,7 +98,7 @@ export default function PaymentConditionsAdmin() {
         try {
             const result = await createPaymentCondition({ ...command.payload, requestId: command.requestId });
             setPending(null);
-            setEditing(null);
+            setEditing(null); leave.saved();
             setNotice(t(result.replayed ? 'payment_conditions_saved_before' : 'payment_conditions_created', { code: result.condition.code }));
             reload();
         } catch (caught) {
@@ -131,7 +134,7 @@ export default function PaymentConditionsAdmin() {
         await run(async () => {
             try {
                 const saved = await updatePaymentCondition(id, { ...payload, expectedVersion: editing.version ?? 0 });
-                setEditing(null);
+                setEditing(null); leave.saved();
                 setNotice(t('payment_conditions_saved', { code: saved.code }));
                 reload();
             } catch (caught) {
@@ -217,7 +220,7 @@ export default function PaymentConditionsAdmin() {
             )}
 
             {editing !== null && (
-                <form noValidate aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void save(); }} className="space-y-3 rounded-md border border-blue-200 bg-blue-50/40 p-3" data-testid="payment-condition-form">
+                <form ref={leave.ref} noValidate aria-busy={busy} onSubmit={(event) => { event.preventDefault(); void save(); }} className="space-y-3 rounded-md border border-blue-200 bg-blue-50/40 p-3" data-testid="payment-condition-form">
                     <p className="text-sm font-semibold text-gray-900">{editing.id === null ? t('payment_conditions_new') : t('payment_conditions_edit', { code: editing.draft.code })}</p>
                     {serverError && pending === null && <ErrorNotice error={serverError} />}
                     {pending !== null && (
@@ -251,7 +254,7 @@ export default function PaymentConditionsAdmin() {
                     {editing.id !== null && <p className="text-xs text-gray-600">{t('payment_conditions_days_change_hint')}</p>}
                     <div className="flex flex-wrap gap-2">
                         <button type="submit" className={primaryButtonClass} disabled={busy}>{pending !== null ? t('supply_retry_same') : busy ? t('supply_saving') : t('payment_conditions_save')}</button>
-                        <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => { setEditing(null); setPending(null); setErrors({}); setServerError(null); }}>{t('inspection_cancel')}</button>
+                        <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => { setEditing(null); leave.saved(); setPending(null); setErrors({}); setServerError(null); }}>{t('inspection_cancel')}</button>
                     </div>
                 </form>
             )}
