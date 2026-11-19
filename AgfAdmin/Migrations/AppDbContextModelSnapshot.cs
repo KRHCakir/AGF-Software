@@ -376,6 +376,9 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("VatNumber")
                         .HasColumnType("text");
 
+                    b.Property<int>("WeightDisplayDecimals")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.ToTable("CompanySettings", t =>

@@ -43,6 +43,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateLoadingSlip([FromServices] Services.LoadingSlipService slips, [FromBody] AgfAdmin.DTOs.LoadingSlipSettingsDto request) =>
             this.ToActionResult(await slips.UpdateSettingsAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Gewichten tonen met 0 of 1 decimaal (fixes 5a): lezen mag iedereen (de schermen hebben het nodig), wijzigen met Beheer.
+        [HttpGet("weight-display")]
+        public async Task<IActionResult> GetWeightDisplay([FromServices] Services.WeightDisplayService weights) => Ok(await weights.GetAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("weight-display")]
+        public async Task<IActionResult> UpdateWeightDisplay([FromServices] Services.WeightDisplayService weights, [FromBody] Services.WeightDisplaySettingsDto request) =>
+            this.ToActionResult(await weights.UpdateAsync(request, HttpContext?.RequestAborted ?? default));
+
         // Transportopdracht (documenten deel 2): taal van de kopteksten en de standaard soort pallet.
         [HttpGet("transport-order")]
         public async Task<IActionResult> GetTransportOrder([FromServices] Services.SalesOrderTransportService transports) => Ok(await transports.GetSettingsAsync(HttpContext?.RequestAborted ?? default));

@@ -14,7 +14,9 @@ namespace AgfAdmin.Services
         string LoadingReference, string UnloadingReference, string Remarks, string PalletKind,
         List<TransportOrderRow> Rows, List<LoadingSlipPackagingRow> Packaging,
         decimal TotalQuantity, decimal? TotalPalletSpaces, decimal? TotalGrossKg,
-        DateTime ConfirmedAt, string ConfirmedBy);
+        DateTime ConfirmedAt, string ConfirmedBy,
+        // Zoals bij de laadbon: 0 of 1 decimaal voor gewichten; null = een opdracht van vóór deze instelling.
+        int? WeightDecimals = null);
 
     // Eén rij per orderregel: colli, omschrijving (product, ras, verpakking), klasse, herkomst, palletplaatsen (niet afgerond, zelfde
     // berekening als op de orderregel) en bruto kg (van de regel, berekend of aangepast; anders uit het artikel).
@@ -52,7 +54,7 @@ namespace AgfAdmin.Services
                 LoadingSlipBuilder.Blank(transport.LoadingReference), LoadingSlipBuilder.Blank(transport.UnloadingReference) ?? LoadingSlipBuilder.Blank(order.CustomerReference),
                 LoadingSlipBuilder.Blank(transport.Remarks), LoadingSlipBuilder.Blank(transport.PalletKind) ?? LoadingSlipBuilder.Blank(settings.TransportOrderPalletKind) ?? SalesTransportRules.DefaultPalletKind,
                 rows, packaging, rows.Sum(r => r.Quantity), spaces.Count == 0 ? null : spaces.Sum(), gross.Count == 0 ? null : gross.Sum(),
-                LoadingSlipBuilder.Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy);
+                LoadingSlipBuilder.Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals));
         }
 
         public static string Serialize(TransportOrderSnapshot snapshot) => JsonSerializer.Serialize(snapshot, Json);
@@ -60,7 +62,7 @@ namespace AgfAdmin.Services
 
         // Vingerafdruk zoals bij de laadbon: lege velden tellen niet mee.
         public static string Hash(TransportOrderSnapshot snapshot) =>
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot, LoadingSlipBuilder.HashJson)))).ToLowerInvariant();
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot with { WeightDecimals = null }, LoadingSlipBuilder.HashJson)))).ToLowerInvariant();
 
         // Bruto van de regel (berekend of door de gebruiker aangepast); zonder dat aantal × het standaard bruto per verpakking van het artikel.
         public static decimal? GrossKg(SalesOrderLine line) =>

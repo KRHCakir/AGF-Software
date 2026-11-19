@@ -160,7 +160,7 @@ namespace AgfAdmin.Services
                         table.Cell().Element(Cell).Text(order.PalletKind ?? "");
                         // Twee decimalen, zelfde berekening als de orderregel (niet naar hele pallets).
                         table.Cell().Element(Cell).AlignRight().Text(LoadingSlipPdf.Pallets(row.PalletSpaces));
-                        table.Cell().Element(Cell).AlignRight().Text(LoadingSlipPdf.Kg(row.GrossKg));
+                        table.Cell().Element(Cell).AlignRight().Text(LoadingSlipPdf.Kg(row.GrossKg, order.WeightDecimals));
                     }
                     IContainer Total(IContainer cell) => cell.BorderTop(1.5f).PaddingVertical(4).PaddingHorizontal(2);
                     var kgPartial = order.TotalGrossKg != null && order.Rows.Any(r => r.GrossKg == null);
@@ -171,7 +171,7 @@ namespace AgfAdmin.Services
                         if (kgPartial) text.Span($" · {L("kgPartial")}").FontSize(8);
                     });
                     table.Cell().Element(Total).AlignRight().Text(LoadingSlipPdf.Pallets(order.TotalPalletSpaces)).Bold();
-                    table.Cell().Element(Total).AlignRight().Text(LoadingSlipPdf.Kg(order.TotalGrossKg)).Bold();
+                    table.Cell().Element(Total).AlignRight().Text(LoadingSlipPdf.Kg(LoadingSlipPdf.TotalKg(order.TotalGrossKg, order.Rows.Select(r => r.GrossKg), order.WeightDecimals), order.WeightDecimals)).Bold();
                 });
 
                 if (order.Packaging.Count > 0)
