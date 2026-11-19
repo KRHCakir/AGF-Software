@@ -2085,7 +2085,7 @@
   "sales_next_confirm": "Volgende stap: alles is verzonden; bevestig de aflevering bij de verzending.",
   "sales_next_done": "Alles is verzonden en afgeleverd. De factuur komt in een volgende versie.",
   "availability_view_sales": "Verkoop",
-  "availability_view_hint_sales": "Vrij te verkopen = voorraad + verwacht − verkocht. Een negatief getal is een tekort: je mag verkopen, het loopt weer bij zodra er inkoop binnenkomt.",
+  "availability_view_hint_sales": "Vrij te verkopen = besteld + voorraad − verkocht. Een negatief getal is een tekort: je mag verkopen, het loopt weer bij zodra er inkoop binnenkomt.",
   "sales_col_stock": "Voorraad",
   "sales_col_stock_hint": "goedgekeurd, in het magazijn",
   "sales_col_expected": "Besteld",
