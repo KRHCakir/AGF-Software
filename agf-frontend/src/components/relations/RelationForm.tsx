@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { vatScope } from '../../lib/vatRules';
+import { relationTaxCountry, vatScope } from '../../lib/vatRules';
 import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, buildRelationPayload, creditDraftFromRole, draftFromRelation, draftTaxCountry, normalizeVat, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
 import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
 import { emptyTermsDraft } from '../../lib/roleTermsRules';
@@ -430,7 +430,14 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
     const removeGgn = (key: string) => update({ ggns: draft.ggns.filter((g) => g.key !== key) });
 
     // Land van de relatie voor de btw (registratie, hoofdadres, eerste adres): buiten de EU geen btw-controle (fixes 5b).
-    const outsideEu = vatScope(draftTaxCountry(draft), draft.vatNumber.trim() === '' ? null : normalizeVat(draft.vatNumber)) === 'outside';
+    const draftVat = draft.vatNumber.trim() === '' ? null : normalizeVat(draft.vatNumber);
+    const draftScope = vatScope(draftTaxCountry(draft), draftVat);
+    const outsideEu = draftScope === 'outside';
+    // De opgeslagen btw-status geldt alleen zolang nummer en EU-scope gelijk zijn aan de opgeslagen relatie; anders bepaalt de server haar
+    // bij opslaan opnieuw en tonen we wat er dan komt (niet gecontroleerd, of geen nummer).
+    const storedStatusApplies = current !== null && draftVat !== null && draftVat === current.vatNumber
+        && vatScope(relationTaxCountry(current.registrationCountry, current.addresses), current.vatNumber) === draftScope;
+    const vatStatus = storedStatusApplies ? current.vatVerificationStatus : draftVat === null ? 'NotApplicable' : 'NotChecked';
     const textField = (field: keyof RelationDraft & string, labelKey: string, options: { ref?: boolean; hintKey?: string; list?: string; mono?: boolean; maxLength?: number; span?: string; required?: boolean; upper?: boolean } = {}) => (
         <div className={options.span ?? ''}>
             <label htmlFor={`${field}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}{options.required ? ' *' : ''}</label>
@@ -547,7 +554,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                             {/* Fixes 5b: buiten de EU een vrij belasting- of registratienummer, zonder landcode, vormcontrole of VIES. */}
                             {textField('vatNumber', outsideEu ? 'relations_field_tax_number' : 'relations_field_vat', { mono: true, maxLength: 32, hintKey: outsideEu ? 'relations_hint_tax_number' : 'relations_hint_vat' })}
                             <span className="mt-1 inline-flex rounded border border-gray-300 bg-gray-50 px-1.5 text-xs text-gray-700" data-testid="vat-status">
-                                {outsideEu ? t('relations_vat_status_outside_eu') : t(`relations_vat_status_${current?.vatVerificationStatus ?? (draft.vatNumber.trim() === '' ? 'NotApplicable' : 'NotChecked')}`)}
+                                {outsideEu ? t('relations_vat_status_outside_eu') : t(`relations_vat_status_${vatStatus}`)}
                             </span>
                         </div>
                         {textField('legalForm', 'relations_field_legal_form', { list: 'relation-legal-forms', maxLength: 64 })}
