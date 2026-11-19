@@ -21,6 +21,8 @@ export interface ArticleDraft {
     sizeCategory: string;
     packaging: string;
     packagingUnit: PackageUnit | '';
+    // Seizoen staat sinds fixes 5b nergens meer in beeld. Het concept neemt de opgeslagen waarde ongezien mee terug, zodat bewaren
+    // van een artikel haar nooit leegmaakt (de kolom blijft in de database).
     season: string;
     notes: string;
     weightMethod: WeightMethod;

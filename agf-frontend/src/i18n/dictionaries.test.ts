@@ -36,6 +36,15 @@ describe('i18n dictionaries', () => {
         assert.deepEqual([...used].filter((k) => !enKeys.has(k)).sort(), [], 'missing in en');
     });
 
+    // Fixes 5b: Seizoen is weg uit formulieren, lijsten, filters, documenten en de rondleiding (de kolom blijft in de database).
+    test('Season appears nowhere on screen: no text in either dictionary and no season field in any screen', () => {
+        for (const [key, value] of [...Object.entries(nl), ...Object.entries(en)]) assert.ok(!/season|seizoen/i.test(`${key} ${value}`), `season text: ${key}`);
+        for (const file of sourceFiles(join(process.cwd(), 'src'))) {
+            if (!/\.tsx$/.test(file) && !/[\\/]tour[\\/]/.test(file)) continue;
+            assert.ok(!/\bseason\b|\.season\b|'season'/i.test(readFileSync(file, 'utf8')), `season in ${file}`);
+        }
+    });
+
     test('customer-facing subtitles do not mention the API', () => {
         for (const dict of [nl, en]) {
             for (const key of ['sales_subtitle', 'supply_subtitle', 'availability_subtitle', 'inspection_subtitle']) {

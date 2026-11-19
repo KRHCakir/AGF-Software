@@ -13,7 +13,6 @@ import { unitLabelKey } from '../../lib/units';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
 import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
-import UnitSelect from '../shared/UnitSelect';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { secondaryButtonClass } from './SuccessPanel';
 
@@ -114,7 +113,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                         value={line.productVariantId} disabled={locked || limit.articleFixed} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
                                         describedBy={(errors(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
-                                        onChange={(variantId) => onChange(line.key, { productVariantId: variantId })} />
+                                        onChange={(variantId) => onChange(line.key, { productVariantId: variantId, unit: '' })} />
                                     <FieldError id={`${prefix}.productVariantId`} messages={errors(`${prefix}.productVariantId`)} />
                                     <FieldError id={prefix} messages={errors(prefix)} />
                                     {limit.articleFixed && (
@@ -156,10 +155,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                             <input {...fieldProps(`${prefix}.expectedQuantity`, errors(`${prefix}.expectedQuantity`))} inputMode="decimal" value={line.quantity} disabled={locked}
                                                 data-tour="supply-line-quantity" data-tour-key={index} onChange={(event) => onChange(line.key, { quantity: event.target.value })}
                                                 className={`${inputClass} !mt-0 w-20 text-right`} />
-                                            {row?.unitFromArticle !== false && row?.unit
-                                                ? <span className="text-xs text-gray-700" data-testid={`${prefix}.unit`}>{t(unitLabelKey(row.unit)).toLowerCase()}</span>
-                                                : variant && <UnitSelect fieldKey={`${prefix}.expectedUnit`} index={index} value={line.unit} errors={errors(`${prefix}.expectedUnit`)} disabled={locked}
-                                                    dataTour="supply-line-unit" onChange={(unit) => onChange(line.key, { unit })} />}
+                                            {row?.unit && <span className="text-xs text-gray-700" data-testid={`${prefix}.unit`}>{t(unitLabelKey(row.unit)).toLowerCase()}</span>}
                                         </div>
                                         {variant && row?.quantity != null && (
                                             <span className="block text-xs text-gray-600" data-testid={`${prefix}.pallets`}>

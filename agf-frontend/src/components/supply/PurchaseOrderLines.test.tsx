@@ -17,6 +17,7 @@ const reference: ReferenceData = {
         variant(1, 'Hass', { brand: 'Westfalia', shortcutCode: 'avohassper18' }),
         variant(2, 'Kent', { origin: 'Brazilië', defaultPackagesPerPallet: 264, shortcutCode: '2' }),
         variant(3, 'Lime', { defaultPackagesPerPallet: null, defaultGrossKgPerPackage: null, shortcutCode: '3' }),
+        variant(4, 'Oud', { packagingUnit: null, shortcutCode: '4' }),
     ] }],
 };
 
@@ -49,6 +50,25 @@ describe('purchase order lines: the new layout', () => {
         assert.equal(mounted.container.querySelector('tbody select'), null, 'unit comes from the article');
         assert.ok(Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('tbody button')).every((button) => button.tabIndex === -1), 'buttons are outside the Tab order');
         assert.equal(cell(0, 'quantity').querySelector('[data-testid="lines[0].pallets"]')!.textContent, 'po_line_pallets');
+    });
+
+    test('fixes 5b: the unit is text from the article ("200 box"), never a choice', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await pick(0, 'AVOHASSPER18');
+        await type('lines[0].expectedQuantity-input', '200');
+        assert.equal(mounted.container.querySelector('[data-testid="lines[0].unit"]')!.textContent, 'unit_box');
+        assert.equal(mounted.container.querySelector('tbody select'), null);
+    });
+
+    test('fixes 5b: an article without unit gives no choice on the line but a pointer to the article, and saving is blocked', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await pick(0, '4');
+        await type('lines[0].expectedQuantity-input', '200');
+        assert.equal(mounted.container.querySelector('tbody select'), null, 'no unit select, also without a unit on the article');
+        assert.equal(mounted.container.querySelector('[data-testid="lines[0].unit"]'), null);
+        await submit();
+        assert.ok((mounted.container.textContent ?? '').includes('po_line_unit_missing'));
+        assert.equal(posted.length, 0, 'not saved');
     });
 
     test('Tab on the price of the last line makes a new line with the cursor in its product; the price becomes 12,00; an empty line is not sent', async () => {

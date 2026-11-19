@@ -72,6 +72,17 @@ describe('ArticleForm', () => {
         assert.ok(text().includes('articles_created'));
     });
 
+    test('fixes 5b: no Season field anywhere in the form, but a stored season goes back unchanged on save', async () => {
+        respond = (call) => (call.method === 'PUT' ? json(200, { ...hass, season: 'Mei - Augustus' }) : json(404, {}));
+        await mounted.render(<ArticleForm article={{ ...hass, sizeCategory: '18', tradeClass: 'I', season: 'Mei - Augustus', notes: 'x' }} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="article-trade"]')?.click(); });
+        assert.equal(mounted.container.querySelector('[id="season-input"]'), null, 'no season input');
+        assert.ok(!/season/i.test(text()), 'no season label');
+        await save();
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
+        assert.equal((calls.find((call) => call.method === 'PUT')!.body as { season: string | null }).season, 'Mei - Augustus', 'the stored value is not cleared');
+    });
+
     test('validation keeps the input and shows inline errors; gross below net and a goods code without system are refused before any request', async () => {
         await mounted.render(<ArticleForm article={null} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
         await type(input('productName'), 'Avocado');
