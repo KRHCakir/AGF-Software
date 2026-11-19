@@ -276,9 +276,11 @@ export function buildRelationPayload(draft: RelationDraft, options: { requestId?
     if (email !== null && !emailOk(email, stored?.email)) errors.push({ field: 'email', code: 'invalid_email' });
     const phone = optional(draft.phone, 40, 'phone', errors);
     const vatRaw = blankToNull(draft.vatNumber);
-    const vatNumber = vatRaw === null ? null : normalizeVat(vatRaw);
     // Opnieuw controleren bij een nieuw of gewijzigd nummer, en ook als het land van binnen naar buiten de EU gaat (of andersom).
     const taxCountry = draftTaxCountry(draft);
+    // Binnen de EU een genormaliseerd btw-nummer; buiten de EU een vrij nummer: de ingevoerde tekst blijft staan (zonder randspaties).
+    const vatNormalized = vatRaw === null ? null : normalizeVat(vatRaw);
+    const vatNumber = vatRaw === null ? null : vatScope(taxCountry, vatNormalized) === 'outside' ? vatRaw : vatNormalized;
     const storedScope = stored ? vatScope(relationTaxCountry(stored.registrationCountry, stored.addresses), stored.vatNumber) : null;
     if (vatNumber !== null && (vatNumber !== stored?.vatNumber || vatScope(taxCountry, vatNumber) !== storedScope)) vatErrors(vatNumber, taxCountry, errors);
     const registrationNumber = optional(draft.registrationNumber, 64, 'registrationNumber', errors);
