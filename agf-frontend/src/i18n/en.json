@@ -2085,7 +2085,7 @@
   "sales_next_confirm": "Next step: everything is dispatched; confirm delivery on the dispatch.",
   "sales_next_done": "Everything is dispatched and delivered. The invoice comes in a later version.",
   "availability_view_sales": "Sales",
-  "availability_view_hint_sales": "Free to sell = stock + expected − sold. A negative number is a shortage: you may sell, it recovers as soon as purchases arrive.",
+  "availability_view_hint_sales": "Free to sell = ordered + stock − sold. A negative number is a shortage: you may sell, it recovers as soon as purchases arrive.",
   "sales_col_stock": "Stock",
   "sales_col_stock_hint": "approved, in the warehouse",
   "sales_col_expected": "Ordered",
