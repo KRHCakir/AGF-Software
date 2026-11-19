@@ -77,10 +77,11 @@ export default function RelationsPage() {
 
     const [section, setSection] = useState<string | null>(null);
     const created = useCreated();
-    // De nieuwe relatie als lijstregel: valt zij buiten de geladen pagina (alfabetisch verderop), dan staat zij zolang de melding staat
-    // bovenaan, zodat je haar altijd ziet.
+    // De nieuwe relatie staat zolang de melding staat bovenaan de lijst, direct onder de melding (ook als zij alfabetisch verderop of op
+    // een volgende pagina zou staan). De versie uit de herladen lijst gaat voor, anders de opgeslagen relatie.
     const [pinned, setPinned] = useState<RelationListItem | null>(null);
-    const rows = created.created !== null && pinned !== null && pinned.id === created.created.id && !shown.some((item) => item.id === pinned.id) ? [pinned, ...shown] : shown;
+    const pinnedId = created.created !== null && pinned !== null && pinned.id === created.created.id ? pinned.id : null;
+    const rows = pinnedId === null ? shown : [shown.find((item) => item.id === pinnedId) ?? pinned!, ...shown.filter((item) => item.id !== pinnedId)];
     const clearCreated = created.clear;
     // Een formulier openen (nieuw of bestaand) haalt de melding van de vorige aanmaak weg.
     useEffect(() => { if (editing !== null) clearCreated(); }, [editing, clearCreated]);
