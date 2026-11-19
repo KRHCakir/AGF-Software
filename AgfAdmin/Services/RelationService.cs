@@ -600,7 +600,6 @@ namespace AgfAdmin.Services
                 CheckNewEmail(email, "email", errors, signals);
             }
             var phone = ValidationErrors.OptionalText(request.Phone, RelationRules.MaxPhoneLength, "phone", errors);
-            var vat = RelationRules.NormalizeVat(request.VatNumber);
             var registrationNumber = ValidationErrors.OptionalText(request.RegistrationNumber, RelationRules.MaxRegistrationLength, "registrationNumber", errors);
             var registrationCountry = RelationRules.NormalizeCountry(request.RegistrationCountry);
             if (registrationCountry != null && !RelationRules.IsCountryCode(registrationCountry))
@@ -677,6 +676,9 @@ namespace AgfAdmin.Services
             // Btw-vorm per land alleen voor een nieuw of gewijzigd nummer, en alleen binnen de EU (VatRules, fixes 5b). Een ongewijzigd
             // opgeslagen nummer blijft staan, tenzij het land van binnen naar buiten de EU gaat of andersom.
             var taxCountry = VatRules.TaxCountry(registrationCountry, (addresses ?? new List<AddressCommand>()).Select(a => (a.Purpose, a.CountryCode, a.IsActive)));
+            // Binnen de EU een genormaliseerd btw-nummer; buiten de EU een vrij nummer: de ingevoerde tekst blijft staan (zonder randspaties).
+            var vatNormalized = RelationRules.NormalizeVat(request.VatNumber);
+            var vat = vatNormalized != null && !VatRules.InEuScope(taxCountry, vatNormalized) ? request.VatNumber.Trim() : vatNormalized;
             if (vat != null && (!string.Equals(vat, existing?.VatNumber, StringComparison.Ordinal) || VatRules.InEuScope(taxCountry, vat) != (existing == null || StoredInEuScope(existing))))
             {
                 var problem = VatRules.Check(vat, taxCountry);
