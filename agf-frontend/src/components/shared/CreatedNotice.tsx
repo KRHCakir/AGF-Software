@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 // Fixes 5b, na opslaan van een nieuw item: het formulier sluit, de lijst ververst en toont het nieuwe item kort gemarkeerd, en deze melding
 // blijft staan tot de gebruiker iets anders opent. `useCreated` houdt bij welk item nieuw is; de markering verdwijnt na FRESH_MS.
@@ -19,12 +19,9 @@ export function useCreated(): { created: Created | null; fresh: number | null; a
         const handle = setTimeout(() => setFresh(null), FRESH_MS);
         return () => clearTimeout(handle);
     }, [fresh]);
-    return {
-        created,
-        fresh,
-        announce: (next) => { setCreated(next); setFresh(next.id); },
-        clear: () => { setCreated(null); setFresh(null); },
-    };
+    const announce = useCallback((next: Created) => { setCreated(next); setFresh(next.id); }, []);
+    const clear = useCallback(() => { setCreated(null); setFresh(null); }, []);
+    return { created, fresh, announce, clear };
 }
 
 export default function CreatedNotice({ created, tour, onClose }: { created: Created | null; tour: string; onClose: () => void }) {

@@ -66,7 +66,10 @@ export default function RelationsPage() {
 
     const [section, setSection] = useState<string | null>(null);
     const created = useCreated();
-    const openNew = () => { created.clear(); setEditing({ relation: null, key: Date.now() }); };
+    const clearCreated = created.clear;
+    // Een formulier openen (nieuw of bestaand) haalt de melding van de vorige aanmaak weg.
+    useEffect(() => { if (editing !== null) clearCreated(); }, [editing, clearCreated]);
+    const openNew = () => setEditing({ relation: null, key: Date.now() });
     // Leeg nog niets gefilterd: dan zijn er echt nog geen relaties (schone start) en is de eerste stap een nieuwe relatie.
     const nothingYet = total === 0 && debounced === '' && role === 'all';
 
@@ -79,7 +82,6 @@ export default function RelationsPage() {
         if (Number.isInteger(open) && open > 0) { setSection(params.get('section')); void openRelation(open); }
     }, []);
     const openRelation = async (id: number) => {
-        created.clear();
         setOpening(id);
         try {
             const relation = await getRelation(id);

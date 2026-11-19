@@ -67,6 +67,7 @@ describe('RelationsPage after creating a relation', () => {
             const url = String(input);
             urls.push(url);
             if (url.includes('/relations/reference')) return json(200, reference);
+            if (/\/relations\/4$/.test(url)) return json(200, card);
             if ((init?.method ?? 'GET') === 'POST' && /\/relations$/.test(url)) { created = true; return json(201, { ...card, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customer: null }); }
             const items = created ? [oost, other, { ...oost, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customerId: null }] : [oost, other];
             return json(200, { items, total: items.length, page: 1, pageSize: 50 });
