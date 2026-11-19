@@ -110,4 +110,18 @@ describe('RelationsPage after creating a relation', () => {
         assert.deepEqual(rows, ['relation-row-9', 'relation-row-4', 'relation-row-5'], 'the new relation on top');
         window.history.replaceState(null, '', '/relations');
     });
+
+    test('the pinned relation follows the selection: another role filter or search shows only what the server returns', async () => {
+        listed = false;
+        window.history.replaceState(null, '', '/relations?new=1');
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="name-input"]'), 'new form open');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="name-input"]')!, 'Nieuwe Kweker'); });
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'pinned row');
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[role="radio"]:nth-child(2)')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]') === null, 'not pinned under another filter');
+        window.history.replaceState(null, '', '/relations');
+    });
 });
+

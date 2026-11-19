@@ -444,6 +444,15 @@ describe('RelationForm', () => {
         assert.deepEqual([posts()[0].body!.vatNumber, posts()[0].body!.registrationCountry], ['1234567890', 'TR']);
     });
 
+    test('fixes 5b: a stored relation outside the EU that moves to an EU country shows the VAT status the server will give, not the stored one', async () => {
+        await mounted.render(<RelationForm relation={saved({ customer: null, vatNumber: 'NL123456789B01', vatVerificationStatus: 'NotApplicable', registrationCountry: 'TR' })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await openSection('company');
+        const status = () => mounted.container.querySelector('[data-testid="vat-status"]')!.textContent;
+        assert.equal(status(), 'relations_vat_status_outside_eu');
+        await type(input('registrationCountry'), 'NL');
+        assert.equal(status(), 'relations_vat_status_NotChecked', 'not the stored "not applicable"');
+    });
+
     test('an existing role shows its own days, end of month and discount; an inactive condition is only mentioned while the term still matches it', async () => {
         const inactive = { id: 7, code: '60EM-2%10', descriptionNl: '60', descriptionEn: '60', days: 60, basis: 'EndOfMonth' as const, discountPercent: 2, discountDays: 10, isActive: false };
         respond = (call) => (call.url.includes('/credit') ? json(200, credit) : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
