@@ -39,6 +39,7 @@ import { listInvoiceCandidates } from '../../services/purchaseOrderService';
 import type { InvoiceCandidate } from '../../types/purchaseOrder';
 import { InvoiceOrderLineInfo, InvoiceOrderPicker, InvoicePriceQuestion } from './InvoiceOrderLink';
 import type { AiExtraction } from '../../types/aiReading';
+import { useLeaveGuard } from '../shared/LeaveGuard';
 
 // Een AI-voorstel in het formulier (stap 7a): de lezing, de bevestigde inkooporder en Afwijzen / Handmatig verder. Opslaan heet dan
 // Goedkeuren en gaat via hetzelfde opslagpad, met de lezing erbij.
@@ -146,12 +147,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
         setLastSaved(null);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- alleen een nieuwe sleutel vervangt het concept
     }, [seed?.key]);
-    useEffect(() => {
-        if (!dirty) return;
-        const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
-        window.addEventListener('beforeunload', warn);
-        return () => window.removeEventListener('beforeunload', warn);
-    }, [dirty]);
+    // Weggaan met een concept of een fout vraagt eerst; tabblad sluiten geeft de waarschuwing van de browser (LeaveGuard, fixes 5b).
+    useLeaveGuard(dirty, result === null && Object.keys(errors).length > 0);
     useEffect(() => {
         if (focusLine.current === null) return;
         const input = itemInputs.current.get(focusLine.current);
