@@ -10,7 +10,7 @@ import type { PackageUnit } from '../../types/availability';
 export function WeightBadge({ method, kgPerPackage, unit }: { method: WeightMethod; kgPerPackage: number | null; unit?: PackageUnit | null }) {
     const { t, locale } = useTranslation();
     const calculated = method === 'Calculated';
-    const tone = calculated ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-gray-300 bg-gray-50 text-gray-700';
+    const tone = calculated ? 'border-amber-400 bg-amber-100 text-amber-900' : 'border-gray-400 bg-gray-100 text-gray-700';
     return (
         <span data-weight-method={method} className={`inline-flex max-w-full flex-wrap items-center gap-1 rounded border px-1.5 py-0.5 text-xs ${tone}`}>
             <span>{t(WEIGHT_METHOD_LABEL_KEYS[method])}</span>
@@ -26,7 +26,7 @@ export function WeightBasisBadge({ basis }: { basis: WeightBasis | null }) {
     const { t } = useTranslation();
     if (basis === null || basis === 'weighed') return null;
     return (
-        <span data-weight-basis={basis} className="mt-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs text-amber-900">
+        <span data-weight-basis={basis} className="mt-1 inline-flex rounded border border-amber-400 bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
             {t(WEIGHT_BASIS_LABEL_KEYS[basis])}
         </span>
     );

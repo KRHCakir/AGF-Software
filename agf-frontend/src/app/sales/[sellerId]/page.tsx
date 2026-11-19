@@ -366,7 +366,7 @@ export default function FastSalesPage({ params }: { params: Promise<{ sellerId: 
                                                                     newItems[idx].productName = null;
                                                                     setCartItems(newItems);
                                                                 }}
-                                                                className="text-xs text-red-500 hover:text-red-700"
+                                                                className="text-xs text-red-700 hover:text-red-700"
                                                                 title="Clear Product"
                                                             >
                                                                 ✖
@@ -447,7 +447,7 @@ export default function FastSalesPage({ params }: { params: Promise<{ sellerId: 
                                                     <div className="flex flex-col items-end bg-yellow-50 p-2 rounded-lg border border-yellow-200 shadow-inner group transition-colors focus-within:ring-2 focus-within:ring-yellow-400">
                                                         <span className="text-xs font-bold text-yellow-800 mb-1 uppercase tracking-wider">Quick Edit Price</span>
                                                         <div className="flex items-center space-x-1">
-                                                            <span className="text-yellow-600 font-bold text-lg">€</span>
+                                                            <span className="text-yellow-800 font-bold text-lg">€</span>
                                                             <input 
                                                                 type="number" 
                                                                 step="0.01"
@@ -466,7 +466,7 @@ export default function FastSalesPage({ params }: { params: Promise<{ sellerId: 
                                                 </div>
                                                 <button 
                                                     onClick={() => handleRemoveItem(idx)}
-                                                    className="w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center transition-colors"
+                                                    className="w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 text-red-700 flex items-center justify-center transition-colors"
                                                     title="Remove Item"
                                                 >
                                                     🗑️

@@ -84,8 +84,8 @@ export default function OrdersPage() {
   };
 
   const getSortIndicator = (key: string) => {
-    if (sortConfig.key !== key) return <span className="text-gray-300 ml-1">↕</span>;
-    return sortConfig.direction === 'asc' ? <span className="text-blue-600 ml-1">↑</span> : <span className="text-blue-600 ml-1">↓</span>;
+    if (sortConfig.key !== key) return <span className="text-gray-500 ml-1">↕</span>;
+    return sortConfig.direction === 'asc' ? <span className="text-blue-700 ml-1">↑</span> : <span className="text-blue-700 ml-1">↓</span>;
   };
 
   return (
@@ -107,7 +107,7 @@ export default function OrdersPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-gray-50 text-[11px] uppercase text-gray-500 font-bold border-b">
+          <thead className="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b">
             <tr>
               {['createdAt', 'id', 'customerName', 'products', 'totalAmount', 'status'].map((key) => (
                 <th
@@ -139,8 +139,8 @@ export default function OrdersPage() {
                   € {formatMoney(order.totalAmount, null, locale)}
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${order.status === 'Invoiced' ? 'bg-green-100 text-green-700' :
-                    order.status === 'Cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-black uppercase ${order.status === 'Invoiced' ? 'bg-green-100 text-green-700' :
+                    order.status === 'Cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-800'
                     }`}>
                     {t(order.status.toLowerCase())}
                   </span>
@@ -152,7 +152,7 @@ export default function OrdersPage() {
                         {/* Blauwe Generate Invoice knop */}
                         <button
                           onClick={() => handleGenerateInvoice(order.id)}
-                          className="bg-blue-600 text-white text-[10px] px-3 py-1.5 rounded font-bold hover:bg-blue-700 uppercase flex items-center gap-1 shadow-sm"
+                          className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded font-bold hover:bg-blue-700 uppercase flex items-center gap-1 shadow-sm"
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                           {t('generate_invoice')}
@@ -161,7 +161,7 @@ export default function OrdersPage() {
                         {/* Rode Prullenbak */}
                         <button
                           onClick={() => handleDeleteOrder(order.id)}
-                          className="bg-red-100 text-red-600 p-1.5 rounded hover:bg-red-200 transition-colors"
+                          className="bg-red-100 text-red-700 p-1.5 rounded hover:bg-red-200 transition-colors"
                           title={t('cancel_order')}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

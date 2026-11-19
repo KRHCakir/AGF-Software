@@ -215,7 +215,7 @@ export default function AddOrderModal({ isOpen, onClose, onSuccess }: AddOrderMo
                                     {/* Let op: col-span-2 in plaats van 4, zodat de titel mooi over de 2 kolommen spreidt */}
                                     <div className="col-span-2 pb-2 border-b mb-2">
                                         <h3 className="text-sm font-bold text-gray-700">
-                                            {t('item_identification')} {matchedProduct && <span className="float-right text-green-600 bg-green-100 px-2 py-0.5 rounded text-xs">✓ {t('valid_match')} (ID: {matchedProduct.id})</span>}
+                                            {t('item_identification')} {matchedProduct && <span className="float-right text-green-800 bg-green-100 px-2 py-0.5 rounded text-xs">✓ {t('valid_match')} (ID: {matchedProduct.id})</span>}
                                         </h3>
                                     </div>
 

@@ -184,9 +184,9 @@ export interface QualityStyle {
 
 // Kleur nooit als enige drager: altijd icoon + tekst, met AA-contrast (-800 op -100).
 const QUALITY_STYLES: Record<QualityStatus, QualityStyle> = {
-    Approved: { key: 'availability_quality_approved', icon: '✓', className: 'bg-green-100 text-green-800 border-green-300' },
-    Quarantine: { key: 'availability_quality_quarantine', icon: '⏳', className: 'bg-amber-100 text-amber-900 border-amber-300' },
-    Blocked: { key: 'availability_quality_blocked', icon: '⛔', className: 'bg-red-100 text-red-800 border-red-300' },
+    Approved: { key: 'availability_quality_approved', icon: '✓', className: 'bg-green-100 text-green-900 border-green-400' },
+    Quarantine: { key: 'availability_quality_quarantine', icon: '⏳', className: 'bg-amber-100 text-amber-950 border-amber-400' },
+    Blocked: { key: 'availability_quality_blocked', icon: '⛔', className: 'bg-red-100 text-red-900 border-red-400' },
     Rejected: { key: 'availability_quality_rejected', icon: '✕', className: 'bg-gray-200 text-gray-800 border-gray-400' },
 };
 

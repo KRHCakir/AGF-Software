@@ -43,7 +43,7 @@ export default function DumpWasteModal({ isOpen, inventoryId, currentQuantity, o
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
             <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm border-t-4 border-red-500">
-                <div className="flex items-center mb-4 text-red-600">
+                <div className="flex items-center mb-4 text-red-700">
                     <span className="text-3xl mr-3">🗑️</span>
                     <h2 className="text-xl font-black">Register Waste</h2>
                 </div>

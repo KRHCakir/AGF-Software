@@ -18,7 +18,7 @@ export default function SalesStepBar({ order }: { order: SalesOrder }) {
                     return (
                         <li key={step} aria-current={next === step ? 'step' : undefined}
                             className={`flex items-center gap-1 ${next === step ? 'font-semibold' : passed ? 'text-green-800' : 'text-blue-900/70'}`}>
-                            {index > 0 && <span aria-hidden="true" className="text-blue-400">›</span>}
+                            {index > 0 && <span aria-hidden="true" className="text-blue-700">›</span>}
                             <span>{passed ? '✓ ' : `${index + 1}. `}{t(`sales_step_${step}`)}</span>
                         </li>
                     );

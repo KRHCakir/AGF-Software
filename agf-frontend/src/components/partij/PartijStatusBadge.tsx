@@ -5,8 +5,8 @@ import { PARTIJ_STATUS_LABEL_KEYS, type PartijStatus } from '../../lib/partijRul
 
 // Status van de partij in dezelfde stijl als de inkooporderlijst: Open (blauw), Uitverkocht (grijs, niets meer op voorraad of verwacht).
 const STYLES: Record<PartijStatus, string> = {
-    Open: 'border-blue-300 bg-blue-50 text-blue-900',
-    SoldOut: 'border-gray-300 bg-gray-100 text-gray-700',
+    Open: 'border-blue-400 bg-blue-100 text-blue-900',
+    SoldOut: 'border-gray-400 bg-gray-100 text-gray-700',
 };
 
 export default function PartijStatusBadge({ status }: { status: string }) {
