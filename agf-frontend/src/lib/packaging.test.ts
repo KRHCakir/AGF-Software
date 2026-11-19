@@ -23,7 +23,8 @@ describe('packaging rules', () => {
         assert.deepEqual(parseUnitPrice('7.50', 'en'), { ok: true, value: 7.5 });
         assert.equal(parseUnitPrice('7,505', 'nl').ok, false);
         assert.equal(parseUnitPrice('-1', 'nl').ok, false);
-        assert.equal(parseUnitPrice('7.50', 'nl').ok, false, 'a point is never a decimal sign in Dutch');
+        assert.deepEqual(parseUnitPrice('7.50', 'nl'), { ok: true, value: 7.5 }, 'a point with 2 digits is the decimal sign, also in Dutch');
+        assert.equal(parseUnitPrice('7.5.0', 'nl').ok, false);
     });
 
     test('a quantity is a whole number from 1 to 99.999', () => {
@@ -70,11 +71,12 @@ describe('packaging rules', () => {
 });
 
 describe('order payload with packaging', () => {
-    test('without a locale argument the screen language counts, as set by the LanguageProvider (English: 7.50, not 7,50)', () => {
+    test('without a locale argument the screen language counts, as set by the LanguageProvider (English: 1,000 is a thousand)', () => {
         setInputLocale('en');
         try {
             assert.deepEqual(parseUnitPrice('7.50'), { ok: true, value: 7.5 });
-            assert.equal(parseUnitPrice('7,50').ok, false);
+            assert.deepEqual(parseUnitPrice('7,50'), { ok: true, value: 7.5 });
+            assert.equal(parseUnitPrice('1.250,00').ok, false);
             const english = buildOrderPayload(draft({ packagingLines: [pack('2', '1,000', '7.50')] }));
             assert.deepEqual(english.ok && english.value.packagingLines, [{ costArticleId: 2, quantity: 1000, unitPrice: 7.5 }]);
         } finally {

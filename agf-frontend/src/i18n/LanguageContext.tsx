@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import en from './en.json';
 import nl from './nl.json';
+import NumberInputAssist from '../components/shared/NumberInputAssist';
 import { reformatDecimalFieldsOnBlur, setInputLocale } from '../lib/decimal';
 
 type Locale = 'en' | 'nl';
@@ -88,7 +89,9 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
         return text;
     };
 
-    // Getalvelden: invoer lezen in de taal van het scherm (vóór de kinderen renderen) en na blur in die notatie tonen (15000 -> 15.000).
+    // Getalvelden: invoer lezen in de taal van het scherm (vóór de kinderen renderen), de punt als decimaalteken meteen een komma
+    // maken en na het verlaten de notatie en de vaste decimalen tonen (15000 -> 15.000, 4 -> 4,00). De melding bij een ongeldig getal
+    // komt van NumberInputAssist.
     useEffect(() => reformatDecimalFieldsOnBlur(document), []);
     // Before hydration, we avoid rendering translations that might mismatch the server if we had SSR,
     // but since this is an internal ERP, we just render right away.
@@ -98,6 +101,7 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
     return (
         <LanguageContext.Provider value={{ locale, setLocale, t }}>
             {children}
+            <NumberInputAssist />
         </LanguageContext.Provider>
     );
 };

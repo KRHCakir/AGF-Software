@@ -513,7 +513,7 @@ describe('RelationForm', () => {
         assert.ok(mounted.container.querySelector('[data-testid="credit-insurance-gap"]'), 'live gap from the input');
         assert.equal(mounted.container.querySelector('label[for="customer.currency-input"]')?.textContent, 'relations_field_currency_sales', 'customer currency is not labelled as purchasing');
         await choose(select('customer.insurer'), 'Other');
-        await type(input('customer.creditLimit'), '12.34');
+        await type(input('customer.creditLimit'), '12.3.4');
         await press('s', { ctrlKey: true });
         assert.ok(text().includes('relations_error_amount') && text().includes('relations_error_insurer_text'));
         await type(input('customer.creditLimit'), '1500,50');
