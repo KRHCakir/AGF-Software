@@ -11,7 +11,6 @@ import CreatedNotice, { useCreated } from '../shared/CreatedNotice';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 // Kostenartikelen (type Dienst) beheren: de standaardsoorten (Handling, Transport, QC, Zeevracht, Afval, Overig) staan er al; eigen soorten
 // (Elektra, Autohuur) voeg je hier toe. Nooit verwijderen: factuurregels en partijkosten verwijzen ernaar. Inactief = niet meer te kiezen.
@@ -22,8 +21,6 @@ export default function CostArticlesAdmin() {
     const [name, setName] = useState('');
     const [requestId, setRequestId] = useState(newRequestId);
     const [errors, setErrors] = useState<string[] | undefined>(undefined);
-    // Fixes 5b: weggaan met een fout of niet-opgeslagen invoer vraagt eerst (LeaveGuard).
-    const leave = useFormLeaveGuard((errors ?? []).length > 0);
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
     const [reloadToken, setReloadToken] = useState(0);
@@ -52,7 +49,6 @@ export default function CostArticlesAdmin() {
             const saved = await createCostArticle({ requestId, name: name.trim() });
             created.announce({ id: saved.value.id, text: t('cost_article_created', { name: saved.value.name }) });
             setName('');
-            leave.saved();
             setRequestId(newRequestId());
             setReloadToken((n) => n + 1);
         } catch (caught) {
@@ -103,7 +99,7 @@ export default function CostArticlesAdmin() {
                     ))}
                 </ul>
             )}
-            <form ref={leave.ref} noValidate onSubmit={add} className="flex flex-wrap items-end gap-2">
+            <form noValidate onSubmit={add} className="flex flex-wrap items-end gap-2">
                 <div className="min-w-[12rem] flex-1">
                     <label htmlFor="costArticleName-input" className="text-xs font-medium text-gray-700">{t('cost_article_new')}</label>
                     <input {...fieldProps('costArticleName', errors)} value={name} maxLength={MAX_COST_ARTICLE_NAME_LENGTH} placeholder={t('cost_article_new_placeholder')}

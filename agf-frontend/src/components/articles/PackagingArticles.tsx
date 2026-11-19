@@ -14,7 +14,6 @@ import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 interface PriceDraft { price: string; vat: string }
 
@@ -36,8 +35,6 @@ export default function PackagingArticles() {
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
-    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
-    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [notice, setNotice] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [reloadToken, setReloadToken] = useState(0);
@@ -119,7 +116,6 @@ export default function PackagingArticles() {
             }
             setNotice(t('packaging_article_saved', { name: added.name.trim() }));
             setAdded({ name: '', price: '', vat: STANDARD_VAT });
-            leave.saved();
             setRequestId(newRequestId());
         });
     };
@@ -169,7 +165,7 @@ export default function PackagingArticles() {
                     ))}
                 </ul>
             )}
-            <form ref={leave.ref} noValidate onSubmit={add} className="flex flex-wrap items-start gap-2">
+            <form noValidate onSubmit={add} className="flex flex-wrap items-start gap-2">
                 <div className="min-w-[12rem] flex-1">
                     <label htmlFor="packaging-new.name-input" className="text-xs font-medium text-gray-700">{t('packaging_new')}</label>
                     <input {...fieldProps('packaging-new.name', e('packaging-new.name'))} value={added.name} disabled={busy} maxLength={MAX_COST_ARTICLE_NAME_LENGTH} placeholder={t('packaging_new_placeholder')}

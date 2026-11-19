@@ -29,7 +29,6 @@ import { type RecipientProblem, type RecipientRow, recipientProblems, recipients
 import { getRelationRecipients, saveRelationRecipients } from '../../services/documentMailService';
 import type { RecipientAddressOption } from '../../types/documentMail';
 import SubmitErrors from '../shared/SubmitErrors';
-import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 // Relatiekaart: altijd zichtbaar zijn zoekcode, bedrijfsnaam, rollen, actief en de belangrijkste contactgegevens; de rest staat
 // compact gegroepeerd (bedrijfsgegevens, adressen, contactpersonen, inkoop-/verkoopdefaults, interne opmerking). Alleen de naam
@@ -89,8 +88,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
     const [pending, setPendingState] = useState<PendingCreate | null>(() => (relation === null ? readPending() : null));
     const [draft, setDraft] = useState<RelationDraft>(() => (relation !== null ? draftFromRelation(relation) : pending?.draft ?? emptyRelationDraft()));
     const [errors, setErrors] = useState<FieldErrors>({});
-    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
-    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [serverError, setServerError] = useState<ApiError | null>(null);
     const [similar, setSimilar] = useState<SimilarRelation[] | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -243,7 +240,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
             setNotice(t(result.outcome === 'replayed' ? 'relations_saved_before' : 'relations_created', { name: result.relation.name }));
             setDraft(draftFromRelation(result.relation));
             if (!(await saveRecipients(result.relation.id))) return;
-            leave.saved();
             onSaved(result.relation, true);
         } catch (caught) {
             const apiError = toApiError(caught);
@@ -301,7 +297,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
             setDraft(draftFromRelation(saved));
             setCreditRefresh((n) => n + 1);
             if (!(await saveRecipients(saved.id))) return;
-            leave.saved();
             onSaved(saved, false);
         } catch (caught) {
             applyServerError(toApiError(caught));
@@ -464,7 +459,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
     const usage = current?.usage;
 
     return (
-        <form ref={(element) => { formRef.current = element; leave.ref(element); }} noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="relation-form">
+        <form ref={formRef} noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="relation-form">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="text-lg font-semibold text-gray-900">{current === null ? t('relations_new') : t('relations_edit', { id: String(current.id) })}</h2>
                 <div className="flex flex-wrap items-center gap-2">

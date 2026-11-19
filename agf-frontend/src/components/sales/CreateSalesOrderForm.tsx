@@ -44,7 +44,6 @@ import { PendingNotice } from './PendingCommandsBanner';
 import { usePendingCommand, usePendingCommands } from './PendingCommandsContext';
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 import SubmitErrors from '../shared/SubmitErrors';
-import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()], packagingLines: [] });
@@ -107,8 +106,6 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
-    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
-    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [result, setResult] = useState<SaveResult<SalesOrder> | null>(null);
     const inFlight = useRef(false);
     // Verkoop-partij: het voorstel van de server (null in modus Eigen of zonder antwoord) en wat de gebruiker typt (null = niet
@@ -274,7 +271,6 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         try {
             const saved = await createSalesOrder(command.payload);
             clearPending();
-            leave.saved();
             setResult(saved);
             onSaved(saved.value);
         } catch (caught) {
@@ -378,7 +374,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     }
 
     return (
-        <form ref={leave.ref} noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }}
+        <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }}
             className="space-y-4 rounded-md border border-gray-300 bg-white p-4">
             <div className="flex items-start justify-between gap-4">
                 <div>

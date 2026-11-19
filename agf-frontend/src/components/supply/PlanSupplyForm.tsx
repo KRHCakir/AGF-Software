@@ -41,7 +41,6 @@ import { missingMasterData } from '../../lib/masterDataStatus';
 import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 import SubmitErrors from '../shared/SubmitErrors';
-import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 export interface ReferenceData {
     vendors: VendorOption[];
@@ -112,8 +111,6 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
-    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
-    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [result, setResult] = useState<SaveResult<SupplyCommitment> | null>(null);
     const inFlight = useRef(false);
     // Artikelen van dit formulier: de referentielijst plus wat hier met "Nieuw artikel" is aangemaakt; per regel het open blok.
@@ -298,14 +295,10 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setError(null);
         try {
             if (editing !== null && edit !== null) {
-                const updated = await updatePurchaseOrder(edit.orderId, submission.payload as UpdatePurchaseOrderRequest);
-                leave.saved();
-                editing.onSaved(updated);
+                editing.onSaved(await updatePurchaseOrder(edit.orderId, submission.payload as UpdatePurchaseOrderRequest));
                 return;
             }
-            const created = await createSupplyCommitment(submission.payload as CreateSupplyCommitmentRequest);
-            leave.saved();
-            setResult(created);
+            setResult(await createSupplyCommitment(submission.payload as CreateSupplyCommitmentRequest));
         } catch (caught) {
             const apiError = toApiError(caught);
             // Het getypte partijnummer bestaat al (ook als een ander het net aanmaakte): dezelfde vraag als bij het verlaten van het veld.
@@ -397,7 +390,6 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
 
     return (
         <form
-            ref={leave.ref}
             noValidate
             aria-busy={submitting}
             onSubmit={(event) => { event.preventDefault(); void submit(); }}
