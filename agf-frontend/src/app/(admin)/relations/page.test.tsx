@@ -90,6 +90,7 @@ describe('RelationsPage after creating a relation', () => {
         assert.equal(mounted.container.querySelector('[id="name-input"]'), null, 'the old form is gone');
         assert.ok(mounted.container.querySelector('[data-testid="created-notice"]')!.textContent!.includes('relations_created'));
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'list reloaded with the new relation');
+        assert.equal(mounted.container.querySelector('tbody tr[data-testid^="relation-row-"]')!.getAttribute('data-testid'), 'relation-row-9', 'on top, right under the notice');
         assert.ok(listCalls() > before, 'list fetched again');
         assert.equal(mounted.container.querySelector('[data-testid="relation-row-9"]')!.getAttribute('data-fresh'), 'true', 'new row marked');
         await act(async () => { mounted.container.querySelector<HTMLElement>('[data-testid="relation-row-4"]')!.click(); });
@@ -97,7 +98,7 @@ describe('RelationsPage after creating a relation', () => {
         window.history.replaceState(null, '', '/relations');
     });
 
-    test('a new relation outside the loaded page (later in the alphabet) is shown on top while the notice stands', async () => {
+    test('a new relation outside the loaded page is shown on top as well', async () => {
         listed = false;
         window.history.replaceState(null, '', '/relations?new=1');
         await mounted.render(<RelationsPage />);

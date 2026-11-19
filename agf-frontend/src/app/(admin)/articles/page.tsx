@@ -68,6 +68,12 @@ export default function ArticlesPage() {
     const archivedCount = state.status === 'ready' ? state.data.articles.filter((article) => article.isArchived).length : 0;
 
     const created = useCreated();
+    // Het nieuwe artikel staat zolang de melding staat bovenaan de lijst, direct onder de melding.
+    const rows = useMemo(() => {
+        const id = created.created?.id ?? null;
+        const fresh = id === null ? undefined : shown.find((article) => article.id === id);
+        return fresh === undefined ? shown : [fresh, ...shown.filter((article) => article.id !== id)];
+    }, [shown, created.created]);
     const openNew = () => { created.clear(); setTab('goods'); setEditing({ article: null, key: Date.now() }); };
     // Nog geen enkel artikel (ook geen gearchiveerd): schone start, de eerste stap is een nieuw artikel.
     const nothingYet = state.status === 'ready' && state.data.articles.length === 0;
@@ -193,7 +199,7 @@ export default function ArticlesPage() {
                                         ) : t('articles_none')}
                                     </td></tr>
                                 )}
-                                {shown.map((article, index) => (
+                                {rows.map((article, index) => (
                                     <tr key={article.id} data-fresh={created.fresh === article.id ? 'true' : undefined} className={listRowClass(index, { fresh: created.fresh === article.id, selected: editing?.article?.id === article.id, clickable: true })} onClick={rowClick(() => openArticle(article))} data-testid={`article-row-${article.id}`}>
                                         <td className="px-3 py-2 font-mono">{article.shortcutCode ?? <span className="text-gray-400">–</span>}</td>
                                         <td className="px-3 py-2 text-gray-900">{article.description}{article.brand ? <span className="ml-1 text-xs text-gray-500">· {article.brand}</span> : null}{article.isArchived && <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-700">{t('articles_archived_badge')}</span>}</td>
