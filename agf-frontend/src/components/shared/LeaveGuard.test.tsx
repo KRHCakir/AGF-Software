@@ -99,13 +99,33 @@ describe('LeaveGuard', () => {
         assert.deepEqual(reached, ['/availability']);
     });
 
-    test('the browser Back button asks the same question', async () => {
-        // Een eerdere test kan nog een history.back() van jsdom (asynchroon) onderweg hebben; eerst laten landen.
-        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    test('Back or Forward (also several steps through the history menu) asks the same question before Next.js shows the other page', async () => {
+        let routerSaw = 0;
+        // Zoals de luisteraar van Next.js: eerder geregistreerd, zonder capture.
+        const next = () => { routerSaw += 1; };
+        window.addEventListener('popstate', next);
+        try {
+            await mounted.render(page(<Form />));
+            await type('x');
+            // De browser staat al op een andere regel (bijvoorbeeld twee stappen terug via het geschiedenismenu).
+            window.history.pushState(null, '', '/purchase-orders?id=4');
+            await act(async () => { window.dispatchEvent(new window.PopStateEvent('popstate', { state: null })); });
+            assert.ok(dialog()?.textContent?.includes('leave_guard_unsaved'));
+            assert.equal(routerSaw, 0, 'Next.js never saw the navigation');
+            assert.equal(window.location.pathname + window.location.search, '/relations', 'the form page is back in the address bar');
+            await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-testid="leave-guard-discard"]')!.click(); });
+            assert.equal(currentUrl(), '/purchase-orders?id=4', 'discard goes where the user wanted');
+        } finally {
+            window.removeEventListener('popstate', next);
+        }
+    });
+
+    test('an anchor on the same page (#section) is not leaving', async () => {
         await mounted.render(page(<Form />));
         await type('x');
+        window.history.pushState(null, '', '/relations#adressen');
         await act(async () => { window.dispatchEvent(new window.PopStateEvent('popstate', { state: null })); });
-        assert.ok(dialog()?.textContent?.includes('leave_guard_unsaved'));
+        assert.equal(dialog(), null);
     });
 
     test('a real create form (Artikel) is guarded as soon as the user types', async () => {

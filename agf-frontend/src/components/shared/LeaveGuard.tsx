@@ -4,17 +4,19 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
+import { setPopHandler } from './HistoryFirst';
 
 // Fixes 5b, een fout blokkeert het weggaan. Een formulier meldt zich met useLeaveGuard(gewijzigd, fout). Zolang een formulier een
 // invoerfout heeft of niet-opgeslagen wijzigingen, kan de gebruiker niet naar een andere pagina:
 //   - een link (menu, submenu, keten-strip, knoppen die links zijn) vraagt eerst "Je formulier bevat nog een fout / niet-opgeslagen
 //     wijzigingen." met Terug naar het formulier (standaard) en Annuleren en weggooien;
-//   - de browserknop Terug: een extra geschiedenisregel op dezelfde pagina vangt hem op en stelt dezelfde vraag;
+//   - de browserknoppen Terug en Vooruit (ook meerdere stappen via het geschiedenismenu): de provider vangt popstate op vóór Next.js,
+//     zet de formulierpagina terug in de adresbalk en stelt dezelfde vraag;
 //   - het tabblad sluiten of herladen: de eigen waarschuwing van de browser (beforeunload).
 // Een onaangeroerd formulier blokkeert niets. Alleen weggaan van de pagina telt; binnen de pagina werken knoppen gewoon.
 
 type GuardState = 'none' | 'dirty' | 'error';
-type Pending = { kind: 'href'; href: string } | { kind: 'back' };
+type Pending = { href: string };
 
 interface LeaveGuardApi {
     set: (id: string, dirty: boolean, error: boolean) => void;
@@ -80,14 +82,6 @@ export function leavingHref(event: ClickEvent, location: PageLocation): string |
     return url.pathname + url.search + url.hash;
 }
 
-// Een anker op dezelfde pagina (#sectie) voegt normaal een geschiedenisregel toe en zou onze extra regel van plek laten wisselen.
-// Dat vangen we zelf af: de regel wordt vervangen (replaceState) en we scrollen er zelf heen. Geeft het anker terug, of null.
-export function sameDocumentHash(event: ClickEvent, location: PageLocation): string | null {
-    const url = clickedUrl(event, location);
-    if (url === null || url.pathname !== location.pathname || url.search !== location.search) return null;
-    return url.hash;
-}
-
 // useSearchParams vraagt een Suspense-grens; zo hangt alleen dit kleine onderdeel daarvan af, niet de hele layout.
 function SearchWatcher({ onChange }: { onChange: () => void }) {
     const search = useSearchParams().toString();
@@ -107,8 +101,8 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     const state: GuardState = leaving ? 'none' : computed;
     const stateRef = useRef(state);
     stateRef.current = state;
-    const armed = useRef(false);
-    const skipPop = useRef(false);
+    // De formulierpagina (adres en geschiedenisstand van Next.js) zolang er bewaakt wordt: daarheen terug als Terug of Vooruit weg wil.
+    const formEntry = useRef<{ href: string; state: unknown } | null>(null);
     const backButton = useRef<HTMLButtonElement>(null);
 
     const api = useMemo<LeaveGuardApi>(() => ({
@@ -128,46 +122,36 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         return () => window.removeEventListener('beforeunload', warn);
     }, [state]);
 
-    // Browserknop Terug: een extra regel in de geschiedenis met dezelfde pagina. Terug haalt die weg (zelfde pagina, niets verandert),
-    // wij zetten haar terug en stellen de vraag. Wordt het formulier weer schoon (opgeslagen), dan gaat de extra regel er stil af.
-    // Ankers op dezelfde pagina vervangen de regel (zie onClick), zodat de extra regel altijd direct boven de pagina blijft staan.
-    // Beperking: pushState wist de vooruit-geschiedenis; de browserknop Vooruit werkt na het wijzigen van een formulier niet meer.
+    // Elke keer dat er (nog steeds) bewaakt wordt de huidige pagina vastleggen; Next.js kan de geschiedenisstand intussen vervangen.
     useEffect(() => {
-        if (state !== 'none' && !armed.current) {
-            window.history.pushState(window.history.state, '', window.location.href);
-            armed.current = true;
-        } else if (state === 'none' && armed.current) {
-            armed.current = false;
-            if (!leaving) { skipPop.current = true; window.history.back(); }
-        }
-    }, [state, leaving]);
+        formEntry.current = state === 'none' ? null : { href: window.location.href, state: window.history.state };
+    });
 
     useEffect(() => {
-        const onPop = () => {
-            if (skipPop.current) { skipPop.current = false; return; }
-            if (!armed.current || stateRef.current === 'none') return;
-            window.history.pushState(window.history.state, '', window.location.href);
-            setPending({ kind: 'back' });
+        // Terug of Vooruit (popstate): de browser staat dan al op de andere regel. Via HistoryFirst komen wij vóór de luisteraar van
+        // Next.js (die anders de andere pagina toont); wij houden die tegen, zetten de formulierpagina terug en stellen de vraag.
+        // Een anker op dezelfde pagina (#sectie) blijft op dezelfde pagina en telt niet.
+        const onPop = (event: PopStateEvent) => {
+            const form = formEntry.current;
+            if (stateRef.current === 'none' || form === null) return;
+            const here = new URL(window.location.href);
+            const there = new URL(form.href);
+            if (here.pathname === there.pathname && here.search === there.search) return;
+            event.stopImmediatePropagation();
+            window.history.pushState(form.state, '', form.href);
+            setPending({ href: here.pathname + here.search + here.hash });
         };
         const onClick = (event: MouseEvent) => {
             if (stateRef.current === 'none') return;
-            const hash = sameDocumentHash(event, window.location);
-            if (hash !== null) {
-                event.preventDefault();
-                event.stopPropagation();
-                window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + hash);
-                if (hash.length > 1) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
-                return;
-            }
             const href = leavingHref(event, window.location);
             if (href === null) return;
             event.preventDefault();
             event.stopPropagation();
-            setPending({ kind: 'href', href });
+            setPending({ href });
         };
-        window.addEventListener('popstate', onPop);
+        setPopHandler(onPop);
         document.addEventListener('click', onClick, true);
-        return () => { window.removeEventListener('popstate', onPop); document.removeEventListener('click', onClick, true); };
+        return () => { setPopHandler(null); document.removeEventListener('click', onClick, true); };
     }, []);
 
     useEffect(() => { if (pending !== null) backButton.current?.focus(); }, [pending]);
@@ -177,9 +161,8 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         const target = pending;
         setPending(null);
         setLeaving(true);
-        if (target?.kind === 'href') router.push(target.href);
-        // Terug: voorbij de extra regel en de pagina zelf.
-        else if (target?.kind === 'back') { armed.current = false; window.history.go(-2); }
+        // Ook na Terug of Vooruit: de pagina waar de gebruiker heen wilde, als nieuwe stap (de formulierpagina staat er al weer).
+        if (target !== null) router.push(target.href);
     }, [pending, router]);
 
     return (

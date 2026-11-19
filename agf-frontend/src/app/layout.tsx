@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import DemoEnvironmentBar from '../components/demo/DemoEnvironmentBar';
+import HistoryFirst from '../components/shared/HistoryFirst';
 import { demoEnvironmentEnabled, demoRobots } from '../lib/demoEnvironment';
 
 export const metadata: Metadata = {
@@ -18,6 +19,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="flex flex-col min-h-dvh bg-gray-50 text-sm font-sans antialiased text-gray-900">
+        {/* Vóór de router van Next.js: Terug en Vooruit eerst langs de weggaansbeveiliging (fixes 5b). */}
+        <HistoryFirst />
         <DemoEnvironmentBar />
         {children}
       </body>
