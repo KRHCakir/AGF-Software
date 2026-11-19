@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
-import { formatDecimalInput } from '../../lib/decimal';
+import { formatDecimalInput, formatKgInput } from '../../lib/decimal';
 import { type LineWeightDraft, lineKgRows } from '../../lib/lineWeight';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
@@ -66,8 +66,8 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         supplySource: line.supplySource ?? '', sourceTouched: line.supplySource !== undefined,
         // Ingevulde kg als ingevuld terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
         ...(line.weightSource === 'Entered' ? {
-            netKg: line.netWeightKg == null ? '' : formatDecimalInput(line.netWeightKg), netKgEntered: line.netWeightKg != null,
-            grossKg: line.grossWeightKg == null ? '' : formatDecimalInput(line.grossWeightKg), grossKgEntered: line.grossWeightKg != null,
+            netKg: line.netWeightKg == null ? '' : formatKgInput(line.netWeightKg), netKgEntered: line.netWeightKg != null,
+            grossKg: line.grossWeightKg == null ? '' : formatKgInput(line.grossWeightKg), grossKgEntered: line.grossWeightKg != null,
         } : {}),
     })).concat(command.payload.lines.length === 0 ? [emptyLine()] : []),
     packagingLines: (command.payload.packagingLines ?? []).map((line) => packagingDraftFrom(line, newRequestId())),

@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
-import { formatDecimalInput, parsePositiveDecimal } from '../../lib/decimal';
+import { formatDecimalInput, formatKgInput, parsePositiveDecimal } from '../../lib/decimal';
 import { MAX_EXPLANATION_LENGTH, REJECTION_DECISIONS, REJECTION_REASONS, defaultRejectedKg } from '../../lib/purchaseOrderRejection';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, RejectionDecision } from '../../lib/purchaseOrderRules';
 import { RejectReceiptCommand, rejectReceiptKey, withAttempt } from '../../lib/pendingCommands';
@@ -38,7 +38,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
     // Een bevroren opdracht toont exact haar eigen waarden; anders het hele afkeurbare deel als voorstel.
     const frozen = pending?.payload;
     const [quantity, setQuantity] = useState(formatDecimalInput(frozen?.lines[0].quantity ?? receipt.rejectableQuantity));
-    const [kg, setKg] = useState(formatDecimalInput(frozen?.lines[0].netWeightKg ?? kgFor(receipt.rejectableQuantity)));
+    const [kg, setKg] = useState(formatKgInput(frozen?.lines[0].netWeightKg ?? kgFor(receipt.rejectableQuantity)));
     const [kgTouched, setKgTouched] = useState(false);
     const [reason, setReason] = useState(frozen?.reason ?? '');
     const [explanation, setExplanation] = useState(frozen?.explanation ?? '');
@@ -55,7 +55,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
         setQuantity(value);
         // Kg volgt het aantal zolang de gebruiker het niet zelf heeft aangepast; berekende regels volgen altijd.
         const parsed = parsePositiveDecimal(value);
-        if (parsed.ok && (calculated || !kgTouched)) setKg(formatDecimalInput(kgFor(parsed.value)));
+        if (parsed.ok && (calculated || !kgTouched)) setKg(formatKgInput(kgFor(parsed.value)));
         edited();
     };
 
@@ -141,7 +141,7 @@ export default function RejectReceiptForm({ orderId, orderNumber, receipt, onDon
                 </div>
                 <div>
                     <label htmlFor={`${id}-kg`} className="text-xs font-medium text-gray-700">{t('po_reject_kg')} *</label>
-                    <input {...fieldProps('lines[0].netWeightKg', e('lines[0].netWeightKg'))} id={`${id}-kg`} data-tour="reject-kg" inputMode="decimal" value={kg} disabled={locked} readOnly={calculated}
+                    <input {...fieldProps('lines[0].netWeightKg', e('lines[0].netWeightKg'))} id={`${id}-kg`} data-tour="reject-kg" inputMode="decimal" data-decimals={2} value={kg} disabled={locked} readOnly={calculated}
                         onChange={(event) => { if (locked) return; setKg(event.target.value); setKgTouched(true); edited(); }} className={inputClass} />
                     <FieldError id="lines[0].netWeightKg" messages={e('lines[0].netWeightKg')} />
                 </div>

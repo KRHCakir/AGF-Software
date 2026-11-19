@@ -141,7 +141,7 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
                 ))}
                 <label className="font-medium text-gray-700">
                     {t('supply_new_article_kg')} {t('field_optional')}
-                    <input value={kg} inputMode="decimal" disabled={busy} className={inputClass} aria-invalid={perPackage !== null && !perPackage.ok}
+                    <input value={kg} inputMode="decimal" data-decimals={2} disabled={busy} className={inputClass} aria-invalid={perPackage !== null && !perPackage.ok}
                         onChange={(event) => { setKg(event.target.value); setError(null); }} data-tour="supply-new-article-kg" data-tour-key={index} />
                 </label>
             </div>

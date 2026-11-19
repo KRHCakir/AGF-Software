@@ -130,7 +130,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         {editingGross ? (
                                             <>
                                                 <label htmlFor={`${prefix}.expectedGrossWeightKg-input`} className="sr-only">{labels.gross} {index + 1}</label>
-                                                <input {...fieldProps(`${prefix}.expectedGrossWeightKg`, errors(`${prefix}.expectedGrossWeightKg`))} inputMode="decimal" value={line.grossKg ?? ''} disabled={locked}
+                                                <input {...fieldProps(`${prefix}.expectedGrossWeightKg`, errors(`${prefix}.expectedGrossWeightKg`))} inputMode="decimal" data-decimals={2} value={line.grossKg ?? ''} disabled={locked}
                                                     data-tour="supply-line-gross" data-tour-key={index} onChange={(event) => onChange(line.key, { grossKg: event.target.value, grossKgEntered: true })}
                                                     className={`${inputClass} !mt-0 w-24 text-right`} />
                                                 {line.grossKgEntered && <span className="block text-xs font-medium text-amber-900" data-testid={`${prefix}.gross-deviates`}>{t('po_line_gross_deviates')}</span>}
@@ -176,7 +176,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                 <td {...lineCell('packaging', labels.packaging)} data-testid={`${prefix}.packaging`}>{text(variant?.packaging)}</td>
                                 <td {...lineCell('price', labels.price, 'min-w-[7rem]')}>
                                     <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{labels.price} {index + 1}</label>
-                                    <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} inputMode="decimal" value={line.unitPrice} disabled={locked}
+                                    <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} inputMode="decimal" data-decimals={2} value={line.unitPrice} disabled={locked}
                                         data-tour="supply-line-price" data-tour-key={index} onChange={(event) => onChange(line.key, { unitPrice: event.target.value })}
                                         onBlur={() => { const price = parseUnitPrice(line.unitPrice); if (price.ok && price.value !== null) onChange(line.key, { unitPrice: formatAmountInput(price.value) }); }}
                                         onKeyDown={last === 'price' ? (event) => onLastField(event, index) : undefined}

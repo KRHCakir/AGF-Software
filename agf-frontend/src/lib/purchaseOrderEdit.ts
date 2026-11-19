@@ -5,7 +5,7 @@
 import type { CreateSupplyCommitmentLineRequest } from '../types/supply';
 import type { PurchaseOrderDetail, PurchaseOrderLine, UpdatePurchaseOrderLineRequest } from '../types/purchaseOrder';
 import { amsterdamDateOf } from './calendarDate.ts';
-import { formatAmountInput, formatDecimalInput } from './decimal.ts';
+import { formatAmountInput, formatDecimalInput, formatKgInput } from './decimal.ts';
 import type { PurchaseLineDraft } from './purchaseOrderLines.ts';
 import type { PackageUnit } from '../types/availability';
 
@@ -60,7 +60,7 @@ export function lineDraftOf(line: PurchaseOrderLine): PurchaseLineDraft {
         productVariantId: String(line.productVariantId),
         quantity: decimal(line.expectedQuantity),
         unitPrice: line.unitPrice === null || line.unitPrice === undefined ? '' : formatAmountInput(line.unitPrice),
-        ...(grossEntered ? { grossKg: decimal(line.expectedGrossWeightKg), grossKgEntered: true } : {}),
+        ...(grossEntered ? { grossKg: formatKgInput(line.expectedGrossWeightKg!), grossKgEntered: true } : {}),
         unit: (line.unit ?? '') as PackageUnit | '',
         lotNumber: line.lotNumber ?? '',
     };

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { formatDecimalInput } from '../../lib/decimal';
+import { formatDecimalInput, formatKgInput } from '../../lib/decimal';
 import { FifoRowInput, calculatedKgFor, sumQuantities, validateFifo } from '../../lib/fifoReservation';
 import { ReserveBatchCommand, reserveBatchKey, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
@@ -58,7 +58,7 @@ export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, 
                 setProposal({ status: 'ready', data });
                 // Een bevroren opdracht toont zijn eigen aantallen; anders het voorstel van het systeem.
                 const items = pendingItems.current ?? data.items;
-                setRows(Object.fromEntries(items.map((item) => [item.palletContentLineId, { quantity: formatDecimalInput(item.quantity), netKg: formatDecimalInput(item.netWeightKg) }])));
+                setRows(Object.fromEntries(items.map((item) => [item.palletContentLineId, { quantity: formatDecimalInput(item.quantity), netKg: formatKgInput(item.netWeightKg) }])));
             })
             .catch((caught: unknown) => {
                 const apiError = toApiError(caught);
@@ -191,7 +191,7 @@ export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, 
                                             </td>
                                             <td className={`${td} w-32`}>
                                                 <label htmlFor={`${id}-kg`} className="sr-only">{t('sales_reserve_kg')} {candidate.lotNumber}</label>
-                                                <input id={`${id}-kg`} inputMode="decimal" value={calculated === null ? row.netKg : formatDecimalInput(calculated)} disabled={locked || calculated !== null}
+                                                <input id={`${id}-kg`} inputMode="decimal" data-decimals={2} value={calculated === null ? row.netKg : formatKgInput(calculated)} disabled={locked || calculated !== null}
                                                     readOnly={calculated !== null} aria-invalid={kgErrors !== undefined}
                                                     onChange={(event) => setRow(candidate.palletContentLineId, 'netKg', event.target.value)} className={`${inputClass} !mt-0 text-right`} />
                                                 <FieldError id={`${id}-kg-error`} messages={kgErrors} />

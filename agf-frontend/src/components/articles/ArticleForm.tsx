@@ -188,13 +188,13 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                 </div>
                 <div>
                     <label htmlFor="defaultNetKgPerPackage-input" className="text-xs font-medium text-gray-700">{t('articles_field_net_kg', { unit })}</label>
-                    <input {...fieldProps('defaultNetKgPerPackage', e('defaultNetKgPerPackage'))} data-tour="article-net-kg" inputMode="decimal" value={draft.defaultNetKgPerPackage} disabled={submitting}
+                    <input {...fieldProps('defaultNetKgPerPackage', e('defaultNetKgPerPackage'))} data-tour="article-net-kg" inputMode="decimal" data-decimals={2} value={draft.defaultNetKgPerPackage} disabled={submitting}
                         onChange={(event) => update({ defaultNetKgPerPackage: event.target.value })} className={inputClass} />
                     <FieldError id="defaultNetKgPerPackage" messages={e('defaultNetKgPerPackage')} />
                 </div>
                 <div>
                     <label htmlFor="defaultGrossKgPerPackage-input" className="text-xs font-medium text-gray-700">{t('articles_field_gross_kg', { unit })}</label>
-                    <input {...fieldProps('defaultGrossKgPerPackage', e('defaultGrossKgPerPackage'))} inputMode="decimal" value={draft.defaultGrossKgPerPackage} disabled={submitting}
+                    <input {...fieldProps('defaultGrossKgPerPackage', e('defaultGrossKgPerPackage'))} inputMode="decimal" data-decimals={2} value={draft.defaultGrossKgPerPackage} disabled={submitting}
                         onChange={(event) => update({ defaultGrossKgPerPackage: event.target.value })} className={inputClass} />
                     <FieldError id="defaultGrossKgPerPackage" messages={e('defaultGrossKgPerPackage')} />
                 </div>

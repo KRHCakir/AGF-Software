@@ -27,7 +27,7 @@ describe('purchase order edit', () => {
     test('the form opens with the stored values in nl notation, the version and the expected date in Amsterdam', () => {
         const { header, lines, edit } = orderEditOf(order([line({ unitPrice: 12.5, weightSource: 'Entered', expectedGrossWeightKg: 990 })]));
         assert.deepEqual(header, { vendorId: '3', origin: '', expectedDate: '2026-11-14', supplierReference: '45-21', orderedOn: '2026-11-10', supplierLotReference: '', note: 'Bel bij aankomst' });
-        assert.deepEqual(lines[0], { key: 'line-7', productVariantId: '1', quantity: '221', unitPrice: '12,50', grossKg: '990', grossKgEntered: true, unit: 'colli', lotNumber: '' });
+        assert.deepEqual(lines[0], { key: 'line-7', productVariantId: '1', quantity: '221', unitPrice: '12,50', grossKg: '990,00', grossKgEntered: true, unit: 'colli', lotNumber: '' });
         assert.equal(edit.version, 2);
         assert.equal(edit.lines.get('line-7')?.lineId, 7);
     });

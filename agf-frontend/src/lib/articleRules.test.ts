@@ -77,7 +77,7 @@ describe('article payload', () => {
         const draft = draftFromArticle(article({ sizeCategory: '18', tradeClass: '1' }));
         assert.equal(draft.tradeClass, 'I', 'an old spelling of a class is shown as the fixed class');
         assert.equal(draft.goodsCode, '08044000');
-        assert.equal(draft.defaultGrossKgPerPackage, '4,4', 'prefilled in screen notation, never as 4.4 (= 44 in nl)');
+        assert.equal(draft.defaultGrossKgPerPackage, '4,40', 'prefilled in screen notation with the two fixed decimals of kg per package');
         const rebuilt = buildArticlePayload(draft);
         assert.equal(rebuilt.ok, true);
         if (rebuilt.ok) assert.deepEqual(rebuilt.value, {

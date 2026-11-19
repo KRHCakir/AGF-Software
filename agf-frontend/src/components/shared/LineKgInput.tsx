@@ -38,7 +38,7 @@ export default function LineKgInput({ id, label, index, field, line, calculated,
         <>
             <label htmlFor={`${id}-input`} className="block text-xs text-gray-700">{label}<span className="sr-only"> {index + 1}</span></label>
             <div className="flex items-center gap-1">
-                <input {...fieldProps(id, messages)} inputMode="decimal" value={shown} disabled={locked} data-weight-state={state}
+                <input {...fieldProps(id, messages)} inputMode="decimal" data-decimals={2} value={shown} disabled={locked} data-weight-state={state}
                     onChange={(event) => onChange({ [textKey]: event.target.value, [enteredKey]: true })}
                     // Leeg gemaakt: terug naar de berekening (of gewoon leeg zonder standaard).
                     onBlur={() => { if (typing && (line[textKey] ?? '').trim() === '') onChange({ [textKey]: '', [enteredKey]: false }); }}

@@ -49,10 +49,10 @@ describe('RejectReceiptForm', () => {
     test('calculated kg follows the quantity; Other needs an explanation; unknown outcome retries the same request', async () => {
         await mounted.render(view());
         await mounted.waitFor(() => input('reject-41-quantity').value === '20', 'default quantity');
-        assert.equal(input('reject-41-kg').value, '80');
+        assert.equal(input('reject-41-kg').value, '80,00');
         assert.equal(input('reject-41-kg').readOnly, true);
         await act(async () => { setValue(input('reject-41-quantity'), '5'); });
-        await mounted.waitFor(() => input('reject-41-kg').value === '20', 'calculated kg');
+        await mounted.waitFor(() => input('reject-41-kg').value === '20,00', 'calculated kg');
 
         await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="reject-41-reason"]')!, 'Other'); });
         await save();

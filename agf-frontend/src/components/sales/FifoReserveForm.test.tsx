@@ -65,7 +65,7 @@ describe('FifoReserveForm through OrderLinePanel', () => {
         await mounted.waitFor(() => confirm(), 'proposal');
         const rows = Array.from(mounted.container.querySelectorAll('[data-fifo-row]')).map((row) => row.getAttribute('data-fifo-row'));
         assert.deepEqual(rows, ['1', '2']);
-        assert.deepEqual([qty(1).value, kg(1).value, qty(2).value, kg(2).value], ['40', '240', '10', '60']);
+        assert.deepEqual([qty(1).value, kg(1).value, qty(2).value, kg(2).value], ['40', '240,00', '10', '60,00']);
         assert.equal(kg(2).readOnly, true, 'calculated weight is not typed');
         assert.ok(mounted.hasText('IO-2026-0001'));
 
@@ -82,7 +82,7 @@ describe('FifoReserveForm through OrderLinePanel', () => {
         await mounted.render(element());
         await mounted.waitFor(() => confirm(), 'proposal');
         await act(async () => { setValue(qty(2), '20'); });
-        assert.equal(kg(2).value, '120', 'the full rest takes the remaining kg');
+        assert.equal(kg(2).value, '120,00', 'the full rest takes the remaining kg');
         await click(confirm()!);
         assert.equal(posted.length, 0, '60 > 50: nothing sent');
         assert.ok(mounted.container.querySelector('[id="fifo-50-items"]')?.textContent?.includes('sales_error_exceeds_demand'));

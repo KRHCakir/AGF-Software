@@ -2,7 +2,7 @@ import type { PackageUnit } from '../types/availability';
 import { PACKAGE_UNITS } from '../types/availability';
 import type { Article, GoodsCodeSystem, SaveArticleRequest } from '../types/article';
 import { GOODS_CODE_SYSTEMS, isGoodsCodeSystem } from '../types/article';
-import { formatDecimalInput, parsePositiveDecimal } from './decimal.ts';
+import { formatDecimalInput, formatKgInput, parsePositiveDecimal } from './decimal.ts';
 import type { WeightMethod } from './weight.ts';
 import { isWeightMethod } from './weight.ts';
 import { normalizeTradeClass } from './tradeClass.ts';
@@ -53,13 +53,15 @@ export function emptyArticleDraft(): ArticleDraft {
 
 // Invoertekst in de schermtaal (4,25 kg), zodat een standaard nooit als duizendtal wordt teruggelezen.
 const num = (value: number | null) => (value === null ? '' : formatDecimalInput(value));
+// Kg per verpakking: altijd twee decimalen (4 -> 4,00; 1,5 -> 1,50), want daar zijn decimalen juist nodig.
+const kg = (value: number | null) => (value === null ? '' : formatKgInput(value));
 
 export function draftFromArticle(article: Article): ArticleDraft {
     return {
         productName: article.productName, variantName: article.variantName, shortcutCode: article.shortcutCode ?? '', originCountryCode: article.originCountryCode ?? '',
         brand: article.brand ?? '', sizeCategory: article.sizeCategory ?? '', packaging: article.packaging ?? '', packagingUnit: article.packagingUnit ?? '',
         season: article.season ?? '', notes: article.notes ?? '', weightMethod: article.weightMethod,
-        defaultNetKgPerPackage: num(article.defaultNetKgPerPackage), defaultGrossKgPerPackage: num(article.defaultGrossKgPerPackage), defaultPackagesPerPallet: num(article.defaultPackagesPerPallet),
+        defaultNetKgPerPackage: kg(article.defaultNetKgPerPackage), defaultGrossKgPerPackage: kg(article.defaultGrossKgPerPackage), defaultPackagesPerPallet: num(article.defaultPackagesPerPallet),
         goodsCode: article.goodsCode ?? '', goodsCodeSystem: article.goodsCodeSystem ?? '', tradeClass: normalizeTradeClass(article.tradeClass) ?? article.tradeClass ?? '',
     };
 }

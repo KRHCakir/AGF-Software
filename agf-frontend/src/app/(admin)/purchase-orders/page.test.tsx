@@ -123,9 +123,9 @@ describe('Purchase orders page', () => {
 
         await click(mounted.buttons().find((b) => b.getAttribute('aria-label') === 'po_reject_line')!);
         assert.equal(input('reject-40-quantity').value, '221');
-        assert.equal(input('reject-40-kg').value, '884');
+        assert.equal(input('reject-40-kg').value, '884,00');
         await act(async () => { setValue(input('reject-40-quantity'), '48'); });
-        await mounted.waitFor(() => input('reject-40-kg').value === '192', 'proportional kg');
+        await mounted.waitFor(() => input('reject-40-kg').value === '192,00', 'proportional kg');
 
         // Zonder reden wordt er niets verstuurd.
         await click(mounted.button('po_reject_save')!);
