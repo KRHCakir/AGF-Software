@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
-import { setPopHandler } from './HistoryFirst';
+import { historyIndexOf, setPopHandler } from './HistoryFirst';
 
 // Fixes 5b, een fout blokkeert het weggaan. Een formulier meldt zich met useLeaveGuard(gewijzigd, fout). Zolang een formulier een
 // invoerfout heeft of niet-opgeslagen wijzigingen, kan de gebruiker niet naar een andere pagina:
@@ -103,6 +103,7 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     stateRef.current = state;
     // De formulierpagina (adres en geschiedenisstand van Next.js) zolang er bewaakt wordt: daarheen terug als Terug of Vooruit weg wil.
     const formEntry = useRef<{ href: string; state: unknown } | null>(null);
+    const restoring = useRef(false);
     const backButton = useRef<HTMLButtonElement>(null);
 
     const api = useMemo<LeaveGuardApi>(() => ({
@@ -132,13 +133,24 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         // Next.js (die anders de andere pagina toont); wij houden die tegen, zetten de formulierpagina terug en stellen de vraag.
         // Een anker op dezelfde pagina (#sectie) blijft op dezelfde pagina en telt niet.
         const onPop = (event: PopStateEvent) => {
+            if (restoring.current) { restoring.current = false; event.stopImmediatePropagation(); return; }
             const form = formEntry.current;
             if (stateRef.current === 'none' || form === null) return;
             const here = new URL(window.location.href);
             const there = new URL(form.href);
             if (here.pathname === there.pathname && here.search === there.search) return;
             event.stopImmediatePropagation();
-            window.history.pushState(form.state, '', form.href);
+            // Terug naar de formulierregel met history.go(): geen nieuwe regel, dus de vooruitgeschiedenis blijft intact. Die sprong geeft
+            // zelf weer een popstate, die wij ook tegenhouden (Next.js heeft de andere pagina nooit getoond).
+            const formIndex = historyIndexOf(form.state);
+            const hereIndex = historyIndexOf(event.state ?? window.history.state);
+            if (formIndex !== null && hereIndex !== null && formIndex !== hereIndex) {
+                restoring.current = true;
+                window.history.go(formIndex - hereIndex);
+            } else {
+                // Geen volgnummers bekend (regel van vóór de bewaking): terugvallen op een nieuwe regel.
+                window.history.pushState(form.state, '', form.href);
+            }
             setPending({ href: here.pathname + here.search + here.hash });
         };
         const onClick = (event: MouseEvent) => {

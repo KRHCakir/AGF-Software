@@ -120,6 +120,44 @@ describe('LeaveGuard', () => {
         }
     });
 
+    test('Back and Forward return to the form page without pushing: the forward history stays intact', async () => {
+        const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+        const where = () => window.location.pathname + window.location.search;
+        // Geschiedenis: A, B (het formulier), C. De gebruiker staat op B.
+        window.history.replaceState({}, '', '/purchase-orders?id=4');
+        window.history.pushState({}, '', '/relations');
+        window.history.pushState({}, '', '/availability');
+        window.history.go(-1);
+        await settle();
+        assert.equal(where(), '/relations');
+        await mounted.render(page(<Form />));
+        await type('x');
+        let routerSaw = 0;
+        const next = () => { routerSaw += 1; };
+        window.addEventListener('popstate', next);
+        const lengthBefore = window.history.length;
+        try {
+            // Terug naar A: de formulierpagina komt terug, C blijft vooruit bereikbaar.
+            window.history.go(-1);
+            await settle();
+            assert.ok(dialog(), 'asks the question');
+            assert.equal(where(), '/relations', 'back on the form page');
+            await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-testid="leave-guard-stay"]')!.click(); });
+            // Vooruit naar C: ook dan terug op B, en de vraag komt weer.
+            window.history.go(1);
+            await settle();
+            assert.ok(dialog(), 'asks the question again');
+            assert.equal(where(), '/relations');
+            assert.equal(routerSaw, 0, 'Next.js never saw the navigation');
+            // Geen regel erbij of eraf: de vooruitgeschiedenis (C) is niet gewist.
+            assert.equal(window.history.length, lengthBefore, 'no entry pushed');
+            await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-testid="leave-guard-discard"]')!.click(); });
+            assert.equal(currentUrl(), '/availability', 'discard goes to C');
+        } finally {
+            window.removeEventListener('popstate', next);
+        }
+    });
+
     test('an anchor on the same page (#section) is not leaving', async () => {
         await mounted.render(page(<Form />));
         await type('x');
