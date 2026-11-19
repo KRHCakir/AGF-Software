@@ -105,6 +105,9 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     // De formulierpagina (adres en geschiedenisstand van Next.js) zolang er bewaakt wordt: daarheen terug als Terug of Vooruit weg wil.
     const formEntry = useRef<{ href: string; state: unknown } | null>(null);
     const restoring = useRef(false);
+    // De vraag na Terug of Vooruit komt pas als de formulierpagina terug is (de herstel-popstate): anders kon weggooien de tweede sprong
+    // vanaf de verkeerde regel starten (review #275).
+    const afterRestore = useRef<Pending | null>(null);
     // Na weggooien bij Terug of Vooruit: de volgende popstate is de bedoelde sprong; die laten we door naar Next.js.
     const passThrough = useRef(false);
     const backButton = useRef<HTMLButtonElement>(null);
@@ -137,7 +140,12 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         // Een anker op dezelfde pagina (#sectie) blijft op dezelfde pagina en telt niet.
         const onPop = (event: PopStateEvent) => {
             if (passThrough.current) { passThrough.current = false; return; }
-            if (restoring.current) { restoring.current = false; event.stopImmediatePropagation(); return; }
+            if (restoring.current) {
+                restoring.current = false;
+                event.stopImmediatePropagation();
+                if (afterRestore.current !== null) { setPending(afterRestore.current); afterRestore.current = null; }
+                return;
+            }
             const form = formEntry.current;
             if (stateRef.current === 'none' || form === null) return;
             const here = new URL(window.location.href);
@@ -151,8 +159,8 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
             const href = here.pathname + here.search + here.hash;
             if (formIndex !== null && hereIndex !== null && formIndex !== hereIndex) {
                 restoring.current = true;
+                afterRestore.current = { href, delta: hereIndex - formIndex };
                 window.history.go(formIndex - hereIndex);
-                setPending({ href, delta: hereIndex - formIndex });
             } else {
                 // Geen volgnummers bekend (regel van vóór de bewaking): terugvallen op een nieuwe regel.
                 window.history.pushState(form.state, '', form.href);
