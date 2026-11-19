@@ -141,7 +141,38 @@ namespace AgfAdmin.Services
                     })).ToList()
             };
             await AddPartijenAsync(drillDown, cancellationToken);
+            await AddSalesLocationsAsync(drillDown, cancellationToken);
             return ServiceResult<AvailabilityDrillDownDto>.Ok(drillDown);
+        }
+
+        // Waar de verkochte handel nu ligt (fixes 5b): de actieve reserveringen op een pallet per verkooporderregel, met de plek van die
+        // pallet (Pallet.LocationContext en WarehouseLocation, het bestaande locatieveld). Geen nieuw locatiemodel; alleen lezen.
+        private async Task AddSalesLocationsAsync(AvailabilityDrillDownDto drillDown, CancellationToken cancellationToken)
+        {
+            var lineIds = drillDown.SalesLines.Select(l => l.SalesOrderLineId).Distinct().ToList();
+            if (lineIds.Count == 0) return;
+            var rows = await _db.StockReservations.AsNoTracking()
+                .Where(r => r.SalesOrderLineId != null && lineIds.Contains(r.SalesOrderLineId.Value) && r.Status == ReservationRules.StatusActive
+                    && r.Source == ReservationRules.SourcePhysical && r.PalletContentLineId != null)
+                .Select(r => new
+                {
+                    LineId = r.SalesOrderLineId!.Value, r.Quantity, r.PalletContentLine.PalletId, r.PalletContentLine.Pallet.Reference,
+                    r.PalletContentLine.Pallet.LocationContext, r.PalletContentLine.Pallet.WarehouseLocation
+                })
+                .ToListAsync(cancellationToken);
+            var byLine = rows.ToLookup(r => r.LineId);
+            foreach (var line in drillDown.SalesLines)
+            {
+                line.Locations = byLine[line.SalesOrderLineId]
+                    .GroupBy(r => new { r.PalletId, r.Reference, r.LocationContext, r.WarehouseLocation })
+                    .OrderBy(g => g.Key.WarehouseLocation == null).ThenBy(g => g.Key.WarehouseLocation, StringComparer.Ordinal).ThenBy(g => g.Key.PalletId)
+                    .Select(g => new AvailabilityLocationDto
+                    {
+                        PalletId = g.Key.PalletId, PalletReference = g.Key.Reference, LocationContext = g.Key.LocationContext,
+                        WarehouseLocation = g.Key.WarehouseLocation, Quantity = g.Sum(r => r.Quantity)
+                    })
+                    .ToList();
+            }
         }
 
         // Uitsplitsing per partij: het partijnummer uit de partij zelf (en haar id voor de link naar het partijdetail), naast het oude

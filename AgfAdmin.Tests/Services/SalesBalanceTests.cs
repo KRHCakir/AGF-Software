@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using AgfAdmin.DTOs;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
@@ -111,6 +112,29 @@ public sealed class SalesBalanceTests : IDisposable
         Assert.Equal(ServiceResultStatus.Created, (await _s.CreateAsync(_s.Order(cherry, (8m, "Expected")))).Status);
         var balance = await BalanceAsync(cherry);
         Assert.Equal((0m, 0m, 8m, -8m, true), (balance.Stock, balance.Expected, balance.Sold, balance.Free, balance.Shortage));
+    }
+
+    // Fixes 5b: bij Verkocht staat waar de verkochte handel nu ligt (de pallet met haar plek in het magazijn, uit de reservering);
+    // het deel zonder reservering of uit verwachte aanvoer heeft geen plek ("nog niet toegewezen" op het scherm).
+    [Fact]
+    public async Task The_Drill_Down_Shows_Where_Sold_Goods_Lie_Now_From_The_Reservations()
+    {
+        await _s.ArrangeAsync();
+        await using (var db = _s.Factory.CreateContext())
+        {
+            var pallet = await db.Pallets.SingleAsync(p => p.Reference == "P-T1");
+            pallet.WarehouseLocation = "Cel 3";
+            await db.SaveChangesAsync();
+        }
+        var order = (await _s.CreateAsync(_s.Order((30m, "Stock"), (20m, "Expected")))).Value;
+        await _s.ReserveAsync(order.Id, order.Lines[0].Id, _s.StockContentId, 10m, 60m);
+        await using var read = _s.Factory.CreateContext();
+        var drill = (await new AvailabilityService(read).GetVariantAsync(_s.TomatoId, new AvailabilityQuery())).Value;
+        var fromStock = drill.SalesLines.Single(l => l.SupplySource == "Stock");
+        var location = Assert.Single(fromStock.Locations);
+        Assert.Equal(("P-T1", "Warehouse", "Cel 3", 10m), (location.PalletReference, location.LocationContext, location.WarehouseLocation, location.Quantity));
+        Assert.Equal(30m, fromStock.OpenQuantity);
+        Assert.Empty(drill.SalesLines.Single(l => l.SupplySource == "Expected").Locations);
     }
 
     [Fact]
