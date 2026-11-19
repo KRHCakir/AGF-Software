@@ -218,7 +218,7 @@ export default function RelationsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {shown.length === 0 && (
+                            {rows.length === 0 && (
                                 <tr><td colSpan={7} className={nothingYet ? 'p-2' : 'px-3 py-6 text-center text-gray-600'}>
                                     {nothingYet ? (
                                         <EmptyState testId="relations-empty" title={t('relations_empty_title')} description={t('relations_empty_text')}
