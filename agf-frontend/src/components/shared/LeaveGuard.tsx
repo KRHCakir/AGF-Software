@@ -62,15 +62,30 @@ export function guardStateOf(entries: Iterable<{ dirty: boolean; error: boolean 
 
 // Een klik op een link naar een andere pagina van de software (zelfde website, ander pad of andere zoekvraag). Nieuwe tabbladen,
 // downloads en klikken met een modificatietoets laten we met rust: daarbij blijft het formulier staan.
-export function leavingHref(event: Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'defaultPrevented' | 'target'>, location: { href: string; origin: string; pathname: string; search: string }): string | null {
+type ClickEvent = Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'defaultPrevented' | 'target'>;
+type PageLocation = { href: string; origin: string; pathname: string; search: string };
+
+function clickedUrl(event: ClickEvent, location: PageLocation): URL | null {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null;
     const target = event.target as { closest?: (selector: string) => Element | null } | null;
     const anchor = typeof target?.closest === 'function' ? target.closest('a[href]') as HTMLAnchorElement | null : null;
     if (anchor === null || (anchor.target !== '' && anchor.target !== '_self') || anchor.hasAttribute('download')) return null;
     const url = new URL(anchor.getAttribute('href') ?? '', location.href);
-    if (url.origin !== location.origin) return null;
-    if (url.pathname === location.pathname && url.search === location.search) return null;
+    return url.origin === location.origin ? url : null;
+}
+
+export function leavingHref(event: ClickEvent, location: PageLocation): string | null {
+    const url = clickedUrl(event, location);
+    if (url === null || (url.pathname === location.pathname && url.search === location.search)) return null;
     return url.pathname + url.search + url.hash;
+}
+
+// Een anker op dezelfde pagina (#sectie) voegt normaal een geschiedenisregel toe en zou onze extra regel van plek laten wisselen.
+// Dat vangen we zelf af: de regel wordt vervangen (replaceState) en we scrollen er zelf heen. Geeft het anker terug, of null.
+export function sameDocumentHash(event: ClickEvent, location: PageLocation): string | null {
+    const url = clickedUrl(event, location);
+    if (url === null || url.pathname !== location.pathname || url.search !== location.search) return null;
+    return url.hash;
 }
 
 // useSearchParams vraagt een Suspense-grens; zo hangt alleen dit kleine onderdeel daarvan af, niet de hele layout.
@@ -115,6 +130,8 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
 
     // Browserknop Terug: een extra regel in de geschiedenis met dezelfde pagina. Terug haalt die weg (zelfde pagina, niets verandert),
     // wij zetten haar terug en stellen de vraag. Wordt het formulier weer schoon (opgeslagen), dan gaat de extra regel er stil af.
+    // Ankers op dezelfde pagina vervangen de regel (zie onClick), zodat de extra regel altijd direct boven de pagina blijft staan.
+    // Beperking: pushState wist de vooruit-geschiedenis; de browserknop Vooruit werkt na het wijzigen van een formulier niet meer.
     useEffect(() => {
         if (state !== 'none' && !armed.current) {
             window.history.pushState(window.history.state, '', window.location.href);
@@ -134,6 +151,14 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         };
         const onClick = (event: MouseEvent) => {
             if (stateRef.current === 'none') return;
+            const hash = sameDocumentHash(event, window.location);
+            if (hash !== null) {
+                event.preventDefault();
+                event.stopPropagation();
+                window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + hash);
+                if (hash.length > 1) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+                return;
+            }
             const href = leavingHref(event, window.location);
             if (href === null) return;
             event.preventDefault();
