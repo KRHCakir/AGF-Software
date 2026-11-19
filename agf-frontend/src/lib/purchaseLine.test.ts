@@ -16,7 +16,7 @@ describe('purchase order line math (mirror of PurchaseLineMath)', () => {
             { quantity: 250, netKg: null, grossKg: null, total: 10, pallets: pallets(250, 120) },
         ]);
         assert.equal(totals.pallets, 2.67, '0,397 + 0,189 + 2,083: summed, then two decimals, never a whole pallet');
-        assert.deepEqual({ ...totals, pallets: 0 }, { quantity: 400, netKg: 600, grossKg: 440, amount: 1260, pallets: 0, linesWithoutNet: 1, linesWithoutGross: 2, linesWithoutPrice: 1, linesWithoutPallets: 0 });
+        assert.deepEqual({ ...totals, pallets: 0 }, { quantity: 400, netKg: 600, grossKg: 440, shownNetKg: 600, shownGrossKg: 440, amount: 1260, pallets: 0, linesWithoutNet: 1, linesWithoutGross: 2, linesWithoutPrice: 1, linesWithoutPallets: 0 });
         assert.equal(sumLines([{ quantity: 250, netKg: null, grossKg: null, total: null, pallets: pallets(250, 120) }]).pallets, 2.08);
         // Eén keer afronden op de exacte som: 0,004 + 0,004 + 0,004 = 0,012 → 0,01 (niet drie keer 0,00).
         assert.equal(sumLines([1, 2, 3].map(() => ({ quantity: 1, netKg: null, grossKg: null, total: null, pallets: 0.004 }))).pallets, 0.01);

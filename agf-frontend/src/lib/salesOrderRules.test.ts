@@ -251,8 +251,8 @@ describe('progress and search', () => {
         assert.deepEqual(dispatchTotals([allocation]), [{ unit: 'box', quantity: 5, netWeightKg: 0, count: 1 }], 'null kg never becomes a number by inference; it only sums as 0 for display');
         assert.deepEqual(dispatchTotals([active, colli, { ...active, id: 6, quantity: 1, netWeightKg: 4 }]), [
             { unit: 'box', quantity: 6, netWeightKg: 24, count: 2 },
-            { unit: 'colli', quantity: 2.5, netWeightKg: 13.75, count: 1 },
-        ]);
+            { unit: 'colli', quantity: 2.5, netWeightKg: 14, count: 1 },
+        ], 'kg as shown: the sum of the rounded rows (13,75 is shown as 14), so the total under the rows adds up');
         assert.deepEqual(dispatchTotals([]), []);
         assert.deepEqual(normalizeDispatchReference('  VRB-1 '), { ok: true, value: 'VRB-1' });
         assert.deepEqual(normalizeDispatchReference('   '), { ok: true, value: null });

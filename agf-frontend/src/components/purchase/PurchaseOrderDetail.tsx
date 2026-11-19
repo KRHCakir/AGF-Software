@@ -5,6 +5,7 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatMoney, formatQuantity, qualityStyle } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import { purchaseOrderChain } from '../../lib/chain';
+import { shownKgTotal } from '../../lib/weightDisplay';
 import { DECISION_LABEL_KEYS, REASON_LABEL_KEYS, labelKey, lineAmountParts, orderNumbers } from '../../lib/purchaseOrderRules';
 import OrderNumberText from './OrderNumberText';
 import type { PurchaseOrderDetail as Order, PurchaseOrderHistoryEvent } from '../../types/purchaseOrder';
@@ -144,7 +145,9 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                             </tr>
                         ))}
                     </tbody>
-                    {order.totals && <PurchaseLineTotalsRow totals={{ ...order.totals, netKg: order.totals.netWeightKg, grossKg: order.totals.grossWeightKg }} />}
+                    {order.totals && <PurchaseLineTotalsRow totals={{ ...order.totals, netKg: order.totals.netWeightKg, grossKg: order.totals.grossWeightKg,
+                        shownNetKg: order.totals.netWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedNetWeightKg)),
+                        shownGrossKg: order.totals.grossWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedGrossWeightKg)) }} />}
                 </table>
             </section>
 

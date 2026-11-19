@@ -1,4 +1,4 @@
-import { formatKgOneDecimal } from '../../lib/quantityKg';
+import { formatKg } from '../../lib/weightDisplay';
 
 type Translate = (key: string, variables?: Record<string, string>) => string;
 
@@ -6,8 +6,8 @@ type Translate = (key: string, variables?: Record<string, string>) => string;
 // Met `withSource` ook "(berekend)" of "(ingevuld)", zodat een berekend gewicht nooit als opgegeven gewicht leest.
 export function lineKgLabel(line: { netWeightKg?: number | null; grossWeightKg?: number | null; weightSource?: string | null }, t: Translate, locale: string, withSource = false): string | null {
     const parts = [
-        line.netWeightKg != null ? t('quantity_kg_net', { net: formatKgOneDecimal(line.netWeightKg, locale) }) : null,
-        line.grossWeightKg != null ? t('quantity_kg_gross', { gross: formatKgOneDecimal(line.grossWeightKg, locale) }) : null,
+        line.netWeightKg != null ? t('quantity_kg_net', { net: formatKg(line.netWeightKg, locale) }) : null,
+        line.grossWeightKg != null ? t('quantity_kg_gross', { gross: formatKg(line.grossWeightKg, locale) }) : null,
     ].filter((part): part is string => part !== null);
     if (parts.length === 0) return null;
     const source = !withSource ? '' : line.weightSource === 'Calculated' ? ` (${t('line_kg_calculated')})` : line.weightSource === 'Entered' ? ` (${t('line_kg_entered')})` : '';

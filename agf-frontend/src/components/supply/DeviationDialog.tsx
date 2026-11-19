@@ -4,6 +4,7 @@ import { KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatQuantity } from '../../lib/availability';
+import { formatKgPerPackage } from '../../lib/weightDisplay';
 import { orderNumbers } from '../../lib/purchaseOrderRules';
 import { AttributeKind, DEVIATION_REASONS, DEVIATION_REASON_LABEL_KEYS, DeviationReason, articleName, deviationRows, isWeightOnly, shortNames, unitText } from '../../lib/receiptDeviation';
 
@@ -43,8 +44,9 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
     const expectedText = !preview.kinds.some((kind) => kind !== 'Other' && kind !== 'Weight') ? names.expected : `${articleName(preview.expected)} ${names.expected}`;
     // Gewicht (netto) als extra rij: "4 kg per colli (40 kg)"; rood alleen als de server het als afwijking noemt.
     const kg = (value: number | null | undefined) => (value === null || value === undefined ? '–' : formatKg(value, locale));
+    const perKg = (value: number | null | undefined) => (value === null || value === undefined ? '–' : formatKgPerPackage(value, locale));
     const weightText = (perPackage: number | null | undefined, total: number | null | undefined) =>
-        t('deviation_weight_value', { perPackage: kg(perPackage), unit, total: kg(total) });
+        t('deviation_weight_value', { perPackage: perKg(perPackage), unit, total: kg(total) });
     const expectedWeight = weightText(preview.expectedKgPerPackage, preview.expectedNetKg);
     const receivedWeight = weightText(preview.receivedKgPerPackage, preview.receivedNetKg);
     const weightOnly = isWeightOnly(preview.kinds);
@@ -99,7 +101,7 @@ export default function DeviationDialog({ preview, onNo, onYes }: {
 
                 <p className="mt-3 text-sm text-gray-900" data-testid="deviation-consequence">
                     {weightOnly
-                        ? t('deviation_consequence_weight', { perPackage: kg(preview.receivedKgPerPackage), unit, total: kg(preview.originalExpectedNetKgAfter) })
+                        ? t('deviation_consequence_weight', { perPackage: perKg(preview.receivedKgPerPackage), unit, total: kg(preview.originalExpectedNetKgAfter) })
                         : preview.reducedQuantity > 0
                         ? t('deviation_consequence', { expected: names.expected, from: qty(preview.originalExpectedQuantity), to: qty(preview.originalExpectedQuantityAfter), received: names.received, quantity: qty(preview.quantity), unit })
                         : t('deviation_consequence_add_only', { expected: names.expected, received: names.received, quantity: qty(preview.quantity), unit })}

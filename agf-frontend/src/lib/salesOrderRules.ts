@@ -7,6 +7,7 @@ import { resolveLineWeight, weightPayload, type LineWeightDraft } from './lineWe
 import { buildPackagingLines, type PackagingLineDraft } from './packaging.ts';
 import { resolvePalletInput, type QuantityInputMode } from './palletInput.ts';
 import type { PackageKgDefaults } from './quantityKg.ts';
+import { shownKgTotal } from './weightDisplay.ts';
 
 // Pure regels van de verkoopwerkplek, los van React en i18n, zodat ze met node:test te toetsen zijn.
 // Ze spiegelen de backendregels (SalesOrderService, StockReservationService); de server blijft altijd leidend.
@@ -380,7 +381,8 @@ export function dispatchTotals(selected: DispatchCandidate[]): { unit: string; q
     for (const reservation of selected) {
         const total = byUnit.get(reservation.unit) ?? { unit: reservation.unit, quantity: 0, netWeightKg: 0, count: 0 };
         total.quantity += reservation.quantity;
-        total.netWeightKg += reservation.netWeightKg ?? 0;
+        // Zoals getoond: de som van de afgeronde regels (hele kilo's of één decimaal), zodat het totaal onder de regels optelt.
+        total.netWeightKg = shownKgTotal([total.netWeightKg, reservation.netWeightKg]);
         total.count += 1;
         byUnit.set(reservation.unit, total);
     }

@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
-import { formatKgOneDecimal } from '../../lib/quantityKg';
+import { formatKg } from '../../lib/weightDisplay';
 import { orderProgress } from '../../lib/salesOrderRules';
 import { orderLabel } from '../../lib/salesSupply';
 import { SalesOrder } from '../../types/salesOrder';
@@ -111,7 +111,7 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                                 {line.dispatchedQuantity > 0 && <span className="text-emerald-900">({t('sales_list_dispatched', { quantity: formatQuantity(line.dispatchedQuantity, locale) })})</span>}
                                                 <UnitBadge unit={line.unit} />
                                                 {/* Netto kg van de regel (berekend of ingevuld), zoals "221 colli · 2.210,0 kg". */}
-                                                {line.netWeightKg != null && <span className="text-gray-800" data-testid="list-line-kg">· {formatKgOneDecimal(line.netWeightKg, locale)}</span>}
+                                                {line.netWeightKg != null && <span className="text-gray-800" data-testid="list-line-kg">· {formatKg(line.netWeightKg, locale)}</span>}
                                             </li>
                                         ))}
                                         {(order.packagingLines ?? []).map((line) => (

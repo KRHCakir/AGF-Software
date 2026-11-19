@@ -18,7 +18,3 @@ export function packageKg(quantity: number | null, defaults: PackageKgDefaults |
     return { netKgPerPackage: net, netKg: times(quantity, net), grossKg: gross !== null && gross > 0 ? times(quantity, gross) : null };
 }
 
-// Kg in de rekenregel altijd met precies 1 decimaal (15.600,0 kg), in de notatie van de schermtaal.
-export function formatKgOneDecimal(value: number, locale: string): string {
-    return `${new Intl.NumberFormat(locale === 'nl' ? 'nl-NL' : 'en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)} kg`;
-}

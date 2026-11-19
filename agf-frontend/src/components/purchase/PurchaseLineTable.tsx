@@ -65,8 +65,8 @@ export function PurchaseLineTotalsRow({ totals, trailingCells = 0 }: { totals: P
                     {missing(totals.linesWithoutPallets, 'po_line_lines_without_pallets')}
                 </td>
                 <td className="max-md:hidden" colSpan={3} />
-                <td {...lineCell('gross', labels.gross)} data-testid="line-totals-gross">{kg(totals.grossKg)}{missing(totals.linesWithoutGross, 'po_line_lines_without_kg')}</td>
-                <td {...lineCell('net', labels.net)} data-testid="line-totals-net">{kg(totals.netKg)}{missing(totals.linesWithoutNet, 'po_line_lines_without_kg')}</td>
+                <td {...lineCell('gross', labels.gross)} data-testid="line-totals-gross">{kg(totals.shownGrossKg === undefined ? totals.grossKg : totals.shownGrossKg)}{missing(totals.linesWithoutGross, 'po_line_lines_without_kg')}</td>
+                <td {...lineCell('net', labels.net)} data-testid="line-totals-net">{kg(totals.shownNetKg === undefined ? totals.netKg : totals.shownNetKg)}{missing(totals.linesWithoutNet, 'po_line_lines_without_kg')}</td>
                 <td {...lineCell('quantity', labels.quantity)} data-testid="line-totals-quantity">{formatQuantity(totals.quantity, locale)}</td>
                 <td className="max-md:hidden" colSpan={2} />
                 <td {...lineCell('total', labels.total)} data-testid="line-totals-amount">
