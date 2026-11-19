@@ -8,6 +8,29 @@ let decimals = 0;
 
 export function setWeightDecimals(value: number) {
     decimals = value === 1 ? 1 : 0;
+    queued = null;
+    revision += 1;
+}
+
+// Een instelling die later opnieuw is gelezen (een collega wijzigde haar) geldt pas vanaf het volgende scherm. Zo verandert een
+// gewicht nooit van vorm terwijl iemand in een scherm werkt, en wordt er niets opnieuw opgebouwd. Is de instelling intussen hier
+// zelf gezet (opgeslagen onder Instellingen), dan vervalt een lezing van daarvoor.
+let queued: number | null = null;
+let revision = 0;
+
+export function weightRevision(): number {
+    return revision;
+}
+
+export function queueWeightDecimals(value: number, readSinceRevision: number) {
+    if (readSinceRevision === revision) queued = value === 1 ? 1 : 0;
+}
+
+export function applyQueuedWeightDecimals() {
+    if (queued === null) return;
+    decimals = queued;
+    queued = null;
+    revision += 1;
 }
 
 export function weightDecimals(): number {
@@ -29,6 +52,14 @@ export function formatWeight(kg: number, locale: string): string {
 
 export function formatKg(kg: number, locale: string): string {
     return `${formatWeight(kg, locale)} kg`;
+}
+
+// Hetzelfde met een expliciet aantal decimalen, los van de globale instelling (voor het voorbeeld onder Instellingen).
+export function formatKgWithDecimals(kg: number, locale: string, digits: number): string {
+    const places = digits === 1 ? 1 : 0;
+    const factor = 10 ** places;
+    const rounded = Math.round(kg * factor + 1e-7) / factor;
+    return `${new Intl.NumberFormat(numberLocale(locale), { minimumFractionDigits: places, maximumFractionDigits: places }).format(rounded)} kg`;
 }
 
 // Gewicht per colli of verpakking: minstens twee decimalen (4,00; 1,50; 1,125), want daar zijn decimalen juist nodig.

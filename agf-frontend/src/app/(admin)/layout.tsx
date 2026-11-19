@@ -9,6 +9,7 @@ import AppMenu from '../../components/AppMenu';
 import { SubNav, TopNav } from '../../components/TopNav';
 import DemoAssistant from '../../components/demo/DemoAssistant';
 import { CurrentUserProvider, SignedInAs } from '../../components/shared/CurrentUserContext';
+import WeightDisplayProvider from '../../components/shared/WeightDisplayProvider';
 import { showDemoAssistant, showLegacyDemoChrome } from '../../lib/featureFlags';
 
 function AdminLayoutContent({
@@ -104,7 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return (
         <LanguageProvider>
             <CurrentUserProvider>
-                <AdminLayoutContent>{children}</AdminLayoutContent>
+                <AdminLayoutContent><WeightDisplayProvider>{children}</WeightDisplayProvider></AdminLayoutContent>
             </CurrentUserProvider>
         </LanguageProvider>
     );
