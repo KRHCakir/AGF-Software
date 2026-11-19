@@ -152,10 +152,11 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         <LeaveGuardContext.Provider value={api}>
             {children}
             {pending !== null && (
+                // Onder de rondleiding (z-70); op een telefoon ruimte onderin, zodat de knoppen niet onder de zwevende knop Demo-assistent vallen.
                 <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/40 p-0 sm:items-center sm:p-4"
                     onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); stay(); } }}>
                     <div role="alertdialog" aria-modal="true" aria-labelledby="leave-guard-title" data-testid="leave-guard"
-                        className="w-full max-w-md space-y-3 rounded-t-lg bg-white p-4 shadow-xl sm:rounded-lg">
+                        className="w-full max-w-md space-y-3 rounded-t-lg bg-white p-4 shadow-xl max-sm:pb-20 sm:rounded-lg">
                         <h2 id="leave-guard-title" className="text-base font-semibold text-gray-900">
                             {t(computed === 'error' ? 'leave_guard_error' : 'leave_guard_unsaved')}
                         </h2>
