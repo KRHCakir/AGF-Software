@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { createContext, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 
@@ -73,6 +73,13 @@ export function leavingHref(event: Pick<MouseEvent, 'button' | 'metaKey' | 'ctrl
     return url.pathname + url.search + url.hash;
 }
 
+// useSearchParams vraagt een Suspense-grens; zo hangt alleen dit kleine onderdeel daarvan af, niet de hele layout.
+function SearchWatcher({ onChange }: { onChange: () => void }) {
+    const search = useSearchParams().toString();
+    useEffect(() => { onChange(); }, [search, onChange]);
+    return null;
+}
+
 export default function LeaveGuardProvider({ children }: { children: ReactNode }) {
     const { t } = useTranslation();
     const router = useRouter();
@@ -95,6 +102,8 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     }), []);
 
     useEffect(() => { setLeaving(false); }, [pathname]);
+    // Ook een andere zoekvraag op dezelfde pagina (?id=) is een nieuwe bestemming: de beveiliging gaat dan weer aan.
+    const releaseLeaving = useCallback(() => setLeaving(false), []);
 
     // Tabblad sluiten of herladen: de waarschuwing van de browser zelf.
     useEffect(() => {
@@ -150,6 +159,7 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
 
     return (
         <LeaveGuardContext.Provider value={api}>
+            <Suspense fallback={null}><SearchWatcher onChange={releaseLeaving} /></Suspense>
             {children}
             {pending !== null && (
                 // Onder de rondleiding (z-70); op een telefoon ruimte onderin, zodat de knoppen niet onder de zwevende knop Demo-assistent vallen.

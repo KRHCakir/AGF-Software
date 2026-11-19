@@ -328,7 +328,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                 ? { ...draftNow, customerRole: true, ...(saved.customer ? { customerTerms: termsDraftFromRole(saved.customer, saved.customer.currency), credit: creditDraftFromRole(saved.customer) } : {}) }
                 : { ...draftNow, vendorRole: true, ...(saved.vendor ? { vendorTerms: termsDraftFromRole(saved.vendor, saved.vendor.defaultCurrency) } : {}) });
             setOpen((current) => ({ ...current, defaults: true }));
-            leave.saved();
             onSaved(saved, false);
         } catch (caught) {
             applyServerError(toApiError(caught));
@@ -358,7 +357,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                 }),
             }));
             setNotice(t('relations_bank_confirmed', { name: saved.bankAccounts.find((b) => b.id === bankAccountId)?.confirmedBy ?? '' }));
-            leave.saved();
             onSaved(saved, false);
         } catch (caught) {
             applyServerError(toApiError(caught));
