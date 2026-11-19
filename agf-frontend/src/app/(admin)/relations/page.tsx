@@ -80,6 +80,9 @@ export default function RelationsPage() {
     // De nieuwe relatie staat zolang de melding staat bovenaan de lijst, direct onder de melding (ook als zij alfabetisch verderop of op
     // een volgende pagina zou staan). De versie uit de herladen lijst gaat voor, anders de opgeslagen relatie.
     const [pinned, setPinned] = useState<RelationListItem | null>(null);
+    // Een andere zoekterm, rolfilter, inactief-keuze of pagina is een eigen selectie: dan geldt alleen wat de server teruggeeft
+    // (review #274). Het eerste herladen na opslaan houdt dezelfde selectie, dus daar blijft de nieuwe relatie bovenaan.
+    useEffect(() => { setPinned(null); }, [role, debounced, includeInactive, page]);
     const pinnedId = created.created !== null && pinned !== null && pinned.id === created.created.id ? pinned.id : null;
     const rows = pinnedId === null ? shown : [shown.find((item) => item.id === pinnedId) ?? pinned!, ...shown.filter((item) => item.id !== pinnedId)];
     const clearCreated = created.clear;
