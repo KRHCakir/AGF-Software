@@ -39,10 +39,12 @@ export function useFormLeaveGuard(error: boolean): { ref: (element: HTMLElement 
     const [touched, setTouched] = useState(false);
     useEffect(() => {
         if (element === null) return;
-        const onInput = () => setTouched(true);
-        element.addEventListener('input', onInput);
-        element.addEventListener('change', onInput);
-        return () => { element.removeEventListener('input', onInput); element.removeEventListener('change', onInput); };
+        // Op window en niet op het formulier zelf: dan komt deze luisteraar ná de onChange van React (die op de root luistert). Op het
+        // formulier zou setTouched eerder komen, React tekende het veld dan opnieuw met de oude waarde en de eerste toets ging verloren.
+        const onInput = (event: Event) => { if (event.target instanceof Node && element.contains(event.target)) setTouched(true); };
+        window.addEventListener('input', onInput);
+        window.addEventListener('change', onInput);
+        return () => { window.removeEventListener('input', onInput); window.removeEventListener('change', onInput); };
     }, [element]);
     useLeaveGuard(touched, error);
     const saved = useCallback(() => setTouched(false), []);
