@@ -60,7 +60,9 @@ describe('RelationsPage search', () => {
 // gemarkeerd, en de melding blijft staan.
 describe('RelationsPage after creating a relation', () => {
     let created = false;
+    let listed = true;
     beforeEach(() => {
+        listed = true;
         urls = [];
         created = false;
         globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -69,7 +71,7 @@ describe('RelationsPage after creating a relation', () => {
             if (url.includes('/relations/reference')) return json(200, reference);
             if (/\/relations\/4$/.test(url)) return json(200, card);
             if ((init?.method ?? 'GET') === 'POST' && /\/relations$/.test(url)) { created = true; return json(201, { ...card, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customer: null }); }
-            const items = created ? [oost, other, { ...oost, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customerId: null }] : [oost, other];
+            const items = created && listed ? [oost, other, { ...oost, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customerId: null }] : [oost, other];
             return json(200, { items, total: items.length, page: 1, pageSize: 50 });
         }) as typeof fetch;
         mounted = new Mounted();
@@ -94,5 +96,17 @@ describe('RelationsPage after creating a relation', () => {
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="created-notice"]') === null, 'notice cleared when opening another relation');
         window.history.replaceState(null, '', '/relations');
     });
-});
 
+    test('a new relation outside the loaded page (later in the alphabet) is shown on top while the notice stands', async () => {
+        listed = false;
+        window.history.replaceState(null, '', '/relations?new=1');
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="name-input"]'), 'new form open');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="name-input"]')!, 'Nieuwe Kweker'); });
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'pinned row');
+        const rows = Array.from(mounted.container.querySelectorAll('tbody tr[data-testid^="relation-row-"]')).map((row) => row.getAttribute('data-testid'));
+        assert.deepEqual(rows, ['relation-row-9', 'relation-row-4', 'relation-row-5'], 'the new relation on top');
+        window.history.replaceState(null, '', '/relations');
+    });
+});

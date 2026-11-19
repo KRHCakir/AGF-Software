@@ -11,7 +11,7 @@ import { relationRole } from '../../../lib/relationRules';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../../lib/shortcuts';
 import { toApiError } from '../../../services/apiClient';
 import { getRelation, getRelationReference, listRelations } from '../../../services/relationService';
-import type { Relation, RelationList, RelationReference, RelationRoleFilter } from '../../../types/relation';
+import type { Relation, RelationList, RelationListItem, RelationReference, RelationRoleFilter } from '../../../types/relation';
 import { listRowClass, rowClick } from '../../../lib/listRows';
 
 const PAGE_SIZE = 50;
@@ -19,6 +19,17 @@ const PAGE_SIZE = 50;
 // Relaties: één werkplek voor klanten/debiteuren en leveranciers/crediteuren. Filters Alle / Klanten / Leveranciers, zoeken op
 // code, naam, handelsnaam, btw, plaats en contact (⌥F, type-ahead met pijltjes en Enter), nieuw (⌥N), bewerken in één
 // formulier boven de begrensde, gepagineerde lijst. Inactieve relaties blijven vindbaar via het vinkje; verwijderen bestaat niet.
+// Lijstregel uit een opgeslagen relatie (voor de nieuwe relatie bovenaan de lijst).
+function listItemOf(relation: Relation): RelationListItem {
+    const main = relation.addresses.find((address) => address.isActive && address.purpose === 'Main') ?? relation.addresses.find((address) => address.isActive) ?? null;
+    const contact = relation.contacts.find((item) => item.isActive && item.isPrimary) ?? null;
+    return {
+        id: relation.id, searchCode: relation.searchCode, name: relation.name, tradeName: relation.tradeName, customerId: relation.customer?.customerId ?? null,
+        vendorId: relation.vendor?.vendorId ?? null, isActive: relation.isActive, city: main?.city ?? null, countryCode: main?.countryCode ?? null, email: relation.email,
+        phone: relation.phone, primaryContactName: contact?.name ?? null, vatNumber: relation.vatNumber, version: relation.version,
+    };
+}
+
 export default function RelationsPage() {
     const { t } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
@@ -66,6 +77,10 @@ export default function RelationsPage() {
 
     const [section, setSection] = useState<string | null>(null);
     const created = useCreated();
+    // De nieuwe relatie als lijstregel: valt zij buiten de geladen pagina (alfabetisch verderop), dan staat zij zolang de melding staat
+    // bovenaan, zodat je haar altijd ziet.
+    const [pinned, setPinned] = useState<RelationListItem | null>(null);
+    const rows = created.created !== null && pinned !== null && pinned.id === created.created.id && !shown.some((item) => item.id === pinned.id) ? [pinned, ...shown] : shown;
     const clearCreated = created.clear;
     // Een formulier openen (nieuw of bestaand) haalt de melding van de vorige aanmaak weg.
     useEffect(() => { if (editing !== null) clearCreated(); }, [editing, clearCreated]);
@@ -119,6 +134,7 @@ export default function RelationsPage() {
         if (isNew) {
             setEditing(null);
             created.announce({ id: saved.id, text: t('relations_created', { name: saved.name }) });
+            setPinned(listItemOf(saved));
         } else {
             setEditing((current) => ({ relation: saved, key: current?.key ?? saved.id }));
         }
@@ -206,7 +222,7 @@ export default function RelationsPage() {
                                     ) : t('relations_none')}
                                 </td></tr>
                             )}
-                            {shown.map((item, index) => (
+                            {rows.map((item, index) => (
                                 <tr key={item.id} role="option" aria-selected={index === highlight} data-testid={`relation-row-${item.id}`} onClick={rowClick(() => void openRelation(item.id))}
                                     data-fresh={created.fresh === item.id ? 'true' : undefined}
                                     className={listRowClass(index, { clickable: true, fresh: created.fresh === item.id, selected: editing?.relation?.id === item.id || (index === highlight && query !== ''), selectedClass: editing?.relation?.id === item.id ? 'bg-blue-50' : 'bg-blue-50/60' })}>
