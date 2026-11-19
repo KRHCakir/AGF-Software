@@ -36,6 +36,7 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
     const preview = freeTermsPreview(today, terms, defaultDays);
     // Inactieve huidige conditie: alleen melden zolang de termijn er nog precies mee overeenkomt (dan blijft zij gekoppeld).
     const free = validateFreeTerms(terms, defaultDays);
+    const hasDiscount = terms.discountPercent.trim() !== '';
     const keepsInactive = currentCondition !== null && !currentCondition.isActive && free.errors.length === 0 && currentCondition.days === free.effectiveDays
         && (currentCondition.basis === 'EndOfMonth') === terms.paymentTermsEndOfMonth
         && currentCondition.discountPercent === free.values.discountPercent && currentCondition.discountDays === free.values.discountDays;
@@ -44,7 +45,10 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
         <div className={extra.width ?? ''}>
             <label htmlFor={`${k(field)}-input`} className="text-xs font-medium text-gray-700">{t(labelKey)}</label>
             <input {...fieldProps(k(field), e(field))} type="text" inputMode={extra.decimal ? 'decimal' : 'numeric'} autoComplete="off" data-select-on-focus="" value={terms[field]}
-                placeholder={extra.placeholder} maxLength={extra.decimal ? 6 : 3} disabled={locked} onChange={(event) => onChange({ [field]: event.target.value } as Partial<RoleTermsDraft>)}
+                placeholder={extra.placeholder} maxLength={extra.decimal ? 6 : 3} disabled={locked} onChange={(event) => onChange(field === 'discountPercent' && event.target.value.trim() === ''
+                    // Geen korting meer: de dagen gaan mee weg (niet getoond, niet bewaard).
+                    ? { discountPercent: event.target.value, discountDays: '' }
+                    : { [field]: event.target.value } as Partial<RoleTermsDraft>)}
                 className={`${inputClass} text-right tabular-nums placeholder:text-gray-400`} />
             <FieldError id={k(field)} messages={e(field)} />
         </div>
@@ -79,9 +83,10 @@ export default function RelationTermsSection({ prefix, terms, onChange, currentC
                         {t('relations_terms_end_of_month')}
                     </label>
                     {numberInput('discountPercent', 'relations_terms_discount_percent', { decimal: true })}
-                    {numberInput('discountDays', 'relations_terms_discount_days')}
+                    {/* Fixes 5b: "binnen … dagen" en de uitleg alleen bij een ingevuld kortingspercentage. */}
+                    {hasDiscount && numberInput('discountDays', 'relations_terms_discount_days')}
                 </div>
-                <span className="block text-xs text-gray-500">{t('relations_terms_discount_optional')}</span>
+                <span className="block text-xs text-gray-500">{t(hasDiscount ? 'relations_terms_discount_days_hint' : 'relations_terms_discount_optional')}</span>
                 {keepsInactive && <span className="block text-xs text-amber-800">{t('relations_terms_condition_inactive')}</span>}
                 {preview !== null && (
                     <span className="block text-xs text-gray-600" data-testid={`${prefix}-terms-example`}>

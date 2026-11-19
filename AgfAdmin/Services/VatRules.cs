@@ -53,16 +53,50 @@ namespace AgfAdmin.Services
 
         private static readonly Dictionary<string, Regex> Compiled = Patterns.ToDictionary(p => p.Key, p => new Regex(p.Value, RegexOptions.Compiled), StringComparer.Ordinal);
 
-        public enum VatProblem { None, Shape, CountryPattern, GreeceUsesEl }
+        public enum VatProblem { None, Shape, CountryPattern, GreeceUsesEl, TooLong }
 
-        // Uitkomst van de controle op een genormaliseerd nummer (null = geen nummer = geen probleem).
-        public static VatProblem Check(string normalized)
+        // Fixes 5b: de btw-controle (landvoorvoegsel, vorm per land, VIES-status) geldt alleen binnen de EU. De 27 lidstaten als
+        // ISO-landcode uit CountryList (Griekenland is GR als land, EL als btw-voorvoegsel). De frontend spiegelt deze lijst.
+        public static readonly IReadOnlySet<string> EuMemberStates = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT",
+            "RO", "SE", "SI", "SK",
+        };
+
+        // Een belasting- of registratienummer buiten de EU is vrij, alleen met deze lengte (zelfde grens als de algemene btw-vorm).
+        public const int MaxTaxNumberLength = 32;
+
+        public static bool IsEuMember(string countryCode) => countryCode != null && EuMemberStates.Contains(countryCode);
+
+        // Het land van de relatie voor de btw: het land van registratie, anders het land van het hoofdadres, anders van het eerste
+        // actieve adres met een land. Geen land bekend = null.
+        public static string TaxCountry(string registrationCountry, IEnumerable<(string Purpose, string CountryCode, bool IsActive)> addresses)
+        {
+            static string Code(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
+            var active = addresses.Where(a => a.IsActive && Code(a.CountryCode) != null).ToList();
+            return Code(registrationCountry)
+                ?? Code(active.FirstOrDefault(a => a.Purpose == Models.AddressPurpose.Main).CountryCode)
+                ?? Code(active.FirstOrDefault().CountryCode);
+        }
+
+        // Binnen de EU (de btw-controle geldt) of erbuiten (vrij nummer, geen VIES):
+        //   - een EU-lidstaat: binnen;
+        //   - geen land bekend: binnen, zoals voorheen (de melding vraagt dan om het land als het geen EU-bedrijf is);
+        //   - Verenigd Koninkrijk met een XI-nummer: binnen. Noord-Ierland valt voor goederen onder de EU-btw-regels (Windsor-kader) en
+        //     XI-nummers staan in VIES; een GB-nummer is vrij;
+        //   - elk ander land (Turkije, Zwitserland, Noorwegen, ...): buiten.
+        public static bool InEuScope(string country, string normalized) =>
+            country == null || IsEuMember(country) || (country == "GB" && normalized != null && normalized.StartsWith("XI", StringComparison.Ordinal));
+
+        // Uitkomst van de controle op een genormaliseerd nummer (null = geen nummer = geen probleem). Buiten de EU alleen de lengte.
+        public static VatProblem Check(string normalized, string country = null)
         {
             if (normalized == null) return VatProblem.None;
+            if (!InEuScope(country, normalized)) return normalized.Length > MaxTaxNumberLength ? VatProblem.TooLong : VatProblem.None;
             if (!RelationRules.IsVatShape(normalized)) return VatProblem.Shape;
-            var country = normalized[..2];
-            if (country == "GR") return VatProblem.GreeceUsesEl;
-            if (Compiled.TryGetValue(country, out var pattern)) return pattern.IsMatch(normalized) ? VatProblem.None : VatProblem.CountryPattern;
+            var prefix = normalized[..2];
+            if (prefix == "GR") return VatProblem.GreeceUsesEl;
+            if (Compiled.TryGetValue(prefix, out var pattern)) return pattern.IsMatch(normalized) ? VatProblem.None : VatProblem.CountryPattern;
             return VatProblem.None;
         }
 
@@ -72,7 +106,8 @@ namespace AgfAdmin.Services
 
         public static string Message(VatProblem problem, string normalized) => problem switch
         {
-            VatProblem.Shape => "Een btw-nummer begint met een landcode van twee letters (XI voor Noord-Ierland, EL voor Griekenland), gevolgd door letters en cijfers. Spaties, punten en streepjes tellen niet mee. Dit is een vormcontrole, geen VIES-controle.",
+            VatProblem.TooLong => $"Een belasting- of registratienummer is hoogstens {MaxTaxNumberLength} tekens.",
+            VatProblem.Shape => "Een btw-nummer begint met een landcode van twee letters (XI voor Noord-Ierland, EL voor Griekenland), gevolgd door letters en cijfers. Spaties, punten en streepjes tellen niet mee. Dit is een vormcontrole, geen VIES-controle. Is dit geen EU-bedrijf, vul dan het land in; buiten de EU is het nummer vrij.",
             VatProblem.CountryPattern => $"Dit btw-nummer heeft niet de vorm van een {normalized[..2]}-nummer (bijvoorbeeld {Examples[normalized[..2]]}). Dit is een vormcontrole, geen VIES-controle.",
             VatProblem.GreeceUsesEl => GreekSuggestion(normalized) is { } suggestion
                 ? $"Griekse btw-nummers beginnen met EL, niet GR: gebruik {suggestion}."

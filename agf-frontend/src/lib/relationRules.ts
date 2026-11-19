@@ -5,7 +5,7 @@ import { emailTypoSuggestion, isStrictEmail } from './emailRules.ts';
 import { resolveGgn } from './ggn.ts';
 import { MAX_ACCOUNT_HOLDER_LENGTH, MAX_BANK_ACCOUNTS, MAX_OTHER_ACCOUNT_NUMBER_LENGTH, checkIban, isBic, normalizeBic, normalizeIban } from './iban.ts';
 import { CreditDraft, RoleTermsDraft, TermsRuleCode, emptyCreditDraft, emptyTermsDraft, normalizeCredit, normalizeTerms } from './roleTermsRules.ts';
-import { VAT_EXAMPLES, checkVat, greekVatSuggestion, isVatShape } from './vatRules.ts';
+import { VAT_EXAMPLES, checkVat, greekVatSuggestion, isVatShape, relationTaxCountry, vatScope } from './vatRules.ts';
 
 // Pure regels van de relatiewerkplek (node:test), spiegel van RelationService/RelationRules: alleen de bedrijfsnaam is verplicht,
 // leeg = niet vastgelegd, zoekcode zonder spaties, land verplicht voor nieuwe/gewijzigde adressen, één standaard per adresdoel,
@@ -155,7 +155,8 @@ export function termsDraftFromRole(role: RoleTerms, currency: string | null): Ro
     return {
         // Een bestaande rol toont haar huidige termijn (ook als die gelijk is aan de standaard); korting alleen als de conditie die heeft.
         paymentTermsDays: String(role.paymentTermsDays), paymentTermsEndOfMonth: role.paymentTermsEndOfMonth, discountPercent: percentText(role.discountPercent),
-        discountDays: role.discountDays === null ? '' : String(role.discountDays), paymentMethod: role.paymentMethod ?? 'BankTransfer',
+        // Kortingsdagen alleen bij een kortingspercentage (fixes 5b); zonder percentage niet getoond.
+        discountDays: role.discountDays === null || role.discountPercent === null ? '' : String(role.discountDays), paymentMethod: role.paymentMethod ?? 'BankTransfer',
         mandateReference: text(role.mandateReference), mandateSignedOn: text(role.mandateSignedOn), currency: currency ?? 'EUR', deliveryTermKind: text(role.deliveryTermKind),
         incoterm: text(role.incoterm), incotermPlace: text(role.incotermPlace), deliveryTermText: text(role.deliveryTermText), tradeConditions: text(role.tradeConditions),
         tradeConditionsText: text(role.tradeConditionsText),
@@ -194,6 +195,11 @@ export function draftFromRelation(relation: Relation): RelationDraft {
     };
 }
 
+// Het land van de relatie voor de btw-controle zoals het nu in het formulier staat (VatRules: registratie, hoofdadres, eerste adres).
+export function draftTaxCountry(draft: Pick<RelationDraft, 'registrationCountry' | 'addresses'>): string | null {
+    return relationTaxCountry(draft.registrationCountry, draft.addresses);
+}
+
 export function blankToNull(value: string): string | null {
     const trimmed = value.trim();
     return trimmed === '' ? null : trimmed;
@@ -209,10 +215,11 @@ export function normalizeVat(raw: string): string {
     return raw.trim().replace(/[ .-]/g, '').toUpperCase();
 }
 
-// Btw per land alleen voor een nieuw of gewijzigd nummer (VatRules); GR krijgt de suggestie EL.
-function vatErrors(normalized: string, errors: RelationRuleError[]) {
-    const problem = checkVat(normalized);
-    if (problem === 'shape') errors.push({ field: 'vatNumber', code: 'vat_shape' });
+// Btw per land alleen voor een nieuw of gewijzigd nummer (VatRules), en alleen binnen de EU; GR krijgt de suggestie EL.
+function vatErrors(normalized: string, country: string | null, errors: RelationRuleError[]) {
+    const problem = checkVat(normalized, country);
+    if (problem === 'too_long') errors.push({ field: 'vatNumber', code: 'too_long' });
+    else if (problem === 'shape') errors.push({ field: 'vatNumber', code: 'vat_shape' });
     else if (problem === 'country_pattern') errors.push({ field: 'vatNumber', code: 'vat_country', params: { country: normalized.slice(0, 2), example: VAT_EXAMPLES[normalized.slice(0, 2)] } });
     else if (problem === 'greece_uses_el') errors.push({ field: 'vatNumber', code: 'vat_greece', params: { suggestion: greekVatSuggestion(normalized) ?? 'EL123456789' } });
 }
@@ -270,7 +277,10 @@ export function buildRelationPayload(draft: RelationDraft, options: { requestId?
     const phone = optional(draft.phone, 40, 'phone', errors);
     const vatRaw = blankToNull(draft.vatNumber);
     const vatNumber = vatRaw === null ? null : normalizeVat(vatRaw);
-    if (vatNumber !== null && vatNumber !== stored?.vatNumber) vatErrors(vatNumber, errors);
+    // Opnieuw controleren bij een nieuw of gewijzigd nummer, en ook als het land van binnen naar buiten de EU gaat (of andersom).
+    const taxCountry = draftTaxCountry(draft);
+    const storedScope = stored ? vatScope(relationTaxCountry(stored.registrationCountry, stored.addresses), stored.vatNumber) : null;
+    if (vatNumber !== null && (vatNumber !== stored?.vatNumber || vatScope(taxCountry, vatNumber) !== storedScope)) vatErrors(vatNumber, taxCountry, errors);
     const registrationNumber = optional(draft.registrationNumber, 64, 'registrationNumber', errors);
     const registrationCountry = blankToNull(draft.registrationCountry)?.toUpperCase() ?? null;
     if (registrationCountry !== null && !COUNTRY.test(registrationCountry)) errors.push({ field: 'registrationCountry', code: 'invalid' });

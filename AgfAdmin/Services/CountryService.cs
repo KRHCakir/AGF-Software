@@ -23,7 +23,7 @@ namespace AgfAdmin.Services
         {
             Countries = (await _db.Countries.AsNoTracking().ToListAsync(cancellationToken))
                 .OrderBy(c => c.NameNl, StringComparer.Create(new System.Globalization.CultureInfo("nl-NL"), true))
-                .Select(c => new CountryDto { Code = c.Code, NameNl = c.NameNl, NameEn = c.NameEn }).ToList(),
+                .Select(c => new CountryDto { Code = c.Code, NameNl = c.NameNl, NameEn = c.NameEn, IsEu = VatRules.IsEuMember(c.Code) }).ToList(),
             Aliases = await _db.CountryAliases.AsNoTracking().OrderBy(a => a.Alias)
                 .Select(a => new CountryAliasDto { Id = a.Id, Alias = a.Alias, CountryCode = a.CountryCode }).ToListAsync(cancellationToken)
         };

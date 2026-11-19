@@ -601,12 +601,6 @@ namespace AgfAdmin.Services
             }
             var phone = ValidationErrors.OptionalText(request.Phone, RelationRules.MaxPhoneLength, "phone", errors);
             var vat = RelationRules.NormalizeVat(request.VatNumber);
-            // Btw-vorm per land alleen voor een nieuw of gewijzigd nummer (VatRules); een ongewijzigd opgeslagen nummer blijft staan.
-            if (vat != null && !string.Equals(vat, existing?.VatNumber, StringComparison.Ordinal))
-            {
-                var problem = VatRules.Check(vat);
-                if (problem != VatRules.VatProblem.None) ValidationErrors.Add(errors, "vatNumber", VatRules.Message(problem, vat));
-            }
             var registrationNumber = ValidationErrors.OptionalText(request.RegistrationNumber, RelationRules.MaxRegistrationLength, "registrationNumber", errors);
             var registrationCountry = RelationRules.NormalizeCountry(request.RegistrationCountry);
             if (registrationCountry != null && !RelationRules.IsCountryCode(registrationCountry))
@@ -680,6 +674,14 @@ namespace AgfAdmin.Services
             }
 
             var addresses = NormalizeAddresses(request.Addresses, existing, errors);
+            // Btw-vorm per land alleen voor een nieuw of gewijzigd nummer, en alleen binnen de EU (VatRules, fixes 5b). Een ongewijzigd
+            // opgeslagen nummer blijft staan, tenzij het land van binnen naar buiten de EU gaat of andersom.
+            var taxCountry = VatRules.TaxCountry(registrationCountry, (addresses ?? new List<AddressCommand>()).Select(a => (a.Purpose, a.CountryCode, a.IsActive)));
+            if (vat != null && (!string.Equals(vat, existing?.VatNumber, StringComparison.Ordinal) || VatRules.InEuScope(taxCountry, vat) != (existing == null || StoredInEuScope(existing))))
+            {
+                var problem = VatRules.Check(vat, taxCountry);
+                if (problem != VatRules.VatProblem.None) ValidationErrors.Add(errors, "vatNumber", VatRules.Message(problem, vat));
+            }
             var contacts = NormalizeContacts(request.Contacts, existing, errors, signals);
             // Elke wijziging van bankgegevens wordt geaudit met de ingelogde gebruiker.
             var actor = _user.Actor(MaxActorLength);
@@ -1026,10 +1028,12 @@ namespace AgfAdmin.Services
             relation.Website = command.Website;
             relation.Email = command.Email;
             relation.Phone = command.Phone;
-            if (relation.Id == 0 || !string.Equals(relation.VatNumber, command.VatNumber, StringComparison.Ordinal))
+            var taxCountry = VatRules.TaxCountry(command.RegistrationCountry, command.Addresses.Select(a => (a.Purpose, a.CountryCode, a.IsActive)));
+            if (relation.Id == 0 || !string.Equals(relation.VatNumber, command.VatNumber, StringComparison.Ordinal)
+                || VatRules.InEuScope(taxCountry, command.VatNumber) != StoredInEuScope(relation))
             {
                 relation.VatNumber = command.VatNumber;
-                ResetVatVerification(relation);
+                ResetVatVerification(relation, VatRules.InEuScope(taxCountry, command.VatNumber));
             }
             relation.RegistrationNumber = command.RegistrationNumber;
             relation.RegistrationCountry = command.RegistrationCountry;
@@ -1168,10 +1172,15 @@ namespace AgfAdmin.Services
             }
         }
 
-        private static void ResetVatVerification(Relation relation)
+        // Valt het opgeslagen nummer binnen de EU-btw-controle (land uit de opgeslagen registratie en adressen)?
+        private static bool StoredInEuScope(Relation relation) =>
+            VatRules.InEuScope(VatRules.TaxCountry(relation.RegistrationCountry, relation.Addresses.Select(a => (a.Purpose, a.CountryCode, a.IsActive))), relation.VatNumber);
+
+        private static void ResetVatVerification(Relation relation, bool inEuScope = true)
         {
-            // Een gewijzigd nummer erft nooit de status van het vorige nummer; zonder nummer is verificatie niet van toepassing.
-            relation.VatVerificationStatus = relation.VatNumber == null ? VatVerification.NotApplicable : VatVerification.NotChecked;
+            // Een gewijzigd nummer erft nooit de status van het vorige nummer; zonder nummer, of buiten de EU (geen VIES), is verificatie
+            // niet van toepassing.
+            relation.VatVerificationStatus = relation.VatNumber == null || !inEuScope ? VatVerification.NotApplicable : VatVerification.NotChecked;
             relation.VatVerifiedNumber = null;
             relation.VatVerifiedAt = null;
         }

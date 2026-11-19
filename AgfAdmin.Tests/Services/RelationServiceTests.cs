@@ -487,6 +487,65 @@ public class RelationServiceTests : IDisposable
         Assert.Contains("geen VIES-controle", bad.Errors["vatNumber"][0]);
     }
 
+    // Fixes 5b: de btw-controle geldt alleen binnen de EU. Turkije: een vrij belasting- of registratienummer, optioneel, zonder landcode
+    // of VIES (status niet van toepassing). Noord-Ierland (GB met een XI-nummer) blijft gecontroleerd. Het land komt uit de registratie,
+    // anders uit het hoofdadres.
+    [Fact]
+    public async Task The_Vat_Check_Applies_Only_Inside_The_Eu_And_A_Turkish_Number_Is_Free()
+    {
+        var turkish = Minimal("Ege Meyve");
+        turkish.Addresses = new() { new() { Purpose = "Main", Line1 = "Liman Cad. 1", City = "Mersin", CountryCode = "TR" } };
+        turkish.VatNumber = "1234567890";
+        var created = await CreateAsync(turkish);
+        Assert.Equal(ServiceResultStatus.Created, created.Status);
+        Assert.Equal(("1234567890", VatVerification.NotApplicable), (created.Value.VatNumber, created.Value.VatVerificationStatus));
+        var withoutNumber = Minimal("Anadolu Narenciye");
+        withoutNumber.RegistrationCountry = "TR";
+        Assert.Equal(ServiceResultStatus.Created, (await CreateAsync(withoutNumber)).Status);
+
+        // Hetzelfde nummer bij een Nederlandse relatie: wel de EU-vorm, dus geweigerd.
+        var dutch = Minimal("Hollandse Handel");
+        dutch.RegistrationCountry = "NL";
+        dutch.VatNumber = "1234567890";
+        var refused = await CreateAsync(dutch);
+        Assert.Equal(ServiceResultStatus.Validation, refused.Status);
+        Assert.Contains("vul dan het land in", refused.Errors["vatNumber"][0]);
+
+        // Verhuist de Turkse relatie naar Nederland met hetzelfde nummer, dan geldt de EU-controle weer.
+        var moved = From(created.Value);
+        moved.RegistrationCountry = "NL";
+        Assert.Equal(ServiceResultStatus.Validation, (await UpdateAsync(created.Value.Id, moved)).Status);
+
+        // Noord-Ierland: Verenigd Koninkrijk met een XI-nummer is EU-btw (VIES); een fout XI-nummer wordt geweigerd, een GB-nummer is vrij.
+        var northernIreland = Minimal("Belfast Produce");
+        northernIreland.RegistrationCountry = "GB";
+        northernIreland.VatNumber = "XI123456789";
+        var ni = await CreateAsync(northernIreland);
+        Assert.Equal(VatVerification.NotChecked, ni.Value.VatVerificationStatus);
+        var badNi = Minimal("Antrim Greens");
+        badNi.RegistrationCountry = "GB";
+        badNi.VatNumber = "XI12";
+        Assert.Equal(ServiceResultStatus.Validation, (await CreateAsync(badNi)).Status);
+        var british = Minimal("London Fruit");
+        british.RegistrationCountry = "GB";
+        british.VatNumber = "GB 123 4567 89";
+        Assert.Equal(VatVerification.NotApplicable, (await CreateAsync(british)).Value.VatVerificationStatus);
+    }
+
+    [Fact]
+    public void The_Eu_Marking_Has_The_27_Member_States_From_The_Country_List()
+    {
+        Assert.Equal(27, VatRules.EuMemberStates.Count);
+        Assert.All(VatRules.EuMemberStates, code => Assert.True(CountryRules.IsCode(code), code));
+        Assert.True(VatRules.IsEuMember("GR"));
+        Assert.False(VatRules.IsEuMember("TR"));
+        Assert.False(VatRules.IsEuMember("GB"));
+        Assert.False(VatRules.IsEuMember("CH"));
+        Assert.Equal("TR", VatRules.TaxCountry(null, new[] { ("Delivery", "NL", false), ("Main", "TR", true) }));
+        Assert.Equal("DE", VatRules.TaxCountry("de", new[] { ("Main", "TR", true) }));
+        Assert.Null(VatRules.TaxCountry(null, Array.Empty<(string, string, bool)>()));
+    }
+
     [Fact]
     public async Task Vendor_Defaults_Are_Proposals_Existing_Purchase_Invoices_And_Replays_Keep_Their_Own_Values()
     {

@@ -12,6 +12,8 @@ namespace AgfAdmin.DTOs
         public string Code { get; set; }
         public string NameNl { get; set; }
         public string NameEn { get; set; }
+        // EU-lidstaat (VatRules.EuMemberStates): alleen daar geldt de btw-controle op een relatie (fixes 5b).
+        public bool IsEu { get; set; }
     }
 
     public sealed class CountryAliasDto
