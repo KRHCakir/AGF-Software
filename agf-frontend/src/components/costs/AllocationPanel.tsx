@@ -204,7 +204,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                                         {skipped?.ids.includes(row.target.partijId) && <span className="block text-xs text-amber-900">{t(skipped.mode === 'kg' ? 'allocation_skipped_kg' : 'allocation_skipped_colli')}</span>}
                                     </span>
                                     <label htmlFor={`${prefix}-amount-${row.target.partijId}`} className="sr-only">{t('allocation_amount_for', { number: row.target.number })}</label>
-                                    <input id={`${prefix}-amount-${row.target.partijId}`} inputMode="decimal" value={row.amount} onChange={(event) => setAmount(row.target.partijId, event.target.value)}
+                                    <input id={`${prefix}-amount-${row.target.partijId}`} inputMode="decimal" data-decimals={2} value={row.amount} onChange={(event) => setAmount(row.target.partijId, event.target.value)}
                                         aria-invalid={shown.includes(row) && check.amountErrors[shown.indexOf(row)] !== null ? true : undefined} data-tour="allocation-amount" data-tour-key={row.target.number}
                                         className={`${inputClass} !w-32 text-right font-mono`} placeholder="0,00" />
                                     {foreign && shown.includes(row) && check.amountErrors[shown.indexOf(row)] === null && row.amount.trim() !== '' && (

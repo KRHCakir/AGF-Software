@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatMoney } from '../../lib/availability';
-import { parseLocaleDecimal } from '../../lib/decimal';
+import { formatAmountInput, parseLocaleDecimal } from '../../lib/decimal';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { type AiReadingSettings, getAiReadingSettings, getAiReadingStatus, updateAiReadingSettings } from '../../services/aiReadingService';
 import type { AiReadingStatus } from '../../types/aiReading';
@@ -27,7 +27,7 @@ export default function AiReadingSetting() {
     useEffect(() => {
         const controller = new AbortController();
         Promise.all([getAiReadingSettings(controller.signal), getAiReadingStatus(controller.signal).catch(() => null)])
-            .then(([loaded, current]) => { setSettings(loaded); setStatus(current); setLimit(String(loaded.monthlyLimitEur).replace('.', ',')); })
+            .then(([loaded, current]) => { setSettings(loaded); setStatus(current); setLimit(formatAmountInput(loaded.monthlyLimitEur)); })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
     }, []);
@@ -76,7 +76,7 @@ export default function AiReadingSetting() {
                     {status && !status.limitReached && <p className="text-xs text-gray-600">{t('ai_settings_spent', { spent: formatMoney(status.monthSpentEur, 'EUR', locale), limit: formatMoney(status.monthlyLimitEur, 'EUR', locale) })}</p>}
                     <div className="max-w-xs">
                         <label htmlFor="aiMonthlyLimit-input" className="text-xs font-medium text-gray-700">{t('ai_settings_limit')}</label>
-                        <input {...fieldProps('aiMonthlyLimit', limitError)} inputMode="decimal" value={limit} onChange={(event) => setLimit(event.target.value)} className={inputClass} />
+                        <input {...fieldProps('aiMonthlyLimit', limitError)} inputMode="decimal" data-decimals={2} value={limit} onChange={(event) => setLimit(event.target.value)} className={inputClass} />
                         <FieldError id="aiMonthlyLimit" messages={limitError} />
                     </div>
                     {!settings.enabled && (

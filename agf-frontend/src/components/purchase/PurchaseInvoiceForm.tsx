@@ -583,7 +583,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                     </td>
                                     <td className={`w-28 px-2 py-1.5 ${aiFieldClass(aiLine('unitPrice'))}`}>
                                         <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('purchase_col_price')} {index + 1}</label>
-                                        <input {...fieldProps(`${prefix}.unitPrice`, e(`${prefix}.unitPrice`))} data-tour="pinvoice-line-price" data-tour-key={index} inputMode="decimal" value={line.unitPrice} disabled={locked} onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })} className={inputClass} />
+                                        <input {...fieldProps(`${prefix}.unitPrice`, e(`${prefix}.unitPrice`))} data-tour="pinvoice-line-price" data-tour-key={index} inputMode="decimal" data-decimals={2} value={line.unitPrice} disabled={locked} onChange={(event) => updateLine(line.key, { unitPrice: event.target.value })} className={inputClass} />
                                         <FieldError id={`${prefix}.unitPrice`} messages={e(`${prefix}.unitPrice`)} />
                                         <AiFieldHint codes={aiLine('unitPrice')} />
                                     </td>

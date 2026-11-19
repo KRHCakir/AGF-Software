@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatMoney } from '../../lib/availability';
+import { formatMoney, formatQuantity } from '../../lib/availability';
 import { type PackagingLineDraft, defaultPriceText, packagingLineTotal, palletArticle } from '../../lib/packaging';
 import { newRequestId } from '../../lib/requestId';
 import type { CostArticle } from '../../types/costArticle';
@@ -11,7 +11,7 @@ import FieldError, { fieldProps, inputClass, lineTableClass } from '../supply/Fi
 import { secondaryButtonClass } from '../supply/SuccessPanel';
 
 const emptyPackagingLine = (): PackagingLineDraft => ({ key: newRequestId(), costArticleId: '', quantity: '', unitPrice: '' });
-const vatText = (vat: number, locale: string) => String(vat).replace('.', locale === 'nl' ? ',' : '.');
+const vatText = (vat: number, locale: string) => formatQuantity(vat, locale);
 
 // Emballage onder de goederen: artikel, heel aantal, prijs per stuk (voorgevuld, aanpasbaar, 0,00 mag). "Pallet toevoegen" zet het
 // palletvoorstel neer, alleen na een klik en altijd aanpasbaar.
@@ -86,7 +86,7 @@ export function PackagingLinesInput({ lines, articles, proposal, locked, errors,
                                         </td>
                                         <td className="px-2 py-1.5 md:w-40">
                                             <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{t('packaging_unit_price')} {index + 1}</label>
-                                            <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} value={line.unitPrice} disabled={locked} inputMode="decimal" placeholder="0,00" className={inputClass}
+                                            <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} value={line.unitPrice} disabled={locked} inputMode="decimal" data-decimals={2} placeholder="0,00" className={inputClass}
                                                 onChange={(event) => update(line.key, { unitPrice: event.target.value })} />
                                             <span className="block text-xs text-gray-500">{article?.vatPercentage != null ? t('packaging_vat', { vat: vatText(article.vatPercentage, locale) }) : ''}</span>
                                             <FieldError id={`${prefix}.unitPrice`} messages={errors(`${prefix}.unitPrice`)} />

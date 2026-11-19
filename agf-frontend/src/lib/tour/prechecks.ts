@@ -4,7 +4,7 @@
 // los te starten, ook op een lege database. Na het aanmaken lezen de stappen opnieuw (lookup*), met dezelfde zoekregels als de schermen.
 
 import { formatDateInput, todayInAmsterdam } from '../calendarDate';
-import { formatDecimalInput } from '../decimal';
+import { formatDecimalInput, parseLocaleDecimal } from '../decimal';
 import { articleVariants, isCompleteVariant } from '../receiptBlindEntry';
 import { normalizeTradeClass } from '../tradeClass';
 import { searchCustomers } from '../customerSearch';
@@ -110,6 +110,9 @@ export function shortDate(date: string): string {
 }
 
 // Inkooporder aanmaken: leverancier en artikel van de rondleiding, en of de partijnummering een voorstel geeft.
+// Een eerder ingevuld getal van de rondleiding teruglezen, met de gedeelde parser (nooit een eigen komma-puntvertaling).
+const readKg = (text: string): number => { const parsed = parseLocaleDecimal(text); return parsed.ok ? parsed.value : NaN; };
+
 export async function lookupPurchase(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
     const [data, numbering] = await Promise.all([masterData(signal), getNextPartijNumber(undefined, signal)]);
     if (data.vendor === null || data.article === null) return { missing: [...(data.vendor === null ? [missingVendor] : []), ...(data.article === null ? [missingArticle] : [])] };
@@ -227,7 +230,7 @@ export async function lookupDeviation(vars: Readonly<Record<string, string>>, si
     const otherName = countries.countries.find((country) => country.code === otherCode)?.nameNl ?? otherCode;
     const existing = findOriginVariant(ordered, variants, otherCode);
     const quantity = Math.max(1, Math.floor(Number(receive.vars.quantity) / 2));
-    const expectedKg = (ordered.defaultNetKgPerPackage ?? 0) > 0 ? ordered.defaultNetKgPerPackage! : Number(receive.vars.kgPerPackage.replace(',', '.'));
+    const expectedKg = (ordered.defaultNetKgPerPackage ?? 0) > 0 ? ordered.defaultNetKgPerPackage! : readKg(receive.vars.kgPerPackage);
     const heavier = Math.round(expectedKg * TOUR_WEIGHT_FACTOR * 10) / 10;
     return {
         missing: [],

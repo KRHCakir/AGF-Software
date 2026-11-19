@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { isDateOnly } from '../../lib/calendarDate';
-import { formatDecimalInput, parseLocaleDecimal } from '../../lib/decimal';
+import { formatAmountInput, parseLocaleDecimal } from '../../lib/decimal';
 import { InvoiceRefCommand, invoiceRefKey, withAttempt } from '../../lib/pendingCommands';
 import { MAX_INVOICE_NUMBER_LENGTH, normalizeInvoiceNumber } from '../../lib/purchaseOrderRules';
 import { newRequestId } from '../../lib/requestId';
@@ -59,7 +59,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
     const frozen = pending?.payload;
     const [number, setNumber] = useState(frozen?.invoiceNumber ?? '');
     const [date, setDate] = useState(frozen?.invoiceDate ?? '');
-    const [amount, setAmount] = useState(frozen?.amountExclVat == null ? '' : formatDecimalInput(frozen.amountExclVat, 2));
+    const [amount, setAmount] = useState(frozen?.amountExclVat == null ? '' : formatAmountInput(frozen.amountExclVat));
     const [errors, setErrors] = useState<FieldErrors>({});
     const [error, setError] = useState<ApiError | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -138,7 +138,7 @@ function InvoiceRefForm({ kind, orderId, orderNumber, label, onClose, onDone }: 
                 </div>
                 <div>
                     <label htmlFor={`invoiceRef-${kind}-amount`} className="text-xs font-medium text-gray-700">{t('po_amount_excl_vat')}</label>
-                    <input {...fieldProps('amountExclVat', e('amountExclVat'))} id={`invoiceRef-${kind}-amount`} inputMode="decimal" value={amount} disabled={locked}
+                    <input {...fieldProps('amountExclVat', e('amountExclVat'))} id={`invoiceRef-${kind}-amount`} inputMode="decimal" data-decimals={2} value={amount} disabled={locked}
                         onChange={(event) => edit(() => setAmount(event.target.value))} className={inputClass} />
                     <FieldError id="amountExclVat" messages={e('amountExclVat')} />
                 </div>

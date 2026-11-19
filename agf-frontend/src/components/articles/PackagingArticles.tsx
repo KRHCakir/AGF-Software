@@ -125,7 +125,7 @@ export default function PackagingArticles() {
         <>
             <div className="w-32">
                 <label htmlFor={`${prefix}.defaultUnitPrice-input`} className={label ? 'text-xs font-medium text-gray-700' : 'sr-only'}>{t('packaging_default_price')}</label>
-                <input {...fieldProps(`${prefix}.defaultUnitPrice`, e(`${prefix}.defaultUnitPrice`))} value={draft.price} inputMode="decimal" placeholder={t('packaging_no_price')} disabled={disabled}
+                <input {...fieldProps(`${prefix}.defaultUnitPrice`, e(`${prefix}.defaultUnitPrice`))} value={draft.price} inputMode="decimal" data-decimals={2} placeholder={t('packaging_no_price')} disabled={disabled}
                     onChange={(event) => onChange({ price: event.target.value })} className={`${inputClass} bg-white`} />
                 <FieldError id={`${prefix}.defaultUnitPrice`} messages={e(`${prefix}.defaultUnitPrice`)} />
             </div>
