@@ -151,8 +151,15 @@ describe('LeaveGuard', () => {
             assert.equal(routerSaw, 0, 'Next.js never saw the navigation');
             // Geen regel erbij of eraf: de vooruitgeschiedenis (C) is niet gewist.
             assert.equal(window.history.length, lengthBefore, 'no entry pushed');
+            // Weggooien voert dezelfde sprong nog eens uit en laat Next.js die afhandelen: geen extra stap in de geschiedenis.
             await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-testid="leave-guard-discard"]')!.click(); });
-            assert.equal(currentUrl(), '/availability', 'discard goes to C');
+            await settle();
+            assert.equal(where(), '/availability', 'discard goes to C');
+            assert.equal(routerSaw, 1, 'this time Next.js handles the jump');
+            assert.equal(window.history.length, lengthBefore, 'still no entry pushed');
+            window.history.go(-1);
+            await settle();
+            assert.equal(where(), '/relations', 'Back from C is the form page once, as in the browser history');
         } finally {
             window.removeEventListener('popstate', next);
         }

@@ -16,7 +16,8 @@ import { historyIndexOf, setPopHandler } from './HistoryFirst';
 // Een onaangeroerd formulier blokkeert niets. Alleen weggaan van de pagina telt; binnen de pagina werken knoppen gewoon.
 
 type GuardState = 'none' | 'dirty' | 'error';
-type Pending = { href: string };
+// href: waar de gebruiker heen wilde. delta: bij Terug of Vooruit het aantal geschiedenisstappen vanaf de formulierregel (negatief = terug).
+type Pending = { href: string; delta?: number };
 
 interface LeaveGuardApi {
     set: (id: string, dirty: boolean, error: boolean) => void;
@@ -104,6 +105,8 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     // De formulierpagina (adres en geschiedenisstand van Next.js) zolang er bewaakt wordt: daarheen terug als Terug of Vooruit weg wil.
     const formEntry = useRef<{ href: string; state: unknown } | null>(null);
     const restoring = useRef(false);
+    // Na weggooien bij Terug of Vooruit: de volgende popstate is de bedoelde sprong; die laten we door naar Next.js.
+    const passThrough = useRef(false);
     const backButton = useRef<HTMLButtonElement>(null);
 
     const api = useMemo<LeaveGuardApi>(() => ({
@@ -133,6 +136,7 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         // Next.js (die anders de andere pagina toont); wij houden die tegen, zetten de formulierpagina terug en stellen de vraag.
         // Een anker op dezelfde pagina (#sectie) blijft op dezelfde pagina en telt niet.
         const onPop = (event: PopStateEvent) => {
+            if (passThrough.current) { passThrough.current = false; return; }
             if (restoring.current) { restoring.current = false; event.stopImmediatePropagation(); return; }
             const form = formEntry.current;
             if (stateRef.current === 'none' || form === null) return;
@@ -144,14 +148,16 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
             // zelf weer een popstate, die wij ook tegenhouden (Next.js heeft de andere pagina nooit getoond).
             const formIndex = historyIndexOf(form.state);
             const hereIndex = historyIndexOf(event.state ?? window.history.state);
+            const href = here.pathname + here.search + here.hash;
             if (formIndex !== null && hereIndex !== null && formIndex !== hereIndex) {
                 restoring.current = true;
                 window.history.go(formIndex - hereIndex);
+                setPending({ href, delta: hereIndex - formIndex });
             } else {
                 // Geen volgnummers bekend (regel van vóór de bewaking): terugvallen op een nieuwe regel.
                 window.history.pushState(form.state, '', form.href);
+                setPending({ href });
             }
-            setPending({ href: here.pathname + here.search + here.hash });
         };
         const onClick = (event: MouseEvent) => {
             if (stateRef.current === 'none') return;
@@ -173,8 +179,11 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         const target = pending;
         setPending(null);
         setLeaving(true);
-        // Ook na Terug of Vooruit: de pagina waar de gebruiker heen wilde, als nieuwe stap (de formulierpagina staat er al weer).
-        if (target !== null) router.push(target.href);
+        if (target === null) return;
+        // Terug of Vooruit: dezelfde sprong nog eens, nu door naar Next.js. Zo blijft de geschiedenis precies zoals de browser haar had
+        // (geen extra stap, vooruit blijft vooruit). Een link: gewoon naar die pagina.
+        if (target.delta !== undefined) { passThrough.current = true; window.history.go(target.delta); }
+        else router.push(target.href);
     }, [pending, router]);
 
     return (
