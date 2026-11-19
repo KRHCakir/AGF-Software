@@ -2,6 +2,7 @@
 
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import CreatedNotice, { useCreated } from '../../../components/shared/CreatedNotice';
 import RelationForm from '../../../components/relations/RelationForm';
 import { inputClass } from '../../../components/supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../../../components/supply/SuccessPanel';
@@ -64,7 +65,8 @@ export default function RelationsPage() {
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     const [section, setSection] = useState<string | null>(null);
-    const openNew = () => setEditing({ relation: null, key: Date.now() });
+    const created = useCreated();
+    const openNew = () => { created.clear(); setEditing({ relation: null, key: Date.now() }); };
     // Leeg nog niets gefilterd: dan zijn er echt nog geen relaties (schone start) en is de eerste stap een nieuwe relatie.
     const nothingYet = total === 0 && debounced === '' && role === 'all';
 
@@ -77,6 +79,7 @@ export default function RelationsPage() {
         if (Number.isInteger(open) && open > 0) { setSection(params.get('section')); void openRelation(open); }
     }, []);
     const openRelation = async (id: number) => {
+        created.clear();
         setOpening(id);
         try {
             const relation = await getRelation(id);
@@ -108,11 +111,17 @@ export default function RelationsPage() {
         else if (event.key === 'Escape') { setQuery(''); }
     };
 
-    const onSaved = (saved: Relation, created: boolean) => {
-        setEditing((current) => ({ relation: saved, key: current?.key ?? saved.id }));
+    const onSaved = (saved: Relation, isNew: boolean) => {
+        // Nieuw (fixes 5b): het formulier sluit, de melding blijft boven de lijst staan en de nieuwe regel is kort gemarkeerd. Bij
+        // bewerken blijft het formulier open op de opgeslagen relatie.
+        if (isNew) {
+            setEditing(null);
+            created.announce({ id: saved.id, text: t('relations_created', { name: saved.name }) });
+        } else {
+            setEditing((current) => ({ relation: saved, key: current?.key ?? saved.id }));
+        }
         // Lijst en keuzelijsten verversen (nieuwe rollen, gewijzigde namen, legacy-GGN's).
         setReloadToken((n) => n + 1);
-        void created;
     };
 
     const roleBadge = (item: { customerId: number | null; vendorId: number | null }) => {
@@ -145,6 +154,7 @@ export default function RelationsPage() {
                 </div>
             )}
 
+            <CreatedNotice created={created.created} tour="relation-notice" onClose={created.clear} />
             {editing && reference.status === 'ready' && (
                 <RelationForm key={editing.key} relation={editing.relation} reference={reference.data} onSaved={onSaved} onClose={() => setEditing(null)} initialSection={section} />
             )}
@@ -196,7 +206,8 @@ export default function RelationsPage() {
                             )}
                             {shown.map((item, index) => (
                                 <tr key={item.id} role="option" aria-selected={index === highlight} data-testid={`relation-row-${item.id}`} onClick={rowClick(() => void openRelation(item.id))}
-                                    className={listRowClass(index, { clickable: true, selected: editing?.relation?.id === item.id || (index === highlight && query !== ''), selectedClass: editing?.relation?.id === item.id ? 'bg-blue-50' : 'bg-blue-50/60' })}>
+                                    data-fresh={created.fresh === item.id ? 'true' : undefined}
+                                    className={listRowClass(index, { clickable: true, fresh: created.fresh === item.id, selected: editing?.relation?.id === item.id || (index === highlight && query !== ''), selectedClass: editing?.relation?.id === item.id ? 'bg-blue-50' : 'bg-blue-50/60' })}>
                                     <td className="px-3 py-2 font-mono text-xs">{item.searchCode ?? '–'}</td>
                                     <td className="px-3 py-2">
                                         <span className="font-medium text-gray-900">{item.name}</span>

@@ -55,3 +55,43 @@ describe('RelationsPage search', () => {
         });
     }
 });
+
+// Fixes 5b: na opslaan van een nieuwe relatie verdwijnt het oude formulier; de lijst ververst en toont de nieuwe relatie kort
+// gemarkeerd, en de melding blijft staan.
+describe('RelationsPage after creating a relation', () => {
+    let created = false;
+    beforeEach(() => {
+        urls = [];
+        created = false;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            urls.push(url);
+            if (url.includes('/relations/reference')) return json(200, reference);
+            if ((init?.method ?? 'GET') === 'POST' && /\/relations$/.test(url)) { created = true; return json(201, { ...card, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customer: null }); }
+            const items = created ? [oost, other, { ...oost, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customerId: null }] : [oost, other];
+            return json(200, { items, total: items.length, page: 1, pageSize: 50 });
+        }) as typeof fetch;
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('the form closes, the list reloads with the new relation marked, and the notice stays until something else is opened', async () => {
+        window.history.replaceState(null, '', '/relations?new=1');
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="name-input"]'), 'new form open');
+        const listCalls = () => urls.filter((url) => /\/relations\?/.test(url)).length;
+        const before = listCalls();
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="name-input"]')!, 'Nieuwe Kweker'); });
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="created-notice"]'), 'notice');
+        assert.equal(mounted.container.querySelector('[id="name-input"]'), null, 'the old form is gone');
+        assert.ok(mounted.container.querySelector('[data-testid="created-notice"]')!.textContent!.includes('relations_created'));
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'list reloaded with the new relation');
+        assert.ok(listCalls() > before, 'list fetched again');
+        assert.equal(mounted.container.querySelector('[data-testid="relation-row-9"]')!.getAttribute('data-fresh'), 'true', 'new row marked');
+        await act(async () => { mounted.container.querySelector<HTMLElement>('[data-testid="relation-row-4"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="created-notice"]') === null, 'notice cleared when opening another relation');
+        window.history.replaceState(null, '', '/relations');
+    });
+});
+

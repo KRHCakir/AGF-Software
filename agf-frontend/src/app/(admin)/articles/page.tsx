@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
+import CreatedNotice, { useCreated } from '../../../components/shared/CreatedNotice';
 import ArticleForm from '../../../components/articles/ArticleForm';
 import ArticleLifecycle from '../../../components/articles/ArticleLifecycle';
 import EmptyProducts from '../../../components/articles/EmptyProducts';
@@ -66,7 +67,8 @@ export default function ArticlesPage() {
     const shown = useMemo(() => (state.status === 'ready' ? searchArticles(visibleArticles(state.data.articles, showArchived), query) : []), [state, query, showArchived]);
     const archivedCount = state.status === 'ready' ? state.data.articles.filter((article) => article.isArchived).length : 0;
 
-    const openNew = () => { setTab('goods'); setEditing({ article: null, key: Date.now() }); };
+    const created = useCreated();
+    const openNew = () => { created.clear(); setTab('goods'); setEditing({ article: null, key: Date.now() }); };
     // Nog geen enkel artikel (ook geen gearchiveerd): schone start, de eerste stap is een nieuw artikel.
     const nothingYet = state.status === 'ready' && state.data.articles.length === 0;
 
@@ -74,7 +76,7 @@ export default function ArticlesPage() {
     useEffect(() => {
         if (new URLSearchParams(window.location.search).get('new') === '1') setEditing({ article: null, key: Date.now() });
     }, []);
-    const openArticle = (article: Article) => setEditing({ article, key: article.id });
+    const openArticle = (article: Article) => { created.clear(); setEditing({ article, key: article.id }); };
 
     // Sneltoetsen van de werkplek: ⌥F zoeken, ⌥N nieuw artikel; ⌘S en ⌥E regelt het formulier zelf.
     const handler = useRef<(event: KeyboardEvent) => void>(() => {});
@@ -90,15 +92,21 @@ export default function ArticlesPage() {
     }, []);
 
     // Na opslaan: lijst ter plekke bijwerken (geen herladen nodig) en nieuwe productsoorten in de keuzelijst opnemen.
-    const onSaved = (saved: Article, created: boolean) => {
+    const onSaved = (saved: Article, isNew: boolean) => {
         setState((current) => {
             if (current.status !== 'ready') return current;
-            const articles = created ? [...current.data.articles, saved] : current.data.articles.map((a) => (a.id === saved.id ? saved : a));
+            const articles = isNew ? [...current.data.articles, saved] : current.data.articles.map((a) => (a.id === saved.id ? saved : a));
             const productNames = current.data.reference.productNames.includes(saved.productName) ? current.data.reference.productNames : [...current.data.reference.productNames, saved.productName].sort();
             return { status: 'ready', data: { ...current.data, articles, reference: { ...current.data.reference, productNames } } };
         });
-        // Dezelfde key: het formulier blijft gemonteerd (melding en focus blijven), maar werkt voortaan op het opgeslagen artikel.
-        setEditing((current) => ({ article: saved, key: current?.key ?? saved.id }));
+        // Nieuw (fixes 5b): het formulier sluit, de melding blijft boven de lijst en de nieuwe regel is kort gemarkeerd. Bewerken: dezelfde
+        // key, het formulier blijft gemonteerd (melding en focus blijven) en werkt voortaan op het opgeslagen artikel.
+        if (isNew) {
+            setEditing(null);
+            created.announce({ id: saved.id, text: t('articles_created', { description: saved.description }) });
+        } else {
+            setEditing((current) => ({ article: saved, key: current?.key ?? saved.id }));
+        }
     };
 
     // Verwijderd: uit de lijst en het formulier dicht; een productsoort zonder artikelen verdwijnt uit de keuzelijst.
@@ -144,6 +152,7 @@ export default function ArticlesPage() {
             {tab === 'goods' && state.status === 'error' && <ErrorState error={state.error} onRetry={() => setReloadToken((n) => n + 1)} />}
             {tab === 'goods' && state.status === 'ready' && (
                 <>
+                    <CreatedNotice created={created.created} tour="article-notice" onClose={created.clear} />
                     {editing !== null && (
                         <ArticleForm key={editing.key} article={editing.article} reference={state.data.reference} countries={state.data.countries} onSaved={onSaved} onClose={() => setEditing(null)} />
                     )}
@@ -185,7 +194,7 @@ export default function ArticlesPage() {
                                     </td></tr>
                                 )}
                                 {shown.map((article, index) => (
-                                    <tr key={article.id} className={listRowClass(index, { selected: editing?.article?.id === article.id, clickable: true })} onClick={rowClick(() => openArticle(article))} data-testid={`article-row-${article.id}`}>
+                                    <tr key={article.id} data-fresh={created.fresh === article.id ? 'true' : undefined} className={listRowClass(index, { fresh: created.fresh === article.id, selected: editing?.article?.id === article.id, clickable: true })} onClick={rowClick(() => openArticle(article))} data-testid={`article-row-${article.id}`}>
                                         <td className="px-3 py-2 font-mono">{article.shortcutCode ?? <span className="text-gray-400">–</span>}</td>
                                         <td className="px-3 py-2 text-gray-900">{article.description}{article.brand ? <span className="ml-1 text-xs text-gray-500">· {article.brand}</span> : null}{article.isArchived && <span className="ml-2 rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-700">{t('articles_archived_badge')}</span>}</td>
                                         <td className="px-3 py-2">{article.packagingUnit ? t(unitLabelKey(article.packagingUnit)) : '–'}</td>
