@@ -15,7 +15,7 @@ type Fetch = { status: 'idle' | 'loading' | 'ready' } | { status: 'none' | 'unav
 // Valuta-ronde: de koers van een document in een andere valuta dan euro (inkooporder, inkoopfactuur). Het scherm haalt de ECB-koers voor de
 // documentdatum op en vult hem in ("1 EUR = 1,0842 USD · ECB, 18-11-2026", met de andere richting als uitleg). Pas je de koers aan, dan
 // staat er "Handmatig" en vraagt het scherm daarna nergens meer om bevestiging. Geen ECB-koers of de ECB niet bereikbaar: dat staat er, en je
-// vult de koers zelf in. `fetchOnOpen` = false bij een opgeslagen document: de vastgelegde koers blijft staan tot de valuta verandert.
+// vult de koers zelf in. `fetchOnOpen` = false bij een opgeslagen document: de vastgelegde ECB-koers blijft staan zolang valuta en bron dezelfde zijn.
 // Bij euro toont dit onderdeel niets.
 export default function ExchangeRateField({ value, onChange, documentDate, errors, disabled = false, fetchOnOpen = true, prefix = 'supply' }: {
     value: CurrencyDraft;
@@ -31,9 +31,10 @@ export default function ExchangeRateField({ value, onChange, documentDate, error
     const foreign = /^[A-Z]{3}$/.test(code) && !isEuro(code);
     const date = isDateOnly(documentDate) ? documentDate : null;
     const [fetch, setFetch] = useState<Fetch>({ status: 'idle' });
-    // De ECB-koers volgen zolang de bron ECB is: bij een andere valuta of documentdatum opnieuw ophalen (niet bij het openen van een
-    // opgeslagen document, tenzij de valuta verandert).
-    const skipFirst = useRef(!fetchOnOpen);
+    // De ECB-koers volgen zolang de bron ECB is: bij een andere valuta of documentdatum opnieuw ophalen. Bij aanpassen van een opgeslagen
+    // document met een ECB-koers blijft die vastgelegde koers staan zolang valuta en bron dezelfde zijn, ook bij een andere datum: zo houdt
+    // de server hem ook (DocumentCurrency.SameChoiceAs). Een opgeslagen euro- of handmatige keuze legt niets vast: een andere valuta haalt op.
+    const stored = useRef(!fetchOnOpen && foreign && value.source === 'ECB' && value.rate !== '' ? { currency: code, rate: value.rate, rateDate: value.rateDate } : null);
     const latest = useRef(value);
     latest.current = value;
 
@@ -41,7 +42,12 @@ export default function ExchangeRateField({ value, onChange, documentDate, error
         if (!foreign) { setFetch({ status: 'idle' }); return; }
         // Handmatig: niets ophalen; een melding "geen ECB-koers" of "niet bereikbaar" blijft staan.
         if (value.source === 'Manual') return;
-        if (skipFirst.current) { skipFirst.current = false; return; }
+        const keep = stored.current;
+        if (keep !== null && keep.currency === code) {
+            setFetch({ status: 'idle' });
+            if (latest.current.rate !== keep.rate || latest.current.rateDate !== keep.rateDate) onChange({ ...latest.current, rate: keep.rate, rateDate: keep.rateDate });
+            return;
+        }
         const controller = new AbortController();
         setFetch({ status: 'loading' });
         getExchangeRate(code, date, controller.signal)

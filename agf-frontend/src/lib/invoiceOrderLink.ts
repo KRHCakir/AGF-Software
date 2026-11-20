@@ -63,22 +63,48 @@ export function linesFromCandidate(order: InvoiceCandidate, defaultVat: number):
 // null zolang er niets gekoppeld is.
 export function linkedOrderCurrency(draft: InvoiceDraft): string | null {
     const linked = draft.lines.find((line) => line.orderLine !== undefined && line.orderLine !== null);
-    return linked?.orderLine ? (linked.orderLine.orderCurrency ?? 'EUR').toUpperCase() : null;
+    // Een oud concept zonder ordervaluta: voorlopig de valuta van de factuur zelf (het scherm haalt de order daarna opnieuw op, zie withOrderCurrency).
+    return linked?.orderLine ? (linked.orderLine.orderCurrency ?? draft.header.currency).trim().toUpperCase() : null;
 }
 
-// Kan deze order bij deze factuur? Nee als er al een order in een andere valuta aan hangt.
-export function orderCurrencyFits(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'currency'>): boolean {
+// Gekoppelde regels uit een bewaard concept van vóór de valuta-ronde hebben geen ordervaluta: de ids van die orders.
+export function ordersMissingCurrency(draft: InvoiceDraft): number[] {
+    return [...new Set(draft.lines.filter((line) => line.orderLine && line.orderLine.orderCurrency === undefined).map((line) => line.orderLine!.orderId))];
+}
+
+// Vult de valuta en koers van de order in op de regels van die order (uit de opnieuw opgehaalde order); de rest van het concept blijft.
+export function withOrderCurrency(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'id' | 'currency' | 'exchangeRate' | 'exchangeRateSource' | 'exchangeRateDate'>): InvoiceDraft {
+    return {
+        ...draft,
+        lines: draft.lines.map((line) => line.orderLine && line.orderLine.orderId === order.id && line.orderLine.orderCurrency === undefined
+            ? { ...line, orderLine: { ...line.orderLine, orderCurrency: (order.currency ?? 'EUR').toUpperCase(), orderRate: order.exchangeRate ?? 1,
+                orderRateSource: order.exchangeRateSource ?? 'NotApplicable', orderRateDate: order.exchangeRateDate ?? null } }
+            : line),
+    };
+}
+
+// De valuta waarin de factuur vastzit: die van de gekoppelde orders, of anders die van de factuur zelf zodra er handmatig ingevoerde regels
+// staan (die bedragen mogen niet ongemerkt in een andere valuta gaan gelden). null = nog vrij.
+export function lockedInvoiceCurrency(draft: InvoiceDraft): string | null {
     const linked = linkedOrderCurrency(draft);
-    return linked === null || linked === (order.currency ?? 'EUR').toUpperCase();
+    if (linked !== null) return linked;
+    return draft.lines.every(isBlankLine) ? null : draft.header.currency.trim().toUpperCase();
+}
+
+// Kan deze order bij deze factuur? Nee als de factuur al in een andere valuta vastzit (gekoppelde order of bestaande regels).
+export function orderCurrencyFits(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'currency'>): boolean {
+    const locked = lockedInvoiceCurrency(draft);
+    return locked === null || locked === (order.currency ?? 'EUR').toUpperCase();
 }
 
 // Orderregels toevoegen: een leeg begin (alleen lege regels) wordt vervangen; een orderregel die er al staat komt er niet nog eens bij.
 // Valuta-ronde: de eerste gekoppelde order bepaalt de valuta van de factuur (de koers wordt dan opnieuw die van de factuurdatum); een order in
-// een andere valuta dan wat al gekoppeld is, komt er niet bij.
+// een andere valuta dan wat al gekoppeld is of wat de handmatige regels al hebben, komt er niet bij. Zonder nieuwe regels verandert er niets.
 export function addOrderLines(draft: InvoiceDraft, order: InvoiceCandidate, defaultVat: number): InvoiceDraft {
     if (!orderCurrencyFits(draft, order)) return draft;
     const present = new Set(draft.lines.map((line) => line.orderLine?.lineId).filter((id) => id !== undefined));
     const added = linesFromCandidate(order, defaultVat).filter((line) => !present.has(line.orderLine!.lineId));
+    if (added.length === 0) return draft;
     const kept = draft.lines.every(isBlankLine) ? [] : draft.lines;
     const currency = (order.currency ?? 'EUR').toUpperCase();
     const withCurrency = linkedOrderCurrency(draft) === null && currency !== draft.header.currency.trim().toUpperCase()

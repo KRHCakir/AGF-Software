@@ -1132,6 +1132,7 @@
   "purchase_due_date": "Vervaldatum",
   "purchase_currency": "Valuta",
   "purchase_currency_hint": "Alleen de code, bijvoorbeeld EUR of USD.",
+  "purchase_currency_locked_by_order": "De valuta volgt de gekoppelde order. Verwijder eerst de orderregels om haar te wijzigen.",
   "purchase_manual_vs_default": "Handmatig; standaard van de leverancier: {value}",
   "purchase_due_manual": "Handmatig ingevuld.",
   "purchase_due_deviation": "Handmatig: {days} dagen ten opzichte van factuurdatum + termijn.",

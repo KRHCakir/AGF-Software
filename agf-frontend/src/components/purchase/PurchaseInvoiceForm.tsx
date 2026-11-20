@@ -32,11 +32,11 @@ import VendorPicker from './VendorPicker';
 import SubmitErrors from '../shared/SubmitErrors';
 import CurrencyField from '../shared/CurrencyField';
 import ExchangeRateField from './ExchangeRateField';
-import { effectiveRate, formatEuro, rateLine } from '../../lib/documentCurrency';
+import { type CurrencyDraft, effectiveRate, formatEuro, rateLine } from '../../lib/documentCurrency';
 import { isEuro, toEuro } from '../../lib/exchangeRate';
 import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
 import { problemsByField } from '../../lib/aiProposal';
-import { addOrderLines, linkCheck, linkedOrderCurrency } from '../../lib/invoiceOrderLink';
+import { addOrderLines, linkCheck, linkedOrderCurrency, lockedInvoiceCurrency, ordersMissingCurrency, withOrderCurrency } from '../../lib/invoiceOrderLink';
 import { listInvoiceCandidates } from '../../services/purchaseOrderService';
 import type { InvoiceCandidate } from '../../types/purchaseOrder';
 import { InvoiceOrderLineInfo, InvoiceOrderPicker, InvoicePriceQuestion } from './InvoiceOrderLink';
@@ -139,6 +139,19 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     // Concept bewaren bij elke wijziging; na succesvol opslaan is er geen concept meer.
     useEffect(() => { if (result === null) saveDraft(draft); }, [draft, result]);
     useEffect(() => { saveExtraOpen(extraOpen); }, [extraOpen]);
+    // Een hersteld concept van vóór de valuta-ronde kent de valuta van zijn gekoppelde orders niet: die komt van de order zelf, zodat de
+    // vergrendelde valuta klopt. Mislukt het ophalen, dan geldt voorlopig de valuta van de factuur.
+    const missingCurrencyKey = ordersMissingCurrency(draft).join(',');
+    useEffect(() => {
+        if (missingCurrencyKey === '' || draft.header.vendorId === '') return;
+        let cancelled = false;
+        for (const orderId of missingCurrencyKey.split(',').map(Number)) {
+            listInvoiceCandidates(Number(draft.header.vendorId), '', orderId)
+                .then((found) => { const order = found.find((candidate) => candidate.id === orderId); if (!cancelled && order) setDraft((existing) => withOrderCurrency(existing, order)); })
+                .catch(() => { /* blijft de valuta van de factuur */ });
+        }
+        return () => { cancelled = true; };
+    }, [missingCurrencyKey, draft.header.vendorId]);
     useEffect(() => {
         if (seed === null) return;
         cancelTake();
@@ -170,10 +183,22 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     // Valuta-ronde: koers van de factuur en, per gekoppelde order met een andere koers, die koers (beide tonen, geen fout).
     const invoiceMoney = invoiceCurrencyDraft(draft.header);
     const invoiceRate = effectiveRate(invoiceMoney);
-    const otherOrderRates = invoiceRate === null || isEuro(draft.header.currency) ? [] : [...new Map(draft.lines
-        .filter((line) => line.orderLine && line.orderLine.orderRate !== undefined && line.orderLine.orderRate !== invoiceRate)
-        .map((line) => [line.orderLine!.orderId, { orderId: line.orderLine!.orderId, orderNumber: line.orderLine!.supplierReference ?? line.orderLine!.orderNumber,
-            rate: line.orderLine!.orderRate!, source: line.orderLine!.orderRateSource ?? 'ECB' }])).values()];
+    // Het koersverschil geldt alleen de regels van die order (niet het hele factuurtotaal met andere orders of kostenregels).
+    const otherOrderRates = invoiceRate === null || isEuro(draft.header.currency) ? [] : [...draft.lines.reduce((map, line) => {
+        const ref = line.orderLine;
+        if (!ref || ref.orderRate === undefined || ref.orderRate === invoiceRate) return map;
+        const entry = map.get(ref.orderId) ?? { orderId: ref.orderId, orderNumber: ref.supplierReference ?? ref.orderNumber, rate: ref.orderRate, source: ref.orderRateSource ?? 'ECB', net: 0 };
+        entry.net += lineAmounts(line)?.net ?? 0;
+        return map.set(ref.orderId, entry);
+    }, new Map<number, { orderId: number; orderNumber: string; rate: number; source: string; net: number }>()).values()];
+    // Een koers die asynchroon binnenkomt wordt op de actuele invoer toegepast, zodat tussentijdse wijzigingen niet worden teruggedraaid.
+    const applyRate = (next: CurrencyDraft) => {
+        if (locked) return;
+        setDraft((existing) => changeRate(existing, next));
+        setErrors({});
+        setServerError(null);
+        setQuestion(null);
+    };
     // "Hoort bij order …" (factuurnummer al op een order): de regels van die order echt overnemen, zodat de koppeling wordt opgeslagen.
     const takeOrder = (orderId: number) => {
         if (locked || draft.header.vendorId === '') return;
@@ -476,7 +501,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 </div>
                 <div className={aiFieldClass(aiProblems.currency)}>
                     <label htmlFor="currency-input" className="text-xs font-medium text-gray-700">{t('purchase_currency')} *</label>
-                    <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} onChange={(value) => update(changeCurrency(draft, value))} />
+                    <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} disabled={linkedOrderCurrency(draft) !== null} onChange={(value) => update(changeCurrency(draft, value))} />
+                    {linkedOrderCurrency(draft) !== null && <span className="block text-xs text-gray-600" data-testid="currency-locked-note">{t('purchase_currency_locked_by_order')}</span>}
                     {defaultsNote('currency') && <span className="block text-xs text-gray-500">{defaultsNote('currency')}</span>}
                     <span className="block text-xs text-gray-500">{t('purchase_currency_hint')}</span>
                     <FieldError id="currency" messages={e('currency')} />
@@ -486,7 +512,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     anders is (geen fout: een koersverschil is voor de boekhouder). */}
                 {!isEuro(draft.header.currency) && (
                     <div className="col-span-2" data-testid="invoice-rate">
-                        <ExchangeRateField value={invoiceMoney} onChange={(next) => update(changeRate(draft, next))} documentDate={draft.header.invoiceDate} prefix="pinvoice"
+                        <ExchangeRateField value={invoiceMoney} onChange={applyRate} documentDate={draft.header.invoiceDate} prefix="pinvoice"
                             errors={{ exchangeRate: e('exchangeRate') ?? [] }} disabled={locked} />
                         {invoiceRate !== null && (
                             <p className="text-xs text-gray-700" data-testid="invoice-rate-euro">{t('invoice_rate_euro', { amount: formatEuro(toEuro(totals.net, invoiceRate), locale) })}</p>
@@ -497,7 +523,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                     order: order.orderNumber, orderLine: rateLine(draft.header.currency.toUpperCase(), order.rate, locale),
                                     orderSource: order.source === 'Manual' ? t('currency_rate_manual') : 'ECB',
                                     invoiceLine: rateLine(draft.header.currency.toUpperCase(), invoiceRate!, locale),
-                                    difference: formatEuro(toEuro(totals.net, invoiceRate!) - toEuro(totals.net, order.rate), locale),
+                                    difference: formatEuro(toEuro(order.net, invoiceRate!) - toEuro(order.net, order.rate), locale),
                                 })}
                             </p>
                         ))}
@@ -535,7 +561,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             )}
 
             {/* Koppelen aan de bon (stap 4b): de open orders van deze leverancier */}
-            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} linkedCurrency={linkedOrderCurrency(draft)} />}
+            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} linkedCurrency={lockedInvoiceCurrency(draft)} />}
 
             {/* Regels */}
             <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
