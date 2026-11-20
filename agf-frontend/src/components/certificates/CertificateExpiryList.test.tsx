@@ -17,7 +17,7 @@ describe('CertificateExpiryList', () => {
     beforeEach(() => {
         items = [];
         globalThis.fetch = (async (input: RequestInfo | URL) => {
-            assert.ok(String(input).includes('/certificates?status=attention'));
+            assert.equal(new URL(String(input)).searchParams.get('status'), 'attention');
             return json(200, { warningDays: 30, total: items.length, items });
         }) as typeof fetch;
         mounted = new Mounted();

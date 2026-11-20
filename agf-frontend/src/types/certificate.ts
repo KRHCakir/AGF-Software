@@ -77,7 +77,8 @@ export interface CertificateOverviewItem {
     isActive: boolean;
     productNames: string[];
 }
-export interface CertificateOverview { warningDays: number; total: number; items: CertificateOverviewItem[] }
+// Per pagina (standaard 100, hooguit 500); total = alle certificaten bij het filter.
+export interface CertificateOverview { warningDays: number; total: number; page?: number; pageSize?: number; items: CertificateOverviewItem[] }
 
 export interface RelationCertificateSummary { typeCode: string; typeName: string; status: CertificateStatus; productsPending: boolean }
 

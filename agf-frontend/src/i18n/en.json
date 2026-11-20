@@ -3059,7 +3059,7 @@
   "cert_settings_types_hint": "Shown in the type list of a certificate; a new own type on a certificate is added here automatically.",
   "cert_settings_days_invalid": "Enter a whole number of days.",
   "cert_settings_reload": "Reload settings",
-  "cert_settings_save":"Save",
+  "cert_settings_save": "Save",
   "cert_settings_saved": "Saved.",
   "cert_own_title": "Certificates of the own company",
   "cert_own_hint": "For example your own CoC, SKAL or BRCGS: with an end date, so they also warn in time.",
@@ -3111,5 +3111,7 @@
   "cert_check_audit": "A warning, not a block. With Yes, that's right it is recorded that you confirmed this, with date and time.",
   "cert_check_yes": "Yes, that's right",
   "cert_check_no": "No, I'll change it",
-  "cert_check_declined": "Not booked: the product does not match the supplier's GGN certificate. Change the line or stop this receipt."
+  "cert_check_declined": "Not booked: the product does not match the supplier's GGN certificate. Change the line or stop this receipt.",
+  "cert_expiry_more": "The first {shown} of {total}; filter below to see the rest.",
+  "cert_page_count": "{shown} of {total} certificates"
 }
