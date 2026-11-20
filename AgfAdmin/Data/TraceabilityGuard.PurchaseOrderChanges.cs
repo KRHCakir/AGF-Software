@@ -8,7 +8,8 @@ namespace AgfAdmin.Data
     internal static partial class TraceabilityGuard
     {
         private sealed record StoredOrderDocument(int Id, string Route, int VendorId, string SupplierReference, DateOnly OrderedOn, DateTime? ExpectedAt, string Origin,
-            string Note, string SupplierLotReference, string OrderChannel, string Status, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia);
+            string Note, string SupplierLotReference, string OrderChannel, string Status, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia,
+            string Currency, decimal ExchangeRate, DateOnly? ExchangeRateDate, string ExchangeRateSource);
 
         private sealed record StoredOrderLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, decimal ExpectedQuantity, decimal? ExpectedNetWeightKg,
             decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, int? ReplacesLineId);
@@ -24,7 +25,8 @@ namespace AgfAdmin.Data
         //   - Finalize: Open naar Definitive, met wie, wanneer en waardoor; verder verandert er in die save niets aan de order.
         //   - Correction: alleen een Definitive order, met reden, en alleen de prijs per regel, het ordernummer van de leverancier en de
         //     notitie. Een definitieve order verandert in haar kopvelden (leverancier, ordernummer leverancier, besteldatum, verwacht,
-        //     herkomst, notitie, lot van de leverancier, kanaal) en regels (toevoegen, verwijderen, wijzigen) alleen zo.
+        //     herkomst, notitie, lot van de leverancier, kanaal) en regels (toevoegen, verwijderen, wijzigen) alleen zo; valuta en koers
+        //     (valuta-ronde) veranderen bij een definitieve order nooit.
         // Een nieuwe order is Open; Definitive gaat nooit terug en wie, wanneer en waardoor liggen dan vast. Auditregels zijn append-only.
         // Kopvelden en het toevoegen of verwijderen van regels van een Open order bewaakte de guard niet en blijft hij niet bewaken (de
         // service schrijft er wel altijd een auditregel bij). Vergeleken met de opgeslagen waarden (ook bij een losgekoppelde Update).
@@ -112,7 +114,7 @@ namespace AgfAdmin.Data
             var orderIds = modifiedOrders.Select(e => e.Entity.Id).Concat(changes.Keys).Concat(edited.Select(e => e.OrderId)).Distinct().ToList();
             var stored = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(c => orderIds.Contains(c.Id))
                 .Select(c => new StoredOrderDocument(c.Id, c.Route, c.VendorId, c.SupplierReference, c.OrderedOn, c.ExpectedAt, c.Origin, c.Note, c.SupplierLotReference, c.OrderChannel,
-                    c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia)), async, cancellationToken)).ToDictionary(c => c.Id);
+                    c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia, c.Currency, c.ExchangeRate, c.ExchangeRateDate, c.ExchangeRateSource)), async, cancellationToken)).ToDictionary(c => c.Id);
             var trackedOrders = modifiedOrders.ToDictionary(e => e.Entity.Id, e => e.Entity);
 
             foreach (var orderId in orderIds)
@@ -267,6 +269,10 @@ namespace AgfAdmin.Data
             Check(!string.Equals(order.Note, before.Note, StringComparison.Ordinal), nameof(SupplyCommitment.Note));
             Check(!string.Equals(order.SupplierLotReference, before.SupplierLotReference, StringComparison.Ordinal), nameof(SupplyCommitment.SupplierLotReference));
             Check(!string.Equals(order.OrderChannel, before.OrderChannel, StringComparison.Ordinal), nameof(SupplyCommitment.OrderChannel));
+            // Valuta-ronde: valuta en koers horen bij de kop; een definitieve order houdt ze (ook een correctie verandert ze niet).
+            Check(!string.Equals(order.Currency, before.Currency, StringComparison.Ordinal), nameof(SupplyCommitment.Currency));
+            Check(order.ExchangeRate != before.ExchangeRate || order.ExchangeRateDate != before.ExchangeRateDate
+                || !string.Equals(order.ExchangeRateSource, before.ExchangeRateSource, StringComparison.Ordinal), nameof(SupplyCommitment.ExchangeRate));
             return fields;
         }
     }

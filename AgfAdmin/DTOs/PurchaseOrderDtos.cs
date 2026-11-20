@@ -51,6 +51,10 @@ namespace AgfAdmin.DTOs
         // Gefactureerd volgens de gekoppelde factuurregels (stap 4b): None, Partial of Full (PurchaseInvoiceOrderLinkRules.BillingStatus).
         public string BillingStatus { get; set; }
         public string DocumentStatus { get; set; }
+        // Valuta-ronde: het bedrag van de regels met een prijs in de valuta van de order, en in euro (de lijst telt alleen euro's op).
+        public string Currency { get; set; }
+        public decimal? Amount { get; set; }
+        public decimal? AmountEur { get; set; }
     }
 
     // Een verkooporder die van deze inkooporder reserveert (Active) of verzonden heeft (Consumed), per eenheid opgeteld.
@@ -69,6 +73,11 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string OrderNumber { get; set; }
+        // Valuta-ronde: prijzen en totalen staan in deze valuta; de koers is eenheden valuta per 1 euro (bij EUR 1, bron NotApplicable).
+        public string Currency { get; set; }
+        public decimal ExchangeRate { get; set; }
+        public DateOnly? ExchangeRateDate { get; set; }
+        public string ExchangeRateSource { get; set; }
         public int VendorId { get; set; }
         public string VendorName { get; set; }
         public string SupplierReference { get; set; }
@@ -149,6 +158,11 @@ namespace AgfAdmin.DTOs
         public int? PartijId { get; set; }
         public NewPartijForOrderDto NewPartij { get; set; }
         public string SupplierLotReference { get; set; }
+        // Valuta-ronde: zoals bij aanmaken. Weggelaten (null) = de valuta en koers van de order blijven zoals ze zijn. Dezelfde valuta en
+        // bron (en bij Manual dezelfde koers) houden de vastgelegde koers; alleen een andere keuze legt een nieuwe koers vast.
+        public string Currency { get; set; }
+        public decimal? ExchangeRate { get; set; }
+        public string ExchangeRateSource { get; set; }
         public List<UpdatePurchaseOrderLineDto> Lines { get; set; }
     }
 
@@ -174,6 +188,8 @@ namespace AgfAdmin.DTOs
         public decimal? NetWeightKg { get; set; }
         public decimal? GrossWeightKg { get; set; }
         public decimal? Amount { get; set; }
+        // Valuta-ronde: het totaal in euro (Amount gedeeld door de koers van de order, op centen); bij EUR gelijk aan Amount.
+        public decimal? AmountEur { get; set; }
         // Som van de regels met colli per pallet, op twee decimalen (niet afgerond naar hele pallets).
         public decimal? Pallets { get; set; }
         public int LinesWithoutNet { get; set; }

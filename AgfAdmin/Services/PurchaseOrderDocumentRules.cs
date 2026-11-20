@@ -37,6 +37,9 @@ namespace AgfAdmin.Services
         public const string FieldSupplierReference = "supplierReference";
         public const string FieldNote = "note";
         public const string FieldUnitPrice = "unitPrice";
+        // Valuta-ronde: valuta en koers van de order (alleen bij aanpassen van een Open order, nooit met een correctie).
+        public const string FieldCurrency = "currency";
+        public const string FieldExchangeRate = "exchangeRate";
         public static readonly IReadOnlyList<string> CorrectionFields = new[] { FieldSupplierReference, FieldNote, FieldUnitPrice };
 
         public static bool IsStatus(string value) => value != null && Statuses.Contains(value, StringComparer.Ordinal);

@@ -16,11 +16,15 @@ namespace AgfAdmin.Services
         private readonly ICurrentUser _user;
 
         // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek.
-        public PurchaseOrderService(AppDbContext db, ICurrentUser currentUser = null)
+        // Zonder koersbron (tests) kan een order in een andere valuta alleen met een handmatige koers worden aangepast.
+        public PurchaseOrderService(AppDbContext db, ICurrentUser currentUser = null, IExchangeRateSource rates = null)
         {
             _user = currentUser ?? CurrentUser.Default;
             _db = db;
+            _rates = rates;
         }
+
+        private readonly IExchangeRateSource _rates;
 
         // ---------------- Lijst ----------------
 
@@ -107,9 +111,16 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.OrderNumber, c.OrderYear, c.OrderSequence, c.VendorId, VendorName = c.Vendor.Name, c.SupplierReference, c.OrderedOn,
-                    c.ExpectedAt, c.Route, CustomerName = c.Customer.Name, c.Status, c.PartijId, PartijNumber = c.Partij.Number, c.SupplierLotReference, c.DocumentStatus
+                    c.ExpectedAt, c.Route, CustomerName = c.Customer.Name, c.Status, c.PartijId, PartijNumber = c.Partij.Number, c.SupplierLotReference, c.DocumentStatus,
+                    c.Currency, c.ExchangeRate
                 })
                 .ToListAsync(cancellationToken);
+            // Valuta-ronde: het bedrag per order (regels met een prijs), in de valuta van de order en in euro.
+            var headerIds = headers.Select(h => h.Id).ToList();
+            var priced = (await _db.SupplyCommitmentLines.AsNoTracking().Where(l => headerIds.Contains(l.SupplyCommitmentId) && l.UnitPrice != null)
+                    .Select(l => new { l.SupplyCommitmentId, l.ExpectedQuantity, l.UnitPrice }).ToListAsync(cancellationToken))
+                .GroupBy(l => l.SupplyCommitmentId)
+                .ToDictionary(g => g.Key, g => g.Sum(l => PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice) ?? 0m));
             var facts = await LoadFactsAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
             var withDeviation = await OrdersWithDeviationAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
 
@@ -143,7 +154,10 @@ namespace AgfAdmin.Services
                         InvoiceIndicator = f.InvoiceIndicator(),
                         HasDeviation = withDeviation.Contains(h.Id),
                         DocumentStatus = h.DocumentStatus,
-                        BillingStatus = f.BillingStatus()
+                        BillingStatus = f.BillingStatus(),
+                        Currency = h.Currency,
+                        Amount = priced.TryGetValue(h.Id, out var amount) ? amount : null,
+                        AmountEur = priced.TryGetValue(h.Id, out var inCurrency) ? ExchangeRateRules.ToEuro(inCurrency, h.ExchangeRate) : null
                     });
                 })
                 .Where(i => statusFilter == "all"
@@ -396,7 +410,11 @@ namespace AgfAdmin.Services
                 RejectedQuantity = facts.RejectedQuantity,
                 RejectedNetWeightKg = facts.RejectedNetWeightKg,
                 Lines = lines,
-                Totals = TotalsOf(commitment.Lines),
+                Totals = TotalsOf(commitment.Lines, commitment.ExchangeRate),
+                Currency = commitment.Currency,
+                ExchangeRate = commitment.ExchangeRate,
+                ExchangeRateDate = commitment.ExchangeRateDate,
+                ExchangeRateSource = commitment.ExchangeRateSource,
                 Receipts = receipts,
                 InvoiceRefs = facts.Refs.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).Select(r => new PurchaseOrderInvoiceRefDto
                 {
@@ -606,13 +624,14 @@ namespace AgfAdmin.Services
 
         private static decimal? PalletsOf(SupplyCommitmentLine line) => ExactPallets(line) is { } pallets ? PurchaseLineMath.Round2(pallets) : null;
 
-        private static PurchaseOrderLineTotalsDto TotalsOf(IEnumerable<SupplyCommitmentLine> lines)
+        private static PurchaseOrderLineTotalsDto TotalsOf(IEnumerable<SupplyCommitmentLine> lines, decimal exchangeRate)
         {
             var totals = PurchaseLineMath.Sum(lines.Select(l => new PurchaseLineMath.Line(l.ExpectedQuantity, l.ExpectedNetWeightKg, l.ExpectedGrossWeightKg,
                 PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice), ExactPallets(l))).ToList());
             return new PurchaseOrderLineTotalsDto
             {
                 Quantity = totals.Quantity, NetWeightKg = totals.NetKg, GrossWeightKg = totals.GrossKg, Amount = totals.Amount, Pallets = totals.Pallets,
+                AmountEur = totals.Amount is decimal amount ? ExchangeRateRules.ToEuro(amount, exchangeRate) : null,
                 LinesWithoutNet = totals.LinesWithoutNet, LinesWithoutGross = totals.LinesWithoutGross, LinesWithoutPrice = totals.LinesWithoutPrice,
                 LinesWithoutPallets = totals.LinesWithoutPallets
             };
