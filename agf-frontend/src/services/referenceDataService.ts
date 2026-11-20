@@ -19,7 +19,8 @@ export async function getVendors(signal?: AbortSignal): Promise<VendorOption[]> 
         throw new ApiError('shape', 'Onverwacht antwoord bij leveranciers.');
     }
     const text = (value: unknown) => (typeof value === 'string' && value.trim() !== '' ? value : null);
-    return json.map((item) => ({ id: item.id, name: item.name, searchCode: text(item.searchCode), vatNumber: text(item.vatNumber), isActive: item.isActive !== false })).sort(byName);
+    return json.map((item) => ({ id: item.id, name: item.name, searchCode: text(item.searchCode), vatNumber: text(item.vatNumber), isActive: item.isActive !== false,
+        defaultCurrency: text(item.defaultCurrency) })).sort(byName);
 }
 
 export async function getCustomers(signal?: AbortSignal): Promise<CustomerOption[]> {

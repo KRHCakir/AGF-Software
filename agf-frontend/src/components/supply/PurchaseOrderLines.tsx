@@ -25,8 +25,12 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // toetsenbord bereik je ze vanuit elk veld van de regel met Alt+B (Bruto aanpassen), Alt+A (Nieuw artikel) en Alt+R (regel verwijderen), wat onder de tabel
 // staat. Een aangepaste bruto leegmaken zet de regel terug op de bruto van het artikel. Bij aanpassen (stap 4a) zegt `limits` per regel
 // wat vastligt na ontvangst: dan staat de uitleg bij het veld (artikel vast, nooit onder ontvangen, regel blijft staan).
-export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined) }: {
+export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
+    currency = null, rate = null }: {
     lines: PurchaseLineDraft[];
+    // Valuta-ronde: valuta van de order (prijzen en totalen staan erin) en de koers voor het eurobedrag onder het totaal.
+    currency?: string | null;
+    rate?: number | null;
     rows: PurchaseLineRow[];
     products: ProductOption[];
     variantOf: (variantId: number) => (VariantOption & PurchaseArticle) | undefined;
@@ -179,7 +183,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         className={`${inputClass} !mt-0 w-24 text-right`} />
                                     <FieldError id={`${prefix}.unitPrice`} messages={errors(`${prefix}.unitPrice`)} />
                                 </td>
-                                <td {...lineCell('total', labels.total)} data-testid={`${prefix}.total`}>{row?.total == null ? '–' : formatMoney(row.total, null, locale)}</td>
+                                <td {...lineCell('total', labels.total)} data-testid={`${prefix}.total`}>{row?.total == null ? '–' : formatMoney(row.total, currency, locale)}</td>
                                 {isDirect && (
                                     <td {...lineCell('extra', t('supply_lot_optional'))}>
                                         <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
@@ -197,7 +201,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         );
                     })}
                 </tbody>
-                <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 2 : 1} />
+                <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 2 : 1} currency={currency} rate={rate} />
             </table>
             {!locked && <p className="px-2 py-1 text-xs text-gray-600" data-testid="purchase-lines-keys">{t('po_line_keys_hint', { gross: shortcutLabel('adjustGross', isMac), article: shortcutLabel('newArticle', isMac), remove: shortcutLabel('removeLine', isMac) })}</p>}
         </div>

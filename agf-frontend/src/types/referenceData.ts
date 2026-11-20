@@ -13,6 +13,8 @@ export interface VendorOption {
     searchCode: string | null;
     vatNumber: string | null;
     isActive: boolean;
+    // Standaardvaluta van de leverancier (rol), alleen als voorstel bij een nieuwe inkooporder of factuur (valuta-ronde).
+    defaultCurrency?: string | null;
 }
 
 export interface CustomerOption {

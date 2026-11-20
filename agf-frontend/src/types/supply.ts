@@ -39,6 +39,10 @@ export interface CreateSupplyCommitmentRequest {
     supplierLotReference?: string;
     // Notitie bij de order (intern, optioneel).
     note?: string;
+    // Valuta-ronde: valuta (EUR of een andere) en bij een andere valuta de bron (ECB: de server legt de koers vast; Manual: deze koers).
+    currency?: string;
+    exchangeRate?: number | null;
+    exchangeRateSource?: 'ECB' | 'Manual' | null;
     lines: CreateSupplyCommitmentLineRequest[];
 }
 

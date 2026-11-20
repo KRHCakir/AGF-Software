@@ -5,6 +5,8 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
 import { ROW_PLAIN, ROW_STRIPE } from '../../lib/listRows';
 import { formatPallets, type PurchaseLineTotals } from '../../lib/purchaseLine';
+import { formatEuro } from '../../lib/documentCurrency';
+import { isEuro, toEuro } from '../../lib/exchangeRate';
 
 // De indeling van de inkooporderregel (feedback 11 november), gedeeld door Inkooporder aanmaken en het orderdetail: van links naar
 // rechts Product · Merk · Land · Maat · Bruto kg · Netto kg · Aantal · Inhoud · Prijs · Totaal, rijen om en om gekleurd (ook
@@ -51,7 +53,8 @@ export function PurchaseLineHead({ trailing }: { trailing?: ReactNode }) {
 
 // Totaalrij onder dezelfde kolommen: aantal, bruto, netto en bedrag, met het totaal aantal pallets onder Product. Regels zonder kg,
 // prijs of colli per pallet tellen niet mee; dat staat er dan bij, zodat een totaal nooit stilzwijgend onvolledig is.
-export function PurchaseLineTotalsRow({ totals, trailingCells = 0 }: { totals: PurchaseLineTotals; trailingCells?: number }) {
+// Valuta-ronde: het bedrag met de valuta van het document, en bij een andere valuta dan euro het bedrag in euro eronder (≈ € …).
+export function PurchaseLineTotalsRow({ totals, trailingCells = 0, currency = null, rate = null }: { totals: PurchaseLineTotals; trailingCells?: number; currency?: string | null; rate?: number | null }) {
     const { t, locale } = useTranslation();
     const labels = usePurchaseLineLabels();
     const missing = (count: number, key: string) => (count > 0 ? <span className="block text-xs font-normal text-gray-600">{t(key, { count: String(count) })}</span> : null);
@@ -70,7 +73,10 @@ export function PurchaseLineTotalsRow({ totals, trailingCells = 0 }: { totals: P
                 <td {...lineCell('quantity', labels.quantity)} data-testid="line-totals-quantity">{formatQuantity(totals.quantity, locale)}</td>
                 <td className="max-md:hidden" colSpan={2} />
                 <td {...lineCell('total', labels.total)} data-testid="line-totals-amount">
-                    {totals.amount === null ? '–' : formatMoney(totals.amount, null, locale)}
+                    {totals.amount === null ? '–' : formatMoney(totals.amount, currency, locale)}
+                    {totals.amount !== null && currency !== null && !isEuro(currency) && rate !== null && (
+                        <span className="block text-xs font-normal text-gray-700" data-testid="line-totals-euro">{t('currency_euro_hint', { amount: formatEuro(toEuro(totals.amount, rate), locale) })}</span>
+                    )}
                     {missing(totals.linesWithoutPrice, 'po_line_lines_without_price')}
                 </td>
                 {trailingCells > 0 && <td className="max-md:hidden" colSpan={trailingCells} />}

@@ -42,6 +42,10 @@ import { FieldErrors, addError, decimalErrorKey, outcomeUnknown } from './messag
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 import SubmitErrors from '../shared/SubmitErrors';
 import { useFormLeaveGuard } from '../shared/LeaveGuard';
+import DocumentCurrencyField from '../purchase/DocumentCurrencyField';
+import { type CurrencyDraft, currencyPayload, draftFromDocument, effectiveRate, euroDraft } from '../../lib/documentCurrency';
+import { EURO, isEuro } from '../../lib/exchangeRate';
+import { getPurchaseCurrencies, type PurchaseCurrency } from '../../services/purchaseCurrencyService';
 
 export interface ReferenceData {
     vendors: VendorOption[];
@@ -127,6 +131,20 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const [suggestionToken, setSuggestionToken] = useState(0);
     // Bij aanpassen nooit een voorstel over de partij van de order heen.
     const partijTouched = useRef(editing !== null);
+    // Valuta-ronde: valuta en koers van de order (euro standaard; bij aanpassen de vastgelegde) en de lijst om uit te kiezen.
+    const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
+        : draftFromDocument(editing.order.currency, editing.order.exchangeRate, editing.order.exchangeRateSource, editing.order.exchangeRateDate, locale)));
+    const [currencies, setCurrencies] = useState<PurchaseCurrency[]>([{ code: EURO, hasEcbRate: false }]);
+    // Lukt het laden van de valutalijst niet, dan blijven euro en de valuta van de order; het scherm zegt dat en kan het opnieuw proberen.
+    const [currenciesFailed, setCurrenciesFailed] = useState(false);
+    const [currenciesAttempt, setCurrenciesAttempt] = useState(0);
+    useEffect(() => {
+        const controller = new AbortController();
+        getPurchaseCurrencies(controller.signal)
+            .then((list) => { setCurrencies(list); setCurrenciesFailed(false); })
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setCurrenciesFailed(true); });
+        return () => controller.abort();
+    }, [currenciesAttempt]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -156,6 +174,24 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         if (locked) return;
         setHeader((current) => ({ ...current, [field]: value }));
         edited();
+    };
+
+    const updateMoney = (next: CurrencyDraft) => {
+        if (locked) return;
+        setMoney(next);
+        edited();
+    };
+
+    // Een andere leverancier stelt haar standaardvaluta voor, zolang de gebruiker de valuta niet zelf koos (en nooit bij aanpassen).
+    const chooseVendor = (vendor: VendorOption | null) => {
+        updateHeader('vendorId', vendor === null ? '' : String(vendor.id));
+        // Zolang de gebruiker de valuta niet zelf koos, volgt ze de leverancier; een leverancier zonder standaardvaluta (of geen
+        // leverancier) is euro, zodat de valuta van een eerder gekozen leverancier niet blijft staan.
+        const proposal = vendor?.defaultCurrency?.trim().toUpperCase();
+        const wanted = proposal && /^[A-Z]{3}$/.test(proposal) ? proposal : EURO;
+        if (editing === null && !money.touched && wanted !== money.currency.trim().toUpperCase()) {
+            setMoney(isEuro(wanted) ? euroDraft() : { currency: wanted, rate: '', source: 'ECB', rateDate: null, touched: false });
+        }
     };
 
     const updatePartij = (choice: PartijChoice) => {
@@ -192,6 +228,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         const found: FieldErrors = {};
         const vendorId = Number(header.vendorId);
         if (!header.vendorId) addError(found, 'vendorId', t('supply_error_required'));
+        const currency = currencyPayload(money);
+        if (!currency.ok) addError(found, currency.field, t(currency.field === 'currency' ? 'supply_error_required' : money.source === 'ECB' ? 'currency_error_rate_pending' : 'currency_error_rate'));
 
         const customerId = Number(header.customerId);
         if (isDirect && !header.customerId) addError(found, 'customerId', t('supply_error_required_customer'));
@@ -264,6 +302,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 ...partijPayload(partij),
                 ...(supplierLotReference === '' ? {} : { supplierLotReference }),
                 ...(note === '' ? {} : { note }),
+                ...(currency.ok ? currency.value : {}),
                 lines: payloadLines,
             },
             errors: {},
@@ -287,6 +326,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     ...(payload.supplierReference === undefined ? {} : { supplierReference: payload.supplierReference }),
                     ...(payload.orderedOn === undefined ? {} : { orderedOn: payload.orderedOn }), ...(payload.note === undefined ? {} : { note: payload.note }),
                     ...partijPayload(partij), ...(payload.supplierLotReference === undefined ? {} : { supplierLotReference: payload.supplierLotReference }),
+                    currency: payload.currency, exchangeRate: payload.exchangeRate, exchangeRateSource: payload.exchangeRateSource,
                     lines: editLines ?? [],
                 },
             };
@@ -431,7 +471,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     <label htmlFor="vendorId-input" className="text-xs font-medium text-gray-700">{t('supply_vendor')} *</label>
                     <VendorPicker id="vendorId" dataTour="supply-vendor" ariaLabel={t('supply_vendor')} vendors={reference.vendors} value={header.vendorId} disabled={locked || edit?.vendorFixed === true}
                         invalid={!!e('vendorId')} describedBy={e('vendorId') ? 'vendorId' : undefined}
-                        onChange={(vendor) => updateHeader('vendorId', vendor === null ? '' : String(vendor.id))} />
+                        onChange={chooseVendor} />
                     <FieldError id="vendorId" messages={e('vendorId')} />
                     {edit?.vendorFixed && <span className="block text-xs text-gray-700" data-testid="po-edit-vendor-fixed">{t('po_edit_vendor_fixed')}</span>}
                 </div>
@@ -467,6 +507,17 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                         onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} aria-describedby="origin-hint" />
                     <span id="origin-hint" className="block text-xs text-gray-500">{t('supply_origin_hint')}</span>
                     <FieldError id="origin" messages={e('origin')} />
+                </div>
+                {/* Valuta-ronde: valuta en koers in de kop (na de vaste volgorde Leverancier, Ordernummer, Besteldatum, Verwacht, Herkomst). */}
+                <div className="col-span-2 md:col-span-3">
+                    <DocumentCurrencyField value={money} onChange={updateMoney} documentDate={header.orderedOn} currencies={currencies} disabled={locked}
+                        fetchOnOpen={editing === null} errors={{ currency: e('currency') ?? [], exchangeRate: e('exchangeRate') ?? [] }} />
+                    {currenciesFailed && (
+                        <p role="alert" className="mt-1 text-xs text-amber-900" data-testid="currency-list-failed">
+                            {t('currency_list_failed')}{' '}
+                            <button type="button" className="underline underline-offset-2" onClick={() => setCurrenciesAttempt((n) => n + 1)}>{t('currency_list_retry')}</button>
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -517,7 +568,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             <fieldset className="space-y-2">
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
-                <PurchaseOrderLines lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
+                <PurchaseOrderLines currency={money.currency} rate={effectiveRate(money)} lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
                     errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor} limits={limitsOf}
                     productExtra={(line, index) => (newArticleFor === line.key ? (
                         <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
