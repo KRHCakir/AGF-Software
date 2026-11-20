@@ -654,34 +654,55 @@ describe('RelationForm', () => {
         assert.ok(text().includes('relations_error_vat_country'));
     });
 
-    test('GGN check: stores who and when, opens the portal (noopener) and copies the GGN, with a fallback when copying fails', async () => {
+    test('certificates: a GGN taken over from the old fields asks for products; the portal button copies the GGN; saved with the same click after the relation', async () => {
         const opened: unknown[][] = [];
         const originalOpen = window.open;
         window.open = ((...args: unknown[]) => { opened.push(args); return null; }) as typeof window.open;
         let copied = '';
         Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => { copied = value; } } });
+        const certificate = {
+            id: 31, typeCode: 'GlobalGapIfa', customTypeName: null, typeName: 'GLOBALG.A.P. IFA (GGN)', number: '4049929000001', certificationBody: null, validFrom: null, validUntil: null,
+            products: [], productsPending: true, producerName: 'Finca Uno', hasGgnLabel: false, checkedOn: null, checkedBy: null, isActive: true, status: 'NoEndDate', daysLeft: null, files: [],
+        };
+        const certReference = {
+            types: [{ code: 'GlobalGapIfa', name: 'GLOBALG.A.P. IFA (GGN)', description: '', typicalHolder: '', productsRequired: true, ggnNumber: true }],
+            customTypes: [], warningDays: 30, globalGapPortalUrl: 'https://portal.example/certificates', globalGapDatabaseUrl: 'https://database.example/', maxFileBytes: 1000,
+        };
         try {
-            const vendor = vendorRole({ ggns: [{ id: 5, ggn: '4049929000001', producerName: 'Finca Uno', isActive: true, checkedOn: null, checkedBy: null, certificateValidUntil: null, hasGgnLabel: false }] });
-            respond = (call) => (call.method === 'PUT' ? json(200, saved({ version: 1, vendor })) : json(404, {}));
+            const vendor = vendorRole();
+            respond = (call) => {
+                if (call.url.endsWith('/certificates/reference')) return json(200, certReference);
+                if (call.url.endsWith('/products')) return json(200, [{ id: 2, name: 'Mango' }, { id: 1, name: 'Avocado' }]);
+                if (call.url.endsWith('/certificates/relations/7') && call.method === 'GET') return json(200, { version: 'v1', warningDays: 30, certificates: [certificate], warnings: [] });
+                if (call.url.endsWith('/certificates/relations/7') && call.method === 'PUT') {
+                    return json(200, { version: 'v2', warningDays: 30, warnings: [], certificates: [{ ...certificate, products: [{ id: 1, name: 'Avocado' }], productsPending: false, checkedOn: '2026-10-26', checkedBy: 'Anja', validUntil: '2027-03-31', status: 'Valid', daysLeft: 156 }] });
+                }
+                return call.method === 'PUT' ? json(200, saved({ version: 1, vendor })) : json(404, {});
+            };
             await mounted.render(<RelationForm relation={saved({ customer: null, vendor })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
-            assert.ok(text().includes('relations_ggn_never_checked'));
+            await mounted.waitFor(() => mounted.container.querySelector('#relation-certificates') !== null && text().includes('4049929000001') || !!mounted.container.querySelector('[data-testid="certificate-0"]'), 'certificates open');
+            assert.ok(text().includes('relations_ggn_moved'), 'the old GGN block points to the certificates');
+            assert.ok(mounted.container.querySelector('[data-testid="certificate-0-warning-products_pending"]'), 'products still to fill in');
             await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="ggn-check-4049929000001"]')!);
             await mounted.waitFor(() => text().includes('relations_ggn_copied'), 'copied');
             assert.deepEqual(opened, [['https://portal.example/certificates', '_blank', 'noopener,noreferrer']]);
             assert.equal(copied, '4049929000001');
-            Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('denied'); } } });
-            await click(mounted.container.querySelector<HTMLButtonElement>('[data-testid="ggn-check-4049929000001"]')!);
-            await mounted.waitFor(() => text().includes('relations_ggn_copy_failed'), 'fallback');
-            const key = mounted.container.querySelector('[data-testid^="ggn-k"]')!.getAttribute('data-testid')!.replace('ggn-', '');
-            await type(input(`ggns.${key}.checkedOn`), '2026-10-26');
+
+            const row = mounted.container.querySelector('[data-testid="certificate-0"]')!.getAttribute('data-row')!;
+            await choose(select(`certificates.${row}.productIds`), '1');
+            await type(input(`certificates.${row}.checkedOn`), '2026-10-26');
+            await type(input(`certificates.${row}.validUntil`), '2027-03-31');
+            assert.ok(text().includes('cert_checked_by_you'), 'who checked comes from the signed-in user on save');
             await press('s', { ctrlKey: true });
-            assert.ok(text().includes('relations_error_ggn_check_pair'), 'date without name');
-            await type(input(`ggns.${key}.checkedBy`), 'Anja');
-            await type(input(`ggns.${key}.certificateValidUntil`), '2027-03-31');
-            await press('s', { ctrlKey: true });
-            await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
-            const ggns = (calls.find((call) => call.method === 'PUT')!.body!.vendor as { ggns: Record<string, unknown>[] }).ggns;
-            assert.deepEqual([ggns[0].checkedOn, ggns[0].checkedBy, ggns[0].certificateValidUntil], ['2026-10-26', 'Anja', '2027-03-31']);
+            await mounted.waitFor(() => calls.some((call) => call.method === 'PUT' && call.url.includes('/certificates/')), 'certificates saved');
+            const puts = calls.filter((call) => call.method === 'PUT');
+            assert.ok(puts[0].url.endsWith('/relations/7'), 'the relation first');
+            const body = puts.find((call) => call.url.includes('/certificates/'))!.body as { expectedVersion: string; certificates: Record<string, unknown>[] };
+            assert.equal(body.expectedVersion, 'v1');
+            assert.deepEqual([body.certificates[0].id, body.certificates[0].productIds, body.certificates[0].checkedOn, body.certificates[0].validUntil, 'checkedBy' in body.certificates[0]],
+                [31, [1], '2026-10-26', '2027-03-31', false]);
+            await mounted.waitFor(() => text().includes('cert_checked_by'), 'stored check');
+            assert.equal(mounted.container.querySelector('[data-testid="certificate-0-warning-products_pending"]'), null);
         } finally {
             window.open = originalOpen;
             Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined });
