@@ -1,13 +1,18 @@
 namespace AgfAdmin.Services
 {
-    // Koersen voor facturen in een andere valuta dan EUR (feedback 8 november): kosten op partijen staan altijd in euro, dus een
-    // factuurregel in USD wordt omgerekend. De koers wordt nooit getypt maar door de server bij de ECB opgehaald (de officiële
-    // referentiekoers, ook wat de boekhouding gebruikt), voor de factuurdatum. Zo kan niemand een verkeerde of verouderde koers invullen.
+    // Koersen voor documenten in een andere valuta dan EUR (feedback 8 november, valuta-ronde november 2026). De boekvaluta is euro:
+    // elk document bewaart zijn eigen valuta en bedragen, plus de koers, de datum en de bron, en rekent met één regel (ToEuro) naar euro.
+    // De koers komt van de ECB (de officiële referentiekoers, eenheden valuta per 1 euro) voor de documentdatum; sinds de valuta-ronde
+    // mag de gebruiker hem aanpassen (bron Handmatig). Bij opslaan ligt hij vast; een latere koers verandert een document nooit.
     // Gespiegeld in agf-frontend/src/lib/exchangeRate.ts.
     public static class ExchangeRateRules
     {
         public const string Euro = "EUR";
         public const string SourceEcb = "ECB";
+        // Valuta-ronde: de gebruiker heeft de koers zelf ingevuld of aangepast (daarna geen waarschuwing meer), en "n.v.t." bij euro.
+        public const string SourceManual = "Manual";
+        public const string SourceNotApplicable = "NotApplicable";
+        public static readonly IReadOnlyList<string> Sources = new[] { SourceEcb, SourceManual, SourceNotApplicable };
         public const int MaxSourceLength = 20;
 
         // Een koers mag hoogstens zoveel dagen vóór de factuurdatum liggen: de ECB publiceert niet in het weekend en op feestdagen.

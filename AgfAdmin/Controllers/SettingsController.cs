@@ -51,6 +51,14 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> UpdateWeightDisplay([FromServices] Services.WeightDisplayService weights, [FromBody] Services.WeightDisplaySettingsDto request) =>
             this.ToActionResult(await weights.UpdateAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Valuta's om uit te kiezen bij inkoop (valuta-ronde): lezen mag iedereen (de formulieren hebben het nodig), wijzigen met Beheer.
+        [HttpGet("purchase-currencies")]
+        public async Task<IActionResult> GetPurchaseCurrencies([FromServices] Services.PurchaseCurrencyService currencies) => Ok(await currencies.GetAsync(HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("purchase-currencies")]
+        public async Task<IActionResult> UpdatePurchaseCurrencies([FromServices] Services.PurchaseCurrencyService currencies, [FromBody] Services.UpdatePurchaseCurrenciesDto request) =>
+            this.ToActionResult(await currencies.UpdateAsync(request, HttpContext?.RequestAborted ?? default));
+
         // Transportopdracht (documenten deel 2): taal van de kopteksten en de standaard soort pallet.
         [HttpGet("transport-order")]
         public async Task<IActionResult> GetTransportOrder([FromServices] Services.SalesOrderTransportService transports) => Ok(await transports.GetSettingsAsync(HttpContext?.RequestAborted ?? default));

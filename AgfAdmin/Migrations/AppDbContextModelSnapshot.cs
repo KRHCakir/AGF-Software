@@ -324,6 +324,13 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("text");
 
+                    b.Property<string>("PurchaseCurrencies")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("EUR,USD,GBP,CHF,TRY,ZAR,CAD,NOK");
+
                     b.Property<string>("PurchaseInvoiceDefaultCurrency")
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(3)
@@ -5537,6 +5544,13 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("EUR");
+
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer");
 
@@ -5554,6 +5568,22 @@ namespace AgfAdmin.Migrations
                     b.Property<int>("EditVersion")
                         .IsConcurrencyToken()
                         .HasColumnType("integer");
+
+                    b.Property<decimal>("ExchangeRate")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasDefaultValue(1m);
+
+                    b.Property<DateOnly?>("ExchangeRateDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ExchangeRateSource")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("NotApplicable");
 
                     b.Property<DateTime?>("ExpectedAt")
                         .HasColumnType("timestamp with time zone");
@@ -5650,6 +5680,8 @@ namespace AgfAdmin.Migrations
                     b.ToTable("SupplyCommitments", t =>
                         {
                             t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed", "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
+
+                            t.HasCheckConstraint("CK_SupplyCommitments_ExchangeRate", "(\"Currency\" = 'EUR' AND CAST(\"ExchangeRate\" AS REAL) = 1 AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" = 'NotApplicable') OR (\"Currency\" <> 'EUR' AND CAST(\"ExchangeRate\" AS REAL) > 0 AND \"ExchangeRateSource\" IN ('ECB', 'Manual') AND (\"ExchangeRateSource\" <> 'ECB' OR \"ExchangeRateDate\" IS NOT NULL))");
 
                             t.HasCheckConstraint("CK_SupplyCommitments_OrderChannel_Allowed", "\"OrderChannel\" IS NULL OR \"OrderChannel\" IN ('Phone', 'Email', 'Portal', 'Other')");
 
