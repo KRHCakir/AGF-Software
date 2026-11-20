@@ -206,6 +206,12 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
             else if (document.activeElement instanceof HTMLElement && document.activeElement.closest('a[href]') === null) returnFocus.current = document.activeElement;
         }
         backButton.current?.focus();
+        // Komt de focus toch buiten de vraag (bijvoorbeeld door een script), dan gaat die terug naar de vraag.
+        const onOutside = (event: FocusEvent) => {
+            if (event.target instanceof Node && dialogRef.current?.contains(event.target) !== true) backButton.current?.focus();
+        };
+        document.addEventListener('focusin', onOutside);
+        return () => document.removeEventListener('focusin', onOutside);
     }, [pending]);
     const onDialogKey = (event: ReactKeyboardEvent) => {
         if (event.key === 'Escape') { event.preventDefault(); stay(); return; }
@@ -238,7 +244,9 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     return (
         <LeaveGuardContext.Provider value={api}>
             <Suspense fallback={null}><SearchWatcher onChange={releaseLeaving} /></Suspense>
-            {children}
+            {/* Modaal: zolang de vraag open staat is de rest van de pagina (ook de zwevende Demo-assistent) inert: geen focus, geen klik en
+                verborgen voor ondersteunende technologie. display: contents laat de opmaak ongemoeid. */}
+            <div style={{ display: 'contents' }} inert={pending !== null}>{children}</div>
             {pending !== null && (
                 // Onder de rondleiding (z-70); op een telefoon ruimte onderin, zodat de knoppen niet onder de zwevende knop Demo-assistent vallen.
                 <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/40 p-0 sm:items-center sm:p-4"
