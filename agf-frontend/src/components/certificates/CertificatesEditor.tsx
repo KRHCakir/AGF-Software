@@ -19,7 +19,7 @@ const FILE_ACCEPT = 'application/pdf,image/jpeg,image/png,image/heic,image/heif,
 // Het blok "Certificaten" (certificaten deel 1) bij een relatie of het eigen bedrijf: per certificaat de soort (vaste lijst of een eigen
 // soort), het nummer (GGN: 13 cijfers), de instantie, geldig van en tot met de status, de producten (verplicht bij GGN, anders een
 // waarschuwing), wanneer gecontroleerd (wie: de ingelogde gebruiker, bij opslaan) en de PDF's en foto's als versies. Tab op het laatste veld
-// van de laatste (ingevulde) regel maakt een nieuwe regel; de knoppen om iets weg te halen staan buiten de Tab-volgorde. Een opgeslagen
+// van de laatste (ingevulde) regel maakt een nieuwe regel; alle knoppen (product weghalen, bestand openen) zijn met Tab bereikbaar. Een opgeslagen
 // certificaat verdwijnt nooit: archiveren (Actief uit).
 export default function CertificatesEditor({ idPrefix, rows, onChange, reference, products, errors, today, warningDays, disabled = false, onOpenFile, onAddFile, uploading = null, dataTour = 'certificate' }: {
     idPrefix: string;
@@ -55,8 +55,10 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
         add();
     };
     const productName = (id: number) => products.find((p) => p.id === id)?.name ?? `#${id}`;
+    // Een eigen soort uit de lijst: de schrijfwijze van de lijst (hoofdletters kunnen verschillen), zodat de keuzelijst de optie vindt.
+    const listedCustom = (row: CertificateRow) => reference.customTypes.find((n) => n.toLowerCase() === row.customTypeName.trim().toLowerCase());
     const typeValue = (row: CertificateRow) => (row.typeCode !== CUSTOM_TYPE ? row.typeCode
-        : reference.customTypes.some((n) => n.toLowerCase() === row.customTypeName.trim().toLowerCase()) ? `${CUSTOM_PREFIX}${row.customTypeName.trim()}` : CUSTOM_TYPE);
+        : listedCustom(row) !== undefined ? `${CUSTOM_PREFIX}${listedCustom(row)}` : CUSTOM_TYPE);
     const chooseType = (row: CertificateRow, value: string) => {
         if (value.startsWith(CUSTOM_PREFIX)) edit(row.key, { typeCode: CUSTOM_TYPE, customTypeName: value.slice(CUSTOM_PREFIX.length) });
         // "Eigen soort toevoegen…": een nieuwe naam (een naam uit de lijst kies je in de lijst zelf).
@@ -142,7 +144,7 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
                                 {row.productIds.map((id) => (
                                     <span key={id} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-900 ring-1 ring-emerald-200">
                                         {productName(id)}
-                                        <button type="button" tabIndex={-1} aria-label={t('cert_product_remove', { name: productName(id) })} className="text-emerald-900"
+                                        <button type="button" aria-label={t('cert_product_remove', { name: productName(id) })} className="text-emerald-900"
                                             onClick={() => edit(row.key, { productIds: row.productIds.filter((p) => p !== id) })}>×</button>
                                     </span>
                                 ))}
@@ -179,7 +181,7 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
                             {isGgn && (
                                 <div className="flex flex-wrap items-end gap-2 pb-1 sm:col-span-3">
                                     <GgnPortalButton ggn={row.number.replace(/ /g, '')} portalUrl={reference.globalGapPortalUrl} disabled={disabled} />
-                                    <a href={reference.globalGapDatabaseUrl} target="_blank" rel="noreferrer" tabIndex={-1} className="text-xs font-medium text-blue-800 underline underline-offset-2">{t('relations_ggn_official')}</a>
+                                    <a href={reference.globalGapDatabaseUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-800 underline underline-offset-2">{t('relations_ggn_official')}</a>
                                 </div>
                             )}
                         </div>
@@ -192,13 +194,13 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
                                         <span className="rounded bg-gray-100 px-1 font-medium text-gray-800">{t('cert_file_version', { version: String(file.version) })}</span>
                                         <span className="break-all text-gray-900">{file.fileName}</span>
                                         <span className="text-gray-600">{formatDateOnly(amsterdamDateOf(file.createdAt) ?? file.createdAt.slice(0, 10), locale)} · {file.createdBy}</span>
-                                        <button type="button" tabIndex={-1} className="font-medium text-blue-800 underline underline-offset-2" onClick={() => row.id !== null && onOpenFile(row.id, file)}>{t('cert_file_open')}</button>
+                                        <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={() => row.id !== null && onOpenFile(row.id, file)}>{t('cert_file_open')}</button>
                                     </li>
                                 ))}
                                 {row.pendingFiles.map((file, i) => (
                                     <li key={`${file.name}-${i}`} className="flex flex-wrap items-center gap-2 text-gray-800">
                                         <span className="break-all">{t('cert_file_pending', { name: file.name })}</span>
-                                        <button type="button" tabIndex={-1} className="text-red-800 underline" onClick={() => edit(row.key, { pendingFiles: row.pendingFiles.filter((_, j) => j !== i) })}>{t('cert_remove')}</button>
+                                        <button type="button" className="text-red-800 underline" onClick={() => edit(row.key, { pendingFiles: row.pendingFiles.filter((_, j) => j !== i) })}>{t('cert_remove')}</button>
                                     </li>
                                 ))}
                             </ul>
@@ -210,14 +212,15 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
                             </label>
                             <FieldError id={k('file')} messages={e('file')} />
                         </div>
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-800">
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-gray-800">
+                            {/* Weghalen (alleen een nieuwe regel) staat vóór Actief: Actief blijft het laatste veld, waar Tab een nieuwe regel geeft. */}
+                            {row.id === null && <button type="button" className="text-red-800 underline" onClick={() => remove(row.key)}>{t('cert_remove')}</button>}
                             <label className="flex items-center gap-1">
                                 <input type="checkbox" checked={row.isActive} onChange={(event) => edit(row.key, { isActive: event.target.checked })} onKeyDown={(event) => tabOnLast(event, row.key)}
                                     data-testid={`certificate-${index}-active`} />
                                 {t('cert_active')}
                                 {!row.isActive && <span className="text-gray-600">({t('cert_archived')})</span>}
                             </label>
-                            {row.id === null && <button type="button" tabIndex={-1} className="text-red-800 underline" onClick={() => remove(row.key)}>{t('cert_remove')}</button>}
                         </div>
                     </fieldset>
                 );
