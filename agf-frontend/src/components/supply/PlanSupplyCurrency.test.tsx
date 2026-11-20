@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Mounted, json, setValue, stubFetch } from '../../test/reactHarness.ts';
-import { PURCHASE_LINE_COLUMNS } from '../purchase/PurchaseLineTable';
 import { setInputLocale } from '../../lib/decimal.ts';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
