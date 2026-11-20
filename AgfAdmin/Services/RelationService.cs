@@ -222,6 +222,7 @@ namespace AgfAdmin.Services
                 }
                 return ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
             }
+            await SyncGgnCertificatesAsync(relation.Id, new Dictionary<int, GgnState>(), command.ActorReference, cancellationToken);
             var created = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == relation.Id, cancellationToken), cancellationToken);
             created.Warnings.InsertRange(0, signals.Warnings);
             return ServiceResult<RelationDto>.Created(created);
@@ -252,26 +253,28 @@ namespace AgfAdmin.Services
             var conditions = await ResolveConditionsAsync(command, cancellationToken);
             await CheckEmailDomainsAsync(signals, cancellationToken);
             var previousDefaults = relation.BankAccounts.Where(a => a.IsDefault && a.IsActive).Select(a => a.Id).ToHashSet();
+            var ggnsBefore = GgnStates(relation);
             Apply(relation, command, conditions);
+            var syncing = false;
             try
             {
                 // Hooguit één actieve standaardrekening (gefilterde unieke index, per statement gecontroleerd): verhuist de standaard
-                // naar een andere opgeslagen rekening, dan eerst de oude uitzetten en pas daarna de nieuwe aanzetten, in één transactie.
+                // naar een andere opgeslagen rekening, dan eerst de oude uitzetten en pas daarna de nieuwe aanzetten.
                 // De relatieversie stijgt maar één keer (de tweede save raakt alleen de rekening).
+                // Relatie en GGN-certificaten gaan in één transactie: faalt de synchronisatie (bijv. door een gelijktijdige synchronisatie),
+                // dan wordt ook de relatiewijziging teruggedraaid en kan de gebruiker veilig opnieuw opslaan.
                 var newDefault = relation.BankAccounts.FirstOrDefault(a => a.IsDefault && a.IsActive && !previousDefaults.Contains(a.Id));
+                await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
                 if (newDefault != null && previousDefaults.Count > 0)
                 {
-                    await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
                     newDefault.IsDefault = false;
                     await _db.SaveChangesAsync(cancellationToken);
                     newDefault.IsDefault = true;
-                    await _db.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
                 }
-                else
-                {
-                    await _db.SaveChangesAsync(cancellationToken);
-                }
+                await _db.SaveChangesAsync(cancellationToken);
+                syncing = true;
+                await SyncGgnCertificatesAsync(id, ggnsBefore, command.ActorReference, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -279,12 +282,73 @@ namespace AgfAdmin.Services
             }
             catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
-                return ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
+                return syncing
+                    ? ServiceResult<RelationDto>.Conflict($"The certificates of relation {id} were synchronized concurrently; nothing was saved, apply your change again.")
+                    : ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
             }
             _db.ChangeTracker.Clear();
             var updated = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == id, cancellationToken), cancellationToken);
             updated.Warnings.InsertRange(0, signals.Warnings);
             return ServiceResult<RelationDto>.Ok(updated);
+        }
+
+        private sealed record GgnState(string Ggn, string ProducerName, bool IsActive, DateOnly? CheckedOn, string CheckedBy, DateOnly? ValidUntil, bool HasGgnLabel);
+
+        private static Dictionary<int, GgnState> GgnStates(Relation relation) =>
+            (relation.Vendor?.Ggns ?? new List<VendorGgn>()).Where(g => g.Id != 0)
+                .ToDictionary(g => g.Id, g => new GgnState(g.Ggn, g.ProducerName, g.IsActive, g.CheckedOn, g.CheckedBy, g.CertificateValidUntil, g.HasGgnLabel));
+
+        // Zolang de oude GGN-velden bij de leverancier nog via deze API bewerkt kunnen worden (oudere clients; de relatiekaart stuurt ze sinds
+        // certificaten deel 1 ongewijzigd terug), gaat een wijziging daarvan naar het certificaat dat eruit is overgenomen (migratie 66):
+        // - een GGN zonder certificaat wordt er een (soort GGN, "producten nog invullen"); ook een eerder gemiste overname herstelt zo;
+        // - van een GGN dat in deze opslag veranderde, gaan alléén de gewijzigde velden naar het certificaat;
+        // - een GGN dat in deze opslag verdween, archiveert zijn certificaat (nooit verwijderen, regel 33).
+        // Een GGN dat niet veranderde, raakt zijn certificaat niet: wat op het certificaat zelf is bijgewerkt (einddatum, controle, archiveren,
+        // producten, bestanden) blijft dus staan bij elke volgende opslag van de relatie.
+        private async Task SyncGgnCertificatesAsync(int relationId, IReadOnlyDictionary<int, GgnState> before, string actor, CancellationToken cancellationToken)
+        {
+            _db.ChangeTracker.Clear();
+            var after = await _db.VendorGgns.AsNoTracking().Where(g => g.Vendor.RelationId == relationId).ToListAsync(cancellationToken);
+            var ids = after.Select(g => g.Id).Concat(before.Keys).Distinct().ToList();
+            var bySource = (await _db.RelationCertificates.Where(c => c.SourceVendorGgnId != null && ids.Contains(c.SourceVendorGgnId.Value)).ToListAsync(cancellationToken))
+                .ToDictionary(c => c.SourceVendorGgnId.Value);
+            var who = string.IsNullOrWhiteSpace(actor) ? "Systeem" : actor;
+            var now = DateTime.UtcNow;
+            var nextSort = (await _db.RelationCertificates.Where(c => c.RelationId == relationId).Select(c => (int?)c.SortOrder).MaxAsync(cancellationToken) ?? -1) + 1;
+            foreach (var g in after.OrderBy(g => g.SortOrder).ThenBy(g => g.Id))
+            {
+                var state = new GgnState(g.Ggn, g.ProducerName, g.IsActive, g.CheckedOn, g.CheckedBy, g.CertificateValidUntil, g.HasGgnLabel);
+                if (!bySource.TryGetValue(g.Id, out var c))
+                {
+                    _db.RelationCertificates.Add(new RelationCertificate
+                    {
+                        RelationId = relationId, TypeCode = CertificateRules.GlobalGapIfa, Number = g.Ggn, NumberKey = g.Ggn, ValidUntil = g.CertificateValidUntil,
+                        ProductsPending = true, ProducerName = g.ProducerName, HasGgnLabel = g.HasGgnLabel, CheckedOn = g.CheckedOn, CheckedBy = g.CheckedBy,
+                        IsActive = g.IsActive, SortOrder = nextSort++, SourceVendorGgnId = g.Id, CreatedAt = now, CreatedBy = who, UpdatedAt = now, UpdatedBy = who,
+                    });
+                    continue;
+                }
+                if (!before.TryGetValue(g.Id, out var old) || old == state) continue;
+                if (old.Ggn != state.Ggn) { c.Number = g.Ggn; c.NumberKey = g.Ggn; }
+                if (old.ProducerName != state.ProducerName) c.ProducerName = g.ProducerName;
+                if (old.IsActive != state.IsActive) c.IsActive = g.IsActive;
+                if (old.CheckedOn != state.CheckedOn || old.CheckedBy != state.CheckedBy) { c.CheckedOn = g.CheckedOn; c.CheckedBy = g.CheckedBy; }
+                if (old.ValidUntil != state.ValidUntil) c.ValidUntil = g.CertificateValidUntil;
+                if (old.HasGgnLabel != state.HasGgnLabel) c.HasGgnLabel = g.HasGgnLabel;
+                c.UpdatedAt = now;
+                c.UpdatedBy = who;
+            }
+            var current = after.Select(g => g.Id).ToHashSet();
+            foreach (var removed in before.Keys.Where(id => !current.Contains(id)))
+            {
+                if (bySource.TryGetValue(removed, out var c) && c.IsActive)
+                {
+                    c.IsActive = false;
+                    c.UpdatedAt = now;
+                    c.UpdatedBy = who;
+                }
+            }
+            if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(cancellationToken);
         }
 
         // Bankrekening bevestigen (na controle bij de relatie, bijv. terugbellen op een bekend nummer): wie verplicht, verwachte versie
