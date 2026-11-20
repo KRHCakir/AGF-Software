@@ -5,6 +5,7 @@ import CostArticlesAdmin from '../../../components/settings/CostArticlesAdmin';
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
 import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
 import WeightDisplaySetting from '../../../components/settings/WeightDisplaySetting';
+import PurchaseCurrenciesSetting from '../../../components/settings/PurchaseCurrenciesSetting';
 import LoadingSlipSetting from '../../../components/settings/LoadingSlipSetting';
 import TransportOrderSetting from '../../../components/settings/TransportOrderSetting';
 import WarehouseRecipientsSetting from '../../../components/settings/WarehouseRecipientsSetting';
@@ -27,6 +28,7 @@ export default function SettingsPage() {
             </div>
             <PartijNumberingSetting />
             <WeightDisplaySetting />
+            <PurchaseCurrenciesSetting />
             <LoadingSlipSetting />
             <TransportOrderSetting />
             <WarehouseRecipientsSetting />

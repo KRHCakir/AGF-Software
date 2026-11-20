@@ -45,4 +45,24 @@ describe('PurchaseOrderDetail lines', () => {
         assert.deepEqual(['brand', 'gross', 'price', 'total'].map((column) => cell(0, column)), ['–', '–', '–', '–']);
         assert.equal(mounted.container.querySelector('[data-tour="po-lines-table"] tfoot'), null);
     });
+
+    test('valuta-ronde: an order in USD shows currency and fixed rate, prices and totals in USD and the total in euro', async () => {
+        const totals = { quantity: 100, netWeightKg: 400, grossWeightKg: 440, amount: 1250, amountEur: 1000, pallets: 0.4, linesWithoutNet: 0, linesWithoutGross: 0, linesWithoutPrice: 0, linesWithoutPallets: 0 };
+        await mounted.render(<PurchaseOrderDetail order={{ ...order([line({})], totals), currency: 'USD', exchangeRate: 1.25, exchangeRateDate: '2026-11-18', exchangeRateSource: 'ECB' }} onChanged={() => {}} />);
+        const header = mounted.container.querySelector('[data-testid="po-currency"]')!.textContent!;
+        assert.ok(header.includes('po_currency_line') && header.includes('po_currency_ecb'), header);
+        assert.deepEqual([cell(0, 'price'), cell(0, 'total'), total('amount')!.startsWith('1,250.00 USD')], ['12.50 USD', '1,250.00 USD', true]);
+        assert.ok(mounted.container.querySelector('[data-testid="line-totals-euro"]'), 'euro amount under the total');
+    });
+
+    test('valuta-ronde: a manual rate says Manual; a euro order shows no rate line', async () => {
+        await mounted.render(<PurchaseOrderDetail order={{ ...order([line({})]), currency: 'USD', exchangeRate: 1.1, exchangeRateDate: null, exchangeRateSource: 'Manual' }} onChanged={() => {}} />);
+        assert.ok(mounted.container.querySelector('[data-testid="po-currency"]')!.textContent!.includes('currency_rate_manual'));
+        await mounted.unmount();
+        mounted = new Mounted();
+        await mounted.render(<PurchaseOrderDetail order={{ ...order([line({})]), currency: 'EUR', exchangeRate: 1, exchangeRateDate: null, exchangeRateSource: 'NotApplicable' }} onChanged={() => {}} />);
+        assert.equal(mounted.container.querySelector('[data-testid="po-currency"]'), null);
+        assert.equal(cell(0, 'price'), '12.50 EUR');
+    });
 });
+

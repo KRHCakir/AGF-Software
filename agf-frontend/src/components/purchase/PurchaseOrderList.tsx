@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatKg, formatQuantity } from '../../lib/availability';
+import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
 import Link from 'next/link';
@@ -10,6 +10,8 @@ import { listEditable } from '../../lib/purchaseOrderEdit';
 import { listRowClass, rowClick } from '../../lib/listRows';
 import { orderNumbers } from '../../lib/purchaseOrderRules';
 import OrderNumberText from './OrderNumberText';
+import { formatEuro } from '../../lib/documentCurrency';
+import { isEuro } from '../../lib/exchangeRate';
 
 // Lijst "Inkoopopdrachten": vanaf md een tabel, smaller kaarten met dezelfde gegevens. Het ordernummer van de leverancier is het hoofdnummer
 // (een lang nummer afgekapt met …, volledig in het detail), het eigen IO-nummer staat er klein en grijs onder.
@@ -28,6 +30,14 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
     );
     const th = 'px-2 py-2';
 
+    // Valuta-ronde: het bedrag in euro (de lijst telt alleen euro's op); bij een andere valuta het bedrag in die valuta eronder.
+    const amount = (item: PurchaseOrderListItem) => item.amountEur == null ? '–' : (
+        <>
+            {formatEuro(item.amountEur, locale)}
+            {item.currency && !isEuro(item.currency) && item.amount != null && <span className="block text-xs text-gray-600">{formatMoney(item.amount, item.currency, locale)}</span>}
+        </>
+    );
+
     return (
         <>
             <div className="hidden overflow-x-auto rounded-md border border-gray-200 bg-white md:block">
@@ -42,6 +52,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                             <th scope="col" className={th}>{t('po_col_status')}</th>
                             <th scope="col" className={`${th} text-right`}>{t('po_col_packages')}</th>
                             <th scope="col" className={`${th} text-right`}>{t('po_col_net_kg')}</th>
+                            <th scope="col" className={`${th} text-right`}>{t('po_col_amount')}<span className="block font-normal normal-case">{t('po_amount_eur_hint')}</span></th>
                             <th scope="col" className={th}>{t('po_col_invoices')}</th>
                         </tr>
                     </thead>
@@ -67,6 +78,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                                 </td>
                                 <td className={`${th} text-right font-mono`}>{formatQuantity(item.expectedQuantity, locale)}</td>
                                 <td className={`${th} whitespace-nowrap text-right font-mono`}>{kg(item)}</td>
+                                <td className={`${th} whitespace-nowrap text-right font-mono`} data-testid="po-list-amount">{amount(item)}</td>
                                 <td className={th}>
                                     <span className="font-mono">{invoices(item)}</span>
                                     {item.invoiceIndicator !== 'None' && <span className="ml-1"><InvoiceIndicatorBadge indicator={item.invoiceIndicator} /></span>}
@@ -90,6 +102,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                             {item.partijNumber && <span className="block break-words text-gray-700">{t('partij_field')} <span className="font-mono">{item.partijNumber}</span></span>}
                             <span className="block text-gray-700">{t('po_col_ordered_on')} {formatDateOnly(item.orderedOn, locale)} · {t('po_col_expected')} {expected(item)}</span>
                             <span className="block font-mono text-gray-900">{formatQuantity(item.expectedQuantity, locale)} {t('po_packages')} · {kg(item)}</span>
+                            {item.amountEur != null && <span className="block font-mono text-gray-900">{amount(item)}</span>}
                             {rejected(item)}
                             <span className="mt-1 flex flex-wrap items-center gap-1 break-all">
                                 <span className="text-gray-700">{t('po_col_invoices')}: <span className="font-mono">{invoices(item)}</span></span>

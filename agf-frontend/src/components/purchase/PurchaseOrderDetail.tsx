@@ -22,6 +22,8 @@ import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClas
 import { unitLabelKey } from '../../lib/units';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import type { PackageUnit } from '../../types/availability';
+import { rateLine } from '../../lib/documentCurrency';
+import { isEuro } from '../../lib/exchangeRate';
 
 const section = sectionClass;
 const h3 = 'mb-2 text-sm font-semibold text-gray-900';
@@ -90,6 +92,13 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <p className="mt-1 text-sm font-medium text-red-800">{t('po_rejected_of', { rejected: qty(order.rejectedQuantity), total: qty(order.receivedQuantity) })} · {formatKg(order.rejectedNetWeightKg, locale)}</p>
                 )}
                 {order.note && <p className="mt-1 text-sm text-gray-700">{order.note}</p>}
+                {/* Valuta-ronde: valuta en de vastgelegde koers (eenheden valuta per 1 euro), met bron en datum. */}
+                {order.currency && !isEuro(order.currency) && order.exchangeRate ? (
+                    <p className="mt-1 text-sm text-gray-900" data-testid="po-currency" data-tour="po-currency">
+                        {t('po_currency_line', { currency: order.currency, line: rateLine(order.currency, order.exchangeRate, locale) })}
+                        {' · '}{order.exchangeRateSource === 'Manual' ? t('currency_rate_manual') : t('po_currency_ecb', { date: order.exchangeRateDate ? formatDateOnly(order.exchangeRateDate, locale) : '–' })}
+                    </p>
+                ) : null}
             </header>
 
             <section className={section} aria-labelledby="po-lines">
@@ -140,14 +149,15 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                     </span>
                                 </td>
                                 <td {...lineCell('packaging', labels.packaging)}>{line.packaging || '–'}</td>
-                                <td {...lineCell('price', labels.price)}>{line.unitPrice == null ? '–' : formatMoney(line.unitPrice, null, locale)}</td>
-                                <td {...lineCell('total', labels.total)}>{line.lineTotal == null ? '–' : formatMoney(line.lineTotal, null, locale)}</td>
+                                <td {...lineCell('price', labels.price)}>{line.unitPrice == null ? '–' : formatMoney(line.unitPrice, order.currency ?? null, locale)}</td>
+                                <td {...lineCell('total', labels.total)}>{line.lineTotal == null ? '–' : formatMoney(line.lineTotal, order.currency ?? null, locale)}</td>
                             </tr>
                         ))}
                     </tbody>
                     {order.totals && <PurchaseLineTotalsRow totals={{ ...order.totals, netKg: order.totals.netWeightKg, grossKg: order.totals.grossWeightKg,
                         shownNetKg: order.totals.netWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedNetWeightKg)),
-                        shownGrossKg: order.totals.grossWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedGrossWeightKg)) }} />}
+                        shownGrossKg: order.totals.grossWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedGrossWeightKg)) }}
+                        currency={order.currency ?? null} rate={order.exchangeRate ?? null} />}
                 </table>
             </section>
 
