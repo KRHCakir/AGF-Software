@@ -52,6 +52,9 @@ export default function DocumentCurrencyField({ value, onChange, documentDate, c
         }
         const controller = new AbortController();
         setFetch({ status: 'loading' });
+        // De vorige koers geldt niet meer (andere valuta of datum): leeg tot de nieuwe binnen is, zodat er geen eurobedrag van de oude koers
+        // staat en opslaan wacht.
+        if (latest.current.rate !== '' || latest.current.rateDate !== null) onChange({ ...latest.current, rate: '', rateDate: null });
         getExchangeRate(code, date, controller.signal)
             .then((rate) => {
                 setFetch({ status: 'ready' });

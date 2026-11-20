@@ -14,10 +14,10 @@ namespace AgfAdmin.Services
         public const int MaxStoredLength = 100;
 
         // De valuta's met een dagelijkse ECB-referentiekoers (stand november 2026). Alleen om bij het kiezen te tonen of er een automatische
-        // koers komt; het ophalen zelf vraagt het altijd aan de ECB.
+        // koers komt; het ophalen zelf vraagt het altijd aan de ECB. Niet meer: BGN (Bulgarije heeft sinds 1 januari 2026 de euro).
         public static readonly IReadOnlySet<string> EcbCurrencies = new HashSet<string>(StringComparer.Ordinal)
         {
-            "USD", "JPY", "BGN", "CZK", "DKK", "GBP", "HUF", "PLN", "RON", "SEK", "CHF", "ISK", "NOK", "TRY", "AUD", "BRL", "CAD", "CNY", "HKD",
+            "USD", "JPY", "CZK", "DKK", "GBP", "HUF", "PLN", "RON", "SEK", "CHF", "ISK", "NOK", "TRY", "AUD", "BRL", "CAD", "CNY", "HKD",
             "IDR", "ILS", "INR", "KRW", "MXN", "MYR", "NZD", "PHP", "SGD", "THB", "ZAR",
         };
 

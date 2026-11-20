@@ -224,7 +224,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         const vendorId = Number(header.vendorId);
         if (!header.vendorId) addError(found, 'vendorId', t('supply_error_required'));
         const currency = currencyPayload(money);
-        if (!currency.ok) addError(found, currency.field, t(currency.field === 'currency' ? 'supply_error_required' : 'currency_error_rate'));
+        if (!currency.ok) addError(found, currency.field, t(currency.field === 'currency' ? 'supply_error_required' : money.source === 'ECB' ? 'currency_error_rate_pending' : 'currency_error_rate'));
 
         const customerId = Number(header.customerId);
         if (isDirect && !header.customerId) addError(found, 'customerId', t('supply_error_required_customer'));

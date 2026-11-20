@@ -79,14 +79,15 @@ export interface CurrencyPayload {
 
 export type CurrencyPayloadResult = { ok: true; value: CurrencyPayload } | { ok: false; field: 'currency' | 'exchangeRate' };
 
-// Wat er naar de server gaat. Bij ECB stuurt het scherm de getoonde koers mee, maar de server legt zelf vast (dezelfde dagkoers).
+// Wat er naar de server gaat. Bij ECB stuurt het scherm de getoonde koers mee, maar de server legt zelf vast (dezelfde dagkoers). Zonder
+// koers kan opslaan niet: bij ECB loopt het ophalen dan nog (het scherm toont geen eurobedrag van een vorige koers), bij Handmatig is hij leeg.
 export function currencyPayload(draft: CurrencyDraft): CurrencyPayloadResult {
     const currency = draft.currency.trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) return { ok: false, field: 'currency' };
     if (currency === EURO) return { ok: true, value: { currency, exchangeRate: null, exchangeRateSource: null } };
     const check = parseRate(draft.rate);
     const source = draft.source;
-    if (source === 'NotApplicable' || (source === 'Manual' && !check.ok)) return { ok: false, field: 'exchangeRate' };
+    if (source === 'NotApplicable' || !check.ok) return { ok: false, field: 'exchangeRate' };
     return { ok: true, value: { currency, exchangeRate: check.ok ? check.rate : null, exchangeRateSource: source } };
 }
 
