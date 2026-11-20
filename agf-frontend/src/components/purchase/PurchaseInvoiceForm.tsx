@@ -36,7 +36,7 @@ import { type CurrencyDraft, effectiveRate, formatEuro, rateLine } from '../../l
 import { isEuro, toEuro } from '../../lib/exchangeRate';
 import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
 import { problemsByField } from '../../lib/aiProposal';
-import { addOrderLines, linkCheck, linkedOrderCurrency, lockedInvoiceCurrency } from '../../lib/invoiceOrderLink';
+import { addOrderLines, linkCheck, linkedOrderCurrency, lockedInvoiceCurrency, ordersMissingCurrency, withOrderCurrency } from '../../lib/invoiceOrderLink';
 import { listInvoiceCandidates } from '../../services/purchaseOrderService';
 import type { InvoiceCandidate } from '../../types/purchaseOrder';
 import { InvoiceOrderLineInfo, InvoiceOrderPicker, InvoicePriceQuestion } from './InvoiceOrderLink';
@@ -139,6 +139,19 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     // Concept bewaren bij elke wijziging; na succesvol opslaan is er geen concept meer.
     useEffect(() => { if (result === null) saveDraft(draft); }, [draft, result]);
     useEffect(() => { saveExtraOpen(extraOpen); }, [extraOpen]);
+    // Een hersteld concept van vóór de valuta-ronde kent de valuta van zijn gekoppelde orders niet: die komt van de order zelf, zodat de
+    // vergrendelde valuta klopt. Mislukt het ophalen, dan geldt voorlopig de valuta van de factuur.
+    const missingCurrencyKey = ordersMissingCurrency(draft).join(',');
+    useEffect(() => {
+        if (missingCurrencyKey === '' || draft.header.vendorId === '') return;
+        let cancelled = false;
+        for (const orderId of missingCurrencyKey.split(',').map(Number)) {
+            listInvoiceCandidates(Number(draft.header.vendorId), '', orderId)
+                .then((found) => { const order = found.find((candidate) => candidate.id === orderId); if (!cancelled && order) setDraft((existing) => withOrderCurrency(existing, order)); })
+                .catch(() => { /* blijft de valuta van de factuur */ });
+        }
+        return () => { cancelled = true; };
+    }, [missingCurrencyKey, draft.header.vendorId]);
     useEffect(() => {
         if (seed === null) return;
         cancelTake();

@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import type { PurchaseInvoiceSettings } from '../types/purchaseInvoice';
 import { setInputLocale } from './decimal.ts';
 import { candidate } from '../test/invoiceCandidate.ts';
-import { addOrderLines, linkedOrderCurrency, lockedInvoiceCurrency, orderCurrencyFits } from './invoiceOrderLink.ts';
+import { addOrderLines, linkedOrderCurrency, lockedInvoiceCurrency, orderCurrencyFits, ordersMissingCurrency, withOrderCurrency } from './invoiceOrderLink.ts';
 import { buildPurchaseInvoicePayload, changeCurrency, changeRate, emptyDraft, invoiceCurrencyDraft } from './purchaseInvoiceRules.ts';
 
 // Valuta-ronde, de inkoopfactuur: de koers van de factuurdatum (ECB, aanpasbaar: Manual) gaat mee bij opslaan; een andere valuta begint
@@ -52,6 +52,17 @@ describe('purchase invoice currency', () => {
         assert.equal(refused, dollars, 'nothing added');
         // Een oudere order zonder valuta in het antwoord is euro.
         assert.equal(linkedOrderCurrency(addOrderLines(draft, candidate(), 9)), 'EUR');
+    });
+
+    test('an old draft without order currency is not treated as euro: it follows the invoice until the order is fetched again', () => {
+        const dollars = addOrderLines(emptyDraft('2026-11-19', settings), candidate({ currency: 'USD', exchangeRate: 1.2, exchangeRateSource: 'Manual' }), 9);
+        const old = { ...dollars, lines: dollars.lines.map((line) => ({ ...line, orderLine: { ...line.orderLine!, orderCurrency: undefined, orderRate: undefined, orderRateSource: undefined } })) };
+        assert.equal(linkedOrderCurrency(old), 'USD');
+        assert.equal(orderCurrencyFits(old, { currency: 'USD' }), true);
+        const orderId = old.lines[0].orderLine!.orderId;
+        assert.deepEqual(ordersMissingCurrency(old), [orderId]);
+        const fixed = withOrderCurrency(old, candidate({ id: orderId, currency: 'USD', exchangeRate: 1.2, exchangeRateSource: 'Manual' }));
+        assert.deepEqual([fixed.lines[0].orderLine?.orderCurrency, fixed.lines[0].orderLine?.orderRate, ordersMissingCurrency(fixed)], ['USD', 1.2, []]);
     });
 
     test('existing manual lines keep their currency: an order in another currency is refused', () => {

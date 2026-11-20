@@ -63,7 +63,24 @@ export function linesFromCandidate(order: InvoiceCandidate, defaultVat: number):
 // null zolang er niets gekoppeld is.
 export function linkedOrderCurrency(draft: InvoiceDraft): string | null {
     const linked = draft.lines.find((line) => line.orderLine !== undefined && line.orderLine !== null);
-    return linked?.orderLine ? (linked.orderLine.orderCurrency ?? 'EUR').toUpperCase() : null;
+    // Een oud concept zonder ordervaluta: voorlopig de valuta van de factuur zelf (het scherm haalt de order daarna opnieuw op, zie withOrderCurrency).
+    return linked?.orderLine ? (linked.orderLine.orderCurrency ?? draft.header.currency).trim().toUpperCase() : null;
+}
+
+// Gekoppelde regels uit een bewaard concept van vóór de valuta-ronde hebben geen ordervaluta: de ids van die orders.
+export function ordersMissingCurrency(draft: InvoiceDraft): number[] {
+    return [...new Set(draft.lines.filter((line) => line.orderLine && line.orderLine.orderCurrency === undefined).map((line) => line.orderLine!.orderId))];
+}
+
+// Vult de valuta en koers van de order in op de regels van die order (uit de opnieuw opgehaalde order); de rest van het concept blijft.
+export function withOrderCurrency(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'id' | 'currency' | 'exchangeRate' | 'exchangeRateSource' | 'exchangeRateDate'>): InvoiceDraft {
+    return {
+        ...draft,
+        lines: draft.lines.map((line) => line.orderLine && line.orderLine.orderId === order.id && line.orderLine.orderCurrency === undefined
+            ? { ...line, orderLine: { ...line.orderLine, orderCurrency: (order.currency ?? 'EUR').toUpperCase(), orderRate: order.exchangeRate ?? 1,
+                orderRateSource: order.exchangeRateSource ?? 'NotApplicable', orderRateDate: order.exchangeRateDate ?? null } }
+            : line),
+    };
 }
 
 // De valuta waarin de factuur vastzit: die van de gekoppelde orders, of anders die van de factuur zelf zodra er handmatig ingevoerde regels
