@@ -7,6 +7,7 @@ import { round2 } from '../../lib/invoiceMath';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatMoney } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
+import { formatEuro } from '../../lib/documentCurrency';
 import { formatRate, isEuro } from '../../lib/exchangeRate';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getInvoiceAllocations, getPurchaseInvoice, refreshExchangeRate } from '../../services/purchaseInvoiceService';
@@ -67,16 +68,21 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
     const [rate, setRate] = useState<{ status: 'idle' | 'fetching' } | { status: 'unavailable' | 'none'; error: ApiError }>({ status: 'idle' });
     const rateRequest = useRef<AbortController | null>(null);
 
-    // De ECB-koers laten ophalen (alleen een factuur in een andere valuta waarvan nog niets verdeeld is). De nieuwe stand vervangt de verdeling.
+    // De ECB-koers laten ophalen: alleen een oudere factuur in een andere valuta zonder vastgelegde koers (valuta-ronde: een nieuwe factuur
+    // legt haar koers vast bij opslaan). De nieuwe stand vervangt de verdeling.
     const fetchRate = useCallback((allocations: InvoiceAllocations) => {
-        if (isEuro(allocations.currency) || allocations.rateLocked) return;
+        if (isEuro(allocations.currency) || allocations.rateLocked || allocations.exchangeRate != null) return;
         rateRequest.current?.abort();
         const controller = new AbortController();
         rateRequest.current = controller;
         setRate({ status: 'fetching' });
         refreshExchangeRate(allocations.invoiceId, controller.signal)
-            .then((next) => {
-                setState((current) => (current.status === 'ready' && current.data.invoice.id === next.invoiceId ? { status: 'ready', data: { ...current.data, allocations: mergeRefreshed(current.data.allocations, next) } } : current));
+            .then(async (next) => {
+                // De koers is nu vastgelegd; de factuur zelf opnieuw ophalen zodat ook het eurototaal (totalAmountEur) klopt.
+                const refreshedInvoice = await getPurchaseInvoice(allocations.invoiceId, controller.signal).catch(() => null);
+                if (controller.signal.aborted) return;
+                setState((current) => (current.status === 'ready' && current.data.invoice.id === next.invoiceId
+                    ? { status: 'ready', data: { invoice: refreshedInvoice ?? current.data.invoice, allocations: mergeRefreshed(current.data.allocations, next) } } : current));
                 setRate({ status: 'idle' });
             })
             .catch((caught: unknown) => {
@@ -105,7 +111,8 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
     const money = (value: number) => formatMoney(value, invoice.currency ?? null, locale);
     const euro = (value: number) => formatMoney(value, 'EUR', locale);
     const foreign = !isEuro(allocations.currency);
-    const rateKnown = foreign && allocations.exchangeRate != null && allocations.exchangeRateDate != null;
+    const rateKnown = foreign && allocations.exchangeRate != null;
+    const manualRate = allocations.exchangeRateSource === 'Manual' || allocations.exchangeRateDate == null;
     // Algemene kosten in euro; zonder koers is de hele factuur algemene kosten (in haar eigen valuta).
     const general = allocations.lines.every((line) => line.general !== null)
         ? euro(allocations.lines.reduce((total, line) => total + (line.general ?? 0), 0))
@@ -122,6 +129,7 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                 </div>
                 <p className="text-sm text-gray-800">
                     {invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'} · {t('invoice_detail_totals', { net: money(invoice.subTotal), vat: money(invoice.vatAmount), gross: money(invoice.totalAmount) })}
+                    {foreign && invoice.totalAmountEur != null && <span data-testid="invoice-total-eur"> ≈ {formatEuro(invoice.totalAmountEur, locale)}</span>}
                 </p>
                 {/* AI-voorstel (stap 7a): wie keurde het goed, welk model las het, hoeveel velden werden aangepast; het originele document als bijlage. */}
                 {invoice.aiReading && (
@@ -164,8 +172,10 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
                     <div className="mt-1 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-sm text-sky-950" data-testid="invoice-exchange-rate" data-tour="invoice-exchange-rate">
                         {rateKnown && (
                             <p>
-                                <span className="font-medium">{t('exchange_rate_line', { date: formatDateOnly(allocations.exchangeRateDate!, locale), rate: formatRate(allocations.exchangeRate!, locale), currency: allocations.currency })}</span>
-                                <span className="block text-xs text-sky-900">{t(allocations.rateLocked ? 'exchange_rate_locked' : 'exchange_rate_live')}</span>
+                                <span className="font-medium">{manualRate
+                                    ? t('exchange_rate_line_manual', { rate: formatRate(allocations.exchangeRate!, locale), currency: allocations.currency })
+                                    : t('exchange_rate_line', { date: formatDateOnly(allocations.exchangeRateDate!, locale), rate: formatRate(allocations.exchangeRate!, locale), currency: allocations.currency })}</span>
+                                <span className="block text-xs text-sky-900">{t(allocations.rateLocked ? 'exchange_rate_locked' : 'exchange_rate_fixed')}</span>
                             </p>
                         )}
                         {rate.status === 'fetching' && <p role="status">{t('exchange_rate_fetching')}</p>}

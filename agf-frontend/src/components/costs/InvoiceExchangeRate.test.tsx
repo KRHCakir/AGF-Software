@@ -7,6 +7,8 @@ import type { InvoiceAllocations, InvoiceLineAllocation } from '../../types/part
 import AllocationPanel from './AllocationPanel';
 import PurchaseInvoiceDetail from './PurchaseInvoiceDetail';
 
+// Valuta-ronde: een nieuwe factuur legt haar koers vast bij opslaan (ECB of handmatig) en wordt nooit opnieuw opgehaald; alleen een oudere
+// factuur zonder vastgelegde koers laat bij het openen eenmalig de ECB-koers ophalen.
 // Een factuur in USD (feedback 8 november): het scherm laat de server bij het openen de ECB-koers ophalen (nooit getypt), verdeelt in
 // euro tot het omgerekende regelbedrag en toont bij elk bedrag het bedrag in USD. Zonder koers kan verdelen niet; is de ECB even niet
 // bereikbaar, dan kun je opnieuw laten ophalen. Een factuur in euro vraagt nooit om een koers.
@@ -54,7 +56,7 @@ describe('invoice in another currency', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('opening a USD invoice fetches the ECB rate through the server and shows it with the line in euro', async () => {
+    test('an older USD invoice without a rate fetches the ECB rate through the server and shows it with the line in euro', async () => {
         answers['GET /purchase-invoices/9'] = () => json(200, invoice('USD'));
         answers['GET /purchase-invoices/9/allocations'] = () => json(200, withoutRate());
         answers['POST /purchase-invoices/9/exchange-rate'] = () => json(200, allocations());
@@ -63,7 +65,7 @@ describe('invoice in another currency', () => {
         assert.equal(posts().length, 1);
         assert.ok(posts()[0].url.endsWith('/purchase-invoices/9/exchange-rate'));
         assert.ok(testId('invoice-exchange-rate')!.textContent!.includes('exchange_rate_line'));
-        assert.ok(testId('invoice-exchange-rate')!.textContent!.includes('exchange_rate_live'), 'says it is fetched again until costs are allocated');
+        assert.ok(testId('invoice-exchange-rate')!.textContent!.includes('exchange_rate_fixed'), 'says the rate is fixed');
         assert.match(testId('invoice-line-eur')!.textContent!, /4[.,]478[.,]28/);
         assert.equal(mounted.container.querySelector('input[name="line-41-mode"]')!.hasAttribute('disabled'), false, 'allocating is possible');
     });
@@ -91,6 +93,16 @@ describe('invoice in another currency', () => {
         await mounted.render(<PurchaseInvoiceDetail invoiceId={9} onClose={() => {}} />);
         await mounted.waitFor(() => mounted.hasText('exchange_rate_none'), 'no rate notice');
         assert.equal(mounted.buttons().some((button) => button.textContent === 'exchange_rate_retry'), false);
+    });
+
+    test('a saved invoice with a manual rate opens without fetching and shows the manual rate and the total in euro', async () => {
+        answers['GET /purchase-invoices/9'] = () => json(200, { ...invoice('USD'), exchangeRate: 1.12, exchangeRateDate: null, exchangeRateSource: 'Manual', subTotalEur: 4464.29, totalAmountEur: 4464.29 });
+        answers['GET /purchase-invoices/9/allocations'] = () => json(200, allocations({ exchangeRate: 1.12, exchangeRateDate: null, exchangeRateSource: 'Manual' }));
+        await mounted.render(<PurchaseInvoiceDetail invoiceId={9} onClose={() => {}} />);
+        await mounted.waitFor(() => testId('invoice-exchange-rate') !== null, 'rate shown');
+        assert.ok(testId('invoice-exchange-rate')!.textContent!.includes('exchange_rate_line_manual'));
+        assert.match(testId('invoice-total-eur')!.textContent!, /4[.,]464[.,]29/);
+        assert.equal(posts().length, 0, 'a fixed rate is never fetched');
     });
 
     test('a fixed rate (costs allocated) and a euro invoice are never fetched again', async () => {
