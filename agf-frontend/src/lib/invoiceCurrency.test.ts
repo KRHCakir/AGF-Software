@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import type { PurchaseInvoiceSettings } from '../types/purchaseInvoice';
 import { setInputLocale } from './decimal.ts';
 import { candidate } from '../test/invoiceCandidate.ts';
-import { addOrderLines, linkedOrderCurrency, lockedInvoiceCurrency, orderCurrencyFits, ordersMissingCurrency, withOrderCurrency } from './invoiceOrderLink.ts';
+import { addOrderLines, linkedOrderCurrency, lockedInvoiceCurrency, orderCurrencyConflict, orderCurrencyFits, ordersMissingCurrency, withOrderCurrency } from './invoiceOrderLink.ts';
 import { buildPurchaseInvoicePayload, changeCurrency, changeRate, emptyDraft, invoiceCurrencyDraft } from './purchaseInvoiceRules.ts';
 
 // Valuta-ronde, de inkoopfactuur: de koers van de factuurdatum (ECB, aanpasbaar: Manual) gaat mee bij opslaan; een andere valuta begint
@@ -13,8 +13,9 @@ const settings: PurchaseInvoiceSettings = { allOptionalFields: [], optionalField
 
 describe('purchase invoice currency', () => {
     test('euro sends no rate; a dollar invoice sends ECB (the server fixes the rate) or a valid manual rate', () => {
+        // Een factuur met een handmatige regel (zonder order): de valuta is vrij te kiezen.
         const base = addOrderLines(emptyDraft('2026-11-19', settings), candidate(), 9);
-        const filled = { ...base, header: { ...base.header, vendorId: '3', invoiceNumber: 'F-1' } };
+        const filled = { ...base, header: { ...base.header, vendorId: '3', invoiceNumber: 'F-1' }, lines: base.lines.map((line) => ({ ...line, orderLine: undefined })) };
         const euro = buildPurchaseInvoicePayload(filled, settings);
         assert.ok(euro.ok);
         assert.equal(euro.ok && 'exchangeRateSource' in euro.value, false);
@@ -77,6 +78,20 @@ describe('purchase invoice currency', () => {
         const fixed = withOrderCurrency(old, candidate({ id: orderId }));
         assert.deepEqual([fixed.header.currency, fixed.header.exchangeRate, fixed.header.rateSource, linkedOrderCurrency(fixed)], ['EUR', '', undefined, 'EUR']);
         assert.equal(withOrderCurrency(fixed, candidate({ id: orderId })), fixed, 'nothing left to restore');
+    });
+
+    test('an old draft with manual amounts is never switched silently: the conflict shows and saving waits', () => {
+        const euros = addOrderLines(emptyDraft('2026-11-19', settings), candidate(), 9);
+        const orderId = euros.lines[0].orderLine!.orderId;
+        const manualLine = { ...euros.lines[0], key: 'manual-1', orderLine: undefined, description: 'Transport', unitPrice: '100' };
+        const old = { ...euros, header: { ...euros.header, vendorId: '3', invoiceNumber: 'F-9', currency: 'USD', exchangeRate: '1,1', rateSource: 'Manual' as const },
+            lines: [...euros.lines.map((line) => ({ ...line, orderLine: { ...line.orderLine!, orderCurrency: undefined, orderRate: undefined, orderRateSource: undefined } })), manualLine] };
+        const restored = withOrderCurrency(old, candidate({ id: orderId }));
+        assert.deepEqual([restored.header.currency, restored.header.exchangeRate, orderCurrencyConflict(restored)], ['USD', '1,1', 'EUR']);
+        const blocked = buildPurchaseInvoicePayload(restored, settings);
+        assert.ok(!blocked.ok && blocked.errors.some((error) => error.field === 'currency' && error.code === 'order_currency'));
+        // De gebruiker kiest zelf de valuta van de order: het conflict is weg.
+        assert.equal(orderCurrencyConflict(changeCurrency(restored, 'EUR')), null);
     });
 
     test('existing manual lines keep their currency: an order in another currency is refused', () => {

@@ -1191,6 +1191,7 @@
   "purchase_error_empty": "Verplicht.",
   "purchase_error_invalid": "Ongeldige waarde.",
   "purchase_error_rate_pending": "De ECB-koers wordt nog opgehaald. Wacht even, of vul de koers zelf in.",
+  "purchase_error_order_currency": "De gekoppelde order heeft een andere valuta dan deze factuur. Kies de valuta van de order, of haal de orderregels weg.",
   "purchase_error_not_positive": "Moet groter dan 0 zijn.",
   "purchase_error_too_many_decimals": "Te veel decimalen.",
   "purchase_error_too_large": "Te groot.",

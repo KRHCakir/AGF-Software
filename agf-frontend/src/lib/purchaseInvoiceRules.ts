@@ -66,7 +66,7 @@ export interface InvoiceDraft {
     vendorTerms?: VendorTerms | null;
 }
 
-export type RuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines' | 'rate_pending';
+export type RuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines' | 'rate_pending' | 'order_currency';
 export interface RuleError { field: string; code: RuleCode }
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; errors: RuleError[] };
 
@@ -247,6 +247,10 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     else if (addDays(header.invoiceDate, 0) !== null && header.dueDate < header.invoiceDate) errors.push({ field: 'dueDate', code: 'before_invoice_date' });
     const currency = header.currency.trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) errors.push({ field: 'currency', code: currency === '' ? 'required' : 'invalid' });
+    // Een gekoppelde orderregel in een andere valuta dan de factuur (hersteld oud concept): eerst oplossen; nooit stil omrekenen.
+    else if (draft.lines.some((line) => line.orderLine?.orderCurrency !== undefined && line.orderLine.orderCurrency.trim().toUpperCase() !== currency)) {
+        errors.push({ field: 'currency', code: 'order_currency' });
+    }
     // Valuta-ronde: een handmatige koers moet geldig zijn; een ECB-koers legt de server vast, maar opslaan wacht tot hij is opgehaald.
     const moneyDraft = invoiceCurrencyDraft(header);
     const money = currencyPayload(moneyDraft);
