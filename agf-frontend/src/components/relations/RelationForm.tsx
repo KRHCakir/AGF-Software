@@ -486,6 +486,10 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                 <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${draft.isActive ? 'bg-green-100 text-green-900' : 'bg-gray-200 text-gray-800'}`}>{draft.isActive ? t('relations_active') : t('relations_inactive')}</span>
                     <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-900">{roleLabel}</span>
+                    {attention > 0 && (
+                        <button type="button" className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-950 ring-1 ring-amber-400" data-testid="relation-certificate-badge"
+                            onClick={() => setOpen((now) => ({ ...now, certificates: true }))}>⚠ {t('cert_summary_attention', { count: String(attention) })}</button>
+                    )}
                     <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting}>{t('relations_close')}</button>
                 </div>
             </div>

@@ -28,6 +28,7 @@ const PATHS: Readonly<Record<string, string>> = {
     'mail-drafts': 'M3 6h18v12H3zM3 6l9 7 9-7',
     relations: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 6.5M18 14a5.5 5.5 0 013.5 6',
     articles: 'M12 3l8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9',
+    certificates: 'M12 3a6 6 0 1 1 0 12a6 6 0 0 1 0-12zM9.5 9l1.8 1.8L14.8 7.5M8.5 14.2L7 21l5-2.5 5 2.5-1.5-6.8',
 };
 
 export default function NavIcon({ id, className = 'h-5 w-5' }: { id: string; className?: string }) {

@@ -13,6 +13,7 @@ import { toApiError } from '../../../services/apiClient';
 import { getRelation, getRelationReference, listRelations } from '../../../services/relationService';
 import type { Relation, RelationList, RelationListItem, RelationReference, RelationRoleFilter } from '../../../types/relation';
 import { listRowClass, rowClick } from '../../../lib/listRows';
+import { relationAttention, shortTypeName } from '../../../lib/certificateDisplay';
 
 const PAGE_SIZE = 50;
 
@@ -35,6 +36,8 @@ export default function RelationsPage() {
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     const [role, setRole] = useState<RelationRoleFilter>('all');
     const [includeInactive, setIncludeInactive] = useState(false);
+    // Certificaten deel 1: filter op de certificaten (aandacht nodig, verlopen, bijna verlopen, producten nog invullen, geen, of een soort).
+    const [certificate, setCertificate] = useState('');
     const [query, setQuery] = useState('');
     const [debounced, setDebounced] = useState('');
     const [page, setPage] = useState(1);
@@ -50,7 +53,7 @@ export default function RelationsPage() {
         const handle = setTimeout(() => setDebounced(query.trim()), 200);
         return () => clearTimeout(handle);
     }, [query]);
-    useEffect(() => { setPage(1); }, [role, includeInactive, debounced]);
+    useEffect(() => { setPage(1); }, [role, includeInactive, debounced, certificate]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -63,11 +66,11 @@ export default function RelationsPage() {
     useEffect(() => {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        listRelations({ role, query: debounced, includeInactive, page, pageSize: PAGE_SIZE }, controller.signal)
+        listRelations({ role, query: debounced, includeInactive, page, pageSize: PAGE_SIZE, certificate }, controller.signal)
             .then((data) => { setList({ status: 'ready', data }); setHighlight(0); })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [role, debounced, includeInactive, page, reloadToken]);
+    }, [role, debounced, includeInactive, page, reloadToken, certificate]);
 
     // De server bepaalt de definitieve resultaten en volgorde (ook tweede contactpersonen, telefoons en e-mails van alle contacten);
     // de werkplek filtert niet opnieuw, zodat zij nooit een treffer van de server weer weghaalt.
@@ -82,7 +85,7 @@ export default function RelationsPage() {
     const [pinned, setPinned] = useState<RelationListItem | null>(null);
     // Een andere zoekterm, rolfilter, inactief-keuze of pagina is een eigen selectie: dan geldt alleen wat de server teruggeeft
     // (review #274). Het eerste herladen na opslaan houdt dezelfde selectie, dus daar blijft de nieuwe relatie bovenaan.
-    useEffect(() => { setPinned(null); }, [role, debounced, includeInactive, page]);
+    useEffect(() => { setPinned(null); }, [role, debounced, includeInactive, page, certificate]);
     const pinnedId = created.created !== null && pinned !== null && pinned.id === created.created.id ? pinned.id : null;
     const rows = pinnedId === null ? shown : [shown.find((item) => item.id === pinnedId) ?? pinned!, ...shown.filter((item) => item.id !== pinnedId)];
     const clearCreated = created.clear;
@@ -90,7 +93,7 @@ export default function RelationsPage() {
     useEffect(() => { if (editing !== null) clearCreated(); }, [editing, clearCreated]);
     const openNew = () => setEditing({ relation: null, key: Date.now() });
     // Leeg nog niets gefilterd: dan zijn er echt nog geen relaties (schone start) en is de eerste stap een nieuwe relatie.
-    const nothingYet = total === 0 && debounced === '' && role === 'all';
+    const nothingYet = total === 0 && debounced === '' && role === 'all' && certificate === '';
 
     // Link vanaf de Beginnen-kaart of een formulier dat een leverancier of klant mist: /relations?new=1 opent meteen een nieuwe relatie.
     useEffect(() => {
@@ -194,6 +197,12 @@ export default function RelationsPage() {
                     <input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} />
                     {t('relations_filter_inactive')}
                 </label>
+                <label htmlFor="relation-certificate-filter" className="sr-only">{t('cert_section_title')}</label>
+                <select id="relation-certificate-filter" value={certificate} onChange={(event) => setCertificate(event.target.value)} className={`${inputClass} mt-0 w-auto`} data-tour="relations-certificate-filter">
+                    {['', 'attention', 'Expired', 'ExpiringSoon', 'productsPending', 'none', 'GlobalGapIfa', 'GlobalGapCoc', 'Skal'].map((option) => (
+                        <option key={option} value={option}>{t(`relations_cert_filter_${option || 'all'}`)}</option>
+                    ))}
+                </select>
                 <label htmlFor="relation-search" className="sr-only">{t('relations_search_label')}</label>
                 <input id="relation-search" ref={searchInput} type="search" role="combobox" aria-expanded={shown.length > 0} aria-controls="relation-list" aria-autocomplete="list" autoComplete="off"
                     value={query} onChange={(event) => { setQuery(event.target.value); setHighlight(0); }} onKeyDown={onSearchKeyDown}
@@ -212,6 +221,7 @@ export default function RelationsPage() {
                                 <th scope="col" className="px-3 py-2">{t('relations_col_name')}</th>
                                 <th scope="col" className="px-3 py-2">{t('relations_col_role')}</th>
                                 <th scope="col" className="px-3 py-2">{t('relations_col_status')}</th>
+                                <th scope="col" className="px-3 py-2">{t('cert_section_title')}</th>
                                 <th scope="col" className="px-3 py-2">{t('relations_col_place')}</th>
                                 <th scope="col" className="px-3 py-2">{t('relations_col_contact')}</th>
                                 <th scope="col" className="px-3 py-2"><span className="sr-only">{t('relations_edit_action')}</span></th>
@@ -219,7 +229,7 @@ export default function RelationsPage() {
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {rows.length === 0 && (
-                                <tr><td colSpan={7} className={nothingYet ? 'p-2' : 'px-3 py-6 text-center text-gray-600'}>
+                                <tr><td colSpan={8} className={nothingYet ? 'p-2' : 'px-3 py-6 text-center text-gray-600'}>
                                     {nothingYet ? (
                                         <EmptyState testId="relations-empty" title={t('relations_empty_title')} description={t('relations_empty_text')}
                                             action={editing === null ? <button type="button" onClick={openNew} className={primaryButtonClass}>{t('relations_empty_action')}</button> : undefined} />
@@ -238,6 +248,20 @@ export default function RelationsPage() {
                                     <td className="px-3 py-2">{roleBadge(item)}</td>
                                     <td className="px-3 py-2">
                                         <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${item.isActive ? 'bg-green-100 text-green-900' : 'bg-gray-200 text-gray-800'}`}>{item.isActive ? t('relations_active') : t('relations_inactive')}</span>
+                                    </td>
+                                    <td className="px-3 py-2" data-testid={`relation-certificates-${item.id}`}>
+                                        {/* Badge zolang een certificaat bijna verloopt of verlopen is; daarnaast de soorten met hun status. */}
+                                        {relationAttention(item.certificates) && (
+                                            <span className={`mr-1 inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${relationAttention(item.certificates) === 'Expired' ? 'bg-red-100 text-red-900' : 'bg-amber-100 text-amber-950'}`}
+                                                data-testid={`relation-certificate-badge-${item.id}`}>⚠ {t(`cert_status_short_${relationAttention(item.certificates)}`)}</span>
+                                        )}
+                                        {(item.certificates ?? []).map((c, i) => (
+                                            <span key={`${c.typeCode}-${i}`} title={t(`cert_status_${c.status === 'ExpiringSoon' || c.status === 'Expired' ? `short_${c.status}` : c.status}`)}
+                                                className={`mr-1 inline-block rounded px-1 text-xs ring-1 ${c.status === 'Expired' ? 'text-red-900 ring-red-300' : c.status === 'ExpiringSoon' ? 'text-amber-950 ring-amber-400' : 'text-gray-800 ring-gray-300'}`}>
+                                                {shortTypeName(c.typeCode, c.typeName)}{c.productsPending ? ' *' : ''}
+                                            </span>
+                                        ))}
+                                        {(item.certificates ?? []).length === 0 && <span className="text-xs text-gray-500">–</span>}
                                     </td>
                                     <td className="px-3 py-2 text-xs text-gray-800">{[item.city, item.countryCode].filter(Boolean).join(', ') || '–'}</td>
                                     <td className="px-3 py-2 text-xs text-gray-800">
