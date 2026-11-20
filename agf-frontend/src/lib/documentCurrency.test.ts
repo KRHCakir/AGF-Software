@@ -42,6 +42,8 @@ describe('document currency', () => {
         assert.deepEqual(currencyPayload({ ...euroDraft(), currency: 'usd', rate: '1,0842', source: 'ECB' }), { ok: true, value: { currency: 'USD', exchangeRate: 1.0842, exchangeRateSource: 'ECB' } });
         assert.deepEqual(currencyPayload({ ...euroDraft(), currency: 'USD', rate: '1,1', source: 'Manual' }), { ok: true, value: { currency: 'USD', exchangeRate: 1.1, exchangeRateSource: 'Manual' } });
         assert.deepEqual(currencyPayload({ ...euroDraft(), currency: 'USD', rate: '', source: 'Manual' }), { ok: false, field: 'exchangeRate' });
+        // ECB zonder koers: het ophalen loopt nog; opslaan wacht.
+        assert.deepEqual(currencyPayload({ ...euroDraft(), currency: 'USD', rate: '', source: 'ECB' }), { ok: false, field: 'exchangeRate' });
         assert.deepEqual(currencyPayload({ ...euroDraft(), currency: 'US', source: 'ECB' }), { ok: false, field: 'currency' });
     });
 
