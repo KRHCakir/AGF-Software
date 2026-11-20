@@ -21,11 +21,14 @@ namespace AgfAdmin.Services
             "IDR", "ILS", "INR", "KRW", "MXN", "MYR", "NZD", "PHP", "SGD", "THB", "ZAR",
         };
 
-        public static IReadOnlyList<string> Parse(string stored)
+        public static IReadOnlyList<string> Parse(string stored) =>
+            Normalize((string.IsNullOrWhiteSpace(stored) ? DefaultList : stored).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        // Zonder terugval op de standaardlijst: een bewust lege keuze geeft alleen EUR.
+        public static IReadOnlyList<string> Normalize(IEnumerable<string> input)
         {
-            var codes = (string.IsNullOrWhiteSpace(stored) ? DefaultList : stored)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(code => code.ToUpperInvariant())
+            var codes = input
+                .Select(code => code.Trim().ToUpperInvariant())
                 .Where(PurchaseInvoiceRules.IsCurrencyCode)
                 .Where(code => code != ExchangeRateRules.Euro)
                 .Distinct()
@@ -71,7 +74,7 @@ namespace AgfAdmin.Services
                     ["codes"] = new[] { "Elke valuta is een ISO-code van drie letters (bijvoorbeeld USD)." }
                 });
             }
-            var list = PurchaseCurrencyRules.Parse(string.Join(',', codes));
+            var list = PurchaseCurrencyRules.Normalize(codes);
             if (list.Count > PurchaseCurrencyRules.MaxCount)
             {
                 return ServiceResult<PurchaseCurrencySettingsDto>.Validation(new Dictionary<string, string[]>
