@@ -49,15 +49,47 @@ export function isVatShape(normalized: string): boolean {
     return /^[A-Z]{2}[A-Z0-9]{2,30}$/.test(normalized);
 }
 
-export type VatProblem = 'none' | 'shape' | 'country_pattern' | 'greece_uses_el';
+export type VatProblem = 'none' | 'shape' | 'country_pattern' | 'greece_uses_el' | 'too_long';
 
-// Uitkomst van de controle op een genormaliseerd nummer (null = geen nummer = geen probleem).
-export function checkVat(normalized: string | null): VatProblem {
+// Fixes 5b: de btw-controle (landvoorvoegsel, vorm per land, later VIES) geldt alleen binnen de EU. De 27 lidstaten als ISO-landcode
+// (Griekenland is GR als land, EL als btw-voorvoegsel). Spiegel van VatRules.EuMemberStates.
+export const EU_MEMBER_STATES: ReadonlySet<string> = new Set([
+    'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT',
+    'RO', 'SE', 'SI', 'SK',
+]);
+export const MAX_TAX_NUMBER_LENGTH = 32;
+
+// Het land van de relatie voor de btw: het land van registratie, anders het land van het hoofdadres, anders van het eerste actieve
+// adres met een land. Geen land bekend = null.
+export function relationTaxCountry(registrationCountry: string | null | undefined, addresses: readonly { purpose: string; countryCode: string | null; isActive: boolean }[]): string | null {
+    const code = (value: string | null | undefined) => {
+        const trimmed = (value ?? '').trim().toUpperCase();
+        return trimmed === '' ? null : trimmed;
+    };
+    const active = addresses.filter((address) => address.isActive && code(address.countryCode) !== null);
+    return code(registrationCountry) ?? code(active.find((address) => address.purpose === 'Main')?.countryCode) ?? code(active[0]?.countryCode) ?? null;
+}
+
+// Binnen de EU (de btw-controle geldt) of erbuiten (een vrij belasting- of registratienummer):
+//   - een EU-lidstaat: EU;
+//   - geen land bekend: EU, zoals voorheen (de melding vraagt dan om het land als het geen EU-bedrijf is);
+//   - Verenigd Koninkrijk met een XI-nummer: EU. Noord-Ierland valt voor goederen onder de EU-btw-regels (Windsor-kader) en
+//     XI-nummers staan in VIES; een GB-nummer van dezelfde relatie is vrij;
+//   - elk ander land (Turkije, Zwitserland, Noorwegen, …): buiten de EU.
+export function vatScope(country: string | null, normalized: string | null): 'eu' | 'outside' {
+    if (country === null || EU_MEMBER_STATES.has(country)) return 'eu';
+    if (country === 'GB' && normalized !== null && normalized.startsWith('XI')) return 'eu';
+    return 'outside';
+}
+
+// Uitkomst van de controle op een genormaliseerd nummer (null = geen nummer = geen probleem). Buiten de EU alleen de lengte.
+export function checkVat(normalized: string | null, country: string | null = null): VatProblem {
     if (normalized === null) return 'none';
+    if (vatScope(country, normalized) === 'outside') return normalized.length > MAX_TAX_NUMBER_LENGTH ? 'too_long' : 'none';
     if (!isVatShape(normalized)) return 'shape';
-    const country = normalized.slice(0, 2);
-    if (country === 'GR') return 'greece_uses_el';
-    const pattern = VAT_PATTERNS[country];
+    const prefix = normalized.slice(0, 2);
+    if (prefix === 'GR') return 'greece_uses_el';
+    const pattern = VAT_PATTERNS[prefix];
     if (pattern !== undefined) return pattern.test(normalized) ? 'none' : 'country_pattern';
     return 'none';
 }

@@ -7,6 +7,8 @@ export interface Country {
     code: string;
     nameNl: string;
     nameEn: string;
+    // EU-lidstaat (alleen daar geldt de btw-controle; spiegel in lib/vatRules.ts EU_MEMBER_STATES).
+    isEu?: boolean;
 }
 
 export interface CountryAlias {

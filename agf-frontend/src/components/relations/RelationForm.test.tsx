@@ -406,6 +406,53 @@ describe('RelationForm', () => {
         assert.deepEqual([customer.paymentTermsDays, customer.paymentTermsEndOfMonth, customer.discountPercent, customer.discountDays], [30, true, 2.5, 8]);
     });
 
+    test('fixes 5b: "within … days" only appears with a discount percentage; clearing the percentage drops the days from the save', async () => {
+        respond = (call) => (call.url.includes('/credit') ? json(200, credit) : call.method === 'POST' ? json(201, saved()) : json(404, {}));
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Fruitimport Zuid');
+        await click(input('customerRole'));
+        assert.equal(mounted.container.querySelector('[id="customer.discountDays-input"]'), null, 'no days field without a percentage');
+        assert.ok(!text().includes('relations_terms_discount_days_hint'));
+        await type(input('customer.discountPercent'), '2');
+        assert.ok(input('customer.discountDays'), 'the days field appears');
+        assert.ok(text().includes('relations_terms_discount_days_hint'));
+        await type(input('customer.discountDays'), '8');
+        await type(input('customer.discountPercent'), '');
+        assert.equal(mounted.container.querySelector('[id="customer.discountDays-input"]'), null, 'gone again');
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => posts().length === 1, 'posted');
+        const customer = posts()[0].body!.customer as Record<string, unknown>;
+        assert.deepEqual([customer.discountPercent, customer.discountDays], [null, null], 'no discount, no days stored');
+    });
+
+    test('fixes 5b: outside the EU (Turkey) the field is a free, optional tax or registration number without VAT check', async () => {
+        respond = (call) => (call.method === 'POST' ? json(201, saved({ customer: null, vatNumber: '1234567890' })) : json(404, {}));
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Ege Meyve');
+        await openSection('company');
+        assert.ok(text().includes('relations_field_vat'), 'EU or unknown country: VAT number');
+        await type(input('vatNumber'), '1234567890');
+        await type(input('registrationCountry'), 'nl');
+        await press('s', { ctrlKey: true });
+        assert.equal(posts().length, 0, 'NL: the EU shape is required');
+        assert.ok(text().includes('relations_error_vat_shape'));
+        await type(input('registrationCountry'), 'TR');
+        assert.ok(text().includes('relations_field_tax_number') && text().includes('relations_vat_status_outside_eu'), 'the label and status change');
+        assert.ok(!text().includes('relations_field_vat'));
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => posts().length === 1, 'posted');
+        assert.deepEqual([posts()[0].body!.vatNumber, posts()[0].body!.registrationCountry], ['1234567890', 'TR']);
+    });
+
+    test('fixes 5b: a stored relation outside the EU that moves to an EU country shows the VAT status the server will give, not the stored one', async () => {
+        await mounted.render(<RelationForm relation={saved({ customer: null, vatNumber: 'NL123456789B01', vatVerificationStatus: 'NotApplicable', registrationCountry: 'TR' })} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await openSection('company');
+        const status = () => mounted.container.querySelector('[data-testid="vat-status"]')!.textContent;
+        assert.equal(status(), 'relations_vat_status_outside_eu');
+        await type(input('registrationCountry'), 'NL');
+        assert.equal(status(), 'relations_vat_status_NotChecked', 'not the stored "not applicable"');
+    });
+
     test('an existing role shows its own days, end of month and discount; an inactive condition is only mentioned while the term still matches it', async () => {
         const inactive = { id: 7, code: '60EM-2%10', descriptionNl: '60', descriptionEn: '60', days: 60, basis: 'EndOfMonth' as const, discountPercent: 2, discountDays: 10, isActive: false };
         respond = (call) => (call.url.includes('/credit') ? json(200, credit) : call.method === 'PUT' ? json(200, saved({ version: 1 })) : json(404, {}));
@@ -415,8 +462,8 @@ describe('RelationForm', () => {
         assert.ok(text().includes('relations_terms_condition_inactive'));
         await type(input('customer.paymentTermsDays'), '45');
         assert.equal(text().includes('relations_terms_condition_inactive'), false, 'a changed term gets an active condition');
+        // Percentage leeg: de dagen verdwijnen mee (fixes 5b).
         await type(input('customer.discountPercent'), '');
-        await type(input('customer.discountDays'), '');
         await choose(select('customer.paymentMethod'), 'DirectDebit');
         await press('s', { ctrlKey: true });
         assert.equal(calls.filter((call) => call.method === 'PUT').length, 0, 'nothing sent');
@@ -439,7 +486,8 @@ describe('RelationForm', () => {
         const order = () => flowFields(form as unknown as { querySelectorAll(s: string): ArrayLike<HTMLInputElement> }).map((f) => f.id.replace(/-input$/, ''));
         assert.deepEqual(order(), ['searchCode', 'name', 'tradeName', 'customerRole', 'vendorRole', 'isActive', 'email', 'phone'], 'collapsed sections have no fields');
         await click(input('customerRole'));
-        assert.deepEqual(order().slice(8, 13), ['customer.paymentTermsDays', 'customer.paymentTermsEndOfMonth', 'customer.discountPercent', 'customer.discountDays', 'customer.paymentMethod']);
+        // Zonder kortingspercentage geen veld "binnen … dagen" in de Tab-volgorde (fixes 5b).
+        assert.deepEqual(order().slice(8, 13), ['customer.paymentTermsDays', 'customer.paymentTermsEndOfMonth', 'customer.discountPercent', 'customer.paymentMethod', 'customer.currency']);
         const keyIn = async (element: HTMLElement, k: string) => {
             const event = new window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
             await act(async () => { element.dispatchEvent(event); });
