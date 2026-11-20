@@ -40,8 +40,10 @@ export function getCertificateFile(certificateId: number, fileId: number, signal
     return getBlob(`/certificates/${certificateId}/files/${fileId}`, signal);
 }
 
-export async function getCertificateOverview(options: { query?: string; type?: string; status?: string; includeArchived?: boolean }, signal?: AbortSignal): Promise<CertificateOverview> {
+export async function getCertificateOverview(options: { query?: string; type?: string; status?: string; includeArchived?: boolean; page?: number; pageSize?: number }, signal?: AbortSignal): Promise<CertificateOverview> {
     const params = new URLSearchParams();
+    if (options.page) params.set('page', String(options.page));
+    if (options.pageSize) params.set('pageSize', String(options.pageSize));
     if (options.query) params.set('query', options.query);
     if (options.type) params.set('type', options.type);
     if (options.status) params.set('status', options.status);

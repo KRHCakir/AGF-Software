@@ -15,6 +15,7 @@ import { getCertificateOverview, getCertificateReference } from '../../../servic
 import type { CertificateOverview, CertificateReference } from '../../../types/certificate';
 
 const STATUSES = ['', 'attention', 'Expired', 'ExpiringSoon', 'Valid', 'NoEndDate', 'productsPending'] as const;
+const PAGE_SIZE = 100;
 
 // Stamgegevens › Certificaten (certificaten deel 1): bovenaan de certificaten die bijna verlopen, daaronder alle certificaten van alle
 // relaties en het eigen bedrijf, te filteren op soort en status en te zoeken op nummer of relatie. Een regel opent de relatie met het blok
@@ -29,6 +30,8 @@ export default function CertificatesPage() {
     const [list, setList] = useState<LoadState<CertificateOverview>>({ status: 'loading' });
     const [reference, setReference] = useState<CertificateReference | null>(null);
     const [reload, setReload] = useState(0);
+    const [page, setPage] = useState(1);
+    useEffect(() => { setPage(1); }, [debounced, type, status, includeArchived]);
 
     useEffect(() => {
         const handle = setTimeout(() => setDebounced(query.trim()), 200);
@@ -42,11 +45,12 @@ export default function CertificatesPage() {
     useEffect(() => {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        getCertificateOverview({ query: debounced, type, status, includeArchived }, controller.signal)
+        getCertificateOverview({ query: debounced, type, status, includeArchived, page, pageSize: PAGE_SIZE }, controller.signal)
             .then((data) => setList({ status: 'ready', data }))
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [debounced, type, status, includeArchived, reload]);
+    }, [debounced, type, status, includeArchived, reload, page]);
+    const pages = list.status === 'ready' ? Math.max(1, Math.ceil(list.data.total / PAGE_SIZE)) : 1;
 
     const role = (item: { relationId: number | null; isCustomer: boolean; isVendor: boolean; isCarrier: boolean }) => (item.relationId === null ? t('cert_own_company')
         : [item.isVendor ? t('relations_role_vendor') : '', item.isCustomer ? t('relations_role_customer') : '', item.isCarrier ? t('cert_role_carrier') : ''].filter(Boolean).join(', ') || '–');
@@ -75,6 +79,7 @@ export default function CertificatesPage() {
                     <input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} />{t('cert_page_archived')}
                 </label>
                 <button type="button" className="text-sm text-blue-800 underline" onClick={() => setReload((n) => n + 1)}>↻ {t('availability_refresh')}</button>
+                {list.status === 'ready' && <span className="text-xs text-gray-600" data-testid="certificate-count">{t('cert_page_count', { shown: String(list.data.items.length), total: String(list.data.total) })}</span>}
             </div>
             {list.status === 'loading' && <LoadingRows label={t('cert_loading')} />}
             {list.status === 'error' && <ErrorState error={list.error} onRetry={() => setReload((n) => n + 1)} />}
@@ -113,6 +118,13 @@ export default function CertificatesPage() {
                             ))}
                         </tbody>
                     </table>
+                    {pages > 1 && (
+                        <div className="flex items-center justify-between border-t border-gray-200 px-3 py-2 text-xs text-gray-700">
+                            <button type="button" className="rounded border border-gray-300 px-2 py-1" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>‹ {t('relations_page_previous')}</button>
+                            <span>{t('relations_page_of', { page: String(page), pages: String(pages) })}</span>
+                            <button type="button" className="rounded border border-gray-300 px-2 py-1" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>{t('relations_page_next')} ›</button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

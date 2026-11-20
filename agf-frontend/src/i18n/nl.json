@@ -3062,7 +3062,7 @@
   "cert_settings_types_hint": "Staan in de keuzelijst bij een certificaat; een nieuwe eigen soort bij een certificaat komt hier vanzelf bij.",
   "cert_settings_days_invalid": "Voer een geheel aantal dagen in.",
   "cert_settings_reload": "Instellingen opnieuw laden",
-  "cert_settings_save":"Opslaan",
+  "cert_settings_save": "Opslaan",
   "cert_settings_saved": "Opgeslagen.",
   "cert_own_title": "Certificaten van het eigen bedrijf",
   "cert_own_hint": "Bijvoorbeeld uw eigen CoC, SKAL of BRCGS: met einddatum, zodat ook die tijdig een waarschuwing geeft.",
@@ -3114,5 +3114,7 @@
   "cert_check_audit": "Een waarschuwing, geen blokkade. Bij Ja, klopt wordt vastgelegd dat u dit bevestigde, met datum en tijd.",
   "cert_check_yes": "Ja, klopt",
   "cert_check_no": "Nee, ik pas het aan",
-  "cert_check_declined": "Niet geboekt: het product past niet bij het GGN-certificaat van de leverancier. Pas de regel aan of stop met deze ontvangst."
+  "cert_check_declined": "Niet geboekt: het product past niet bij het GGN-certificaat van de leverancier. Pas de regel aan of stop met deze ontvangst.",
+  "cert_expiry_more": "De eerste {shown} van {total}; filter hieronder om de rest te zien.",
+  "cert_page_count": "{shown} van {total} certificaten"
 }
