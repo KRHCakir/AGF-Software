@@ -51,6 +51,9 @@ export function parseDraft(raw: string | null): InvoiceDraft | null {
         // Concepten van vóór de interne opmerking hebben het veld niet: dan leeg, nooit het hele concept weggooien.
         if (h.internalNote === undefined) h.internalNote = '';
         else if (!isString(h.internalNote)) return null;
+        // Valuta-ronde: een koers die niet klopt valt weg (dan haalt het scherm de ECB-koers opnieuw op); nooit het concept weggooien.
+        if (h.exchangeRate !== undefined && !isString(h.exchangeRate)) delete h.exchangeRate;
+        if (h.rateSource !== undefined && h.rateSource !== 'ECB' && h.rateSource !== 'Manual' && h.rateSource !== 'NotApplicable') delete h.rateSource;
         return value as unknown as InvoiceDraft;
     } catch {
         return null;

@@ -1132,6 +1132,7 @@
   "purchase_due_date": "Due date",
   "purchase_currency": "Currency",
   "purchase_currency_hint": "Code only, e.g. EUR or USD.",
+  "purchase_currency_locked_by_order": "The currency follows the linked order. Remove the order lines to change it.",
   "purchase_manual_vs_default": "Manual; supplier default: {value}",
   "purchase_due_manual": "Entered manually.",
   "purchase_due_deviation": "Manual: {days} days relative to invoice date + terms.",
@@ -1189,6 +1190,8 @@
   "purchase_error_required": "Required.",
   "purchase_error_empty": "Required.",
   "purchase_error_invalid": "Invalid value.",
+  "purchase_error_rate_pending": "The ECB rate is still being fetched. Wait a moment, or enter the rate yourself.",
+  "purchase_error_order_currency": "The linked purchase order has another currency than this invoice. Choose the currency of the order, or remove the order lines.",
   "purchase_error_not_positive": "Must be greater than 0.",
   "purchase_error_too_many_decimals": "Too many decimals.",
   "purchase_error_too_large": "Too large.",
@@ -2473,8 +2476,6 @@
   "exchange_rate_retry": "Fetch again",
   "exchange_rate_none": "The ECB publishes no current rate for {currency}. This invoice cannot be allocated to lots; everything stays general costs.",
   "partij_cost_in_currency": "{amount} · rate {rate}",
-  "exchange_rate_preview": "ECB rate {date}: 1 EUR = {rate} {currency} · excl. VAT ≈ {euro}",
-  "exchange_rate_preview_hint": "The system fetches the rate from the ECB itself; you do not type it.",
   "allocation_search_purchase": "Find a purchase lot",
   "allocation_search_sales": "Find a sales lot",
   "allocation_search_none": "No lot found.",
@@ -2981,5 +2982,8 @@
   "settings_currencies_add_placeholder": "e.g. JPY",
   "settings_currencies_remove": "Remove",
   "settings_currencies_saved": "Currencies saved.",
-  "settings_currencies_invalid": "A currency is a three-letter ISO code (for example USD)."
+  "settings_currencies_invalid": "A currency is a three-letter ISO code (for example USD).",
+  "invoice_link_other_currency": "In {currency}; this invoice is in {invoice}.",
+  "invoice_rate_differs": "Rate of purchase order {order}: {orderLine} ({orderSource}). This invoice: {invoiceLine}. Difference on this invoice: {difference}. Not an error: an exchange difference is for the accountant.",
+  "invoice_rate_euro": "Amount excl. VAT in euro: {amount}"
 }

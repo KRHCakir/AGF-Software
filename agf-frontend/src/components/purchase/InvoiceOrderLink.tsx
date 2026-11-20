@@ -21,7 +21,10 @@ const signed = (value: number, money: (value: number) => string) => (value > 0 ?
 // Een eenheid van de bon als woord (box → doos); een onbekende eenheid zoals ze is.
 const unitWord = (t: (key: string) => string, unit: string | null) => (unit === null ? '' : unit in UNIT_LABEL_KEYS ? t(UNIT_LABEL_KEYS[unit as PackageUnit]).toLowerCase() : unit);
 
-export function InvoiceOrderPicker({ vendorId, lines, disabled, onAdd }: {
+// Valuta-ronde: `linkedCurrency` = valuta van de orders die al aan de factuur hangen (null = nog geen): een order in een andere valuta kan er
+// niet bij (de factuur is in de valuta van haar orders; koppelen neemt die valuta over).
+export function InvoiceOrderPicker({ vendorId, lines, disabled, onAdd, linkedCurrency = null }: {
+    linkedCurrency?: string | null;
     vendorId: number;
     lines: readonly LineDraft[];
     disabled: boolean;
@@ -62,17 +65,20 @@ export function InvoiceOrderPicker({ vendorId, lines, disabled, onAdd }: {
                     {orders.map((order) => {
                         const open = order.lines.filter((line) => line.openQuantity > 0);
                         const all = open.length > 0 && open.every((line) => added.has(line.id));
+                        const currency = (order.currency ?? 'EUR').toUpperCase();
+                        const otherCurrency = linkedCurrency !== null && linkedCurrency !== currency;
                         return (
                             <li key={order.id} className="flex flex-wrap items-center gap-2 py-1.5" data-testid="invoice-order-candidate" data-order-id={order.id}>
                                 <span className="font-semibold text-gray-900">{orderLabel(order)}</span>
                                 {order.partijNumber && <span className="text-xs text-gray-600">{t('invoice_link_partij', { number: order.partijNumber })}</span>}
                                 <span className="text-gray-700">
                                     {open.length > 0
-                                        ? open.map((line) => `${line.productName} ${line.productVariantName}: ${formatQuantity(line.openQuantity, locale)} ${unitWord(t, line.unit)}${line.unitPrice === null ? '' : ` × ${formatMoney(line.unitPrice, null, locale)}`}`).join(' · ')
+                                        ? open.map((line) => `${line.productName} ${line.productVariantName}: ${formatQuantity(line.openQuantity, locale)} ${unitWord(t, line.unit)}${line.unitPrice === null ? '' : ` × ${formatMoney(line.unitPrice, currency, locale)}`}`).join(' · ')
                                         : t('invoice_link_all_invoiced')}
                                 </span>
                                 {order.documentStatus === 'Definitive' && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{t('po_document_definitive')}</span>}
-                                <button type="button" className={`${secondaryButtonClass} ml-auto`} disabled={disabled || all} data-tour="pinvoice-order-add" data-tour-key={order.supplierReference ?? order.orderNumber}
+                                {otherCurrency && <span className="text-xs font-medium text-amber-900" data-testid="invoice-order-other-currency">{t('invoice_link_other_currency', { currency, invoice: linkedCurrency })}</span>}
+                                <button type="button" className={`${secondaryButtonClass} ml-auto`} disabled={disabled || all || otherCurrency} data-tour="pinvoice-order-add" data-tour-key={order.supplierReference ?? order.orderNumber}
                                     onClick={() => onAdd(order)}>
                                     {all ? t('invoice_link_added') : t('invoice_link_add')}
                                 </button>
