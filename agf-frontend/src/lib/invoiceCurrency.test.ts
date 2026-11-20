@@ -27,6 +27,10 @@ describe('purchase invoice currency', () => {
         const sent = buildPurchaseInvoicePayload(manual, settings);
         assert.ok(sent.ok && sent.value.exchangeRateSource === 'Manual' && sent.value.exchangeRate === 1.1);
 
+        // ECB zonder koers: het ophalen loopt nog; opslaan wacht met een eigen melding.
+        const pending = buildPurchaseInvoicePayload(changeRate(usd, { ...invoiceCurrencyDraft(usd.header), rate: '', source: 'ECB', rateDate: null }), settings);
+        assert.ok(!pending.ok && pending.errors.some((error) => error.field === 'exchangeRate' && error.code === 'rate_pending'));
+
         const bad = changeRate(usd, { ...invoiceCurrencyDraft(usd.header), rate: 'abc', source: 'Manual', rateDate: null });
         const refused = buildPurchaseInvoicePayload(bad, settings);
         assert.ok(!refused.ok && refused.errors.some((error) => error.field === 'exchangeRate'));
@@ -63,6 +67,16 @@ describe('purchase invoice currency', () => {
         assert.deepEqual(ordersMissingCurrency(old), [orderId]);
         const fixed = withOrderCurrency(old, candidate({ id: orderId, currency: 'USD', exchangeRate: 1.2, exchangeRateSource: 'Manual' }));
         assert.deepEqual([fixed.lines[0].orderLine?.orderCurrency, fixed.lines[0].orderLine?.orderRate, ordersMissingCurrency(fixed)], ['USD', 1.2, []]);
+    });
+
+    test('an old draft in another currency than its restored order follows the order, with a new rate', () => {
+        const euros = addOrderLines(emptyDraft('2026-11-19', settings), candidate(), 9);
+        const orderId = euros.lines[0].orderLine!.orderId;
+        const old = { ...euros, header: { ...euros.header, currency: 'USD', exchangeRate: '1,1', rateSource: 'Manual' as const },
+            lines: euros.lines.map((line) => ({ ...line, orderLine: { ...line.orderLine!, orderCurrency: undefined, orderRate: undefined, orderRateSource: undefined } })) };
+        const fixed = withOrderCurrency(old, candidate({ id: orderId }));
+        assert.deepEqual([fixed.header.currency, fixed.header.exchangeRate, fixed.header.rateSource, linkedOrderCurrency(fixed)], ['EUR', '', undefined, 'EUR']);
+        assert.equal(withOrderCurrency(fixed, candidate({ id: orderId })), fixed, 'nothing left to restore');
     });
 
     test('existing manual lines keep their currency: an order in another currency is refused', () => {

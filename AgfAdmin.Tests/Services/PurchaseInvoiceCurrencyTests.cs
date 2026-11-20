@@ -106,6 +106,27 @@ public class PurchaseInvoiceCurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task The_Euro_Totals_Are_The_Sum_Of_The_Lines_Converted_And_Rounded_One_By_One()
+    {
+        var request = await InvoiceAsync("USD", 1.2m, "Manual");
+        var line = request.Lines[0];
+        line.Quantity = 1m;
+        line.UnitPrice = 1m;
+        request.Lines = new() { line, Clone(line), Clone(line) };
+
+        var saved = await SaveAsync(request);
+        Assert.Equal(ServiceResultStatus.Created, saved.Status);
+        // 3 x (1,00 / 1,2 = 0,83): per regel afgerond is 2,49, niet 3,00 / 1,2 = 2,50 (gelijk aan de kostenverdeling).
+        Assert.Equal((3m, (decimal?)2.49m, (decimal?)2.49m), (saved.Value.TotalAmount, saved.Value.SubTotalEur, saved.Value.TotalAmountEur));
+    }
+
+    private static CreatePurchaseInvoiceLineDto Clone(CreatePurchaseInvoiceLineDto l) => new()
+    {
+        ProductVariantId = l.ProductVariantId, Description = l.Description, Quantity = l.Quantity, Unit = l.Unit, UnitPrice = l.UnitPrice,
+        VatPercentage = l.VatPercentage, SupplyCommitmentLineId = l.SupplyCommitmentLineId
+    };
+
+    [Fact]
     public async Task An_Invoice_Links_Only_To_An_Order_In_The_Same_Currency_And_May_Have_Another_Rate()
     {
         _rates.Quotes["USD"] = Quote("USD", 1.25m, new DateOnly(2026, 11, 19));
