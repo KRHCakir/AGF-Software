@@ -23,7 +23,7 @@ export default function CertificateExpiryList({ compact = false, limit = 6 }: { 
     useEffect(() => {
         const controller = new AbortController();
         setError(null);
-        getCertificateOverview({ status: 'attention' }, controller.signal).then(setOverview)
+        getCertificateOverview({ status: 'attention', pageSize: 500 }, controller.signal).then(setOverview)
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
     }, [attempt]);
@@ -37,7 +37,7 @@ export default function CertificateExpiryList({ compact = false, limit = 6 }: { 
             className={`space-y-2 rounded-lg border p-4 ${compact ? 'border-amber-300 bg-amber-50' : 'border-gray-300 bg-white'}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 id="certificate-expiry-title" className="text-base font-semibold text-gray-900">
-                    {t('cert_expiry_title')}{overview ? ` (${overview.items.length})` : ''}
+                    {t('cert_expiry_title')}{overview ? ` (${overview.total})` : ''}
                 </h2>
                 {overview && <span className="text-xs text-gray-700">{t('cert_expiry_days', { days: String(overview.warningDays) })}</span>}
             </div>
@@ -66,10 +66,13 @@ export default function CertificateExpiryList({ compact = false, limit = 6 }: { 
                     })}
                 </ul>
             )}
-            {compact && overview && overview.items.length > items.length && (
-                <Link href="/certificates" className="text-sm font-medium text-blue-800 underline underline-offset-2">{t('cert_expiry_all', { count: String(overview.items.length) })}</Link>
+            {!compact && overview && overview.total > overview.items.length && (
+                <p className="text-xs text-gray-700" data-testid="certificate-expiry-more">{t('cert_expiry_more', { shown: String(overview.items.length), total: String(overview.total) })}</p>
             )}
-            {compact && overview && overview.items.length <= items.length && (
+            {compact && overview && overview.total > items.length && (
+                <Link href="/certificates" className="text-sm font-medium text-blue-800 underline underline-offset-2">{t('cert_expiry_all', { count: String(overview.total) })}</Link>
+            )}
+            {compact && overview && overview.total <= items.length && (
                 <Link href="/certificates" className="text-sm font-medium text-blue-800 underline underline-offset-2">{t('cert_expiry_open')}</Link>
             )}
         </section>

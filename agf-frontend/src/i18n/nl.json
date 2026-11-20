@@ -3059,7 +3059,7 @@
   "cert_settings_types_hint": "Staan in de keuzelijst bij een certificaat; een nieuwe eigen soort bij een certificaat komt hier vanzelf bij.",
   "cert_settings_days_invalid": "Voer een geheel aantal dagen in.",
   "cert_settings_reload": "Instellingen opnieuw laden",
-  "cert_settings_save":"Opslaan",
+  "cert_settings_save": "Opslaan",
   "cert_settings_saved": "Opgeslagen.",
   "cert_own_title": "Certificaten van het eigen bedrijf",
   "cert_own_hint": "Bijvoorbeeld uw eigen CoC, SKAL of BRCGS: met einddatum, zodat ook die tijdig een waarschuwing geeft.",
@@ -3102,5 +3102,7 @@
   "relations_cert_filter_none": "Zonder certificaat",
   "relations_cert_filter_GlobalGapIfa": "Met GGN (GLOBALG.A.P.)",
   "relations_cert_filter_GlobalGapCoc": "Met CoC",
-  "relations_cert_filter_Skal": "Met SKAL (bio)"
+  "relations_cert_filter_Skal": "Met SKAL (bio)",
+  "cert_expiry_more": "De eerste {shown} van {total}; filter hieronder om de rest te zien.",
+  "cert_page_count": "{shown} van {total} certificaten"
 }
