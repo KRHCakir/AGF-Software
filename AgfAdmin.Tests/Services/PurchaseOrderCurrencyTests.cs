@@ -186,7 +186,8 @@ public class PurchaseOrderCurrencyTests : IDisposable
         // Weggelaten valuta (een oudere client): alles blijft zoals het was.
         var omitted = PurchaseOrderEditHarness.EditOf(adjusted.Value);
         omitted.Note = "Zonder valuta";
-        Assert.Equal((1.1m, "Manual"), ((await UpdateAsync(detail.Id, omitted)).Value.ExchangeRate, "Manual"));
+        var kept = (await UpdateAsync(detail.Id, omitted)).Value;
+        Assert.Equal((1.1m, "Manual"), (kept.ExchangeRate, kept.ExchangeRateSource));
 
         // Definitief: aanpassen kan niet meer, en ook de guard (regel 29) laat valuta en koers niet veranderen.
         await using (var db = _factory.CreateContext())
