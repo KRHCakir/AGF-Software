@@ -66,19 +66,28 @@ export function linkedOrderCurrency(draft: InvoiceDraft): string | null {
     return linked?.orderLine ? (linked.orderLine.orderCurrency ?? 'EUR').toUpperCase() : null;
 }
 
-// Kan deze order bij deze factuur? Nee als er al een order in een andere valuta aan hangt.
-export function orderCurrencyFits(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'currency'>): boolean {
+// De valuta waarin de factuur vastzit: die van de gekoppelde orders, of anders die van de factuur zelf zodra er handmatig ingevoerde regels
+// staan (die bedragen mogen niet ongemerkt in een andere valuta gaan gelden). null = nog vrij.
+export function lockedInvoiceCurrency(draft: InvoiceDraft): string | null {
     const linked = linkedOrderCurrency(draft);
-    return linked === null || linked === (order.currency ?? 'EUR').toUpperCase();
+    if (linked !== null) return linked;
+    return draft.lines.every(isBlankLine) ? null : draft.header.currency.trim().toUpperCase();
+}
+
+// Kan deze order bij deze factuur? Nee als de factuur al in een andere valuta vastzit (gekoppelde order of bestaande regels).
+export function orderCurrencyFits(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'currency'>): boolean {
+    const locked = lockedInvoiceCurrency(draft);
+    return locked === null || locked === (order.currency ?? 'EUR').toUpperCase();
 }
 
 // Orderregels toevoegen: een leeg begin (alleen lege regels) wordt vervangen; een orderregel die er al staat komt er niet nog eens bij.
 // Valuta-ronde: de eerste gekoppelde order bepaalt de valuta van de factuur (de koers wordt dan opnieuw die van de factuurdatum); een order in
-// een andere valuta dan wat al gekoppeld is, komt er niet bij.
+// een andere valuta dan wat al gekoppeld is of wat de handmatige regels al hebben, komt er niet bij. Zonder nieuwe regels verandert er niets.
 export function addOrderLines(draft: InvoiceDraft, order: InvoiceCandidate, defaultVat: number): InvoiceDraft {
     if (!orderCurrencyFits(draft, order)) return draft;
     const present = new Set(draft.lines.map((line) => line.orderLine?.lineId).filter((id) => id !== undefined));
     const added = linesFromCandidate(order, defaultVat).filter((line) => !present.has(line.orderLine!.lineId));
+    if (added.length === 0) return draft;
     const kept = draft.lines.every(isBlankLine) ? [] : draft.lines;
     const currency = (order.currency ?? 'EUR').toUpperCase();
     const withCurrency = linkedOrderCurrency(draft) === null && currency !== draft.header.currency.trim().toUpperCase()

@@ -1132,6 +1132,7 @@
   "purchase_due_date": "Due date",
   "purchase_currency": "Currency",
   "purchase_currency_hint": "Code only, e.g. EUR or USD.",
+  "purchase_currency_locked_by_order": "The currency follows the linked order. Remove the order lines to change it.",
   "purchase_manual_vs_default": "Manual; supplier default: {value}",
   "purchase_due_manual": "Entered manually.",
   "purchase_due_deviation": "Manual: {days} days relative to invoice date + terms.",

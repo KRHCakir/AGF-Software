@@ -36,7 +36,7 @@ import { effectiveRate, formatEuro, rateLine } from '../../lib/documentCurrency'
 import { isEuro, toEuro } from '../../lib/exchangeRate';
 import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
 import { problemsByField } from '../../lib/aiProposal';
-import { addOrderLines, linkCheck, linkedOrderCurrency } from '../../lib/invoiceOrderLink';
+import { addOrderLines, linkCheck, linkedOrderCurrency, lockedInvoiceCurrency } from '../../lib/invoiceOrderLink';
 import { listInvoiceCandidates } from '../../services/purchaseOrderService';
 import type { InvoiceCandidate } from '../../types/purchaseOrder';
 import { InvoiceOrderLineInfo, InvoiceOrderPicker, InvoicePriceQuestion } from './InvoiceOrderLink';
@@ -476,7 +476,8 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 </div>
                 <div className={aiFieldClass(aiProblems.currency)}>
                     <label htmlFor="currency-input" className="text-xs font-medium text-gray-700">{t('purchase_currency')} *</label>
-                    <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} onChange={(value) => update(changeCurrency(draft, value))} />
+                    <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} disabled={linkedOrderCurrency(draft) !== null} onChange={(value) => update(changeCurrency(draft, value))} />
+                    {linkedOrderCurrency(draft) !== null && <span className="block text-xs text-gray-600" data-testid="currency-locked-note">{t('purchase_currency_locked_by_order')}</span>}
                     {defaultsNote('currency') && <span className="block text-xs text-gray-500">{defaultsNote('currency')}</span>}
                     <span className="block text-xs text-gray-500">{t('purchase_currency_hint')}</span>
                     <FieldError id="currency" messages={e('currency')} />
@@ -535,7 +536,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             )}
 
             {/* Koppelen aan de bon (stap 4b): de open orders van deze leverancier */}
-            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} linkedCurrency={linkedOrderCurrency(draft)} />}
+            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} linkedCurrency={lockedInvoiceCurrency(draft)} />}
 
             {/* Regels */}
             <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
