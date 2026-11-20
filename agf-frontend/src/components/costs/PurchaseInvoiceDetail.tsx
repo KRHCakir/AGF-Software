@@ -77,8 +77,12 @@ export default function PurchaseInvoiceDetail({ invoiceId, onClose }: { invoiceI
         rateRequest.current = controller;
         setRate({ status: 'fetching' });
         refreshExchangeRate(allocations.invoiceId, controller.signal)
-            .then((next) => {
-                setState((current) => (current.status === 'ready' && current.data.invoice.id === next.invoiceId ? { status: 'ready', data: { ...current.data, allocations: mergeRefreshed(current.data.allocations, next) } } : current));
+            .then(async (next) => {
+                // De koers is nu vastgelegd; de factuur zelf opnieuw ophalen zodat ook het eurototaal (totalAmountEur) klopt.
+                const refreshedInvoice = await getPurchaseInvoice(allocations.invoiceId, controller.signal).catch(() => null);
+                if (controller.signal.aborted) return;
+                setState((current) => (current.status === 'ready' && current.data.invoice.id === next.invoiceId
+                    ? { status: 'ready', data: { invoice: refreshedInvoice ?? current.data.invoice, allocations: mergeRefreshed(current.data.allocations, next) } } : current));
                 setRate({ status: 'idle' });
             })
             .catch((caught: unknown) => {
