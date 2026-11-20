@@ -49,6 +49,8 @@ import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 import NumberEcho from '../shared/NumberEcho';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import DeviationDialog, { DeviationChoice } from './DeviationDialog';
+import CertificateCheckDialog from '../certificates/CertificateCheckDialog';
+import { type CertificateCheck, certificateChecksOf } from '../../types/certificate';
 import ExpectedAttributes from './ExpectedAttributes';
 import ErrorNotice from './ErrorNotice';
 import FieldError, { fieldProps, inputClass } from './FieldError';
@@ -180,6 +182,8 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
     const [abandonedNotice, setAbandonedNotice] = useState<string | null>(null);
     // Venster "Afwijking van de bestelling"; afterRun = de pallet bestaat al (409 als vangnet), Ja stuurt dan dezelfde aanvraag opnieuw.
     const [dialog, setDialog] = useState<{ lineId: number; preview: DeviationPreview; afterRun: boolean } | null>(null);
+    // Certificaten deel 1: "Klopt dit?" na de server (product niet in het GGN-certificaat van de leverancier, of verlopen) voor deze regel.
+    const [certificateDialog, setCertificateDialog] = useState<{ lineId: number; checks: CertificateCheck[] } | null>(null);
     const [checking, setChecking] = useState(false);
     // Varianten per product en de landenlijst: suggesties en het zoeken van de ontvangen variant bij registreren.
     const [products, setProducts] = useState<ProductOption[] | null>(null);
@@ -510,7 +514,11 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                 const mapped = mapServerErrors(step, apiError);
                 // Vangnet: de server eist een bevestiging (of weigert de afwijking) terwijl het venster vooraf niet getoond is.
                 const conflict = step !== 'pallet' && apiError.status === 409 ? deviationConflict(apiError.body) : null;
-                if (conflict !== null && step !== 'pallet') {
+                const checks = step !== 'pallet' && apiError.status === 409 ? certificateChecksOf(apiError.body) : null;
+                if (checks !== null && step !== 'pallet') {
+                    setCertificateDialog({ lineId: step, checks });
+                    setFailure(null);
+                } else if (conflict !== null && step !== 'pallet') {
                     if (conflict.code === DEVIATION_CODES.confirmationRequired && isDeviationPreview(conflict.deviation)) {
                         setDialog({ lineId: step, preview: conflict.deviation, afterRun: true });
                     } else {
@@ -620,8 +628,28 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
         }
     };
 
+    // Ja, klopt: dezelfde regel (zelfde requestId) opnieuw, met de bevestiging; wie bevestigt legt de server vast.
+    const confirmCertificate = () => {
+        if (certificateDialog === null || frozen === null) return;
+        const line = frozen.lines[certificateDialog.lineId];
+        setCertificateDialog(null);
+        if (line === undefined) return;
+        const updated: FrozenSubmission = { ...frozen, lines: { ...frozen.lines, [certificateDialog.lineId]: { ...line, payload: { ...line.payload, confirmCertificate: true } } } };
+        setFrozen(updated);
+        setErrors({});
+        void run(updated, selected);
+    };
+    // Nee: niets geboekt voor deze regel; de melding blijft staan zodat de gebruiker kan aanpassen of stoppen.
+    const declineCertificate = () => {
+        if (certificateDialog === null) return;
+        setErrors({ [`line.${certificateDialog.lineId}.supplyCommitmentLineId`]: [t('cert_check_declined')] });
+        setFailure({ step: certificateDialog.lineId, error: new ApiError('http', t('cert_check_declined'), 409) });
+        setCertificateDialog(null);
+    };
+
     const reset = useCallback((notice: string | null) => {
         setDialog(null);
+        setCertificateDialog(null);
         setCombinations({});
         setSelected([]);
         setDrafts({});
@@ -1032,12 +1060,13 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
             {progress.length > 0 && <SubmitProgress steps={progress} />}
 
             <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                <button type="submit" data-tour="receive-save" className={primaryButtonClass} disabled={blocked || checking || dialog !== null || sources.status !== 'ready'}>
+                <button type="submit" data-tour="receive-save" className={primaryButtonClass} disabled={blocked || checking || dialog !== null || certificateDialog !== null || sources.status !== 'ready'}>
                     {running || checking ? t('supply_saving') : frozen?.pallet.done ? t('supply_continue_registration') : t('supply_register_pallet')}
                 </button>
                 <SubmitErrors errors={errors} />
             </div>
             {dialog !== null && <DeviationDialog preview={dialog.preview} onNo={() => setDialog(null)} onYes={confirmDeviation} />}
+            {certificateDialog !== null && <CertificateCheckDialog checks={certificateDialog.checks} onNo={declineCertificate} onYes={confirmCertificate} />}
         </form>
     );
 }

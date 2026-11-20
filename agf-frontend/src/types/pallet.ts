@@ -34,6 +34,8 @@ export interface AddPalletContentLineRequest {
     // Afwijkende ontvangst: de werkelijk ontvangen variant (null = de variant van de bronregel) en de bevestiging "Ja, klopt".
     receivedProductVariantId?: number | null;
     confirmDeviation?: boolean | null;
+    // Certificaten deel 1: "Ja, klopt" na de vraag over het GGN-certificaat van de leverancier.
+    confirmCertificate?: boolean | null;
     deviationReason?: string | null;
     deviationReasonNote?: string | null;
     // "Toon verwachte kenmerken" vóór het invullen gebruikt: true met het moment (alleen meegestuurd als het gebeurde).

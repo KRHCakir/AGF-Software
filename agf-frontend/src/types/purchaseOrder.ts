@@ -296,6 +296,7 @@ export interface UpdatePurchaseOrderRequest {
     exchangeRate?: number | null;
     exchangeRateSource?: 'ECB' | 'Manual' | null;
     lines: UpdatePurchaseOrderLineRequest[];
+    confirmedCertificateProductIds?: number[];
 }
 
 export interface FinalizePurchaseOrderRequest {

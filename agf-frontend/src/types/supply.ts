@@ -44,6 +44,8 @@ export interface CreateSupplyCommitmentRequest {
     exchangeRate?: number | null;
     exchangeRateSource?: 'ECB' | 'Manual' | null;
     lines: CreateSupplyCommitmentLineRequest[];
+    // Certificaten deel 1: de producten waarvoor "Ja, klopt" gekozen is na de vraag over het GGN-certificaat.
+    confirmedCertificateProductIds?: number[];
 }
 
 export interface SupplyCommitmentLine {
