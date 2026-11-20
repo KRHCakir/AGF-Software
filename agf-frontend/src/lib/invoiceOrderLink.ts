@@ -73,14 +73,21 @@ export function ordersMissingCurrency(draft: InvoiceDraft): number[] {
 }
 
 // Vult de valuta en koers van de order in op de regels van die order (uit de opnieuw opgehaalde order); de rest van het concept blijft.
+// Staat de factuur in een andere valuta dan die order, dan gaat de factuur over op de valuta van de order (met een nieuwe koers), net als
+// bij het koppelen van een eerste order: de overgenomen regels staan in de valuta van de order. Zo blijft er geen vergrendelde,
+// verkeerde factuurvaluta staan die de server daarna weigert.
 export function withOrderCurrency(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'id' | 'currency' | 'exchangeRate' | 'exchangeRateSource' | 'exchangeRateDate'>): InvoiceDraft {
-    return {
+    const currency = (order.currency ?? 'EUR').trim().toUpperCase();
+    if (!draft.lines.some((line) => line.orderLine?.orderId === order.id && line.orderLine.orderCurrency === undefined)) return draft;
+    const filled: InvoiceDraft = {
         ...draft,
         lines: draft.lines.map((line) => line.orderLine && line.orderLine.orderId === order.id && line.orderLine.orderCurrency === undefined
-            ? { ...line, orderLine: { ...line.orderLine, orderCurrency: (order.currency ?? 'EUR').toUpperCase(), orderRate: order.exchangeRate ?? 1,
+            ? { ...line, orderLine: { ...line.orderLine, orderCurrency: currency, orderRate: order.exchangeRate ?? 1,
                 orderRateSource: order.exchangeRateSource ?? 'NotApplicable', orderRateDate: order.exchangeRateDate ?? null } }
             : line),
     };
+    if (draft.header.currency.trim().toUpperCase() === currency) return filled;
+    return { ...filled, header: { ...filled.header, currency, exchangeRate: '', rateSource: undefined, rateDate: null }, touched: { ...filled.touched, currency: true } };
 }
 
 // De valuta waarin de factuur vastzit: die van de gekoppelde orders, of anders die van de factuur zelf zodra er handmatig ingevoerde regels
