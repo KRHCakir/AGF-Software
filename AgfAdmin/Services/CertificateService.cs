@@ -292,7 +292,9 @@ namespace AgfAdmin.Services
             if (store == null) return null;
             var file = await db.RelationCertificateFiles.AsNoTracking().SingleOrDefaultAsync(f => f.Id == fileId && f.RelationCertificateId == certificateId, cancellationToken);
             if (file == null) return null;
-            return (await store.ReadAsync(file.DisplayStorageKey ?? file.StorageKey, cancellationToken), file.DisplayMediaType ?? file.MediaType, file.FileName);
+            // Met een displayversie (bv. HEIC als JPEG) past de extensie van de bestandsnaam bij de aangeboden inhoud.
+            var fileName = file.DisplayStorageKey != null && file.DisplayMediaType == "image/jpeg" ? Path.ChangeExtension(file.FileName, ".jpg") : file.FileName;
+            return (await store.ReadAsync(file.DisplayStorageKey ?? file.StorageKey, cancellationToken), file.DisplayMediaType ?? file.MediaType, fileName);
         }
 
         private static string UploadMessage(string error) => error switch

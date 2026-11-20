@@ -83,4 +83,14 @@ describe('CertificatesEditor', () => {
         assert.deepEqual(added, [{ key: row.key, name: 'skal.pdf' }]);
         assert.ok(mounted.hasText('cert_file_pending'));
     });
+
+    test('an own type in other letters still finds its option; remove and open buttons are reachable with Tab', async () => {
+        await mounted.render(<Harness initial={[{ ...emptyCertificateRow('Custom'), id: 5, customTypeName: 'demeter', number: 'D-1', productIds: [1],
+            files: [{ id: 3, version: 1, fileName: 'd.pdf', mediaType: 'application/pdf', sizeBytes: 9, sha256: 'a', createdAt: '2026-11-20T10:00:00Z', createdBy: 'Anja' }] }]} />);
+        const row = latest[0];
+        assert.equal(mounted.container.querySelector<HTMLSelectElement>(`#certificates\\.${row.key}\\.typeCode-input`)!.value, 'custom:Demeter');
+        const buttons = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid="certificate-0"] button'));
+        assert.ok(buttons.length >= 2);
+        assert.ok(buttons.every((b) => b.tabIndex !== -1), 'no button is taken out of the Tab order');
+    });
 });
