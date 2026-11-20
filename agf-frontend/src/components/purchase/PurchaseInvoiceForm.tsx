@@ -32,7 +32,7 @@ import VendorPicker from './VendorPicker';
 import SubmitErrors from '../shared/SubmitErrors';
 import CurrencyField from '../shared/CurrencyField';
 import ExchangeRateField from './ExchangeRateField';
-import { effectiveRate, formatEuro, rateLine } from '../../lib/documentCurrency';
+import { type CurrencyDraft, effectiveRate, formatEuro, rateLine } from '../../lib/documentCurrency';
 import { isEuro, toEuro } from '../../lib/exchangeRate';
 import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
 import { problemsByField } from '../../lib/aiProposal';
@@ -170,10 +170,22 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     // Valuta-ronde: koers van de factuur en, per gekoppelde order met een andere koers, die koers (beide tonen, geen fout).
     const invoiceMoney = invoiceCurrencyDraft(draft.header);
     const invoiceRate = effectiveRate(invoiceMoney);
-    const otherOrderRates = invoiceRate === null || isEuro(draft.header.currency) ? [] : [...new Map(draft.lines
-        .filter((line) => line.orderLine && line.orderLine.orderRate !== undefined && line.orderLine.orderRate !== invoiceRate)
-        .map((line) => [line.orderLine!.orderId, { orderId: line.orderLine!.orderId, orderNumber: line.orderLine!.supplierReference ?? line.orderLine!.orderNumber,
-            rate: line.orderLine!.orderRate!, source: line.orderLine!.orderRateSource ?? 'ECB' }])).values()];
+    // Het koersverschil geldt alleen de regels van die order (niet het hele factuurtotaal met andere orders of kostenregels).
+    const otherOrderRates = invoiceRate === null || isEuro(draft.header.currency) ? [] : [...draft.lines.reduce((map, line) => {
+        const ref = line.orderLine;
+        if (!ref || ref.orderRate === undefined || ref.orderRate === invoiceRate) return map;
+        const entry = map.get(ref.orderId) ?? { orderId: ref.orderId, orderNumber: ref.supplierReference ?? ref.orderNumber, rate: ref.orderRate, source: ref.orderRateSource ?? 'ECB', net: 0 };
+        entry.net += lineAmounts(line)?.net ?? 0;
+        return map.set(ref.orderId, entry);
+    }, new Map<number, { orderId: number; orderNumber: string; rate: number; source: string; net: number }>()).values()];
+    // Een koers die asynchroon binnenkomt wordt op de actuele invoer toegepast, zodat tussentijdse wijzigingen niet worden teruggedraaid.
+    const applyRate = (next: CurrencyDraft) => {
+        if (locked) return;
+        setDraft((existing) => changeRate(existing, next));
+        setErrors({});
+        setServerError(null);
+        setQuestion(null);
+    };
     // "Hoort bij order …" (factuurnummer al op een order): de regels van die order echt overnemen, zodat de koppeling wordt opgeslagen.
     const takeOrder = (orderId: number) => {
         if (locked || draft.header.vendorId === '') return;
@@ -487,7 +499,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     anders is (geen fout: een koersverschil is voor de boekhouder). */}
                 {!isEuro(draft.header.currency) && (
                     <div className="col-span-2" data-testid="invoice-rate">
-                        <ExchangeRateField value={invoiceMoney} onChange={(next) => update(changeRate(draft, next))} documentDate={draft.header.invoiceDate} prefix="pinvoice"
+                        <ExchangeRateField value={invoiceMoney} onChange={applyRate} documentDate={draft.header.invoiceDate} prefix="pinvoice"
                             errors={{ exchangeRate: e('exchangeRate') ?? [] }} disabled={locked} />
                         {invoiceRate !== null && (
                             <p className="text-xs text-gray-700" data-testid="invoice-rate-euro">{t('invoice_rate_euro', { amount: formatEuro(toEuro(totals.net, invoiceRate), locale) })}</p>
@@ -498,7 +510,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                     order: order.orderNumber, orderLine: rateLine(draft.header.currency.toUpperCase(), order.rate, locale),
                                     orderSource: order.source === 'Manual' ? t('currency_rate_manual') : 'ECB',
                                     invoiceLine: rateLine(draft.header.currency.toUpperCase(), invoiceRate!, locale),
-                                    difference: formatEuro(toEuro(totals.net, invoiceRate!) - toEuro(totals.net, order.rate), locale),
+                                    difference: formatEuro(toEuro(order.net, invoiceRate!) - toEuro(order.net, order.rate), locale),
                                 })}
                             </p>
                         ))}
