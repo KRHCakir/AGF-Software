@@ -71,7 +71,11 @@ public class PurchaseCurrencyTests : IDisposable
         Assert.False(saved.Value.Currencies.Single(c => c.Code == "AED").HasEcbRate);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() { "US$" } })).Status);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(null)).Status);
+        var onlyEuro = await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() });
+        Assert.Equal(new[] { "EUR" }, onlyEuro.Value.Currencies.Select(c => c.Code));
+        Assert.Equal(new[] { "EUR" }, (await service.GetAsync()).Currencies.Select(c => c.Code));
     }
+
     [Fact]
     public async Task The_Database_Refuses_A_Rate_That_Does_Not_Fit_The_Currency()
     {
