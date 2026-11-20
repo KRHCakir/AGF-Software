@@ -58,6 +58,7 @@ import SubmitProgress, { ProgressStep, StepState } from './SubmitProgress';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from './SuccessPanel';
 import SubmitErrors from '../shared/SubmitErrors';
 import PartijLinkPanel from '../partij/PartijLinkPanel';
+import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 interface ContentDraft {
     lot: string;
@@ -174,6 +175,8 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
     const [running, setRunning] = useState(false);
     const [failure, setFailure] = useState<Failure | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
+    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
+    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [abandonedNotice, setAbandonedNotice] = useState<string | null>(null);
     // Venster "Afwijking van de bestelling"; afterRun = de pallet bestaat al (409 als vangnet), Ja stuurt dan dezelfde aanvraag opnieuw.
     const [dialog, setDialog] = useState<{ lineId: number; preview: DeviationPreview; afterRun: boolean } | null>(null);
@@ -499,6 +502,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                 working = { ...working, lines: { ...working.lines, [id]: { ...line, done: true, result: saved.value, replayed: saved.replayed } } };
                 setFrozen(working);
             }
+            leave.saved();
         } catch (caught) {
             const apiError = toApiError(caught);
             if (mounted.current) {
@@ -724,7 +728,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
     const visibleCommitments = orderListGroups(commitments, search, todayInAmsterdam());
 
     return (
-        <form noValidate aria-busy={running || checking} onSubmit={(event) => { event.preventDefault(); submit(); }}
+        <form ref={leave.ref} noValidate aria-busy={running || checking} onSubmit={(event) => { event.preventDefault(); submit(); }}
             className="space-y-5 rounded-md border border-gray-300 bg-white p-4">
             {abandonedNotice && (
                 <p role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">{abandonedNotice}</p>
