@@ -77,6 +77,23 @@ describe('purchase order in another currency', () => {
         assert.equal(field('exchangeRate-input'), null);
     });
 
+    test('the currency list cannot be loaded: the screen says so and can try again', async () => {
+        let fail = true;
+        posted = stubFetch({
+            onGet: (url) => url.includes('/settings/purchase-currencies')
+                ? (fail ? json(500, { message: 'down' }) : json(200, { currencies: [{ code: 'EUR', hasEcbRate: false }, { code: 'USD', hasEcbRate: true }] }))
+                : json(404, {}),
+            nextPost: async () => json(500, { message: 'stop' }),
+        });
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="currency-list-failed"]'), 'failure notice');
+        assert.deepEqual([...mounted.container.querySelectorAll<HTMLOptionElement>('#currency-input option')].map((option) => option.value), ['EUR']);
+        fail = false;
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-testid="currency-list-failed"] button')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="currency-list-failed"]') === null, 'notice gone after retry');
+        assert.deepEqual([...mounted.container.querySelectorAll<HTMLOptionElement>('#currency-input option')].map((option) => option.value), ['EUR', 'USD']);
+    });
+
     test('a manual rate goes along as Manual; euro sends no rate', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={{ ...reference, vendors: [{ ...reference.vendors[0], defaultCurrency: null }] }} onReceive={() => {}} />);
         await type('vendorId-input', 'supb');

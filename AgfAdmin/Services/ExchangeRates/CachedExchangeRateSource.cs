@@ -22,9 +22,15 @@ namespace AgfAdmin.Services
             return true;
         }
 
-        // expiresAt = null: geldig tot het einde van de kalenderdag.
-        public void Set(string currency, DateOnly day, DateOnly today, DateTimeOffset? expiresAt, ExchangeRateQuote quote) =>
+        // expiresAt = null: geldig tot het einde van de kalenderdag. Items van een eerdere ophaaldag gelden niet meer en gaan er dan uit,
+        // zodat de cache niet blijft groeien.
+        public void Set(string currency, DateOnly day, DateOnly today, DateTimeOffset? expiresAt, ExchangeRateQuote quote)
+        {
+            foreach (var stale in _entries.Where(entry => entry.Value.FetchedOn != today).Select(entry => entry.Key).ToList()) _entries.TryRemove(stale, out _);
             _entries[(currency, day)] = (today, expiresAt, quote);
+        }
+
+        public int Count => _entries.Count;
     }
 
     public sealed class CachedExchangeRateSource : IExchangeRateSource
@@ -59,7 +65,16 @@ namespace AgfAdmin.Services
             var fetch = _cache.InFlight.GetOrAdd(key, completion.Task);
             if (ReferenceEquals(fetch, completion.Task))
             {
-                _ = FetchAsync(code, day, today, key, completion);
+                // Tussen de eerste controle en GetOrAdd kan een andere aanvraag net klaar zijn: dan staat de koers al in de cache.
+                if (_cache.TryGet(code, day, today, _clock.GetUtcNow(), out var justCached))
+                {
+                    _cache.InFlight.TryRemove(key, out _);
+                    completion.SetResult(justCached);
+                }
+                else
+                {
+                    _ = FetchAsync(code, day, today, key, completion);
+                }
             }
             return await fetch.WaitAsync(cancellationToken);
         }
