@@ -26,6 +26,8 @@ export const ORDER_CORE: TourStep[] = [
         { kind: 'type', target: 'supply-reference', text: '{{tourRef}}' },
         { kind: 'highlight', target: 'supply-ordered-on' },
         { kind: 'type', target: 'supply-expected', text: '{{expectedDate}}' },
+        // Valuta-ronde: de valuta staat op euro; bij een andere valuta komt de ECB-koers er vanzelf bij.
+        { kind: 'highlight', target: 'supply-currency' },
     ]),
     // Partij: het voorgestelde nummer blijft staan (staat de nummering op Eigen, dan typt de rondleiding haar eigen kenmerk). Een tweede
     // order op dezelfde partij kies je met "Bestaande partij kiezen". Daarnaast het lot van de leverancier.
