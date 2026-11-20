@@ -115,8 +115,9 @@ export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
                         <tr>
                             <th scope="col" className={th}>{t('availability_col_product')}</th>
                             <th scope="col" className={th}>{t('availability_col_unit')}</th>
-                            <th scope="col" className={th}>{t('sales_col_stock')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_stock_hint')}</span></th>
+                            {/* Fixes 5b: Besteld, Voorraad, Verkocht, Vrij te verkopen. */}
                             <th scope="col" className={`${th} ${marked('expected')} ${marked('quarantine')}`}>{t('sales_col_expected')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_expected_hint')}</span></th>
+                            <th scope="col" className={th}>{t('sales_col_stock')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_stock_hint')}</span></th>
                             <th scope="col" className={th}>{t('sales_col_sold')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_sold_hint')}</span></th>
                             <th scope="col" className={`${th} bg-emerald-50 text-emerald-900`}>{t('sales_col_free')}<span className="block font-normal normal-case text-emerald-800">{t('sales_col_free_hint')}</span></th>
                             <th scope="col" className={th}>{t('availability_col_signals')}</th>
@@ -131,8 +132,8 @@ export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
                                     <tr className={listRowClass(index)} data-row-key={row.key}>
                                         <th scope="row" className={`${td} text-left font-normal`}>{name(row)}</th>
                                         <td className={td}><UnitBadge unit={row.supply.unit} /></td>
-                                        <td className={td} data-tour="availability-available" data-tour-key={row.variant.productVariantId} data-col="stock">{stock(row)}</td>
                                         <td className={`${td} ${marked('expected')} ${marked('quarantine')}`} data-col="expected">{expected(balance)}</td>
+                                        <td className={td} data-tour="availability-available" data-tour-key={row.variant.productVariantId} data-col="stock">{stock(row)}</td>
                                         <td className={td} data-col="sold">{sold(balance)}</td>
                                         <td className={`${td} bg-emerald-50/60`} data-tour="availability-free" data-tour-key={row.variant.productVariantId} data-col="free">{free(balance)}</td>
                                         <td className={td}><WarningBadges warnings={row.supply.warnings} /></td>
@@ -160,8 +161,8 @@ export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
                                 <UnitBadge unit={row.supply.unit} />
                             </div>
                             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                                <dt className="text-xs text-gray-600">{t('sales_col_stock')}</dt><dd className="text-right">{stock(row)}</dd>
                                 <dt className="text-xs text-gray-600">{t('sales_col_expected')}</dt><dd className="text-right">{expected(balance)}</dd>
+                                <dt className="text-xs text-gray-600">{t('sales_col_stock')}</dt><dd className="text-right">{stock(row)}</dd>
                                 <dt className="text-xs text-gray-600">{t('sales_col_sold')}</dt><dd className="text-right">{sold(balance)}</dd>
                                 <dt className="text-xs font-semibold text-emerald-900">{t('sales_col_free')}</dt><dd className="text-right">{free(balance)}</dd>
                             </dl>

@@ -63,6 +63,16 @@ export interface AvailabilitySalesLine {
     openQuantity: number;
     reservedQuantity: number;
     coverage: SalesLineCoverage;
+    // Fixes 5b: waar de verkochte handel nu ligt (actieve reserveringen op een pallet); de rest is nog niet toegewezen.
+    locations?: AvailabilityLocation[];
+}
+
+export interface AvailabilityLocation {
+    palletId: number;
+    palletReference: string;
+    locationContext: string;
+    warehouseLocation: string | null;
+    quantity: number;
 }
 
 export interface AvailabilityExpectedSupply {
@@ -151,7 +161,13 @@ export function isAvailabilitySalesLine(value: unknown): value is AvailabilitySa
         && isSupplySource(value.supplySource)
         && isNumber(value.openQuantity)
         && isNumber(value.reservedQuantity)
-        && isSalesLineCoverage(value.coverage);
+        && isSalesLineCoverage(value.coverage)
+        && (value.locations === undefined || (Array.isArray(value.locations) && value.locations.every(isAvailabilityLocation)));
+}
+
+function isAvailabilityLocation(value: unknown): value is AvailabilityLocation {
+    return isObject(value) && isNumber(value.palletId) && isString(value.palletReference) && isString(value.locationContext)
+        && isNullableString(value.warehouseLocation) && isNumber(value.quantity);
 }
 
 export function isAvailabilityExpectedSupply(value: unknown): value is AvailabilityExpectedSupply {

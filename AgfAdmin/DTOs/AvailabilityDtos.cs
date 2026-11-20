@@ -146,6 +146,18 @@ namespace AgfAdmin.DTOs
         public decimal OpenQuantity { get; set; }
         public decimal ReservedQuantity { get; set; }
         public SalesLineCoverageDto Coverage { get; set; }
+        // Fixes 5b: waar de verkochte handel nu ligt, per actieve reservering op een pallet (pallet, locatie en plek uit Pallet). Het deel
+        // zonder reservering (verkocht uit verwachte aanvoer, of nog niet toegewezen) staat hier niet in: OpenQuantity min de som.
+        public List<AvailabilityLocationDto> Locations { get; set; } = new();
+    }
+
+    public sealed class AvailabilityLocationDto
+    {
+        public int PalletId { get; set; }
+        public string PalletReference { get; set; }
+        public string LocationContext { get; set; }
+        public string WarehouseLocation { get; set; }
+        public decimal Quantity { get; set; }
     }
 
     public sealed class AvailabilityExpectedSupplyDto
