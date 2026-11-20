@@ -10,7 +10,7 @@ namespace AgfAdmin.Controllers
     // overzicht (ook bijna verlopen) en de instellingen. Lezen mag iedereen, wijzigen met Stamgegevens; de instellingen ook met Beheer.
     [ApiController]
     [Route("api/certificates")]
-    [Authorize(Policy = Permissions.MasterDataWrites)]
+    [Authorize]
     public sealed class CertificatesController(CertificateService service) : ControllerBase
     {
         // Ruim boven de documentgrens (10 MB, DocumentAi:MaxFileBytes), zodat een te groot bestand een nette melding krijgt.
@@ -25,7 +25,7 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Settings() => Ok(await service.GetSettingsAsync(Aborted));
 
         [HttpPut("settings")]
-        [Authorize(Policy = Permissions.AdminWrites)]
+        [Authorize(Policy = Permissions.MasterDataOrAdminWrites)]
         public async Task<IActionResult> UpdateSettings([FromBody] CertificateSettingsDto request) => this.ToActionResult(await service.UpdateSettingsAsync(request, Aborted));
 
         [HttpGet("relations/{relationId:int}")]
@@ -33,6 +33,7 @@ namespace AgfAdmin.Controllers
 
         // Vervangt de hele lijst, met de versie die de gebruiker zag (409 bij een gelijktijdige wijziging).
         [HttpPut("relations/{relationId:int}")]
+        [Authorize(Policy = Permissions.MasterDataWrites)]
         public async Task<IActionResult> SaveForRelation(int relationId, [FromBody] SaveCertificatesDto request) =>
             this.ToActionResult(await service.SaveForRelationAsync(relationId, request, Aborted));
 
@@ -40,10 +41,12 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Own() => Ok(await service.GetOwnAsync(Aborted));
 
         [HttpPut("own")]
+        [Authorize(Policy = Permissions.MasterDataWrites)]
         public async Task<IActionResult> SaveOwn([FromBody] SaveCertificatesDto request) => this.ToActionResult(await service.SaveOwnAsync(request, Aborted));
 
         // Een PDF of foto toevoegen: altijd een nieuwe versie (vervangen wist nooit de vorige).
         [HttpPost("{id:int}/files")]
+        [Authorize(Policy = Permissions.MasterDataWrites)]
         [RequestSizeLimit(MaxRequestBytes)]
         [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes)]
         public async Task<IActionResult> Upload(int id, IFormFile file)
