@@ -87,9 +87,11 @@ export default function DocumentCurrencyField({ value, onChange, documentDate, c
                     <label htmlFor="exchangeRate-input" className="text-xs font-medium text-gray-700">{t('currency_rate_label', { currency: code })}</label>
                     <div className="flex items-center gap-2">
                         <span className="mt-1 shrink-0 text-sm text-gray-700">1 EUR =</span>
-                        <input {...fieldProps('exchangeRate', errors.exchangeRate)} inputMode="decimal" autoComplete="off" value={value.rate} disabled={disabled}
-                            data-tour={`${prefix}-rate`} className={`${inputClass} w-32 text-right tabular-nums`}
-                            onChange={(event) => onChange({ ...value, rate: event.target.value, source: 'Manual', rateDate: null })} />
+                        <div className="w-36 shrink-0">
+                            <input {...fieldProps('exchangeRate', errors.exchangeRate)} inputMode="decimal" autoComplete="off" value={value.rate} disabled={disabled}
+                                data-tour={`${prefix}-rate`} className={`${inputClass} text-right tabular-nums`}
+                                onChange={(event) => onChange({ ...value, rate: event.target.value, source: 'Manual', rateDate: null })} />
+                        </div>
                         <span className="mt-1 shrink-0 text-sm text-gray-700">{code}</span>
                     </div>
                     <p className="mt-1 text-xs text-gray-700" data-testid="currency-rate-source" aria-live="polite">
