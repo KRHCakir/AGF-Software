@@ -2953,5 +2953,15 @@
   "leave_guard_unsaved": "Your form has unsaved changes.",
   "leave_guard_hint": "Go back to finish and save it, or discard your input and continue.",
   "leave_guard_stay": "Back to the form",
-  "leave_guard_discard": "Cancel and discard"
+  "leave_guard_discard": "Cancel and discard",
+  "currency_field": "Currency",
+  "currency_rate_label": "Exchange rate ({currency})",
+  "currency_rate_ecb": "{line} · ECB, {date}",
+  "currency_rate_manual": "Manual",
+  "currency_rate_direction": "So {inverse}. The amount in euro is the amount divided by the rate.",
+  "currency_rate_none": "The ECB publishes no current rate for {currency}. Enter the rate yourself.",
+  "currency_rate_unavailable": "The ECB cannot be reached right now. Enter the rate yourself, or choose the currency again in a moment.",
+  "currency_use_ecb": "Use the ECB rate",
+  "currency_euro_hint": "≈ {amount}",
+  "currency_error_rate": "Enter a rate: how much of this currency is 1 euro (a number above zero, at most six decimals)."
 }

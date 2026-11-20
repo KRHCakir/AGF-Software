@@ -12,6 +12,10 @@ export interface PurchaseOrderInvoiceNumber {
 export interface PurchaseOrderListItem {
     id: number;
     orderNumber: string;
+    // Valuta-ronde: bedrag van de regels met een prijs, in de valuta van de order en in euro (de lijst telt alleen euro's op).
+    currency?: string;
+    amount?: number | null;
+    amountEur?: number | null;
     vendorId: number;
     vendorName: string | null;
     supplierReference: string | null;
@@ -205,6 +209,11 @@ export interface PurchaseOrderHistoryEvent {
 export interface PurchaseOrderDetail {
     id: number;
     orderNumber: string;
+    // Valuta-ronde: prijzen en totalen in deze valuta; koers in eenheden valuta per 1 euro (EUR: 1, bron NotApplicable).
+    currency?: string;
+    exchangeRate?: number;
+    exchangeRateDate?: string | null;
+    exchangeRateSource?: string;
     vendorId: number;
     vendorName: string | null;
     supplierReference: string | null;
@@ -282,6 +291,10 @@ export interface UpdatePurchaseOrderRequest {
     partijId?: number;
     newPartij?: { number: string | null };
     supplierLotReference?: string;
+    // Valuta-ronde: zoals bij aanmaken; dezelfde keuze houdt de vastgelegde koers.
+    currency?: string;
+    exchangeRate?: number | null;
+    exchangeRateSource?: 'ECB' | 'Manual' | null;
     lines: UpdatePurchaseOrderLineRequest[];
 }
 
@@ -306,6 +319,8 @@ export interface PurchaseLineTotalsDto {
     netWeightKg: number | null;
     grossWeightKg: number | null;
     amount: number | null;
+    // Valuta-ronde: het totaal in euro (bij EUR gelijk aan amount).
+    amountEur?: number | null;
     pallets: number | null;
     linesWithoutNet: number;
     linesWithoutGross: number;

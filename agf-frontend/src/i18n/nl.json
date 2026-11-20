@@ -2953,5 +2953,15 @@
   "leave_guard_unsaved": "Je formulier heeft niet-opgeslagen wijzigingen.",
   "leave_guard_hint": "Ga terug om het af te maken en op te slaan, of gooi je invoer weg en ga verder.",
   "leave_guard_stay": "Terug naar het formulier",
-  "leave_guard_discard": "Annuleren en weggooien"
+  "leave_guard_discard": "Annuleren en weggooien",
+  "currency_field": "Valuta",
+  "currency_rate_label": "Koers ({currency})",
+  "currency_rate_ecb": "{line} · ECB, {date}",
+  "currency_rate_manual": "Handmatig",
+  "currency_rate_direction": "Dus {inverse}. Het bedrag in euro is het bedrag gedeeld door de koers.",
+  "currency_rate_none": "De ECB publiceert geen actuele koers voor {currency}. Vul de koers zelf in.",
+  "currency_rate_unavailable": "De ECB is nu niet bereikbaar. Vul de koers zelf in, of kies de valuta zo opnieuw.",
+  "currency_use_ecb": "ECB-koers gebruiken",
+  "currency_euro_hint": "≈ {amount}",
+  "currency_error_rate": "Vul een koers in: hoeveel van deze valuta is 1 euro (een getal boven nul, hoogstens zes decimalen)."
 }
