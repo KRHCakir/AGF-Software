@@ -86,8 +86,18 @@ export function withOrderCurrency(draft: InvoiceDraft, order: Pick<InvoiceCandid
                 orderRateSource: order.exchangeRateSource ?? 'NotApplicable', orderRateDate: order.exchangeRateDate ?? null } }
             : line),
     };
-    if (draft.header.currency.trim().toUpperCase() === currency) return filled;
+    // Handmatige regels met bedragen: hun valuta verandert niet ongemerkt. Het conflict blijft zichtbaar (orderCurrencyConflict) en de
+    // gebruiker lost het zelf op; opslaan wacht zolang (purchaseInvoiceRules).
+    const manual = draft.lines.some((line) => line.orderLine === undefined && !isBlankLine(line));
+    if (draft.header.currency.trim().toUpperCase() === currency || manual) return filled;
     return { ...filled, header: { ...filled.header, currency, exchangeRate: '', rateSource: undefined, rateDate: null }, touched: { ...filled.touched, currency: true } };
+}
+
+// Een gekoppelde order in een andere valuta dan de factuur (alleen mogelijk bij een hersteld oud concept met handmatige regels): de
+// valuta van die order, anders null. Het valutaveld gaat dan open, zodat de gebruiker de valuta van de order kiest of de orderregels weghaalt.
+export function orderCurrencyConflict(draft: InvoiceDraft): string | null {
+    const linked = linkedOrderCurrency(draft);
+    return linked !== null && linked !== draft.header.currency.trim().toUpperCase() ? linked : null;
 }
 
 // De valuta waarin de factuur vastzit: die van de gekoppelde orders, of anders die van de factuur zelf zodra er handmatig ingevoerde regels
