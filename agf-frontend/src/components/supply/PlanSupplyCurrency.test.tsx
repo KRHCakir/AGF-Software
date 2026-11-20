@@ -64,6 +64,19 @@ describe('purchase order in another currency', () => {
         assert.deepEqual([body.currency, body.exchangeRate, body.exchangeRateSource], ['USD', 1.25, 'ECB']);
     });
 
+    test('the currency follows the vendor until chosen: a next vendor without a default currency goes back to euro', async () => {
+        const vendors = [reference.vendors[0], { id: 4, name: 'Supplier C', searchCode: 'SUPC', vatNumber: null, isActive: true, defaultCurrency: null }];
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={{ ...reference, vendors }} onReceive={() => {}} />);
+        await type('vendorId-input', 'supb');
+        await key('vendorId-input', 'Enter');
+        await mounted.waitFor(() => mounted.container.querySelector<HTMLSelectElement>('#currency-input')!.value === 'USD', 'USD from supplier B');
+        await key('vendorId-input', 'Backspace');
+        await type('vendorId-input', 'supc');
+        await key('vendorId-input', 'Enter');
+        assert.equal(mounted.container.querySelector<HTMLSelectElement>('#currency-input')!.value, 'EUR');
+        assert.equal(field('exchangeRate-input'), null);
+    });
+
     test('a manual rate goes along as Manual; euro sends no rate', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={{ ...reference, vendors: [{ ...reference.vendors[0], defaultCurrency: null }] }} onReceive={() => {}} />);
         await type('vendorId-input', 'supb');

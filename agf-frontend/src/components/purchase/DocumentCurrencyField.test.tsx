@@ -21,10 +21,14 @@ let seen: CurrencyDraft;
 
 const currencies = [{ code: 'EUR', hasEcbRate: false }, { code: 'USD', hasEcbRate: true }, { code: 'AED', hasEcbRate: false }];
 
+let setDate: (date: string) => void;
+
 function Field({ initial = euroDraft(), fetchOnOpen = true }: { initial?: CurrencyDraft; fetchOnOpen?: boolean }) {
     const [value, setValueState] = useState(initial);
+    const [date, setDateState] = useState('2026-11-18');
     seen = value;
-    return <DocumentCurrencyField value={value} onChange={setValueState} documentDate="2026-11-18" currencies={currencies} errors={{}} fetchOnOpen={fetchOnOpen} />;
+    setDate = setDateState;
+    return <DocumentCurrencyField value={value} onChange={setValueState} documentDate={date} currencies={currencies} errors={{}} fetchOnOpen={fetchOnOpen} />;
 }
 
 const select = () => mounted.container.querySelector<HTMLSelectElement>('#currency-input')!;
@@ -86,6 +90,21 @@ describe('DocumentCurrencyField', () => {
         await act(async () => { setSelectValue(select(), 'USD'); });
         await mounted.waitFor(() => mounted.hasText('currency_rate_unavailable'), 'unavailable message');
         assert.equal(seen.source, 'Manual');
+    });
+
+    test('a stored order keeps its fixed ECB rate when the date changes, as the server does', async () => {
+        await mounted.render(<Field fetchOnOpen={false} initial={{ currency: 'USD', rate: '1.0842', source: 'ECB', rateDate: '2026-11-10', touched: true }} />);
+        await act(async () => { setDate('2026-11-19'); });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+        assert.equal(urls.length, 0, 'no new rate for another date');
+        assert.deepEqual([seen.rate, seen.rateDate], ['1.0842', '2026-11-10']);
+    });
+
+    test('a stored euro order fetches the ECB rate as soon as another currency is chosen', async () => {
+        await mounted.render(<Field fetchOnOpen={false} />);
+        await act(async () => { setSelectValue(select(), 'USD'); });
+        await mounted.waitFor(() => /^1[.,]0842$/.test(rate()?.value ?? ''), 'rate fetched on the first change');
+        assert.equal(urls.length, 1);
     });
 
     test('a stored order opens with its fixed rate and does not fetch until the currency changes', async () => {

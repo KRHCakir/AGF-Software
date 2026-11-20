@@ -33,9 +33,10 @@ export default function DocumentCurrencyField({ value, onChange, documentDate, c
     const code = value.currency.trim().toUpperCase();
     const foreign = /^[A-Z]{3}$/.test(code) && !isEuro(code);
     const date = isDateOnly(documentDate) ? documentDate : null;
-    // De ECB-koers volgen zolang de bron ECB is: bij een andere valuta of documentdatum opnieuw ophalen (niet bij het openen van een
-    // opgeslagen document, tenzij de valuta verandert).
-    const skipFirst = useRef(!fetchOnOpen);
+    // De ECB-koers volgen zolang de bron ECB is: bij een andere valuta of documentdatum opnieuw ophalen. Bij aanpassen van een opgeslagen
+    // document met een ECB-koers blijft die vastgelegde koers staan zolang valuta en bron dezelfde zijn, ook bij een andere datum: zo houdt
+    // de server hem ook (DocumentCurrency.SameChoiceAs). Een opgeslagen euro- of handmatige keuze legt niets vast: een andere valuta haalt op.
+    const stored = useRef(!fetchOnOpen && foreign && value.source === 'ECB' && value.rate !== '' ? { currency: code, rate: value.rate, rateDate: value.rateDate } : null);
     const latest = useRef(value);
     latest.current = value;
 
@@ -43,7 +44,12 @@ export default function DocumentCurrencyField({ value, onChange, documentDate, c
         if (!foreign) { setFetch({ status: 'idle' }); return; }
         // Handmatig: niets ophalen; een melding "geen ECB-koers" of "niet bereikbaar" blijft staan.
         if (value.source === 'Manual') return;
-        if (skipFirst.current) { skipFirst.current = false; return; }
+        const keep = stored.current;
+        if (keep !== null && keep.currency === code) {
+            setFetch({ status: 'idle' });
+            if (latest.current.rate !== keep.rate || latest.current.rateDate !== keep.rateDate) onChange({ ...latest.current, rate: keep.rate, rateDate: keep.rateDate });
+            return;
+        }
         const controller = new AbortController();
         setFetch({ status: 'loading' });
         getExchangeRate(code, date, controller.signal)
