@@ -26,6 +26,8 @@ namespace AgfAdmin.Security
                 }
                 options.AddPolicy(Permissions.MasterDataWrites, policy => policy.RequireAuthenticatedUser().AddRequirements(new ReadsForAllRequirement(Permissions.MasterData)));
                 options.AddPolicy(Permissions.AdminWrites, policy => policy.RequireAuthenticatedUser().AddRequirements(new ReadsForAllRequirement(Permissions.Admin)));
+                options.AddPolicy(Permissions.MasterDataOrAdminWrites, policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                    context.User.HasClaim(Permissions.ClaimType, Permissions.MasterData) || context.User.HasClaim(Permissions.ClaimType, Permissions.Admin)));
                 options.AddPolicy(Permissions.PurchaseOrStock, policy => policy.RequireAuthenticatedUser().RequireAssertion(context =>
                     context.User.HasClaim(Permissions.ClaimType, Permissions.Purchase) || context.User.HasClaim(Permissions.ClaimType, Permissions.Stock)));
                 // Een endpoint zonder eigen beleid vraagt in elk geval een aangemelde gebruiker.

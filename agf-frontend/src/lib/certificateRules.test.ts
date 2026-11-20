@@ -49,8 +49,15 @@ describe('certificate rows', () => {
         assert.equal(hasValidGgnCheckDigit('4049928415685'), false);
         assert.deepEqual(certificateWarnings(ggn('4049928415684')), []);
         assert.deepEqual(certificateWarnings(ggn('4049928415685', [])), ['products_missing', 'ggn_check_digit']);
-        assert.deepEqual(certificateWarnings({ ...ggn('4049928415684', []), id: 7 }), ['products_pending']);
+        assert.deepEqual(certificateWarnings({ ...ggn('4049928415684', []), id: 7, productsPending: true }), ['products_pending']);
+        assert.deepEqual(certificateWarnings({ ...ggn('4049928415684', []), id: 7 }), ['products_missing']);
         assert.deepEqual(certificateWarnings({ ...emptyCertificateRow('Skal'), number: 'X' }), []);
+    });
+
+    test('a new row with only a date, product or body filled in is not blank and gets validated', () => {
+        for (const patch of [{ validFrom: '2026-01-01' }, { certificationBody: 'Control Union' }, { productIds: [2] }, { producerName: 'X' }, { hasGgnLabel: true }]) {
+            assert.equal(buildCertificatesPayload([{ ...emptyCertificateRow(), ...patch }], TODAY).ok, false);
+        }
     });
 
     test('Tab adds a row only after a filled last row; a blank row is no change', () => {
