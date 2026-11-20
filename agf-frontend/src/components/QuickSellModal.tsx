@@ -109,10 +109,10 @@ export default function QuickSellModal({ isOpen, onClose, onSuccess }: { isOpen:
                                 <div className="w-20">
                                     <input type="number" step="0.01" placeholder={t('price')} value={line.unitPrice} onChange={e => updateLine(index, 'unitPrice', Number(e.target.value))} className="w-full border rounded p-1 text-sm" required />
                                 </div>
-                                <button type="button" onClick={() => removeLine(index)} className="text-red-500 hover:text-red-700 px-1">✕</button>
+                                <button type="button" onClick={() => removeLine(index)} className="text-red-700 hover:text-red-700 px-1">✕</button>
                             </div>
                         ))}
-                        <button type="button" onClick={addLine} className="text-sm text-blue-600 hover:text-blue-800 font-medium">{t('add_item')}</button>
+                        <button type="button" onClick={addLine} className="text-sm text-blue-700 hover:text-blue-800 font-medium">{t('add_item')}</button>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t">

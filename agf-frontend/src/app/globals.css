@@ -12,6 +12,22 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Fixes 5b, beter leesbaar. Alleen grootte en kleur, geen indeling:
+   - tabellen en velden (text-sm) 15 px in plaats van 14; labels en kleine tekst (text-xs) 13 px in plaats van 12;
+   - gedempte tekst (grijs 400, 500 en 600) donkerder, zodat het contrast op wit, grijs-50/100 en de lichte meldingskleuren minstens
+     4,5 op 1 is (WCAG AA). De test colorContrast.test.ts rekent deze waarden na. Grijs 50 en 100 staan er als vaste achtergrond bij. */
+@theme {
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-400: #646b78;
+  --color-gray-500: #555d6b;
+  --color-gray-600: #4b5563;
+}
+
 
 body {
   background: var(--background);

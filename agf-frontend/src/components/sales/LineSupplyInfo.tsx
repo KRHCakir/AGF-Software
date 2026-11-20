@@ -21,16 +21,16 @@ export default function LineSupplyInfo({ line }: { line: SalesOrderLine }) {
     return (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-100 px-3 py-1.5 text-sm" data-testid="line-supply-info" data-tour="sales-line-supply">
             {line.supplySource !== undefined && (
-                <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${line.supplySource === 'Expected' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-gray-300 bg-white text-gray-800'}`}
+                <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${line.supplySource === 'Expected' ? 'border-amber-400 bg-amber-100 text-amber-900' : 'border-gray-300 bg-white text-gray-800'}`}
                     data-testid="line-source">
                     {t(line.supplySource === 'Expected' ? 'sales_source_expected' : 'sales_source_stock')}
                 </span>
             )}
-            {line.awaitingStock && <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900">{t('sales_awaiting_stock')}</span>}
+            {line.awaitingStock && <span className="rounded border border-amber-400 bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900">{t('sales_awaiting_stock')}</span>}
             {balance !== null && (
                 <span className="text-gray-800" data-testid="line-balance">
                     {t('sales_balance_line', { stock: q(balance.stock), expected: q(balance.expected), free: q(balance.free), unit })}
-                    {state === 'shortage' && <span className="ml-1 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold uppercase text-red-800">{t('sales_shortage')}</span>}
+                    {state === 'shortage' && <span className="ml-1 rounded border border-red-400 bg-red-100 px-1.5 py-0.5 text-xs font-semibold uppercase text-red-800">{t('sales_shortage')}</span>}
                 </span>
             )}
             {parts.length > 0 && <CoverageText parts={parts} reserved={line.reservedQuantity} testId="line-coverage" />}

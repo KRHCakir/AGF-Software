@@ -100,7 +100,7 @@ export default function InventoryPage() {
                                                 <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500">
                                                     {new Date(batch.stored).toLocaleDateString()}
                                                 </td>
-                                                <td className={`px-6 py-3 whitespace-nowrap text-sm text-right font-bold ${batch.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                                                <td className={`px-6 py-3 whitespace-nowrap text-sm text-right font-bold ${batch.quantity < 0 ? 'text-red-700' : 'text-gray-900'}`}>
                                                     {batch.quantity}
                                                 </td>
                                                 <td className="px-6 py-3 whitespace-nowrap text-right space-x-2">

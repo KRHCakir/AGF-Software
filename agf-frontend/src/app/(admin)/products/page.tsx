@@ -71,7 +71,7 @@ export default function ProductsPage() {
                       <td colSpan={3} className="px-6 py-6 border-t border-blue-100 border-b-4 border-b-gray-200">
                         <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
                           <table className="w-full text-sm">
-                            <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase text-[10px]">
+                            <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 font-semibold uppercase text-xs">
                               <tr>
                                 <th className="px-4 py-2">{t('variant')}</th>
                                 <th className="px-4 py-2">{t('origin')} / {t('size')}</th>
@@ -97,7 +97,7 @@ export default function ProductsPage() {
                                     </td>
                                     <td className="px-4 py-3 text-gray-500 text-xs">
                                       {v.notes && <div><span className="font-semibold text-gray-700">{t('info_label')}</span> <span className="italic">{v.notes}</span></div>}
-                                      {!v.notes && <span className="text-gray-300">{t('no_extra_info')}</span>}
+                                      {!v.notes && <span className="text-gray-500">{t('no_extra_info')}</span>}
                                     </td>
                                     <td className="px-4 py-3">
                                       <WeightSettings variantId={v.id} weightMethod={isWeightMethod(v.weightMethod) ? v.weightMethod : 'Weighed'}

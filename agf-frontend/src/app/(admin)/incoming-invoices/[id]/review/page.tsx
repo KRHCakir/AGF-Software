@@ -94,7 +94,7 @@ export default function InvoiceReviewPage({ params }: { params: Promise<{ id: st
     if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
     if (!invoice) return <div className="flex items-center justify-center h-screen">Invoice not found</div>;
 
-    const confidenceColor = invoice.reviewConfidence > 0.8 ? 'text-green-600' : invoice.reviewConfidence > 0.5 ? 'text-yellow-600' : 'text-red-600';
+    const confidenceColor = invoice.reviewConfidence > 0.8 ? 'text-green-800' : invoice.reviewConfidence > 0.5 ? 'text-yellow-800' : 'text-red-700';
 
     return (
         <div className="flex h-screen bg-gray-100 overflow-hidden">
@@ -147,7 +147,7 @@ export default function InvoiceReviewPage({ params }: { params: Promise<{ id: st
 
                         {/* Messages / Warnings */}
                         {invoice.detectedIssues && (
-                            <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700">
+                            <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800">
                                 <p className="font-bold">AI Warnings:</p>
                                 <p>{invoice.detectedIssues}</p>
                             </div>

@@ -356,7 +356,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     </div>
                     {order.internalNote && (
                         <div className="col-span-full" data-testid="internal-note">
-                            <dt className="text-xs text-gray-600">{t('internal_note_label')} <span className="rounded bg-amber-100 px-1 text-[10px] font-semibold uppercase text-amber-900">{t('internal_note_badge')}</span></dt>
+                            <dt className="text-xs text-gray-600">{t('internal_note_label')} <span className="rounded bg-amber-100 px-1 text-xs font-semibold uppercase text-amber-900">{t('internal_note_badge')}</span></dt>
                             <dd className="font-medium text-gray-900">{order.internalNote}</dd>
                         </div>
                     )}

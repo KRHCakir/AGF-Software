@@ -79,8 +79,8 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                                     {/* Indicatoren van verkopen vóór aankomst: Tekort (niet gedekt door voorraad of verwachte aanvoer) en Wacht op voorraad. */}
                                     {order.status === 'Open' && (order.shortage || order.awaitingStock) && (
                                         <span className="mt-1 flex flex-wrap gap-1">
-                                            {order.shortage && <span className="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-800" data-testid="order-shortage">{t('sales_shortage')}</span>}
-                                            {order.awaitingStock && <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-testid="order-awaiting-stock">{t('sales_awaiting_stock')}</span>}
+                                            {order.shortage && <span className="rounded border border-red-400 bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-800" data-testid="order-shortage">{t('sales_shortage')}</span>}
+                                            {order.awaitingStock && <span className="rounded border border-amber-400 bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" data-testid="order-awaiting-stock">{t('sales_awaiting_stock')}</span>}
                                         </span>
                                     )}
                                     {order.status !== 'Open' && (

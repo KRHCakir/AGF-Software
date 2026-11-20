@@ -84,11 +84,11 @@ function AdminLayoutContent({
                     {showLegacyDemoChrome && (
                         <div className="mb-2 flex flex-wrap gap-2 text-xs">
                             <div className="rounded border border-gray-300 bg-white p-2 shadow-sm">
-                                <div className="mb-1 font-bold text-blue-600">{t('incoming_shipment')}</div>
+                                <div className="mb-1 font-bold text-blue-700">{t('incoming_shipment')}</div>
                                 <p>{t('container_arriving')}</p>
                             </div>
                             <div className="rounded border border-gray-300 bg-white p-2 shadow-sm">
-                                <div className="mb-1 font-bold text-red-600">{t('stock_warning')}</div>
+                                <div className="mb-1 font-bold text-red-700">{t('stock_warning')}</div>
                                 <p>{t('avocados_expiring')}</p>
                             </div>
                         </div>
