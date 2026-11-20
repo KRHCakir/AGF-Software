@@ -485,7 +485,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                 {/* Valuta-ronde: de koers van de factuurdatum (ECB, aanpasbaar: Handmatig), het bedrag in euro, en de koers van de order als die
                     anders is (geen fout: een koersverschil is voor de boekhouder). */}
                 {!isEuro(draft.header.currency) && (
-                    <div className="sm:col-span-2" data-testid="invoice-rate">
+                    <div className="col-span-2" data-testid="invoice-rate">
                         <ExchangeRateField value={invoiceMoney} onChange={(next) => update(changeRate(draft, next))} documentDate={draft.header.invoiceDate} prefix="pinvoice"
                             errors={{ exchangeRate: e('exchangeRate') ?? [] }} disabled={locked} />
                         {invoiceRate !== null && (
