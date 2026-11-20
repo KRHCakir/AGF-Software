@@ -26,6 +26,9 @@ namespace AgfAdmin.DTOs
         public decimal? ExchangeRate { get; set; }
         public string ExchangeRateSource { get; set; }
         public List<CreateSupplyCommitmentLineDto> Lines { get; set; }
+        // Certificaten deel 1: de producten waarvoor de gebruiker "Ja, klopt" koos na de vraag over het GGN-certificaat van de leverancier
+        // (409 CERTIFICATE_CONFIRMATION_REQUIRED). Telt niet mee in de replayvergelijking.
+        public List<int> ConfirmedCertificateProductIds { get; set; }
     }
 
     public sealed class CreateSupplyCommitmentLineDto

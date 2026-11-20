@@ -350,7 +350,20 @@ namespace AgfAdmin.Services
                 deviation = planned.Deviation;
             }
 
+            // Certificaten deel 1: staat het ontvangen product niet in het GGN-certificaat van de leverancier, of is dat vandaag verlopen,
+            // dan eerst "Klopt dit?" (409); "Ja, klopt" (ConfirmCertificate) legt vast wie bevestigde, in dezelfde save als de ontvangst.
+            var receivedVariantId = request.ReceivedProductVariantId ?? source.ProductVariantId;
+            var receivedProductId = receivedVariantId == source.ProductVariantId && source.ProductVariant != null ? source.ProductVariant.ProductId
+                : await _db.ProductVariants.AsNoTracking().Where(v => v.Id == receivedVariantId).Select(v => v.ProductId).SingleAsync(cancellationToken);
+            var certificateChecks = await CertificateCheck.CheckAsync(_db, source.SupplyCommitment.VendorId, new[] { receivedProductId }, _db.BusinessCalendar.Today(), cancellationToken);
+            if (certificateChecks.Count > 0 && request.ConfirmCertificate != true)
+            {
+                return ServiceResult<PalletContentLineDto>.Conflict(CertificateCheck.ConflictMessage(certificateChecks), CertificateCheck.ConflictBody(certificateChecks));
+            }
+
             _db.PalletContentLines.Add(candidate);
+            _db.CertificateConfirmations.AddRange(CertificateCheck.Confirmations(certificateChecks, CertificateCheck.ContextReceipt, source.SupplyCommitment.VendorId, _user, DateTime.UtcNow,
+                orderId: source.SupplyCommitmentId, contentLine: candidate));
             _db.Entry(pallet).Property(p => p.Version).IsModified = true;
             if (deviation == null)
             {
