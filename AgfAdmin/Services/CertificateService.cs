@@ -16,6 +16,7 @@ namespace AgfAdmin.Services
     public sealed partial class CertificateService(AppDbContext db, ICurrentUser user = null, IDocumentStore store = null, IOptions<DocumentAiOptions> options = null)
     {
         private const int CertificateLockClass = 0x43455231; // eigen lockruimte voor het opslaan van certificaten
+        private const int SettingsLockClass = 0x43455332; // bedrijfsbrede lock voor de certificaatinstellingen (eigen soorten, dagen vooraf)
         public const string WarningProductsMissing = "products-missing";
         public const string WarningGgnCheckDigit = "ggn-check-digit";
 
@@ -56,10 +57,14 @@ namespace AgfAdmin.Services
             if (names.Count > CertificateRules.MaxCustomTypes) ValidationErrors.Add(errors, "customTypes", $"At most {CertificateRules.MaxCustomTypes} own certificate types.");
             if (names.Any(n => n.Length > CertificateRules.MaxCustomTypeLength)) ValidationErrors.Add(errors, "customTypes", $"A certificate type has at most {CertificateRules.MaxCustomTypeLength} characters.");
             if (errors.Count > 0) return ServiceResult<CertificateSettingsDto>.Validation(ValidationErrors.ToArrays(errors));
+            // Lezen en schrijven achter dezelfde bedrijfsbrede lock als het toevoegen van eigen soorten bij het opslaan van certificaten.
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            await LockSettingsAsync(cancellationToken);
             var settings = await SettingsAsync(tracking: true, cancellationToken);
             settings.CertificateWarningDays = request!.WarningDays;
             settings.CustomCertificateTypes = CertificateRules.FormatCustomTypes(names);
             await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             return ServiceResult<CertificateSettingsDto>.Ok(new CertificateSettingsDto { WarningDays = settings.CertificateWarningDays, CustomTypes = names.ToList() });
         }
 
@@ -204,11 +209,22 @@ namespace AgfAdmin.Services
             return ServiceResult<CertificateListDto>.Ok(dto);
         }
 
+        private async Task LockSettingsAsync(CancellationToken cancellationToken)
+        {
+            if (db.Database.IsNpgsql())
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({SettingsLockClass}, 0)", cancellationToken);
+            }
+        }
+
         // "Eigen soort toevoegen": een nieuwe eigen soort komt in de bedrijfslijst, zodat hij de volgende keer in de keuzelijst staat.
         private async Task AddCustomTypesAsync(IEnumerable<string> names, CancellationToken cancellationToken)
         {
             var wanted = names.Where(n => n != null).ToList();
             if (wanted.Count == 0) return;
+            // Bedrijfsbreed: de lock per relatie volstaat niet, want de lijst met eigen soorten is voor alle relaties gedeeld.
+            // Volgorde altijd eerst de lock van de eigenaar, dan deze; UpdateSettingsAsync neemt alleen deze, dus geen deadlock.
+            await LockSettingsAsync(cancellationToken);
             var settings = await SettingsAsync(tracking: true, cancellationToken);
             var list = CertificateRules.ParseCustomTypes(settings.CustomCertificateTypes).ToList();
             foreach (var name in wanted)

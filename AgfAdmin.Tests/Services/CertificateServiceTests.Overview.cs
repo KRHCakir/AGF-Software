@@ -39,6 +39,20 @@ public partial class CertificateServiceTests
     }
 
     [Fact]
+    public async Task The_Overview_Pages_Through_All_Certificates_And_Reports_The_Total_Before_Paging()
+    {
+        var seed = await SeedAsync();
+        await SaveAsync(seed.CustomerRelation, "0", Enumerable.Range(1, 5).Select(i => new SaveCertificateDto { TypeCode = "Brcgs", Number = $"BRC-{i}", ValidUntil = Today.AddDays(100 + i) }).ToArray());
+        await using var db = _factory.CreateContext();
+        var first = await Service(db).OverviewAsync(null, null, null, false, 1, 2);
+        var last = await Service(db).OverviewAsync(null, null, null, false, 3, 2);
+        Assert.Equal(5, first.Total);
+        Assert.Equal(new[] { "BRC-1", "BRC-2" }, first.Items.Select(i => i.Number));
+        Assert.Equal(5, last.Total);
+        Assert.Equal(new[] { "BRC-5" }, last.Items.Select(i => i.Number));
+    }
+
+    [Fact]
     public async Task The_Relation_List_Shows_Certificates_Filters_On_Status_And_Finds_A_Certificate_Number()
     {
         var seed = await SeedAsync();
