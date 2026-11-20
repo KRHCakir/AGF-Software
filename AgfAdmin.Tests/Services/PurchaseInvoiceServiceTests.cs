@@ -89,6 +89,8 @@ public class PurchaseInvoiceServiceTests : IDisposable
         var request = Request();
         request.PaymentTermsDays = 60;
         request.Currency = "usd";
+        // Valuta-ronde: een factuur in dollars heeft een koers nodig (hier handmatig; de ECB-koers staat in ExchangeRateTests).
+        (request.ExchangeRate, request.ExchangeRateSource) = (1.1m, "Manual");
         request.DueDate = new DateTime(2026, 12, 31, 0, 0, 0, DateTimeKind.Utc);
         var created = (await CreateAsync(request)).Value;
         Assert.Equal((60, "USD", new DateTime(2026, 12, 31, 0, 0, 0, DateTimeKind.Utc)), (created.PaymentTermsDays!.Value, created.Currency, created.DueDate!.Value));

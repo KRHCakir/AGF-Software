@@ -34,11 +34,19 @@ public sealed class PartijCostTests : IDisposable
         _purchase = (await new PartijService(db).CreateAsync(new CreatePartijDto { RequestId = Guid.NewGuid(), Number = "52611002" })).Value.Id;
         var invoice = await new PurchaseInvoiceService(db).CreateAsync(new CreatePurchaseInvoiceDto
         {
-            RequestId = Guid.NewGuid(), VendorId = _s.VendorId, InvoiceNumber = "BC-118", InvoiceDate = new DateTime(2026, 11, 5, 0, 0, 0, DateTimeKind.Utc), Currency = currency,
+            RequestId = Guid.NewGuid(), VendorId = _s.VendorId, InvoiceNumber = "BC-118", InvoiceDate = new DateTime(2026, 11, 5, 0, 0, 0, DateTimeKind.Utc), Currency = currency, ExchangeRate = ExchangeRateRules.IsEuro(currency) ? null : 1m, ExchangeRateSource = ExchangeRateRules.IsEuro(currency) ? null : ExchangeRateRules.SourceManual,
             Lines = new() { new() { CostArticleId = costs["Handling"], Quantity = 1m, UnitPrice = 5000m, VatPercentage = 21m } }
         });
         Assert.Equal(ServiceResultStatus.Created, invoice.Status);
         (_invoiceId, _lineId) = (invoice.Value.Id, invoice.Value.Lines[0].Id);
+        // Valuta-ronde: een factuur in een andere valuta krijgt bij opslaan een koers. Deze tests gaan over een factuur van vóór die ronde
+        // (zonder koers, die haalt haar ECB-koers nog op bij het verdelen): de koers wordt hier weer weggehaald.
+        if (!ExchangeRateRules.IsEuro(currency))
+        {
+            var stored = await db.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId);
+            (stored.ExchangeRate, stored.ExchangeRateDate, stored.ExchangeRateSource, stored.ExchangeRateFetchedAt) = (null, null, null, null);
+            await db.SaveChangesAsync();
+        }
     }
 
     private async Task<ServiceResult<InvoiceAllocationsDto>> SaveAsync(int version, Guid? requestId = null, params (int PartijId, decimal Amount)[] allocations)

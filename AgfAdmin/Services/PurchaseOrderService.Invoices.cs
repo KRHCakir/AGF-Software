@@ -73,6 +73,7 @@ namespace AgfAdmin.Services
                 .Select(c => new
                 {
                     c.Id, c.OrderNumber, c.SupplierReference, c.OrderedOn, c.ExpectedAt, PartijNumber = c.Partij.Number, c.DocumentStatus, c.Route,
+                    c.Currency, c.ExchangeRate, c.ExchangeRateDate, c.ExchangeRateSource,
                     Lines = c.Lines.OrderBy(l => l.Id).Select(l => new { l.Id, l.ProductVariantId, Product = l.ProductVariant.Product.Name, Variant = l.ProductVariant.Name, l.ExpectedUnit, l.UnitPrice, PartijNumber = l.Partij.Number }).ToList(),
                 })
                 .ToListAsync(cancellationToken);
@@ -102,6 +103,7 @@ namespace AgfAdmin.Services
                     Id = order.Id, OrderNumber = order.OrderNumber, SupplierReference = order.SupplierReference, OrderedOn = order.OrderedOn,
                     ExpectedAt = order.ExpectedAt == null ? null : DateTime.SpecifyKind(order.ExpectedAt.Value, DateTimeKind.Utc), PartijNumber = order.PartijNumber,
                     DocumentStatus = order.DocumentStatus, Route = order.Route,
+                    Currency = order.Currency, ExchangeRate = order.ExchangeRate, ExchangeRateDate = order.ExchangeRateDate, ExchangeRateSource = order.ExchangeRateSource,
                     PriceAdjustable = order.DocumentStatus == PurchaseOrderDocumentRules.StatusOpen && order.Route == SupplyRules.RouteWarehouse,
                     InvoiceNumbers = facts.For(id).Refs.Where(r => r.Kind == PurchaseOrderRules.KindInvoice).OrderBy(r => r.CreatedAt).Select(r => r.InvoiceNumber).ToList(),
                     Lines = lines,

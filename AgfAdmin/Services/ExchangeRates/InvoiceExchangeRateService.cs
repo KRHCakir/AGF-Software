@@ -59,7 +59,10 @@ namespace AgfAdmin.Services
                 return ServiceResult<InvoiceAllocationsDto>.NotFound($"Purchase invoice {invoiceId} does not exist.");
             }
             var lineIds = invoice.InvoiceLines.Select(l => l.Id).ToList();
-            if (ExchangeRateRules.IsEuro(invoice.Currency) || await _db.PartijCosts.AnyAsync(c => lineIds.Contains(c.IncomingInvoiceLineId), cancellationToken))
+            // Valuta-ronde: een factuur met een koers (sinds deze ronde vastgelegd bij opslaan, ECB of handmatig) houdt die koers; alleen een
+            // oudere factuur zonder koers haalt hem hier op, zolang er niets op partijen staat.
+            if (ExchangeRateRules.IsEuro(invoice.Currency) || invoice.ExchangeRate != null
+                || await _db.PartijCosts.AnyAsync(c => lineIds.Contains(c.IncomingInvoiceLineId), cancellationToken))
             {
                 return await costs.GetInvoiceAsync(invoiceId, cancellationToken);
             }
