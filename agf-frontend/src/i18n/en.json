@@ -2948,5 +2948,10 @@
   "tour_orderedit_correct_what": "On a definitive order we change the price with Correction, with a required reason.",
   "tour_orderedit_correct_why": "Only the price, the supplier's order number and the note; quantities and articles follow from the receipt.",
   "ai_upload_hint_single": "PDF, JPG, PNG or HEIC (phone photo), at most 10 MB. The AI ({model}) makes a proposal; you check and approve it.",
-  "ai_settings_hint_single": "With AI reading, {provider} reads an uploaded purchase invoice and makes a proposal; someone checks and approves it. The document is sent to that service for this. Model: {model} (no other model)."
+  "ai_settings_hint_single": "With AI reading, {provider} reads an uploaded purchase invoice and makes a proposal; someone checks and approves it. The document is sent to that service for this. Model: {model} (no other model).",
+  "leave_guard_error": "Your form still contains an error.",
+  "leave_guard_unsaved": "Your form has unsaved changes.",
+  "leave_guard_hint": "Go back to finish and save it, or discard your input and continue.",
+  "leave_guard_stay": "Back to the form",
+  "leave_guard_discard": "Cancel and discard"
 }

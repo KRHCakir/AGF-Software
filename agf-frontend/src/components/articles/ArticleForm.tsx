@@ -20,6 +20,7 @@ import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import GoodsCodeLookup from './GoodsCodeLookup';
+import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 // Eén compact artikelformulier: identificatie en uitvoering direct zichtbaar, verpakking en gewicht ernaast, handels- en
 // aanvullende gegevens ingeklapt (open zodra er iets in staat). Alleen de productsoort is verplicht; leeg blijft leeg.
@@ -43,6 +44,8 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     const [draft, setDraft] = useState<ArticleDraft>(() => (article === null ? emptyArticleDraft() : draftFromArticle(article)));
     const [errors, setErrors] = useState<FieldErrors>({});
+    // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
+    const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [serverError, setServerError] = useState<ApiError | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [tradeOpen, setTradeOpen] = useState<boolean>(() => article !== null && hasTradeValues(draftFromArticle(article)));
@@ -80,6 +83,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
             const saved = article === null ? await createArticle(built.value) : await updateArticle(article.id, built.value);
             setNotice(t(article === null ? 'articles_created' : 'articles_saved', { description: saved.description }));
             setDraft(draftFromArticle(saved));
+            leave.saved();
             onSaved(saved, article === null);
         } catch (caught) {
             const apiError = toApiError(caught);
@@ -130,7 +134,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
     );
 
     return (
-        <form noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="article-form">
+        <form ref={leave.ref} noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="article-form">
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <h2 className="text-lg font-semibold text-gray-900">{article === null ? t('articles_new') : t('articles_edit', { id: String(article.id) })}</h2>
                 <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting}>{t('articles_cancel')}</button>
