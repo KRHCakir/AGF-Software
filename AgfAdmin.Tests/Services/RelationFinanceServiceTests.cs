@@ -657,6 +657,21 @@ public class RelationFinanceServiceTests : IDisposable
         var first = Assert.Single(await CertificatesAsync());   // nieuw GGN = nieuw certificaat
         Assert.Equal((CertificateRules.GlobalGapIfa, "4049929000001", "Uno", true), (first.TypeCode, first.Number, first.ProducerName, first.ProductsPending));
 
+        // Wat op het certificaat zelf is bijgewerkt (einddatum), blijft staan bij een volgende opslag waarin het GGN niet verandert; van een
+        // later gewijzigd GGN gaat alleen het gewijzigde veld (producent) naar het certificaat.
+        await using (var db = _factory.CreateContext())
+        {
+            var certificate = await db.RelationCertificates.SingleAsync(c => c.Id == first.Id);
+            certificate.ValidUntil = new DateOnly(2027, 6, 30);
+            await db.SaveChangesAsync();
+        }
+        var same = New("Kweker sync");
+        same.ExpectedVersion = created.Version;
+        same.Vendor = new SaveVendorRoleDto { Ggns = created.Vendor!.Ggns };
+        var unchanged = (await UpdateAsync(created.Id, same)).Value;
+        Assert.Equal(new DateOnly(2027, 6, 30), Assert.Single(await CertificatesAsync()).ValidUntil);
+        created = unchanged;
+
         var update = New("Kweker sync");
         update.ExpectedVersion = created.Version;
         update.Vendor = new SaveVendorRoleDto
@@ -671,6 +686,7 @@ public class RelationFinanceServiceTests : IDisposable
         var certificates = await CertificatesAsync();
         Assert.Equal(2, certificates.Count);
         Assert.Equal(("Uno BV", false, first.Id), (certificates[0].ProducerName, certificates[0].IsActive, certificates[0].Id));   // gewijzigd/gedeactiveerd
+        Assert.Equal(new DateOnly(2027, 6, 30), certificates[0].ValidUntil);                                                      // niet gewijzigd: blijft
         Assert.Equal("4049929000002", certificates[1].Number);                                                                      // toegevoegd
 
         var remove = New("Kweker sync");

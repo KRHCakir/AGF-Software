@@ -201,7 +201,7 @@ namespace AgfAdmin.Services
                 }
                 return ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
             }
-            await SyncGgnCertificatesAsync(relation.Id, command.ActorReference, cancellationToken);
+            await SyncGgnCertificatesAsync(relation.Id, new Dictionary<int, GgnState>(), command.ActorReference, cancellationToken);
             var created = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == relation.Id, cancellationToken), cancellationToken);
             created.Warnings.InsertRange(0, signals.Warnings);
             return ServiceResult<RelationDto>.Created(created);
@@ -232,6 +232,7 @@ namespace AgfAdmin.Services
             var conditions = await ResolveConditionsAsync(command, cancellationToken);
             await CheckEmailDomainsAsync(signals, cancellationToken);
             var previousDefaults = relation.BankAccounts.Where(a => a.IsDefault && a.IsActive).Select(a => a.Id).ToHashSet();
+            var ggnsBefore = GgnStates(relation);
             Apply(relation, command, conditions);
             var syncing = false;
             try
@@ -251,7 +252,7 @@ namespace AgfAdmin.Services
                 }
                 await _db.SaveChangesAsync(cancellationToken);
                 syncing = true;
-                await SyncGgnCertificatesAsync(id, command.ActorReference, cancellationToken);
+                await SyncGgnCertificatesAsync(id, ggnsBefore, command.ActorReference, cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateConcurrencyException)
@@ -270,43 +271,61 @@ namespace AgfAdmin.Services
             return ServiceResult<RelationDto>.Ok(updated);
         }
 
-        // Zolang de GGN-velden bij de leverancier hier nog bewerkt worden, blijven de certificaten van de soort GLOBALG.A.P. IFA (GGN)
-        // gelijk aan die GGN's (overname in migratie 66, CertificateRules.CopyVendorGgnsSql): een nieuw GGN wordt een certificaat (producten
-        // nog invullen), een gewijzigd GGN werkt zijn certificaat bij, een weggehaald GGN archiveert zijn certificaat (nooit verwijderen,
-        // regel 33). Producten, bestanden, soort en begindatum van het certificaat blijven staan. Idempotent: een volgende save herstelt
-        // een eventueel gemiste synchronisatie.
-        private async Task SyncGgnCertificatesAsync(int relationId, string actor, CancellationToken cancellationToken)
+        private sealed record GgnState(string Ggn, string ProducerName, bool IsActive, DateOnly? CheckedOn, string CheckedBy, DateOnly? ValidUntil, bool HasGgnLabel);
+
+        private static Dictionary<int, GgnState> GgnStates(Relation relation) =>
+            (relation.Vendor?.Ggns ?? new List<VendorGgn>()).Where(g => g.Id != 0)
+                .ToDictionary(g => g.Id, g => new GgnState(g.Ggn, g.ProducerName, g.IsActive, g.CheckedOn, g.CheckedBy, g.CertificateValidUntil, g.HasGgnLabel));
+
+        // Zolang de oude GGN-velden bij de leverancier nog via deze API bewerkt kunnen worden (oudere clients; de relatiekaart stuurt ze sinds
+        // certificaten deel 1 ongewijzigd terug), gaat een wijziging daarvan naar het certificaat dat eruit is overgenomen (migratie 66):
+        // - een GGN zonder certificaat wordt er een (soort GGN, "producten nog invullen"); ook een eerder gemiste overname herstelt zo;
+        // - van een GGN dat in deze opslag veranderde, gaan alléén de gewijzigde velden naar het certificaat;
+        // - een GGN dat in deze opslag verdween, archiveert zijn certificaat (nooit verwijderen, regel 33).
+        // Een GGN dat niet veranderde, raakt zijn certificaat niet: wat op het certificaat zelf is bijgewerkt (einddatum, controle, archiveren,
+        // producten, bestanden) blijft dus staan bij elke volgende opslag van de relatie.
+        private async Task SyncGgnCertificatesAsync(int relationId, IReadOnlyDictionary<int, GgnState> before, string actor, CancellationToken cancellationToken)
         {
             _db.ChangeTracker.Clear();
-            var ggns = await _db.VendorGgns.AsNoTracking().Where(g => g.Vendor.RelationId == relationId).ToListAsync(cancellationToken);
-            var ggnIds = ggns.Select(g => g.Id).ToList();
-            var certificates = await _db.RelationCertificates
-                .Where(c => c.SourceVendorGgnId != null && (c.RelationId == relationId || ggnIds.Contains(c.SourceVendorGgnId.Value)))
-                .ToListAsync(cancellationToken);
-            var bySource = certificates.ToDictionary(c => c.SourceVendorGgnId.Value);
+            var after = await _db.VendorGgns.AsNoTracking().Where(g => g.Vendor.RelationId == relationId).ToListAsync(cancellationToken);
+            var ids = after.Select(g => g.Id).Concat(before.Keys).Distinct().ToList();
+            var bySource = (await _db.RelationCertificates.Where(c => c.SourceVendorGgnId != null && ids.Contains(c.SourceVendorGgnId.Value)).ToListAsync(cancellationToken))
+                .ToDictionary(c => c.SourceVendorGgnId.Value);
             var who = string.IsNullOrWhiteSpace(actor) ? "Systeem" : actor;
             var now = DateTime.UtcNow;
-            foreach (var g in ggns)
+            var nextSort = (await _db.RelationCertificates.Where(c => c.RelationId == relationId).Select(c => (int?)c.SortOrder).MaxAsync(cancellationToken) ?? -1) + 1;
+            foreach (var g in after.OrderBy(g => g.SortOrder).ThenBy(g => g.Id))
             {
+                var state = new GgnState(g.Ggn, g.ProducerName, g.IsActive, g.CheckedOn, g.CheckedBy, g.CertificateValidUntil, g.HasGgnLabel);
                 if (!bySource.TryGetValue(g.Id, out var c))
                 {
                     _db.RelationCertificates.Add(new RelationCertificate
                     {
                         RelationId = relationId, TypeCode = CertificateRules.GlobalGapIfa, Number = g.Ggn, NumberKey = g.Ggn, ValidUntil = g.CertificateValidUntil,
                         ProductsPending = true, ProducerName = g.ProducerName, HasGgnLabel = g.HasGgnLabel, CheckedOn = g.CheckedOn, CheckedBy = g.CheckedBy,
-                        IsActive = g.IsActive, SortOrder = g.SortOrder, SourceVendorGgnId = g.Id, CreatedAt = now, CreatedBy = who, UpdatedAt = now, UpdatedBy = who
+                        IsActive = g.IsActive, SortOrder = nextSort++, SourceVendorGgnId = g.Id, CreatedAt = now, CreatedBy = who, UpdatedAt = now, UpdatedBy = who,
                     });
                     continue;
                 }
-                if (c.Number == g.Ggn && c.NumberKey == g.Ggn && c.ValidUntil == g.CertificateValidUntil && c.ProducerName == g.ProducerName && c.HasGgnLabel == g.HasGgnLabel
-                    && c.CheckedOn == g.CheckedOn && c.CheckedBy == g.CheckedBy && c.IsActive == g.IsActive && c.SortOrder == g.SortOrder) continue;
-                c.Number = g.Ggn; c.NumberKey = g.Ggn; c.ValidUntil = g.CertificateValidUntil; c.ProducerName = g.ProducerName; c.HasGgnLabel = g.HasGgnLabel;
-                c.CheckedOn = g.CheckedOn; c.CheckedBy = g.CheckedBy; c.IsActive = g.IsActive; c.SortOrder = g.SortOrder;
-                c.UpdatedAt = now; c.UpdatedBy = who;
+                if (!before.TryGetValue(g.Id, out var old) || old == state) continue;
+                if (old.Ggn != state.Ggn) { c.Number = g.Ggn; c.NumberKey = g.Ggn; }
+                if (old.ProducerName != state.ProducerName) c.ProducerName = g.ProducerName;
+                if (old.IsActive != state.IsActive) c.IsActive = g.IsActive;
+                if (old.CheckedOn != state.CheckedOn || old.CheckedBy != state.CheckedBy) { c.CheckedOn = g.CheckedOn; c.CheckedBy = g.CheckedBy; }
+                if (old.ValidUntil != state.ValidUntil) c.ValidUntil = g.CertificateValidUntil;
+                if (old.HasGgnLabel != state.HasGgnLabel) c.HasGgnLabel = g.HasGgnLabel;
+                c.UpdatedAt = now;
+                c.UpdatedBy = who;
             }
-            foreach (var c in certificates.Where(c => c.RelationId == relationId && c.IsActive && !ggnIds.Contains(c.SourceVendorGgnId.Value)))
+            var current = after.Select(g => g.Id).ToHashSet();
+            foreach (var removed in before.Keys.Where(id => !current.Contains(id)))
             {
-                c.IsActive = false; c.UpdatedAt = now; c.UpdatedBy = who;
+                if (bySource.TryGetValue(removed, out var c) && c.IsActive)
+                {
+                    c.IsActive = false;
+                    c.UpdatedAt = now;
+                    c.UpdatedBy = who;
+                }
             }
             if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(cancellationToken);
         }
