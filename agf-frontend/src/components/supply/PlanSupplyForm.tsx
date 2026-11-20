@@ -135,11 +135,16 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
         : draftFromDocument(editing.order.currency, editing.order.exchangeRate, editing.order.exchangeRateSource, editing.order.exchangeRateDate, locale)));
     const [currencies, setCurrencies] = useState<PurchaseCurrency[]>([{ code: EURO, hasEcbRate: false }]);
+    // Lukt het laden van de valutalijst niet, dan blijven euro en de valuta van de order; het scherm zegt dat en kan het opnieuw proberen.
+    const [currenciesFailed, setCurrenciesFailed] = useState(false);
+    const [currenciesAttempt, setCurrenciesAttempt] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
-        getPurchaseCurrencies(controller.signal).then(setCurrencies).catch(() => { /* alleen EUR en de valuta van de order */ });
+        getPurchaseCurrencies(controller.signal)
+            .then((list) => { setCurrencies(list); setCurrenciesFailed(false); })
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setCurrenciesFailed(true); });
         return () => controller.abort();
-    }, []);
+    }, [currenciesAttempt]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -507,6 +512,12 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 <div className="col-span-2 md:col-span-3">
                     <DocumentCurrencyField value={money} onChange={updateMoney} documentDate={header.orderedOn} currencies={currencies} disabled={locked}
                         fetchOnOpen={editing === null} errors={{ currency: e('currency') ?? [], exchangeRate: e('exchangeRate') ?? [] }} />
+                    {currenciesFailed && (
+                        <p role="alert" className="mt-1 text-xs text-amber-900" data-testid="currency-list-failed">
+                            {t('currency_list_failed')}{' '}
+                            <button type="button" className="underline underline-offset-2" onClick={() => setCurrenciesAttempt((n) => n + 1)}>{t('currency_list_retry')}</button>
+                        </p>
+                    )}
                 </div>
             </div>
 
