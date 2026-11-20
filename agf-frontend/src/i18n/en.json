@@ -2963,6 +2963,7 @@
   "currency_use_ecb": "Use the ECB rate",
   "currency_euro_hint": "≈ {amount}",
   "currency_error_rate": "Enter a rate: how much of this currency is 1 euro (a number above zero, at most six decimals).",
+  "currency_error_rate_pending": "The ECB rate is still being fetched. Wait a moment, or enter the rate yourself.",
   "po_currency_line": "Currency {currency} · rate {line}",
   "po_currency_ecb": "ECB, {date}",
   "po_col_amount": "Amount",

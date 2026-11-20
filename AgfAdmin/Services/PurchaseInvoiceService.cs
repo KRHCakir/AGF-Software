@@ -653,6 +653,22 @@ namespace AgfAdmin.Services
         private static ServiceResult<T> Validation<T>(Dictionary<string, List<string>> errors) =>
             ServiceResult<T>.Validation(ValidationErrors.ToArrays(errors));
 
+        // Eurototaal als som van de per regel omgerekende en afgeronde bedragen, zoals de kostenverdeling (PartijCostService) het doet;
+        // een factuur zonder regels valt terug op het omgerekende factuurbedrag.
+        private static decimal? SumInEuro(IncomingInvoice invoice, Func<IncomingInvoiceLine, decimal> amount, decimal fallback)
+        {
+            if (invoice.InvoiceLines == null || invoice.InvoiceLines.Count == 0)
+                return ExchangeRateRules.LineAmountInEuro(fallback, invoice.Currency, invoice.ExchangeRate);
+            decimal total = 0m;
+            foreach (var line in invoice.InvoiceLines)
+            {
+                var eur = ExchangeRateRules.LineAmountInEuro(amount(line), invoice.Currency, invoice.ExchangeRate);
+                if (eur == null) return null;
+                total += eur.Value;
+            }
+            return total;
+        }
+
         public static PurchaseInvoiceDto ToDto(IncomingInvoice invoice) => new()
         {
             Id = invoice.Id,
@@ -671,8 +687,8 @@ namespace AgfAdmin.Services
             ExchangeRate = invoice.ExchangeRate,
             ExchangeRateDate = invoice.ExchangeRateDate,
             ExchangeRateSource = invoice.ExchangeRateSource,
-            SubTotalEur = ExchangeRateRules.LineAmountInEuro(invoice.TotalAmount - invoice.VATAmount, invoice.Currency, invoice.ExchangeRate),
-            TotalAmountEur = ExchangeRateRules.LineAmountInEuro(invoice.TotalAmount, invoice.Currency, invoice.ExchangeRate),
+            SubTotalEur = SumInEuro(invoice, l => l.LineTotal, invoice.TotalAmount - invoice.VATAmount),
+            TotalAmountEur = SumInEuro(invoice, l => l.LineTotal + l.VATAmount, invoice.TotalAmount),
             CreatedAt = invoice.CreatedAt,
             InternalNote = invoice.InternalNote,
             ReceivedDate = invoice.ReceivedDate,

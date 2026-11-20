@@ -97,6 +97,8 @@ public class PurchaseCurrencyTests : IDisposable
         var saved = await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() { "usd", "aed", "USD", " gbp " } });
         Assert.Equal(new[] { "EUR", "USD", "AED", "GBP" }, saved.Value.Currencies.Select(c => c.Code));
         Assert.False(saved.Value.Currencies.Single(c => c.Code == "AED").HasEcbRate);
+        // Bulgarije heeft sinds 1 januari 2026 de euro: de ECB geeft geen BGN-koers meer.
+        Assert.False((await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() { "BGN" } })).Value.Currencies.Single(c => c.Code == "BGN").HasEcbRate);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() { "US$" } })).Status);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(null)).Status);
         var onlyEuro = await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() });

@@ -92,6 +92,21 @@ describe('DocumentCurrencyField', () => {
         assert.equal(seen.source, 'Manual');
     });
 
+    test('another date on a new order: the previous rate is cleared at once until the rate of the new date is in', async () => {
+        await mounted.render(<Field />);
+        await act(async () => { setSelectValue(select(), 'USD'); });
+        await mounted.waitFor(() => /^1[.,]0842$/.test(rate()?.value ?? ''), 'first rate');
+        let release: () => void = () => {};
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        const answer = json(200, { currency: 'USD', unitsPerEuro: 1.0992, rateDate: '2026-11-19', forDate: '2026-11-19', source: 'ECB' });
+        globalThis.fetch = (async (input: RequestInfo | URL) => { urls.push(String(input)); await gate; return answer; }) as typeof fetch;
+        await act(async () => { setDate('2026-11-19'); });
+        assert.deepEqual([seen.rate, seen.rateDate, seen.source], ['', null, 'ECB'], 'no old rate while fetching');
+        await act(async () => { release(); });
+        await mounted.waitFor(() => /^1[.,]0992$/.test(rate()?.value ?? ''), 'rate of the new date');
+        assert.equal(seen.rateDate, '2026-11-19');
+    });
+
     test('a stored order keeps its fixed ECB rate when the date changes, as the server does', async () => {
         await mounted.render(<Field fetchOnOpen={false} initial={{ currency: 'USD', rate: '1.0842', source: 'ECB', rateDate: '2026-11-10', touched: true }} />);
         await act(async () => { setDate('2026-11-19'); });
