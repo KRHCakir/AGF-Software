@@ -410,9 +410,10 @@ namespace AgfAdmin.Data
                 b.Property(i => i.InternalNote).HasMaxLength(1000);
                 b.Property(i => i.ExchangeRate).HasPrecision(18, 6);
                 b.Property(i => i.ExchangeRateSource).HasMaxLength(ExchangeRateRules.MaxSourceLength);
-                // Een koers is er helemaal (positief, met datum en bron) of helemaal niet.
+                // Een koers is er helemaal of helemaal niet (een oudere factuur in een andere valuta haalt hem nog op). Valuta-ronde: positief
+                // met een bron; een ECB-koers met zijn publicatiedatum, een handmatige koers en euro (koers 1, NotApplicable) zonder datum.
                 b.ToTable(t => t.HasCheckConstraint("CK_IncomingInvoices_ExchangeRate",
-                    "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateDate\" IS NOT NULL AND \"ExchangeRateSource\" IS NOT NULL)"));
+                    "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateSource\" IS NOT NULL AND ((\"ExchangeRateSource\" = 'ECB' AND \"ExchangeRateDate\" IS NOT NULL) OR (\"ExchangeRateSource\" IN ('Manual', 'NotApplicable') AND \"ExchangeRateDate\" IS NULL)))"));
                 // NULL telt als verschillend: facturen van vóór de kantoorinvoer (upload, oude handmatige invoer) hebben geen RequestId.
                 b.HasIndex(i => i.RequestId).IsUnique();
             });

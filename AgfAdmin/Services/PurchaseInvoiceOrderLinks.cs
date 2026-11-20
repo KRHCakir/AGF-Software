@@ -22,7 +22,7 @@ namespace AgfAdmin.Services
         // Controleert de koppelingen (na het opbouwen van de regels, in dezelfde volgorde als het verzoek) en vult per factuurregel de
         // orderregel en de prijs op de bon in. Null als er niets gekoppeld is.
         public async Task<Prepared> PrepareAsync(CreatePurchaseInvoiceDto request, Vendor vendor, List<IncomingInvoiceLine> lines, Dictionary<string, List<string>> errors,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, string invoiceCurrency = ExchangeRateRules.Euro)
         {
             var requested = request.Lines.Select((line, index) => (line, index)).Where(x => x.line.SupplyCommitmentLineId != null).ToList();
             if (requested.Count == 0) return null;
@@ -56,6 +56,13 @@ namespace AgfAdmin.Services
                 if (order.Status == SupplyRules.StatusCancelled)
                 {
                     ValidationErrors.Add(errors, $"{key}.supplyCommitmentLineId", $"Purchase order {number} is cancelled and is not invoiced.");
+                    continue;
+                }
+                // Valuta-ronde: prijzen vergelijken en de prijs op de bon aanpassen kan alleen in dezelfde valuta (nooit stil omrekenen).
+                if (!string.Equals(order.Currency, invoiceCurrency, StringComparison.Ordinal))
+                {
+                    ValidationErrors.Add(errors, $"{key}.supplyCommitmentLineId",
+                        $"Inkooporder {number} is in {order.Currency} en deze factuur in {invoiceCurrency}: een factuurregel factureert alleen een order in dezelfde valuta.");
                     continue;
                 }
                 if (line.CostArticleId != null)
@@ -117,7 +124,7 @@ namespace AgfAdmin.Services
         // zodat een order die intussen is aangepast, geannuleerd of definitief gemaakt niet met verouderde gegevens wordt gebruikt.
         // Aanpassingen aan een order lopen onder dezelfde leverancierslock niet gelijktijdig; de verse lezing is dus de stand waarop ApplyAsync werkt.
         public async Task<Prepared> RevalidateAsync(Prepared prepared, CreatePurchaseInvoiceDto request, Vendor vendor, List<IncomingInvoiceLine> lines,
-            Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
+            Dictionary<string, List<string>> errors, CancellationToken cancellationToken, string invoiceCurrency = ExchangeRateRules.Euro)
         {
             if (prepared == null) return null;
             foreach (var order in prepared.Lines.Select(l => l.OrderLine.SupplyCommitment).Distinct().ToList())
@@ -125,7 +132,7 @@ namespace AgfAdmin.Services
                 await db.Entry(order).ReloadAsync(cancellationToken);
                 foreach (var line in order.Lines.ToList()) await db.Entry(line).ReloadAsync(cancellationToken);
             }
-            return await PrepareAsync(request, vendor, lines, errors, cancellationToken);
+            return await PrepareAsync(request, vendor, lines, errors, cancellationToken, invoiceCurrency);
         }
 
         // Meer dan besteld of ontvangen: alleen na de waarschuwing (AcceptOverInvoicing). Wat al op andere facturen staat telt mee. Aan te roepen

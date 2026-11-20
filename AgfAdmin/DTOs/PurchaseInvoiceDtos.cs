@@ -12,6 +12,10 @@ namespace AgfAdmin.DTOs
         public int? PaymentTermsDays { get; set; }
         public DateTime? DueDate { get; set; }
         public string Currency { get; set; }
+        // Valuta-ronde: bij een andere valuta dan euro de bron van de koers: ECB (de server legt de koers van de factuurdatum vast) of
+        // Manual (ExchangeRate zoals ingevuld, eenheden valuta per 1 euro). Weggelaten = ECB.
+        public decimal? ExchangeRate { get; set; }
+        public string ExchangeRateSource { get; set; }
         public List<CreatePurchaseInvoiceLineDto> Lines { get; set; } = new();
         // Interne opmerking bij dit document (altijd beschikbaar, nooit extern zichtbaar; telt mee in de replayvergelijking).
         public string InternalNote { get; set; }
@@ -70,6 +74,13 @@ namespace AgfAdmin.DTOs
         public decimal SubTotal { get; set; }
         public decimal VatAmount { get; set; }
         public decimal TotalAmount { get; set; }
+        // Valuta-ronde: de vastgelegde koers (eenheden valuta per 1 euro; EUR: 1, bron NotApplicable; een oudere factuur in een andere
+        // valuta kan nog zonder koers zijn) en de bedragen in euro (null zonder koers). Lijsten en overzichten tellen alleen euro's op.
+        public decimal? ExchangeRate { get; set; }
+        public DateTime? ExchangeRateDate { get; set; }
+        public string ExchangeRateSource { get; set; }
+        public decimal? SubTotalEur { get; set; }
+        public decimal? TotalAmountEur { get; set; }
         public DateTime CreatedAt { get; set; }
         public string InternalNote { get; set; }
         public DateTime? ReceivedDate { get; set; }

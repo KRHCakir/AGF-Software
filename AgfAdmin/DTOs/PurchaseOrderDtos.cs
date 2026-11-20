@@ -386,6 +386,11 @@ namespace AgfAdmin.DTOs
         public string DocumentStatus { get; set; }
         public string Route { get; set; }
         public bool PriceAdjustable { get; set; }
+        // Valuta-ronde: valuta en vastgelegde koers van de order (de factuur volgt de valuta; de koers van de factuur is die van haar datum).
+        public string Currency { get; set; }
+        public decimal ExchangeRate { get; set; }
+        public DateOnly? ExchangeRateDate { get; set; }
+        public string ExchangeRateSource { get; set; }
         public List<string> InvoiceNumbers { get; set; } = new();
         public List<PurchaseOrderInvoiceCandidateLineDto> Lines { get; set; } = new();
     }

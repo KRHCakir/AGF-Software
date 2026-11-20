@@ -54,11 +54,19 @@ public sealed class ExchangeRateTests : IDisposable
         await using var db = _s.Factory.CreateContext();
         var invoice = await new PurchaseInvoiceService(db).CreateAsync(new CreatePurchaseInvoiceDto
         {
-            RequestId = Guid.NewGuid(), VendorId = _s.VendorId, InvoiceNumber = "MAERSK-1", InvoiceDate = InvoiceDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), Currency = currency,
+            RequestId = Guid.NewGuid(), VendorId = _s.VendorId, InvoiceNumber = "MAERSK-1", InvoiceDate = InvoiceDay.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), Currency = currency, ExchangeRate = ExchangeRateRules.IsEuro(currency) ? null : 1m, ExchangeRateSource = ExchangeRateRules.IsEuro(currency) ? null : ExchangeRateRules.SourceManual,
             Lines = new() { new() { CostArticleId = costs["Zeevracht"], Quantity = 1m, UnitPrice = 5000m, VatPercentage = 0m } }
         });
         Assert.Equal(ServiceResultStatus.Created, invoice.Status);
         (_invoiceId, _lineId) = (invoice.Value.Id, invoice.Value.Lines[0].Id);
+        // Valuta-ronde: een factuur in een andere valuta krijgt bij opslaan een koers. Deze tests gaan over een factuur van vóór die ronde
+        // (zonder koers, die haalt haar ECB-koers nog op bij het verdelen): de koers wordt hier weer weggehaald.
+        if (!ExchangeRateRules.IsEuro(currency))
+        {
+            var stored = await db.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId);
+            (stored.ExchangeRate, stored.ExchangeRateDate, stored.ExchangeRateSource, stored.ExchangeRateFetchedAt) = (null, null, null, null);
+            await db.SaveChangesAsync();
+        }
     }
 
     private async Task<ServiceResult<InvoiceAllocationsDto>> RefreshAsync()
@@ -165,11 +173,12 @@ public sealed class ExchangeRateTests : IDisposable
         var line = Assert.Single(invoice.Lines);
         Assert.Equal((5000m, (decimal?)4478.28m, 0m, (decimal?)4478.28m, 1), (line.LineTotal, line.LineTotalEur, line.Allocated, line.General, line.Version));
 
-        // Dezelfde koers nog eens: niets verandert (ook de versie niet); een nieuwere koers (nog niets verdeeld) wordt overgenomen.
-        Assert.Equal(1, (await RefreshAsync()).Value.Lines[0].Version);
+        // Valuta-ronde: daarna ligt de koers vast. Opnieuw openen haalt niets meer op, ook niet als de ECB intussen een nieuwere koers
+        // heeft (geen automatisch vernieuwen van koersen op bestaande documenten).
         _rates.Next = Usd(1.12m);
-        var updated = (await RefreshAsync()).Value;
-        Assert.Equal((1.12m, (decimal?)4464.29m, 2), (updated.ExchangeRate.Value, updated.Lines[0].LineTotalEur, updated.Lines[0].Version));
+        var again = (await RefreshAsync()).Value;
+        Assert.Equal((1.1165m, (decimal?)4478.28m, 1), (again.ExchangeRate.Value, again.Lines[0].LineTotalEur, again.Lines[0].Version));
+        Assert.Single(_rates.Asked);
         await using var check = _s.Factory.CreateContext();
         var stored = await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId);
         Assert.NotNull(stored.ExchangeRateFetchedAt);
@@ -200,40 +209,10 @@ public sealed class ExchangeRateTests : IDisposable
         Assert.Equal((500m, "USD", (decimal?)558.25m, (decimal?)1.1165m), (cost.Amount, cost.Currency, cost.AmountInCurrency, cost.ExchangeRate));
     }
 
-    [Fact]
-    public async Task A_New_Rate_Saved_Between_Reading_And_Saving_An_Allocation_Makes_That_Allocation_A_Conflict()
-    {
-        await ArrangeAsync();
-        _rates.Next = Usd(1.1165m);
-        await RefreshAsync();
-        // Iemand anders ververst de koers (1,12) precies tussen de controles van de verdeling en het opslaan ervan.
-        _rates.Next = Usd(1.12m);
-        await using var db = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal(ServiceResultStatus.Ok, (await RefreshAsync()).Status));
-        var result = await new PartijCostService(db).SaveLineAsync(_invoiceId, _lineId, new SaveLineAllocationDto
-        {
-            RequestId = Guid.NewGuid(), ExpectedVersion = 1, Allocations = new() { new() { PartijId = _salesA, Amount = 4478.28m } }
-        });
-        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
-        await using var check = _s.Factory.CreateContext();
-        Assert.Equal(0, await check.PartijCosts.CountAsync());
-        Assert.Equal(1.12m, (await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
-    }
-
-    [Fact]
-    public async Task An_Allocation_Saved_Between_Reading_And_Saving_A_New_Rate_Keeps_The_Old_Rate()
-    {
-        await ArrangeAsync();
-        _rates.Next = Usd(1.1165m);
-        await RefreshAsync();
-        // Iemand anders verdeelt (op koers 1,1165) precies tussen de controles van het verversen en het opslaan van de nieuwe koers.
-        _rates.Next = Usd(1.12m);
-        await using var db = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal(ServiceResultStatus.Ok, (await SaveAsync(1, (_salesA, 500m))).Status));
-        var result = await new InvoiceExchangeRateService(db, _rates, _s.Factory.Calendar).RefreshAsync(_invoiceId);
-        Assert.Equal(ServiceResultStatus.Conflict, result.Status);
-        await using var check = _s.Factory.CreateContext();
-        Assert.Equal(1.1165m, (await check.IncomingInvoices.SingleAsync(i => i.Id == _invoiceId)).ExchangeRate);
-        Assert.Equal(500m, (await check.PartijCosts.SingleAsync()).AmountExclVat);
-    }
+    // Valuta-ronde: een koers wordt nog maar één keer opgeslagen (bij opslaan, of bij een factuur van vóór de ronde bij het eerste openen) en
+    // ligt daarna vast. De twee races rond "een nieuwe koers tijdens het verdelen" bestaan daarom niet meer: zonder koers weigert verdelen
+    // al bij het lezen (PartijCostTests.An_Invoice_In_Another_Currency_Without_A_Rate_Is_Not_Allocated), en een factuur met een koers
+    // haalt er geen nieuwe op (Opening_A_Usd_Invoice_...).
 
     [Fact]
     public async Task Exactly_The_Converted_Line_Amount_Is_Allowed()

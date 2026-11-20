@@ -2713,7 +2713,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("IncomingInvoices", t =>
                         {
-                            t.HasCheckConstraint("CK_IncomingInvoices_ExchangeRate", "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateDate\" IS NOT NULL AND \"ExchangeRateSource\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_IncomingInvoices_ExchangeRate", "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateSource\" IS NOT NULL AND ((\"ExchangeRateSource\" = 'ECB' AND \"ExchangeRateDate\" IS NOT NULL) OR (\"ExchangeRateSource\" IN ('Manual', 'NotApplicable') AND \"ExchangeRateDate\" IS NULL)))");
 
                             t.HasCheckConstraint("CK_IncomingInvoices_OrderPriceDecision", "\"OrderPriceDecision\" IS NULL OR \"OrderPriceDecision\" IN ('AdjustOrder', 'RecordDifference')");
                         });

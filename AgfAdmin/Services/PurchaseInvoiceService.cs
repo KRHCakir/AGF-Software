@@ -25,11 +25,15 @@ namespace AgfAdmin.Services
         private readonly ICurrentUser _user;
 
         // De gebruiker is nodig bij het goedkeuren van een AI-voorstel ("goedgekeurd door"); zonder gebruiker heet de actor "Onbekend".
-        public PurchaseInvoiceService(AppDbContext db, ICurrentUser user = null)
+        public PurchaseInvoiceService(AppDbContext db, ICurrentUser user = null, IExchangeRateSource rates = null)
         {
             _db = db;
             _user = user;
+            _rates = rates;
         }
+
+        // Valuta-ronde: zonder koersbron (tests) kan een factuur in een andere valuta alleen met een handmatige koers.
+        private readonly IExchangeRateSource _rates;
 
         // ---- Instellingen ----
 
@@ -181,6 +185,10 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "currency", "Currency must be a three-letter code (for example EUR).");
             }
+            // Valuta-ronde: euro koers 1; een andere valuta de ECB-koers van de factuurdatum (vastgelegd na de validatie) of handmatig.
+            var money = PurchaseInvoiceRules.IsCurrencyCode(currency)
+                ? DocumentCurrency.FromRequest(currency, request.ExchangeRate, request.ExchangeRateSource, (key, message) => ValidationErrors.Add(errors, key, message))
+                : DocumentCurrency.Euro;
             // Vervaldatum zonder ingevulde datum: volgt de basis van de leveranciersconditie zolang de termijn die van de conditie is
             // (leeg of gelijk aan haar dagen); een afwijkende termijn telt vanaf de factuurdatum. Bestaande facturen worden niet herrekend.
             var basis = vendor?.PaymentCondition != null && terms == vendor.PaymentCondition.Days ? vendor.PaymentCondition.Basis : PaymentConditionBasis.InvoiceDate;
@@ -362,7 +370,7 @@ namespace AgfAdmin.Services
 
             // Koppelen aan de bon (stap 4b): elke gekoppelde regel factureert een orderregel van deze leverancier, met de prijs op de bon.
             var orderLinks = new PurchaseInvoiceOrderLinks(_db, _user);
-            var linked = errors.Count == 0 ? await orderLinks.PrepareAsync(request, vendor, lines, errors, cancellationToken) : null;
+            var linked = errors.Count == 0 ? await orderLinks.PrepareAsync(request, vendor, lines, errors, cancellationToken, currency) : null;
 
             // Goedkeuren van een AI-voorstel (stap 7a): alleen een open voorstel, en een orderkoppeling alleen bij een order van deze leverancier.
             var approval = request.AiExtractionId != null || request.LinkPurchaseOrderId != null
@@ -373,6 +381,16 @@ namespace AgfAdmin.Services
             {
                 return Validation<PurchaseInvoiceDto>(errors);
             }
+
+            // De koers van de factuur ligt vast bij opslaan (ECB: de factuurdatum, in het weekend de laatste werkdag). Een factuur bij een
+            // order neemt nooit vanzelf de koers van de order over: beide blijven zichtbaar, een koersverschil is voor de boekhouder.
+            var fixedRate = await DocumentCurrencyFixer.FixAsync(money, DateOnly.FromDateTime(invoiceDate!.Value), _db.BusinessCalendar.Today(), _rates, cancellationToken);
+            if (fixedRate.Problem != null)
+            {
+                ValidationErrors.Add(errors, "exchangeRate", fixedRate.Problem);
+                return Validation<PurchaseInvoiceDto>(errors);
+            }
+            money = fixedRate.Value;
 
             var canonical = PurchaseInvoiceCommand.Canonical(request);
             var candidate = new IncomingInvoice
@@ -385,6 +403,10 @@ namespace AgfAdmin.Services
                 PaymentTermsDays = terms,
                 DueDate = dueDate,
                 Currency = currency,
+                ExchangeRate = money.ExchangeRate,
+                ExchangeRateDate = money.ExchangeRateDate == null ? null : DateTime.SpecifyKind(money.ExchangeRateDate.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+                ExchangeRateSource = money.ExchangeRateSource,
+                ExchangeRateFetchedAt = money.ExchangeRateSource == ExchangeRateRules.SourceEcb ? DateTime.UtcNow : null,
                 Status = "Draft",
                 ReviewConfidence = 1.0,
                 TotalAmount = totals.Gross,
@@ -460,7 +482,7 @@ namespace AgfAdmin.Services
                     {
                         // Eerst de orders vers lezen en opnieuw valideren (status, prijzen, keuze): wat vóór de transactie is gelezen kan achterhaald zijn.
                         var overErrors = new Dictionary<string, List<string>>();
-                        linked = await orderLinks.RevalidateAsync(linked, request, vendor, lines, overErrors, cancellationToken);
+                        linked = await orderLinks.RevalidateAsync(linked, request, vendor, lines, overErrors, cancellationToken, currency);
                         if (linked != null) candidate.OrderPriceDecision = linked.Decision;
                         if (linked != null) await orderLinks.CheckOverInvoicingAsync(linked, request, overErrors, cancellationToken);
                         if (overErrors.Count > 0)
@@ -631,6 +653,22 @@ namespace AgfAdmin.Services
         private static ServiceResult<T> Validation<T>(Dictionary<string, List<string>> errors) =>
             ServiceResult<T>.Validation(ValidationErrors.ToArrays(errors));
 
+        // Eurototaal als som van de per regel omgerekende en afgeronde bedragen, zoals de kostenverdeling (PartijCostService) het doet;
+        // een factuur zonder regels valt terug op het omgerekende factuurbedrag.
+        private static decimal? SumInEuro(IncomingInvoice invoice, Func<IncomingInvoiceLine, decimal> amount, decimal fallback)
+        {
+            if (invoice.InvoiceLines == null || invoice.InvoiceLines.Count == 0)
+                return ExchangeRateRules.LineAmountInEuro(fallback, invoice.Currency, invoice.ExchangeRate);
+            decimal total = 0m;
+            foreach (var line in invoice.InvoiceLines)
+            {
+                var eur = ExchangeRateRules.LineAmountInEuro(amount(line), invoice.Currency, invoice.ExchangeRate);
+                if (eur == null) return null;
+                total += eur.Value;
+            }
+            return total;
+        }
+
         public static PurchaseInvoiceDto ToDto(IncomingInvoice invoice) => new()
         {
             Id = invoice.Id,
@@ -646,6 +684,11 @@ namespace AgfAdmin.Services
             SubTotal = invoice.TotalAmount - invoice.VATAmount,
             VatAmount = invoice.VATAmount,
             TotalAmount = invoice.TotalAmount,
+            ExchangeRate = invoice.ExchangeRate,
+            ExchangeRateDate = invoice.ExchangeRateDate,
+            ExchangeRateSource = invoice.ExchangeRateSource,
+            SubTotalEur = SumInEuro(invoice, l => l.LineTotal, invoice.TotalAmount - invoice.VATAmount),
+            TotalAmountEur = SumInEuro(invoice, l => l.LineTotal + l.VATAmount, invoice.TotalAmount),
             CreatedAt = invoice.CreatedAt,
             InternalNote = invoice.InternalNote,
             ReceivedDate = invoice.ReceivedDate,
