@@ -27,6 +27,10 @@ describe('purchase invoice currency', () => {
         const sent = buildPurchaseInvoicePayload(manual, settings);
         assert.ok(sent.ok && sent.value.exchangeRateSource === 'Manual' && sent.value.exchangeRate === 1.1);
 
+        // ECB zonder koers: het ophalen loopt nog; opslaan wacht met een eigen melding.
+        const pending = buildPurchaseInvoicePayload(changeRate(usd, { ...invoiceCurrencyDraft(usd.header), rate: '', source: 'ECB', rateDate: null }), settings);
+        assert.ok(!pending.ok && pending.errors.some((error) => error.field === 'exchangeRate' && error.code === 'rate_pending'));
+
         const bad = changeRate(usd, { ...invoiceCurrencyDraft(usd.header), rate: 'abc', source: 'Manual', rateDate: null });
         const refused = buildPurchaseInvoicePayload(bad, settings);
         assert.ok(!refused.ok && refused.errors.some((error) => error.field === 'exchangeRate'));

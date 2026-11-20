@@ -66,7 +66,7 @@ export interface InvoiceDraft {
     vendorTerms?: VendorTerms | null;
 }
 
-export type RuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines';
+export type RuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'too_many_decimals' | 'too_large' | 'negative' | 'out_of_range' | 'before_invoice_date' | 'too_many_lines' | 'rate_pending';
 export interface RuleError { field: string; code: RuleCode }
 export type BuildResult<T> = { ok: true; value: T } | { ok: false; errors: RuleError[] };
 
@@ -247,9 +247,10 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     else if (addDays(header.invoiceDate, 0) !== null && header.dueDate < header.invoiceDate) errors.push({ field: 'dueDate', code: 'before_invoice_date' });
     const currency = header.currency.trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) errors.push({ field: 'currency', code: currency === '' ? 'required' : 'invalid' });
-    // Valuta-ronde: een handmatige koers moet geldig zijn; een ECB-koers legt de server vast.
-    const money = currencyPayload(invoiceCurrencyDraft(header));
-    if (!money.ok && money.field === 'exchangeRate' && /^[A-Z]{3}$/.test(currency)) errors.push({ field: 'exchangeRate', code: 'invalid' });
+    // Valuta-ronde: een handmatige koers moet geldig zijn; een ECB-koers legt de server vast, maar opslaan wacht tot hij is opgehaald.
+    const moneyDraft = invoiceCurrencyDraft(header);
+    const money = currencyPayload(moneyDraft);
+    if (!money.ok && money.field === 'exchangeRate' && /^[A-Z]{3}$/.test(currency)) errors.push({ field: 'exchangeRate', code: moneyDraft.source === 'ECB' ? 'rate_pending' : 'invalid' });
     const internalNote = header.internalNote.trim();
     if (internalNote.length > MAX_INTERNAL_NOTE_LENGTH) errors.push({ field: 'internalNote', code: 'too_large' });
 
