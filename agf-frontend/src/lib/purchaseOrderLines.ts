@@ -17,7 +17,8 @@ export interface PurchaseLineDraft {
     // Bruto aangepast op deze regel ("Bruto aanpassen"); zonder: aantal × bruto per colli van het artikel.
     grossKg?: string;
     grossKgEntered?: boolean;
-    // Alleen als het artikel geen eenheid heeft (dan kiest de gebruiker die op de regel), en bij klantgebonden aanvoer de partij.
+    // Eenheid van een opgeslagen regel (bij bewerken): die blijft zoals ze is opgeslagen. Een nieuwe regel heeft hier niets en neemt de
+    // eenheid van het artikel; op de regel kiezen kan niet meer (fixes 5b). Een ander artikel kiezen maakt dit veld leeg.
     unit: PackageUnit | '';
     lotNumber: string;
 }
@@ -42,8 +43,6 @@ export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity'
 export interface PurchaseLineRow {
     quantity: number | null;
     unit: PackageUnit | '';
-    // Eenheid vast uit het artikel (geen keuze op de regel).
-    unitFromArticle: boolean;
     weight: LineWeight | null;
     price: number | null;
     total: number | null;
@@ -58,8 +57,9 @@ export function purchaseLineRow(line: PurchaseLineDraft, article: PurchaseArticl
     const parsed = parsePositiveDecimal(line.quantity);
     const quantity = parsed.ok ? parsed.value : null;
     if (!parsed.ok) errors.push({ field: 'expectedQuantity', code: line.quantity.trim() === '' ? 'required' : parsed.error });
-    const unitFromArticle = article?.packagingUnit != null;
-    const unit = article?.packagingUnit ?? line.unit;
+    // Eenheid: de opgeslagen eenheid van de regel, anders die van het artikel. Heeft het artikel er geen, dan is dat een fout op de regel
+    // ("leg de eenheid vast bij het artikel"); kiezen op de regel kan niet.
+    const unit = line.unit !== '' ? line.unit : article?.packagingUnit ?? '';
     if (unit === '') errors.push({ field: 'expectedUnit', code: 'required' });
     // Netto altijd uit het artikel (geen invoer meer); bruto uit het artikel, tenzij op deze regel aangepast.
     const resolved = resolveLineWeight({ grossKg: line.grossKg, grossKgEntered: line.grossKgEntered }, quantity, article ?? undefined);
@@ -68,7 +68,7 @@ export function purchaseLineRow(line: PurchaseLineDraft, article: PurchaseArticl
     if (!price.ok) errors.push({ field: 'unitPrice', code: price.error });
     const perPallet = packagesPerPallet(null, article?.defaultPackagesPerPallet);
     return {
-        quantity, unit, unitFromArticle, weight: resolved.ok ? resolved.value : null, price: price.ok ? price.value : null,
+        quantity, unit, weight: resolved.ok ? resolved.value : null, price: price.ok ? price.value : null,
         total: lineTotal(quantity, price.ok ? price.value : null), perPallet, pallets: pallets(quantity, perPallet), errors,
     };
 }

@@ -12,14 +12,23 @@ const line = (over: object) => ({ ...emptyPurchaseLine('k'), productVariantId: '
 describe('purchase order line drafts', () => {
     test('unit, net and gross come from the article; Bruto aanpassen makes only this line Entered; price and pallets follow', () => {
         const row = purchaseLineRow(line({ quantity: '100', unitPrice: '12,50' }), avocado);
-        assert.deepEqual([row.unit, row.unitFromArticle, row.weight, row.price, row.total, row.perPallet, row.errors], ['colli', true, { netWeightKg: 400, grossWeightKg: 440, weightSource: 'Calculated' }, 12.5, 1250, 252, []]);
+        assert.deepEqual([row.unit, row.weight, row.price, row.total, row.perPallet, row.errors], ['colli', { netWeightKg: 400, grossWeightKg: 440, weightSource: 'Calculated' }, 12.5, 1250, 252, []]);
         assert.equal(Math.round(row.pallets! * 100) / 100, 0.4);
         const adjusted = purchaseLineRow(line({ quantity: '50', grossKg: '230', grossKgEntered: true }), avocado);
         assert.deepEqual(adjusted.weight, { netWeightKg: 200, grossWeightKg: 230, weightSource: 'Entered' });
         assert.deepEqual(purchaseLineRow(line({ quantity: '50', grossKg: '150', grossKgEntered: true }), avocado).errors, [{ field: 'expectedGrossWeightKg', code: 'gross_below_net' }]);
     });
 
-    test('without unit on the article the line asks for one; a bad price is an error; no packages per pallet = no pallets', () => {
+    test('fixes 5b: no unit choice on the line; a new line takes the article unit, a stored line keeps its own unit', () => {
+        assert.equal(purchaseLineRow(line({ quantity: '200' }), avocado).unit, 'colli');
+        // Opgeslagen als doos terwijl het artikel nu colli zegt: de regel blijft zoals zij is opgeslagen.
+        const stored = purchaseLineRow(line({ quantity: '200', unit: 'box' }), avocado);
+        assert.deepEqual([stored.unit, stored.errors], ['box', []]);
+        assert.equal(purchaseLinePayloads([line({ quantity: '200', unit: 'box' })], () => avocado).lines[0].payload.expectedUnit, 'box');
+        assert.equal(purchaseLinePayloads([line({ quantity: '200' })], () => avocado).lines[0].payload.expectedUnit, 'colli');
+    });
+
+    test('without unit on the article the line has an error (set it on the article); a bad price is an error; no packages per pallet = no pallets', () => {
         const row = purchaseLineRow(line({ quantity: '5', unitPrice: '1,005' }), noUnit);
         assert.deepEqual(row.errors.map((error) => error.field), ['expectedUnit', 'unitPrice']);
         assert.equal(row.pallets, null);

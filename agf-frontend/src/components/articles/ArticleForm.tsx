@@ -29,7 +29,7 @@ import GoodsCodeLookup from './GoodsCodeLookup';
 const codeKey = (code: string) => `articles_error_${code}`;
 
 function hasTradeValues(draft: ArticleDraft): boolean {
-    return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.season !== '' || draft.notes !== '';
+    return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.notes !== '';
 }
 
 export default function ArticleForm({ article, reference, countries, onSaved, onClose }: {
@@ -68,7 +68,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
         if (!built.ok) {
             const grouped = groupArticleErrors(built.errors);
             setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
-            if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'season', 'notes'].includes(field))) setTradeOpen(true);
+            if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'notes'].includes(field))) setTradeOpen(true);
             const first = Object.keys(grouped)[0];
             setTimeout(() => document.getElementById(`${first}-input`)?.focus(), 0);
             return;
@@ -234,7 +234,6 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                             <span className="block text-xs text-gray-500">{t('articles_hint_goods_code')}</span>
                             <FieldError id="goodsCode" messages={e('goodsCode')} />
                         </div>
-                        {textField('season', 'articles_field_season')}
                         {lookupOpen && (
                             <div className="col-span-2 md:col-span-4">
                                 <GoodsCodeLookup system={draft.goodsCodeSystem} onSystemChange={(system) => update({ goodsCodeSystem: system })} onPick={pickGoodsCode} onManual={enterGoodsCodeManually} disabled={submitting} />

@@ -76,7 +76,7 @@ export default function ProductsPage() {
                                 <th className="px-4 py-2">{t('variant')}</th>
                                 <th className="px-4 py-2">{t('origin')} / {t('size')}</th>
                                 <th className="px-4 py-2">{t('shortcut')}</th>
-                                <th className="px-4 py-2">{t('season_info')}</th>
+                                <th className="px-4 py-2">{t('articles_field_notes')}</th>
                                 <th className="px-4 py-2">{t('products_weight')}</th>
                               </tr>
                             </thead>
@@ -96,9 +96,8 @@ export default function ProductsPage() {
                                       ) : '-'}
                                     </td>
                                     <td className="px-4 py-3 text-gray-500 text-xs">
-                                      {v.season && <div><span className="font-semibold text-gray-700">{t('season_label')}</span> {v.season}</div>}
                                       {v.notes && <div><span className="font-semibold text-gray-700">{t('info_label')}</span> <span className="italic">{v.notes}</span></div>}
-                                      {!v.season && !v.notes && <span className="text-gray-300">{t('no_extra_info')}</span>}
+                                      {!v.notes && <span className="text-gray-300">{t('no_extra_info')}</span>}
                                     </td>
                                     <td className="px-4 py-3">
                                       <WeightSettings variantId={v.id} weightMethod={isWeightMethod(v.weightMethod) ? v.weightMethod : 'Weighed'}
