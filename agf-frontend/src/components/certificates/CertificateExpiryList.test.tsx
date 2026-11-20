@@ -30,6 +30,23 @@ describe('CertificateExpiryList', () => {
         assert.equal(mounted.container.querySelector('[data-testid="certificate-expiry"]'), null);
     });
 
+    test('a load error also shows on the start page, with a retry that reloads', async () => {
+        let fail = true;
+        globalThis.fetch = (async () => (fail ? json(500, {}) : json(200, { warningDays: 30, total: 1, items: [item({})] }))) as typeof fetch;
+        await mounted.render(<CertificateExpiryList compact />);
+        await mounted.waitFor(() => mounted.container.querySelector('[role="alert"]'), 'error');
+        fail = false;
+        (mounted.container.querySelector('[data-testid="certificate-expiry-retry"]') as HTMLButtonElement).click();
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="certificate-expiry-1"]'), 'list');
+        assert.equal(mounted.container.querySelector('[role="alert"]'), null);
+    });
+
+    test('the full list is not truncated', async () => {
+        items = Array.from({ length: 250 }, (_, n) => item({ certificateId: n + 1 }));
+        await mounted.render(<CertificateExpiryList />);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="certificate-expiry-250"]'), 'last');
+    });
+
     test('a supplier: check for a new certificate; a customer: request it; own company: renew; each with a link', async () => {
         items = [item({}), item({ certificateId: 2, relationId: 5, relationName: 'Klant Groot', isCustomer: true, isVendor: false, typeCode: 'Brcgs', typeName: 'BRCGS', status: 'ExpiringSoon', daysLeft: 12 }),
             item({ certificateId: 3, relationId: null, relationName: null, isVendor: false, typeCode: 'Skal', typeName: 'SKAL', status: 'ExpiringSoon', daysLeft: 30 })];
