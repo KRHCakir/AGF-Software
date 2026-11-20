@@ -164,6 +164,23 @@ public class PurchaseInvoiceCurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task The_Database_Refuses_A_Rate_Without_A_Source_And_A_Manual_Rate_With_A_Date()
+    {
+        var saved = await SaveAsync(await InvoiceAsync("USD", 1.2m, "Manual"));
+        foreach (var spoil in new Action<AgfAdmin.Models.IncomingInvoice>[]
+        {
+            invoice => invoice.ExchangeRateSource = null,
+            invoice => invoice.ExchangeRateDate = InvoiceDate,
+        })
+        {
+            await using var db = _factory.CreateContext();
+            var invoice = await db.IncomingInvoices.SingleAsync(i => i.Id == saved.Value.Id);
+            spoil(invoice);
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
     public async Task A_Retry_With_The_Same_Rate_Is_The_Same_Invoice_And_Another_Rate_Is_Another_Request()
     {
         var request = await InvoiceAsync("USD", 1.2m, "Manual");

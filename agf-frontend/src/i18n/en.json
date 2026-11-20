@@ -2966,6 +2966,8 @@
   "currency_euro_hint": "≈ {amount}",
   "currency_error_rate": "Enter a rate: how much of this currency is 1 euro (a number above zero, at most six decimals).",
   "currency_error_rate_pending": "The ECB rate is still being fetched. Wait a moment, or enter the rate yourself.",
+  "currency_list_failed": "The list of currencies could not be loaded; for now you can only choose euro (or the currency of this order).",
+  "currency_list_retry": "Try again",
   "po_currency_line": "Currency {currency} · rate {line}",
   "po_currency_ecb": "ECB, {date}",
   "po_col_amount": "Amount",

@@ -2966,6 +2966,8 @@
   "currency_euro_hint": "≈ {amount}",
   "currency_error_rate": "Vul een koers in: hoeveel van deze valuta is 1 euro (een getal boven nul, hoogstens zes decimalen).",
   "currency_error_rate_pending": "De ECB-koers wordt nog opgehaald. Wacht even, of vul de koers zelf in.",
+  "currency_list_failed": "De lijst met valuta's kon niet worden geladen; je kunt nu alleen euro (of de valuta van deze order) kiezen.",
+  "currency_list_retry": "Opnieuw proberen",
   "po_currency_line": "Valuta {currency} · koers {line}",
   "po_currency_ecb": "ECB, {date}",
   "po_col_amount": "Bedrag",

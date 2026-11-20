@@ -107,6 +107,16 @@ describe('DocumentCurrencyField', () => {
         assert.equal(seen.rateDate, '2026-11-19');
     });
 
+    test('typing a rate while the ECB rate is still loading: the loading message goes, the source is Manual', async () => {
+        const gate = new Promise<Response>(() => {});
+        globalThis.fetch = (async (input: RequestInfo | URL) => { urls.push(String(input)); return gate; }) as typeof fetch;
+        await mounted.render(<Field />);
+        await act(async () => { setSelectValue(select(), 'USD'); });
+        assert.ok(source().includes('exchange_rate_fetching'), source());
+        await act(async () => { setValue(rate()!, '1.1'); });
+        assert.ok(!source().includes('exchange_rate_fetching') && source().includes('currency_rate_manual'), source());
+    });
+
     test('a stored order keeps its fixed ECB rate when the date changes, as the server does', async () => {
         await mounted.render(<Field fetchOnOpen={false} initial={{ currency: 'USD', rate: '1.0842', source: 'ECB', rateDate: '2026-11-10', touched: true }} />);
         await act(async () => { setDate('2026-11-19'); });

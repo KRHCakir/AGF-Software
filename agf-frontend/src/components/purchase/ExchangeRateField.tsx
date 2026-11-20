@@ -40,8 +40,9 @@ export default function ExchangeRateField({ value, onChange, documentDate, error
 
     useEffect(() => {
         if (!foreign) { setFetch({ status: 'idle' }); return; }
-        // Handmatig: niets ophalen; een melding "geen ECB-koers" of "niet bereikbaar" blijft staan.
-        if (value.source === 'Manual') return;
+        // Handmatig: niets ophalen; een melding "geen ECB-koers" of "niet bereikbaar" blijft staan, een lopende laadmelding niet (de aanvraag
+        // is afgebroken).
+        if (value.source === 'Manual') { setFetch((current) => (current.status === 'loading' ? { status: 'idle' } : current)); return; }
         const keep = stored.current;
         if (keep !== null && keep.currency === code) {
             setFetch({ status: 'idle' });
