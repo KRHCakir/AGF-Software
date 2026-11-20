@@ -7,6 +7,7 @@ import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createCostArticle, listCostArticles, setCostArticleActive } from '../../services/costArticleService';
 import type { CostArticle } from '../../types/costArticle';
+import CreatedNotice, { useCreated } from '../shared/CreatedNotice';
 import ErrorNotice from '../supply/ErrorNotice';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
@@ -23,6 +24,8 @@ export default function CostArticlesAdmin() {
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
     const [reloadToken, setReloadToken] = useState(0);
+    // Fixes 5b: na toevoegen een melding en de nieuwe regel kort gemarkeerd; het invoerveld is leeg.
+    const created = useCreated();
 
     useEffect(() => {
         const controller = new AbortController();
@@ -43,7 +46,8 @@ export default function CostArticlesAdmin() {
         setBusy(true);
         setError(null);
         try {
-            await createCostArticle({ requestId, name: name.trim() });
+            const saved = await createCostArticle({ requestId, name: name.trim() });
+            created.announce({ id: saved.value.id, text: t('cost_article_created', { name: saved.value.name }) });
             setName('');
             setRequestId(newRequestId());
             setReloadToken((n) => n + 1);
@@ -76,12 +80,13 @@ export default function CostArticlesAdmin() {
                 <h2 className="text-lg font-semibold text-gray-900">{t('cost_articles_title')}</h2>
                 <p className="text-sm text-gray-600">{t('cost_articles_hint')}</p>
             </div>
+            <CreatedNotice created={created.created} tour="cost-article-notice" onClose={created.clear} />
             {loadError && <ErrorNotice error={loadError} />}
             {error && <ErrorNotice error={error} />}
             {articles !== null && (
                 <ul className="divide-y divide-gray-100 text-sm">
                     {articles.map((article) => (
-                        <li key={article.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5" data-tour="cost-article" data-tour-key={article.name}>
+                        <li key={article.id} className={`flex flex-wrap items-center justify-between gap-2 py-1.5 ${created.fresh === article.id ? 'bg-green-100' : ''}`} data-fresh={created.fresh === article.id ? 'true' : undefined} data-tour="cost-article" data-tour-key={article.name}>
                             <span className={article.isActive ? 'text-gray-900' : 'text-gray-500 line-through'}>
                                 {article.name}
                                 {article.isStandard && <span className="ml-2 rounded bg-gray-100 px-1 text-xs text-gray-700">{t('cost_article_standard')}</span>}

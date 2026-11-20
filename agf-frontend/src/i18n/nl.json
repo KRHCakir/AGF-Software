@@ -2453,6 +2453,7 @@
   "cost_article_used": "{count} factuurregels",
   "cost_article_deactivate": "Inactief maken",
   "cost_article_activate": "Weer actief maken",
+  "cost_article_created": "Kostenartikel toegevoegd: {name}",
   "cost_article_new": "Nieuw kostenartikel",
   "cost_article_new_placeholder": "bijvoorbeeld Elektra of Autohuur",
   "cost_article_add": "Toevoegen",

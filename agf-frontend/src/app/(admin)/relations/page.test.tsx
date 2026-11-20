@@ -55,3 +55,73 @@ describe('RelationsPage search', () => {
         });
     }
 });
+
+// Fixes 5b: na opslaan van een nieuwe relatie verdwijnt het oude formulier; de lijst ververst en toont de nieuwe relatie kort
+// gemarkeerd, en de melding blijft staan.
+describe('RelationsPage after creating a relation', () => {
+    let created = false;
+    let listed = true;
+    beforeEach(() => {
+        listed = true;
+        urls = [];
+        created = false;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            urls.push(url);
+            if (url.includes('/relations/reference')) return json(200, reference);
+            if (/\/relations\/4$/.test(url)) return json(200, card);
+            if ((init?.method ?? 'GET') === 'POST' && /\/relations$/.test(url)) { created = true; return json(201, { ...card, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customer: null }); }
+            const items = created && listed ? [oost, other, { ...oost, id: 9, name: 'Nieuwe Kweker', searchCode: 'NIEUW', customerId: null }] : [oost, other];
+            return json(200, { items, total: items.length, page: 1, pageSize: 50 });
+        }) as typeof fetch;
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('the form closes, the list reloads with the new relation marked, and the notice stays until something else is opened', async () => {
+        window.history.replaceState(null, '', '/relations?new=1');
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="name-input"]'), 'new form open');
+        const listCalls = () => urls.filter((url) => /\/relations\?/.test(url)).length;
+        const before = listCalls();
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="name-input"]')!, 'Nieuwe Kweker'); });
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="created-notice"]'), 'notice');
+        assert.equal(mounted.container.querySelector('[id="name-input"]'), null, 'the old form is gone');
+        assert.ok(mounted.container.querySelector('[data-testid="created-notice"]')!.textContent!.includes('relations_created'));
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'list reloaded with the new relation');
+        assert.equal(mounted.container.querySelector('tbody tr[data-testid^="relation-row-"]')!.getAttribute('data-testid'), 'relation-row-9', 'on top, right under the notice');
+        assert.ok(listCalls() > before, 'list fetched again');
+        assert.equal(mounted.container.querySelector('[data-testid="relation-row-9"]')!.getAttribute('data-fresh'), 'true', 'new row marked');
+        await act(async () => { mounted.container.querySelector<HTMLElement>('[data-testid="relation-row-4"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="created-notice"]') === null, 'notice cleared when opening another relation');
+        window.history.replaceState(null, '', '/relations');
+    });
+
+    test('a new relation outside the loaded page is shown on top as well', async () => {
+        listed = false;
+        window.history.replaceState(null, '', '/relations?new=1');
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="name-input"]'), 'new form open');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="name-input"]')!, 'Nieuwe Kweker'); });
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'pinned row');
+        const rows = Array.from(mounted.container.querySelectorAll('tbody tr[data-testid^="relation-row-"]')).map((row) => row.getAttribute('data-testid'));
+        assert.deepEqual(rows, ['relation-row-9', 'relation-row-4', 'relation-row-5'], 'the new relation on top');
+        window.history.replaceState(null, '', '/relations');
+    });
+
+    test('the pinned relation follows the selection: another role filter or search shows only what the server returns', async () => {
+        listed = false;
+        window.history.replaceState(null, '', '/relations?new=1');
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="name-input"]'), 'new form open');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[id="name-input"]')!, 'Nieuwe Kweker'); });
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]'), 'pinned row');
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[role="radio"]:nth-child(2)')!.click(); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-9"]') === null, 'not pinned under another filter');
+        window.history.replaceState(null, '', '/relations');
+    });
+});
+

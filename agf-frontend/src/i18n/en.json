@@ -2453,6 +2453,7 @@
   "cost_article_used": "{count} invoice lines",
   "cost_article_deactivate": "Make inactive",
   "cost_article_activate": "Make active again",
+  "cost_article_created": "Cost article added: {name}",
   "cost_article_new": "New cost article",
   "cost_article_new_placeholder": "for example Electricity or Car hire",
   "cost_article_add": "Add",

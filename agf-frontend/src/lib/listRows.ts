@@ -6,11 +6,13 @@
 export const ROW_PLAIN = 'bg-white';
 export const ROW_STRIPE = 'bg-slate-100/70';
 export const ROW_SELECTED = 'bg-blue-50';
+// Net aangemaakt (fixes 5b): kort groen gemarkeerd, boven gekozen en om-en-om.
+export const ROW_FRESH = 'bg-green-100';
 
 // `index` telt vanaf 0: de eerste regel is wit, de tweede grijs, de derde wit, enzovoort.
-export function listRowClass(index: number, options: { selected?: boolean; clickable?: boolean; selectedClass?: string } = {}): string {
-    const { selected = false, clickable = false, selectedClass = ROW_SELECTED } = options;
-    const background = selected ? selectedClass : index % 2 === 1 ? ROW_STRIPE : ROW_PLAIN;
+export function listRowClass(index: number, options: { selected?: boolean; clickable?: boolean; selectedClass?: string; fresh?: boolean } = {}): string {
+    const { selected = false, clickable = false, selectedClass = ROW_SELECTED, fresh = false } = options;
+    const background = fresh ? ROW_FRESH : selected ? selectedClass : index % 2 === 1 ? ROW_STRIPE : ROW_PLAIN;
     return `${background} ${clickable ? 'cursor-pointer hover:bg-blue-50' : 'hover:bg-blue-50/60'}`;
 }
 
