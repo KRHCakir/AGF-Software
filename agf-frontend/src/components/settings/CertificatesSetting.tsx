@@ -18,6 +18,9 @@ export default function CertificatesSetting() {
     const { t } = useTranslation();
     const [days, setDays] = useState('');
     const [types, setTypes] = useState('');
+    const [loaded, setLoaded] = useState(false);
+    const [loadToken, setLoadToken] = useState(0);
+    const [daysInvalid, setDaysInvalid] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [saving, setSaving] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
@@ -27,21 +30,24 @@ export default function CertificatesSetting() {
 
     useEffect(() => {
         const controller = new AbortController();
-        getCertificateSettings(controller.signal).then((settings) => { setDays(String(settings.warningDays)); setTypes(settings.customTypes.join('\n')); })
+        getCertificateSettings(controller.signal).then((settings) => { setDays(String(settings.warningDays)); setTypes(settings.customTypes.join('\n')); setError(null); setLoaded(true); })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
-    }, []);
+    }, [loadToken]);
 
     const saveSettings = async () => {
         setSaving(true);
         setError(null);
         setNotice(null);
+        setDaysInvalid(false);
         try {
-            // Een geheel aantal dagen via de gedeelde invoerparser; iets anders laat de server weigeren (met de melding erbij).
+            // Een geheel aantal dagen via de gedeelde invoerparser; bij een parsefout niets versturen maar de fout bij het veld tonen.
             const parsed = parseLocaleDecimal(days, undefined, { maxDecimals: 0 });
-            const stored = await saveCertificateSettings({ warningDays: parsed.ok ? parsed.value : 0, customTypes: types.split('\n').map((line) => line.trim()).filter(Boolean) });
+            if (!parsed.ok) { setDaysInvalid(true); return; }
+            const stored = await saveCertificateSettings({ warningDays: parsed.value, customTypes: types.split('\n').map((line) => line.trim()).filter(Boolean) });
             setDays(String(stored.warningDays));
             setTypes(stored.customTypes.join('\n'));
+            own.applySettings(stored);
             setNotice(t('cert_settings_saved'));
         } catch (caught) {
             setError(toApiError(caught));
@@ -67,18 +73,21 @@ export default function CertificatesSetting() {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div>
                     <label htmlFor="certificate-warning-days" className="text-xs font-medium text-gray-700">{t('cert_settings_days')}</label>
-                    <input id="certificate-warning-days" inputMode="numeric" value={days} disabled={saving} className={`${inputClass} max-w-[8rem]`}
-                        onChange={(event) => setDays(event.target.value)} aria-invalid={!!error?.fieldErrors.warningDays} />
+                    <input id="certificate-warning-days" inputMode="numeric" value={days} disabled={saving || !loaded} className={`${inputClass} max-w-[8rem]`}
+                        onChange={(event) => setDays(event.target.value)} aria-invalid={daysInvalid || !!error?.fieldErrors.warningDays}
+                        aria-describedby={daysInvalid ? 'certificate-warning-days-error' : undefined} />
+                    {daysInvalid && <span id="certificate-warning-days-error" role="alert" className="block text-xs text-red-800">{t('cert_settings_days_invalid')}</span>}
                     <span className="block text-xs text-gray-500">{t('cert_settings_days_hint')}</span>
                 </div>
                 <div className="md:col-span-2">
                     <label htmlFor="certificate-custom-types" className="text-xs font-medium text-gray-700">{t('cert_settings_types')}</label>
-                    <textarea id="certificate-custom-types" rows={3} value={types} disabled={saving} className={inputClass} onChange={(event) => setTypes(event.target.value)} />
+                    <textarea id="certificate-custom-types" rows={3} value={types} disabled={saving || !loaded} className={inputClass} onChange={(event) => setTypes(event.target.value)} />
                     <span className="block text-xs text-gray-500">{t('cert_settings_types_hint')}</span>
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-                <button type="button" className={secondaryButtonClass} disabled={saving || days === ''} onClick={() => void saveSettings()} data-testid="certificate-settings-save">{t('cert_settings_save')}</button>
+                <button type="button" className={secondaryButtonClass} disabled={saving || !loaded || days === ''} onClick={() => void saveSettings()} data-testid="certificate-settings-save">{t('cert_settings_save')}</button>
+                {!loaded && error && <button type="button" className={secondaryButtonClass} onClick={() => setLoadToken((n) => n + 1)}>{t('cert_settings_reload')}</button>}
                 {notice && <span role="status" className="text-sm text-green-900">{notice}</span>}
             </div>
 
