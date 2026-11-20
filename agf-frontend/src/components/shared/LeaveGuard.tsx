@@ -186,9 +186,25 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     // formulier weer naar het veld waar de gebruiker stond (review #275).
     const returnFocus = useRef<HTMLElement | null>(null);
     const dialogRef = useRef<HTMLDivElement>(null);
+    // Bij een muisklik krijgt de link focus vóór de click-handler; daarom leggen we via focusin steeds het laatst gefocuste element vast
+    // dat geen link is (en niet in de vraag zit): dat is het veld waar de gebruiker werkte.
+    const lastFocus = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        const onFocusIn = (event: FocusEvent) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement) || target.closest('a[href], [data-testid="leave-guard"]') !== null) return;
+            lastFocus.current = target;
+        };
+        document.addEventListener('focusin', onFocusIn);
+        return () => document.removeEventListener('focusin', onFocusIn);
+    }, []);
     useEffect(() => {
         if (pending === null) return;
-        if (returnFocus.current === null && document.activeElement instanceof HTMLElement) returnFocus.current = document.activeElement;
+        if (returnFocus.current === null) {
+            const last = lastFocus.current;
+            if (last?.isConnected) returnFocus.current = last;
+            else if (document.activeElement instanceof HTMLElement && document.activeElement.closest('a[href]') === null) returnFocus.current = document.activeElement;
+        }
         backButton.current?.focus();
     }, [pending]);
     const onDialogKey = (event: ReactKeyboardEvent) => {
