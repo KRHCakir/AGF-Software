@@ -2963,5 +2963,6 @@
   "currency_rate_unavailable": "The ECB cannot be reached right now. Enter the rate yourself, or choose the currency again in a moment.",
   "currency_use_ecb": "Use the ECB rate",
   "currency_euro_hint": "≈ {amount}",
-  "currency_error_rate": "Enter a rate: how much of this currency is 1 euro (a number above zero, at most six decimals)."
+  "currency_error_rate": "Enter a rate: how much of this currency is 1 euro (a number above zero, at most six decimals).",
+  "currency_error_rate_pending": "The ECB rate is still being fetched. Wait a moment, or enter the rate yourself."
 }

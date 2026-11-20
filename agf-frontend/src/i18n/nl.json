@@ -2963,5 +2963,6 @@
   "currency_rate_unavailable": "De ECB is nu niet bereikbaar. Vul de koers zelf in, of kies de valuta zo opnieuw.",
   "currency_use_ecb": "ECB-koers gebruiken",
   "currency_euro_hint": "≈ {amount}",
-  "currency_error_rate": "Vul een koers in: hoeveel van deze valuta is 1 euro (een getal boven nul, hoogstens zes decimalen)."
+  "currency_error_rate": "Vul een koers in: hoeveel van deze valuta is 1 euro (een getal boven nul, hoogstens zes decimalen).",
+  "currency_error_rate_pending": "De ECB-koers wordt nog opgehaald. Wacht even, of vul de koers zelf in."
 }
