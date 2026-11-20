@@ -180,9 +180,12 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     // Een andere leverancier stelt haar standaardvaluta voor, zolang de gebruiker de valuta niet zelf koos (en nooit bij aanpassen).
     const chooseVendor = (vendor: VendorOption | null) => {
         updateHeader('vendorId', vendor === null ? '' : String(vendor.id));
+        // Zolang de gebruiker de valuta niet zelf koos, volgt ze de leverancier; een leverancier zonder standaardvaluta (of geen
+        // leverancier) is euro, zodat de valuta van een eerder gekozen leverancier niet blijft staan.
         const proposal = vendor?.defaultCurrency?.trim().toUpperCase();
-        if (editing === null && !money.touched && proposal && /^[A-Z]{3}$/.test(proposal) && proposal !== money.currency) {
-            setMoney(isEuro(proposal) ? euroDraft() : { currency: proposal, rate: '', source: 'ECB', rateDate: null, touched: false });
+        const wanted = proposal && /^[A-Z]{3}$/.test(proposal) ? proposal : EURO;
+        if (editing === null && !money.touched && wanted !== money.currency.trim().toUpperCase()) {
+            setMoney(isEuro(wanted) ? euroDraft() : { currency: wanted, rate: '', source: 'ECB', rateDate: null, touched: false });
         }
     };
 

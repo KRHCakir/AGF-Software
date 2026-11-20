@@ -58,6 +58,34 @@ public class PurchaseCurrencyTests : IDisposable
         Assert.Equal(5, _rates.Asked.Count);
     }
 
+    private sealed class MutableClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 10, 20, 8, 0, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public async Task A_Rate_That_Lags_Behind_The_Requested_Day_Is_Refreshed_Soon_And_Concurrent_Misses_Share_One_Request()
+    {
+        var clock = new MutableClock();
+        var cached = new CachedExchangeRateSource(_rates, new ExchangeRateDayCache(), new FixedBusinessCalendar(Today), clock);
+        _rates.Quotes["USD"] = Quote("USD", 1.08m, Today.AddDays(-1));
+        Assert.Equal(1.08m, (await cached.LatestAsync("USD", Today, default)).UnitsPerEuro);
+        await cached.LatestAsync("USD", Today, default);
+        Assert.Single(_rates.Asked);
+
+        _rates.Quotes["USD"] = Quote("USD", 1.09m, Today);
+        clock.Now += CachedExchangeRateSource.LaggingRateLifetime + TimeSpan.FromSeconds(1);
+        Assert.Equal(1.09m, (await cached.LatestAsync("USD", Today, default)).UnitsPerEuro);
+        await cached.LatestAsync("USD", Today, default);
+        Assert.Equal(2, _rates.Asked.Count);
+
+        _rates.Asked.Clear();
+        var shared = new CachedExchangeRateSource(_rates, new ExchangeRateDayCache(), new FixedBusinessCalendar(Today), clock);
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => shared.LatestAsync("USD", Today, default)));
+        Assert.Single(_rates.Asked);
+    }
+
     [Fact]
     public async Task The_Currency_List_Starts_With_Euro_Can_Be_Extended_And_Says_Which_Have_An_Ecb_Rate()
     {
@@ -71,7 +99,11 @@ public class PurchaseCurrencyTests : IDisposable
         Assert.False(saved.Value.Currencies.Single(c => c.Code == "AED").HasEcbRate);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() { "US$" } })).Status);
         Assert.Equal(ServiceResultStatus.Validation, (await service.UpdateAsync(null)).Status);
+        var onlyEuro = await service.UpdateAsync(new UpdatePurchaseCurrenciesDto { Codes = new() });
+        Assert.Equal(new[] { "EUR" }, onlyEuro.Value.Currencies.Select(c => c.Code));
+        Assert.Equal(new[] { "EUR" }, (await service.GetAsync()).Currencies.Select(c => c.Code));
     }
+
     [Fact]
     public async Task The_Database_Refuses_A_Rate_That_Does_Not_Fit_The_Currency()
     {
