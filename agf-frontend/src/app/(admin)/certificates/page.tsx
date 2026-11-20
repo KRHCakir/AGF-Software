@@ -62,13 +62,13 @@ export default function CertificatesPage() {
                 <label htmlFor="certificate-search" className="sr-only">{t('cert_page_search')}</label>
                 <input id="certificate-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('cert_page_search')} className={`${inputClass} mt-0 max-w-md flex-1`} />
                 <label htmlFor="certificate-type-filter" className="sr-only">{t('cert_type')}</label>
-                <select id="certificate-type-filter" value={type} onChange={(event) => setType(event.target.value)} className={`${inputClass} mt-0 w-auto`}>
+                <select id="certificate-type-filter" value={type} onChange={(event) => setType(event.target.value)} className={`${inputClass} mt-0 w-auto max-w-xs`}>
                     <option value="">{t('cert_page_all_types')}</option>
                     {reference?.types.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
                     <option value="Custom">{t('cert_type_group_custom')}</option>
                 </select>
                 <label htmlFor="certificate-status-filter" className="sr-only">{t('cert_page_status')}</label>
-                <select id="certificate-status-filter" value={status} onChange={(event) => setStatus(event.target.value)} className={`${inputClass} mt-0 w-auto`}>
+                <select id="certificate-status-filter" value={status} onChange={(event) => setStatus(event.target.value)} className={`${inputClass} mt-0 w-auto max-w-xs`}>
                     {STATUSES.map((option) => <option key={option} value={option}>{t(`cert_filter_${option || 'all'}`)}</option>)}
                 </select>
                 <label className="flex items-center gap-1 text-sm text-gray-800">

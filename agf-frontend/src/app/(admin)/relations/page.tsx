@@ -198,7 +198,7 @@ export default function RelationsPage() {
                     {t('relations_filter_inactive')}
                 </label>
                 <label htmlFor="relation-certificate-filter" className="sr-only">{t('cert_section_title')}</label>
-                <select id="relation-certificate-filter" value={certificate} onChange={(event) => setCertificate(event.target.value)} className={`${inputClass} mt-0 w-auto`} data-tour="relations-certificate-filter">
+                <select id="relation-certificate-filter" value={certificate} onChange={(event) => setCertificate(event.target.value)} className={`${inputClass} mt-0 w-auto max-w-xs`} data-tour="relations-certificate-filter">
                     {['', 'attention', 'Expired', 'ExpiringSoon', 'productsPending', 'none', 'GlobalGapIfa', 'GlobalGapCoc', 'Skal'].map((option) => (
                         <option key={option} value={option}>{t(`relations_cert_filter_${option || 'all'}`)}</option>
                     ))}
