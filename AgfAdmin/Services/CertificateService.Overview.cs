@@ -9,10 +9,15 @@ namespace AgfAdmin.Services
     // de GGN's van een leverancier voor het voorstel bij ontvangst.
     public sealed partial class CertificateService
     {
+        private const int DefaultOverviewPageSize = 100;
+        private const int MaxOverviewPageSize = 500;
+
         // Alle certificaten (Stamgegevens › Certificaten), of alleen die aandacht vragen (attention: bijna verlopen en verlopen, gesorteerd
-        // op einddatum). Alleen actieve certificaten van actieve relaties en het eigen bedrijf, tenzij includeArchived.
-        public async Task<CertificateOverviewDto> OverviewAsync(string query, string type, string status, bool includeArchived, CancellationToken cancellationToken = default)
+        // op einddatum), met paginering: Total is het aantal bij het filter, niet het aantal op de pagina. Alleen actieve certificaten van actieve relaties en het eigen bedrijf, tenzij includeArchived.
+        public async Task<CertificateOverviewDto> OverviewAsync(string query, string type, string status, bool includeArchived, int page = 1, int pageSize = DefaultOverviewPageSize, CancellationToken cancellationToken = default)
         {
+            page = Math.Max(page, 1);
+            pageSize = pageSize < 1 ? DefaultOverviewPageSize : Math.Min(pageSize, MaxOverviewPageSize);
             var settings = await SettingsAsync(tracking: false, cancellationToken);
             var today = db.BusinessCalendar.Today();
             var warningUntil = today.AddDays(settings.CertificateWarningDays);
@@ -35,9 +40,10 @@ namespace AgfAdmin.Services
             {
                 certificates = certificates.Where(c => (key != null && c.NumberKey.Contains(key)) || (c.Relation != null && c.Relation.Name.ToLower().Contains(term)));
             }
+            var total = await certificates.CountAsync(cancellationToken);
             var rows = await certificates
                 .OrderBy(c => c.ValidUntil == null).ThenBy(c => c.ValidUntil).ThenBy(c => c.Relation == null ? "" : c.Relation.Name).ThenBy(c => c.Id)
-                .Take(500)
+                .Skip((page - 1) * pageSize).Take(pageSize)
                 .Select(c => new
                 {
                     c.Id, c.RelationId, RelationName = c.Relation == null ? null : c.Relation.Name,
@@ -49,7 +55,9 @@ namespace AgfAdmin.Services
             return new CertificateOverviewDto
             {
                 WarningDays = settings.CertificateWarningDays,
-                Total = rows.Count,
+                Total = total,
+                Page = page,
+                PageSize = pageSize,
                 Items = rows.Select(c => new CertificateOverviewItemDto
                 {
                     CertificateId = c.Id, RelationId = c.RelationId, RelationName = c.RelationName, IsCustomer = c.IsCustomer, IsVendor = c.IsVendor, IsCarrier = c.IsCarrier,
