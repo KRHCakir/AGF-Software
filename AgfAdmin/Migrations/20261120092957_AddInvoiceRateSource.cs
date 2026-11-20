@@ -17,7 +17,7 @@ namespace AgfAdmin.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_IncomingInvoices_ExchangeRate",
                 table: "IncomingInvoices",
-                sql: "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateSource\" IN ('ECB', 'Manual', 'NotApplicable') AND (\"ExchangeRateSource\" <> 'ECB' OR \"ExchangeRateDate\" IS NOT NULL))");
+                sql: "(\"ExchangeRate\" IS NULL AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" IS NULL) OR (\"ExchangeRate\" IS NOT NULL AND \"ExchangeRate\" > 0 AND \"ExchangeRateSource\" IS NOT NULL AND ((\"ExchangeRateSource\" = 'ECB' AND \"ExchangeRateDate\" IS NOT NULL) OR (\"ExchangeRateSource\" IN ('Manual', 'NotApplicable') AND \"ExchangeRateDate\" IS NULL)))");
 
             // Valuta-ronde: bestaande facturen in euro (ook zonder valuta, dat telde al als euro) zijn euro met koers 1 en bron NotApplicable.
             // Een factuur in een andere valuta zonder koers blijft zo: die haalt haar ECB-koers op zoals voorheen (zolang er niets verdeeld is).
