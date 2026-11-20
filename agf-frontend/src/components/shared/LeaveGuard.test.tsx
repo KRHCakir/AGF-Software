@@ -80,6 +80,27 @@ describe('LeaveGuard', () => {
         assert.equal(currentUrl(), '/purchase-orders?id=4', 'went to the chain-strip link');
     });
 
+    test('the question is modal: Tab stays inside it, and Back to the form returns the focus to the field', async () => {
+        await mounted.render(page(<Form />));
+        const field = mounted.container.querySelector<HTMLInputElement>('#field')!;
+        field.focus();
+        await type('x');
+        await follow('/availability');
+        const stayButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="leave-guard-stay"]')!;
+        const discardButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="leave-guard-discard"]')!;
+        assert.equal(window.document.activeElement, stayButton);
+        const tab = async (shiftKey = false) => { await act(async () => { window.document.activeElement!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })); }); };
+        await tab();
+        assert.equal(window.document.activeElement, discardButton);
+        await tab();
+        assert.equal(window.document.activeElement, stayButton, 'wraps around');
+        await tab(true);
+        assert.equal(window.document.activeElement, discardButton, 'Shift+Tab too');
+        await act(async () => { stayButton.click(); });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+        assert.equal(window.document.activeElement, field, 'focus back in the field');
+    });
+
     test('an input error says so in the question', async () => {
         await mounted.render(page(<Form error />));
         await follow('/availability');

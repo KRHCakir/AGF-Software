@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { createContext, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, Suspense, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import { historyIndexOf, setPopHandler } from './HistoryFirst';
@@ -162,7 +162,9 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
                 afterRestore.current = { href, delta: hereIndex - formIndex };
                 window.history.go(formIndex - hereIndex);
             } else {
-                // Geen volgnummers bekend (regel van vóór de bewaking): terugvallen op een nieuwe regel.
+                // Geen volgnummers bekend: terugvallen op een nieuwe regel (dat wist de vooruitgeschiedenis). In de praktijk komt dit niet voor:
+                // HistoryFirst nummert elke regel van dit document vanaf het laden, en regels van een vorig document geven geen popstate
+                // (daar geldt de waarschuwing van de browser).
                 window.history.pushState(form.state, '', form.href);
                 setPending({ href });
             }
@@ -180,10 +182,55 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
         return () => { setPopHandler(null); document.removeEventListener('click', onClick, true); };
     }, []);
 
-    useEffect(() => { if (pending !== null) backButton.current?.focus(); }, [pending]);
+    // Modaal: de focus gaat naar Terug naar het formulier, blijft met Tab binnen de vraag (focusval), en gaat bij Terug naar het
+    // formulier weer naar het veld waar de gebruiker stond (review #275).
+    const returnFocus = useRef<HTMLElement | null>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    // Bij een muisklik krijgt de link focus vóór de click-handler; daarom leggen we via focusin steeds het laatst gefocuste element vast
+    // dat geen link is (en niet in de vraag zit): dat is het veld waar de gebruiker werkte.
+    const lastFocus = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        const onFocusIn = (event: FocusEvent) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement) || target.closest('a[href], [data-testid="leave-guard"]') !== null) return;
+            lastFocus.current = target;
+        };
+        document.addEventListener('focusin', onFocusIn);
+        return () => document.removeEventListener('focusin', onFocusIn);
+    }, []);
+    useEffect(() => {
+        if (pending === null) return;
+        if (returnFocus.current === null) {
+            const last = lastFocus.current;
+            if (last?.isConnected) returnFocus.current = last;
+            else if (document.activeElement instanceof HTMLElement && document.activeElement.closest('a[href]') === null) returnFocus.current = document.activeElement;
+        }
+        backButton.current?.focus();
+        // Komt de focus toch buiten de vraag (bijvoorbeeld door een script), dan gaat die terug naar de vraag.
+        const onOutside = (event: FocusEvent) => {
+            if (event.target instanceof Node && dialogRef.current?.contains(event.target) !== true) backButton.current?.focus();
+        };
+        document.addEventListener('focusin', onOutside);
+        return () => document.removeEventListener('focusin', onOutside);
+    }, [pending]);
+    const onDialogKey = (event: ReactKeyboardEvent) => {
+        if (event.key === 'Escape') { event.preventDefault(); stay(); return; }
+        if (event.key !== 'Tab') return;
+        const buttons = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+        if (buttons.length === 0) return;
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        event.preventDefault();
+        buttons[(index + (event.shiftKey ? buttons.length - 1 : 1)) % buttons.length].focus();
+    };
 
-    const stay = useCallback(() => setPending(null), []);
+    const stay = useCallback(() => {
+        setPending(null);
+        const target = returnFocus.current;
+        returnFocus.current = null;
+        if (target?.isConnected) setTimeout(() => target.focus(), 0);
+    }, []);
     const discard = useCallback(() => {
+        returnFocus.current = null;
         const target = pending;
         setPending(null);
         setLeaving(true);
@@ -197,12 +244,14 @@ export default function LeaveGuardProvider({ children }: { children: ReactNode }
     return (
         <LeaveGuardContext.Provider value={api}>
             <Suspense fallback={null}><SearchWatcher onChange={releaseLeaving} /></Suspense>
-            {children}
+            {/* Modaal: zolang de vraag open staat is de rest van de pagina (ook de zwevende Demo-assistent) inert: geen focus, geen klik en
+                verborgen voor ondersteunende technologie. display: contents laat de opmaak ongemoeid. */}
+            <div style={{ display: 'contents' }} inert={pending !== null}>{children}</div>
             {pending !== null && (
                 // Onder de rondleiding (z-70); op een telefoon ruimte onderin, zodat de knoppen niet onder de zwevende knop Demo-assistent vallen.
                 <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/40 p-0 sm:items-center sm:p-4"
-                    onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); stay(); } }}>
-                    <div role="alertdialog" aria-modal="true" aria-labelledby="leave-guard-title" data-testid="leave-guard"
+                    onKeyDown={onDialogKey}>
+                    <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="leave-guard-title" data-testid="leave-guard"
                         className="w-full max-w-md space-y-3 rounded-t-lg bg-white p-4 shadow-xl max-sm:pb-20 sm:rounded-lg">
                         <h2 id="leave-guard-title" className="text-base font-semibold text-gray-900">
                             {t(computed === 'error' ? 'leave_guard_error' : 'leave_guard_unsaved')}
