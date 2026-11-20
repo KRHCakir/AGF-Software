@@ -642,6 +642,46 @@ public class RelationFinanceServiceTests : IDisposable
         Assert.Equal((new DateOnly(2026, 10, 19), "Anja", new DateOnly(2027, 3, 31), true), (ggn.CheckedOn!.Value, ggn.CheckedBy, ggn.CertificateValidUntil!.Value, ggn.HasGgnLabel));
     }
 
+    [Fact]
+    public async Task Editing_Vendor_Ggns_Keeps_The_Ggn_Certificates_In_Step()
+    {
+        var request = New("Kweker sync");
+        request.Vendor = new SaveVendorRoleDto { Ggns = new() { new() { Ggn = "4049929000001", ProducerName = "Uno", CheckedOn = new DateOnly(2026, 10, 19), CheckedBy = "Anja" } } };
+        var created = (await CreateAsync(request)).Value;
+        async Task<List<RelationCertificate>> CertificatesAsync()
+        {
+            await using var db = _factory.CreateContext();
+            return await db.RelationCertificates.AsNoTracking().Where(c => c.RelationId == created.Id).OrderBy(c => c.SortOrder).ToListAsync();
+        }
+
+        var first = Assert.Single(await CertificatesAsync());   // nieuw GGN = nieuw certificaat
+        Assert.Equal((CertificateRules.GlobalGapIfa, "4049929000001", "Uno", true), (first.TypeCode, first.Number, first.ProducerName, first.ProductsPending));
+
+        var update = New("Kweker sync");
+        update.ExpectedVersion = created.Version;
+        update.Vendor = new SaveVendorRoleDto
+        {
+            Ggns = new()
+            {
+                new() { Id = created.Vendor!.Ggns.Single().Id, Ggn = "4049929000001", ProducerName = "Uno BV", CheckedOn = new DateOnly(2026, 10, 19), CheckedBy = "Anja", IsActive = false },
+                new() { Ggn = "4049929000002", CheckedOn = new DateOnly(2026, 10, 19), CheckedBy = "Anja" }
+            }
+        };
+        var updated = (await UpdateAsync(created.Id, update)).Value;
+        var certificates = await CertificatesAsync();
+        Assert.Equal(2, certificates.Count);
+        Assert.Equal(("Uno BV", false, first.Id), (certificates[0].ProducerName, certificates[0].IsActive, certificates[0].Id));   // gewijzigd/gedeactiveerd
+        Assert.Equal("4049929000002", certificates[1].Number);                                                                      // toegevoegd
+
+        var remove = New("Kweker sync");
+        remove.ExpectedVersion = updated.Version;
+        remove.Vendor = new SaveVendorRoleDto { Ggns = new() };
+        Assert.Equal(ServiceResultStatus.Ok, (await UpdateAsync(created.Id, remove)).Status);
+        certificates = await CertificatesAsync();
+        Assert.Equal(2, certificates.Count);          // nooit verwijderd (regel 33)
+        Assert.All(certificates, c => Assert.False(c.IsActive));
+    }
+
     // ---------------- Krediet ----------------
 
     [Fact]

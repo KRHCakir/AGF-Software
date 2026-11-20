@@ -201,6 +201,7 @@ namespace AgfAdmin.Services
                 }
                 return ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
             }
+            await SyncGgnCertificatesAsync(relation.Id, command.ActorReference, cancellationToken);
             var created = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == relation.Id, cancellationToken), cancellationToken);
             created.Warnings.InsertRange(0, signals.Warnings);
             return ServiceResult<RelationDto>.Created(created);
@@ -260,10 +261,52 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
             }
+            await SyncGgnCertificatesAsync(id, command.ActorReference, cancellationToken);
             _db.ChangeTracker.Clear();
             var updated = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == id, cancellationToken), cancellationToken);
             updated.Warnings.InsertRange(0, signals.Warnings);
             return ServiceResult<RelationDto>.Ok(updated);
+        }
+
+        // Zolang de GGN-velden bij de leverancier hier nog bewerkt worden, blijven de certificaten van de soort GLOBALG.A.P. IFA (GGN)
+        // gelijk aan die GGN's (overname in migratie 66, CertificateRules.CopyVendorGgnsSql): een nieuw GGN wordt een certificaat (producten
+        // nog invullen), een gewijzigd GGN werkt zijn certificaat bij, een weggehaald GGN archiveert zijn certificaat (nooit verwijderen,
+        // regel 33). Producten, bestanden, soort en begindatum van het certificaat blijven staan. Idempotent: een volgende save herstelt
+        // een eventueel gemiste synchronisatie.
+        private async Task SyncGgnCertificatesAsync(int relationId, string actor, CancellationToken cancellationToken)
+        {
+            _db.ChangeTracker.Clear();
+            var ggns = await _db.VendorGgns.AsNoTracking().Where(g => g.Vendor.RelationId == relationId).ToListAsync(cancellationToken);
+            var ggnIds = ggns.Select(g => g.Id).ToList();
+            var certificates = await _db.RelationCertificates
+                .Where(c => c.SourceVendorGgnId != null && (c.RelationId == relationId || ggnIds.Contains(c.SourceVendorGgnId.Value)))
+                .ToListAsync(cancellationToken);
+            var bySource = certificates.ToDictionary(c => c.SourceVendorGgnId.Value);
+            var who = string.IsNullOrWhiteSpace(actor) ? "Systeem" : actor;
+            var now = DateTime.UtcNow;
+            foreach (var g in ggns)
+            {
+                if (!bySource.TryGetValue(g.Id, out var c))
+                {
+                    _db.RelationCertificates.Add(new RelationCertificate
+                    {
+                        RelationId = relationId, TypeCode = CertificateRules.GlobalGapIfa, Number = g.Ggn, NumberKey = g.Ggn, ValidUntil = g.CertificateValidUntil,
+                        ProductsPending = true, ProducerName = g.ProducerName, HasGgnLabel = g.HasGgnLabel, CheckedOn = g.CheckedOn, CheckedBy = g.CheckedBy,
+                        IsActive = g.IsActive, SortOrder = g.SortOrder, SourceVendorGgnId = g.Id, CreatedAt = now, CreatedBy = who, UpdatedAt = now, UpdatedBy = who
+                    });
+                    continue;
+                }
+                if (c.Number == g.Ggn && c.NumberKey == g.Ggn && c.ValidUntil == g.CertificateValidUntil && c.ProducerName == g.ProducerName && c.HasGgnLabel == g.HasGgnLabel
+                    && c.CheckedOn == g.CheckedOn && c.CheckedBy == g.CheckedBy && c.IsActive == g.IsActive && c.SortOrder == g.SortOrder) continue;
+                c.Number = g.Ggn; c.NumberKey = g.Ggn; c.ValidUntil = g.CertificateValidUntil; c.ProducerName = g.ProducerName; c.HasGgnLabel = g.HasGgnLabel;
+                c.CheckedOn = g.CheckedOn; c.CheckedBy = g.CheckedBy; c.IsActive = g.IsActive; c.SortOrder = g.SortOrder;
+                c.UpdatedAt = now; c.UpdatedBy = who;
+            }
+            foreach (var c in certificates.Where(c => c.RelationId == relationId && c.IsActive && !ggnIds.Contains(c.SourceVendorGgnId.Value)))
+            {
+                c.IsActive = false; c.UpdatedAt = now; c.UpdatedBy = who;
+            }
+            if (_db.ChangeTracker.HasChanges()) await _db.SaveChangesAsync(cancellationToken);
         }
 
         // Bankrekening bevestigen (na controle bij de relatie, bijv. terugbellen op een bekend nummer): wie verplicht, verwachte versie
