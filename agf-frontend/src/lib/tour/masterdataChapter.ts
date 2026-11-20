@@ -43,6 +43,16 @@ export const VENDOR_STEPS = [
         { kind: 'click', target: 'relation-role-vendor' },
     ]),
     master('vendor-address', '/relations', address('2991 LD', 'Handelsweg 12', 'Barendrecht')),
+    // Certificaten deel 1: een GGN-certificaat met einddatum. De producten (avocado) komen later, als het artikel bestaat; tot die tijd zegt
+    // het blok "Vul in voor welke producten".
+    master('vendor-certificate', '/relations', [
+        { kind: 'click', target: 'relation-section:certificates' },
+        { kind: 'click', target: 'relation-certificate-add' },
+        { kind: 'select', target: 'relation-certificate-type', value: 'GlobalGapIfa' },
+        { kind: 'type', target: 'relation-certificate-number', text: '4049928415684' },
+        { kind: 'type', target: 'relation-certificate-valid-until', text: '31-12-2027' },
+        { kind: 'highlight', target: 'relation-certificate-product' },
+    ]),
     master('vendor-save', '/relations', save('{{tourRef}} Kwekerij')),
 ];
 
