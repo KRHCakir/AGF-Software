@@ -22,6 +22,8 @@ export interface CertificateRow {
     checkedOn: string;
     checkedBy: string | null;
     isActive: boolean;
+    // Uit de oude GGN-velden overgenomen zonder producten (komt van de server; nieuwe rijen: false).
+    productsPending: boolean;
     files: CertificateFile[];
     // Gekozen bestanden voor een certificaat dat nog niet is opgeslagen: na opslaan gaan ze erbij (elk een versie).
     pendingFiles: File[];
@@ -35,7 +37,7 @@ const newKey = () => `cert-${++counter}`;
 export function emptyCertificateRow(typeCode = ''): CertificateRow {
     return {
         key: newKey(), id: null, typeCode, customTypeName: '', number: '', certificationBody: '', validFrom: '', validUntil: '', productIds: [],
-        producerName: '', hasGgnLabel: false, checkedOn: '', checkedBy: null, isActive: true, files: [], pendingFiles: [],
+        producerName: '', hasGgnLabel: false, checkedOn: '', checkedBy: null, isActive: true, productsPending: false, files: [], pendingFiles: [],
     };
 }
 
@@ -43,13 +45,15 @@ export function rowsFromCertificates(certificates: Certificate[]): CertificateRo
     return certificates.map((c) => ({
         key: newKey(), id: c.id, typeCode: c.typeCode, customTypeName: c.customTypeName ?? '', number: c.number, certificationBody: c.certificationBody ?? '',
         validFrom: c.validFrom ?? '', validUntil: c.validUntil ?? '', productIds: c.products.map((p) => p.id), producerName: c.producerName ?? '',
-        hasGgnLabel: c.hasGgnLabel, checkedOn: c.checkedOn ?? '', checkedBy: c.checkedBy, isActive: c.isActive, files: c.files, pendingFiles: [],
+        hasGgnLabel: c.hasGgnLabel, checkedOn: c.checkedOn ?? '', checkedBy: c.checkedBy, isActive: c.isActive, productsPending: c.productsPending, files: c.files, pendingFiles: [],
     }));
 }
 
-// Een rij zonder soort en zonder nummer is leeg (bijvoorbeeld net toegevoegd met Tab) en gaat niet mee.
+// Een nieuwe rij waarin geen enkel bewerkbaar veld is ingevuld is leeg (bijvoorbeeld net toegevoegd met Tab) en gaat niet mee.
 export function isBlankRow(row: CertificateRow): boolean {
-    return row.id === null && row.typeCode === '' && row.number.trim() === '' && row.customTypeName.trim() === '' && row.pendingFiles.length === 0;
+    return row.id === null && row.typeCode === '' && row.number.trim() === '' && row.customTypeName.trim() === '' && row.certificationBody.trim() === ''
+        && row.validFrom.trim() === '' && row.validUntil.trim() === '' && row.checkedOn.trim() === '' && row.producerName.trim() === ''
+        && row.productIds.length === 0 && !row.hasGgnLabel && row.pendingFiles.length === 0;
 }
 
 // Tab op het laatste veld van de laatste rij geeft een nieuwe rij, maar alleen als die laatste rij al iets bevat.
@@ -117,7 +121,7 @@ export function buildCertificatesPayload(rows: CertificateRow[], today: string):
 export function certificateWarnings(row: CertificateRow): string[] {
     if (row.typeCode !== GGN_TYPE) return [];
     const warnings: string[] = [];
-    if (row.productIds.length === 0) warnings.push(row.id !== null ? 'products_pending' : 'products_missing');
+    if (row.productIds.length === 0) warnings.push(row.productsPending ? 'products_pending' : 'products_missing');
     const number = normalizeGgn(row.number);
     if (isGgn(number) && !hasValidGgnCheckDigit(number)) warnings.push('ggn_check_digit');
     return warnings;
