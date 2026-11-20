@@ -141,6 +141,13 @@ export interface PurchaseInvoice extends OptionalFieldValues {
     subTotal: number;
     vatAmount: number;
     totalAmount: number;
+    // Valuta-ronde (ontbreekt in oudere antwoorden): de vastgelegde koers en de bedragen in euro. Null bij een oudere factuur in een
+    // andere valuta zonder vastgelegde koers.
+    exchangeRate?: number | null;
+    exchangeRateDate?: string | null;
+    exchangeRateSource?: string | null;
+    subTotalEur?: number | null;
+    totalAmountEur?: number | null;
     createdAt: string;
     internalNote: string | null;
     lines: PurchaseInvoiceLine[];

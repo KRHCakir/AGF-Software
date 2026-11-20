@@ -8,12 +8,26 @@ import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../compone
 import { FirstStepLink } from '../../../components/shared/FirstStep';
 import { useTranslation } from '../../../i18n/LanguageContext';
 import { formatMoney } from '../../../lib/availability';
+import { formatEuro } from '../../../lib/documentCurrency';
+import { isEuro } from '../../../lib/exchangeRate';
 import { formatCalendarDate } from '../../../lib/calendarDate';
 import { toApiError } from '../../../services/apiClient';
 import { listPurchaseInvoices } from '../../../services/purchaseInvoiceService';
 import type { PurchaseInvoice } from '../../../types/purchaseInvoice';
 import { primaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { listRowClass, rowClick } from '../../../lib/listRows';
+
+// Valuta-ronde: het totaal in euro (vastgelegde koers), met het bedrag in de factuurvaluta eronder; nooit valuta door elkaar. Een oudere
+// factuur in een andere valuta zonder vastgelegde koers heeft nog geen eurobedrag ("–").
+function invoiceAmount(invoice: PurchaseInvoice, locale: string) {
+    const euro = invoice.totalAmountEur ?? (isEuro(invoice.currency) ? invoice.totalAmount : null);
+    return (
+        <>
+            {euro == null ? '–' : formatEuro(euro, locale)}
+            {!isEuro(invoice.currency) && <span className="block text-xs text-gray-600">{formatMoney(invoice.totalAmount, invoice.currency ?? null, locale)}</span>}
+        </>
+    );
+}
 
 // Overzicht van inkoopfacturen uit de nieuwe werkplek (dezelfde tabel als de oude pagina "Facturen (oud)"). Klikken opent de factuur
 // (?id=) met per regel "Aan welke partij hoort dit?" (kosten verdelen over partijen).
@@ -81,7 +95,7 @@ function PurchaseInvoicesWorkspace() {
                                 <th scope="col" className="px-3 py-2">{t('invoice_number')}</th>
                                 <th scope="col" className="px-3 py-2">{t('purchase_vendor')}</th>
                                 <th scope="col" className="px-3 py-2">{t('purchase_due_date')}</th>
-                                <th scope="col" className="px-3 py-2 text-right">{t('purchase_col_total')}</th>
+                                <th scope="col" className="px-3 py-2 text-right">{t('purchase_col_total')}<span className="block font-normal normal-case">{t('po_amount_eur_hint')}</span></th>
                                 <th scope="col" className="px-3 py-2">{t('purchase_col_status')}</th>
                             </tr>
                         </thead>
@@ -102,7 +116,7 @@ function PurchaseInvoicesWorkspace() {
                                     </td>
                                     <td className="px-3 py-2">{invoice.vendorName ?? '–'}</td>
                                     <td className="px-3 py-2">{invoice.dueDate ? formatCalendarDate(invoice.dueDate, locale) : '–'}</td>
-                                    <td className="px-3 py-2 text-right font-mono">{formatMoney(invoice.totalAmount, invoice.currency ?? null, locale)}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-right font-mono" data-testid="invoice-list-amount">{invoiceAmount(invoice, locale)}</td>
                                     <td className="px-3 py-2">{invoice.status}</td>
                                 </tr>
                             ))}
