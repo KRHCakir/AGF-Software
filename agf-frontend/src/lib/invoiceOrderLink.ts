@@ -21,6 +21,11 @@ export interface OrderLineLink {
     invoicedQuantity: number;
     openQuantity: number;
     priceAdjustable: boolean;
+    // Valuta-ronde: valuta en koers van de order (ontbreken in oudere bewaarde concepten: dan euro).
+    orderCurrency?: string;
+    orderRate?: number;
+    orderRateSource?: string;
+    orderRateDate?: string | null;
 }
 
 const PACKAGE_UNITS: readonly string[] = ['box', 'colli', 'tray', 'piece', 'dozen'];
@@ -48,16 +53,38 @@ export function linesFromCandidate(order: InvoiceCandidate, defaultVat: number):
             productName: `${line.productName} ${line.productVariantName}`.trim(), unit: line.unit, orderUnitPrice: line.unitPrice,
             expectedQuantity: line.expectedQuantity, receivedQuantity: line.receivedQuantity, invoicedQuantity: line.invoicedQuantity, openQuantity: line.openQuantity,
             priceAdjustable: order.priceAdjustable,
+            orderCurrency: (order.currency ?? 'EUR').toUpperCase(), orderRate: order.exchangeRate ?? 1, orderRateSource: order.exchangeRateSource ?? 'NotApplicable',
+            orderRateDate: order.exchangeRateDate ?? null,
         },
     }));
 }
 
+// Valuta-ronde: een factuur factureert alleen orders in haar eigen valuta (de server weigert anders). De valuta van de gekoppelde orders, of
+// null zolang er niets gekoppeld is.
+export function linkedOrderCurrency(draft: InvoiceDraft): string | null {
+    const linked = draft.lines.find((line) => line.orderLine !== undefined && line.orderLine !== null);
+    return linked?.orderLine ? (linked.orderLine.orderCurrency ?? 'EUR').toUpperCase() : null;
+}
+
+// Kan deze order bij deze factuur? Nee als er al een order in een andere valuta aan hangt.
+export function orderCurrencyFits(draft: InvoiceDraft, order: Pick<InvoiceCandidate, 'currency'>): boolean {
+    const linked = linkedOrderCurrency(draft);
+    return linked === null || linked === (order.currency ?? 'EUR').toUpperCase();
+}
+
 // Orderregels toevoegen: een leeg begin (alleen lege regels) wordt vervangen; een orderregel die er al staat komt er niet nog eens bij.
+// Valuta-ronde: de eerste gekoppelde order bepaalt de valuta van de factuur (de koers wordt dan opnieuw die van de factuurdatum); een order in
+// een andere valuta dan wat al gekoppeld is, komt er niet bij.
 export function addOrderLines(draft: InvoiceDraft, order: InvoiceCandidate, defaultVat: number): InvoiceDraft {
+    if (!orderCurrencyFits(draft, order)) return draft;
     const present = new Set(draft.lines.map((line) => line.orderLine?.lineId).filter((id) => id !== undefined));
     const added = linesFromCandidate(order, defaultVat).filter((line) => !present.has(line.orderLine!.lineId));
     const kept = draft.lines.every(isBlankLine) ? [] : draft.lines;
-    return { ...draft, lines: [...kept, ...added] };
+    const currency = (order.currency ?? 'EUR').toUpperCase();
+    const withCurrency = linkedOrderCurrency(draft) === null && currency !== draft.header.currency.trim().toUpperCase()
+        ? { ...draft, header: { ...draft.header, currency, exchangeRate: '', rateSource: undefined, rateDate: null }, touched: { ...draft.touched, currency: true } }
+        : draft;
+    return { ...withCurrency, lines: [...kept, ...added] };
 }
 
 export interface LineComparison {

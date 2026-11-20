@@ -437,6 +437,11 @@ export interface InvoiceCandidate {
     documentStatus: string;
     route: string;
     priceAdjustable: boolean;
+    // Valuta-ronde: valuta en vastgelegde koers van de order (de factuur volgt de valuta; haar koers is die van haar eigen datum).
+    currency?: string;
+    exchangeRate?: number;
+    exchangeRateDate?: string | null;
+    exchangeRateSource?: string;
     invoiceNumbers: string[];
     lines: InvoiceCandidateLine[];
 }

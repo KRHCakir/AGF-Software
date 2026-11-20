@@ -4,6 +4,8 @@ import { parseLocaleDecimal, parsePositiveDecimal } from './decimal.ts';
 import { PaymentConditionBasis, conditionDueDate } from './paymentCondition.ts';
 import { fitsAmount, lineNet, lineVat, totals } from './invoiceMath.ts';
 import type { OrderLineLink } from './invoiceOrderLink.ts';
+import { type CurrencyDraft, type RateSource, currencyPayload } from './documentCurrency.ts';
+import { isEuro } from './exchangeRate.ts';
 
 // Pure regels van de inkoopfactuurwerkplek, los van React en i18n (node:test). Spiegelt PurchaseInvoiceService:
 // leveranciersdefaults zijn voorstellen die op het document worden bewaard; handmatige invoer wordt nooit overschreven;
@@ -32,6 +34,11 @@ export interface HeaderDraft {
     paymentTermsDays: string;
     dueDate: string;     // YYYY-MM-DD
     currency: string;
+    // Valuta-ronde: de koers bij een andere valuta (invoertekst), de bron (ECB: opgehaald voor de factuurdatum, aanpasbaar: Manual) en de
+    // publicatiedatum. Ontbreken in oudere bewaarde concepten: dan haalt het scherm de ECB-koers op.
+    exchangeRate?: string;
+    rateSource?: RateSource;
+    rateDate?: string | null;
     // Interne opmerking bij dit document; blijft in het concept en de bevroren opdracht, nooit overgenomen naar een volgend document.
     internalNote: string;
     extra: Partial<Record<PurchaseOptionalField, string>>;
@@ -120,6 +127,8 @@ export function selectVendor(draft: InvoiceDraft, vendor: PurchaseVendor | null,
     const vendorTerms: VendorTerms | null = vendor === null ? null : { days: vendor.paymentTermsDays, basis: vendor.paymentConditionBasis };
     if (!draft.touched.paymentTermsDays) header.paymentTermsDays = String(vendor?.paymentTermsDays ?? settings.defaultPaymentTermsDays);
     if (!draft.touched.currency) header.currency = (vendor?.defaultCurrency ?? '').trim() === '' ? settings.defaultCurrency : vendor!.defaultCurrency!.trim().toUpperCase();
+    // Een andere valuta: de koers begint opnieuw (ECB voor de factuurdatum).
+    if (header.currency !== draft.header.currency) Object.assign(header, { exchangeRate: '', rateSource: undefined, rateDate: null });
     return recomputeDueDate({ ...draft, header, vendorTerms });
 }
 
@@ -136,7 +145,21 @@ export function changeDueDate(draft: InvoiceDraft, value: string): InvoiceDraft 
 }
 
 export function changeCurrency(draft: InvoiceDraft, value: string): InvoiceDraft {
-    return { ...draft, header: { ...draft.header, currency: value.toUpperCase() }, touched: { ...draft.touched, currency: true } };
+    const currency = value.toUpperCase();
+    const reset = currency === draft.header.currency ? {} : { exchangeRate: '', rateSource: undefined, rateDate: null };
+    return { ...draft, header: { ...draft.header, currency, ...reset }, touched: { ...draft.touched, currency: true } };
+}
+
+// Valuta-ronde: valuta en koers van de factuur als invoer voor het koersveld (zelfde regels als de inkooporder, lib/documentCurrency.ts).
+export function invoiceCurrencyDraft(header: HeaderDraft): CurrencyDraft {
+    const currency = header.currency.trim().toUpperCase();
+    return {
+        currency, rate: header.exchangeRate ?? '', source: header.rateSource ?? (isEuro(currency) ? 'NotApplicable' : 'ECB'), rateDate: header.rateDate ?? null, touched: true,
+    };
+}
+
+export function changeRate(draft: InvoiceDraft, next: CurrencyDraft): InvoiceDraft {
+    return { ...draft, header: { ...draft.header, exchangeRate: next.rate, rateSource: next.source, rateDate: next.rateDate } };
 }
 
 // Een handmatige vervaldatum terug laten volgen uit de termijn.
@@ -224,6 +247,9 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     else if (addDays(header.invoiceDate, 0) !== null && header.dueDate < header.invoiceDate) errors.push({ field: 'dueDate', code: 'before_invoice_date' });
     const currency = header.currency.trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) errors.push({ field: 'currency', code: currency === '' ? 'required' : 'invalid' });
+    // Valuta-ronde: een handmatige koers moet geldig zijn; een ECB-koers legt de server vast.
+    const money = currencyPayload(invoiceCurrencyDraft(header));
+    if (!money.ok && money.field === 'exchangeRate' && /^[A-Z]{3}$/.test(currency)) errors.push({ field: 'exchangeRate', code: 'invalid' });
     const internalNote = header.internalNote.trim();
     if (internalNote.length > MAX_INTERNAL_NOTE_LENGTH) errors.push({ field: 'internalNote', code: 'too_large' });
 
@@ -293,7 +319,9 @@ export function buildPurchaseInvoicePayload(draft: InvoiceDraft, settings: Purch
     if (errors.length > 0) return { ok: false, errors };
     return {
         ok: true,
-        value: { vendorId: Number(header.vendorId), invoiceNumber, invoiceDate: header.invoiceDate, paymentTermsDays: terms, dueDate: header.dueDate, currency, internalNote: internalNote === '' ? null : internalNote, lines, ...extra },
+        value: { vendorId: Number(header.vendorId), invoiceNumber, invoiceDate: header.invoiceDate, paymentTermsDays: terms, dueDate: header.dueDate, currency,
+            ...(money.ok && money.value.exchangeRateSource !== null ? { exchangeRate: money.value.exchangeRate, exchangeRateSource: money.value.exchangeRateSource } : {}),
+            internalNote: internalNote === '' ? null : internalNote, lines, ...extra },
     };
 }
 

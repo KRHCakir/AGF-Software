@@ -8,7 +8,7 @@ import { formatCalendarDate } from '../../lib/calendarDate';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
 import {
-    InvoiceDraft, LineDraft, buildPurchaseInvoicePayload, changeCurrency, changeDueDate, changeInvoiceDate, changePaymentTerms, draftTotals, dueDateDeviation,
+    InvoiceDraft, LineDraft, buildPurchaseInvoicePayload, changeCurrency, changeDueDate, changeRate, invoiceCurrencyDraft, changeInvoiceDate, changePaymentTerms, draftTotals, dueDateDeviation,
     emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, newLineKey, selectVendor,
 } from '../../lib/purchaseInvoiceRules';
 import { PendingSave, clearDraft, clearPending, loadDraft, loadExtraOpen, loadPending, saveDraft, saveExtraOpen, savePending } from '../../lib/purchaseInvoiceStore';
@@ -31,10 +31,12 @@ import InvoiceOrderNotice from './InvoiceOrderNotice';
 import VendorPicker from './VendorPicker';
 import SubmitErrors from '../shared/SubmitErrors';
 import CurrencyField from '../shared/CurrencyField';
-import ExchangeRatePreview from './ExchangeRatePreview';
+import ExchangeRateField from './ExchangeRateField';
+import { effectiveRate, formatEuro, rateLine } from '../../lib/documentCurrency';
+import { isEuro, toEuro } from '../../lib/exchangeRate';
 import AiReviewBanner, { AiFieldHint, aiFieldClass } from './AiReviewBanner';
 import { problemsByField } from '../../lib/aiProposal';
-import { addOrderLines, linkCheck } from '../../lib/invoiceOrderLink';
+import { addOrderLines, linkCheck, linkedOrderCurrency } from '../../lib/invoiceOrderLink';
 import { listInvoiceCandidates } from '../../services/purchaseOrderService';
 import type { InvoiceCandidate } from '../../types/purchaseOrder';
 import { InvoiceOrderLineInfo, InvoiceOrderPicker, InvoicePriceQuestion } from './InvoiceOrderLink';
@@ -165,6 +167,13 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     };
     // De open regels van een order van deze leverancier als factuurregels, met de prijs op de bon.
     const addOrder = (order: InvoiceCandidate) => update(addOrderLines(draft, order, settings.defaultVatPercentage));
+    // Valuta-ronde: koers van de factuur en, per gekoppelde order met een andere koers, die koers (beide tonen, geen fout).
+    const invoiceMoney = invoiceCurrencyDraft(draft.header);
+    const invoiceRate = effectiveRate(invoiceMoney);
+    const otherOrderRates = invoiceRate === null || isEuro(draft.header.currency) ? [] : [...new Map(draft.lines
+        .filter((line) => line.orderLine && line.orderLine.orderRate !== undefined && line.orderLine.orderRate !== invoiceRate)
+        .map((line) => [line.orderLine!.orderId, { orderId: line.orderLine!.orderId, orderNumber: line.orderLine!.supplierReference ?? line.orderLine!.orderNumber,
+            rate: line.orderLine!.orderRate!, source: line.orderLine!.orderRateSource ?? 'ECB' }])).values()];
     // "Hoort bij order …" (factuurnummer al op een order): de regels van die order echt overnemen, zodat de koppeling wordt opgeslagen.
     const takeOrder = (orderId: number) => {
         if (locked || draft.header.vendorId === '') return;
@@ -470,10 +479,30 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                     <CurrencyField {...fieldProps('currency', e('currency'))} value={draft.header.currency} onChange={(value) => update(changeCurrency(draft, value))} />
                     {defaultsNote('currency') && <span className="block text-xs text-gray-500">{defaultsNote('currency')}</span>}
                     <span className="block text-xs text-gray-500">{t('purchase_currency_hint')}</span>
-                    <ExchangeRatePreview currency={draft.header.currency} invoiceDate={draft.header.invoiceDate} net={totals.net} />
                     <FieldError id="currency" messages={e('currency')} />
                     <AiFieldHint codes={aiProblems.currency} />
                 </div>
+                {/* Valuta-ronde: de koers van de factuurdatum (ECB, aanpasbaar: Handmatig), het bedrag in euro, en de koers van de order als die
+                    anders is (geen fout: een koersverschil is voor de boekhouder). */}
+                {!isEuro(draft.header.currency) && (
+                    <div className="sm:col-span-2" data-testid="invoice-rate">
+                        <ExchangeRateField value={invoiceMoney} onChange={(next) => update(changeRate(draft, next))} documentDate={draft.header.invoiceDate} prefix="pinvoice"
+                            errors={{ exchangeRate: e('exchangeRate') ?? [] }} disabled={locked} />
+                        {invoiceRate !== null && (
+                            <p className="text-xs text-gray-700" data-testid="invoice-rate-euro">{t('invoice_rate_euro', { amount: formatEuro(toEuro(totals.net, invoiceRate), locale) })}</p>
+                        )}
+                        {otherOrderRates.map((order) => (
+                            <p key={order.orderId} className="mt-1 rounded border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-950" data-testid="invoice-rate-differs">
+                                {t('invoice_rate_differs', {
+                                    order: order.orderNumber, orderLine: rateLine(draft.header.currency.toUpperCase(), order.rate, locale),
+                                    orderSource: order.source === 'Manual' ? t('currency_rate_manual') : 'ECB',
+                                    invoiceLine: rateLine(draft.header.currency.toUpperCase(), invoiceRate!, locale),
+                                    difference: formatEuro(toEuro(totals.net, invoiceRate!) - toEuro(totals.net, order.rate), locale),
+                                })}
+                            </p>
+                        ))}
+                    </div>
+                )}
             </fieldset>
 
             {/* Extra gegevens: standaard dicht, zonder apart scherm; alleen de door het bedrijf ingeschakelde velden. */}
@@ -506,7 +535,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
             )}
 
             {/* Koppelen aan de bon (stap 4b): de open orders van deze leverancier */}
-            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} />}
+            {vendor !== null && <InvoiceOrderPicker vendorId={vendor.id} lines={draft.lines} disabled={locked} onAdd={addOrder} linkedCurrency={linkedOrderCurrency(draft)} />}
 
             {/* Regels */}
             <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">

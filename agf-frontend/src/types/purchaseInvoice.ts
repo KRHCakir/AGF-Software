@@ -70,6 +70,9 @@ export interface CreatePurchaseInvoiceRequest extends OptionalFieldValues {
     paymentTermsDays: number;
     dueDate: string;
     currency: string;
+    // Valuta-ronde: bij een andere valuta de bron (ECB: de server legt de koers van de factuurdatum vast; Manual: deze koers).
+    exchangeRate?: number | null;
+    exchangeRateSource?: 'ECB' | 'Manual';
     // Interne opmerking bij dit document: alleen intern zichtbaar, telt mee in de replayvergelijking, nooit overgenomen.
     internalNote: string | null;
     lines: CreatePurchaseInvoiceLineRequest[];
