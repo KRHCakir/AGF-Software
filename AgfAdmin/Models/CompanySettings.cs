@@ -58,5 +58,8 @@ namespace AgfAdmin.Models
 
         // Gewichten tonen met 0 of 1 decimaal (fixes 5a). Alleen weergave: de opslag houdt drie decimalen.
         public int WeightDisplayDecimals { get; set; } = Services.WeightDisplay.DefaultDecimals;
+
+        // Valuta's om uit te kiezen bij inkoop (valuta-ronde), komma-lijst; EUR staat er altijd vooraan (PurchaseCurrencyRules).
+        public string PurchaseCurrencies { get; set; } = Services.PurchaseCurrencyRules.DefaultList;
     }
 }

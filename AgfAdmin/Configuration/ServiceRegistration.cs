@@ -36,6 +36,7 @@ namespace AgfAdmin.Configuration
             services.AddScoped<PurchaseOrderService>();
             services.AddScoped<LoadingSlipService>();
             services.AddScoped<WeightDisplayService>();
+            services.AddScoped<PurchaseCurrencyService>();
             services.AddScoped<SalesOrderTransportService>();
             services.AddScoped<DocumentRecipientService>();
             services.AddScoped<MailDraftService>();
@@ -66,10 +67,13 @@ namespace AgfAdmin.Configuration
                 client.DefaultRequestHeaders.Accept.ParseAdd("text/csv");
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("AGF-Software/1.0");
             });
+            // Eén keer per dag per valuta en dag bij de ECB; daarna uit het geheugen (ExchangeRateDayCache, valuta-ronde).
+            services.AddSingleton<ExchangeRateDayCache>();
             services.AddScoped<IExchangeRateSource>(provider =>
                 string.Equals(provider.GetRequiredService<IConfiguration>()["ExchangeRates:Source"], "Off", StringComparison.OrdinalIgnoreCase)
                     ? new DisabledExchangeRateSource()
-                    : provider.GetRequiredService<EcbExchangeRateSource>());
+                    : new CachedExchangeRateSource(provider.GetRequiredService<EcbExchangeRateSource>(), provider.GetRequiredService<ExchangeRateDayCache>(),
+                        provider.GetRequiredService<IBusinessCalendar>()));
             services.AddScoped<InvoiceExchangeRateService>();
             services.AddScoped<ReceiptDeviationService>();
             services.AddScoped<CountryService>();

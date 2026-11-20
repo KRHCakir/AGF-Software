@@ -54,6 +54,15 @@ namespace AgfAdmin.Models
         // die tegelijk dezelfde order aanpassen elkaars wijziging nooit stil overschrijven. Ontvangsten raken hem niet.
         public int EditVersion { get; set; }
 
+        // Valuta-ronde (november 2026). De prijzen op de regels staan in deze valuta; de boekvaluta is euro. De koers is eenheden valuta per
+        // 1 euro (zoals de ECB noteert): bij EUR altijd 1 met bron NotApplicable, anders van de ECB (met de publicatiedatum) of door de
+        // gebruiker ingevuld (Manual). Hij ligt vast bij opslaan; aanpassen kan zolang de order Open is (stap 4a), nooit met een correctie.
+        // Het eurobedrag is regelbedrag gedeeld door de koers, op centen afgerond (ExchangeRateRules.ToEuro).
+        public string Currency { get; set; } = Services.ExchangeRateRules.Euro;
+        public decimal ExchangeRate { get; set; } = 1m;
+        public DateOnly? ExchangeRateDate { get; set; }
+        public string ExchangeRateSource { get; set; } = Services.ExchangeRateRules.SourceNotApplicable;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

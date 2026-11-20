@@ -494,6 +494,7 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PurchaseInvoiceDefaultVatPercentage).HasPrecision(18, 2).HasDefaultValue(PurchaseInvoiceRules.DefaultVatPercentage);
                 b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
                 b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
+                b.Property(c => c.PurchaseCurrencies).IsRequired().HasMaxLength(PurchaseCurrencyRules.MaxStoredLength).HasDefaultValue(PurchaseCurrencyRules.DefaultList);
                 b.Property(c => c.GlobalGapPortalUrl).IsRequired().HasMaxLength(500).HasDefaultValue(RelationRules.DefaultGlobalGapPortalUrl);
                 b.Property(c => c.LoadingSlipLanguage).IsRequired().HasMaxLength(2).HasDefaultValue(SalesOrderDocumentRules.LanguageEnglish);
                 b.Property(c => c.LoadingSlipShowCustomer).HasDefaultValue(true);
@@ -634,10 +635,19 @@ namespace AgfAdmin.Data
                 b.Property(c => c.FinalizedBy).HasMaxLength(PurchaseOrderDocumentRules.MaxActorLength);
                 b.Property(c => c.FinalizedVia).HasMaxLength(20);
                 b.Property(c => c.EditVersion).IsConcurrencyToken();
+                // Valuta-ronde: bestaande orders zijn euro met koers 1 en bron NotApplicable (de standaardwaarden van de kolommen).
+                b.Property(c => c.Currency).IsRequired().HasMaxLength(3).HasDefaultValue(ExchangeRateRules.Euro);
+                b.Property(c => c.ExchangeRate).HasPrecision(18, 6).HasDefaultValue(1m);
+                b.Property(c => c.ExchangeRateSource).IsRequired().HasMaxLength(ExchangeRateRules.MaxSourceLength).HasDefaultValue(ExchangeRateRules.SourceNotApplicable);
 
                 // DirectTrade is altijd klantgebonden; Warehouse-aanbod is nooit aan een klant gebonden.
                 b.ToTable(t =>
                 {
+                    // Euro: koers 1, geen datum, bron NotApplicable. Een andere valuta: een positieve koers van de ECB (met publicatiedatum)
+                    // of handmatig. CAST: SQLite (tests) bewaart een decimal als tekst, Postgres vergelijkt numeric zo ook exact.
+                    t.HasCheckConstraint("CK_SupplyCommitments_ExchangeRate",
+                        "(\"Currency\" = 'EUR' AND CAST(\"ExchangeRate\" AS REAL) = 1 AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" = 'NotApplicable') OR "
+                        + "(\"Currency\" <> 'EUR' AND CAST(\"ExchangeRate\" AS REAL) > 0 AND \"ExchangeRateSource\" IN ('ECB', 'Manual') AND (\"ExchangeRateSource\" <> 'ECB' OR \"ExchangeRateDate\" IS NOT NULL))");
                     t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed",
                         "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR "
                         + "(\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
