@@ -233,25 +233,26 @@ namespace AgfAdmin.Services
             await CheckEmailDomainsAsync(signals, cancellationToken);
             var previousDefaults = relation.BankAccounts.Where(a => a.IsDefault && a.IsActive).Select(a => a.Id).ToHashSet();
             Apply(relation, command, conditions);
+            var syncing = false;
             try
             {
                 // Hooguit één actieve standaardrekening (gefilterde unieke index, per statement gecontroleerd): verhuist de standaard
-                // naar een andere opgeslagen rekening, dan eerst de oude uitzetten en pas daarna de nieuwe aanzetten, in één transactie.
+                // naar een andere opgeslagen rekening, dan eerst de oude uitzetten en pas daarna de nieuwe aanzetten.
                 // De relatieversie stijgt maar één keer (de tweede save raakt alleen de rekening).
+                // Relatie en GGN-certificaten gaan in één transactie: faalt de synchronisatie (bijv. door een gelijktijdige synchronisatie),
+                // dan wordt ook de relatiewijziging teruggedraaid en kan de gebruiker veilig opnieuw opslaan.
                 var newDefault = relation.BankAccounts.FirstOrDefault(a => a.IsDefault && a.IsActive && !previousDefaults.Contains(a.Id));
+                await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
                 if (newDefault != null && previousDefaults.Count > 0)
                 {
-                    await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
                     newDefault.IsDefault = false;
                     await _db.SaveChangesAsync(cancellationToken);
                     newDefault.IsDefault = true;
-                    await _db.SaveChangesAsync(cancellationToken);
-                    await transaction.CommitAsync(cancellationToken);
                 }
-                else
-                {
-                    await _db.SaveChangesAsync(cancellationToken);
-                }
+                await _db.SaveChangesAsync(cancellationToken);
+                syncing = true;
+                await SyncGgnCertificatesAsync(id, command.ActorReference, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -259,9 +260,10 @@ namespace AgfAdmin.Services
             }
             catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception))
             {
-                return ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
+                return syncing
+                    ? ServiceResult<RelationDto>.Conflict($"The certificates of relation {id} were synchronized concurrently; nothing was saved, apply your change again.")
+                    : ServiceResult<RelationDto>.Conflict($"Search code '{command.SearchCode}' was taken by a concurrent change; choose another code.");
             }
-            await SyncGgnCertificatesAsync(id, command.ActorReference, cancellationToken);
             _db.ChangeTracker.Clear();
             var updated = await ToDtoAsync(await Query(tracking: false).SingleAsync(r => r.Id == id, cancellationToken), cancellationToken);
             updated.Warnings.InsertRange(0, signals.Warnings);
