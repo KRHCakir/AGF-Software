@@ -212,7 +212,8 @@ namespace AgfAdmin.Services
                 .ToListAsync(cancellationToken);
 
             var allocated = await AllocatedForAsync(commitments, cancellationToken);
-            return ServiceResult<IReadOnlyList<SupplyCommitmentDto>>.Ok(commitments.Select(c => ToDto(c, allocated)).ToList());
+            var ggns = await CertificateService.GgnOptionsAsync(_db, commitments.Select(c => c.Vendor).Where(v => v != null).ToList(), cancellationToken);
+            return ServiceResult<IReadOnlyList<SupplyCommitmentDto>>.Ok(commitments.Select(c => ToDto(c, allocated, ggns)).ToList());
         }
 
         // Toegewezen DirectTrade-capaciteit per bronregel (alleen voor DirectTrade-toezeggingen opgevraagd).
@@ -223,7 +224,8 @@ namespace AgfAdmin.Services
         }
 
         private async Task<SupplyCommitmentDto> ToDtoAsync(SupplyCommitment commitment, CancellationToken cancellationToken) =>
-            ToDto(commitment, await AllocatedForAsync(new[] { commitment }, cancellationToken));
+            ToDto(commitment, await AllocatedForAsync(new[] { commitment }, cancellationToken),
+                await CertificateService.GgnOptionsAsync(_db, commitment.Vendor == null ? new List<Vendor>() : new List<Vendor> { commitment.Vendor }, cancellationToken));
 
         // Ook gebruikt bij aanpassen (PurchaseOrderService.Edit.cs): dezelfde regels voor kop en regels.
         internal static SupplyCommitment BuildCandidate(CreateSupplyCommitmentDto request, DateOnly today, Dictionary<string, List<string>> errors)
@@ -601,7 +603,7 @@ namespace AgfAdmin.Services
         private IQueryable<SupplyCommitment> Query() =>
             _db.SupplyCommitments
                 .AsNoTracking()
-                .Include(c => c.Vendor).ThenInclude(v => v.Ggns)
+                .Include(c => c.Vendor)
                 .Include(c => c.Customer)
                 .Include(c => c.Partij)
                 .Include(c => c.Lines).ThenInclude(l => l.Partij)
@@ -612,7 +614,7 @@ namespace AgfAdmin.Services
 
         // DirectTrade-regels tonen hun toegewezen en resterende capaciteit; Warehouse-regels nooit (null): magazijnaanvoer
         // wordt pas voorraad na ontvangst en keuring en heeft geen toewijsbare verwachte capaciteit.
-        private static SupplyCommitmentDto ToDto(SupplyCommitment commitment, IReadOnlyDictionary<int, decimal> allocated) => new()
+        private static SupplyCommitmentDto ToDto(SupplyCommitment commitment, IReadOnlyDictionary<int, decimal> allocated, IReadOnlyDictionary<int, List<VendorGgnOptionDto>> ggns) => new()
         {
             Currency = commitment.Currency,
             ExchangeRate = commitment.ExchangeRate,
@@ -622,9 +624,9 @@ namespace AgfAdmin.Services
             RequestId = commitment.RequestId,
             VendorId = commitment.VendorId,
             VendorName = commitment.Vendor?.Name,
-            // Actieve GGN's van de leverancier: voorstel bij ontvangst alleen als er precies één is; bij meer kiest de gebruiker.
-            VendorGgns = (commitment.Vendor?.Ggns ?? new List<VendorGgn>()).Where(g => g.IsActive).OrderBy(g => g.SortOrder).ThenBy(g => g.Id)
-                .Select(g => new VendorGgnOptionDto { Ggn = g.Ggn, ProducerName = g.ProducerName, CheckedOn = g.CheckedOn, CertificateValidUntil = g.CertificateValidUntil, HasGgnLabel = g.HasGgnLabel }).ToList(),
+            // Actieve GGN's van de leverancier (de GGN-certificaten, certificaten deel 1): voorstel bij ontvangst alleen als er precies één is;
+            // bij meer kiest de gebruiker.
+            VendorGgns = ggns.GetValueOrDefault(commitment.VendorId) ?? new List<VendorGgnOptionDto>(),
             CustomerId = commitment.CustomerId,
             CustomerName = commitment.Customer?.Name,
             Route = commitment.Route,

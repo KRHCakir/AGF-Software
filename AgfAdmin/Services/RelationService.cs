@@ -62,7 +62,9 @@ namespace AgfAdmin.Services
 
         // ---------------- Lezen ----------------
 
-        public async Task<RelationListDto> ListAsync(string role, string query, bool includeInactive, int page, int pageSize, CancellationToken cancellationToken = default)
+        // certificate (certificaten deel 1): attention (een certificaat verloopt binnenkort of is verlopen), Expired, ExpiringSoon,
+        // productsPending, none (zonder certificaat) of een soort (GlobalGapIfa, Skal, …). Zoeken vindt ook een certificaatnummer.
+        public async Task<RelationListDto> ListAsync(string role, string query, bool includeInactive, int page, int pageSize, CancellationToken cancellationToken = default, string certificate = null)
         {
             page = Math.Max(1, page);
             pageSize = pageSize <= 0 ? RelationRules.DefaultPageSize : Math.Min(pageSize, RelationRules.MaxPageSize);
@@ -72,6 +74,7 @@ namespace AgfAdmin.Services
             else if (string.Equals(role, RoleCarrier, StringComparison.OrdinalIgnoreCase)) relations = relations.Where(r => r.IsCarrier);
             if (!includeInactive) relations = relations.Where(r => r.IsActive);
             var term = (query ?? "").Trim().ToLowerInvariant();
+            var numberKey = term.Length >= 3 ? CertificateRules.NumberKey(term) : null;
             if (term != "")
             {
                 relations = relations.Where(r => r.Name.ToLower().Contains(term)
@@ -81,7 +84,23 @@ namespace AgfAdmin.Services
                     || (r.Email != null && r.Email.ToLower().Contains(term))
                     || (r.Phone != null && r.Phone.Contains(term))
                     || r.Addresses.Any(a => a.City != null && a.City.ToLower().Contains(term))
-                    || r.Contacts.Any(c => c.Name.ToLower().Contains(term) || c.Channels.Any(ch => ch.Value.ToLower().Contains(term))));
+                    || r.Contacts.Any(c => c.Name.ToLower().Contains(term) || c.Channels.Any(ch => ch.Value.ToLower().Contains(term)))
+                    || (numberKey != null && _db.RelationCertificates.Any(c => c.RelationId == r.Id && c.NumberKey.Contains(numberKey))));
+            }
+            if (!string.IsNullOrWhiteSpace(certificate))
+            {
+                var today = _db.BusinessCalendar.Today();
+                var warningUntil = today.AddDays(await CertificateService.WarningDaysAsync(_db, cancellationToken));
+                var active = _db.RelationCertificates.Where(c => c.IsActive);
+                relations = certificate.Trim() switch
+                {
+                    "attention" => relations.Where(r => active.Any(c => c.RelationId == r.Id && c.ValidUntil != null && c.ValidUntil <= warningUntil)),
+                    CertificateRules.StatusExpired => relations.Where(r => active.Any(c => c.RelationId == r.Id && c.ValidUntil != null && c.ValidUntil < today)),
+                    CertificateRules.StatusExpiringSoon => relations.Where(r => active.Any(c => c.RelationId == r.Id && c.ValidUntil != null && c.ValidUntil >= today && c.ValidUntil <= warningUntil)),
+                    "productsPending" => relations.Where(r => active.Any(c => c.RelationId == r.Id && c.ProductsPending)),
+                    "none" => relations.Where(r => !active.Any(c => c.RelationId == r.Id)),
+                    var type => relations.Where(r => active.Any(c => c.RelationId == r.Id && c.TypeCode == type)),
+                };
             }
             var total = await relations.CountAsync(cancellationToken);
             // De server bepaalt de definitieve resultaten en hun volgorde: een exacte zoekcode eerst, daarna op naam. De werkplek filtert niet opnieuw.
@@ -97,6 +116,7 @@ namespace AgfAdmin.Services
                     PrimaryContact = r.Contacts.Where(c => c.IsActive).OrderByDescending(c => c.IsPrimary).ThenBy(c => c.SortOrder).Select(c => c.Name).FirstOrDefault()
                 })
                 .ToListAsync(cancellationToken);
+            var certificates = await CertificateService.SummariesAsync(_db, pageItems.Select(r => r.Id).ToList(), cancellationToken);
             return new RelationListDto
             {
                 Total = total,
@@ -106,7 +126,8 @@ namespace AgfAdmin.Services
                 {
                     Id = r.Id, SearchCode = r.SearchCode, Name = r.Name, TradeName = r.TradeName, IsActive = r.IsActive, Email = r.Email, Phone = r.Phone,
                     VatNumber = r.VatNumber, Version = r.Version, CustomerId = r.CustomerId, VendorId = r.VendorId, IsCarrier = r.IsCarrier,
-                    City = r.Main?.City, CountryCode = r.Main?.CountryCode, PrimaryContactName = r.PrimaryContact
+                    City = r.Main?.City, CountryCode = r.Main?.CountryCode, PrimaryContactName = r.PrimaryContact,
+                    Certificates = certificates.GetValueOrDefault(r.Id) ?? new List<RelationCertificateSummaryDto>()
                 }).ToList()
             };
         }
