@@ -4,7 +4,9 @@ namespace AgfAdmin.DTOs
     public sealed class CertificateOverviewDto
     {
         public int WarningDays { get; set; }
-        public int Total { get; set; }
+        public int Total { get; set; }          // alle certificaten bij het filter, ook buiten deze pagina
+        public int Page { get; set; }
+        public int PageSize { get; set; }
         public List<CertificateOverviewItemDto> Items { get; set; } = new();
     }
 
