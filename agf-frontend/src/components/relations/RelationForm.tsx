@@ -285,6 +285,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
             setOpen((now) => ({ ...now, recipients: true }));
             return;
         }
+        // Ook de certificaten eerst: een onvolledig certificaat houdt het hele opslaan tegen.
+        if (!certificates.validate()) {
+            setOpen((now) => ({ ...now, certificates: true }));
+            return;
+        }
         const defaults = { defaultPaymentTermsDays: reference.defaultPaymentTermsDays };
         const built = buildRelationPayload(draft, current === null ? { requestId: newRequestId(), acknowledgeSimilarNames, ...defaults } : { expectedVersion: baseVersion ?? current.version, stored: current, ...defaults });
         if (!built.ok) {

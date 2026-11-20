@@ -708,4 +708,27 @@ describe('RelationForm', () => {
             Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined });
         }
     });
+
+    test('an incomplete certificate stops the whole save: nothing is sent, the block opens with the reason', async () => {
+        respond = (call) => {
+            if (call.url.endsWith('/certificates/reference')) return json(200, { types: [{ code: 'Skal', name: 'SKAL', description: '', typicalHolder: '', productsRequired: false, ggnNumber: false }], customTypes: [], warningDays: 30, globalGapPortalUrl: 'https://p', globalGapDatabaseUrl: 'https://d', maxFileBytes: 1 });
+            if (call.url.endsWith('/products')) return json(200, []);
+            return json(404, {});
+        };
+        await mounted.render(<RelationForm relation={null} reference={reference} onSaved={() => {}} onClose={() => {}} />);
+        await type(input('name'), 'Bio Teler');
+        await openSection('certificates');
+        await mounted.waitFor(() => mounted.button('+ cert_add') !== null, 'certificates block');
+        await click(mounted.button('+ cert_add')!);
+        const row = mounted.container.querySelector('[data-testid="certificate-0"]')!.getAttribute('data-row')!;
+        await type(input(`certificates.${row}.number`), 'NL-BIO-01');
+        await press('s', { ctrlKey: true });
+        assert.equal(posts().length, 0, 'the relation is not saved either');
+        assert.ok(text().includes('cert_error_type_required'));
+        await choose(select(`certificates.${row}.typeCode`), 'Skal');
+        respond = (call) => call.method === 'POST' ? json(201, saved({ id: 12, name: 'Bio Teler', searchCode: null, customer: null }))
+            : call.method === 'PUT' ? json(200, { version: 'v1', warningDays: 30, warnings: [], certificates: [] }) : json(404, {});
+        await press('s', { ctrlKey: true });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'PUT' && call.url.endsWith('/certificates/relations/12')), 'certificates saved to the new relation');
+    });
 });

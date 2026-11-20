@@ -89,6 +89,16 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
         return mapped;
     };
 
+    // Vooraf controleren met dezelfde regels als bij opslaan: fouten tonen zonder iets te versturen (de relatiekaart doet dit vóór het
+    // opslaan van de relatie, zodat er nooit half wordt opgeslagen).
+    const validate = (): boolean => {
+        if (failed || loading || !certificatesChanged(rowsRef.current, stored)) return true;
+        const built = buildCertificatesPayload(rowsRef.current, todayInAmsterdam());
+        if (built.ok) return true;
+        setProblems(built.errors);
+        return false;
+    };
+
     const upload = async (certificateId: number, file: File): Promise<CertificateFile> => uploadCertificateFile(certificateId, file);
 
     // Opslaan (met de relatie mee, of los bij het eigen bedrijf). target = het id van een net aangemaakte relatie. true = klaar.
@@ -180,7 +190,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
 
     return {
         reference, products, rows, setRows, stored, warningDays, loading, failed, error, conflict, errors, problems, warnings, uploading, changed,
-        reload, save, addFile, openFile,
+        reload, validate, save, addFile, openFile,
     };
 }
 
