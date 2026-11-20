@@ -60,7 +60,19 @@ export default function CertificatesSetting() {
         setOwnSaving(true);
         setOwnNotice(false);
         try {
-            if (await own.save()) setOwnNotice(true);
+            if (await own.save()) {
+                setOwnNotice(true);
+                // Het opslaan kan een nieuwe eigen soort aan de instellingen toevoegen: die erbij nemen (lopende bewerkingen blijven staan),
+                // zodat een latere instellingenopslag hem niet weer verwijdert.
+                try {
+                    const settings = await getCertificateSettings();
+                    setTypes((current) => {
+                        const lines = current.split('\n').map((line) => line.trim()).filter(Boolean);
+                        const missing = settings.customTypes.filter((type) => !lines.includes(type));
+                        return missing.length === 0 ? current : [...lines, ...missing].join('\n');
+                    });
+                } catch { /* de lijst blijft zoals ze was */ }
+            }
         } finally {
             setOwnSaving(false);
         }
@@ -103,7 +115,7 @@ export default function CertificatesSetting() {
                         onOpenFile={(id, file) => void own.openFile(id, file)} onAddFile={(row, file) => void own.addFile(row, file)} uploading={own.uploading} dataTour="own-certificate" />
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className={primaryButtonClass} disabled={ownSaving || own.loading || own.failed || !own.changed} onClick={() => void saveOwn()} data-testid="own-certificates-save">{t('cert_own_save')}</button>
+                    <button type="button" className={primaryButtonClass} disabled={ownSaving || own.loading || own.failed || !own.changed || own.uploading !== null} onClick={() => void saveOwn()} data-testid="own-certificates-save">{t('cert_own_save')}</button>
                     {ownNotice && <span role="status" className="text-sm text-green-900">{t('cert_own_saved')}</span>}
                 </div>
             </div>
