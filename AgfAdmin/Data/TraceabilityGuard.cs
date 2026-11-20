@@ -118,6 +118,8 @@ namespace AgfAdmin.Data
     //    een documentversie verandert of verdwijnt nooit (alleen doorgegeven/verstuurd wordt één keer gezet) en versies volgen elkaar op.
     // 32. mailconcepten (zie TraceabilityGuard.MailDrafts.cs): een concept verdwijnt nooit (verwijderen = Discarded), een verstuurd
     //    concept verandert niet meer, en het document en de order waar het bij hoort liggen vast.
+    // 33. certificaten (zie TraceabilityGuard.Certificates.cs): een certificaat wordt nooit verwijderd en blijft bij zijn relatie; bestanden
+    //    en bevestigingen "Klopt dit?" bij inkoop zijn append-only, en een nieuw bestand is de volgende versie van dat certificaat.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -244,6 +246,7 @@ namespace AgfAdmin.Data
             await CheckInvoiceOrderLinksAsync(db, async, cancellationToken);
             await CheckSalesOrderDocumentsAsync(db, async, cancellationToken);
             await CheckMailDraftsAsync(db, async, cancellationToken);
+            await CheckCertificatesAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
