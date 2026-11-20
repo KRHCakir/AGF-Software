@@ -23,8 +23,8 @@ namespace AgfAdmin.Controllers
 
         // status: attention (bijna verlopen en verlopen), Expired, ExpiringSoon, Valid, NoEndDate, productsPending. query: nummer of relatie.
         [HttpGet]
-        public async Task<IActionResult> Overview([FromQuery] string query, [FromQuery] string type, [FromQuery] string status, [FromQuery] bool includeArchived = false) =>
-            Ok(await service.OverviewAsync(query, type, status, includeArchived, Aborted));
+        public async Task<IActionResult> Overview([FromQuery] string query, [FromQuery] string type, [FromQuery] string status, [FromQuery] bool includeArchived = false, [FromQuery] int page = 1, [FromQuery] int pageSize = 100) =>
+            Ok(await service.OverviewAsync(query, type, status, includeArchived, page, pageSize, Aborted));
 
         [HttpGet("settings")]
         public async Task<IActionResult> Settings() => Ok(await service.GetSettingsAsync(Aborted));
