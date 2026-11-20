@@ -62,6 +62,9 @@ namespace AgfAdmin.Services
                 RequestId = request.RequestId, VendorId = request.VendorId, Route = SupplyRules.RouteWarehouse, Origin = request.Origin, ExpectedAt = request.ExpectedAt,
                 SupplierReference = request.SupplierReference, OrderedOn = request.OrderedOn ?? order.OrderedOn, OrderChannel = request.OrderChannel, Note = request.Note,
                 PartijId = request.PartijId, NewPartij = request.NewPartij, SupplierLotReference = request.SupplierLotReference,
+                Currency = request.Currency ?? order.Currency,
+                ExchangeRate = request.Currency == null ? order.ExchangeRate : request.ExchangeRate,
+                ExchangeRateSource = request.Currency == null ? order.ExchangeRateSource : request.ExchangeRateSource,
                 Lines = request.Lines?.Select(l => l == null ? null : new CreateSupplyCommitmentLineDto
                 {
                     ProductVariantId = l.ProductVariantId, ExpectedQuantity = l.ExpectedQuantity, ExpectedUnit = l.ExpectedUnit, ExpectedNetWeightKg = l.ExpectedNetWeightKg,
@@ -128,7 +131,25 @@ namespace AgfAdmin.Services
                 newPartij = built.Partij;
             }
 
+            // Valuta-ronde: dezelfde keuze houdt de vastgelegde koers; een andere legt een nieuwe vast (ECB: die van de besteldatum).
+            var money = new DocumentCurrency(candidate.Currency, candidate.ExchangeRate, candidate.ExchangeRateDate, candidate.ExchangeRateSource);
+            if (money.SameChoiceAs(order.Currency, order.ExchangeRate, order.ExchangeRateSource))
+            {
+                money = new DocumentCurrency(order.Currency, order.ExchangeRate, order.ExchangeRateDate, order.ExchangeRateSource);
+            }
+            else
+            {
+                var fixedRate = await DocumentCurrencyFixer.FixAsync(money, candidate.OrderedOn, _db.BusinessCalendar.Today(), _rates, cancellationToken);
+                if (fixedRate.Problem != null)
+                {
+                    AddError(errors, "exchangeRate", fixedRate.Problem);
+                    return Validation<PurchaseOrderDetailDto>(errors);
+                }
+                money = fixedRate.Value;
+            }
+
             var fields = new List<PurchaseOrderChangeField>();
+            ApplyCurrency(order, money, fields);
             await ApplyHeaderAsync(order, candidate, partijChange, request.PartijId, newPartij, fields, cancellationToken);
             await ApplyLinesAsync(order, request, next, stored, kept, fields, cancellationToken);
             if (fields.Count == 0)
@@ -302,6 +323,26 @@ namespace AgfAdmin.Services
                     variant.DefaultNetKgPerPackage, variant.DefaultGrossKgPerPackage, $"lines[{i}]", "expectedNetWeightKg", "expectedGrossWeightKg", errors, AddError);
             }
         }
+
+        // Valuta en koers (valuta-ronde) als eigen auditvelden: "EUR" -> "USD" en "1 EUR = 1,0842 USD · ECB 18-11-2026".
+        private static void ApplyCurrency(SupplyCommitment order, DocumentCurrency money, List<PurchaseOrderChangeField> fields)
+        {
+            if (!string.Equals(order.Currency, money.Currency, StringComparison.Ordinal))
+            {
+                fields.Add(new(PurchaseOrderDocumentRules.FieldCurrency, null, PurchaseOrderDocumentRules.ActionChanged, order.Currency, money.Currency));
+            }
+            var before = RateText(order.Currency, order.ExchangeRate, order.ExchangeRateDate, order.ExchangeRateSource);
+            var after = RateText(money.Currency, money.ExchangeRate, money.ExchangeRateDate, money.ExchangeRateSource);
+            if (!string.Equals(before, after, StringComparison.Ordinal))
+            {
+                fields.Add(new(PurchaseOrderDocumentRules.FieldExchangeRate, null, PurchaseOrderDocumentRules.ActionChanged, before, after));
+            }
+            (order.Currency, order.ExchangeRate, order.ExchangeRateDate, order.ExchangeRateSource) = (money.Currency, money.ExchangeRate, money.ExchangeRateDate, money.ExchangeRateSource);
+        }
+
+        private static string RateText(string currency, decimal rate, DateOnly? date, string source) =>
+            currency == ExchangeRateRules.Euro ? null
+            : $"1 EUR = {rate.ToString("0.######", CultureInfo.InvariantCulture)} {currency} · {source}{(date == null ? "" : " " + date.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}";
 
         private async Task ApplyHeaderAsync(SupplyCommitment order, SupplyCommitment candidate, PartijChangeKind partijChange, int? partijId, Partij newPartij,
             List<PurchaseOrderChangeField> fields, CancellationToken cancellationToken)

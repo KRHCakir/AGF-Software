@@ -20,6 +20,11 @@ namespace AgfAdmin.DTOs
         public int? PartijId { get; set; }
         public NewPartijForOrderDto NewPartij { get; set; }
         public string SupplierLotReference { get; set; }
+        // Valuta-ronde: valuta van de order (weggelaten = EUR) en voor een andere valuta de bron van de koers: ECB (de server legt de koers
+        // van de besteldatum vast) of Manual (ExchangeRate zoals ingevuld, eenheden valuta per 1 euro). De prijzen staan in deze valuta.
+        public string Currency { get; set; }
+        public decimal? ExchangeRate { get; set; }
+        public string ExchangeRateSource { get; set; }
         public List<CreateSupplyCommitmentLineDto> Lines { get; set; }
     }
 
@@ -53,6 +58,11 @@ namespace AgfAdmin.DTOs
     public sealed class SupplyCommitmentDto
     {
         public int Id { get; set; }
+        // Valuta-ronde: valuta van de order en de vastgelegde koers (eenheden valuta per 1 euro; bij EUR 1, bron NotApplicable).
+        public string Currency { get; set; }
+        public decimal ExchangeRate { get; set; }
+        public DateOnly? ExchangeRateDate { get; set; }
+        public string ExchangeRateSource { get; set; }
         public Guid RequestId { get; set; }
         public int VendorId { get; set; }
         public string VendorName { get; set; }

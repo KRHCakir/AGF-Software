@@ -110,7 +110,8 @@ namespace AgfAdmin.Data
     //    buiten een afwijking alleen samen met precies één auditregel van die order: Edit zolang ze Open is (een regel met ontvangst of
     //    historie blijft staan en houdt artikel en eenheid, nooit onder ontvangen; leverancier vast na ontvangst). Finalize maakt haar
     //    Definitive (met wie/wanneer/waardoor, nooit terug); daarna verandert ze alleen nog met een Correction met reden (prijs,
-    //    ordernummer van de leverancier en notitie). Auditregels zijn append-only. Regel 18 blijft voor afwijkingen ongewijzigd.
+    //    ordernummer van de leverancier en notitie); valuta en koers veranderen dan nooit meer. Auditregels zijn append-only. Regel 18
+    //    blijft voor afwijkingen ongewijzigd.
     // 30. factuur gekoppeld aan de bon (zie TraceabilityGuard.InvoiceOrderLinks.cs): een factuurregel factureert alleen een orderregel
     //    van een order van de leverancier van de factuur; koppeling, prijs op de bon en de keuze bij een prijsverschil liggen vast.
     // 31. bevestigen en de laadbon (zie TraceabilityGuard.SalesOrderDocuments.cs): wie en wanneer een verkooporder bevestigde ligt vast;

@@ -19,13 +19,15 @@ namespace AgfAdmin.Services
 
         private readonly AppDbContext _db;
         private readonly ICurrentUser _user;
+        private readonly IExchangeRateSource _rates;
 
         // Zonder ingelogde gebruiker (tests, seed) de standaardgebruiker; in de API altijd de gebruiker van het verzoek (aanmaker van
-        // een nieuwe partij).
-        public SupplyCommitmentService(AppDbContext db, ICurrentUser currentUser = null)
+        // een nieuwe partij). Zonder koersbron (tests, seed) kan een order in een andere valuta alleen met een handmatige koers.
+        public SupplyCommitmentService(AppDbContext db, ICurrentUser currentUser = null, IExchangeRateSource rates = null)
         {
             _db = db;
             _user = currentUser ?? CurrentUser.Default;
+            _rates = rates;
         }
 
         // Pogingen bij een gelijktijdig toegekend ordernummer (unieke index op jaar + volgnummer); daarna een echte fout.
@@ -76,6 +78,13 @@ namespace AgfAdmin.Services
             if (notFound != null)
             {
                 return (ServiceResult<SupplyCommitmentDto>.NotFound(notFound), false);
+            }
+
+            // Valuta-ronde: de ECB-koers van de besteldatum vastleggen (na de replaycontrole: een herhaling houdt de koers van toen).
+            var rateProblem = await FixRateAsync(candidate, cancellationToken);
+            if (rateProblem != null)
+            {
+                return (rateProblem, false);
             }
 
             // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
@@ -309,8 +318,18 @@ namespace AgfAdmin.Services
                 line.CreatedAt = now;
             }
 
+            var money = DocumentCurrency.FromRequest(request.Currency, request.ExchangeRate, request.ExchangeRateSource, (key, message) => AddError(errors, key, message));
+            if (errors.Count > 0)
+            {
+                return null;
+            }
+
             return new SupplyCommitment
             {
+                Currency = money.Currency,
+                ExchangeRate = money.ExchangeRate,
+                ExchangeRateDate = money.ExchangeRateDate,
+                ExchangeRateSource = money.ExchangeRateSource,
                 RequestId = request.RequestId!.Value,
                 VendorId = request.VendorId,
                 CustomerId = request.CustomerId,
@@ -525,6 +544,13 @@ namespace AgfAdmin.Services
                 return false;
             }
 
+            // Valuta en bron (weggelaten = EUR); bij een handmatige koers ook de koers. Een ECB-koers legt de server vast, die telt niet mee.
+            if (!new DocumentCurrency(candidate.Currency, candidate.ExchangeRate, null, candidate.ExchangeRateSource)
+                .SameChoiceAs(existing.Currency, existing.ExchangeRate, existing.ExchangeRateSource))
+            {
+                return false;
+            }
+
             if (existing.VendorId != candidate.VendorId
                 || existing.CustomerId != candidate.CustomerId
                 || !string.Equals(existing.Route, candidate.Route, StringComparison.Ordinal)
@@ -556,6 +582,19 @@ namespace AgfAdmin.Services
                 && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal));
         }
 
+        // Legt de koers van een order in een andere valuta vast (ECB: die van de besteldatum). Geen koers: een melding bij het koersveld.
+        private async Task<ServiceResult<SupplyCommitmentDto>> FixRateAsync(SupplyCommitment candidate, CancellationToken cancellationToken)
+        {
+            var choice = new DocumentCurrency(candidate.Currency, candidate.ExchangeRate, candidate.ExchangeRateDate, candidate.ExchangeRateSource);
+            var fixedRate = await DocumentCurrencyFixer.FixAsync(choice, candidate.OrderedOn, _db.BusinessCalendar.Today(), _rates, cancellationToken);
+            if (fixedRate.Problem != null)
+            {
+                return ServiceResult<SupplyCommitmentDto>.Validation(new Dictionary<string, string[]> { ["exchangeRate"] = new[] { fixedRate.Problem } });
+            }
+            (candidate.ExchangeRate, candidate.ExchangeRateDate) = (fixedRate.Value.ExchangeRate, fixedRate.Value.ExchangeRateDate);
+            return null;
+        }
+
         private Task<SupplyCommitment> FindByRequestIdAsync(Guid requestId, CancellationToken cancellationToken) =>
             Query().SingleOrDefaultAsync(c => c.RequestId == requestId, cancellationToken);
 
@@ -575,6 +614,10 @@ namespace AgfAdmin.Services
         // wordt pas voorraad na ontvangst en keuring en heeft geen toewijsbare verwachte capaciteit.
         private static SupplyCommitmentDto ToDto(SupplyCommitment commitment, IReadOnlyDictionary<int, decimal> allocated) => new()
         {
+            Currency = commitment.Currency,
+            ExchangeRate = commitment.ExchangeRate,
+            ExchangeRateDate = commitment.ExchangeRateDate,
+            ExchangeRateSource = commitment.ExchangeRateSource,
             Id = commitment.Id,
             RequestId = commitment.RequestId,
             VendorId = commitment.VendorId,
