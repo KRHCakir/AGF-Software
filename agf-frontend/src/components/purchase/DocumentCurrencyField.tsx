@@ -73,8 +73,8 @@ export default function DocumentCurrencyField({ value, onChange, documentDate, c
     const known = currencies.some((currency) => currency.code === code) ? currencies : [...currencies, { code, hasEcbRate: false }];
 
     return (
-        <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-x-3 gap-y-1" data-testid="document-currency">
-            <div>
+        <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)]" data-testid="document-currency">
+            <div className="max-w-[10rem] sm:max-w-none">
                 <label htmlFor="currency-input" className="text-xs font-medium text-gray-700">{t('currency_field')}</label>
                 <select {...fieldProps('currency', errors.currency)} value={code} disabled={disabled} className={inputClass} data-tour={`${prefix}-currency`}
                     onChange={(event) => chooseCurrency(event.target.value)}>
