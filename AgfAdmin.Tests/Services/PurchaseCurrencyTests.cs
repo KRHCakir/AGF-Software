@@ -47,8 +47,11 @@ public class PurchaseCurrencyTests : IDisposable
         Assert.Equal(2, _rates.Asked.Count);
 
         var nextDay = new CachedExchangeRateSource(_rates, cache, new FixedBusinessCalendar(Today.AddDays(1)));
+        Assert.Equal(2, cache.Count);
         await nextDay.LatestAsync("USD", Today, default);
         Assert.Equal(3, _rates.Asked.Count);
+        // De items van de vorige ophaaldag (USD en AED) gaan eruit: de cache groeit niet door.
+        Assert.Equal(1, cache.Count);
 
         _rates.Down = true;
         var down = new CachedExchangeRateSource(_rates, cache, new FixedBusinessCalendar(Today.AddDays(2)));
