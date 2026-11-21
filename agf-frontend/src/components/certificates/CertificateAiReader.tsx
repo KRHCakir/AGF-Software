@@ -123,7 +123,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                     errorKeyOf={(code) => (['AI_OFF', 'AI_NOT_CONFIGURED', 'AI_UNAVAILABLE', 'AI_INVALID', 'AI_UNSUPPORTED', 'AI_FAILED', 'AI_NETWORK', 'file_encrypted'].includes(code) ? `cert_ai_error_${code}` : `ai_error_${code}`)}
                     disabledReason={blockedReason} read={(chosen) => { file.current = chosen; return readCertificateDocument(chosen, relationId); }} onProposal={start} />
             )}
-            {notice && <p role="status" className="text-sm text-green-900" data-testid="cert-ai-notice">{notice}</p>}
+            {notice && <p role="status" className="text-sm text-green-900" data-testid="cert-ai-notice" data-tour={`${dataTour}-ai-done`}>{notice}</p>}
             {extraction !== null && (
                 <section className="grid grid-cols-1 gap-3 rounded-md border border-blue-200 bg-white p-2 lg:grid-cols-2" aria-labelledby={`${listId}-title`} data-testid="cert-ai-review" data-tour={`${dataTour}-ai-review`}>
                     <AiDocumentViewer extraction={extraction} load={getCertificateAiDocument} dataTour={`${dataTour}-ai-document`} />
@@ -172,7 +172,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     <div>
                                         <label htmlFor={`${listId}-number-input`} className="text-xs font-medium text-gray-700">{draft.row.typeCode === GGN_TYPE ? t('cert_number_ggn') : t('cert_number')} *</label>
                                         <input {...fieldProps(`${listId}-number`, problems.number)} value={draft.row.number} maxLength={100} inputMode={draft.row.typeCode === GGN_TYPE ? 'numeric' : undefined}
-                                            className={`${inputClass} font-mono ${ring('number')}`} onChange={(event) => edit({ number: event.target.value })} data-testid="cert-ai-number" />
+                                            className={`${inputClass} font-mono ${ring('number')}`} onChange={(event) => edit({ number: event.target.value })} data-testid="cert-ai-number" data-tour={`${dataTour}-ai-number`} />
                                         {markText('number')}
                                         <FieldError id={`${listId}-number`} messages={problems.number} />
                                     </div>
@@ -197,7 +197,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     </div>
                                     <div>
                                         <label htmlFor={`${listId}-until-input`} className="text-xs font-medium text-gray-700">{t('cert_valid_until')}</label>
-                                        <div className={`rounded ${ring('validUntil')}`}>
+                                        <div className={`rounded ${ring('validUntil')}`} data-tour={`${dataTour}-ai-until`}>
                                             <DateField {...fieldProps(`${listId}-until`, problems.validUntil)} value={draft.row.validUntil} onChange={(value) => edit({ validUntil: value })} />
                                         </div>
                                         {markText('validUntil')}
@@ -209,7 +209,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     <span className="text-xs font-medium text-gray-700" id={`${listId}-products`}>{t('cert_ai_products')}</span>
                                     {mark('products') === 'missing' && markText('products')}
                                     <datalist id={`${listId}-product-list`}>{certificates.products.map((p) => <option key={p.id} value={p.name} />)}</datalist>
-                                    <ul className="mt-1 space-y-1" aria-labelledby={`${listId}-products`} data-testid="cert-ai-products">
+                                    <ul className="mt-1 space-y-1" aria-labelledby={`${listId}-products`} data-testid="cert-ai-products" data-tour={`${dataTour}-ai-products`}>
                                         {draft.links.map((l, i) => {
                                             const linked = certificates.products.find((p) => p.id === l.productId);
                                             return (

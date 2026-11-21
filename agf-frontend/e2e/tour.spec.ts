@@ -158,8 +158,10 @@ test('hoofdstuk Inkooporder aanmaken: stamgegevens bestaan al, order met ordernu
     expect(order.status).toBe('Ordered');
     expect(order.invoiceNumbers.map((ref) => ref.invoiceNumber)).toEqual([`F-${tourRef}`]);
     // De verwachte datum is getypt met een tweecijferig jaar en als volledige datum opgeslagen (over twee dagen).
-    const detail = await json<{ expectedAt: string; supplierLotReference: string | null }>(request, `/purchase-orders/${order.id}`);
+    const detail = await json<{ expectedAt: string; supplierLotReference: string | null; lines: { ggn?: string | null }[] }>(request, `/purchase-orders/${order.id}`);
     expect(detail.supplierLotReference).toBe(`LOT-${tourRef}`);
+    // Certificaten deel 2: het GGN van het product op de regel, zoals getypt (dat van de teler op de factuur).
+    expect(detail.lines.map((line) => line.ggn)).toEqual(['4049928415684']);
     expect(new Date(detail.expectedAt).getTime()).toBeGreaterThan(Date.now());
     await expectActorBack(page);
     await page.close();
@@ -296,6 +298,24 @@ test('hoofdstuk Factuur uploaden: AI-voorstel van de demolezer, goedgekeurd, bij
     expect(invoice.attachments.map((a) => [a.fileName.startsWith('demo-factuur--'), a.sha256.length])).toEqual([[true, 64]]);
     const orders = await json<{ items: { orderNumber: string; invoiceNumbers: { invoiceNumber: string }[] }[] }>(request, `/purchase-orders?status=all&query=${encodeURIComponent(number!.slice(3))}`);
     expect(orders.items.some((order) => order.invoiceNumbers.some((ref) => ref.invoiceNumber === number))).toBe(true);
+    await page.close();
+});
+
+// Certificaat laten lezen (certificaten deel 2): met de nagebootste lezer (geen echte AI-aanroep) bij de leverancier van de rondleiding een
+// certificaat-PDF met bijlage uploaden en het voorstel goedkeuren: het certificaat staat erin met het GGN van de demolezer, en de PDF is
+// een versie van het bestand met "AI-voorstel goedgekeurd door" de ingelogde gebruiker.
+test('hoofdstuk Certificaat laten lezen: voorstel met de producten uit de bijlage, goedgekeurd, PDF als versie', async ({ request }) => {
+    const page = await context.newPage();
+    const result = await play(page, 'ai-certificate');
+    expectAllSteps(result);
+    const name = /certificaat van (DEMO-TOUR-\d+ Kwekerij)/.exec(result.done)?.[1] ?? '';
+    const relations = await json<{ items: { id: number; name: string }[] }>(request, `/relations?role=vendor&query=${encodeURIComponent(name)}&includeInactive=false&page=1&pageSize=25`);
+    const relation = relations.items.find((item) => item.name === name)!;
+    const list = await json<{ certificates: { number: string; files: { fileName: string; sha256: string; ai?: { approvedBy: string; modelName: string } | null }[] }[] }>(request, `/certificates/relations/${relation.id}`);
+    const certificate = list.certificates.find((candidate) => candidate.number === '4063061591012')!;
+    const file = certificate.files[0];
+    expect([file.fileName.startsWith('demo-certificaat--'), file.sha256.length]).toEqual([true, 64]);
+    expect(file.ai).toMatchObject({ approvedBy: await signedIn(request), modelName: 'Demolezer' });
     await page.close();
 });
 

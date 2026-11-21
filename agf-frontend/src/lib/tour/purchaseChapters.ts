@@ -42,6 +42,8 @@ export const ORDER_CORE: TourStep[] = [
         { kind: 'assert', target: 'supply-expected', value: '{{expectedDateFull}}' },
         { kind: 'type', target: 'supply-line-quantity:0', text: '{{quantity}}' },
         { kind: 'type', target: 'supply-line-price:0', text: '12,50' },
+        // Certificaten deel 2: het GGN van het product zoals op de factuur van de leverancier (hier dat van de teler).
+        { kind: 'type', target: 'supply-line-ggn:0', text: '4049928415684' },
         { kind: 'highlight', target: 'supply-line-gross-adjust:0' },
         { kind: 'highlight', target: 'supply-line-totals' },
     ]),
