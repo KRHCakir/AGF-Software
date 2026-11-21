@@ -39,6 +39,7 @@ namespace AgfAdmin.Configuration
             services.AddScoped<PurchaseCurrencyService>();
             services.AddScoped<SalesOrderTransportService>();
             services.AddScoped<DocumentRecipientService>();
+            services.AddScoped<CertificateService>();
             services.AddScoped<MailDraftService>();
             services.AddScoped<MailTemplateService>();
             // Demo-omgeving online (AGF_DEMO_ENVIRONMENT=true): limieten voor AI-lezen; zie DemoEnvironment en docs/demo-online.md.
