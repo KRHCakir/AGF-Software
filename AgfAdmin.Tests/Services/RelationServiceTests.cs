@@ -443,7 +443,8 @@ public class RelationServiceTests : IDisposable
             var supply = await new SupplyCommitmentService(db).CreateAsync(new CreateSupplyCommitmentDto { RequestId = Guid.NewGuid(), VendorId = created.Vendor!.VendorId, Route = "Warehouse", Origin = "Peru", ExpectedAt = DateTimeOffset.UtcNow.AddDays(1), Lines = new() { new() { ProductVariantId = variantId, ExpectedQuantity = 1m, ExpectedUnit = "box" } } });
             Assert.Equal(ServiceResultStatus.Created, supply.Status);
             Assert.Equal(new[] { ("4049929000001", "Finca Uno"), ("4049929000002", (string)null) }, supply.Value.VendorGgns.Select(g => (g.Ggn, g.ProducerName)));
-            Assert.DoesNotContain(typeof(SupplyCommitmentLineDto).GetProperties(), p => p.Name.Contains("Ggn"));
+            // Certificaten deel 2: de regel heeft een eigen GGN van het product, maar de server vult het nooit zelf in (alleen een voorstel op het scherm).
+            Assert.Null(supply.Value.Lines.Single().Ggn);
         }
         // Eén nummer inactief: alleen het actieve wordt nog aangeboden (precies één -> automatisch voorstel in de UI).
         var current = (await GetAsync(created.Id)).Value;
