@@ -178,6 +178,8 @@ namespace AgfAdmin.DTOs
         public decimal? ExpectedGrossWeightKg { get; set; }
         public string WeightSource { get; set; }
         public string LotNumber { get; set; }
+        // Certificaten deel 2: GGN van het product, zoals bij aanmaken (leeg = geen).
+        public string Ggn { get; set; }
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }
         public decimal? LoosePackages { get; set; }
@@ -212,6 +214,8 @@ namespace AgfAdmin.DTOs
         public string Packaging { get; set; }
         public string Brand { get; set; }
         public string LotNumber { get; set; }
+        // Certificaten deel 2: GGN van het product op de regel (null = geen).
+        public string Ggn { get; set; }
         // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
         public int? PartijId { get; set; }
         public string PartijNumber { get; set; }

@@ -38,7 +38,7 @@ public sealed class PurchaseOrderEditHarness(SqliteAppDbContextFactory factory)
         {
             Id = l.Id, ProductVariantId = l.ProductVariantId, ExpectedQuantity = l.ExpectedQuantity, ExpectedUnit = l.Unit, ExpectedNetWeightKg = l.ExpectedNetWeightKg,
             ExpectedGrossWeightKg = l.ExpectedGrossWeightKg, WeightSource = l.WeightSource, LotNumber = l.LotNumber, PalletCount = l.PalletInputCount,
-            PackagesPerPallet = l.PalletInputPackagesPerPallet, LoosePackages = l.PalletInputLoose, UnitPrice = l.UnitPrice,
+            PackagesPerPallet = l.PalletInputPackagesPerPallet, LoosePackages = l.PalletInputLoose, UnitPrice = l.UnitPrice, Ggn = l.Ggn,
         }).ToList(),
     };
 

@@ -361,6 +361,11 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("LoadingSlipShowGgn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<bool>("LoadingSlipShowSupplier")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -457,6 +462,11 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasDefaultValue("Europallet");
+
+                    b.Property<bool>("TransportOrderShowGgn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("VatNumber")
                         .HasColumnType("text");
@@ -6046,6 +6056,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("Ggn")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
                     b.Property<decimal?>("LoosePackages")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
@@ -6098,6 +6112,8 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("SupplyCommitmentLines", t =>
                         {
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
+
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", "(\"PalletCount\" IS NULL AND \"PackagesPerPallet\" IS NULL AND \"LoosePackages\" IS NULL) OR (\"PalletCount\" IS NOT NULL AND \"PackagesPerPallet\" IS NOT NULL AND CAST(\"PalletCount\" AS NUMERIC) > 0 AND CAST(\"PackagesPerPallet\" AS NUMERIC) > 0 AND (\"LoosePackages\" IS NULL OR (CAST(\"LoosePackages\" AS NUMERIC) >= 0 AND CAST(\"LoosePackages\" AS NUMERIC) = round(CAST(\"LoosePackages\" AS NUMERIC)))) AND abs(CAST(\"ExpectedQuantity\" AS NUMERIC) - CAST(\"PalletCount\" AS NUMERIC) * CAST(\"PackagesPerPallet\" AS NUMERIC) - coalesce(CAST(\"LoosePackages\" AS NUMERIC), 0)) < 0.001)");
 
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_UnitPrice_NotNegative", "\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0");

@@ -400,6 +400,8 @@ namespace AgfAdmin.Services
             var weightSource = LineWeightRules.Validate(line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg, line.WeightSource, key, "expectedNetWeightKg", "expectedGrossWeightKg", errors, AddError);
 
             var lotNumber = ValidateText(line.LotNumber, required: false, MaxLotNumberLength, $"{key}.lotNumber", errors);
+            // GGN van het product (certificaten deel 2): leeg mag; ingevuld altijd 13 cijfers. Een afwijkend controlecijfer is een waarschuwing op het scherm.
+            var ggn = ProductGgnRules.Validate(line.Ggn, $"{key}.ggn", errors, AddError);
 
             // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet + losse verpakkingen, of moet daar exact aan gelijk zijn.
             var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.ExpectedQuantity, key, "expectedQuantity", errors, AddError);
@@ -426,6 +428,7 @@ namespace AgfAdmin.Services
                 ExpectedGrossWeightKg = line.ExpectedGrossWeightKg,
                 WeightSource = weightSource,
                 LotNumber = lotNumber,
+                Ggn = ggn,
                 UnitPrice = line.UnitPrice
             };
         }
@@ -602,7 +605,8 @@ namespace AgfAdmin.Services
                 && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                 && pair.First.LoosePackages == pair.Second.LoosePackages
                 && pair.First.UnitPrice == pair.Second.UnitPrice
-                && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal));
+                && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal)
+                && string.Equals(pair.First.Ggn, pair.Second.Ggn, StringComparison.Ordinal));
         }
 
         // Legt de koers van een order in een andere valuta vast (ECB: die van de besteldatum). Geen koers: een melding bij het koersveld.
@@ -673,6 +677,7 @@ namespace AgfAdmin.Services
                     ProductName = l.ProductVariant?.Product?.Name,
                     ProductVariantName = l.ProductVariant?.Name,
                     LotNumber = l.LotNumber,
+                    Ggn = l.Ggn,
                     PartijId = l.PartijId,
                     PartijNumber = l.Partij?.Number,
                     ExpectedQuantity = l.ExpectedQuantity,

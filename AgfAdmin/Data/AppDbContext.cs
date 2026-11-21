@@ -509,6 +509,8 @@ namespace AgfAdmin.Data
                 b.Property(c => c.LoadingSlipWarehouseAddress).HasMaxLength(SalesOrderDocumentRules.MaxWarehouseAddressLength);
                 b.Property(c => c.TransportOrderLanguage).IsRequired().HasMaxLength(2).HasDefaultValue(SalesOrderDocumentRules.LanguageEnglish);
                 b.Property(c => c.TransportOrderPalletKind).IsRequired().HasMaxLength(SalesTransportRules.MaxPalletKindLength).HasDefaultValue(SalesTransportRules.DefaultPalletKind);
+                b.Property(c => c.LoadingSlipShowGgn).HasDefaultValue(true);
+                b.Property(c => c.TransportOrderShowGgn).HasDefaultValue(true);
                 b.Property(c => c.PartijNumberMode).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ModeAuto);
                 b.Property(c => c.PartijNumberFormat).IsRequired().HasMaxLength(PartijRules.MaxFormatLength).HasDefaultValue(PartijRules.DefaultFormat);
                 b.Property(c => c.PartijSequenceReset).IsRequired().HasMaxLength(16).HasDefaultValue(PartijRules.ResetYearly);
@@ -808,6 +810,7 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<SupplyCommitmentLine>(b =>
             {
                 b.Property(l => l.LotNumber).HasMaxLength(100);
+                b.Property(l => l.Ggn).HasMaxLength(13);
                 b.HasOne(l => l.Partij).WithMany().HasForeignKey(l => l.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(l => l.PartijId);
                 b.Property(l => l.ExpectedQuantity).HasPrecision(18, 3);
@@ -828,6 +831,7 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", PalletInputCheck("ExpectedQuantity"));
                     LineWeightChecks(t, "SupplyCommitmentLines", "ExpectedNetWeightKg", "ExpectedGrossWeightKg");
                     t.HasCheckConstraint("CK_SupplyCommitmentLines_UnitPrice_NotNegative", "\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0");
+                    t.HasCheckConstraint("CK_SupplyCommitmentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
                 });
 
                 b.HasOne(l => l.SupplyCommitment)

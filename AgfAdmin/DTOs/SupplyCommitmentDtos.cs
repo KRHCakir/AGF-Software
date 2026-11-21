@@ -41,6 +41,9 @@ namespace AgfAdmin.DTOs
         public decimal? ExpectedGrossWeightKg { get; set; }
         public string WeightSource { get; set; }
         public string LotNumber { get; set; }
+        // Certificaten deel 2: GGN van het product (13 cijfers, spaties mogen); leeg of weggelaten = geen GGN. Het voorstel komt uit
+        // GET api/certificates/ggn-proposals; de server vult nooit zelf iets in.
+        public string Ggn { get; set; }
         // Optioneel, beide of geen: ExpectedQuantity mag dan weg (server berekent) of moet exact PalletCount × PackagesPerPallet + LoosePackages zijn.
         // Nieuwe invoer: hele pallets en een heel aantal per pallet; LoosePackages (heel, >= 0) alleen samen met palletinvoer.
         public decimal? PalletCount { get; set; }
@@ -113,6 +116,8 @@ namespace AgfAdmin.DTOs
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
         public string LotNumber { get; set; }
+        // GGN van het product op de inkoopregel (null = geen): het voorstel bij ontvangst, vóór de GGN's van de leverancier.
+        public string Ggn { get; set; }
         // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
         public int? PartijId { get; set; }
         public string PartijNumber { get; set; }
