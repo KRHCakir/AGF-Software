@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { type CertificateRow, buildCertificatesPayload, certificatesChanged, isBlankRow, rowsFromCertificates } from '../../lib/certificateRules';
+import { type CertificateProblem, type CertificateRow, buildCertificatesPayload, certificatesChanged, isBlankRow, rowsFromCertificates } from '../../lib/certificateRules';
 import { todayInAmsterdam } from '../../lib/calendarDate';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getCertificateFile, getCertificateReference, getCertificates, listProductOptions, saveCertificates, uploadCertificateFile } from '../../services/certificateService';
@@ -163,6 +163,44 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
         }
     };
 
+    // Certificaten deel 2: Goedkeuren van een AI-voorstel. Slaat de gegeven lijst op (de opgeslagen certificaten met het goedgekeurde erbij of
+    // bijgewerkt) via hetzelfde opslaan, met aiApproval: de server legt de goedkeuring vast en maakt van het document de volgende versie.
+    // Alleen zonder openstaande wijzigingen in het blok (anders zou Goedkeuren die ongemerkt meenemen) en bij een opgeslagen eigenaar.
+    // Tijdens het goedkeuren is het blok dicht (approving): het antwoord vervangt de lijst, dus een wijziging van onderweg zou verloren gaan.
+    const [approving, setApproving] = useState(false);
+    const canApproveAi = !failed && !loading && !conflict && !changed && !approving && (owner.kind === 'own' || owner.id !== null);
+    const approveAi = async (next: CertificateRow[], index: number, extractionId: number): Promise<{ ok: true } | { ok: false; problems: CertificateProblem[]; error: ApiError | null }> => {
+        if (!canApproveAi) return { ok: false, problems: [], error: null };
+        setApproving(true);
+        try {
+            return await approveNow(next, index, extractionId);
+        } finally {
+            setApproving(false);
+        }
+    };
+    const approveNow = async (next: CertificateRow[], index: number, extractionId: number): Promise<{ ok: true } | { ok: false; problems: CertificateProblem[]; error: ApiError | null }> => {
+        const destination = owner.kind === 'own' ? null : owner.id;
+        const built = buildCertificatesPayload(next, todayInAmsterdam());
+        if (!built.ok) return { ok: false, problems: built.errors, error: null };
+        try {
+            const saved = await saveCertificates(destination, { expectedVersion: version, certificates: built.value, aiApproval: { extractionId, certificateIndex: index } });
+            const list = rowsFromCertificates(saved.certificates);
+            rowsRef.current = list;
+            setRowsState(list);
+            setStored(list);
+            setVersion(saved.version);
+            setWarnings(saved.warnings);
+            setErrors({});
+            setProblems([]);
+            setError(null);
+            return { ok: true };
+        } catch (caught) {
+            const apiError = toApiError(caught);
+            if (apiError.status === 409 && (apiError.body as { code?: string } | null)?.code === 'stale') setConflict(true);
+            return { ok: false, problems: [], error: apiError };
+        }
+    };
+
     // Een bestand bij een opgeslagen certificaat: meteen een nieuwe versie (de lijst zelf verandert er niet door).
     const addFile = async (row: CertificateRow, file: File) => {
         if (row.id === null) {
@@ -214,7 +252,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
 
     return {
         reference, products, rows, setRows, stored, warningDays, loading, failed, error, conflict, errors, problems, warnings, uploading, changed,
-        reload, validate, applySettings, save, addFile, openFile,
+        reload, validate, applySettings, save, addFile, openFile, canApproveAi, approveAi, approving,
     };
 }
 

@@ -1,4 +1,6 @@
-import { ApiError, getBlob, getJson, postForm, putJson } from './apiClient';
+import { ApiError, getBlob, getJson, postForm, postJson, putJson } from './apiClient';
+import { type AiReadingStatus, isAiReadingStatus } from '../types/aiReading';
+import { type AiCertificateExtraction, isAiCertificateExtraction } from '../types/certificateAi';
 import {
     type CertificateFile, type CertificateList, type CertificateOverview, type CertificateReference, type CertificateSettings, type SaveCertificates,
     isCertificateFile, isCertificateList, isCertificateOverview, isCertificateReference, isCertificateSettings,
@@ -73,4 +75,29 @@ export async function saveCertificateSettings(settings: CertificateSettings, sig
     const { json } = await putJson('/certificates/settings', settings, signal);
     if (!isCertificateSettings(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het opslaan van de instellingen van certificaten.');
     return json;
+}
+
+// Certificaten deel 2 (api/certificates/ai): of AI-lezen aan staat (dezelfde instelling als bij facturen), een certificaat laten lezen bij
+// een relatie (relationId) of het eigen bedrijf (null), het document bekijken en het voorstel afwijzen of handmatig verder gaan.
+export async function getCertificateAiStatus(signal?: AbortSignal): Promise<AiReadingStatus> {
+    const json = await getJson('/certificates/ai/status', signal);
+    if (!isAiReadingStatus(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de status van AI-lezen.');
+    return json;
+}
+
+export async function readCertificateDocument(file: File, relationId: number | null, signal?: AbortSignal): Promise<AiCertificateExtraction> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    if (relationId !== null) form.append('relationId', String(relationId));
+    const { json } = await postForm('/certificates/ai/extractions', form, signal);
+    if (!isAiCertificateExtraction(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het lezen van het certificaat.');
+    return json;
+}
+
+export function getCertificateAiDocument(id: number, signal?: AbortSignal): Promise<Blob> {
+    return getBlob(`/certificates/ai/extractions/${id}/document`, signal);
+}
+
+export async function closeCertificateExtraction(id: number, outcome: 'Rejected' | 'Manual', signal?: AbortSignal): Promise<void> {
+    await postJson(`/certificates/ai/extractions/${id}/close`, { outcome }, signal);
 }

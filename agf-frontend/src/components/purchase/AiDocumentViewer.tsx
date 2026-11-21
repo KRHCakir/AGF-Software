@@ -7,7 +7,12 @@ import type { AiExtraction } from '../../types/aiReading';
 
 // Het geüploade document naast het voorstel: een PDF in de PDF-weergave van de browser (met haar eigen zoom), een foto met zoomknoppen.
 // Op een telefoon staat het boven het formulier en is het in te klappen.
-export default function AiDocumentViewer({ extraction }: { extraction: AiExtraction }) {
+// Certificaten deel 2: ook voor een certificaat (eigen ophaalfunctie en rondleidingsnaam).
+export default function AiDocumentViewer({ extraction, load = getAiDocument, dataTour = 'pinvoice-ai-document' }: {
+    extraction: Pick<AiExtraction, 'id' | 'fileName' | 'displayMediaType'>;
+    load?: (id: number, signal?: AbortSignal) => Promise<Blob>;
+    dataTour?: string;
+}) {
     const { t } = useTranslation();
     const [url, setUrl] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
@@ -20,7 +25,7 @@ export default function AiDocumentViewer({ extraction }: { extraction: AiExtract
         let objectUrl: string | null = null;
         setUrl(null);
         setFailed(false);
-        getAiDocument(extraction.id, controller.signal)
+        load(extraction.id, controller.signal)
             .then((blob) => {
                 if (controller.signal.aborted) return;
                 objectUrl = URL.createObjectURL(blob);
@@ -28,11 +33,12 @@ export default function AiDocumentViewer({ extraction }: { extraction: AiExtract
             })
             .catch(() => { if (!controller.signal.aborted) setFailed(true); });
         return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-    }, [extraction.id]);
+        // load is een vaste functie (factuur of certificaat); een andere bron haalt het document opnieuw op.
+    }, [extraction.id, load]);
 
     const zoomButton = 'rounded border border-gray-300 bg-white px-2 py-0.5 text-sm text-gray-800 hover:bg-gray-50';
     return (
-        <section className="min-w-0 rounded-md border border-gray-300 bg-white lg:sticky lg:top-2 lg:self-start" aria-labelledby="ai-document-title" data-tour="pinvoice-ai-document">
+        <section className="min-w-0 rounded-md border border-gray-300 bg-white lg:sticky lg:top-2 lg:self-start" aria-labelledby="ai-document-title" data-tour={dataTour}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-3 py-2">
                 <h2 id="ai-document-title" className="min-w-0 truncate text-sm font-semibold text-gray-900" title={extraction.fileName}>{t('ai_document')} · {extraction.fileName}</h2>
                 <div className="flex items-center gap-1">

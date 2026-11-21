@@ -15,8 +15,20 @@ import { secondaryButtonClass } from '../supply/SuccessPanel';
 const ACCEPT = '.pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/jpeg,image/png,image/heic,image/heif';
 const ALLOWED = /\.(pdf|jpe?g|png|heic|heif)$/i;
 
-export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, demo = demoEnvironmentEnabled() }: {
-    onProposal: (extraction: AiExtraction) => void;
+// Certificaten deel 2: hetzelfde paneel bij een certificaat (eigen status- en leesfunctie, eigen knoptekst en rondleidingsnamen).
+export default function AiUploadPanel<T = AiExtraction>({ onProposal, beforeUpload, beforeApply, demo = demoEnvironmentEnabled(),
+    loadStatus = getAiReadingStatus, read = readInvoiceDocument as unknown as (file: File) => Promise<T>, labelKey = 'ai_upload_button', tour = 'pinvoice-ai',
+    disabledReason = null, readingKey = 'ai_reading', errorKeyOf = (code: string) => `ai_error_${code}` }: {
+    // De tekst tijdens het lezen en bij een fout (bij een certificaat: "Vul het certificaat handmatig in").
+    readingKey?: string;
+    errorKeyOf?: (code: string) => string;
+    onProposal: (extraction: T) => void;
+    loadStatus?: (signal?: AbortSignal) => Promise<AiReadingStatus>;
+    read?: (file: File) => Promise<T>;
+    labelKey?: string;
+    tour?: string;
+    // Waarom uploaden nu niet kan (bijvoorbeeld "sla eerst op"); null = kan.
+    disabledReason?: string | null;
     // De demo-omgeving online: een vaste melding dat alleen verzonnen of geanonimiseerde facturen horen.
     demo?: boolean;
     // Vraagt de gebruiker of het huidige concept vervangen mag worden; false = niet uploaden.
@@ -36,12 +48,14 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, d
     useEffect(() => {
         const controller = new AbortController();
         setStatusFailed(false);
-        getAiReadingStatus(controller.signal).then(setStatus).catch(() => {
+        loadStatus(controller.signal).then(setStatus).catch(() => {
             if (controller.signal.aborted) return;
             setStatus(null);
             setStatusFailed(true);
         });
         return () => controller.abort();
+        // loadStatus is een vaste functie per gebruik van het paneel.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [statusAttempt]);
 
     const available = status !== null && status.enabled && status.configured && !status.limitReached;
@@ -60,7 +74,7 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, d
         setError(null);
         setReading(true);
         try {
-            const extraction = await readInvoiceDocument(file);
+            const extraction = await read(file);
             if (!beforeApply || beforeApply()) onProposal(extraction);
         } catch (caught) {
             setError(aiErrorCode(toApiError(caught)));
@@ -70,15 +84,16 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, d
     };
 
     return (
-        <section className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm" data-tour="pinvoice-ai-upload" aria-labelledby="ai-upload-title">
+        <section className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm" data-tour={`${tour}-upload`} aria-labelledby={`${tour}-upload-title`}>
             <div className="flex flex-wrap items-center gap-3">
-                <h2 id="ai-upload-title" className="sr-only">{t('ai_upload_button')}</h2>
-                <button type="button" className={secondaryButtonClass} disabled={!available || reading} onClick={() => input.current?.click()} data-testid="ai-upload-button">
-                    ⬆ {t('ai_upload_button')}
+                <h2 id={`${tour}-upload-title`} className="sr-only">{t(labelKey)}</h2>
+                <button type="button" className={secondaryButtonClass} disabled={!available || reading || disabledReason !== null} onClick={() => input.current?.click()} data-testid="ai-upload-button">
+                    ⬆ {t(labelKey)}
                 </button>
-                <input ref={input} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} aria-label={t('ai_upload_button')} data-testid="ai-upload-input" data-tour="pinvoice-ai-file"
-                    onChange={(event) => void choose(event.target.files?.[0])} />
-                {reading && status && <span role="status" className="font-medium text-blue-900" data-testid="ai-reading">{t('ai_reading', { model: status.primaryModel.name })}</span>}
+                <input ref={input} type="file" accept={ACCEPT} className="sr-only" tabIndex={-1} aria-label={t(labelKey)} data-testid="ai-upload-input" data-tour={`${tour}-file`}
+                    disabled={disabledReason !== null} onChange={(event) => void choose(event.target.files?.[0])} />
+                {disabledReason !== null && <span className="text-gray-800" data-testid="ai-upload-blocked">{disabledReason}</span>}
+                {reading && status && <span role="status" className="font-medium text-blue-900" data-testid="ai-reading">{t(readingKey, { model: status.primaryModel.name })}</span>}
                 {!reading && available && status && (
                     <span className="text-gray-700">{status.fallbackEnabled && status.fallbackModel
                         ? t('ai_upload_hint', { model: status.primaryModel.name, fallback: status.fallbackModel.name })
@@ -100,7 +115,7 @@ export default function AiUploadPanel({ onProposal, beforeUpload, beforeApply, d
             {demo && <p className="mt-2 font-medium text-amber-950" data-testid="ai-demo-notice">{t('ai_demo_upload_notice')}</p>}
             {error && (
                 <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-950" data-testid="ai-error">
-                    <span>{t(`ai_error_${error}`)}</span>
+                    <span>{t(errorKeyOf(error))}</span>
                     <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={() => setError(null)}>{t('ai_manual_enter')}</button>
                 </div>
             )}
