@@ -73,7 +73,9 @@ describe('PlanSupplyForm: GGN of the product per line', () => {
         await act(async () => { const select = testId('lines[1].ggn-choice') as unknown as HTMLSelectElement; select.value = B; select.dispatchEvent(new window.Event('change', { bubbles: true })); });
         assert.equal(field('lines[1].ggn-input').value, B);
 
-        await key('lines[1].ggn-input', 'Tab');
+        // De keuzelijst staat in de Tab-volgorde (geen tabIndex=-1) en Tab erop is het laatste veld van de regel.
+        assert.notEqual(testId('lines[1].ggn-choice')!.getAttribute('tabindex'), '-1');
+        await act(async () => { testId('lines[1].ggn-choice')!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
         await pick(2, 'man');
         await type('lines[2].expectedQuantity-input', '3');
         await mounted.waitFor(() => testId('lines[2].ggn-hint')?.textContent === 'po_line_ggn_hint_none', 'no match');
