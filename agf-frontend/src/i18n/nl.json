@@ -3169,6 +3169,7 @@
   "cert_ai_save_changes_first": "Sla eerst de wijzigingen in de certificaten op; daarna kun je een certificaat laten lezen.",
   "cert_file_ai": "AI-voorstel goedgekeurd door {name} ({model})",
   "cert_file_ai_adjusted": "{count} velden door gebruiker aangepast",
-  "cert_ai_too_long": "Dit nummer is langer dan 100 tekens: controleer het.",
-  "cert_ai_products_truncated": "Het document noemt meer dan 200 producten; alleen de eerste 200 staan hier. Controleer de rest in het document."
+  "cert_ai_too_long": "Dit is langer dan toegestaan: pas het aan voor het opslaan.",
+  "cert_ai_products_truncated": "Het document noemt meer dan 200 producten; alleen de eerste 200 staan hier. Controleer de rest in het document.",
+  "cert_ai_sites_truncated": "Het document noemt meer dan 50 productielocaties; alleen de eerste 50 staan hier."
 }
