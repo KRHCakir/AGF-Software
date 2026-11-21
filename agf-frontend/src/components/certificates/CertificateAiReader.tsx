@@ -83,12 +83,11 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         }
         setBusy(false);
         if (outcome === 'Manual' && draft !== null) {
-            // Handmatig verder: de waarden als gewone regel in het blok (opslaan zoals altijd), het document als bestand erbij.
+            // Handmatig verder: de waarden als gewone regel in het blok en het document als openstaand bestand bij die regel (ook bij een
+            // bestaand certificaat). Alles gaat pas mee bij het gewone opslaan, met de foutafhandeling daarvan; niet opslaan = niets opgeslagen.
             const { rows, index } = approvalRows(certificates.rows, draft);
-            const row = rows[index];
-            const pending = row.id === null && file.current !== null ? [file.current] : [];
+            const pending = file.current !== null ? [file.current] : [];
             certificates.setRows(rows.map((r, i) => (i === index ? { ...r, pendingFiles: [...r.pendingFiles, ...pending] } : r)));
-            if (row.id !== null && file.current !== null) void certificates.addFile(row, file.current);
             done(t('cert_ai_manual_done'));
             return;
         }
@@ -251,6 +250,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                 <p className="text-xs text-gray-600">{t('cert_ai_approve_hint')}</p>
                             </>
                         )}
+                        {(proposal === null || draft === null) && error && <ErrorNotice error={error} />}
                         {(proposal === null || draft === null) && (
                             <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void close('Rejected')} data-testid="cert-ai-reject">{t('ai_reject')}</button>
                         )}
