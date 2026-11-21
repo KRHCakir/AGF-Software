@@ -194,12 +194,13 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         return product === undefined ? undefined : ggnProposals.get(product);
     };
     // Regels die de gebruiker niet zelf aanraakte, volgen het voorstel (één treffer = voorgevuld, anders leeg).
+    // Niet tijdens of na een opslag (vergrendeld): dan blijft het formulier precies zoals het verstuurd is.
     useEffect(() => {
-        if (result !== null) return;
+        if (locked) return;
         setLines((current) => applyGgnProposals(current, ggnProposalOf) as PurchaseLineDraft[]);
         // ggnProposalOf hangt alleen af van de voorstellen en de artikelen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ggnProposals, productOfVariant, lines, result]);
+    }, [ggnProposals, productOfVariant, lines, locked]);
 
     const edited = () => {
         // Na een definitieve weigering (of niets verstuurd) hoort een gewijzigde invoer bij een nieuw verzoek.
