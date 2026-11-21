@@ -12,6 +12,8 @@ namespace AgfAdmin.Services.DocumentAi
         // Leest het systeem documenten? Zo niet: de reden in gewone taal (geen sleutel, geen prijs voor het model).
         string NotConfiguredReason { get; }
         IDocumentAI Create(string model);
+        // Certificaten deel 2: dezelfde aanbieder met het schema van een certificaat (de nagebootste lezer: het vaste voorbeeldcertificaat).
+        IDocumentAI CreateCertificateReader(string model);
     }
 
     public sealed class DocumentAiFactory(IOptions<DocumentAiOptions> options, IConfiguration configuration) : IDocumentAiFactory
@@ -47,6 +49,12 @@ namespace AgfAdmin.Services.DocumentAi
             if (Demo && DemoEnvironmentOn) throw new InvalidOperationException("De nagebootste lezer is uit in de demo-omgeving.");
             return Demo ? new DemoInvoiceAi() : new ClaudeDocumentAi(model, Key, ExtractionSchema.Build(SchemaParts.Admin));
         }
+
+        public IDocumentAI CreateCertificateReader(string model)
+        {
+            if (Demo && DemoEnvironmentOn) throw new InvalidOperationException("De nagebootste lezer is uit in de demo-omgeving.");
+            return Demo ? new DemoCertificateAi() : new ClaudeDocumentAi(model, Key, CertificateSchema.Build());
+        }
     }
 
     public sealed record ReadAttempt(string Model, string ModelVersion, long InputTokens, long OutputTokens, decimal InputPerMillionUsd,
@@ -75,13 +83,13 @@ namespace AgfAdmin.Services.DocumentAi
             // De nagebootste lezer (tests en rondleiding) leest alleen zichzelf: geen vangnet, en de lezing heet zoals ze is.
             var demo = factory.Provider == DocumentAiOptions.ReaderDemo;
             var primaryModel = demo ? DemoInvoiceAi.Model : _options.PrimaryModel;
-            var primary = await ReadWithRetryAsync(primaryModel, document, instruction, attempts, cancellationToken);
+            var primary = await ReadWithRetryAsync(primaryModel, document, instruction, Invoice, attempts, cancellationToken);
             var problems = primary.Proposal == null ? null : AiReadingRules.Problems(primary.Proposal);
             var fallbackModel = _options.FallbackModel;
             if ((primary.Proposal == null || AiReadingRules.NeedsFallback(problems)) && _options.FallbackEnabled && !demo
                 && !string.IsNullOrWhiteSpace(fallbackModel) && fallbackModel != _options.PrimaryModel && primary.Failure != "unsupported")
             {
-                var fallback = await ReadWithRetryAsync(fallbackModel, document, instruction, attempts, cancellationToken);
+                var fallback = await ReadWithRetryAsync(fallbackModel, document, instruction, Invoice, attempts, cancellationToken);
                 if (fallback.Proposal != null)
                 {
                     return new ReadResult(fallback.Proposal, AiReadingRules.Problems(fallback.Proposal), fallbackModel, fallback.Version, true, attempts, null);
@@ -92,14 +100,42 @@ namespace AgfAdmin.Services.DocumentAi
                 : new ReadResult(null, new List<ReadingProblem>(), null, null, false, attempts, primary.Failure);
         }
 
-        private async Task<(JsonObject Proposal, string Version, string Failure)> ReadWithRetryAsync(string model, DocumentInput document, string instruction,
-            List<ReadAttempt> attempts, CancellationToken cancellationToken)
+        // Certificaten deel 2: een certificaat lezen met het hoofdmodel; een tijdelijke fout krijgt één herhaling. Is de uitvoer ongeldig en staat
+        // het vangnet aan, dan leest het vangnetmodel het één keer. Er zijn geen rekencontroles zoals bij een factuur: twijfel blijft een gele
+        // markering op het scherm. Elke poging telt mee in tokens en kosten.
+        public async Task<ReadResult> ReadCertificateAsync(DocumentInput document, CancellationToken cancellationToken)
         {
-            var first = await ReadOnceAsync(model, document, instruction, attempts, cancellationToken);
-            return first.Failure == "unavailable" ? await ReadOnceAsync(model, document, instruction, attempts, cancellationToken) : first;
+            var attempts = new List<ReadAttempt>();
+            var demo = factory.Provider == DocumentAiOptions.ReaderDemo;
+            var primaryModel = demo ? DemoInvoiceAi.Model : _options.PrimaryModel;
+            var primary = await ReadWithRetryAsync(primaryModel, document, CertificateSchema.Instruction, Certificate, attempts, cancellationToken);
+            var fallbackModel = _options.FallbackModel;
+            if (primary.Proposal == null && primary.Failure == "invalid" && _options.FallbackEnabled && !demo && !string.IsNullOrWhiteSpace(fallbackModel) && fallbackModel != _options.PrimaryModel)
+            {
+                var fallback = await ReadWithRetryAsync(fallbackModel, document, CertificateSchema.Instruction, Certificate, attempts, cancellationToken);
+                if (fallback.Proposal != null) return new ReadResult(fallback.Proposal, new List<ReadingProblem>(), fallbackModel, fallback.Version, true, attempts, null);
+            }
+            return primary.Proposal != null
+                ? new ReadResult(primary.Proposal, new List<ReadingProblem>(), primaryModel, primary.Version, false, attempts, null)
+                : new ReadResult(null, new List<ReadingProblem>(), null, null, false, attempts, primary.Failure);
         }
 
-        private async Task<(JsonObject Proposal, string Version, string Failure)> ReadOnceAsync(string model, DocumentInput document, string instruction,
+        // Wat er per soort document anders is: welke lezer (met welk schema) en hoe de uitvoer wordt gecontroleerd.
+        private sealed record Kind(Func<IDocumentAiFactory, string, IDocumentAI> Create, Func<string, (JsonObject Proposal, string Error)> Validate);
+
+        private static readonly Kind Invoice = new((f, model) => f.Create(model),
+            text => (ExtractionSchema.Validate(text, SchemaParts.Admin, out var error), error));
+        private static readonly Kind Certificate = new((f, model) => f.CreateCertificateReader(model),
+            text => (CertificateSchema.Validate(text, out var error), error));
+
+        private async Task<(JsonObject Proposal, string Version, string Failure)> ReadWithRetryAsync(string model, DocumentInput document, string instruction, Kind kind,
+            List<ReadAttempt> attempts, CancellationToken cancellationToken)
+        {
+            var first = await ReadOnceAsync(model, document, instruction, kind, attempts, cancellationToken);
+            return first.Failure == "unavailable" ? await ReadOnceAsync(model, document, instruction, kind, attempts, cancellationToken) : first;
+        }
+
+        private async Task<(JsonObject Proposal, string Version, string Failure)> ReadOnceAsync(string model, DocumentInput document, string instruction, Kind kind,
             List<ReadAttempt> attempts, CancellationToken cancellationToken)
         {
             var price = _options.Models.GetValueOrDefault(model) ?? new DocumentAiModelPrice();
@@ -114,8 +150,8 @@ namespace AgfAdmin.Services.DocumentAi
             }
             try
             {
-                var response = await factory.Create(model).ExtractAsync(document, instruction, timeout.Token);
-                var proposal = ExtractionSchema.Validate(response.Text, SchemaParts.Admin, out var error);
+                var response = await kind.Create(factory, model).ExtractAsync(document, instruction, timeout.Token);
+                var (proposal, error) = kind.Validate(response.Text);
                 Record(response.ModelVersion, response.InputTokens, response.OutputTokens, proposal == null ? "invalid" : "ok");
                 // Alleen de soort fout in het logboek, nooit de inhoud van het document of het antwoord.
                 if (proposal == null) logger.LogWarning("AI-lezing met {Model}: ongeldige uitvoer ({Reason}).", model, error?.Split(':')[0]);

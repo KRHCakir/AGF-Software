@@ -43,14 +43,25 @@ public sealed class FakeDocumentAi : IDocumentAiFactory, IDocumentAI
         queue.Enqueue(step);
     }
 
-    public IDocumentAI Create(string model) { _model = model; return this; }
+    private bool _certificate;
+    public IDocumentAI Create(string model) { _model = model; _certificate = false; return this; }
+    public IDocumentAI CreateCertificateReader(string model) { _model = model; _certificate = true; return this; }
 
     public Task<AiResponse> ExtractAsync(DocumentInput document, string instruction, CancellationToken cancellationToken)
     {
         Calls.Add(_model);
         LastDocument = document;
-        Assert.Contains("leverancier_iban", instruction);
-        Assert.Contains("korting_totaal", instruction);
+        if (_certificate)
+        {
+            // Certificaten deel 2: alle pagina's lezen, ook de bijlage.
+            Assert.Contains("Annex", instruction);
+            Assert.Contains("producten", instruction);
+        }
+        else
+        {
+            Assert.Contains("leverancier_iban", instruction);
+            Assert.Contains("korting_totaal", instruction);
+        }
         return Task.FromResult(_script[_model].Dequeue()());
     }
 }
