@@ -104,15 +104,17 @@ export function isUntouched(draft: PurchaseLineDraft, edit: EditLine): boolean {
         && Boolean(draft.grossKgEntered) === Boolean(opened.grossKgEntered) && (draft.grossKgEntered ? (draft.grossKg ?? '').trim() === (opened.grossKg ?? '') : true);
 }
 
+// Het GGN van een opgeslagen regel gaat altijd mee: leeg als '' (bewust leegmaken), want weggelaten (null) betekent voor de server
+// "ongewijzigd" (zo wist een oudere client nooit een GGN).
 export function updateLinePayload(draft: PurchaseLineDraft, payload: CreateSupplyCommitmentLineRequest, edit: EditLine | undefined): UpdatePurchaseOrderLineRequest {
     const price = payload.unitPrice ?? null;
     if (edit === undefined) return { ...payload, id: null, unitPrice: price };
-    if (!isUntouched(draft, edit)) return { ...payload, id: edit.lineId, unitPrice: price };
+    if (!isUntouched(draft, edit)) return { ...payload, id: edit.lineId, unitPrice: price, ggn: payload.ggn ?? '' };
     const stored = edit.stored;
     return {
         id: stored.id, productVariantId: stored.productVariantId, expectedQuantity: stored.expectedQuantity, expectedUnit: stored.unit,
         expectedNetWeightKg: stored.expectedNetWeightKg, expectedGrossWeightKg: stored.expectedGrossWeightKg ?? null, weightSource: stored.weightSource ?? null,
-        lotNumber: payload.lotNumber, ggn: payload.ggn ?? null, palletCount: stored.palletInputCount ?? null, packagesPerPallet: stored.palletInputPackagesPerPallet ?? null,
+        lotNumber: payload.lotNumber, ggn: payload.ggn ?? '', palletCount: stored.palletInputCount ?? null, packagesPerPallet: stored.palletInputPackagesPerPallet ?? null,
         loosePackages: stored.palletInputLoose ?? null, unitPrice: price,
     };
 }
