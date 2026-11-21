@@ -7,6 +7,7 @@ import { parseLocaleDecimal } from '../../lib/decimal';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getCertificateSettings, saveCertificateSettings } from '../../services/certificateService';
 import CertificatesEditor from '../certificates/CertificatesEditor';
+import CertificateAiReader from '../certificates/CertificateAiReader';
 import { certificateMessages, useCertificates } from '../certificates/useCertificates';
 import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
@@ -115,6 +116,9 @@ export default function CertificatesSetting() {
                 {own.error && <ErrorNotice error={own.error} />}
                 {own.conflict && <p role="alert" className="text-sm text-amber-950">{t('cert_conflict')}</p>}
                 {(own.conflict || own.failed) && !own.loading && <button type="button" className={secondaryButtonClass} onClick={own.reload}>{t('cert_reload')}</button>}
+                {own.reference !== null && (
+                    <CertificateAiReader owner={{ kind: 'own' }} certificates={own} dataTour="own-certificate" blockedReason={own.changed ? t('cert_ai_save_changes_first') : null} />
+                )}
                 {own.reference !== null && (
                     <CertificatesEditor idPrefix="own-certificates" rows={own.rows} onChange={(rows) => { own.setRows(rows); setOwnNotice(false); }} reference={own.reference} products={own.products}
                         errors={certificateMessages(own.errors, own.problems, t)} today={todayInAmsterdam()} warningDays={own.warningDays} disabled={ownSaving || own.loading || own.failed}
