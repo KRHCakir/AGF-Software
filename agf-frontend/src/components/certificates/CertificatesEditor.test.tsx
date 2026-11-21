@@ -76,6 +76,11 @@ describe('CertificatesEditor', () => {
         assert.equal(mounted.container.querySelector(`#certificates\\.${row.key}\\.customTypeName-input`), null, 'a known own type needs no name field');
         await select(type, 'Custom');
         assert.ok(mounted.container.querySelector(`#certificates\\.${row.key}\\.customTypeName-input`));
+        // Typen van een naam die onderweg gelijk is aan een bestaande eigen soort: het naamveld blijft staan.
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>(`#certificates\\.${row.key}\\.customTypeName-input`)!, 'Demeter'); });
+        assert.ok(mounted.container.querySelector(`#certificates\\.${row.key}\\.customTypeName-input`), 'the name field stays while typing');
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>(`#certificates\\.${row.key}\\.customTypeName-input`)!, 'Demeter biodynamisch'); });
+        assert.equal(latest[0].customTypeName, 'Demeter biodynamisch');
         const input = mounted.container.querySelector<HTMLInputElement>('[data-testid="certificate-0-file"]')!;
         const file = new window.File(['%PDF-1.4'], 'skal.pdf', { type: 'application/pdf' });
         Object.defineProperty(input, 'files', { value: [file], configurable: true });
