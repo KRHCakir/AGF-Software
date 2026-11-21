@@ -119,6 +119,8 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         const proposal = line.productVariantId === '' ? undefined : ggnProposalOf(line);
                         const hint = ggnHint(line, proposal);
                         const problem = ggnProblem(line.ggn ?? '');
+                        // De keuzelijst staat er bij meer treffers, zolang er geen eigen nummer (buiten de lijst) is ingevuld; dan is zij het laatste veld.
+                        const choosing = proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')));
                         const limit = limits(line.key);
                         return (
                             <tr key={line.key} className={purchaseLineRowClass(index)} data-tour="supply-line" data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
@@ -198,10 +200,10 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         <label htmlFor={`${prefix}.ggn-input`} className="sr-only">{t('po_line_col_ggn')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.ggn`, errors(`${prefix}.ggn`))} value={line.ggn ?? ''} disabled={locked} inputMode="numeric" maxLength={20}
                                             data-tour="supply-line-ggn" data-tour-key={index} onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}
-                                            onKeyDown={last === 'ggn' && proposal?.kind !== 'Many' ? (event) => onLastField(event, index) : undefined}
+                                            onKeyDown={last === 'ggn' && !choosing ? (event) => onLastField(event, index) : undefined}
                                             className={`${inputClass} !mt-0 w-40 font-mono`} />
                                         {/* Kiezen bij meer treffers; met een eigen nummer (niet in de lijst) is er niets te kiezen. */}
-                                        {proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? ''))) && (
+                                        {proposal?.kind === 'Many' && choosing && (
                                             <select aria-label={t('po_line_ggn_choose_label', { n: String(index + 1) })} disabled={locked} className={`${inputClass} !mt-0 w-40 text-xs`}
                                                 onKeyDown={last === 'ggn' ? (event) => onLastField(event, index) : undefined}
                                                 value={proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')) ? normalizeGgn(line.ggn ?? '') : ''} data-testid={`${prefix}.ggn-choice`}
