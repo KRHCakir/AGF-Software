@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { relationTaxCountry, vatScope } from '../../lib/vatRules';
-import { AddressDraft, ChannelDraft, ContactDraft, GgnDraft, RelationDraft, buildRelationPayload, creditDraftFromRole, draftFromRelation, draftTaxCountry, normalizeVat, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyGgnDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
-import { isDateOnly, todayInAmsterdam } from '../../lib/calendarDate';
+import { AddressDraft, ChannelDraft, ContactDraft, RelationDraft, buildRelationPayload, creditDraftFromRole, draftFromRelation, draftTaxCountry, normalizeVat, emailSuggestion, emptyAddressDraft, emptyChannelDraft, emptyContactDraft, emptyRelationDraft, groupRelationErrors, termsDraftFromRole } from '../../lib/relationRules';
+import { todayInAmsterdam } from '../../lib/calendarDate';
 import { emptyTermsDraft } from '../../lib/roleTermsRules';
 import { newRequestId } from '../../lib/requestId';
 import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
@@ -14,13 +14,11 @@ import { addRelationRole, confirmBankAccount, createRelation, updateRelation } f
 import type { AddressPurpose, ChannelKind, Relation, RelationReference, SaveRelationRequest, SimilarRelation } from '../../types/relation';
 import { ADDRESS_PURPOSES } from '../../types/relation';
 import ErrorNotice from '../supply/ErrorNotice';
-import DateField from '../shared/DateField';
 import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
 import type { FieldErrors } from '../supply/messages';
 import { outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import CustomerCreditSection from './CustomerCreditSection';
-import GgnPortalButton from './GgnPortalButton';
 import RelationBankAccountsSection from './RelationBankAccountsSection';
 import RelationTermsSection from './RelationTermsSection';
 import RelationWarnings from './RelationWarnings';
@@ -30,6 +28,9 @@ import { getRelationRecipients, saveRelationRecipients } from '../../services/do
 import type { RecipientAddressOption } from '../../types/documentMail';
 import SubmitErrors from '../shared/SubmitErrors';
 import { useFormLeaveGuard } from '../shared/LeaveGuard';
+import CertificatesEditor from '../certificates/CertificatesEditor';
+import { certificateMessages, useCertificates } from '../certificates/useCertificates';
+import { certificateStatus, needsAttention } from '../../lib/certificateRules';
 
 // Relatiekaart: altijd zichtbaar zijn zoekcode, bedrijfsnaam, rollen, actief en de belangrijkste contactgegevens; de rest staat
 // compact gegroepeerd (bedrijfsgegevens, adressen, contactpersonen, inkoop-/verkoopdefaults, interne opmerking). Alleen de naam
@@ -105,6 +106,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
             note: d.internalNote !== '',
             bank: d.bankAccounts.length > 0,
             recipients: initialSection === 'recipients',
+            certificates: initialSection === 'certificates',
         };
     });
     const [confirming, setConfirming] = useState<number | null>(null);
@@ -121,6 +123,17 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
     const [recipientsFailed, setRecipientsFailed] = useState(false);
     const [recipientsReload, setRecipientsReload] = useState(0);
     const [creditRefresh, setCreditRefresh] = useState(0);
+    // Certificaten (certificaten deel 1): eigen endpoint en versie, opgeslagen met dezelfde klik, na de relatie en de e-mailadressen. Bij een
+    // nieuwe relatie pas laden als het blok opengaat; opslaan gaat dan naar de net aangemaakte relatie.
+    const certificates = useCertificates({ kind: 'relation', id: relation?.id ?? null }, relation !== null || open.certificates);
+    useEffect(() => {
+        if (certificates.rows.length > 0 || certificates.failed) setOpen((now) => (now.certificates ? now : { ...now, certificates: true }));
+    }, [certificates.rows.length, certificates.failed]);
+    const saveCertificates = async (id: number): Promise<boolean> => {
+        const ok = await certificates.save(id);
+        if (!ok) setOpen((now) => ({ ...now, certificates: true }));
+        return ok;
+    };
     const inFlight = useRef(false);
     const firstInput = useRef<HTMLInputElement | null>(null);
     const formRef = useRef<HTMLFormElement | null>(null);
@@ -243,6 +256,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
             setNotice(t(result.outcome === 'replayed' ? 'relations_saved_before' : 'relations_created', { name: result.relation.name }));
             setDraft(draftFromRelation(result.relation));
             if (!(await saveRecipients(result.relation.id))) return;
+            if (!(await saveCertificates(result.relation.id))) return;
             leave.saved();
             onSaved(result.relation, true);
         } catch (caught) {
@@ -269,6 +283,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
         setRecipientIssues(issues);
         if (issues.length > 0) {
             setOpen((now) => ({ ...now, recipients: true }));
+            return;
+        }
+        // Ook de certificaten eerst: een onvolledig certificaat houdt het hele opslaan tegen.
+        if (!certificates.validate()) {
+            setOpen((now) => ({ ...now, certificates: true }));
             return;
         }
         const defaults = { defaultPaymentTermsDays: reference.defaultPaymentTermsDays };
@@ -301,6 +320,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
             setDraft(draftFromRelation(saved));
             setCreditRefresh((n) => n + 1);
             if (!(await saveRecipients(saved.id))) return;
+            if (!(await saveCertificates(saved.id))) return;
             leave.saved();
             onSaved(saved, false);
         } catch (caught) {
@@ -426,13 +446,6 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
     };
     const removeChannel = (contactKey: string, channelKey: string) =>
         update({ contacts: draft.contacts.map((c) => (c.key === contactKey ? { ...c, channels: c.channels.filter((ch) => ch.key !== channelKey) } : c)) });
-    const editGgn = (key: string, patch: Partial<GgnDraft>) => update({ ggns: draft.ggns.map((g) => (g.key === key ? { ...g, ...patch } : g)) });
-    const addGgn = () => {
-        const next = emptyGgnDraft();
-        update({ ggns: [...draft.ggns, next] });
-        setTimeout(() => document.getElementById(`ggns.${next.key}.ggn-input`)?.focus(), 0);
-    };
-    const removeGgn = (key: string) => update({ ggns: draft.ggns.filter((g) => g.key !== key) });
 
     // Land van de relatie voor de btw (registratie, hoofdadres, eerste adres): buiten de EU geen btw-controle (fixes 5b).
     const draftVat = draft.vatNumber.trim() === '' ? null : normalizeVat(draft.vatNumber);
@@ -460,6 +473,9 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
         </button>
     );
 
+    // Samenvatting als het blok dicht is: het aantal, en hoeveel er bijna verlopen of verlopen zijn.
+    const attention = certificates.rows.filter((row) => row.id !== null && row.isActive && needsAttention(certificateStatus(row.validUntil, today, certificates.warningDays))).length;
+    const certificateSummary = certificates.rows.length === 0 ? '' : [t('relations_count', { count: String(certificates.rows.length) }), attention > 0 ? t('cert_summary_attention', { count: String(attention) }) : ''].filter(Boolean).join(' · ');
     const roleLabel = draft.customerRole && draft.vendorRole ? t('relations_role_both') : draft.customerRole ? t('relations_role_customer') : draft.vendorRole ? t('relations_role_vendor') : t('relations_role_none');
     const usage = current?.usage;
 
@@ -713,55 +729,11 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                                 <p className="text-sm font-medium text-gray-900">{t('relations_defaults_purchase')}{current?.vendor ? ` · #${current.vendor.vendorId}` : ''}</p>
                                 <RelationTermsSection prefix="vendor" terms={draft.vendorTerms} onChange={(patch) => update({ vendorTerms: { ...draft.vendorTerms, ...patch } })}
                                     currentCondition={current?.vendor?.paymentCondition ?? null} reference={reference} errors={errors} locked={locked} />
-                                <div className="space-y-2">
-                                    <p className="text-xs font-medium text-gray-700">{t('relations_ggn_title')}</p>
-                                    {draft.ggns.map((ggn) => {
-                                        const k = (field: string) => `ggns.${ggn.key}.${field}`;
-                                        return (
-                                            <div key={ggn.key} className="space-y-1 rounded border border-gray-200 p-2" data-testid={`ggn-${ggn.key}`}>
-                                                <div className="flex flex-wrap items-start gap-2">
-                                                    <div>
-                                                        <input {...fieldProps(k('ggn'), e(k('ggn')))} aria-label={t('relations_ggn_number')} placeholder={t('relations_ggn_number')} inputMode="numeric" value={ggn.ggn} disabled={locked} maxLength={20} className={`${inputClass} max-w-44 font-mono`}
-                                                            onChange={(event) => editGgn(ggn.key, { ggn: event.target.value })} />
-                                                        <FieldError id={k('ggn')} messages={e(k('ggn'))} />
-                                                    </div>
-                                                    <input {...fieldProps(k('producerName'), e(k('producerName')))} aria-label={t('relations_ggn_producer')} placeholder={t('relations_ggn_producer')} value={ggn.producerName} disabled={locked} maxLength={200} className={`${inputClass} min-w-40 flex-1`}
-                                                        onChange={(event) => editGgn(ggn.key, { producerName: event.target.value })} />
-                                                    <label className="mt-2 flex items-center gap-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.isActive} disabled={locked} onChange={(event) => editGgn(ggn.key, { isActive: event.target.checked })} />{t('relations_active')}</label>
-                                                    <button type="button" tabIndex={-1} className="mt-2 text-xs text-red-800 underline underline-offset-2" disabled={locked} onClick={() => removeGgn(ggn.key)}>{t('relations_remove')}</button>
-                                                </div>
-                                                {/* Handmatige certificaatcontrole: wanneer en door wie, geldig tot, GGN-label. */}
-                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-5">
-                                                    <div>
-                                                        <label htmlFor={`${k('checkedOn')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_checked_on')}</label>
-                                                        <DateField {...fieldProps(k('checkedOn'), e(k('checkedOn')))} max={today} value={ggn.checkedOn} disabled={locked} onChange={(value) => editGgn(ggn.key, { checkedOn: value })} />
-                                                        <FieldError id={k('checkedOn')} messages={e(k('checkedOn'))} />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor={`${k('checkedBy')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_checked_by')}</label>
-                                                        <input {...fieldProps(k('checkedBy'), e(k('checkedBy')))} value={ggn.checkedBy} maxLength={100} disabled={locked} className={inputClass} onChange={(event) => editGgn(ggn.key, { checkedBy: event.target.value })} />
-                                                        <FieldError id={k('checkedBy')} messages={e(k('checkedBy'))} />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor={`${k('certificateValidUntil')}-input`} className="text-xs font-medium text-gray-700">{t('relations_ggn_valid_until')}</label>
-                                                        <DateField {...fieldProps(k('certificateValidUntil'), e(k('certificateValidUntil')))} value={ggn.certificateValidUntil} disabled={locked} onChange={(value) => editGgn(ggn.key, { certificateValidUntil: value })} />
-                                                        {isDateOnly(ggn.certificateValidUntil) && ggn.certificateValidUntil < today && <span className="block text-xs font-medium text-red-800">{t('relations_ggn_expired')}</span>}
-                                                    </div>
-                                                    <label className="flex items-end gap-1 pb-1 text-xs text-gray-800"><input type="checkbox" checked={ggn.hasGgnLabel} disabled={locked} onChange={(event) => editGgn(ggn.key, { hasGgnLabel: event.target.checked })} />{t('relations_ggn_label')}</label>
-                                                    <div className="flex items-end pb-1">
-                                                        <GgnPortalButton ggn={ggn.ggn.replace(/ /g, '')} portalUrl={reference.globalGapPortalUrl} disabled={locked} />
-                                                    </div>
-                                                </div>
-                                                {ggn.checkedOn === '' && <p className="text-xs text-amber-800">{t('relations_ggn_never_checked')}</p>}
-                                            </div>
-                                        );
-                                    })}
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <button type="button" className={`${secondaryButtonClass} px-2 py-0.5 text-xs`} disabled={locked} onClick={addGgn}>+ {t('relations_ggn_add')}</button>
-                                        <a href={reference.globalGapDatabaseUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-800 underline underline-offset-2">{t('relations_ggn_official')}</a>
-                                    </div>
-                                    <p className="text-xs text-gray-500">{t('relations_ggn_hint')}</p>
-                                </div>
+                                {/* Certificaten deel 1: de GGN's van de leverancier staan bij Certificaten (per GGN de producten). */}
+                                <p className="text-xs text-gray-600" data-testid="relation-ggn-moved">
+                                    {t('relations_ggn_moved')}{' '}
+                                    <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={() => setOpen((now) => ({ ...now, certificates: true }))}>{t('cert_section_title')}</button>
+                                </p>
                             </div>
                         )}
                         {usage && (draft.customerRole || draft.vendorRole) && (
@@ -774,6 +746,29 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                                 </ul>
                             </div>
                         )}
+                    </div>
+                )}
+            </section>
+
+            {/* Certificaten (certificaten deel 1) */}
+            <section className="rounded-md border border-gray-200" data-tour="relation-certificates">
+                {sectionButton('certificates', 'cert_section_title', certificateSummary)}
+                {open.certificates && (
+                    <div id="relation-certificates" className="space-y-2 border-t border-gray-200 p-3">
+                        <p className="text-xs text-gray-600">{t('cert_intro')}</p>
+                        {certificates.error && <ErrorNotice error={certificates.error} />}
+                        {(certificates.conflict || certificates.failed) && !certificates.loading && (
+                            <button type="button" className="rounded border border-gray-300 px-2 py-1 text-sm" onClick={certificates.reload} data-testid="certificates-reload">{t('cert_reload')}</button>
+                        )}
+                        {certificates.conflict && <p role="alert" className="text-sm text-amber-950">{t('cert_conflict')}</p>}
+                        {certificates.reference === null
+                            ? (!certificates.failed && <p className="text-xs text-gray-600">{t('cert_loading')}</p>)
+                            : (
+                                <CertificatesEditor idPrefix="relation-certificates" rows={certificates.rows} onChange={certificates.setRows} reference={certificates.reference}
+                                    products={certificates.products} errors={certificateMessages(certificates.errors, certificates.problems, t)} today={today} warningDays={certificates.warningDays}
+                                    disabled={locked || certificates.loading || certificates.failed} onOpenFile={(id, file) => void certificates.openFile(id, file)}
+                                    onAddFile={(row, file) => void certificates.addFile(row, file)} uploading={certificates.uploading} dataTour="relation-certificate" />
+                            )}
                     </div>
                 )}
             </section>
