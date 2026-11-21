@@ -20,12 +20,16 @@ namespace AgfAdmin.Data
                     .Select(l => new { l.Id, l.Ggn, l.SupplyCommitmentId, l.SupplyCommitment.DocumentStatus }), async, cancellationToken))
                 .ToDictionary(l => l.Id);
             var changes = db.ChangeTracker.Entries<PurchaseOrderChange>().Where(e => e.State == EntityState.Added)
-                .GroupBy(e => e.Entity.SupplyCommitmentId).ToDictionary(g => g.Key, g => g.First().Entity.Kind);
+                .GroupBy(e => e.Entity.SupplyCommitmentId).ToDictionary(g => g.Key, g => g.First().Entity);
             foreach (var entry in lines)
             {
                 if (!stored.TryGetValue(entry.Entity.Id, out var before) || string.Equals(before.Ggn, entry.Entity.Ggn, StringComparison.Ordinal)) continue;
                 var needed = before.DocumentStatus == PurchaseOrderDocumentRules.StatusDefinitive ? PurchaseOrderDocumentRules.KindCorrection : PurchaseOrderDocumentRules.KindEdit;
-                if (!changes.TryGetValue(before.SupplyCommitmentId, out var kind) || kind != needed)
+                // De auditregel moet dit GGN van deze regel vastleggen, met de werkelijke oude en nieuwe waarde.
+                var audited = changes.TryGetValue(before.SupplyCommitmentId, out var change) && change.Kind == needed
+                    && PurchaseOrderDocumentRules.Deserialize(change.ChangesJson).Any(f => f.Field == PurchaseOrderDocumentRules.FieldGgn && f.LineId == before.Id
+                        && string.Equals(f.Old, before.Ggn, StringComparison.Ordinal) && string.Equals(f.New, entry.Entity.Ggn, StringComparison.Ordinal));
+                if (!audited)
                 {
                     throw new TraceabilityViolationException(
                         $"The GGN of purchase order line {before.Id} only changes with an {(needed == PurchaseOrderDocumentRules.KindEdit ? "edit" : "correction with a reason")} of the order.");
