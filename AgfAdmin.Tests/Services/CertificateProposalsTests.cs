@@ -99,6 +99,8 @@ public class CertificateProposalsTests
         Assert.False(CertificateProposals.SameCompany("Agrícola Sol Naciente S.A.", "Fruithandel Noord B.V."));
         var renewed = Build(Example(), out _, Holder, new CertificateProposals.StoredCertificate(7, CertificateRules.GlobalGapIfa, null, "4063 0615 91012"));
         Assert.Equal((7, "GLOBALG.A.P. IFA (GGN)"), (renewed.SameNumberCertificateId!.Value, renewed.SameNumberTypeName));
+        // Hetzelfde nummer op een ander soort certificaat (GRASP) is geen eerdere versie hiervan.
+        Assert.Null(Build(Example(), out _, Holder, new CertificateProposals.StoredCertificate(8, "Grasp", null, "4063061591012")).SameNumberCertificateId);
     }
 
     [Fact]
