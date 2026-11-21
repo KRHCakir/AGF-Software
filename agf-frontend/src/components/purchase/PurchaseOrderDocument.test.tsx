@@ -80,6 +80,23 @@ describe('purchase order document status', () => {
         assert.deepEqual([body.reason, body.expectedVersion, body.supplierReference, body.note, body.lines], ['Prijs volgens factuur', 3, '45-21', '', [{ id: 7, unitPrice: 13.1 }]]);
     });
 
+    test('certificaten deel 2: a correction can set or clear the GGN of a line, 13 digits, with a reason', async () => {
+        answer = async () => json(200, definitive({ editVersion: 4 }));
+        await mounted.render(<PurchaseOrderDocument order={definitive()} onChanged={(o) => changed.push(o)} />);
+        await act(async () => { $('[data-tour="po-correct"]')!.click(); });
+        const form = $('[data-testid="po-correction"]') as HTMLFormElement;
+        const submit = () => act(async () => { form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await act(async () => { setValue($('[id="ggn-7-input"]') as HTMLInputElement, '4049 92841'); });
+        await act(async () => { setValue($('#correction-reason-input') as HTMLTextAreaElement, 'GGN van de teler volgens de factuur'); });
+        await submit();
+        assert.ok(mounted.hasText('supply_error_ggn'));
+        assert.equal(posted.length, 0);
+        await act(async () => { setValue($('[id="ggn-7-input"]') as HTMLInputElement, '404 9928 415684'); });
+        await submit();
+        await mounted.waitFor(() => changed.length === 1, 'corrected');
+        assert.deepEqual(JSON.parse(posted[0].body).lines, [{ id: 7, unitPrice: null, ggn: '4049928415684' }]);
+    });
+
     test('the changes list shows who and what, with numbers and dates in the screen notation', async () => {
         await mounted.render(<PurchaseOrderChanges order={order({ changes: [{
             id: 1, kind: 'Edit', reason: null, actorReference: 'Jan', createdAt: '2026-11-12T09:00:00Z',

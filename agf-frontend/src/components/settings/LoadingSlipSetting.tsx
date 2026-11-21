@@ -60,6 +60,9 @@ export default function LoadingSlipSetting() {
                         </div>
                         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.showCustomer} onChange={(event) => change({ showCustomer: event.target.checked })} /> {t('loading_slip_show_customer')}</label>
                         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.showSupplier} onChange={(event) => change({ showSupplier: event.target.checked })} /> {t('loading_slip_show_supplier')}</label>
+                        {value.showGgn !== undefined && (
+                            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.showGgn} onChange={(event) => change({ showGgn: event.target.checked })} data-testid="loading-slip-show-ggn" /> {t('document_show_ggn')}</label>
+                        )}
                         <div className="max-w-md">
                             <label htmlFor="loading-slip-warehouse" className="text-xs font-medium text-gray-700">{t('loading_slip_warehouse')}</label>
                             <textarea id="loading-slip-warehouse" rows={2} maxLength={MAX_WAREHOUSE} value={value.warehouseAddress ?? ''} placeholder={t('loading_slip_warehouse_placeholder')}

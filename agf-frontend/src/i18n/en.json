@@ -2894,11 +2894,11 @@
   "po_definitive_readonly": "This order is definitive and read-only. Change a price, the supplier's order number or the note with Correction, always with a reason.",
   "po_correct": "Correction",
   "po_correct_title": "Correction on a definitive order",
-  "po_correct_hint": "Only the price per line, the supplier's order number and the note. Quantities and articles follow from the receipt.",
+  "po_correct_hint": "Only the price and GGN per line, the supplier's order number and the note. Quantities and articles follow from the receipt.",
   "po_correct_reason": "Reason (required)",
   "po_correct_reason_required": "Give a reason for the correction.",
   "po_correct_save": "Save correction",
-  "po_correct_nothing": "Change at least one price, the supplier's order number or the note.",
+  "po_correct_nothing": "Change at least one price, GGN, the supplier's order number or the note.",
   "po_correct_saved": "Correction saved",
   "po_changes": "Changes",
   "po_change_vendor": "Supplier",
@@ -3124,5 +3124,7 @@
   "po_line_ggn_hint_choose": "{count} GGNs of the supplier cover this product: choose one or fill in the GGN on the invoice.",
   "po_line_ggn_hint_chosen": "From the supplier's GGN certificate.",
   "po_line_ggn_hint_own": "Not in the supplier's GGN certificate (for a trader this is the grower's GGN).",
-  "po_line_ggn_hint_none": "No GGN of the supplier for this product. If the invoice shows a GGN, fill it in."
+  "po_line_ggn_hint_none": "No GGN of the supplier for this product. If the invoice shows a GGN, fill it in.",
+  "supply_ggn_from_line": "The GGN of the purchase order line; adjustable or clearable per line.",
+  "document_show_ggn": "Show the GGN of the product per line"
 }
