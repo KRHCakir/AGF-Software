@@ -6,7 +6,7 @@ import { Mounted, json, setValue, stubFetch } from '../../test/reactHarness.ts';
 import { PURCHASE_LINE_COLUMNS } from '../purchase/PurchaseLineTable';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
-// De orderregel van Inkooporder aanmaken (feedback 11 november): alleen Product, Aantal en Prijs zijn invoer; merk, land, maat, kg en
+// De orderregel van Inkooporder aanmaken (feedback 11 november): alleen Product, Aantal, Prijs en (certificaten deel 2) GGN zijn invoer; merk, land, maat, kg en
 // inhoud komen uit het artikel; Tab op het laatste veld maakt een nieuwe regel; totalen staan onder dezelfde kolommen.
 
 const variant = (id: number, name: string, extra: object) => ({ id, name, origin: 'Peru', packaging: '4 kg box', sizeCategory: '18', shortcutCode: null, packagingUnit: 'box' as const, defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 252, ...extra });
@@ -37,7 +37,7 @@ describe('purchase order lines: the new layout', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('columns left to right, only product, quantity and price are inputs; the shortcut finds the article; the rest comes from it', async () => {
+    test('columns left to right, only product, quantity, price and GGN are inputs; the shortcut finds the article; the rest comes from it', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         const head = Array.from(mounted.container.querySelectorAll('thead th')).map((th) => th.textContent);
         assert.deepEqual(head.slice(0, 10), PURCHASE_LINE_COLUMNS.map((column) => `po_line_col_${column}`));
@@ -46,7 +46,7 @@ describe('purchase order lines: the new layout', () => {
         await type('lines[0].expectedQuantity-input', '100');
         assert.deepEqual(['brand', 'country', 'size', 'packaging'].map((column) => cell(0, column).textContent), ['Westfalia', 'Peru', '18', '4 kg box']);
         const inputs = Array.from(mounted.container.querySelectorAll<HTMLInputElement>('tbody tr input')).filter((input) => input.tabIndex >= 0).map((input) => input.id);
-        assert.deepEqual(inputs, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input']);
+        assert.deepEqual(inputs, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input', 'lines[0].ggn-input']);
         assert.equal(mounted.container.querySelector('tbody select'), null, 'unit comes from the article');
         assert.ok(Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('tbody button')).every((button) => button.tabIndex === -1), 'buttons are outside the Tab order');
         assert.equal(cell(0, 'quantity').querySelector('[data-testid="lines[0].pallets"]')!.textContent, 'po_line_pallets');
@@ -71,7 +71,7 @@ describe('purchase order lines: the new layout', () => {
         assert.equal(posted.length, 0, 'not saved');
     });
 
-    test('Tab on the price of the last line makes a new line with the cursor in its product; the price becomes 12,00; an empty line is not sent', async () => {
+    test('Tab on the GGN of the last line makes a new line with the cursor in its product; the price becomes 12,00; an empty line is not sent', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         await type('vendorId-input', 'supb');
         await key('vendorId-input', 'Enter');
@@ -81,10 +81,10 @@ describe('purchase order lines: the new layout', () => {
         await type('lines[0].unitPrice-input', '12');
         await act(async () => { field('lines[0].unitPrice-input').blur(); });
         assert.equal(field('lines[0].unitPrice-input').value, '12,00');
-        await key('lines[0].unitPrice-input', 'Tab');
+        await key('lines[0].ggn-input', 'Tab');
         assert.equal(mounted.container.querySelectorAll('tbody tr').length, 2);
         assert.equal(document.activeElement?.id, 'lines[1].productVariantId-input');
-        await key('lines[1].unitPrice-input', 'Tab');
+        await key('lines[1].ggn-input', 'Tab');
         assert.equal(mounted.container.querySelectorAll('tbody tr').length, 2, 'Tab on an empty last line does not add another');
 
         await submit();
@@ -99,10 +99,10 @@ describe('purchase order lines: the new layout', () => {
         await pick(0, 'avohassper18');
         await type('lines[0].expectedQuantity-input', '100');
         await type('lines[0].unitPrice-input', '12,50');
-        await key('lines[0].unitPrice-input', 'Tab');
+        await key('lines[0].ggn-input', 'Tab');
         await pick(1, '2');
         await type('lines[1].expectedQuantity-input', '50');
-        await key('lines[1].unitPrice-input', 'Tab');
+        await key('lines[1].ggn-input', 'Tab');
         await pick(2, '3');
         await type('lines[2].expectedQuantity-input', '10');
         assert.equal(cell(2, 'quantity').querySelector('[data-testid="lines[2].pallets"]')!.textContent, 'po_line_no_packages_per_pallet');

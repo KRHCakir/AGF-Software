@@ -7,7 +7,7 @@ import { emptyPurchaseLine, purchaseLineRow, type PurchaseLineDraft } from '../.
 import type { ProductOption } from '../../types/referenceData';
 import PurchaseOrderLines from './PurchaseOrderLines';
 
-// Toetsenbord in de regels: Tab loopt alleen door Product, Aantal en Prijs (de knoppen staan buiten de Tab-volgorde, zoals de eigenaar
+// Toetsenbord in de regels: Tab loopt alleen door Product, Aantal, Prijs en GGN (de knoppen staan buiten de Tab-volgorde, zoals de eigenaar
 // wil); Bruto aanpassen en regel verwijderen bereik je vanuit elk veld van de regel met Alt+B en Alt+R, wat onder de tabel staat.
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [{ id: 1, name: 'Hass', origin: 'Peru', packaging: '4 kg box', sizeCategory: '18', shortcutCode: 'a', packagingUnit: 'box', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 252 }] }];
 const variant = products[0].variants[0];
@@ -31,11 +31,11 @@ describe('purchase order lines: keyboard', () => {
     beforeEach(() => { mounted = new Mounted(); });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('Tab goes through product, quantity and price only; every button is outside the Tab order and names its shortcut', async () => {
+    test('Tab goes through product, quantity, price and GGN only; every button is outside the Tab order and names its shortcut', async () => {
         await mounted.render(<Harness />);
         const row = mounted.container.querySelector('tbody tr')!;
         const tabbable = Array.from(row.querySelectorAll<HTMLElement>('input, button, select')).filter((element) => element.tabIndex >= 0).map((element) => element.id);
-        assert.deepEqual(tabbable, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input']);
+        assert.deepEqual(tabbable, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input', 'lines[0].ggn-input']);
         assert.ok(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).every((button) => button.tabIndex === -1));
         const adjust = row.querySelector<HTMLButtonElement>('[data-tour="supply-line-gross-adjust"]')!;
         const remove = row.querySelector<HTMLButtonElement>('button[aria-label^="supply_remove_line_n"]')!;
