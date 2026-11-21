@@ -110,7 +110,7 @@ namespace AgfAdmin.Services.DocumentAi
                 if (rawProducts[rawIndex] is not JsonObject item) continue;
                 var text = AiReadingRules.Text(item["tekst"]);
                 if (text == null) continue;
-                var textKey = Normalize(text);
+                var textKey = string.Join(' ', text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant(); // letterlijke tekst: haakjes onderscheiden producten
                 if (!seen.Add(textKey))
                 {
                     if (firstIndexByText.TryGetValue(textKey, out var firstIndex)) productIndexes[rawIndex] = firstIndex;
