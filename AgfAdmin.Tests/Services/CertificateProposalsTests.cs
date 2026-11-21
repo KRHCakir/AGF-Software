@@ -78,6 +78,14 @@ public class CertificateProposalsTests
         json["soort_naam"] = "Demeter biodynamisch";
         var custom = Build(json, out _);
         Assert.Equal((CertificateRules.Custom, "Demeter biodynamisch"), (custom.TypeCode, custom.CustomTypeName));
+        // Een te lange naam blijft volledig en wordt gemarkeerd; meer productielocaties dan getoond wordt gemeld.
+        json["soort_naam"] = new string('D', CertificateRules.MaxCustomTypeLength + 10);
+        json["productiesites"] = new JsonArray(Enumerable.Range(1, CertificateProposals.MaxSites + 2).Select(i => (JsonNode)new JsonObject { ["naam"] = $"Finca {i}", ["land"] = "ES" }).ToArray());
+        var longName = Build(json, out problems);
+        Assert.Equal(CertificateRules.MaxCustomTypeLength + 10, longName.CustomTypeName.Length);
+        Assert.Contains(problems, x => (x.Field, x.Code) == ("typeCode", CertificateProposals.ProblemTooLong));
+        Assert.Equal(CertificateProposals.MaxSites, longName.Sites.Count);
+        Assert.Contains(problems, x => (x.Field, x.Code) == ("sites", CertificateProposals.ProblemTruncated));
     }
 
     [Fact]
