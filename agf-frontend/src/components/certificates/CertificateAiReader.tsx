@@ -49,6 +49,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         setNotice(null);
         setError(null);
         setProblems({});
+        setSearches({});
         setExtraction(read);
         setDraft(read.proposal === null ? null : draftFromProposal(read.proposal));
     };
@@ -109,7 +110,10 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         setSearches((current) => ({ ...current, [index]: text }));
         if (!typed) link(index, text);
     };
-    const unlink = (index: number) => setDraft((current) => (current === null ? current : { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: null, suggested: false } : l)) }));
+    const unlink = (index: number) => {
+        setSearches((current) => ({ ...current, [index]: '' }));
+        setDraft((current) => (current === null ? current : { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: null, suggested: false } : l)) }));
+    };
 
     const mark = (field: string) => (extraction === null ? null : fieldMark(extraction, field));
     const ring = (field: string) => (mark(field) === 'doubt' ? 'ring-2 ring-amber-400 bg-amber-50' : '');
