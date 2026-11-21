@@ -87,6 +87,14 @@ namespace AgfAdmin.Services
                 return (rateProblem, false);
             }
 
+            // Certificaten deel 1: een product dat niet in het GGN-certificaat van de leverancier staat, of een certificaat dat verlopen is of
+            // vóór de verwachte levering verloopt, vraagt eerst "Klopt dit?" (409); bevestigd gaat het mee in dezelfde save.
+            var checks = await CertificateChecksAsync(candidate, request.ConfirmedCertificateProductIds, cancellationToken);
+            if (checks.Refused != null)
+            {
+                return (checks.Refused, false);
+            }
+
             // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
             var variantIds = lines.Select(l => l.ProductVariantId).Distinct().ToList();
             var defaults = await _db.ProductVariants.AsNoTracking().Where(v => variantIds.Contains(v.Id))
@@ -113,6 +121,7 @@ namespace AgfAdmin.Services
             // Het ordernummer kent AppDbContext bij opslaan toe (volgende vrije in het jaar). Een gelijktijdige aanmaak kan hetzelfde
             // nummer kiezen; de unieke index weigert dan de tweede en CreateAsync probeert het opnieuw met een nieuw nummer.
             _db.SupplyCommitments.Add(candidate);
+            _db.CertificateConfirmations.AddRange(CertificateCheck.Confirmations(checks.Confirmed, CertificateCheck.ContextPurchaseOrder, candidate.VendorId, _user, DateTime.UtcNow, order: candidate));
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);
@@ -136,6 +145,18 @@ namespace AgfAdmin.Services
 
             var created = await FindByRequestIdAsync(candidate.RequestId, cancellationToken);
             return (ServiceResult<SupplyCommitmentDto>.Created(await ToDtoAsync(created, cancellationToken)), false);
+        }
+
+        private async Task<(ServiceResult<SupplyCommitmentDto> Refused, List<CertificateCheckDto> Confirmed)> CertificateChecksAsync(SupplyCommitment candidate, List<int> confirmed, CancellationToken cancellationToken)
+        {
+            var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
+            var productIds = await _db.ProductVariants.AsNoTracking().Where(v => variantIds.Contains(v.Id)).Select(v => v.ProductId).Distinct().ToListAsync(cancellationToken);
+            var deliveryDate = candidate.ExpectedAt is DateTime expected ? _db.BusinessCalendar.DateOf(expected) : _db.BusinessCalendar.Today();
+            var checks = await CertificateCheck.CheckAsync(_db, candidate.VendorId, productIds, deliveryDate, cancellationToken);
+            var open = CertificateCheck.Unconfirmed(checks, confirmed);
+            return open.Count > 0
+                ? (ServiceResult<SupplyCommitmentDto>.Conflict(CertificateCheck.ConflictMessage(open), CertificateCheck.ConflictBody(open)), null)
+                : (null, checks);
         }
 
         private async Task<ServiceResult<SupplyCommitmentDto>> AttachPartijAsync(CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken)

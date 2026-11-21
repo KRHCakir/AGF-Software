@@ -40,6 +40,9 @@ namespace AgfAdmin.DTOs
         // terugkomt met ConfirmDeviation = true; de reden is optioneel (toelichting verplicht bij Other).
         public int? ReceivedProductVariantId { get; set; }
         public bool? ConfirmDeviation { get; set; }
+        // Certificaten deel 1: "Ja, klopt" na de vraag over het GGN-certificaat van de leverancier (409 CERTIFICATE_CONFIRMATION_REQUIRED):
+        // het product staat er niet in, of het certificaat is verlopen. Telt niet mee in de replayvergelijking.
+        public bool? ConfirmCertificate { get; set; }
         public string DeviationReason { get; set; }
         public string DeviationReasonNote { get; set; }
         // Blinde invoer: de gebruiker liet vóór het invullen de verwachte kenmerken van de bestelling zien ("Toon verwachte kenmerken").

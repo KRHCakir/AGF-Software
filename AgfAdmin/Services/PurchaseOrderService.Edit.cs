@@ -148,6 +148,20 @@ namespace AgfAdmin.Services
                 money = fixedRate.Value;
             }
 
+            // Certificaten deel 1: "Klopt dit?" voor producten die nieuw op de order komen (bij een andere leverancier: alle producten).
+            var newVariantIds = next.Where((line, i) => candidate.VendorId != order.VendorId || request.Lines[i].Id is not int lineId
+                    || stored[lineId].ProductVariantId != line.ProductVariantId).Select(l => l.ProductVariantId).Distinct().ToList();
+            var keptProducts = candidate.VendorId != order.VendorId ? new HashSet<int>() : order.Lines.Where(l => kept.Contains(l.Id)).Select(l => l.ProductVariant.ProductId).ToHashSet();
+            var newProducts = (await _db.ProductVariants.AsNoTracking().Where(v => newVariantIds.Contains(v.Id)).Select(v => v.ProductId).Distinct().ToListAsync(cancellationToken))
+                .Where(p => !keptProducts.Contains(p)).ToList();
+            var deliveryDate = candidate.ExpectedAt is DateTime expected ? _db.BusinessCalendar.DateOf(expected) : _db.BusinessCalendar.Today();
+            var checks = await CertificateCheck.CheckAsync(_db, candidate.VendorId, newProducts, deliveryDate, cancellationToken);
+            var open = CertificateCheck.Unconfirmed(checks, request.ConfirmedCertificateProductIds);
+            if (open.Count > 0)
+            {
+                return ServiceResult<PurchaseOrderDetailDto>.Conflict(CertificateCheck.ConflictMessage(open), CertificateCheck.ConflictBody(open));
+            }
+
             var fields = new List<PurchaseOrderChangeField>();
             ApplyCurrency(order, money, fields);
             await ApplyHeaderAsync(order, candidate, partijChange, request.PartijId, newPartij, fields, cancellationToken);
@@ -156,6 +170,7 @@ namespace AgfAdmin.Services
             {
                 return await GetAsync(id, cancellationToken);
             }
+            _db.CertificateConfirmations.AddRange(CertificateCheck.Confirmations(checks, CertificateCheck.ContextPurchaseOrder, candidate.VendorId, _user, DateTime.UtcNow, orderId: order.Id));
             return await SaveChangeAsync(order, request.RequestId!.Value, PurchaseOrderDocumentRules.KindEdit, null, fields, cancellationToken);
         }
 

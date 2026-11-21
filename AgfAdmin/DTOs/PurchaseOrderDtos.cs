@@ -164,6 +164,8 @@ namespace AgfAdmin.DTOs
         public decimal? ExchangeRate { get; set; }
         public string ExchangeRateSource { get; set; }
         public List<UpdatePurchaseOrderLineDto> Lines { get; set; }
+        // Certificaten deel 1: zoals bij aanmaken; gevraagd wordt alleen naar producten die nieuw op de order komen (of alle bij een andere leverancier).
+        public List<int> ConfirmedCertificateProductIds { get; set; }
     }
 
     public sealed class UpdatePurchaseOrderLineDto
