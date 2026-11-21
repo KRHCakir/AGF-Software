@@ -166,9 +166,19 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
     // Certificaten deel 2: Goedkeuren van een AI-voorstel. Slaat de gegeven lijst op (de opgeslagen certificaten met het goedgekeurde erbij of
     // bijgewerkt) via hetzelfde opslaan, met aiApproval: de server legt de goedkeuring vast en maakt van het document de volgende versie.
     // Alleen zonder openstaande wijzigingen in het blok (anders zou Goedkeuren die ongemerkt meenemen) en bij een opgeslagen eigenaar.
-    const canApproveAi = !failed && !loading && !conflict && !changed && (owner.kind === 'own' || owner.id !== null);
+    // Tijdens het goedkeuren is het blok dicht (approving): het antwoord vervangt de lijst, dus een wijziging van onderweg zou verloren gaan.
+    const [approving, setApproving] = useState(false);
+    const canApproveAi = !failed && !loading && !conflict && !changed && !approving && (owner.kind === 'own' || owner.id !== null);
     const approveAi = async (next: CertificateRow[], index: number, extractionId: number): Promise<{ ok: true } | { ok: false; problems: CertificateProblem[]; error: ApiError | null }> => {
         if (!canApproveAi) return { ok: false, problems: [], error: null };
+        setApproving(true);
+        try {
+            return await approveNow(next, index, extractionId);
+        } finally {
+            setApproving(false);
+        }
+    };
+    const approveNow = async (next: CertificateRow[], index: number, extractionId: number): Promise<{ ok: true } | { ok: false; problems: CertificateProblem[]; error: ApiError | null }> => {
         const destination = owner.kind === 'own' ? null : owner.id;
         const built = buildCertificatesPayload(next, todayInAmsterdam());
         if (!built.ok) return { ok: false, problems: built.errors, error: null };
@@ -242,7 +252,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
 
     return {
         reference, products, rows, setRows, stored, warningDays, loading, failed, error, conflict, errors, problems, warnings, uploading, changed,
-        reload, validate, applySettings, save, addFile, openFile, canApproveAi, approveAi,
+        reload, validate, applySettings, save, addFile, openFile, canApproveAi, approveAi, approving,
     };
 }
 

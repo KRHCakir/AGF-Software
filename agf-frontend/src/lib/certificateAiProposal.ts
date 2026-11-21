@@ -44,7 +44,8 @@ export function approvalRows(stored: readonly CertificateRow[], draft: AiDraft):
     if (target < 0) return { rows: [...stored, { ...fields, id: null, isActive: true }], index: stored.length };
     const rows = stored.map((r, i) => (i !== target ? r : {
         ...r, typeCode: fields.typeCode, customTypeName: fields.customTypeName, number: fields.number, certificationBody: fields.certificationBody,
-        validFrom: fields.validFrom, validUntil: fields.validUntil, productIds: fields.productIds, producerName: fields.producerName || r.producerName,
+        // De producent zoals in het gecontroleerde voorstel, ook leeg (bewust gewist).
+        validFrom: fields.validFrom, validUntil: fields.validUntil, productIds: fields.productIds, producerName: fields.producerName,
         productsPending: false, isActive: true,
     }));
     return { rows, index: target };
@@ -55,7 +56,8 @@ export type FieldMark = 'doubt' | 'missing' | null;
 export function fieldMark(extraction: Pick<AiCertificateExtraction, 'problems'>, field: string): FieldMark {
     const codes = extraction.problems.filter((p) => p.field === field).map((p) => p.code);
     if (codes.includes('missing')) return 'missing';
-    return codes.some((c) => c === 'uncertain' || c === 'ggnInvalid' || c === 'ggnCheckDigit' || c === 'invalidDate' || c === 'holderMismatch' || c === 'unmatched') ? 'doubt' : null;
+    // Elke andere controle (twijfel, GGN, datum, houder, niet gekoppeld, te lang, meer producten dan getoond) is geel.
+    return codes.length > 0 ? 'doubt' : null;
 }
 
 export const problemCodes = (extraction: Pick<AiCertificateExtraction, 'problems'>, field: string): string[] =>

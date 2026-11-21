@@ -42,6 +42,9 @@ describe('certificate AI proposal', () => {
         assert.equal(renewed.rows.length, 1);
         const row = renewed.rows[0];
         assert.deepEqual([row.id, row.validUntil, row.certificationBody, row.productIds, row.checkedOn, row.files.length], [7, '2027-02-28', 'Demo Certificering B.V.', [10, 11], '2025-03-02', 1]);
+        // Een producent die de gebruiker in het voorstel bewust wiste, blijft leeg (niet terug naar de oude).
+        const cleared = draftFromProposal(proposal({ sameNumberCertificateId: 7 }));
+        assert.equal(approvalRows(rows, { ...cleared, row: { ...cleared.row, producerName: '' } }).rows[0].producerName, '');
         // De gebruiker koos toch een tweede certificaat.
         assert.equal(approvalRows(rows, { ...draftFromProposal(proposal({ sameNumberCertificateId: 7 })), targetId: null }).index, 1);
     });
@@ -52,5 +55,6 @@ describe('certificate AI proposal', () => {
         assert.equal(fieldMark(extraction, 'number'), 'doubt');
         assert.equal(fieldMark(extraction, 'holderName'), 'missing');
         assert.equal(fieldMark(extraction, 'certificationBody'), null);
+        assert.equal(fieldMark({ problems: [{ field: 'products', code: 'truncated' }] }, 'products'), 'doubt');
     });
 });
