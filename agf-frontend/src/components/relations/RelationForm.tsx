@@ -776,7 +776,7 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                             : (
                                 <CertificatesEditor idPrefix="relation-certificates" rows={certificates.rows} onChange={certificates.setRows} reference={certificates.reference}
                                     products={certificates.products} errors={certificateMessages(certificates.errors, certificates.problems, t)} today={today} warningDays={certificates.warningDays}
-                                    disabled={locked || certificates.loading || certificates.failed} onOpenFile={(id, file) => void certificates.openFile(id, file)}
+                                    disabled={locked || certificates.loading || certificates.failed || certificates.approving} onOpenFile={(id, file) => void certificates.openFile(id, file)}
                                     onAddFile={(row, file) => void certificates.addFile(row, file)} uploading={certificates.uploading} dataTour="relation-certificate" />
                             )}
                     </div>

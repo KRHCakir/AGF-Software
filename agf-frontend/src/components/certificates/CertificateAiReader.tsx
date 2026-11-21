@@ -127,7 +127,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         if (m === null || extraction === null) return null;
         const codes = problemCodes(extraction, field);
         const key = m === 'missing' ? 'cert_ai_missing' : codes.includes('ggnInvalid') ? 'cert_ai_ggn_invalid' : codes.includes('ggnCheckDigit') ? 'cert_warning_ggn_check_digit'
-            : codes.includes('invalidDate') ? 'cert_ai_invalid_date' : 'cert_ai_doubt';
+            : codes.includes('invalidDate') ? 'cert_ai_invalid_date' : codes.includes('tooLong') ? 'cert_ai_too_long' : codes.includes('truncated') ? 'cert_ai_products_truncated' : 'cert_ai_doubt';
         return <span className={`block text-xs ${m === 'missing' ? 'text-gray-700' : 'font-medium text-amber-900'}`} data-testid={`cert-ai-mark-${field}`}>{t(key)}</span>;
     };
     const today = todayInAmsterdam();
@@ -209,7 +209,9 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     </div>
                                     <div>
                                         <label htmlFor={`${listId}-from-input`} className="text-xs font-medium text-gray-700">{t('cert_valid_from')}</label>
-                                        <DateField {...fieldProps(`${listId}-from`, problems.validFrom)} value={draft.row.validFrom} onChange={(value) => edit({ validFrom: value })} />
+                                                                                <div className={`rounded ${ring('validFrom')}`}>
+    <DateField {...fieldProps(`${listId}-from`, problems.validFrom)} value={draft.row.validFrom} onChange={(value) => edit({ validFrom: value })} />
+                                        </div>
                                         {markText('validFrom')}
                                         <FieldError id={`${listId}-from`} messages={problems.validFrom} />
                                     </div>
@@ -225,7 +227,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                 </div>
                                 <div>
                                     <span className="text-xs font-medium text-gray-700" id={`${listId}-products`}>{t('cert_ai_products')}</span>
-                                    {mark('products') === 'missing' && markText('products')}
+                                    {markText('products')}
                                     <datalist id={`${listId}-product-list`}>{certificates.products.map((p) => <option key={p.id} value={p.name} />)}</datalist>
                                     <ul className="mt-1 space-y-1" aria-labelledby={`${listId}-products`} data-testid="cert-ai-products">
                                         {draft.links.map((l, i) => {
@@ -268,6 +270,9 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void close('Manual')} data-testid="cert-ai-manual">{t('ai_manual')}</button>
                                     <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void close('Rejected')} data-testid="cert-ai-reject">{t('ai_reject')}</button>
                                 </div>
+                                {!certificates.canApproveAi && certificates.changed && !busy && (
+                                    <p className="text-xs font-medium text-amber-900" data-testid="cert-ai-approve-blocked">{t('cert_ai_save_changes_first')}</p>
+                                )}
                                 <p className="text-xs text-gray-600">{t('cert_ai_approve_hint')}</p>
                             </>
                         )}
