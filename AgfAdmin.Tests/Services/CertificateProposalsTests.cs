@@ -119,6 +119,14 @@ public class CertificateProposalsTests
     }
 
     [Fact]
+    public void A_separately_mentioned_product_is_kept_next_to_a_more_specific_name()
+    {
+        var products = new[] { new CertificateProposals.OwnProduct(4, "Tomaat"), new(6, "Cherrytomaat") };
+        Assert.Equal(CertificateProposals.MatchNone, CertificateProposals.MatchProduct("Cherry tomato and tomato", products).Match);
+        Assert.Equal(CertificateProposals.MatchNone, CertificateProposals.MatchProduct("Tomatoes, cherry tomatoes", products).Match);
+    }
+
+    [Fact]
     public void Several_products_in_one_text_or_a_missing_specific_product_are_not_linked()
     {
         var products = new[] { new CertificateProposals.OwnProduct(1, "Sla"), new(4, "Tomaat") };

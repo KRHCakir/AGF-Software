@@ -193,8 +193,11 @@ namespace AgfAdmin.Services.DocumentAi
             if (exact != null) return (exact, MatchExact);
             var words = Singular(normalized);
             // Alle genoemde producten uit de lijst; een kortere naam die in een langere genoemde naam zit ("tomato" in "cherry tomato") telt niet mee.
-            var named = Names.Where(n => ContainsWords(words, n.Key)).ToList();
-            named = named.Where(n => !named.Any(o => o.Key.Length > n.Key.Length && ContainsWords(Singular(o.Key), n.Key))).ToList();
+            // Per tekstpositie: een kortere naam telt alleen niet mee waar hij binnen een langere naam valt; een afzonderlijke vermelding blijft.
+            var tokens = words.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var spans = Names.Select(n => (Name: n, Spans: Occurrences(tokens, Singular(n.Key)))).Where(n => n.Spans.Count > 0).ToList();
+            var named = spans.Where(n => n.Spans.Any(s => !spans.Any(o => o.Name.Key != n.Name.Key
+                && o.Spans.Any(t => t.Start <= s.Start && t.End >= s.End && t.End - t.Start > s.End - s.Start)))).Select(n => n.Name).ToList();
             var dutchNames = named.Select(n => Singular(n.Value)).Distinct(StringComparer.Ordinal).ToList();
             if (dutchNames.Count > 1) return (null, MatchNone); // meerdere producten in één tekst: de gebruiker kiest zelf
             if (dutchNames.Count == 1)
@@ -250,6 +253,17 @@ namespace AgfAdmin.Services.DocumentAi
             : w.EndsWith("ven", StringComparison.Ordinal) ? w[..^3] + "f"
             : w.EndsWith('s') && !w.EndsWith("ss", StringComparison.Ordinal) ? w[..^1]
             : w));
+
+        private static List<(int Start, int End)> Occurrences(string[] tokens, string words)
+        {
+            var key = words.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var result = new List<(int, int)>();
+            for (var i = 0; key.Length > 0 && i + key.Length <= tokens.Length; i++)
+            {
+                if (tokens.Skip(i).Take(key.Length).SequenceEqual(key)) result.Add((i, i + key.Length));
+            }
+            return result;
+        }
 
         private static bool ContainsWords(string text, string words) => $" {text} ".Contains($" {Singular(words)} ", StringComparison.Ordinal);
     }
