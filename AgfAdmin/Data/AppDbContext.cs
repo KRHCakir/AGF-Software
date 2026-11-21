@@ -1180,6 +1180,9 @@ namespace AgfAdmin.Data
                 b.Property(f => f.CreatedBy).IsRequired().HasMaxLength(CertificateRules.MaxActorLength);
                 b.HasOne(f => f.Certificate).WithMany(c => c.Files).HasForeignKey(f => f.RelationCertificateId).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(f => new { f.RelationCertificateId, f.Version }).IsUnique();
+                // Certificaten deel 2: een goedgekeurde AI-lezing geeft precies één versie.
+                b.HasIndex(f => f.AiExtractionId).IsUnique();
+                b.HasOne(f => f.AiExtraction).WithMany().HasForeignKey(f => f.AiExtractionId).OnDelete(DeleteBehavior.Restrict);
                 b.ToTable(t => t.HasCheckConstraint("CK_RelationCertificateFiles_Version", "\"Version\" >= 1"));
             });
 

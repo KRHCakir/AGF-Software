@@ -13,7 +13,9 @@ namespace AgfAdmin.Services.DocumentAi
     // Een inkoopfactuur uploaden en door AI laten voorinvullen (stap 7a). De AI doet alleen een voorstel: hier wordt het document bewaard,
     // gelezen en de lezing vastgelegd (model, versie, verbruik, kosten). Opslaan als factuur gebeurt pas als een gebruiker goedkeurt, via
     // het gewone opslagpad van de inkoopfactuur. Zonder AI aan of zonder sleutel: een duidelijke melding, nooit nepgegevens.
-    public sealed class AiInvoiceReadingService(AppDbContext db, IDocumentAiFactory factory, InvoiceReader reader, IDocumentStore store,
+    // Certificaten deel 2: hetzelfde leespad voor een certificaat (AiInvoiceReadingService.Certificates.cs), met dezelfde instelling (aan/uit,
+    // maandlimiet) en dezelfde vastlegging in AiExtraction.
+    public sealed partial class AiInvoiceReadingService(AppDbContext db, IDocumentAiFactory factory, InvoiceReader reader, IDocumentStore store,
         UploadRateLimiter rateLimiter, IOptions<DocumentAiOptions> options, ICurrentUser user, TimeProvider clock, DemoEnvironment demo = null)
     {
         public const string CodeOff = "AI_OFF";
@@ -93,23 +95,38 @@ namespace AgfAdmin.Services.DocumentAi
 
         public async Task<ServiceResult<AiExtractionDto>> ReadAsync(string fileName, byte[] bytes, CancellationToken cancellationToken = default)
         {
+            var gate = await GateAsync(fileName, bytes, cancellationToken);
+            if (gate.Validation != null) return ServiceResult<AiExtractionDto>.Validation(gate.Validation);
+            if (gate.Code != null) return Refused(gate.Code, gate.Message);
+            var (extraction, failure) = await ReadAndRecordAsync(fileName, gate.Document, AiReadingRules.DocumentPurchaseInvoice, null,
+                document => reader.ReadAsync(document, gate.Settings.CompanyName, CancellationToken.None), cancellationToken);
+            return failure == null ? ServiceResult<AiExtractionDto>.Ok(ToDto(extraction)) : Refused(FailureCode(failure), FailureMessage(failure, "de factuur"));
+        }
+
+        // Alles vóór het lezen, voor elke soort document gelijk: AI aan, sleutel, uploads per minuut, het bestand, de daglimiet van de demo en de
+        // maandlimiet. Code en Message = een duidelijke weigering (handmatig werkt altijd); Validation = een fout bij het bestand.
+        private sealed record Gate(PreparedDocument Document, CompanySettings Settings, string Code, string Message, Dictionary<string, string[]> Validation);
+
+        private async Task<Gate> GateAsync(string fileName, byte[] bytes, CancellationToken cancellationToken)
+        {
             var settings = await SettingsAsync(cancellationToken);
+            Gate Refuse(string code, string message) => new(null, settings, code, message, null);
             if (!settings.AiReadingEnabled)
             {
-                return Refused(CodeOff, "AI-lezen staat niet aan. Een beheerder kan het aanzetten bij Instellingen; handmatig invoeren werkt gewoon.");
+                return Refuse(CodeOff, "AI-lezen staat niet aan. Een beheerder kan het aanzetten bij Instellingen; handmatig invoeren werkt gewoon.");
             }
             if (factory.NotConfiguredReason is string reason)
             {
-                return Refused(CodeNotConfigured, $"AI-lezen staat niet aan: {reason}");
+                return Refuse(CodeNotConfigured, $"AI-lezen staat niet aan: {reason}");
             }
             if (!rateLimiter.TryAcquire(user.UserId ?? "", _options.MaxUploadsPerMinute))
             {
-                return Refused(CodeRateLimit, "Te veel uploads in korte tijd. Wacht een minuut en probeer het opnieuw.");
+                return Refuse(CodeRateLimit, "Te veel uploads in korte tijd. Wacht een minuut en probeer het opnieuw.");
             }
             var (document, error) = UploadedDocuments.Prepare(fileName, bytes, _options.MaxFileBytes);
             if (error != null)
             {
-                return ServiceResult<AiExtractionDto>.Validation(new Dictionary<string, string[]> { ["file"] = new[] { error } });
+                return new Gate(null, settings, null, null, new Dictionary<string, string[]> { ["file"] = new[] { error } });
             }
 
             // Bewust geen vergrendeling rond het lezen (5 tot 20 seconden): gelijktijdige uploads van verschillende gebruikers wachten niet op
@@ -118,17 +135,34 @@ namespace AgfAdmin.Services.DocumentAi
             // In de demo-omgeving daarnaast een vaste grens per dag, en nooit een hogere maandlimiet dan die van de demo.
             if (_demo.Enabled && await TodayCountAsync(cancellationToken) >= _demo.AiDailyLimit)
             {
-                return Refused(CodeDemoDailyLimit, $"Voor de demo is de limiet voor vandaag bereikt ({_demo.AiDailyLimit} documenten per dag). Morgen kan het weer; handmatig invoeren werkt gewoon.");
+                return Refuse(CodeDemoDailyLimit, $"Voor de demo is de limiet voor vandaag bereikt ({_demo.AiDailyLimit} documenten per dag). Morgen kan het weer; handmatig invoeren werkt gewoon.");
             }
             var limit = _demo.MonthlyLimitEur(settings.AiReadingMonthlyLimitEur);
             if (await MonthSpentEurAsync(cancellationToken) >= limit)
             {
-                return Refused(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({limit:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
+                return Refuse(CodeMonthlyLimit, $"De maandlimiet voor AI-lezen ({limit:0.00} euro) is bereikt; lezen is gepauzeerd. Handmatig invoeren werkt gewoon.");
             }
-            return await ReadDocumentAsync(fileName, document, settings, cancellationToken);
+            return new Gate(document, settings, null, null, null);
         }
 
-        private async Task<ServiceResult<AiExtractionDto>> ReadDocumentAsync(string fileName, PreparedDocument document, CompanySettings settings, CancellationToken cancellationToken)
+        private static string FailureCode(string failure) => failure switch
+        {
+            "unavailable" => CodeUnavailable, "invalid" => CodeInvalid, "unsupported" => CodeUnsupported, _ => CodeFailed,
+        };
+
+        // De melding bij een mislukte lezing, met wat de gebruiker dan handmatig doet ("de factuur", "het certificaat").
+        private static string FailureMessage(string failure, string what) => failure switch
+        {
+            "unavailable" => $"De AI-dienst is nu niet bereikbaar, ook niet na een tweede poging. Vul {what} handmatig in of probeer het later opnieuw.",
+            "invalid" => $"De AI gaf geen bruikbaar voorstel voor dit document. Vul {what} handmatig in.",
+            "unsupported" => $"Dit document kan de AI niet lezen. Vul {what} handmatig in.",
+            _ => $"AI-lezen lukte niet door een fout bij de aanbieder. Vul {what} handmatig in.",
+        };
+
+        // Bewaart het document, legt de lezing vast (eerst als "bezig", dan het voorstel of de reden van mislukken) en leest. Geeft de lezing
+        // en, als het mislukte, de reden (unavailable, invalid, unsupported, failed).
+        private async Task<(AiExtraction Extraction, string Failure)> ReadAndRecordAsync(string fileName, PreparedDocument document, string documentType, int? relationId,
+            Func<AgfDocumentAi.DocumentInput, Task<ReadResult>> read, CancellationToken cancellationToken)
         {
             var originalName = Path.GetFileName(string.IsNullOrWhiteSpace(fileName) ? "document" + document.Extension : fileName.Trim());
             var extraction = new AiExtraction
@@ -137,7 +171,8 @@ namespace AgfAdmin.Services.DocumentAi
                 // voorstel zonder inhoud staan. Na het lezen wordt het een voorstel, of mislukt met de echte reden.
                 Status = AiReadingRules.StatusFailed,
                 ErrorCode = "reading",
-                DocumentType = AiReadingRules.DocumentPurchaseInvoice,
+                DocumentType = documentType,
+                RelationId = relationId,
                 FileName = originalName.Length > 255 ? originalName[^255..] : originalName,
                 MediaType = document.MediaType,
                 SizeBytes = document.Original.LongLength,
@@ -177,7 +212,7 @@ namespace AgfAdmin.Services.DocumentAi
             {
                 // Bewust los van de clientverbinding: een gestarte lezing rondt af (elke poging heeft een eigen time-out), zodat de
                 // gemaakte kosten altijd worden vastgelegd en niet buiten de maandtelling vallen.
-                result = await reader.ReadAsync(document.ForAi, settings.CompanyName, CancellationToken.None);
+                result = await read(document.ForAi);
             }
             catch
             {
@@ -202,27 +237,23 @@ namespace AgfAdmin.Services.DocumentAi
             extraction.ErrorCode = result.Proposal == null ? result.FailureCode : null;
             // Zonder annulering: de kosten zijn al gemaakt en moeten in de maandtelling komen.
             await db.SaveChangesAsync(CancellationToken.None);
-
-            return result.FailureCode switch
-            {
-                null => ServiceResult<AiExtractionDto>.Ok(ToDto(extraction)),
-                "unavailable" => Refused(CodeUnavailable, "De AI-dienst is nu niet bereikbaar, ook niet na een tweede poging. Voer de factuur handmatig in of probeer het later opnieuw."),
-                "invalid" => Refused(CodeInvalid, "De AI gaf geen bruikbaar voorstel voor dit document. Voer de factuur handmatig in."),
-                "unsupported" => Refused(CodeUnsupported, "Dit document kan de AI niet lezen. Voer de factuur handmatig in."),
-                _ => Refused(CodeFailed, "AI-lezen lukte niet door een fout bij de aanbieder. Voer de factuur handmatig in."),
-            };
+            return (extraction, result.FailureCode);
         }
 
         public async Task<ServiceResult<AiExtractionDto>> GetAsync(int id, CancellationToken cancellationToken = default)
         {
-            var extraction = await db.AiExtractions.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
+            var extraction = await db.AiExtractions.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id && e.DocumentType == AiReadingRules.DocumentPurchaseInvoice, cancellationToken);
             return extraction == null ? ServiceResult<AiExtractionDto>.NotFound($"AI reading {id} does not exist.") : ServiceResult<AiExtractionDto>.Ok(ToDto(extraction));
         }
 
         // Het document voor de weergave (bij een HEIC-foto de JPEG); weg na de bewaartermijn van een niet-goedgekeurde lezing.
-        public async Task<(byte[] Bytes, string MediaType, string FileName)?> DocumentAsync(int id, CancellationToken cancellationToken = default)
+        public async Task<(byte[] Bytes, string MediaType, string FileName)?> DocumentAsync(int id, CancellationToken cancellationToken = default) =>
+            await DocumentAsync(id, AiReadingRules.DocumentPurchaseInvoice, cancellationToken);
+
+        // Per soort: een factuurlezing is alleen via Inkoop te zien, een certificaatlezing alleen via Stamgegevens.
+        private async Task<(byte[] Bytes, string MediaType, string FileName)?> DocumentAsync(int id, string documentType, CancellationToken cancellationToken)
         {
-            var extraction = await db.AiExtractions.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
+            var extraction = await db.AiExtractions.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id && e.DocumentType == documentType, cancellationToken);
             if (extraction == null || extraction.FileDeletedAt != null) return null;
             var key = extraction.DisplayStorageKey ?? extraction.StorageKey;
             return (await store.ReadAsync(key, cancellationToken), extraction.DisplayMediaType ?? extraction.MediaType, extraction.FileName);
@@ -231,23 +262,29 @@ namespace AgfAdmin.Services.DocumentAi
         // Afwijzen (Rejected) of handmatig verder (Manual): alleen een openstaand voorstel; er wordt niets opgeslagen als factuur.
         public async Task<ServiceResult<AiExtractionDto>> CloseAsync(int id, CloseAiExtractionDto request, CancellationToken cancellationToken = default)
         {
+            var (extraction, refused) = await CloseCoreAsync(id, request, AiReadingRules.DocumentPurchaseInvoice, cancellationToken);
+            return refused != null ? refused.As<AiExtractionDto>() : ServiceResult<AiExtractionDto>.Ok(ToDto(extraction));
+        }
+
+        private async Task<(AiExtraction Extraction, ServiceResult<object> Refused)> CloseCoreAsync(int id, CloseAiExtractionDto request, string documentType, CancellationToken cancellationToken)
+        {
             var outcome = request?.Outcome;
             if (outcome is not (AiReadingRules.StatusRejected or AiReadingRules.StatusManual))
             {
-                return ServiceResult<AiExtractionDto>.Validation(new Dictionary<string, string[]> { ["outcome"] = new[] { "Outcome must be Rejected or Manual." } });
+                return (null, ServiceResult<object>.Validation(new Dictionary<string, string[]> { ["outcome"] = new[] { "Outcome must be Rejected or Manual." } }));
             }
-            var extraction = await db.AiExtractions.SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
-            if (extraction == null) return ServiceResult<AiExtractionDto>.NotFound($"AI reading {id} does not exist.");
-            if (extraction.Status == outcome) return ServiceResult<AiExtractionDto>.Ok(ToDto(extraction));
+            var extraction = await db.AiExtractions.SingleOrDefaultAsync(e => e.Id == id && e.DocumentType == documentType, cancellationToken);
+            if (extraction == null) return (null, ServiceResult<object>.NotFound($"AI reading {id} does not exist."));
+            if (extraction.Status == outcome) return (extraction, null);
             if (extraction.Status != AiReadingRules.StatusProposed)
             {
-                return ServiceResult<AiExtractionDto>.Conflict($"AI reading {id} is {extraction.Status}; only an open proposal can be closed.");
+                return (null, ServiceResult<object>.Conflict($"AI reading {id} is {extraction.Status}; only an open proposal can be closed."));
             }
             extraction.Status = outcome;
             extraction.ClosedBy = user.Actor(MaxActorLength);
             extraction.ClosedAt = clock.GetUtcNow().UtcDateTime;
             await db.SaveChangesAsync(cancellationToken);
-            return ServiceResult<AiExtractionDto>.Ok(ToDto(extraction));
+            return (extraction, null);
         }
 
         // Opruimen: bestanden van niet-goedgekeurde lezingen (open, afgewezen, handmatig verder, mislukt) ouder dan de bewaartermijn.
