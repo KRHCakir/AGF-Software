@@ -33,9 +33,8 @@ export default function AiDocumentViewer({ extraction, load = getAiDocument, dat
             })
             .catch(() => { if (!controller.signal.aborted) setFailed(true); });
         return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-        // load is een vaste functie per gebruik van de weergave.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [extraction.id]);
+        // load is een vaste functie (factuur of certificaat); een andere bron haalt het document opnieuw op.
+    }, [extraction.id, load]);
 
     const zoomButton = 'rounded border border-gray-300 bg-white px-2 py-0.5 text-sm text-gray-800 hover:bg-gray-50';
     return (
