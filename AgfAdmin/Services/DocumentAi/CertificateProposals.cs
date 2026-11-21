@@ -199,6 +199,9 @@ namespace AgfAdmin.Services.DocumentAi
             var named = spans.Where(n => n.Spans.Any(s => !spans.Any(o => o.Name.Key != n.Name.Key
                 && o.Spans.Any(t => t.Start <= s.Start && t.End >= s.End && t.End - t.Start > s.End - s.Start)))).Select(n => n.Name).ToList();
             var dutchNames = named.Select(n => Singular(n.Value)).Distinct(StringComparer.Ordinal).ToList();
+            // Ook eigen productnamen die letterlijk als woord in de tekst staan ("Lettuce and Tomaat"): samen meer dan één product = zelf kiezen.
+            var mentioned = own.Where(p => p.Key.Length >= 3 && ContainsWords(words, Singular(p.Key))).Select(p => Singular(p.Key));
+            if (dutchNames.Concat(mentioned).Distinct(StringComparer.Ordinal).Count() > 1) return (null, MatchNone);
             if (dutchNames.Count > 1) return (null, MatchNone); // meerdere producten in één tekst: de gebruiker kiest zelf
             if (dutchNames.Count == 1)
             {

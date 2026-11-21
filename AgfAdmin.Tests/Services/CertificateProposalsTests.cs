@@ -111,6 +111,8 @@ public class CertificateProposalsTests
     [InlineData("Avocados Hass", "Avocado", "Translated")]
     [InlineData("Baby leaf Sla mix", "Sla", "Partial")]
     [InlineData("Mizuna", null, "None")]
+    [InlineData("Lettuce and Tomaat", null, "None")]
+    [InlineData("Lettuce, Rucola", null, "None")]
     public void Products_are_linked_by_name_translation_or_a_word_and_never_created(string text, string expected, string match)
     {
         var products = new[] { new CertificateProposals.OwnProduct(1, "Sla"), new(2, "Rucola"), new(3, "IJsbergsla"), new(4, "Tomaat"), new(5, "Avocado") };
