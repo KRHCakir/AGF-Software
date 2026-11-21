@@ -3169,6 +3169,8 @@
   "cert_ai_save_changes_first": "Sla eerst de wijzigingen in de certificaten op; daarna kun je een certificaat laten lezen.",
   "cert_file_ai": "AI-voorstel goedgekeurd door {name} ({model})",
   "cert_file_ai_adjusted": "{count} velden door gebruiker aangepast",
+  "cert_ai_too_long": "Dit nummer is langer dan 100 tekens: controleer het.",
+  "cert_ai_products_truncated": "Het document noemt meer dan 200 producten; alleen de eerste 200 staan hier. Controleer de rest in het document.",
   "tour_ch_aicert_title": "Certificaat laten lezen",
   "tour_ch_aicert_summary": "Een certificaat-PDF uploaden: de AI leest soort, GGN, geldigheid en de producten van alle pagina's (ook de bijlage); jij controleert, koppelt en keurt goed. Met de demolezer, zonder echte AI.",
   "tour_ch_aicert_done": "Het certificaat van {vendorName} staat erin, goedgekeurd door jou; de PDF is de nieuwste versie van het bestand.",

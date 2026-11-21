@@ -89,7 +89,8 @@ export const isCertificateStatus = (value: unknown): value is CertificateStatus 
 const isProduct = (value: unknown): value is CertificateProduct => isObject(value) && isNumber(value.id) && isNullableString(value.name);
 export const isCertificateFile = (value: unknown): value is CertificateFile => isObject(value) && isNumber(value.id) && isNumber(value.version) && isString(value.fileName)
     && isString(value.mediaType) && isNumber(value.sizeBytes) && isString(value.sha256) && isString(value.createdAt) && isString(value.createdBy)
-    && (value.ai === undefined || value.ai === null || (isObject(value.ai) && isString(value.ai.approvedBy) && isString(value.ai.approvedAt) && isNullableString(value.ai.modelName)));
+    && (value.ai === undefined || value.ai === null || (isObject(value.ai) && isString(value.ai.approvedBy) && isString(value.ai.approvedAt) && isNullableString(value.ai.model)
+        && isNullableString(value.ai.modelName) && isNullableString(value.ai.modelVersion) && isNumber(value.ai.adjustedFields)));
 const isWarning = (value: unknown): value is CertificateWarning => isObject(value) && isString(value.code) && isString(value.field) && isString(value.message);
 
 const isCertificate = (value: unknown): value is Certificate => isObject(value) && isNumber(value.id) && isString(value.typeCode) && isNullableString(value.customTypeName)

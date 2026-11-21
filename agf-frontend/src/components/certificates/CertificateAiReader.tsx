@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useId, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { type AiDraft, approvalRows, draftFromProposal, fieldMark, linkedProductIds, problemCodes } from '../../lib/certificateAiProposal';
 import { certificateStatus, daysLeft } from '../../lib/certificateRules';
@@ -39,6 +39,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
     const [error, setError] = useState<ApiError | null>(null);
     const [problems, setProblems] = useState<Record<string, string[]>>({});
     const [notice, setNotice] = useState<string | null>(null);
+    const [searches, setSearches] = useState<Record<number, string>>({});
     const file = useRef<File | null>(null);
     const listId = useId();
     const relationId = owner.kind === 'own' ? null : owner.id;
@@ -48,6 +49,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         setNotice(null);
         setError(null);
         setProblems({});
+        setSearches({});
         setExtraction(read);
         setDraft(read.proposal === null ? null : draftFromProposal(read.proposal));
     };
@@ -94,13 +96,29 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         done(t('cert_ai_rejected'));
     };
 
-    const edit = (patch: Partial<AiDraft['row']>) => setDraft((current) => (current === null ? current : { ...current, row: { ...current.row, ...patch } }));
+    // Een ander nummer of een andere soort is een ander certificaat: het doel voor een nieuwe versie vervalt dan (de keuze wordt opnieuw gevraagd).
+    const edit = (patch: Partial<AiDraft['row']>) => setDraft((current) => {
+        if (current === null) return current;
+        const identityChanged = (patch.number !== undefined && patch.number !== current.row.number) || (patch.typeCode !== undefined && patch.typeCode !== current.row.typeCode);
+        return { ...current, row: { ...current.row, ...patch }, targetId: identityChanged ? null : current.targetId };
+    });
     const link = (index: number, text: string) => setDraft((current) => {
         if (current === null) return current;
         const product = certificates.products.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
         return { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: text.trim() === '' ? null : product?.id ?? l.productId, suggested: false } : l)) };
     });
-    const unlink = (index: number) => setDraft((current) => (current === null ? current : { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: null, suggested: false } : l)) }));
+    // Tijdens het typen wordt alleen de zoektekst bewaard; koppelen gebeurt pas bij een keuze uit de lijst, Enter of het verlaten van het veld.
+    const search = (index: number, event: ChangeEvent<HTMLInputElement>) => {
+        const text = event.target.value;
+        const inputType = (event.nativeEvent as InputEvent).inputType;
+        const typed = inputType !== undefined && inputType !== 'insertReplacementText';
+        setSearches((current) => ({ ...current, [index]: text }));
+        if (!typed) link(index, text);
+    };
+    const unlink = (index: number) => {
+        setSearches((current) => ({ ...current, [index]: '' }));
+        setDraft((current) => (current === null ? current : { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: null, suggested: false } : l)) }));
+    };
 
     const mark = (field: string) => (extraction === null ? null : fieldMark(extraction, field));
     const ring = (field: string) => (mark(field) === 'doubt' ? 'ring-2 ring-amber-400 bg-amber-50' : '');
@@ -109,7 +127,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         if (m === null || extraction === null) return null;
         const codes = problemCodes(extraction, field);
         const key = m === 'missing' ? 'cert_ai_missing' : codes.includes('ggnInvalid') ? 'cert_ai_ggn_invalid' : codes.includes('ggnCheckDigit') ? 'cert_warning_ggn_check_digit'
-            : codes.includes('invalidDate') ? 'cert_ai_invalid_date' : 'cert_ai_doubt';
+            : codes.includes('invalidDate') ? 'cert_ai_invalid_date' : codes.includes('tooLong') ? 'cert_ai_too_long' : codes.includes('truncated') ? 'cert_ai_products_truncated' : 'cert_ai_doubt';
         return <span className={`block text-xs ${m === 'missing' ? 'text-gray-700' : 'font-medium text-amber-900'}`} data-testid={`cert-ai-mark-${field}`}>{t(key)}</span>;
     };
     const today = todayInAmsterdam();
@@ -138,7 +156,8 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                         ⚠ {t('cert_ai_holder_mismatch', { name: proposal.holderMismatch })}
                                     </p>
                                 )}
-                                {proposal.sameNumberCertificateId !== null && certificates.stored.some((r) => r.id === proposal.sameNumberCertificateId) && (
+                                {proposal.sameNumberCertificateId !== null && certificates.stored.some((r) => r.id === proposal.sameNumberCertificateId)
+                                    && draft.row.number === (proposal.number ?? '') && draft.row.typeCode === (proposal.typeCode ?? '') && (
                                     <fieldset className="rounded border border-blue-200 bg-blue-50 p-2 text-sm" data-testid="cert-ai-same-number">
                                         <legend className="px-1 text-xs font-medium text-blue-950">{t('cert_ai_same_number', { type: proposal.sameNumberTypeName ?? '', number: proposal.number ?? '' })}</legend>
                                         <label className="flex items-center gap-2"><input type="radio" name={`${listId}-target`} checked={draft.targetId !== null}
@@ -190,7 +209,9 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     </div>
                                     <div>
                                         <label htmlFor={`${listId}-from-input`} className="text-xs font-medium text-gray-700">{t('cert_valid_from')}</label>
-                                        <DateField {...fieldProps(`${listId}-from`, problems.validFrom)} value={draft.row.validFrom} onChange={(value) => edit({ validFrom: value })} />
+                                                                                <div className={`rounded ${ring('validFrom')}`}>
+    <DateField {...fieldProps(`${listId}-from`, problems.validFrom)} value={draft.row.validFrom} onChange={(value) => edit({ validFrom: value })} />
+                                        </div>
                                         {markText('validFrom')}
                                         <FieldError id={`${listId}-from`} messages={problems.validFrom} />
                                     </div>
@@ -206,7 +227,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                 </div>
                                 <div>
                                     <span className="text-xs font-medium text-gray-700" id={`${listId}-products`}>{t('cert_ai_products')}</span>
-                                    {mark('products') === 'missing' && markText('products')}
+                                    {markText('products')}
                                     <datalist id={`${listId}-product-list`}>{certificates.products.map((p) => <option key={p.id} value={p.name} />)}</datalist>
                                     <ul className="mt-1 space-y-1" aria-labelledby={`${listId}-products`} data-testid="cert-ai-products" data-tour={`${dataTour}-ai-products`}>
                                         {draft.links.map((l, i) => {
@@ -224,7 +245,9 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                                             <span className="text-xs font-medium text-amber-900">{t('cert_ai_unlinked')}</span>
                                                             <label htmlFor={`${listId}-link-${i}`} className="sr-only">{t('cert_ai_link_label', { text: l.text })}</label>
                                                             <input id={`${listId}-link-${i}`} type="search" list={`${listId}-product-list`} placeholder={t('cert_ai_link_placeholder')}
-                                                                className={`${inputClass} !mt-0 w-44`} onChange={(event) => link(i, event.target.value)} data-testid={`cert-ai-link-${i}`} />
+                                                                className={`${inputClass} !mt-0 w-44`} value={searches[i] ?? ''} onChange={(event) => search(i, event)}
+                                                                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); link(i, searches[i] ?? ''); } }}
+                                                                onBlur={() => link(i, searches[i] ?? '')} data-testid={`cert-ai-link-${i}`} />
                                                         </>
                                                     )}
                                                 </li>
@@ -247,6 +270,9 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void close('Manual')} data-testid="cert-ai-manual">{t('ai_manual')}</button>
                                     <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void close('Rejected')} data-testid="cert-ai-reject">{t('ai_reject')}</button>
                                 </div>
+                                {!certificates.canApproveAi && certificates.changed && !busy && (
+                                    <p className="text-xs font-medium text-amber-900" data-testid="cert-ai-approve-blocked">{t('cert_ai_save_changes_first')}</p>
+                                )}
                                 <p className="text-xs text-gray-600">{t('cert_ai_approve_hint')}</p>
                             </>
                         )}

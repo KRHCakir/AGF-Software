@@ -121,7 +121,7 @@ export default function CertificatesSetting() {
                 )}
                 {own.reference !== null && (
                     <CertificatesEditor idPrefix="own-certificates" rows={own.rows} onChange={(rows) => { own.setRows(rows); setOwnNotice(false); }} reference={own.reference} products={own.products}
-                        errors={certificateMessages(own.errors, own.problems, t)} today={todayInAmsterdam()} warningDays={own.warningDays} disabled={ownSaving || own.loading || own.failed}
+                        errors={certificateMessages(own.errors, own.problems, t)} today={todayInAmsterdam()} warningDays={own.warningDays} disabled={ownSaving || own.loading || own.failed || own.approving}
                         onOpenFile={(id, file) => void own.openFile(id, file)} onAddFile={(row, file) => void own.addFile(row, file)} uploading={own.uploading} dataTour="own-certificate" />
                 )}
                 <div className="flex flex-wrap items-center gap-2">
