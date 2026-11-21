@@ -16,6 +16,7 @@ import { getAvailabilityOverview } from '../../services/availabilityService';
 import { getCountries } from '../../services/countryService';
 import { getNextPartijNumber } from '../../services/partijService';
 import { getCustomers, getProductsWithVariants, getVendors } from '../../services/referenceDataService';
+import { listRelations } from '../../services/relationService';
 import type { AvailabilityOverview } from '../../types/availability';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder';
 import type { CustomerOption, ProductOption, VariantOption, VendorOption } from '../../types/referenceData';
@@ -422,4 +423,18 @@ export async function precheckAiInvoice(signal: AbortSignal): Promise<TourPreche
     const order = newestFirst(list.items.filter((item) => item.vendorId === data.vendor!.vendor.id && item.status !== 'Cancelled' && isTour(item.supplierReference)))[0];
     if (!order) return { missing: [{ key: 'tour_missing_ai_order' }] };
     return { missing: [], vars: { vendorName: data.vendor.vendor.name, orderRef: order.supplierReference!, aiOff: status.enabled ? '' : 'ja' } };
+}
+
+// Certificaat laten lezen (certificaten deel 2): alleen met de nagebootste lezer (nooit de echte AI), bij de leverancier van de rondleiding
+// (de relatie wordt geopend met het blok Certificaten). De demolezer zet de naam van die leverancier als houder: geen waarschuwing.
+export async function precheckAiCertificate(signal: AbortSignal): Promise<TourPrecheck> {
+    const [status, data] = await Promise.all([getAiReadingStatus(signal).catch(() => null), masterData(signal)]);
+    if (status === null || status.provider !== 'Demo') return { missing: [{ key: 'tour_missing_demo_reader' }] };
+    if (data.vendor === null) return { missing: [missingVendor] };
+    const vendor = data.vendor;
+    const relations = await listRelations({ role: 'vendor', query: vendor.search, includeInactive: false, page: 1, pageSize: 25 }, signal);
+    const relation = relations.items.find((item) => item.name === vendor.vendor.name && (item.searchCode ?? item.name) === vendor.search)
+        ?? relations.items.find((item) => item.name === vendor.vendor.name);
+    if (!relation) return { missing: [missingVendor] };
+    return { missing: [], vars: { vendorName: vendor.vendor.name, vendorRelationId: String(relation.id), aiOff: status.enabled ? '' : 'ja' } };
 }
