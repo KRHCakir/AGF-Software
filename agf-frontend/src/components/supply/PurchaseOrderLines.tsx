@@ -200,7 +200,8 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                             data-tour="supply-line-ggn" data-tour-key={index} onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}
                                             onKeyDown={last === 'ggn' && proposal?.kind !== 'Many' ? (event) => onLastField(event, index) : undefined}
                                             className={`${inputClass} !mt-0 w-40 font-mono`} />
-                                        {proposal?.kind === 'Many' && (
+                                        {/* Kiezen bij meer treffers; met een eigen nummer (niet in de lijst) is er niets te kiezen. */}
+                                        {proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? ''))) && (
                                             <select aria-label={t('po_line_ggn_choose_label', { n: String(index + 1) })} disabled={locked} className={`${inputClass} !mt-0 w-40 text-xs`}
                                                 onKeyDown={last === 'ggn' ? (event) => onLastField(event, index) : undefined}
                                                 value={proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')) ? normalizeGgn(line.ggn ?? '') : ''} data-testid={`${prefix}.ggn-choice`}
