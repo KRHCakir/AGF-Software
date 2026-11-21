@@ -161,7 +161,9 @@ namespace AgfAdmin.Services.DocumentAi
                 Problem("holderName", ProblemHolder);
             }
             var key = CertificateRules.NumberKey(number);
-            var same = key == null ? null : stored.FirstOrDefault(c => CertificateRules.NumberKey(c.Number) == key);
+            // Hetzelfde nummer én dezelfde soort (bij een eigen soort dezelfde naam): een GGN kan ook op een ander soort certificaat staan (GRASP).
+            var same = key == null || typeCode == null ? null : stored.FirstOrDefault(c => CertificateRules.NumberKey(c.Number) == key && c.TypeCode == typeCode
+                && (typeCode != CertificateRules.Custom || string.Equals(c.CustomTypeName?.Trim(), customName?.Trim(), StringComparison.OrdinalIgnoreCase)));
             if (same != null)
             {
                 dto.SameNumberCertificateId = same.Id;
