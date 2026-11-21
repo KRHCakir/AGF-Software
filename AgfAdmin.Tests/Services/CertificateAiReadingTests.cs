@@ -197,6 +197,8 @@ public class CertificateAiReadingTests : IDisposable
         Assert.Contains("Demo Cert B.V.", reading.AdjustmentsJson);
         Assert.Contains("\"products\"", reading.AdjustmentsJson);
         Assert.Contains(DemoCertificateAi.Number, reading.ApprovedValuesJson);
+        Assert.Contains("\"holderCountry\":\"ES\"", reading.ApprovedValuesJson);
+        Assert.Contains("\"sites\":[{\"name\":\"Finca Demo Norte\",\"country\":\"ES\"}]", reading.ApprovedValuesJson);
         Assert.Equal(reading.Id, (await db.RelationCertificateFiles.SingleAsync()).AiExtractionId);
 
         // Nog eens goedkeuren kan niet: de lezing is al goedgekeurd.

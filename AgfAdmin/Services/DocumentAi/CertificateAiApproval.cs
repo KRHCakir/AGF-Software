@@ -57,6 +57,10 @@ namespace AgfAdmin.Services.DocumentAi
                 certificateId = certificate.Id, typeCode = certificate.TypeCode, customTypeName = certificate.CustomTypeName, number = certificate.Number,
                 certificationBody = certificate.CertificationBody, validFrom = certificate.ValidFrom, validUntil = certificate.ValidUntil, producerName = certificate.ProducerName,
                 productIds = item.ProductIds ?? new List<int>(), checkedOn = certificate.CheckedOn, isActive = certificate.IsActive,
+                // Land en productielocaties worden niet in het certificaat zelf bewaard en zijn in het opslagpad niet aanpasbaar: de goedgekeurde
+                // waarde is die van het voorstel zoals de gebruiker het zag.
+                holderCountry = proposal.HolderCountry,
+                sites = proposal.Sites.Select(s => new { name = s.Name, country = s.Country }).ToList(),
             }, Json);
             var claimed = await db.AiExtractions.Where(e => e.Id == extraction.Id && e.Status == AiReadingRules.StatusProposed && e.FileDeletedAt == null)
                 .ExecuteUpdateAsync(u => u
