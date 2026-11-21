@@ -2,7 +2,7 @@ import '../../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, json, setValue } from '../../../test/reactHarness.ts';
+import { Mounted, json, setSelectValue, setValue } from '../../../test/reactHarness.ts';
 import RelationsPage from './page';
 
 // Werkplek Relaties door de hele pagina: de server bepaalt de zoekresultaten. Een relatie die alleen via een tweede contactpersoon of
@@ -125,3 +125,38 @@ describe('RelationsPage after creating a relation', () => {
     });
 });
 
+
+// Certificaten deel 1: de kolom Certificaten met de soorten en een badge zolang een certificaat bijna verloopt of verlopen is, en het
+// filter op certificaten (de server filtert).
+describe('RelationsPage certificates', () => {
+    let certificateUrls: string[];
+    beforeEach(() => {
+        certificateUrls = [];
+        globalThis.fetch = (async (input: RequestInfo | URL) => {
+            const url = String(input);
+            certificateUrls.push(url);
+            if (url.includes('/relations/reference')) return json(200, reference);
+            const filter = new URL(url, 'http://x').searchParams.get('certificate') ?? '';
+            const withCertificates = { ...oost, certificates: [
+                { typeCode: 'GlobalGapIfa', typeName: 'GLOBALG.A.P. IFA (GGN)', status: 'ExpiringSoon', productsPending: false },
+                { typeCode: 'Skal', typeName: 'SKAL / EU Organic (bio)', status: 'Valid', productsPending: false },
+            ] };
+            const items = filter === 'attention' ? [withCertificates] : [withCertificates, { ...other, certificates: [] }];
+            return json(200, { items, total: items.length, page: 1, pageSize: 50 });
+        }) as typeof fetch;
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('the certificates column shows the types and a badge; the filter asks the server', async () => {
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-5"]'), 'list');
+        const cell = mounted.container.querySelector('[data-testid="relation-certificates-4"]')!;
+        assert.ok(cell.textContent!.includes('GGN') && cell.textContent!.includes('SKAL'));
+        assert.ok(mounted.container.querySelector('[data-testid="relation-certificate-badge-4"]')!.textContent!.includes('cert_status_short_ExpiringSoon'));
+        assert.equal(mounted.container.querySelector('[data-testid="relation-certificate-badge-5"]'), null);
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('#relation-certificate-filter')!, 'attention'); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-5"]') === null, 'filtered');
+        assert.ok(certificateUrls.some((url) => url.includes('certificate=attention')));
+    });
+});

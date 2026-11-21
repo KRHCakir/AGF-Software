@@ -1,4 +1,5 @@
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
+import { type RelationCertificateSummary, isRelationCertificateSummary } from './certificate';
 import { PaymentConditionSummary, isPaymentConditionSummary } from './paymentCondition';
 
 // Contract van api/relations (backend: AgfAdmin/DTOs/RelationDtos.cs). Eén onderneming die klant, leverancier of beide is;
@@ -27,6 +28,8 @@ export interface RelationListItem {
     primaryContactName: string | null;
     vatNumber: string | null;
     version: number;
+    // Certificaten deel 1: per actief certificaat de soort en de status; oudere antwoorden kennen het veld niet.
+    certificates?: RelationCertificateSummary[];
 }
 
 export interface RelationList {
@@ -392,7 +395,8 @@ export function isRelation(value: unknown): value is Relation {
 function isListItem(value: unknown): value is RelationListItem {
     return isObject(value) && isNumber(value.id) && isNullableString(value.searchCode) && isString(value.name) && isNullableString(value.tradeName) && isNullableNumber(value.customerId)
         && isNullableNumber(value.vendorId) && typeof value.isActive === 'boolean' && isNullableString(value.city) && isNullableString(value.countryCode) && isNullableString(value.email)
-        && isNullableString(value.phone) && isNullableString(value.primaryContactName) && isNullableString(value.vatNumber) && isNumber(value.version);
+        && isNullableString(value.phone) && isNullableString(value.primaryContactName) && isNullableString(value.vatNumber) && isNumber(value.version)
+        && (value.certificates === undefined || isArrayOf(value.certificates, isRelationCertificateSummary));
 }
 
 export function isRelationList(value: unknown): value is RelationList {

@@ -49,6 +49,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         id: 'master', labelKey: 'nav_group_master', items: [
             { id: 'relations', href: '/relations', labelKey: 'nav_relations' },
             { id: 'articles', href: '/articles', labelKey: 'nav_articles' },
+            { id: 'certificates', href: '/certificates', labelKey: 'nav_certificates' },
         ],
     },
 ];
