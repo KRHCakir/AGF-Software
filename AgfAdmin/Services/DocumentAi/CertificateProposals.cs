@@ -72,7 +72,9 @@ namespace AgfAdmin.Services.DocumentAi
             if (known == null && documentName != null)
             {
                 typeCode = CertificateRules.Custom;
-                customName = documentName.Length > CertificateRules.MaxCustomTypeLength ? documentName[..CertificateRules.MaxCustomTypeLength].Trim() : documentName;
+                // De volledige naam uit het document; te lang wordt gemarkeerd (niet ingekort), opslaan vraagt dan een kortere naam.
+                customName = documentName;
+                if (documentName.Length > CertificateRules.MaxCustomTypeLength) Problem("typeCode", ProblemTooLong);
             }
             if (typeCode == null) Problem("typeCode", AiReadingRules.Missing);
 
@@ -131,6 +133,7 @@ namespace AgfAdmin.Services.DocumentAi
                 if (product == null) Problem($"products[{dto.Products.Count - 1}]", ProblemUnmatched);
             }
             if (dto.Products.Count == 0) Problem("products", AiReadingRules.Missing);
+            if ((json["productiesites"] as JsonArray)?.Count > MaxSites) Problem("sites", ProblemTruncated);
             dto.Sites = (json["productiesites"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Take(MaxSites)
                 .Select(s => new AiCertificateSiteDto { Name = AiReadingRules.Text(s["naam"]), Country = AiReadingRules.Text(s["land"]) })
                 .Where(s => s.Name != null).ToList();
