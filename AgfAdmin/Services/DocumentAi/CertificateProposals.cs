@@ -197,7 +197,7 @@ namespace AgfAdmin.Services.DocumentAi
                 var found = candidates.DistinctBy(p => p.Id).Take(2).ToList();
                 return found.Count == 1 ? found[0] : null;
             }
-            var exact = Single(own.Where(p => p.Key == normalized || Singular(p.Key) == Singular(normalized)).Select(p => p.Product));
+            var exact = Single(own.Where(p => p.Key == normalized || Singular(p.Key) == Singular(normalized) || DutchPlurals(p.Key).Contains(normalized)).Select(p => p.Product));
             if (exact != null) return (exact, MatchExact);
             var words = Singular(normalized);
             // Alle genoemde producten uit de lijst; een kortere naam die in een langere genoemde naam zit ("tomato" in "cherry tomato") telt niet mee.
@@ -208,7 +208,7 @@ namespace AgfAdmin.Services.DocumentAi
                 && o.Spans.Any(t => t.Start <= s.Start && t.End >= s.End && t.End - t.Start > s.End - s.Start)))).Select(n => n.Name).ToList();
             var dutchNames = named.Select(n => Singular(n.Value)).Distinct(StringComparer.Ordinal).ToList();
             // Ook eigen productnamen die letterlijk als woord in de tekst staan ("Lettuce and Tomaat"): samen meer dan één product = zelf kiezen.
-            var mentioned = own.Where(p => p.Key.Length >= 3 && ContainsWords(words, Singular(p.Key))).Select(p => Singular(p.Key));
+            var mentioned = own.Where(p => p.Key.Length >= 3 && Mentions(words, p.Key)).Select(p => Singular(p.Key));
             if (dutchNames.Concat(mentioned).Distinct(StringComparer.Ordinal).Count() > 1) return (null, MatchNone);
             if (dutchNames.Count > 1) return (null, MatchNone); // meerdere producten in één tekst: de gebruiker kiest zelf
             if (dutchNames.Count == 1)
@@ -217,7 +217,7 @@ namespace AgfAdmin.Services.DocumentAi
                 var translated = Single(own.Where(p => Singular(p.Key) == dutchNames[0]).Select(p => p.Product));
                 return translated != null ? (translated, MatchTranslated) : (null, MatchNone);
             }
-            var partial = Single(own.Where(p => p.Key.Length >= 3 && ContainsWords(words, Singular(p.Key))).Select(p => p.Product));
+            var partial = Single(own.Where(p => p.Key.Length >= 3 && Mentions(words, p.Key)).Select(p => p.Product));
             return partial != null ? (partial, MatchPartial) : (null, MatchNone);
         }
 
@@ -264,6 +264,22 @@ namespace AgfAdmin.Services.DocumentAi
             : w.EndsWith("ven", StringComparison.Ordinal) ? w[..^3] + "f"
             : w.EndsWith('s') && !w.EndsWith("ss", StringComparison.Ordinal) ? w[..^1]
             : w));
+
+        // Nederlandse meervouden van een eigen productnaam: tomaat → tomaten, peer → peren, druif → druiven, appel → appels, kers → kersen.
+        public static IReadOnlyList<string> DutchPlurals(string name)
+        {
+            var list = new List<string> { name + "s", name + "en" };
+            if (name.Length >= 4 && !IsVowel(name[^1]) && IsVowel(name[^2]) && name[^2] == name[^3] && !IsVowel(name[^4])) list.Add(name[..^2] + name[^1] + "en");
+            if (name.EndsWith('f')) list.Add(name[..^1] + "ven");
+            if (name.EndsWith('s')) list.Add(name[..^1] + "zen");
+            return list;
+        }
+
+        // Staat de eigen productnaam (of een Nederlands meervoud ervan) als woord in de tekst?
+        private static bool Mentions(string words, string key) =>
+            ContainsWords(words, Singular(key)) || DutchPlurals(key).Any(plural => $" {words} ".Contains($" {plural} ", StringComparison.Ordinal));
+
+        private static bool IsVowel(char c) => "aeiou".Contains(c);
 
         private static List<(int Start, int End)> Occurrences(string[] tokens, string words)
         {

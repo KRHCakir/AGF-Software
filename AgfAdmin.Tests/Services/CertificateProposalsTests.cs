@@ -130,6 +130,8 @@ public class CertificateProposalsTests
     [InlineData("Baby leaf Sla mix", "Sla", "Partial")]
     [InlineData("Mizuna", null, "None")]
     [InlineData("Lettuce and Tomaat", null, "None")]
+    [InlineData("Tomaten", "Tomaat", "Exact")]
+    [InlineData("Tomaten los (Solanum lycopersicum)", "Tomaat", "Partial")]
     [InlineData("Lettuce, Rucola", null, "None")]
     public void Products_are_linked_by_name_translation_or_a_word_and_never_created(string text, string expected, string match)
     {
