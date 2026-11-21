@@ -57,9 +57,17 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
     const productName = (id: number) => products.find((p) => p.id === id)?.name ?? `#${id}`;
     // Een eigen soort uit de lijst: de schrijfwijze van de lijst (hoofdletters kunnen verschillen), zodat de keuzelijst de optie vindt.
     const listedCustom = (row: CertificateRow) => reference.customTypes.find((n) => n.toLowerCase() === row.customTypeName.trim().toLowerCase());
+    // Regels waarvoor "Eigen soort toevoegen…" gekozen is: het naamveld blijft staan tijdens het typen, ook als de tekst onderweg gelijk is
+    // aan een bestaande eigen soort (anders kan "Demeter biodynamisch" niet worden afgemaakt als "Demeter" al bestaat).
+    const [newCustom, setNewCustom] = useState<ReadonlySet<string>>(() => new Set());
     const typeValue = (row: CertificateRow) => (row.typeCode !== CUSTOM_TYPE ? row.typeCode
-        : listedCustom(row) !== undefined ? `${CUSTOM_PREFIX}${listedCustom(row)}` : CUSTOM_TYPE);
+        : !newCustom.has(row.key) && listedCustom(row) !== undefined ? `${CUSTOM_PREFIX}${listedCustom(row)}` : CUSTOM_TYPE);
     const chooseType = (row: CertificateRow, value: string) => {
+        setNewCustom((now) => {
+            const next = new Set(now);
+            if (value === CUSTOM_TYPE) next.add(row.key); else next.delete(row.key);
+            return next;
+        });
         if (value.startsWith(CUSTOM_PREFIX)) edit(row.key, { typeCode: CUSTOM_TYPE, customTypeName: value.slice(CUSTOM_PREFIX.length) });
         // "Eigen soort toevoegen…": een nieuwe naam (een naam uit de lijst kies je in de lijst zelf).
         else edit(row.key, { typeCode: value, customTypeName: '' });
