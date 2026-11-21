@@ -92,6 +92,10 @@ namespace AgfAdmin.Data
         public DbSet<RelationContact> RelationContacts { get; set; }
         public DbSet<RelationContactChannel> RelationContactChannels { get; set; }
         public DbSet<VendorGgn> VendorGgns { get; set; }
+        public DbSet<RelationCertificate> RelationCertificates { get; set; }
+        public DbSet<RelationCertificateProduct> RelationCertificateProducts { get; set; }
+        public DbSet<RelationCertificateFile> RelationCertificateFiles { get; set; }
+        public DbSet<CertificateConfirmation> CertificateConfirmations { get; set; }
         public DbSet<PaymentCondition> PaymentConditions { get; set; }
         public DbSet<RelationBankAccount> RelationBankAccounts { get; set; }
         public DbSet<RelationBankAccountEvent> RelationBankAccountEvents { get; set; }
@@ -496,6 +500,8 @@ namespace AgfAdmin.Data
                 b.Property(c => c.PurchaseInvoiceDefaultPaymentTermsDays).HasDefaultValue(PurchaseInvoiceRules.DefaultPaymentTermsDays);
                 b.Property(c => c.PurchaseInvoiceDefaultCurrency).HasMaxLength(3).HasDefaultValue(PurchaseInvoiceRules.DefaultCurrency);
                 b.Property(c => c.PurchaseCurrencies).IsRequired().HasMaxLength(PurchaseCurrencyRules.MaxStoredLength).HasDefaultValue(PurchaseCurrencyRules.DefaultList);
+                b.Property(c => c.CertificateWarningDays).HasDefaultValue(CertificateRules.DefaultWarningDays);
+                b.Property(c => c.CustomCertificateTypes).IsRequired().HasMaxLength(4000).HasDefaultValue("");
                 b.Property(c => c.GlobalGapPortalUrl).IsRequired().HasMaxLength(500).HasDefaultValue(RelationRules.DefaultGlobalGapPortalUrl);
                 b.Property(c => c.LoadingSlipLanguage).IsRequired().HasMaxLength(2).HasDefaultValue(SalesOrderDocumentRules.LanguageEnglish);
                 b.Property(c => c.LoadingSlipShowCustomer).HasDefaultValue(true);
@@ -1123,6 +1129,74 @@ namespace AgfAdmin.Data
                 b.HasOne(g => g.Vendor).WithMany(v => v.Ggns).HasForeignKey(g => g.VendorId).OnDelete(DeleteBehavior.Cascade);
                 b.HasIndex(g => new { g.VendorId, g.Ggn }).IsUnique();
                 b.ToTable(t => t.HasCheckConstraint("CK_VendorGgns_Ggn_Length", "length(\"Ggn\") = 13"));
+            });
+
+            // Certificaten (deel 1): bij een relatie of, zonder relatie, bij het eigen bedrijf. Nooit verwijderd (regel 33).
+            modelBuilder.Entity<RelationCertificate>(b =>
+            {
+                b.Property(c => c.TypeCode).IsRequired().HasMaxLength(40);
+                b.Property(c => c.CustomTypeName).HasMaxLength(CertificateRules.MaxCustomTypeLength);
+                b.Property(c => c.Number).IsRequired().HasMaxLength(CertificateRules.MaxNumberLength);
+                b.Property(c => c.NumberKey).IsRequired().HasMaxLength(CertificateRules.MaxNumberLength);
+                b.Property(c => c.CertificationBody).HasMaxLength(CertificateRules.MaxBodyLength);
+                b.Property(c => c.ProducerName).HasMaxLength(RelationRules.MaxProducerNameLength);
+                b.Property(c => c.CheckedBy).HasMaxLength(CertificateRules.MaxActorLength);
+                b.Property(c => c.CreatedBy).IsRequired().HasMaxLength(CertificateRules.MaxActorLength);
+                b.Property(c => c.UpdatedBy).IsRequired().HasMaxLength(CertificateRules.MaxActorLength);
+                b.HasOne(c => c.Relation).WithMany().HasForeignKey(c => c.RelationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(c => new { c.RelationId, c.SortOrder });
+                b.HasIndex(c => c.NumberKey);
+                b.HasIndex(c => c.ValidUntil);
+                b.HasIndex(c => c.SourceVendorGgnId).IsUnique();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_RelationCertificates_CustomType", "(\"TypeCode\" = 'Custom') = (\"CustomTypeName\" IS NOT NULL)");
+                    t.HasCheckConstraint("CK_RelationCertificates_Ggn", "\"TypeCode\" <> 'GlobalGapIfa' OR length(\"Number\") = 13");
+                    t.HasCheckConstraint("CK_RelationCertificates_Validity", "\"ValidFrom\" IS NULL OR \"ValidUntil\" IS NULL OR \"ValidFrom\" <= \"ValidUntil\"");
+                });
+            });
+
+            modelBuilder.Entity<RelationCertificateProduct>(b =>
+            {
+                b.HasKey(p => new { p.RelationCertificateId, p.ProductId });
+                b.HasOne(p => p.Certificate).WithMany(c => c.Products).HasForeignKey(p => p.RelationCertificateId).OnDelete(DeleteBehavior.Cascade);
+                b.HasOne(p => p.Product).WithMany().HasForeignKey(p => p.ProductId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(p => p.ProductId);
+            });
+
+            // Bestanden van een certificaat: elke upload een nieuwe versie, append-only (regel 33).
+            modelBuilder.Entity<RelationCertificateFile>(b =>
+            {
+                b.Property(f => f.FileName).IsRequired().HasMaxLength(255);
+                b.Property(f => f.MediaType).IsRequired().HasMaxLength(100);
+                b.Property(f => f.Sha256).IsRequired().HasMaxLength(64);
+                b.Property(f => f.StorageKey).IsRequired().HasMaxLength(200);
+                b.Property(f => f.DisplayStorageKey).HasMaxLength(200);
+                b.Property(f => f.DisplayMediaType).HasMaxLength(100);
+                b.Property(f => f.CreatedBy).IsRequired().HasMaxLength(CertificateRules.MaxActorLength);
+                b.HasOne(f => f.Certificate).WithMany(c => c.Files).HasForeignKey(f => f.RelationCertificateId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(f => new { f.RelationCertificateId, f.Version }).IsUnique();
+                b.ToTable(t => t.HasCheckConstraint("CK_RelationCertificateFiles_Version", "\"Version\" >= 1"));
+            });
+
+            // "Klopt dit?" bij inkoop (certificaten deel 1): append-only (regel 33).
+            modelBuilder.Entity<CertificateConfirmation>(b =>
+            {
+                b.Property(c => c.Context).IsRequired().HasMaxLength(20);
+                b.Property(c => c.Kinds).IsRequired().HasMaxLength(100);
+                b.Property(c => c.CertificateIds).IsRequired().HasMaxLength(500);
+                b.Property(c => c.Message).IsRequired().HasMaxLength(2000);
+                b.Property(c => c.ConfirmedBy).IsRequired().HasMaxLength(CertificateRules.MaxActorLength);
+                b.HasOne(c => c.SupplyCommitment).WithMany().HasForeignKey(c => c.SupplyCommitmentId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(c => c.PalletContentLine).WithMany().HasForeignKey(c => c.PalletContentLineId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne<Vendor>().WithMany().HasForeignKey(c => c.VendorId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne<Product>().WithMany().HasForeignKey(c => c.ProductId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(c => c.SupplyCommitmentId);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_CertificateConfirmations_Context", "\"Context\" IN ('PurchaseOrder', 'Receipt')");
+                    t.HasCheckConstraint("CK_CertificateConfirmations_Receipt", "(\"Context\" = 'Receipt') = (\"PalletContentLineId\" IS NOT NULL)");
+                });
             });
 
             // Documenten bij een verkooporder (documenten deel 1): één rij per versie, append-only (regel 31).

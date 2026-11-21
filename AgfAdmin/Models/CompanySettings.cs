@@ -61,5 +61,9 @@ namespace AgfAdmin.Models
 
         // Valuta's om uit te kiezen bij inkoop (valuta-ronde), komma-lijst; EUR staat er altijd vooraan (PurchaseCurrencyRules).
         public string PurchaseCurrencies { get; set; } = Services.PurchaseCurrencyRules.DefaultList;
+
+        // Certificaten (deel 1): hoeveel dagen vóór de einddatum de app waarschuwt (standaard 30) en de eigen soorten, één per regel.
+        public int CertificateWarningDays { get; set; } = Services.CertificateRules.DefaultWarningDays;
+        public string CustomCertificateTypes { get; set; } = "";
     }
 }

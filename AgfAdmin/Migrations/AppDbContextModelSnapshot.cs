@@ -225,6 +225,72 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.CertificateConfirmation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CertificateIds")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConfirmedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Context")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Kinds")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("PalletContentLineId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplyCommitmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VendorId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PalletContentLineId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("SupplyCommitmentId");
+
+                    b.HasIndex("VendorId");
+
+                    b.ToTable("CertificateConfirmations", t =>
+                        {
+                            t.HasCheckConstraint("CK_CertificateConfirmations_Context", "\"Context\" IN ('PurchaseOrder', 'Receipt')");
+
+                            t.HasCheckConstraint("CK_CertificateConfirmations_Receipt", "(\"Context\" = 'Receipt') = (\"PalletContentLineId\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.CompanySettings", b =>
                 {
                     b.Property<int>("Id")
@@ -252,8 +318,20 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasDefaultValue(25m);
 
+                    b.Property<int>("CertificateWarningDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
+
                     b.Property<string>("CompanyName")
                         .HasColumnType("text");
+
+                    b.Property<string>("CustomCertificateTypes")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasDefaultValue("");
 
                     b.Property<string>("Email")
                         .HasColumnType("text");
@@ -4419,6 +4497,188 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CertificationBody")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CheckedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly?>("CheckedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CustomTypeName")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("HasGgnLabel")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NumberKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProducerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("ProductsPending")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("RelationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SourceVendorGgnId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TypeCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly?>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ValidUntil")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NumberKey");
+
+                    b.HasIndex("SourceVendorGgnId")
+                        .IsUnique();
+
+                    b.HasIndex("ValidUntil");
+
+                    b.HasIndex("RelationId", "SortOrder");
+
+                    b.ToTable("RelationCertificates", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationCertificates_CustomType", "(\"TypeCode\" = 'Custom') = (\"CustomTypeName\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_RelationCertificates_Ggn", "\"TypeCode\" <> 'GlobalGapIfa' OR length(\"Number\") = 13");
+
+                            t.HasCheckConstraint("CK_RelationCertificates_Validity", "\"ValidFrom\" IS NULL OR \"ValidUntil\" IS NULL OR \"ValidFrom\" <= \"ValidUntil\"");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificateFile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DisplayMediaType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("DisplayStorageKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("RelationCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RelationCertificateId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("RelationCertificateFiles", t =>
+                        {
+                            t.HasCheckConstraint("CK_RelationCertificateFiles_Version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificateProduct", b =>
+                {
+                    b.Property<int>("RelationCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("RelationCertificateId", "ProductId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("RelationCertificateProducts");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>
                 {
                     b.Property<int>("Id")
@@ -6271,6 +6531,36 @@ namespace AgfAdmin.Migrations
                     b.Navigation("IncomingInvoice");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.CertificateConfirmation", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.PalletContentLine", "PalletContentLine")
+                        .WithMany()
+                        .HasForeignKey("PalletContentLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
+                        .WithMany()
+                        .HasForeignKey("SupplyCommitmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.Vendor", null)
+                        .WithMany()
+                        .HasForeignKey("VendorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("PalletContentLine");
+
+                    b.Navigation("SupplyCommitment");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.CountryAlias", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Country", null)
@@ -6763,6 +7053,46 @@ namespace AgfAdmin.Migrations
                     b.Navigation("BankAccount");
 
                     b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificate", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany()
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Relation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificateFile", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.RelationCertificate", "Certificate")
+                        .WithMany("Files")
+                        .HasForeignKey("RelationCertificateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Certificate");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificateProduct", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.RelationCertificate", "Certificate")
+                        .WithMany("Products")
+                        .HasForeignKey("RelationCertificateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Certificate");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>
@@ -7392,6 +7722,13 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.RelationBankAccount", b =>
                 {
                     b.Navigation("Events");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.RelationCertificate", b =>
+                {
+                    b.Navigation("Files");
+
+                    b.Navigation("Products");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.RelationContact", b =>
