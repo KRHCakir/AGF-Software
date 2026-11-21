@@ -96,7 +96,12 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         done(t('cert_ai_rejected'));
     };
 
-    const edit = (patch: Partial<AiDraft['row']>) => setDraft((current) => (current === null ? current : { ...current, row: { ...current.row, ...patch } }));
+    // Een ander nummer of een andere soort is een ander certificaat: het doel voor een nieuwe versie vervalt dan (de keuze wordt opnieuw gevraagd).
+    const edit = (patch: Partial<AiDraft['row']>) => setDraft((current) => {
+        if (current === null) return current;
+        const identityChanged = (patch.number !== undefined && patch.number !== current.row.number) || (patch.typeCode !== undefined && patch.typeCode !== current.row.typeCode);
+        return { ...current, row: { ...current.row, ...patch }, targetId: identityChanged ? null : current.targetId };
+    });
     const link = (index: number, text: string) => setDraft((current) => {
         if (current === null) return current;
         const product = certificates.products.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
@@ -151,7 +156,8 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                         ⚠ {t('cert_ai_holder_mismatch', { name: proposal.holderMismatch })}
                                     </p>
                                 )}
-                                {proposal.sameNumberCertificateId !== null && certificates.stored.some((r) => r.id === proposal.sameNumberCertificateId) && (
+                                {proposal.sameNumberCertificateId !== null && certificates.stored.some((r) => r.id === proposal.sameNumberCertificateId)
+                                    && draft.row.number === (proposal.number ?? '') && draft.row.typeCode === (proposal.typeCode ?? '') && (
                                     <fieldset className="rounded border border-blue-200 bg-blue-50 p-2 text-sm" data-testid="cert-ai-same-number">
                                         <legend className="px-1 text-xs font-medium text-blue-950">{t('cert_ai_same_number', { type: proposal.sameNumberTypeName ?? '', number: proposal.number ?? '' })}</legend>
                                         <label className="flex items-center gap-2"><input type="radio" name={`${listId}-target`} checked={draft.targetId !== null}
