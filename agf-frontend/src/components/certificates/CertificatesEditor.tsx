@@ -202,6 +202,12 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
                                         <span className="rounded bg-gray-100 px-1 font-medium text-gray-800">{t('cert_file_version', { version: String(file.version) })}</span>
                                         <span className="break-all text-gray-900">{file.fileName}</span>
                                         <span className="text-gray-600">{formatDateOnly(amsterdamDateOf(file.createdAt) ?? file.createdAt.slice(0, 10), locale)} · {file.createdBy}</span>
+                                        {file.ai && (
+                                            <span className="rounded bg-blue-50 px-1 text-blue-950 ring-1 ring-blue-200" data-testid={`certificate-${index}-file-ai`}>
+                                                {t('cert_file_ai', { name: file.ai.approvedBy, model: file.ai.modelName ?? file.ai.model ?? '' })}
+                                                {file.ai.adjustedFields > 0 && ` · ${t('cert_file_ai_adjusted', { count: String(file.ai.adjustedFields) })}`}
+                                            </span>
+                                        )}
                                         <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={() => row.id !== null && onOpenFile(row.id, file)}>{t('cert_file_open')}</button>
                                     </li>
                                 ))}

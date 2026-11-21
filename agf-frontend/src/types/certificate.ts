@@ -7,7 +7,9 @@ export const GGN_TYPE = 'GlobalGapIfa';
 export const CUSTOM_TYPE = 'Custom';
 
 export interface CertificateProduct { id: number; name: string | null }
-export interface CertificateFile { id: number; version: number; fileName: string; mediaType: string; sizeBytes: number; sha256: string; createdAt: string; createdBy: string }
+// ai (certificaten deel 2): deze versie komt uit een goedgekeurd AI-voorstel; ontbreekt bij een oudere server of een gewone upload.
+export interface CertificateFileAi { approvedBy: string; approvedAt: string; model: string | null; modelName: string | null; modelVersion: string | null; adjustedFields: number }
+export interface CertificateFile { id: number; version: number; fileName: string; mediaType: string; sizeBytes: number; sha256: string; createdAt: string; createdBy: string; ai?: CertificateFileAi | null }
 export interface CertificateWarning { code: string; field: string; message: string }
 
 export interface Certificate {
@@ -47,7 +49,8 @@ export interface SaveCertificate {
     checkedOn: string | null;
     isActive: boolean;
 }
-export interface SaveCertificates { expectedVersion: string; certificates: SaveCertificate[] }
+// aiApproval (certificaten deel 2): Goedkeuren van een AI-voorstel in dezelfde opslag; de regel op die plek is het goedgekeurde certificaat.
+export interface SaveCertificates { expectedVersion: string; certificates: SaveCertificate[]; aiApproval?: { extractionId: number; certificateIndex: number } }
 
 export interface CertificateType { code: string; name: string; description: string; typicalHolder: string; productsRequired: boolean; ggnNumber: boolean }
 export interface CertificateReference {
@@ -85,7 +88,8 @@ export interface RelationCertificateSummary { typeCode: string; typeName: string
 export const isCertificateStatus = (value: unknown): value is CertificateStatus => isString(value) && (CERTIFICATE_STATUSES as readonly string[]).includes(value);
 const isProduct = (value: unknown): value is CertificateProduct => isObject(value) && isNumber(value.id) && isNullableString(value.name);
 export const isCertificateFile = (value: unknown): value is CertificateFile => isObject(value) && isNumber(value.id) && isNumber(value.version) && isString(value.fileName)
-    && isString(value.mediaType) && isNumber(value.sizeBytes) && isString(value.sha256) && isString(value.createdAt) && isString(value.createdBy);
+    && isString(value.mediaType) && isNumber(value.sizeBytes) && isString(value.sha256) && isString(value.createdAt) && isString(value.createdBy)
+    && (value.ai === undefined || value.ai === null || (isObject(value.ai) && isString(value.ai.approvedBy) && isString(value.ai.approvedAt) && isNullableString(value.ai.modelName)));
 const isWarning = (value: unknown): value is CertificateWarning => isObject(value) && isString(value.code) && isString(value.field) && isString(value.message);
 
 const isCertificate = (value: unknown): value is Certificate => isObject(value) && isNumber(value.id) && isString(value.typeCode) && isNullableString(value.customTypeName)
