@@ -131,6 +131,10 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
             setRowsState(next);
             setStored(next.map((r) => ({ ...r, pendingFiles: [] })));
             setVersion(saved.version);
+            // Een nieuwe eigen soort komt bij het opslaan in de bedrijfslijst: de keuzelijst haalt die er meteen bij.
+            if (built.value.some((c) => c.typeCode === 'Custom' && c.customTypeName !== null && !(reference?.customTypes ?? []).some((n) => n.toLowerCase() === c.customTypeName!.toLowerCase()))) {
+                getCertificateReference().then((fresh) => setReference((current) => (current === null ? fresh : { ...current, customTypes: fresh.customTypes }))).catch(() => {});
+            }
             setWarnings(saved.warnings);
             setErrors({});
             setProblems([]);
@@ -173,12 +177,27 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
         }
     };
 
+    // Openen: het venster gaat direct bij de klik open (anders kan de pop-upblokkering het tegenhouden) en krijgt het bestand zodra het binnen
+    // is. Blokkeert de browser het venster toch, dan wordt het bestand gedownload met zijn eigen naam.
     const openFile = async (certificateId: number, file: CertificateFile) => {
+        const win = typeof window.open === 'function' ? window.open('', '_blank') : null;
+        if (win) win.opener = null;
         try {
             const url = URL.createObjectURL(await getCertificateFile(certificateId, file.id));
-            window.open(url, '_blank', 'noopener');
+            if (win && !win.closed) {
+                win.location.href = url;
+            } else {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = file.fileName;
+                link.rel = 'noopener';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
         } catch (caught) {
+            win?.close();
             setError(toApiError(caught));
         }
     };

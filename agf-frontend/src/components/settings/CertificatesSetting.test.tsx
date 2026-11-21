@@ -68,4 +68,41 @@ describe('certificates setting', () => {
         assert.ok(mounted.hasText('brc.pdf'));
         assert.equal($('[data-testid="certificate-0-status"]')!.getAttribute('data-status'), 'ExpiringSoon');
     });
+
+    test('Open shows the file in a window opened on the click; a blocked window downloads it instead', async () => {
+        const file = { id: 8, version: 1, fileName: 'brc.pdf', mediaType: 'application/pdf', sizeBytes: 8, sha256: 'a', createdAt: '2026-11-20T09:00:00Z', createdBy: 'Anja' };
+        const base = globalThis.fetch;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.endsWith('/certificates/own')) return json(200, { version: 'v1', warningDays: 30, warnings: [], certificates: [ownCertificate([file])] });
+            if (url.endsWith('/certificates/3/files/8')) return new Response(new Blob(['%PDF-1.4']), { status: 200, headers: { 'Content-Type': 'application/pdf' } });
+            return base(input, init);
+        }) as typeof fetch;
+        const originalOpen = window.open;
+        const originalCreate = URL.createObjectURL;
+        URL.createObjectURL = (() => 'blob:brc') as typeof URL.createObjectURL;
+        const opened = { opener: {} as unknown, closed: false, location: { href: '' }, close() { this.closed = true; } };
+        try {
+            window.open = (() => opened) as unknown as typeof window.open;
+            await mounted.render(<CertificatesSetting />);
+            await mounted.waitFor(() => mounted.button('cert_file_open') !== null, 'file listed');
+            await act(async () => { mounted.button('cert_file_open')!.click(); });
+            await mounted.waitFor(() => opened.location.href === 'blob:brc', 'loaded in the window');
+            assert.equal(opened.opener, null, 'the new window gets no access back');
+
+            let downloaded = '';
+            const originalClick = window.HTMLAnchorElement.prototype.click;
+            window.HTMLAnchorElement.prototype.click = function click(this: HTMLAnchorElement) { downloaded = this.download; };
+            try {
+                window.open = (() => null) as typeof window.open;
+                await act(async () => { mounted.button('cert_file_open')!.click(); });
+                await mounted.waitFor(() => downloaded === 'brc.pdf', 'downloaded');
+            } finally {
+                window.HTMLAnchorElement.prototype.click = originalClick;
+            }
+        } finally {
+            window.open = originalOpen;
+            URL.createObjectURL = originalCreate;
+        }
+    });
 });
