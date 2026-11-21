@@ -3168,5 +3168,7 @@
   "cert_ai_save_relation_first": "Save the relation first; then you can have a certificate read.",
   "cert_ai_save_changes_first": "Save the changes to the certificates first; then you can have a certificate read.",
   "cert_file_ai": "AI proposal approved by {name} ({model})",
-  "cert_file_ai_adjusted": "{count} fields adjusted by the user"
+  "cert_file_ai_adjusted": "{count} fields adjusted by the user",
+  "cert_ai_too_long": "This number is longer than 100 characters: check it.",
+  "cert_ai_products_truncated": "The document lists more than 200 products; only the first 200 are shown here. Check the rest in the document."
 }
