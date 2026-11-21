@@ -156,10 +156,13 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "certificates", $"Certificate {CertificateRules.TypeName(missing.TypeCode, missing.CustomTypeName)} {missing.Number} cannot be removed; archive it instead.");
             }
+            // Certificaten deel 2: Goedkeuren van een AI-voorstel in dezelfde opslag.
+            var approval = await CertificateAiApproval.CheckAsync(db, request.AiApproval, relationId, items.Count, errors, cancellationToken);
             if (errors.Count > 0) return ServiceResult<CertificateListDto>.Validation(ValidationErrors.ToArrays(errors));
 
             var now = DateTime.UtcNow;
             var actor = _user.Actor(CertificateRules.MaxActorLength);
+            var rows = new List<RelationCertificate>();
             for (var i = 0; i < normalized.Count; i++)
             {
                 var (item, type, customName, number, body, producer, ids) = normalized[i];
@@ -169,6 +172,7 @@ namespace AgfAdmin.Services
                     row = new RelationCertificate { RelationId = relationId, CreatedAt = now, CreatedBy = actor };
                     db.RelationCertificates.Add(row);
                 }
+                rows.Add(row);
                 // Gecontroleerd door: wie de controledatum nu zet of wijzigt (CurrentUser); een ongewijzigde datum houdt wie het toen deed.
                 var checkChanged = row.CheckedOn != item.CheckedOn;
                 if (item.CheckedOn == null) row.CheckedBy = null;
@@ -201,6 +205,17 @@ namespace AgfAdmin.Services
             }
             await AddCustomTypesAsync(normalized.Where(n => n.Type == CertificateRules.Custom).Select(n => n.CustomName), cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
+            if (approval != null)
+            {
+                var refused = await CertificateAiApproval.ApplyAsync(db, approval, rows[approval.Index], normalized[approval.Index].Item, actor, now, cancellationToken);
+                if (refused != null)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    db.ChangeTracker.Clear();
+                    return ServiceResult<CertificateListDto>.Conflict(refused, new { code = "aiClosed", message = refused });
+                }
+                await db.SaveChangesAsync(cancellationToken);
+            }
             // Het antwoord is precies wat deze opslag schreef: nog binnen de transactie (en de lock) gelezen.
             var dto = await ListAsync(relationId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -345,6 +360,8 @@ namespace AgfAdmin.Services
         private async Task<List<RelationCertificate>> StoredAsync(int? relationId, bool tracking, CancellationToken cancellationToken)
         {
             var query = db.RelationCertificates.Include(c => c.Products).Include(c => c.Files).Where(c => c.RelationId == relationId);
+            // Voor het tonen ook de goedgekeurde AI-lezing per bestandsversie (wie, wanneer, model); bij opslaan niet nodig.
+            if (!tracking) query = query.Include(c => c.Files).ThenInclude(f => f.AiExtraction);
             return await (tracking ? query : query.AsNoTracking()).AsSplitQuery().OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToListAsync(cancellationToken);
         }
 
@@ -363,6 +380,11 @@ namespace AgfAdmin.Services
         {
             Id = f.Id, Version = f.Version, FileName = f.FileName, MediaType = f.MediaType, SizeBytes = f.SizeBytes, Sha256 = f.Sha256,
             CreatedAt = DateTime.SpecifyKind(f.CreatedAt, DateTimeKind.Utc), CreatedBy = f.CreatedBy,
+            Ai = f.AiExtraction is { ApprovedAt: DateTime approvedAt } ai ? new CertificateFileAiDto
+            {
+                ApprovedBy = ai.ApprovedBy, ApprovedAt = DateTime.SpecifyKind(approvedAt, DateTimeKind.Utc), Model = ai.Model, ModelName = AiModelNames.Display(ai.Model),
+                ModelVersion = ai.ModelVersion, AdjustedFields = string.IsNullOrEmpty(ai.AdjustmentsJson) ? 0 : System.Text.Json.Nodes.JsonNode.Parse(ai.AdjustmentsJson) is System.Text.Json.Nodes.JsonArray changed ? changed.Count : 0,
+            } : null,
         };
 
         // De versie van een lijst: een korte vingerafdruk van wat er staat (leeg = "0"); bestanden tellen niet mee (die komen er los bij).

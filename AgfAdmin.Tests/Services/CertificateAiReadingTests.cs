@@ -173,4 +173,84 @@ public class CertificateAiReadingTests : IDisposable
             Assert.Equal(ServiceResultStatus.NotFound, (await Reading(db).CloseAsync(read.Id, new CloseAiExtractionDto { Outcome = AiReadingRules.StatusRejected })).Status);
         }
     }
+
+    [Fact]
+    public async Task Approving_saves_through_the_certificate_path_with_the_file_as_a_version_and_records_who_and_what_was_adjusted()
+    {
+        await SeedAsync();
+        var read = (await ReadAsync()).Value;
+        // De gebruiker koppelt Mizuna zelf aan een eigen product en past de instantie aan.
+        var row = Row(read.Proposal, products: new[] { _sla, _rucola, _mix }, body: "Demo Cert B.V.");
+        var saved = await SaveAsync(new SaveCertificatesDto { ExpectedVersion = "0", Certificates = new() { row }, AiApproval = new() { ExtractionId = read.Id, CertificateIndex = 0 } });
+        Assert.Equal(ServiceResultStatus.Ok, saved.Status);
+        var certificate = saved.Value.Certificates.Single();
+        Assert.Equal((DemoCertificateAi.Number, "Demo Cert B.V.", 3), (certificate.Number, certificate.CertificationBody, certificate.Products.Count));
+        var file = certificate.Files.Single();
+        Assert.Equal((1, "certificaat.pdf", UploadedDocuments.Sha256(Pdf)), (file.Version, file.FileName, file.Sha256));
+        Assert.Equal(("Piet", Haiku, "Claude Haiku 5.5", 2), (file.Ai!.ApprovedBy, file.Ai.Model, file.Ai.ModelName, file.Ai.AdjustedFields));
+
+        await using var db = _factory.CreateContext();
+        var reading = await db.AiExtractions.SingleAsync();
+        Assert.Equal((AiReadingRules.StatusApproved, "Piet", (int?)certificate.Id), (reading.Status, reading.ApprovedBy, reading.RelationCertificateId));
+        Assert.NotNull(reading.ApprovedAt);
+        Assert.Contains("\"certificationBody\"", reading.AdjustmentsJson);
+        Assert.Contains("Demo Cert B.V.", reading.AdjustmentsJson);
+        Assert.Contains("\"products\"", reading.AdjustmentsJson);
+        Assert.Contains(DemoCertificateAi.Number, reading.ApprovedValuesJson);
+        Assert.Equal(reading.Id, (await db.RelationCertificateFiles.SingleAsync()).AiExtractionId);
+
+        // Nog eens goedkeuren kan niet: de lezing is al goedgekeurd.
+        var list = await ListAsync();
+        var again = await SaveAsync(new SaveCertificatesDto { ExpectedVersion = list.Version, Certificates = new() { Row(read.Proposal, certificate.Id) }, AiApproval = new() { ExtractionId = read.Id, CertificateIndex = 0 } });
+        Assert.Equal(ServiceResultStatus.Validation, again.Status);
+        Assert.Contains("aiApproval", again.Errors.Keys);
+        // Een goedgekeurde lezing verandert niet meer (regel 28).
+        reading.Status = AiReadingRules.StatusRejected;
+        await Assert.ThrowsAsync<AgfAdmin.Data.TraceabilityViolationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task The_same_number_at_this_relation_becomes_a_new_version_instead_of_a_second_certificate()
+    {
+        await SeedAsync();
+        var first = (await ReadAsync()).Value;
+        var saved = (await SaveAsync(new SaveCertificatesDto { ExpectedVersion = "0", Certificates = new() { Row(first.Proposal) }, AiApproval = new() { ExtractionId = first.Id, CertificateIndex = 0 } })).Value;
+        var existing = saved.Certificates.Single();
+
+        // Een jaar later: hetzelfde GGN met een nieuwe einddatum.
+        var renewed = CertificateProposalsTests.Example();
+        renewed["geldig_tot"] = "2027-12-10";
+        var second = (await ReadAsync(answer: renewed)).Value;
+        Assert.Equal((existing.Id, "GLOBALG.A.P. IFA (GGN)"), (second.Proposal.SameNumberCertificateId, second.Proposal.SameNumberTypeName));
+        var result = await SaveAsync(new SaveCertificatesDto { ExpectedVersion = saved.Version, Certificates = new() { Row(second.Proposal, existing.Id) }, AiApproval = new() { ExtractionId = second.Id, CertificateIndex = 0 } });
+        Assert.Equal(ServiceResultStatus.Ok, result.Status);
+        var certificate = Assert.Single(result.Value.Certificates);
+        Assert.Equal((existing.Id, new DateOnly(2027, 12, 10)), (certificate.Id, certificate.ValidUntil!.Value));
+        Assert.Equal(new[] { 2, 1 }, certificate.Files.Select(f => f.Version));
+        Assert.All(certificate.Files, f => Assert.NotNull(f.Ai));
+    }
+
+    [Fact]
+    public async Task A_closed_proposal_or_a_reading_of_another_relation_cannot_be_approved()
+    {
+        await SeedAsync();
+        var read = (await ReadAsync()).Value;
+        await using (var db = _factory.CreateContext())
+        {
+            Assert.Equal(ServiceResultStatus.Ok, (await Reading(db, "Anja").CloseCertificateAsync(read.Id, new CloseAiExtractionDto { Outcome = AiReadingRules.StatusRejected })).Status);
+        }
+        var approve = await SaveAsync(new SaveCertificatesDto { ExpectedVersion = "0", Certificates = new() { Row(read.Proposal) }, AiApproval = new() { ExtractionId = read.Id, CertificateIndex = 0 } });
+        Assert.Contains("aiApproval", approve.Errors.Keys);
+        Assert.Empty((await ListAsync()).Certificates);
+        // Een lezing van een andere relatie keurt deze relatie niet goed.
+        var mine = (await ReadAsync()).Value;
+        await using (var db = _factory.CreateContext())
+        {
+            var other = new Relation { Name = "Ander", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            db.Add(other);
+            await db.SaveChangesAsync();
+            var foreign = await new CertificateService(db, User("Piet")).SaveForRelationAsync(other.Id, new SaveCertificatesDto { ExpectedVersion = "0", Certificates = new() { Row(mine.Proposal) }, AiApproval = new() { ExtractionId = mine.Id, CertificateIndex = 0 } });
+            Assert.Contains("aiApproval", foreign.Errors.Keys);
+        }
+    }
 }

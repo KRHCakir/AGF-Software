@@ -49,6 +49,8 @@ namespace AgfAdmin.DTOs
         public string Sha256 { get; set; }
         public DateTime CreatedAt { get; set; }
         public string CreatedBy { get; set; }
+        // Certificaten deel 2: deze versie komt uit een goedgekeurd AI-voorstel (wie, wanneer, model); anders null.
+        public CertificateFileAiDto Ai { get; set; }
     }
 
     public sealed class CertificateWarningDto
@@ -64,6 +66,10 @@ namespace AgfAdmin.DTOs
     {
         public string ExpectedVersion { get; set; }
         public List<SaveCertificateDto> Certificates { get; set; }
+        // Certificaten deel 2: Goedkeuren van een AI-voorstel in dezelfde opslag (geen tweede route). De regel op die plek is het
+        // goedgekeurde certificaat (een nieuwe, of een bestaande met hetzelfde nummer: dan een nieuwe versie); het origineel wordt daar de
+        // volgende versie van het bestand.
+        public CertificateAiApprovalDto AiApproval { get; set; }
     }
 
     public sealed class SaveCertificateDto
