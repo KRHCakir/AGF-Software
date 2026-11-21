@@ -35,7 +35,9 @@ export default function CertificatesSetting() {
         return () => controller.abort();
     }, [loadToken]);
 
+    // De twee opslagacties sluiten elkaar uit: anders kan de instellingenopslag een net door een certificaat toegevoegde eigen soort wegschrijven.
     const saveSettings = async () => {
+        if (ownSaving) return;
         setSaving(true);
         setError(null);
         setNotice(null);
@@ -57,16 +59,18 @@ export default function CertificatesSetting() {
     };
 
     const saveOwn = async () => {
+        if (saving) return;
         setOwnSaving(true);
         setOwnNotice(false);
         // Alleen soorten die dit opslaan nieuw maakt (nog niet in de bekende lijst) mogen in het tekstvak komen; bewust verwijderde blijven weg.
         const known = (own.reference?.customTypes ?? []).map((name) => name.toLowerCase());
         const created = own.rows.filter((row) => row.typeCode === 'Custom').map((row) => row.customTypeName.trim()).filter((name) => name !== '' && !known.includes(name.toLowerCase()));
         try {
-            if (await own.save()) {
-                setOwnNotice(true);
-                // Het opslaan kan een nieuwe eigen soort aan de instellingen toevoegen: die erbij nemen (lopende bewerkingen blijven staan),
-                // zodat een latere instellingenopslag hem niet weer verwijdert.
+            if (await own.save()) setOwnNotice(true);
+        } finally {
+            // Ook als alleen het certificaat lukte en een upload niet: een nieuwe eigen soort staat dan al in de bedrijfslijst. Die erbij nemen
+            // (lopende bewerkingen blijven staan), zodat een latere instellingenopslag hem niet weer verwijdert.
+            if (created.length > 0) {
                 try {
                     const settings = await getCertificateSettings();
                     setTypes((current) => {
@@ -76,7 +80,6 @@ export default function CertificatesSetting() {
                     });
                 } catch { /* de lijst blijft zoals ze was */ }
             }
-        } finally {
             setOwnSaving(false);
         }
     };
@@ -101,7 +104,7 @@ export default function CertificatesSetting() {
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-                <button type="button" className={secondaryButtonClass} disabled={saving || !loaded || days === ''} onClick={() => void saveSettings()} data-testid="certificate-settings-save">{t('cert_settings_save')}</button>
+                <button type="button" className={secondaryButtonClass} disabled={saving || ownSaving || !loaded || days === ''} onClick={() => void saveSettings()} data-testid="certificate-settings-save">{t('cert_settings_save')}</button>
                 {!loaded && error && <button type="button" className={secondaryButtonClass} onClick={() => setLoadToken((n) => n + 1)}>{t('cert_settings_reload')}</button>}
                 {notice && <span role="status" className="text-sm text-green-900">{notice}</span>}
             </div>
@@ -118,7 +121,7 @@ export default function CertificatesSetting() {
                         onOpenFile={(id, file) => void own.openFile(id, file)} onAddFile={(row, file) => void own.addFile(row, file)} uploading={own.uploading} dataTour="own-certificate" />
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className={primaryButtonClass} disabled={ownSaving || own.loading || own.failed || !own.changed || own.uploading.length > 0} onClick={() => void saveOwn()} data-testid="own-certificates-save">{t('cert_own_save')}</button>
+                    <button type="button" className={primaryButtonClass} disabled={ownSaving || saving || own.loading || own.failed || !own.changed || own.uploading.length > 0} onClick={() => void saveOwn()} data-testid="own-certificates-save">{t('cert_own_save')}</button>
                     {ownNotice && <span role="status" className="text-sm text-green-900">{t('cert_own_saved')}</span>}
                 </div>
             </div>
