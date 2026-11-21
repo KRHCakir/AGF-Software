@@ -66,7 +66,8 @@ namespace AgfAdmin.Services.DocumentAi
             catch (JsonException e) { error = $"geen geldige JSON: {e.Message}"; return null; }
             if (root is not JsonObject obj) { error = "geen JSON-object"; return null; }
             var known = new HashSet<string>(TextFields.Concat(["soort", "producten", "productiesites", "zekerheden"]));
-            error = obj.Select(p => p.Key).Where(k => !known.Contains(k)).Select(k => $"{k} is een onbekende eigenschap").FirstOrDefault()
+            // Zonder de naam van de sleutel: die komt uit de uitvoer van het model en kan inhoud van het document bevatten (het logboek krijgt alleen de soort fout).
+            error = (obj.Any(p => !known.Contains(p.Key)) ? "onbekende eigenschap" : null)
                 ?? (obj["soort"] is JsonValue soort && soort.TryGetValue(out string code) && TypeCodes.Contains(code) ? null : "soort ontbreekt of is onbekend")
                 ?? TextFields.Where(f => !IsText(obj[f])).Select(f => $"{f} ontbreekt of is geen tekst").FirstOrDefault()
                 ?? Items(obj, "producten", item => IsText(item["tekst"]) && item["pagina"] is JsonValue page && page.TryGetValue(out int _), ["tekst", "pagina"])
