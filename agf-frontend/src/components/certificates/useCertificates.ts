@@ -74,6 +74,8 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
         // Alleen bij een andere eigenaar (of bewust opnieuw laden), niet bij elke render.
     }, [owner.kind, id, reloadToken, enabled]);
 
+    // De regels bijwerken vanuit de actuele stand (niet een kopie van een eerdere render), bijvoorbeeld na een wachttijd.
+    const updateRows = useCallback((change: (current: CertificateRow[]) => CertificateRow[]) => setRows(change(rowsRef.current)), [setRows]);
     const reload = () => setReloadToken((n) => n + 1);
     // Na het opslaan van de instellingen: de eigen soorten en de waarschuwingstermijn overnemen, zonder de ingevulde regels te herladen.
     const applySettings = useCallback((settings: { warningDays: number; customTypes: string[] }) => {
@@ -252,7 +254,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
 
     return {
         reference, products, rows, setRows, stored, warningDays, loading, failed, error, conflict, errors, problems, warnings, uploading, changed,
-        reload, validate, applySettings, save, addFile, openFile, canApproveAi, approveAi, approving,
+        reload, validate, applySettings, save, addFile, openFile, canApproveAi, approveAi, approving, updateRows,
     };
 }
 
