@@ -18,8 +18,10 @@ namespace AgfAdmin.Controllers
 
         // role: all (standaard), customer, vendor. query: code, naam, handelsnaam, btw, e-mail, telefoon, plaats, contact. Begrensd (paginering).
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string role, [FromQuery] string query, [FromQuery] bool includeInactive = false, [FromQuery] int page = 1, [FromQuery] int pageSize = RelationRules.DefaultPageSize) =>
-            Ok(await _service.ListAsync(role, query, includeInactive, page, pageSize, HttpContext?.RequestAborted ?? default));
+        // certificate: attention, Expired, ExpiringSoon, productsPending, none of een soort (certificaten deel 1).
+        public async Task<IActionResult> List([FromQuery] string role, [FromQuery] string query, [FromQuery] bool includeInactive = false, [FromQuery] int page = 1, [FromQuery] int pageSize = RelationRules.DefaultPageSize,
+            [FromQuery] string certificate = null) =>
+            Ok(await _service.ListAsync(role, query, includeInactive, page, pageSize, HttpContext?.RequestAborted ?? default, certificate));
 
         [HttpGet("reference")]
         public async Task<IActionResult> Reference() => Ok(await _service.ReferenceAsync(HttpContext?.RequestAborted ?? default));

@@ -21,6 +21,8 @@ namespace AgfAdmin.DTOs
         public string PrimaryContactName { get; set; }
         public string VatNumber { get; set; }
         public int Version { get; set; }
+        // Certificaten deel 1: per actief certificaat de soort en de status (badge bij bijna verlopen of verlopen).
+        public List<RelationCertificateSummaryDto> Certificates { get; set; } = new();
     }
 
     public sealed class RelationListDto
