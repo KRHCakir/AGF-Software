@@ -63,6 +63,9 @@ export function lineDraftOf(line: PurchaseOrderLine): PurchaseLineDraft {
         ...(grossEntered ? { grossKg: formatKgInput(line.expectedGrossWeightKg!), grossKgEntered: true } : {}),
         unit: (line.unit ?? '') as PackageUnit | '',
         lotNumber: line.lotNumber ?? '',
+        // Een opgeslagen GGN (ook leeg) is een keuze: het voorstel overschrijft het niet.
+        ggn: line.ggn ?? '',
+        ggnTouched: true,
     };
 }
 
@@ -109,7 +112,7 @@ export function updateLinePayload(draft: PurchaseLineDraft, payload: CreateSuppl
     return {
         id: stored.id, productVariantId: stored.productVariantId, expectedQuantity: stored.expectedQuantity, expectedUnit: stored.unit,
         expectedNetWeightKg: stored.expectedNetWeightKg, expectedGrossWeightKg: stored.expectedGrossWeightKg ?? null, weightSource: stored.weightSource ?? null,
-        lotNumber: payload.lotNumber, palletCount: stored.palletInputCount ?? null, packagesPerPallet: stored.palletInputPackagesPerPallet ?? null,
+        lotNumber: payload.lotNumber, ggn: payload.ggn ?? null, palletCount: stored.palletInputCount ?? null, packagesPerPallet: stored.palletInputPackagesPerPallet ?? null,
         loosePackages: stored.palletInputLoose ?? null, unitPrice: price,
     };
 }
@@ -137,6 +140,6 @@ const FIELD_KEYS: Readonly<Record<string, string>> = {
     note: 'po_note', supplierLotReference: 'partij_supplier_lot', orderChannel: 'po_change_channel', partij: 'partij_field', line: 'po_change_line',
     article: 'po_change_article', expectedQuantity: 'po_change_quantity', expectedUnit: 'po_change_unit', unitPrice: 'po_change_price',
     expectedNetWeightKg: 'po_change_net', expectedGrossWeightKg: 'po_change_gross', weightSource: 'po_change_weight_source', pallets: 'po_change_pallets',
-    lotNumber: 'supply_lot', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
+    lotNumber: 'supply_lot', ggn: 'po_line_col_ggn', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
 };
 export const changeFieldKey = (field: string): string | null => FIELD_KEYS[field] ?? null;
