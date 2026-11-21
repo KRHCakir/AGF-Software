@@ -43,7 +43,7 @@ describe('purchase order edit', () => {
         assert.equal(isUntouched(priced, edit.lines.get('line-7')!), true);
         assert.deepEqual(updateLinePayload(priced, built, edit.lines.get('line-7')), {
             id: 7, productVariantId: 1, expectedQuantity: 221, expectedUnit: 'colli', expectedNetWeightKg: 884, expectedGrossWeightKg: 972.4, weightSource: 'Calculated',
-            lotNumber: null, ggn: null, palletCount: 1, packagesPerPallet: 221, loosePackages: null, unitPrice: 13,
+            lotNumber: null, ggn: '', palletCount: 1, packagesPerPallet: 221, loosePackages: null, unitPrice: 13,
         });
         // Alleen het GGN aangepast: de regel blijft "niet aangeraakt" en het nieuwe GGN gaat mee.
         const ggn = { ...lines[0], ggn: '4049928415684' };
@@ -54,6 +54,9 @@ describe('purchase order edit', () => {
         assert.deepEqual([rebuilt.id, rebuilt.expectedQuantity, rebuilt.expectedNetWeightKg, rebuilt.palletCount, rebuilt.unitPrice], [7, 230, 966, null, 12.5]);
         const fresh = updateLinePayload(more, purchaseLinePayloads([more], () => avocado).lines[0].payload, undefined);
         assert.equal(fresh.id, null);
+        // Leeggemaakt: een lege tekst (weggelaten zou voor de server "ongewijzigd" zijn); een nieuwe regel zonder GGN stuurt null.
+        assert.equal(rebuilt.ggn, '');
+        assert.equal(fresh.ggn, null);
     });
 
     test('after a receipt the article is fixed, the quantity never below received and the line stays; others are free', () => {

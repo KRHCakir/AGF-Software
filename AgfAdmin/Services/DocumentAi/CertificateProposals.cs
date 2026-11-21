@@ -51,7 +51,8 @@ namespace AgfAdmin.Services.DocumentAi
         [
             "bv", "b.v.", "nv", "n.v.", "vof", "v.o.f.", "gmbh", "ag", "kg", "ltd", "limited", "plc", "llc", "inc", "co", "corp", "company", "sl", "s.l.", "sa", "s.a.",
             "sas", "sarl", "srl", "spa", "s.p.a.", "lda", "pty", "cv", "c.v.", "the", "de", "het", "van", "en", "und", "y", "and", "group", "groep", "holding", "international",
-            "trading", "export", "import", "sociedad", "cooperativa", "coop", "agricola", "agrícola", "farms", "farm", "fruit", "fruits",
+            "kwekerij", "kwekerijen", "nursery", "nurseries", "tuinbouw", "tuinderij", "telers", "teelt", "kwekers", "growers", "grower", "producers", "produce", "packhouse", "greenhouse",
+            "greenhouses", "kassen", "handel", "bedrijf", "vers", "fresh", "vegetables", "groenten", "orchards", "orchard", "finca", "huerta", "gartenbau", "trading", "export", "import", "sociedad", "cooperativa", "coop", "agricola", "agrícola", "farms", "farm", "fruit", "fruits",
         ];
 
         public static AiCertificateProposalDto Build(JsonObject json, IReadOnlyCollection<OwnProduct> products, IReadOnlyCollection<StoredCertificate> stored, IReadOnlyCollection<string> ownerNames,
@@ -101,10 +102,22 @@ namespace AgfAdmin.Services.DocumentAi
                 Status = CertificateRules.Status(until, today, warningDays), DaysLeft = until is DateOnly u ? CertificateRules.DaysLeft(u, today) : null,
             };
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var item in (json["producten"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().Take(MaxProducts))
+            var productIndexes = new Dictionary<int, int>(); // index in de uitvoer van de AI -> index in het voorstel (na weglaten van lege en dubbele)
+            var firstIndexByText = new Dictionary<string, int>(StringComparer.Ordinal);
+            var rawProducts = json["producten"] as JsonArray ?? new JsonArray();
+            for (var rawIndex = 0; rawIndex < rawProducts.Count && rawIndex < MaxProducts; rawIndex++)
             {
+                if (rawProducts[rawIndex] is not JsonObject item) continue;
                 var text = AiReadingRules.Text(item["tekst"]);
-                if (text == null || !seen.Add(Normalize(text))) continue;
+                if (text == null) continue;
+                var textKey = string.Join(' ', text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant(); // letterlijke tekst: haakjes onderscheiden producten
+                if (!seen.Add(textKey))
+                {
+                    if (firstIndexByText.TryGetValue(textKey, out var firstIndex)) productIndexes[rawIndex] = firstIndex;
+                    continue;
+                }
+                productIndexes[rawIndex] = dto.Products.Count;
+                firstIndexByText[textKey] = dto.Products.Count;
                 var (product, match) = MatchProduct(text, products);
                 dto.Products.Add(new AiCertificateProductDto
                 {
@@ -121,7 +134,17 @@ namespace AgfAdmin.Services.DocumentAi
             foreach (var doubt in (json["zekerheden"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
             {
                 if (AiReadingRules.Text(doubt["zekerheid"]) is not ("laag" or "midden")) continue;
-                if (FormField(AiReadingRules.Text(doubt["veld"])) is string field) Problem(field, AiReadingRules.Uncertain);
+                var aiField = (AiReadingRules.Text(doubt["veld"]) ?? "").Trim();
+                if (aiField.StartsWith("producten[", StringComparison.Ordinal) && aiField.EndsWith(']'))
+                {
+                    // Producttwijfel: via de mapping naar het product in het voorstel; een weggelaten product krijgt geen markering.
+                    if (int.TryParse(aiField[10..^1], NumberStyles.None, CultureInfo.InvariantCulture, out var rawIdx) && productIndexes.TryGetValue(rawIdx, out var index))
+                    {
+                        Problem($"products[{index}]", AiReadingRules.Uncertain);
+                    }
+                    continue;
+                }
+                if (FormField(aiField) is string field) Problem(field, AiReadingRules.Uncertain);
             }
 
             if (holder != null && ownerNames.Count > 0 && ownerNames.All(name => !SameCompany(holder, name)))
@@ -169,11 +192,22 @@ namespace AgfAdmin.Services.DocumentAi
             var exact = Single(own.Where(p => p.Key == normalized || Singular(p.Key) == Singular(normalized)).Select(p => p.Product));
             if (exact != null) return (exact, MatchExact);
             var words = Singular(normalized);
-            foreach (var (name, dutch) in Names.OrderByDescending(n => n.Key.Length))
+            // Alle genoemde producten uit de lijst; een kortere naam die in een langere genoemde naam zit ("tomato" in "cherry tomato") telt niet mee.
+            // Per tekstpositie: een kortere naam telt alleen niet mee waar hij binnen een langere naam valt; een afzonderlijke vermelding blijft.
+            var tokens = words.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var spans = Names.Select(n => (Name: n, Spans: Occurrences(tokens, Singular(n.Key)))).Where(n => n.Spans.Count > 0).ToList();
+            var named = spans.Where(n => n.Spans.Any(s => !spans.Any(o => o.Name.Key != n.Name.Key
+                && o.Spans.Any(t => t.Start <= s.Start && t.End >= s.End && t.End - t.Start > s.End - s.Start)))).Select(n => n.Name).ToList();
+            var dutchNames = named.Select(n => Singular(n.Value)).Distinct(StringComparer.Ordinal).ToList();
+            // Ook eigen productnamen die letterlijk als woord in de tekst staan ("Lettuce and Tomaat"): samen meer dan één product = zelf kiezen.
+            var mentioned = own.Where(p => p.Key.Length >= 3 && ContainsWords(words, Singular(p.Key))).Select(p => Singular(p.Key));
+            if (dutchNames.Concat(mentioned).Distinct(StringComparer.Ordinal).Count() > 1) return (null, MatchNone);
+            if (dutchNames.Count > 1) return (null, MatchNone); // meerdere producten in één tekst: de gebruiker kiest zelf
+            if (dutchNames.Count == 1)
             {
-                if (!ContainsWords(words, name)) continue;
-                var translated = Single(own.Where(p => Singular(p.Key) == Singular(dutch)).Select(p => p.Product));
-                if (translated != null) return (translated, MatchTranslated);
+                // Een specifiekere naam valt niet terug op een ander product.
+                var translated = Single(own.Where(p => Singular(p.Key) == dutchNames[0]).Select(p => p.Product));
+                return translated != null ? (translated, MatchTranslated) : (null, MatchNone);
             }
             var partial = Single(own.Where(p => p.Key.Length >= 3 && ContainsWords(words, Singular(p.Key))).Select(p => p.Product));
             return partial != null ? (partial, MatchPartial) : (null, MatchNone);
@@ -222,6 +256,17 @@ namespace AgfAdmin.Services.DocumentAi
             : w.EndsWith("ven", StringComparison.Ordinal) ? w[..^3] + "f"
             : w.EndsWith('s') && !w.EndsWith("ss", StringComparison.Ordinal) ? w[..^1]
             : w));
+
+        private static List<(int Start, int End)> Occurrences(string[] tokens, string words)
+        {
+            var key = words.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var result = new List<(int, int)>();
+            for (var i = 0; key.Length > 0 && i + key.Length <= tokens.Length; i++)
+            {
+                if (tokens.Skip(i).Take(key.Length).SequenceEqual(key)) result.Add((i, i + key.Length));
+            }
+            return result;
+        }
 
         private static bool ContainsWords(string text, string words) => $" {text} ".Contains($" {Singular(words)} ", StringComparison.Ordinal);
     }

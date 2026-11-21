@@ -178,7 +178,7 @@ namespace AgfAdmin.DTOs
         public decimal? ExpectedGrossWeightKg { get; set; }
         public string WeightSource { get; set; }
         public string LotNumber { get; set; }
-        // Certificaten deel 2: GGN van het product, zoals bij aanmaken (leeg = geen).
+        // Certificaten deel 2: GGN van het product. Weggelaten (null) = ongewijzigd; een lege tekst = leegmaken.
         public string Ggn { get; set; }
         public decimal? PalletCount { get; set; }
         public decimal? PackagesPerPallet { get; set; }

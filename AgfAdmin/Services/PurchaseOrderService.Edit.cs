@@ -448,7 +448,8 @@ namespace AgfAdmin.Services
                 }
                 Field("lotNumber", line.LotNumber, wanted.LotNumber, () => line.LotNumber = wanted.LotNumber);
                 // GGN van het product: ook na ontvangst aan te passen zolang de order Open is (wat al ontvangen is, houdt het GGN van de ontvangst).
-                Field(PurchaseOrderDocumentRules.FieldGgn, line.Ggn, wanted.Ggn, () => line.Ggn = wanted.Ggn);
+                // Een weggelaten ggn (null) laat de opgeslagen waarde staan; een lege tekst wist het GGN bewust.
+                if (request.Lines[i].Ggn != null) Field(PurchaseOrderDocumentRules.FieldGgn, line.Ggn, wanted.Ggn, () => line.Ggn = wanted.Ggn);
             }
         }
 

@@ -66,7 +66,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
     const text = (value: string | null | undefined) => (value && value.trim() !== '' ? value : '–');
 
     // Tab op het laatste veld van de laatste (gevulde) regel: een nieuwe regel, cursor in haar product.
-    const onLastField = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
+    const onLastField = (event: KeyboardEvent<HTMLElement>, index: number) => {
         if (event.key !== 'Tab' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || locked) return;
         if (index !== lines.length - 1 || isBlankPurchaseLine(lines[index])) return;
         event.preventDefault();
@@ -198,10 +198,11 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         <label htmlFor={`${prefix}.ggn-input`} className="sr-only">{t('po_line_col_ggn')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.ggn`, errors(`${prefix}.ggn`))} value={line.ggn ?? ''} disabled={locked} inputMode="numeric" maxLength={20}
                                             data-tour="supply-line-ggn" data-tour-key={index} onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}
-                                            onKeyDown={last === 'ggn' ? (event) => onLastField(event, index) : undefined}
+                                            onKeyDown={last === 'ggn' && proposal?.kind !== 'Many' ? (event) => onLastField(event, index) : undefined}
                                             className={`${inputClass} !mt-0 w-40 font-mono`} />
                                         {proposal?.kind === 'Many' && (
-                                            <select aria-label={t('po_line_ggn_choose_label', { n: String(index + 1) })} tabIndex={-1} disabled={locked} className={`${inputClass} !mt-0 w-40 text-xs`}
+                                            <select aria-label={t('po_line_ggn_choose_label', { n: String(index + 1) })} disabled={locked} className={`${inputClass} !mt-0 w-40 text-xs`}
+                                                onKeyDown={last === 'ggn' ? (event) => onLastField(event, index) : undefined}
                                                 value={proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')) ? normalizeGgn(line.ggn ?? '') : ''} data-testid={`${prefix}.ggn-choice`}
                                                 onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}>
                                                 <option value="">{t('po_line_ggn_choose')}</option>
