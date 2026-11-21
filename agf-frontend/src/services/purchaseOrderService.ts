@@ -1,4 +1,5 @@
 import { ApiError, getJson, postJson, putJson } from './apiClient';
+import { type GgnProposals, isGgnProposals } from '../types/productGgn';
 import type { SaveResult } from './supplyService';
 import {
     AddInvoiceRefRequest,
@@ -109,5 +110,14 @@ export async function finalizePurchaseOrder(orderId: number, request: FinalizePu
 export async function correctPurchaseOrder(orderId: number, request: CorrectPurchaseOrderRequest, signal?: AbortSignal): Promise<PurchaseOrderDetail> {
     const { json } = await postJson(`/purchase-orders/${orderId}/corrections`, request, signal);
     if (!isPurchaseOrderDetail(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de correctie van de inkooporder.');
+    return json;
+}
+
+// Certificaten deel 2: het voorgestelde GGN van het product per regel, op de verwachte leverdatum (anders vandaag).
+export async function getGgnProposals(vendorId: number, productIds: readonly number[], date: string | null, signal?: AbortSignal): Promise<GgnProposals> {
+    const query = new URLSearchParams({ vendorId: String(vendorId), productIds: productIds.join(',') });
+    if (date !== null) query.set('date', date);
+    const json = await getJson(`/purchase-orders/ggn-proposals?${query.toString()}`, signal);
+    if (!isGgnProposals(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het GGN-voorstel.');
     return json;
 }

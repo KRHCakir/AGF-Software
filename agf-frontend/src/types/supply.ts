@@ -11,6 +11,8 @@ export interface CreateSupplyCommitmentLineRequest {
     expectedUnit: PackageUnit;
     expectedNetWeightKg: number | null;
     lotNumber: string | null;
+    // Certificaten deel 2: GGN van het product (13 cijfers) of null.
+    ggn?: string | null;
     // Optioneel, beide of geen: expectedQuantity = palletCount × packagesPerPallet (de server controleert dit).
     palletCount: number | null;
     packagesPerPallet: number | null;
@@ -54,6 +56,8 @@ export interface SupplyCommitmentLine {
     productName: string | null;
     productVariantName: string | null;
     lotNumber: string | null;
+    // Certificaten deel 2: GGN van het product op de inkoopregel (ontbreekt bij een oudere server): het voorstel bij ontvangst.
+    ggn?: string | null;
     // Partij van de regel (die van de kop, of bij een oudere order die uit de migratie); de ontvangst neemt haar over.
     partijId?: number | null;
     partijNumber?: string | null;
@@ -125,6 +129,7 @@ function isLine(value: unknown): value is SupplyCommitmentLine {
         && isNullableString(value.productName)
         && isNullableString(value.productVariantName)
         && isNullableString(value.lotNumber)
+        && isOptionalNullableString(value.ggn)
         && isNumber(value.expectedQuantity)
         && isNullableUnit(value.expectedUnit)
         && isNullableNumber(value.expectedNetWeightKg)
