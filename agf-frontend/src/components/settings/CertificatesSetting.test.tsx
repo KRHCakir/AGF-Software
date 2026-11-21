@@ -105,4 +105,32 @@ describe('certificates setting', () => {
             URL.createObjectURL = originalCreate;
         }
     });
+
+    test('a new own type ends up in the settings field even when the file upload after saving fails', async () => {
+        const base = globalThis.fetch;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            const method = init?.method ?? 'GET';
+            if (url.endsWith('/certificates/settings') && method === 'GET') return json(200, { warningDays: 30, customTypes: calls.some((c) => c.method === 'PUT' && c.url.endsWith('/certificates/own')) ? ['Demeter'] : [] });
+            if (url.endsWith('/certificates/own') && method === 'PUT') {
+                calls.push({ method, url, body: null });
+                return json(200, { version: 'v1', warningDays: 30, warnings: [], certificates: [{ ...ownCertificate(), typeCode: 'Custom', customTypeName: 'Demeter', typeName: 'Demeter' }] });
+            }
+            if (url.endsWith('/certificates/3/files')) return json(500, { message: 'disk full' });
+            return base(input, init);
+        }) as typeof fetch;
+        await mounted.render(<CertificatesSetting />);
+        await settle();
+        await act(async () => { mounted.button('+ cert_add')!.click(); });
+        const row = $('[data-testid="certificate-0"]')!.getAttribute('data-row')!;
+        await act(async () => { setSelectValue($<HTMLSelectElement>(`[id="certificates.${row}.typeCode-input"]`)!, 'Custom'); });
+        await act(async () => { setValue($<HTMLInputElement>(`[id="certificates.${row}.customTypeName-input"]`)!, 'Demeter'); });
+        await act(async () => { setValue($<HTMLInputElement>(`[id="certificates.${row}.number-input"]`)!, 'D-1'); });
+        const input = $<HTMLInputElement>('[data-testid="certificate-0-file"]')!;
+        Object.defineProperty(input, 'files', { value: [new globalThis.File(['%PDF-1.4'], 'd.pdf', { type: 'application/pdf' })], configurable: true });
+        await act(async () => { input.dispatchEvent(new window.Event('change', { bubbles: true })); });
+        await act(async () => { $<HTMLButtonElement>('[data-testid="own-certificates-save"]')!.click(); });
+        await mounted.waitFor(() => $<HTMLTextAreaElement>('#certificate-custom-types')!.value.includes('Demeter'), 'own type in the settings field');
+        assert.equal(mounted.hasText('cert_own_saved'), false, 'the upload failed, so no "saved" notice');
+    });
 });

@@ -30,7 +30,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [problems, setProblems] = useState<{ field: string; code: string }[]>([]);
     const [warnings, setWarnings] = useState<CertificateWarning[]>([]);
-    const [uploading, setUploading] = useState<string | null>(null);
+    const [uploading, setUploading] = useState<string[]>([]);
     const [reloadToken, setReloadToken] = useState(0);
     const rowsRef = useRef<CertificateRow[]>([]);
     const id = ownerId(owner);
@@ -169,7 +169,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
             setRows(rowsRef.current.map((r) => (r.key === row.key ? { ...r, pendingFiles: [...r.pendingFiles, file] } : r)));
             return;
         }
-        setUploading(row.key);
+        setUploading((keys) => [...keys, row.key]);
         setError(null);
         try {
             const added = await upload(row.id, file);
@@ -183,7 +183,7 @@ export function useCertificates(owner: CertificateOwner, enabled = true) {
             const message = apiError.fieldErrors.file;
             if (message) setErrors({ [`certificates.${row.key}.file`]: message });
         } finally {
-            setUploading(null);
+            setUploading((keys) => { const at = keys.indexOf(row.key); return at < 0 ? keys : [...keys.slice(0, at), ...keys.slice(at + 1)]; });
         }
     };
 

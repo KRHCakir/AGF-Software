@@ -21,7 +21,7 @@ const FILE_ACCEPT = 'application/pdf,image/jpeg,image/png,image/heic,image/heif,
 // waarschuwing), wanneer gecontroleerd (wie: de ingelogde gebruiker, bij opslaan) en de PDF's en foto's als versies. Tab op het laatste veld
 // van de laatste (ingevulde) regel maakt een nieuwe regel; alle knoppen (product weghalen, bestand openen) zijn met Tab bereikbaar. Een opgeslagen
 // certificaat verdwijnt nooit: archiveren (Actief uit).
-export default function CertificatesEditor({ idPrefix, rows, onChange, reference, products, errors, today, warningDays, disabled = false, onOpenFile, onAddFile, uploading = null, dataTour = 'certificate' }: {
+export default function CertificatesEditor({ idPrefix, rows, onChange, reference, products, errors, today, warningDays, disabled = false, onOpenFile, onAddFile, uploading = [], dataTour = 'certificate' }: {
     idPrefix: string;
     rows: CertificateRow[];
     onChange: (rows: CertificateRow[]) => void;
@@ -34,7 +34,7 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
     onOpenFile: (certificateId: number, file: CertificateFile) => void;
     // Een opgeslagen certificaat krijgt het bestand meteen (een nieuwe versie); bij een nieuw certificaat gaat het mee met Opslaan.
     onAddFile: (row: CertificateRow, file: File) => void;
-    uploading?: string | null;
+    uploading?: string[];
     dataTour?: string;
 }) {
     const { t, locale } = useTranslation();
@@ -213,8 +213,8 @@ export default function CertificatesEditor({ idPrefix, rows, onChange, reference
                                 ))}
                             </ul>
                             <label className={`${secondaryButtonClass} mt-1 inline-flex cursor-pointer items-center px-2 py-0.5 text-xs focus-within:ring-2 focus-within:ring-blue-500`}>
-                                {uploading === row.key ? t('cert_file_uploading') : t('cert_file_add')}
-                                <input type="file" accept={FILE_ACCEPT} className="sr-only" disabled={disabled || uploading === row.key} data-testid={`certificate-${index}-file`}
+                                {uploading.includes(row.key) ? t('cert_file_uploading') : t('cert_file_add')}
+                                <input type="file" accept={FILE_ACCEPT} className="sr-only" disabled={disabled || uploading.includes(row.key)} data-testid={`certificate-${index}-file`}
                                     onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onAddFile(row, file); }}
                                     data-tour={index === 0 ? `${dataTour}-file` : undefined} />
                             </label>
