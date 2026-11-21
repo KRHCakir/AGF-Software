@@ -59,6 +59,9 @@ export default function CertificatesSetting() {
     const saveOwn = async () => {
         setOwnSaving(true);
         setOwnNotice(false);
+        // Alleen soorten die dit opslaan nieuw maakt (nog niet in de bekende lijst) mogen in het tekstvak komen; bewust verwijderde blijven weg.
+        const known = (own.reference?.customTypes ?? []).map((name) => name.toLowerCase());
+        const created = own.rows.filter((row) => row.typeCode === 'Custom').map((row) => row.customTypeName.trim()).filter((name) => name !== '' && !known.includes(name.toLowerCase()));
         try {
             if (await own.save()) {
                 setOwnNotice(true);
@@ -68,7 +71,7 @@ export default function CertificatesSetting() {
                     const settings = await getCertificateSettings();
                     setTypes((current) => {
                         const lines = current.split('\n').map((line) => line.trim()).filter(Boolean);
-                        const missing = settings.customTypes.filter((type) => !lines.includes(type));
+                        const missing = settings.customTypes.filter((type) => !lines.includes(type) && created.some((name) => name.toLowerCase() === type.toLowerCase()));
                         return missing.length === 0 ? current : [...lines, ...missing].join('\n');
                     });
                 } catch { /* de lijst blijft zoals ze was */ }
@@ -115,7 +118,7 @@ export default function CertificatesSetting() {
                         onOpenFile={(id, file) => void own.openFile(id, file)} onAddFile={(row, file) => void own.addFile(row, file)} uploading={own.uploading} dataTour="own-certificate" />
                 )}
                 <div className="flex flex-wrap items-center gap-2">
-                    <button type="button" className={primaryButtonClass} disabled={ownSaving || own.loading || own.failed || !own.changed || own.uploading !== null} onClick={() => void saveOwn()} data-testid="own-certificates-save">{t('cert_own_save')}</button>
+                    <button type="button" className={primaryButtonClass} disabled={ownSaving || own.loading || own.failed || !own.changed || own.uploading.length > 0} onClick={() => void saveOwn()} data-testid="own-certificates-save">{t('cert_own_save')}</button>
                     {ownNotice && <span role="status" className="text-sm text-green-900">{t('cert_own_saved')}</span>}
                 </div>
             </div>
