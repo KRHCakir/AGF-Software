@@ -33,12 +33,21 @@ namespace AgfAdmin.Data
                 b.HasIndex(e => e.CreatedAt);
                 b.HasIndex(e => e.IncomingInvoiceId).IsUnique();
                 b.HasOne(e => e.IncomingInvoice).WithMany().HasForeignKey(e => e.IncomingInvoiceId).OnDelete(DeleteBehavior.Restrict);
+                // Certificaten deel 2: de relatie waarbij gelezen werd en het certificaat dat de goedkeuring opleverde.
+                b.HasIndex(e => e.RelationId);
+                b.HasIndex(e => e.RelationCertificateId);
+                b.HasOne(e => e.Relation).WithMany().HasForeignKey(e => e.RelationId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(e => e.RelationCertificate).WithMany().HasForeignKey(e => e.RelationCertificateId).OnDelete(DeleteBehavior.Restrict);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_AiExtractions_Status_Allowed", "\"Status\" IN ('Proposed', 'Approved', 'Rejected', 'Manual', 'Failed')");
-                    // Goedgekeurd betekent: bij een factuur, door iemand, op een moment; en alleen dan.
+                    // Goedgekeurd betekent: bij een factuur (of, certificaten deel 2, bij een certificaat), door iemand, op een moment; en alleen dan.
+                    // Een factuurlezing hoort nooit bij een certificaat en omgekeerd.
                     t.HasCheckConstraint("CK_AiExtractions_Approved_Complete",
-                        "(\"Status\" = 'Approved' AND \"IncomingInvoiceId\" IS NOT NULL AND \"ApprovedBy\" IS NOT NULL AND \"ApprovedAt\" IS NOT NULL) OR (\"Status\" <> 'Approved' AND \"IncomingInvoiceId\" IS NULL AND \"ApprovedBy\" IS NULL AND \"ApprovedAt\" IS NULL)");
+                        "(\"Status\" = 'Approved' AND \"ApprovedBy\" IS NOT NULL AND \"ApprovedAt\" IS NOT NULL AND ((\"DocumentType\" = 'PurchaseInvoice' AND \"IncomingInvoiceId\" IS NOT NULL AND \"RelationCertificateId\" IS NULL) OR (\"DocumentType\" = 'Certificate' AND \"RelationCertificateId\" IS NOT NULL AND \"IncomingInvoiceId\" IS NULL)))"
+                        + " OR (\"Status\" <> 'Approved' AND \"IncomingInvoiceId\" IS NULL AND \"RelationCertificateId\" IS NULL AND \"ApprovedBy\" IS NULL AND \"ApprovedAt\" IS NULL)");
+                    t.HasCheckConstraint("CK_AiExtractions_DocumentType_Allowed", "\"DocumentType\" IN ('PurchaseInvoice', 'Certificate')");
+                    t.HasCheckConstraint("CK_AiExtractions_Relation_Certificate", "\"RelationId\" IS NULL OR \"DocumentType\" = 'Certificate'");
                     t.HasCheckConstraint("CK_AiExtractions_Costs_NotNegative", "CAST(\"CostUsd\" AS NUMERIC) >= 0 AND CAST(\"CostEur\" AS NUMERIC) >= 0 AND \"InputTokens\" >= 0 AND \"OutputTokens\" >= 0");
                 });
             });

@@ -41,5 +41,8 @@ namespace AgfAdmin.Services
         public static ServiceResult<T> Unavailable(string message) => new(ServiceResultStatus.Unavailable, default, null, message);
         // 503 met een eigen lichaam (zoals een foutcode voor het scherm), net als Conflict(message, body).
         public static ServiceResult<T> Unavailable(string message, object body) => new(ServiceResultStatus.Unavailable, default, null, message, body);
+
+        // Een weigering als uitkomst van een ander type: dezelfde status, fouten, melding en 409/503-lichaam (zonder waarde).
+        public ServiceResult<TOther> As<TOther>() => new(Status, default, Errors, Message, ConflictBody);
     }
 }

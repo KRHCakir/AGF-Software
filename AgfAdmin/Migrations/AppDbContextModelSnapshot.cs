@@ -134,6 +134,12 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<int?>("RelationCertificateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RelationId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Sha256")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -162,11 +168,19 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("IncomingInvoiceId")
                         .IsUnique();
 
+                    b.HasIndex("RelationCertificateId");
+
+                    b.HasIndex("RelationId");
+
                     b.ToTable("AiExtractions", t =>
                         {
-                            t.HasCheckConstraint("CK_AiExtractions_Approved_Complete", "(\"Status\" = 'Approved' AND \"IncomingInvoiceId\" IS NOT NULL AND \"ApprovedBy\" IS NOT NULL AND \"ApprovedAt\" IS NOT NULL) OR (\"Status\" <> 'Approved' AND \"IncomingInvoiceId\" IS NULL AND \"ApprovedBy\" IS NULL AND \"ApprovedAt\" IS NULL)");
+                            t.HasCheckConstraint("CK_AiExtractions_Approved_Complete", "(\"Status\" = 'Approved' AND \"ApprovedBy\" IS NOT NULL AND \"ApprovedAt\" IS NOT NULL AND ((\"DocumentType\" = 'PurchaseInvoice' AND \"IncomingInvoiceId\" IS NOT NULL AND \"RelationCertificateId\" IS NULL) OR (\"DocumentType\" = 'Certificate' AND \"RelationCertificateId\" IS NOT NULL AND \"IncomingInvoiceId\" IS NULL))) OR (\"Status\" <> 'Approved' AND \"IncomingInvoiceId\" IS NULL AND \"RelationCertificateId\" IS NULL AND \"ApprovedBy\" IS NULL AND \"ApprovedAt\" IS NULL)");
 
                             t.HasCheckConstraint("CK_AiExtractions_Costs_NotNegative", "CAST(\"CostUsd\" AS NUMERIC) >= 0 AND CAST(\"CostEur\" AS NUMERIC) >= 0 AND \"InputTokens\" >= 0 AND \"OutputTokens\" >= 0");
+
+                            t.HasCheckConstraint("CK_AiExtractions_DocumentType_Allowed", "\"DocumentType\" IN ('PurchaseInvoice', 'Certificate')");
+
+                            t.HasCheckConstraint("CK_AiExtractions_Relation_Certificate", "\"RelationId\" IS NULL OR \"DocumentType\" = 'Certificate'");
 
                             t.HasCheckConstraint("CK_AiExtractions_Status_Allowed", "\"Status\" IN ('Proposed', 'Approved', 'Rejected', 'Manual', 'Failed')");
                         });
@@ -4618,6 +4632,9 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AiExtractionId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4664,6 +4681,9 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AiExtractionId")
+                        .IsUnique();
 
                     b.HasIndex("RelationCertificateId", "Version")
                         .IsUnique();
@@ -6544,7 +6564,21 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("IncomingInvoiceId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.RelationCertificate", "RelationCertificate")
+                        .WithMany()
+                        .HasForeignKey("RelationCertificateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.Relation", "Relation")
+                        .WithMany()
+                        .HasForeignKey("RelationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("IncomingInvoice");
+
+                    b.Navigation("Relation");
+
+                    b.Navigation("RelationCertificate");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.CertificateConfirmation", b =>
@@ -7083,11 +7117,18 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.RelationCertificateFile", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.AiExtraction", "AiExtraction")
+                        .WithMany()
+                        .HasForeignKey("AiExtractionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.RelationCertificate", "Certificate")
                         .WithMany("Files")
                         .HasForeignKey("RelationCertificateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("AiExtraction");
 
                     b.Navigation("Certificate");
                 });
