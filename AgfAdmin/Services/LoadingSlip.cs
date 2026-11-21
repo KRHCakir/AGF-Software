@@ -53,6 +53,8 @@ namespace AgfAdmin.Services
         // Met hoeveel decimalen deze versie haar gewichten toont (0 of 1); null = een bon van vóór deze instelling, met de oude weergave.
         int? WeightDecimals = null,
         // Certificaten deel 2: het eigen CoC-nummer in de koptekst (null = geen of een bon van vóór deze ronde).
+        // Een null-veld staat wel in SnapshotJson ("ownCocNumber": null), maar telt niet mee in de vingerafdruk: Hash gebruikt HashJson
+        // met WhenWritingNull. Een bon zonder GGN en CoC houdt dus de vingerafdruk van vóór deze ronde (geen onbedoelde nieuwe versie).
         string OwnCocNumber = null);
 
     // Eén rij: een orderregel, en per pallet of partij waar dat al vastligt (gereserveerd); wat nog niet gereserveerd is een eigen rij.

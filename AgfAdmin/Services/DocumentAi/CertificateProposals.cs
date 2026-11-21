@@ -19,6 +19,9 @@ namespace AgfAdmin.Services.DocumentAi
         public const string ProblemGgnCheckDigit = "ggnCheckDigit";
         public const string ProblemHolder = "holderMismatch";
         public const string ProblemUnmatched = "unmatched";
+        public const string ProblemTooLong = "tooLong";
+        // Meer producten gelezen dan het voorstel toont: de gebruiker controleert de rest zelf in het document.
+        public const string ProblemTruncated = "truncated";
         public const int MaxProducts = 200;
         public const int MaxSites = 50;
 
@@ -78,7 +81,8 @@ namespace AgfAdmin.Services.DocumentAi
             if (number == null) Problem("number", AiReadingRules.Missing);
             else if (CertificateRules.IsGgnType(typeCode) && !ArticleRules.IsGgn(number)) Problem("number", ProblemGgnInvalid);
             else if (CertificateRules.IsGgnType(typeCode) && !CertificateRules.HasValidCheckDigit(number)) Problem("number", ProblemGgnCheckDigit);
-            if (number?.Length > CertificateRules.MaxNumberLength) number = number[..CertificateRules.MaxNumberLength];
+            // Te lang: niet stil inkorten (dan zou het een ander nummer worden), maar markeren; opslaan weigert het tot de gebruiker het aanpast.
+            if (number?.Length > CertificateRules.MaxNumberLength) Problem("number", ProblemTooLong);
 
             var holder = AiReadingRules.Text(json["houder_naam"]);
             if (holder == null) Problem("holderName", AiReadingRules.Missing);
@@ -105,6 +109,7 @@ namespace AgfAdmin.Services.DocumentAi
             var productIndexes = new Dictionary<int, int>(); // index in de uitvoer van de AI -> index in het voorstel (na weglaten van lege en dubbele)
             var firstIndexByText = new Dictionary<string, int>(StringComparer.Ordinal);
             var rawProducts = json["producten"] as JsonArray ?? new JsonArray();
+            if (rawProducts.Count > MaxProducts) Problem("products", ProblemTruncated);
             for (var rawIndex = 0; rawIndex < rawProducts.Count && rawIndex < MaxProducts; rawIndex++)
             {
                 if (rawProducts[rawIndex] is not JsonObject item) continue;
