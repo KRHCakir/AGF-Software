@@ -22,5 +22,7 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public decimal? UnitPrice { get; set; }
+        // Certificaten deel 2: het GGN van het product corrigeren. Weggelaten (null) = ongewijzigd; een lege tekst = leegmaken.
+        public string Ggn { get; set; }
     }
 }

@@ -33,6 +33,10 @@ namespace AgfAdmin.Models
         // Transportopdracht (documenten deel 2): taal van de kopteksten (standaard Engels) en de standaard soort pallet.
         public string TransportOrderLanguage { get; set; } = Services.SalesOrderDocumentRules.LanguageEnglish;
         public string TransportOrderPalletKind { get; set; } = Services.SalesTransportRules.DefaultPalletKind;
+        // Certificaten deel 2: het GGN van het product per regel op de laadbon en de transportopdracht (standaard aan, per documentsoort uit
+        // te zetten). Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot.
+        public bool LoadingSlipShowGgn { get; set; } = true;
+        public bool TransportOrderShowGgn { get; set; } = true;
 
         // Link naar de GLOBALG.A.P. Supply Chain Portal voor de handmatige GGN-controle (absolute https-URL; alleen een link).
         public string GlobalGapPortalUrl { get; set; } = Services.RelationRules.DefaultGlobalGapPortalUrl;

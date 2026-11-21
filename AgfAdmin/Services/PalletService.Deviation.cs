@@ -108,6 +108,8 @@ namespace AgfAdmin.Services
                 ExpectedNetWeightKg = candidate.NetWeightKg,
                 WeightSource = LineWeightRules.Entered,
                 LotNumber = candidate.LotNumber,
+                // Certificaten deel 2: het GGN zoals bij deze ontvangst gekozen.
+                Ggn = candidate.Ggn,
                 PartijId = original.PartijId,
                 ReplacesLineId = original.Id,
                 CreatedAt = candidate.CreatedAt

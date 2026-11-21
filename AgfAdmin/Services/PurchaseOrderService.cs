@@ -355,6 +355,7 @@ namespace AgfAdmin.Services
                     Packaging = l.ProductVariant?.Packaging,
                     Brand = l.ProductVariant?.Brand,
                     LotNumber = l.LotNumber,
+                    Ggn = l.Ggn,
                     PartijId = l.PartijId,
                     PartijNumber = l.Partij?.Number,
                     ExpectedQuantity = l.ExpectedQuantity,

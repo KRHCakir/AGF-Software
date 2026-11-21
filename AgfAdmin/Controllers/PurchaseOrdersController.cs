@@ -31,6 +31,17 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> InvoiceCandidates([FromQuery] int vendorId, [FromQuery] string query = null, [FromQuery] int? orderId = null) =>
             Ok(await _service.InvoiceCandidatesAsync(vendorId, query, orderId, HttpContext?.RequestAborted ?? default));
 
+        // Certificaten deel 2: het voorgestelde GGN van het product per regel (uit de geldige GGN-certificaten van de leverancier op de
+        // verwachte leverdatum, anders vandaag). productIds als komma-lijst ("4,7").
+        [HttpGet("ggn-proposals")]
+        public async Task<IActionResult> GgnProposals([FromQuery] int vendorId, [FromQuery] string productIds, [FromQuery] DateOnly? date = null) =>
+            this.ToActionResult(await _service.GgnProposalsAsync(vendorId, ParseIds(productIds), date, HttpContext?.RequestAborted ?? default));
+
+        private static List<int> ParseIds(string text) =>
+            (text ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(part => int.TryParse(part, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
+                .Where(id => id > 0).Distinct().ToList();
+
         [HttpGet("by-supplier-reference")]
         public async Task<IActionResult> BySupplierReference([FromQuery] string supplierReference, [FromQuery] int vendorId) =>
             Ok(await _service.FindBySupplierReferenceAsync(supplierReference, vendorId, HttpContext?.RequestAborted ?? default));
