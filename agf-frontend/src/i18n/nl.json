@@ -2894,11 +2894,11 @@
   "po_definitive_readonly": "Deze order is definitief en alleen-lezen. Een prijs, het ordernummer van de leverancier of de notitie wijzig je met Correctie, altijd met een reden.",
   "po_correct": "Correctie",
   "po_correct_title": "Correctie op een definitieve order",
-  "po_correct_hint": "Alleen de prijs per regel, het ordernummer van de leverancier en de notitie. Aantallen en artikelen volgen uit de ontvangst.",
+  "po_correct_hint": "Alleen de prijs en het GGN per regel, het ordernummer van de leverancier en de notitie. Aantallen en artikelen volgen uit de ontvangst.",
   "po_correct_reason": "Reden (verplicht)",
   "po_correct_reason_required": "Geef een reden voor de correctie.",
   "po_correct_save": "Correctie opslaan",
-  "po_correct_nothing": "Wijzig minstens één prijs, het ordernummer van de leverancier of de notitie.",
+  "po_correct_nothing": "Wijzig minstens één prijs, GGN, het ordernummer van de leverancier of de notitie.",
   "po_correct_saved": "Correctie opgeslagen",
   "po_changes": "Wijzigingen",
   "po_change_vendor": "Leverancier",
@@ -3124,5 +3124,7 @@
   "po_line_ggn_hint_choose": "{count} GGN's van de leverancier gelden voor dit product: kies er een of vul het GGN van de factuur in.",
   "po_line_ggn_hint_chosen": "Uit het GGN-certificaat van de leverancier.",
   "po_line_ggn_hint_own": "Niet in het GGN-certificaat van de leverancier (bij een handelaar is dat het GGN van de teler).",
-  "po_line_ggn_hint_none": "Geen GGN van de leverancier voor dit product. Staat er een GGN op de factuur, vul dat in."
+  "po_line_ggn_hint_none": "Geen GGN van de leverancier voor dit product. Staat er een GGN op de factuur, vul dat in.",
+  "supply_ggn_from_line": "Het GGN van de inkoopregel; per regel aanpasbaar of leeg te maken.",
+  "document_show_ggn": "GGN van het product per regel tonen"
 }

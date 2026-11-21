@@ -59,6 +59,9 @@ export default function TransportOrderSetting() {
                             <label htmlFor="transport-order-pallet-kind" className="text-xs font-medium text-gray-700">{t('transport_order_pallet_kind')}</label>
                             <input id="transport-order-pallet-kind" value={value.palletKind} maxLength={100} onChange={(event) => change({ palletKind: event.target.value })} className={inputClass} />
                         </div>
+                        {value.showGgn !== undefined && (
+                            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={value.showGgn} onChange={(event) => change({ showGgn: event.target.checked })} data-testid="transport-order-show-ggn" /> {t('document_show_ggn')}</label>
+                        )}
                     </fieldset>
                     <div className="flex items-center gap-2">
                         <button type="submit" className={primaryButtonClass} disabled={saving}>{t('loading_slip_save')}</button>

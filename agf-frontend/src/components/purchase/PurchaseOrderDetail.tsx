@@ -119,6 +119,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                             {(line.replacedByLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_replaced_by', { line: lineName(id) })}</span>)}
                                         </span>
                                     )}
+                                    {line.ggn && <span className="block font-mono text-xs text-gray-800" data-testid={`po-line-ggn-${line.id}`}>GGN {line.ggn}</span>}
                                     {(line.invoicedQuantity ?? 0) > 0 && (
                                         <span className="block text-xs text-gray-700" data-testid={`po-line-invoiced-${line.id}`}>
                                             {t('po_line_invoiced', { invoiced: qty(line.invoicedQuantity ?? 0), open: qty(line.openToInvoiceQuantity ?? 0) })}
