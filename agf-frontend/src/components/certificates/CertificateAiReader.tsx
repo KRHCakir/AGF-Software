@@ -169,7 +169,8 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     </p>
                                 )}
                                 {proposal.sameNumberCertificateId !== null && certificates.stored.some((r) => r.id === proposal.sameNumberCertificateId)
-                                    && draft.row.number === (proposal.number ?? '') && draft.row.typeCode === (proposal.typeCode ?? '') && (
+                                    && draft.row.number === (proposal.number ?? '') && draft.row.typeCode === (proposal.typeCode ?? '')
+                                    && (draft.row.typeCode !== CUSTOM_TYPE || draft.row.customTypeName.trim().toLowerCase() === (proposal.customTypeName ?? '').trim().toLowerCase()) && (
                                     <fieldset className="rounded border border-blue-200 bg-blue-50 p-2 text-sm" data-testid="cert-ai-same-number">
                                         <legend className="px-1 text-xs font-medium text-blue-950">{t('cert_ai_same_number', { type: proposal.sameNumberTypeName ?? '', number: proposal.number ?? '' })}</legend>
                                         <label className="flex items-center gap-2"><input type="radio" name={`${listId}-target`} checked={draft.targetId !== null}
