@@ -73,7 +73,7 @@ namespace AgfAdmin.Services
         public static string Serialize(TransportOrderSnapshot snapshot) => JsonSerializer.Serialize(snapshot, Json);
         public static TransportOrderSnapshot Deserialize(string json) => JsonSerializer.Deserialize<TransportOrderSnapshot>(json, Json);
 
-        // Vingerafdruk zoals bij de laadbon: lege velden tellen niet mee.
+        // Vingerafdruk zoals bij de laadbon: lege velden tellen niet mee (HashJson, WhenWritingNull), ook de nieuwe Ggn en OwnCocNumber.
         public static string Hash(TransportOrderSnapshot snapshot) =>
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot with { WeightDecimals = null }, LoadingSlipBuilder.HashJson)))).ToLowerInvariant();
 
