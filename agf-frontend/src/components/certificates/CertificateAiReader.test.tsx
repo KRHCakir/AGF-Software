@@ -151,4 +151,17 @@ describe('certificate AI reader', () => {
         assert.equal(put.certificates.length, 1);
         assert.deepEqual([put.certificates[0].id, put.certificates[0].validUntil, put.aiApproval.certificateIndex], [7, '2027-02-28', 0]);
     });
+
+    test('Handmatig verder puts the values and the document as an open change in the block; nothing is uploaded or saved yet', async () => {
+        list = [stored];
+        read = extraction({ proposal: { ...extraction().proposal, sameNumberCertificateId: 7, sameNumberTypeName: 'GLOBALG.A.P. IFA (GGN)' } });
+        await mounted.render(<Harness />);
+        await mounted.waitFor(() => $('[data-testid="ai-upload-button"]') !== null && !$<HTMLButtonElement>('[data-testid="ai-upload-button"]')!.disabled, 'upload ready');
+        await upload();
+        await click('[data-testid="cert-ai-manual"]');
+        await mounted.waitFor(() => $('[data-testid="cert-ai-notice"]') !== null, 'manual');
+        assert.deepEqual(JSON.parse(calls.find((c) => c.url.includes('/close'))!.body), { outcome: 'Manual' });
+        assert.equal(calls.filter((c) => c.method === 'PUT' || (c.method === 'POST' && c.url.includes('/files'))).length, 0, 'nothing saved or uploaded');
+        assert.ok($('[data-testid="certificate-0-files"]')!.textContent!.includes('cert_file_pending'), 'the document waits as an open file on the existing certificate');
+    });
 });
