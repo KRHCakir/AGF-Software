@@ -91,7 +91,7 @@ const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOpti
     // Blind: ook het etiketgewicht vult de gebruiker zelf in (de bestelling wordt niet vooraf getoond).
     kgPerPackage: '',
     netKg: '',
-    ggn: line.ggn ?? proposedGgn(vendorGgns) ?? '',
+    ggn: line.ggn || (proposedGgn(vendorGgns) ?? ''),
     entered: emptyEntered(),
     matchedVariantId: null,
     expectedShownAt: null,
@@ -1041,7 +1041,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                         )}
                                     </div>
                                     <span className="block text-xs text-gray-500" data-testid={`ggn-state-${id}`}>
-                                        {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns, entry.line.ggn ?? null); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
+                                        {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns, entry.line.ggn || null); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
                                     </span>
                                     {(() => {
                                         const warning = ggnCertificateWarning(draft.ggn, entry.commitment.vendorGgns, todayInAmsterdam());
