@@ -306,6 +306,14 @@ namespace AgfAdmin.Services
             _ => "The file cannot be read.",
         };
 
+        // Certificaten deel 2: het eigen CoC-nummer in de koptekst van de laadbon en de transportopdracht. Gekozen: de soort GLOBALG.A.P.
+        // Chain of Custody (CoC) bij de eigen certificaten, het eerste actieve certificaat in de volgorde van de lijst dat op die dag niet
+        // verlopen is. Geen CoC (of alleen verlopen of gearchiveerd): niets in de koptekst.
+        public static async Task<string> OwnCocNumberAsync(AppDbContext db, DateOnly today, CancellationToken cancellationToken) =>
+            await db.RelationCertificates.AsNoTracking()
+                .Where(c => c.RelationId == null && c.IsActive && c.TypeCode == CertificateRules.GlobalGapCoc && (c.ValidUntil == null || c.ValidUntil >= today))
+                .OrderBy(c => c.SortOrder).ThenBy(c => c.Id).Select(c => c.Number).FirstOrDefaultAsync(cancellationToken);
+
         public static async Task<int> WarningDaysAsync(AppDbContext db, CancellationToken cancellationToken) =>
             await db.CompanySettings.AsNoTracking().OrderBy(c => c.Id).Select(c => (int?)c.CertificateWarningDays).FirstOrDefaultAsync(cancellationToken) ?? CertificateRules.DefaultWarningDays;
 

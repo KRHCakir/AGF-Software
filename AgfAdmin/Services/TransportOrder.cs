@@ -16,18 +16,21 @@ namespace AgfAdmin.Services
         decimal TotalQuantity, decimal? TotalPalletSpaces, decimal? TotalGrossKg,
         DateTime ConfirmedAt, string ConfirmedBy,
         // Zoals bij de laadbon: 0 of 1 decimaal voor gewichten; null = een opdracht van vóór deze instelling.
-        int? WeightDecimals = null);
+        int? WeightDecimals = null,
+        // Certificaten deel 2: het eigen CoC-nummer in de koptekst (null = geen).
+        string OwnCocNumber = null);
 
     // Eén rij per orderregel: colli, omschrijving (product, ras, verpakking), klasse, herkomst, palletplaatsen (niet afgerond, zelfde
     // berekening als op de orderregel) en bruto kg (van de regel, berekend of aangepast; anders uit het artikel).
-    public sealed record TransportOrderRow(decimal Quantity, string Unit, string Description, string Class, string Origin, decimal? PalletSpaces, decimal? GrossKg);
+    // Certificaten deel 2: Ggn = de verschillende GGN's van de partijen van die regel, gescheiden door een komma (null = geen).
+    public sealed record TransportOrderRow(decimal Quantity, string Unit, string Description, string Class, string Origin, decimal? PalletSpaces, decimal? GrossKg, string Ggn = null);
 
     public static class TransportOrderBuilder
     {
         private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
         // De order is geladen met klant (relatie, adressen), regels, emballage en transport (vervoerder, losadres).
-        public static TransportOrderSnapshot Build(SalesOrder order, CompanySettings settings)
+        public static TransportOrderSnapshot Build(SalesOrder order, CompanySettings settings, string ownCoc = null)
         {
             var transport = order.Transport ?? throw new InvalidOperationException($"Sales order {order.OrderNumber} has no transport.");
             var rows = order.Lines.OrderBy(l => l.Id).Select(line =>
@@ -36,7 +39,8 @@ namespace AgfAdmin.Services
                 var perPallet = PurchaseLineMath.PackagesPerPallet(line.PackagesPerPallet, variant?.DefaultPackagesPerPallet);
                 var description = string.Join(" · ", new[] { variant?.Product?.Name, variant?.Name, LoadingSlipBuilder.Blank(variant?.Packaging) }.Where(p => !string.IsNullOrWhiteSpace(p)));
                 return new TransportOrderRow(line.Quantity, line.Unit, description, LoadingSlipBuilder.Blank(variant?.TradeClass),
-                    LoadingSlipBuilder.Blank(variant?.OriginCountryCode) ?? LoadingSlipBuilder.Blank(variant?.Origin), PurchaseLineMath.Pallets(line.Quantity, perPallet), GrossKg(line));
+                    LoadingSlipBuilder.Blank(variant?.OriginCountryCode) ?? LoadingSlipBuilder.Blank(variant?.Origin), PurchaseLineMath.Pallets(line.Quantity, perPallet), GrossKg(line),
+                    settings.TransportOrderShowGgn ? Ggns(line) : null);
             }).ToList();
             var packaging = order.PackagingLines.OrderBy(p => p.Id).Select(p => new LoadingSlipPackagingRow(p.Quantity, p.CostArticle?.Name)).ToList();
             // Het totaal van de regels met een waarde, zoals op de laadbon. Heeft een regel geen waarde (geen colli per pallet of geen bruto),
@@ -54,7 +58,16 @@ namespace AgfAdmin.Services
                 LoadingSlipBuilder.Blank(transport.LoadingReference), LoadingSlipBuilder.Blank(transport.UnloadingReference) ?? LoadingSlipBuilder.Blank(order.CustomerReference),
                 LoadingSlipBuilder.Blank(transport.Remarks), LoadingSlipBuilder.Blank(transport.PalletKind) ?? LoadingSlipBuilder.Blank(settings.TransportOrderPalletKind) ?? SalesTransportRules.DefaultPalletKind,
                 rows, packaging, rows.Sum(r => r.Quantity), spaces.Count == 0 ? null : spaces.Sum(), gross.Count == 0 ? null : gross.Sum(),
-                LoadingSlipBuilder.Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals));
+                LoadingSlipBuilder.Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals), LoadingSlipBuilder.Blank(ownCoc));
+        }
+
+        // Komt één regel uit meer partijen met verschillende GGN's, dan alle verschillende nummers achter elkaar (in de volgorde van
+        // reserveren); zonder GGN niets (geen streepje of "n.v.t.").
+        public static string Ggns(SalesOrderLine line)
+        {
+            var numbers = line.Reservations.Where(r => r.Status is "Active" or "Consumed").OrderBy(r => r.Id)
+                .Select(LoadingSlipBuilder.ProductGgn).Where(g => g != null).Distinct(StringComparer.Ordinal).ToList();
+            return numbers.Count == 0 ? null : string.Join(", ", numbers);
         }
 
         public static string Serialize(TransportOrderSnapshot snapshot) => JsonSerializer.Serialize(snapshot, Json);

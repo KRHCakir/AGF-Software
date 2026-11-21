@@ -44,7 +44,7 @@ namespace AgfAdmin.Services
             order.LicensePlate = plate;
             order.UpdatedAt = now;
             // De laadbon, en de transportopdracht als er transport is ingevuld: beide versie 1.
-            AddChangedVersions(order, await SettingsAsync(cancellationToken), now);
+            AddChangedVersions(order, await SettingsAsync(cancellationToken), await OwnCocAsync(cancellationToken), now);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -101,7 +101,7 @@ namespace AgfAdmin.Services
             order.UpdatedAt = now;
             // Laadgegevens en de nieuwe versies van de documenten (laadbon, transportopdracht) in één save: nooit opgeslagen gegevens zonder
             // de documenten die erbij horen.
-            AddChangedVersions(order, await SettingsAsync(cancellationToken), DateTime.UtcNow);
+            AddChangedVersions(order, await SettingsAsync(cancellationToken), await OwnCocAsync(cancellationToken), DateTime.UtcNow);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -151,7 +151,7 @@ namespace AgfAdmin.Services
             db.ChangeTracker.Clear();
             var order = await LoadAsync(orderId, cancellationToken);
             if (order?.ConfirmedAt == null || order.Status == ReservationRules.OrderStatusCancelled) return false;
-            if (AddChangedVersions(order, await SettingsAsync(cancellationToken), DateTime.UtcNow) == 0) return false;
+            if (AddChangedVersions(order, await SettingsAsync(cancellationToken), await OwnCocAsync(cancellationToken), DateTime.UtcNow) == 0) return false;
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -214,7 +214,11 @@ namespace AgfAdmin.Services
         public async Task<LoadingSlipSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
         {
             var settings = await SettingsAsync(cancellationToken);
-            return new LoadingSlipSettingsDto { Language = settings.LoadingSlipLanguage, ShowCustomer = settings.LoadingSlipShowCustomer, ShowSupplier = settings.LoadingSlipShowSupplier, WarehouseAddress = settings.LoadingSlipWarehouseAddress };
+            return new LoadingSlipSettingsDto
+            {
+                Language = settings.LoadingSlipLanguage, ShowCustomer = settings.LoadingSlipShowCustomer, ShowSupplier = settings.LoadingSlipShowSupplier,
+                WarehouseAddress = settings.LoadingSlipWarehouseAddress, ShowGgn = settings.LoadingSlipShowGgn,
+            };
         }
 
         // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot (en dus haar kolommen).
@@ -238,6 +242,8 @@ namespace AgfAdmin.Services
             settings.LoadingSlipShowCustomer = request.ShowCustomer;
             settings.LoadingSlipShowSupplier = request.ShowSupplier;
             settings.LoadingSlipWarehouseAddress = warehouse;
+            // Weggelaten (een oudere client) = ongewijzigd.
+            if (request.ShowGgn is bool showGgn) settings.LoadingSlipShowGgn = showGgn;
             await db.SaveChangesAsync(cancellationToken);
             return ServiceResult<LoadingSlipSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
         }
@@ -248,14 +254,14 @@ namespace AgfAdmin.Services
 
         // Een nieuwe versie van elk document waarvan de inhoud veranderd is (vingerafdruk): de laadbon altijd, de transportopdracht alleen als er
         // transport is ingevuld. De eerste versie heet "bevestigd", de volgende "gewijzigd". Geeft het aantal nieuwe versies.
-        private int AddChangedVersions(SalesOrder order, CompanySettings settings, DateTime now)
+        private int AddChangedVersions(SalesOrder order, CompanySettings settings, string ownCoc, DateTime now)
         {
             var added = 0;
-            var slip = LoadingSlipBuilder.Build(order, settings);
+            var slip = LoadingSlipBuilder.Build(order, settings, ownCoc);
             if (AddIfChanged(order, SalesOrderDocumentRules.KindLoadingSlip, LoadingSlipBuilder.Serialize(slip), LoadingSlipBuilder.Hash(slip), now)) added++;
             if (order.Transport != null)
             {
-                var transport = TransportOrderBuilder.Build(order, settings);
+                var transport = TransportOrderBuilder.Build(order, settings, ownCoc);
                 if (AddIfChanged(order, SalesOrderDocumentRules.KindTransportOrder, TransportOrderBuilder.Serialize(transport), TransportOrderBuilder.Hash(transport), now)) added++;
             }
             return added;
@@ -311,6 +317,9 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Partij)
                 .AsSplitQuery()
                 .SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+
+        // Het eigen CoC-nummer voor de koptekst (certificaten deel 2): zie CertificateService.OwnCocNumberAsync.
+        private Task<string> OwnCocAsync(CancellationToken cancellationToken) => CertificateService.OwnCocNumberAsync(db, db.BusinessCalendar.Today(), cancellationToken);
 
         private async Task<CompanySettings> SettingsAsync(CancellationToken cancellationToken) =>
             await db.CompanySettings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken) ?? new CompanySettings();
