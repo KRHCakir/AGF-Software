@@ -69,7 +69,7 @@ namespace AgfAdmin.Services.DocumentAi
             error = obj.Select(p => p.Key).Where(k => !known.Contains(k)).Select(k => $"{k} is een onbekende eigenschap").FirstOrDefault()
                 ?? (obj["soort"] is JsonValue soort && soort.TryGetValue(out string code) && TypeCodes.Contains(code) ? null : "soort ontbreekt of is onbekend")
                 ?? TextFields.Where(f => !IsText(obj[f])).Select(f => $"{f} ontbreekt of is geen tekst").FirstOrDefault()
-                ?? Items(obj, "producten", item => IsText(item["tekst"]) && item["pagina"] is JsonValue page && page.GetValueKind() == JsonValueKind.Number, ["tekst", "pagina"])
+                ?? Items(obj, "producten", item => IsText(item["tekst"]) && item["pagina"] is JsonValue page && page.TryGetValue(out int _), ["tekst", "pagina"])
                 ?? Items(obj, "productiesites", item => IsText(item["naam"]) && IsText(item["land"]), ["naam", "land"])
                 ?? Items(obj, "zekerheden", item => IsText(item["veld"]) && IsText(item["plek"]) && item["zekerheid"] is JsonValue z && z.TryGetValue(out string level) && Certainties.Contains(level),
                     ["veld", "zekerheid", "plek"]);
