@@ -16,6 +16,8 @@ import { ApiError, toApiError } from '../../services/apiClient';
 import OrderNumberText from '../purchase/OrderNumberText';
 import SupplierReferenceNotice from '../purchase/SupplierReferenceNotice';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
+import CertificateCheckDialog from '../certificates/CertificateCheckDialog';
+import { type CertificateCheck, certificateChecksOf } from '../../types/certificate';
 import { updatePurchaseOrder } from '../../services/purchaseOrderService';
 import { type OrderEdit, lineLimits, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
 import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
@@ -113,6 +115,9 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const [header, setHeader] = useState<HeaderDraft>(() => (opened === null ? emptyHeader() : { ...emptyHeader(), ...opened.header }));
     const [lines, setLines] = useState<PurchaseLineDraft[]>(() => opened?.lines ?? [emptyLine()]);
     const [pending, setPending] = useState<PendingSubmission | null>(null);
+    // Certificaten deel 1: de vraag "Klopt dit?" (product niet in het GGN-certificaat van de leverancier, of verlopen); Ja stuurt dezelfde
+    // opdracht opnieuw met de bevestigde producten.
+    const [certificateCheck, setCertificateCheck] = useState<CertificateCheck[] | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
@@ -168,6 +173,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setPending(null);
         setError(null);
         setErrors({});
+        setCertificateCheck(null);
     };
 
     const updateHeader = (field: keyof HeaderDraft, value: string) => {
@@ -311,9 +317,9 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         };
     };
 
-    const submit = async () => {
+    const submit = async (confirmed: PendingSubmission | null = null) => {
         if (inFlight.current || result !== null) return;
-        let submission = pending;
+        let submission = confirmed ?? pending;
         if (submission === null) {
             const { payload, errors: found, editLines } = validate();
             setErrors(found);
@@ -348,6 +354,12 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             setResult(created);
         } catch (caught) {
             const apiError = toApiError(caught);
+            // "Klopt dit?": niets opgeslagen; dezelfde opdracht (zelfde requestId) wacht op Ja of Nee.
+            const checks = apiError.status === 409 ? certificateChecksOf(apiError.body) : null;
+            if (checks !== null) {
+                setCertificateCheck(checks);
+                return;
+            }
             // Het getypte partijnummer bestaat al (ook als een ander het net aanmaakte): dezelfde vraag als bij het verlaten van het veld.
             if (isPartijExistsConflict(apiError.body)) {
                 setPartijExists(apiError.body.partij);
@@ -360,6 +372,20 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             inFlight.current = false;
             setSubmitting(false);
         }
+    };
+
+    // Ja, klopt: dezelfde opdracht met de bevestigde producten erbij. Nee: terug naar het formulier om aan te passen (een nieuwe opdracht).
+    const confirmCertificates = () => {
+        if (certificateCheck === null || pending === null) return;
+        const already = (pending.payload as { confirmedCertificateProductIds?: number[] }).confirmedCertificateProductIds ?? [];
+        const next = { ...pending, payload: { ...pending.payload, confirmedCertificateProductIds: [...new Set([...already, ...certificateCheck.map((c) => c.productId)])] } } as PendingSubmission;
+        setCertificateCheck(null);
+        setPending(next);
+        void submit(next);
+    };
+    const declineCertificates = () => {
+        setCertificateCheck(null);
+        setPending(null);
     };
 
     const startOver = () => {
@@ -596,6 +622,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     <p role="status" className="text-sm text-amber-900" data-tour="supply-partij-none">{t('partij_none_warning')}</p>
                 )}
             </div>
+            {certificateCheck !== null && <CertificateCheckDialog checks={certificateCheck} onNo={declineCertificates} onYes={confirmCertificates} />}
         </form>
     );
 }

@@ -119,3 +119,28 @@ export function isCertificateOverview(value: unknown): value is CertificateOverv
 
 export const isRelationCertificateSummary = (value: unknown): value is RelationCertificateSummary => isObject(value) && isString(value.typeCode)
     && isString(value.typeName) && isCertificateStatus(value.status) && typeof value.productsPending === 'boolean';
+
+// "Klopt dit?" bij inkoop: per product wat er aan de hand is (409 met code CERTIFICATE_CONFIRMATION_REQUIRED en checks).
+export const CERTIFICATE_CHECK_CODE = 'CERTIFICATE_CONFIRMATION_REQUIRED';
+export type CertificateCheckKind = 'NotCovered' | 'Expired' | 'ExpiresBeforeDelivery';
+export interface CertificateCheckGgn { certificateId: number; number: string; validUntil: string | null; productNames: string[] }
+export interface CertificateCheck {
+    productId: number;
+    productName: string;
+    supplierName: string;
+    kinds: CertificateCheckKind[];
+    deliveryDate: string;
+    certificates: CertificateCheckGgn[];
+    message: string;
+}
+
+const isCheck = (value: unknown): value is CertificateCheck => isObject(value) && isNumber(value.productId) && isString(value.productName) && isString(value.supplierName)
+    && isArrayOf(value.kinds, (k): k is CertificateCheckKind => k === 'NotCovered' || k === 'Expired' || k === 'ExpiresBeforeDelivery') && isString(value.deliveryDate)
+    && isArrayOf(value.certificates, (c): c is CertificateCheckGgn => isObject(c) && isNumber(c.certificateId) && isString(c.number) && isNullableString(c.validUntil) && isArrayOf(c.productNames, isString))
+    && isString(value.message);
+
+// De vragen uit een 409, of null als het een andere weigering is.
+export function certificateChecksOf(body: unknown): CertificateCheck[] | null {
+    if (!isObject(body) || body.code !== CERTIFICATE_CHECK_CODE || !isArrayOf(body.checks, isCheck) || body.checks.length === 0) return null;
+    return body.checks;
+}

@@ -3103,6 +3103,15 @@
   "relations_cert_filter_GlobalGapIfa": "Met GGN (GLOBALG.A.P.)",
   "relations_cert_filter_GlobalGapCoc": "Met CoC",
   "relations_cert_filter_Skal": "Met SKAL (bio)",
+  "cert_check_title": "Klopt dit?",
+  "cert_check_not_covered": "GGN {ggns} van {supplier} geldt voor {covered}, niet voor {product}.",
+  "cert_check_expired": "Het GGN-certificaat is verlopen op {date}.",
+  "cert_check_expires_before": "Het GGN-certificaat verloopt op {date}, vóór de verwachte levering op {delivery}.",
+  "cert_check_and": "en",
+  "cert_check_audit": "Een waarschuwing, geen blokkade. Bij Ja, klopt wordt vastgelegd dat u dit bevestigde, met datum en tijd.",
+  "cert_check_yes": "Ja, klopt",
+  "cert_check_no": "Nee, ik pas het aan",
+  "cert_check_declined": "Niet geboekt, na de vraag over het GGN-certificaat van de leverancier. Pas de regel aan of stop met deze ontvangst.",
   "cert_expiry_more": "De eerste {shown} van {total}; filter hieronder om de rest te zien.",
   "cert_page_count": "{shown} van {total} certificaten"
 }

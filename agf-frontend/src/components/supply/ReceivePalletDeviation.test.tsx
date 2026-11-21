@@ -340,4 +340,41 @@ describe('ReceivePalletForm blind entry', () => {
         assert.deepEqual([first.confirmDeviation, second.confirmDeviation], [null, true]);
         assert.equal(posts().filter((call) => call.url.endsWith('/pallets')).length, 1);
     });
+
+    // Certificaten deel 1: de server vraagt "Klopt dit?" (product niet in het GGN-certificaat van de leverancier); Ja stuurt dezelfde regel met
+    // de bevestiging, zonder tweede pallet; Nee boekt de regel niet en zegt dat.
+    test('a certificate question from the server: Yes resends the same line with the confirmation, No books nothing', async () => {
+        const certificateConflict = () => json(409, { message: 'confirm', code: 'CERTIFICATE_CONFIRMATION_REQUIRED', checks: [{
+            productId: 1, productName: 'Avocado', supplierName: "Nature's Pride", kinds: ['NotCovered'], deliveryDate: '2026-11-20',
+            certificates: [{ certificateId: 9, number: '4049928415684', validUntil: null, productNames: ['Mango'] }], message: 'GGN …' }] });
+        await arrange();
+        await fill('PE', '18');
+        contentAnswers.push(certificateConflict);
+        await submit();
+        const certificateDialog = () => doc().querySelector<HTMLElement>('[data-testid="certificate-check-dialog"]');
+        await mounted.waitFor(certificateDialog, 'certificate question');
+        assert.ok(certificateDialog()!.textContent!.includes('cert_check_not_covered'));
+        await click(certificateDialog()!.querySelector<HTMLButtonElement>('[data-tour="certificate-check-yes"]')!);
+        await mounted.waitFor(() => contentPosts().length === 2, 'resent');
+        const [first, second] = contentPosts();
+        assert.equal(first.requestId, second.requestId);
+        assert.deepEqual([first.confirmCertificate, second.confirmCertificate], [undefined, true]);
+        assert.equal(posts().filter((call) => call.url.endsWith('/pallets')).length, 1);
+    });
+
+    test('No on the certificate question books nothing and says so', async () => {
+        await arrange();
+        await fill('PE', '18');
+        contentAnswers.push(() => json(409, { message: 'confirm', code: 'CERTIFICATE_CONFIRMATION_REQUIRED', checks: [{
+            productId: 1, productName: 'Avocado', supplierName: "Nature's Pride", kinds: ['Expired'], deliveryDate: '2026-11-20',
+            certificates: [{ certificateId: 9, number: '4049928415684', validUntil: '2026-11-01', productNames: ['Avocado'] }], message: 'GGN …' }] }));
+        await submit();
+        const certificateDialog = () => doc().querySelector<HTMLElement>('[data-testid="certificate-check-dialog"]');
+        await mounted.waitFor(certificateDialog, 'certificate question');
+        assert.ok(certificateDialog()!.textContent!.includes('cert_check_expired'));
+        await click(certificateDialog()!.querySelector<HTMLButtonElement>('[data-tour="certificate-check-no"]')!);
+        assert.equal(certificateDialog(), null);
+        assert.equal(contentPosts().length, 1);
+        assert.ok((mounted.container.textContent ?? '').includes('cert_check_declined'));
+    });
 });
