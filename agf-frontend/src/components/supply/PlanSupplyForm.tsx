@@ -180,15 +180,22 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     }))].sort((a, b) => a - b).join(',');
     const proposalDate = useMemo(() => { const parsed = parseDateInput(header.expectedDate); return parsed !== null && isDateOnly(parsed) ? parsed : null; }, [header.expectedDate]);
     const [ggnProposals, setGgnProposals] = useState<ReadonlyMap<number, GgnProposal>>(() => new Map());
+    // De voorstellen gelden voor één leverancier op één datum: een andere leverancier of datum wist ze meteen. Een ander of extra product
+    // houdt de bestaande voorstellen (de voorgevulde GGN's van de andere regels blijven staan) tot het nieuwe antwoord er is.
+    const proposalScope = `${header.vendorId}|${proposalDate ?? ''}`;
+    const scopeRef = useRef(proposalScope);
     useEffect(() => {
-        setGgnProposals(new Map());
+        if (scopeRef.current !== proposalScope) {
+            scopeRef.current = proposalScope;
+            setGgnProposals(new Map());
+        }
         if (header.vendorId === '' || productIdsKey === '') return;
         const controller = new AbortController();
         getGgnProposals(Number(header.vendorId), productIdsKey.split(',').map(Number), proposalDate, controller.signal)
             .then((result) => setGgnProposals(new Map(result.proposals.map((proposal) => [proposal.productId, proposal]))))
             .catch(() => { /* geen voorstel: het GGN blijft gewoon in te vullen */ });
         return () => controller.abort();
-    }, [header.vendorId, productIdsKey, proposalDate]);
+    }, [header.vendorId, productIdsKey, proposalDate, proposalScope]);
     const ggnProposalOf = (line: PurchaseLineDraft): GgnProposal | undefined => {
         const product = line.productVariantId === '' ? undefined : productOfVariant.get(Number(line.productVariantId));
         return product === undefined ? undefined : ggnProposals.get(product);
