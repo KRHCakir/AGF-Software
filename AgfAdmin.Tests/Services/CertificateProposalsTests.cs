@@ -111,11 +111,54 @@ public class CertificateProposalsTests
     [InlineData("Avocados Hass", "Avocado", "Translated")]
     [InlineData("Baby leaf Sla mix", "Sla", "Partial")]
     [InlineData("Mizuna", null, "None")]
+    [InlineData("Lettuce and Tomaat", null, "None")]
+    [InlineData("Lettuce, Rucola", null, "None")]
     public void Products_are_linked_by_name_translation_or_a_word_and_never_created(string text, string expected, string match)
     {
         var products = new[] { new CertificateProposals.OwnProduct(1, "Sla"), new(2, "Rucola"), new(3, "IJsbergsla"), new(4, "Tomaat"), new(5, "Avocado") };
         var (product, kind) = CertificateProposals.MatchProduct(text, products);
         Assert.Equal((expected, match), (product?.Name, kind));
+    }
+
+    [Fact]
+    public void A_separately_mentioned_product_is_kept_next_to_a_more_specific_name()
+    {
+        var products = new[] { new CertificateProposals.OwnProduct(4, "Tomaat"), new(6, "Cherrytomaat") };
+        Assert.Equal(CertificateProposals.MatchNone, CertificateProposals.MatchProduct("Cherry tomato and tomato", products).Match);
+        Assert.Equal(CertificateProposals.MatchNone, CertificateProposals.MatchProduct("Tomatoes, cherry tomatoes", products).Match);
+    }
+
+    [Fact]
+    public void Several_products_in_one_text_or_a_missing_specific_product_are_not_linked()
+    {
+        var products = new[] { new CertificateProposals.OwnProduct(1, "Sla"), new(4, "Tomaat") };
+        Assert.Equal(CertificateProposals.MatchNone, CertificateProposals.MatchProduct("Lettuce and tomatoes", products).Match);
+        Assert.Null(CertificateProposals.MatchProduct("Cherry tomato", products).Product);
+        var withCherry = products.Append(new(6, "Cherrytomaat")).ToArray();
+        Assert.Equal("Cherrytomaat", CertificateProposals.MatchProduct("Cherry tomatoes", withCherry).Product?.Name);
+    }
+
+    [Fact]
+    public void A_generic_company_word_is_not_enough_to_be_the_same_holder()
+    {
+        Assert.False(CertificateProposals.SameCompany("Kwekerij Jansen", "Kwekerij De Vries"));
+        Assert.True(CertificateProposals.SameCompany("Kwekerij Jansen B.V.", "Jansen Kwekerij"));
+    }
+
+    [Fact]
+    public void A_doubt_about_a_product_follows_it_after_empty_and_duplicate_products_are_dropped()
+    {
+        var json = new JsonObject
+        {
+            ["soort"] = "GLOBALG.A.P. IFA (GGN)", ["nummer"] = "4063061591012",
+            ["producten"] = new JsonArray(
+                new JsonObject { ["tekst"] = "" }, new JsonObject { ["tekst"] = "Lettuce" }, new JsonObject { ["tekst"] = "lettuce" }, new JsonObject { ["tekst"] = "Mizuna" }),
+            ["zekerheden"] = new JsonArray(new JsonObject { ["veld"] = "producten[3]", ["zekerheid"] = "laag" }, new JsonObject { ["veld"] = "producten[0]", ["zekerheid"] = "laag" }),
+        };
+        CertificateProposals.Build(json, Array.Empty<CertificateProposals.OwnProduct>(), Array.Empty<CertificateProposals.StoredCertificate>(), Array.Empty<string>(),
+            new DateOnly(2026, 1, 1), 30, out var problems);
+        Assert.Contains(problems, x => (x.Field, x.Code) == ("products[1]", AiReadingRules.Uncertain));
+        Assert.DoesNotContain(problems, x => (x.Field, x.Code) == ("products[0]", AiReadingRules.Uncertain));
     }
 
     [Fact]
