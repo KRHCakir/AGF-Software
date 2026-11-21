@@ -10,6 +10,8 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 // "Klopt dit?" bij inkoop (certificaten deel 1): het product staat niet in het GGN-certificaat van de leverancier ("GGN … van … geldt voor
 // mango en limoen, niet voor avocado"), of het certificaat is verlopen of verloopt vóór de levering. Een waarschuwing, geen blokkade: Ja
 // legt vast wie bevestigde; Nee gaat terug naar het formulier. Nee heeft de focus en Escape is Nee, zodat Enter nooit per ongeluk Ja is.
+// Modaal: Tab blijft tussen de twee knoppen (focusval, zoals bij de vraag over niet-opgeslagen wijzigingen); komt de focus toch buiten het
+// venster, dan gaat die terug naar Nee; bij sluiten gaat de focus terug naar waar de gebruiker stond.
 export function checkLines(check: CertificateCheck, t: (key: string, params?: Record<string, string>) => string, locale: string): string[] {
     const lower = (text: string) => (locale.startsWith('nl') ? text.toLowerCase() : text);
     const join = (items: string[]) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} ${t('cert_check_and')} ${items[items.length - 1]}`);
@@ -30,13 +32,31 @@ export default function CertificateCheckDialog({ checks, onNo, onYes }: { checks
     const { t, locale } = useTranslation();
     const titleId = useId();
     const noRef = useRef<HTMLButtonElement | null>(null);
-    useEffect(() => { noRef.current?.focus(); }, []);
+    const dialogRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        noRef.current?.focus();
+        const onOutside = (event: FocusEvent) => {
+            if (event.target instanceof Node && dialogRef.current?.contains(event.target) !== true) noRef.current?.focus();
+        };
+        document.addEventListener('focusin', onOutside);
+        return () => {
+            document.removeEventListener('focusin', onOutside);
+            if (previous?.isConnected) setTimeout(() => previous.focus(), 0);
+        };
+    }, []);
     const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === 'Escape') { event.preventDefault(); onNo(); }
+        if (event.key === 'Escape') { event.preventDefault(); onNo(); return; }
+        if (event.key !== 'Tab') return;
+        const buttons = Array.from(dialogRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+        if (buttons.length === 0) return;
+        event.preventDefault();
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        buttons[(index + (event.shiftKey ? buttons.length - 1 : 1)) % buttons.length].focus();
     };
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/40 p-0 sm:items-center sm:p-4" onKeyDown={onKeyDown}>
-            <div role="alertdialog" aria-modal="true" aria-labelledby={titleId} data-tour="certificate-check-dialog" data-testid="certificate-check-dialog"
+            <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby={titleId} data-tour="certificate-check-dialog" data-testid="certificate-check-dialog"
                 className="max-h-full w-full overflow-y-auto rounded-t-lg bg-white p-4 pb-20 shadow-xl sm:max-w-xl sm:rounded-lg sm:pb-4">
                 <h2 id={titleId} className="text-lg font-semibold text-gray-900">{t('cert_check_title')}</h2>
                 <ul className="mt-2 space-y-2 text-sm text-gray-900">
