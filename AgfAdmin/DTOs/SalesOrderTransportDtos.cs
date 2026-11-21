@@ -63,5 +63,7 @@ namespace AgfAdmin.DTOs
     {
         public string Language { get; set; }
         public string PalletKind { get; set; }
+        // Certificaten deel 2: het GGN van het product per regel (standaard aan). Weggelaten bij opslaan = ongewijzigd.
+        public bool? ShowGgn { get; set; }
     }
 }

@@ -167,7 +167,7 @@ namespace AgfAdmin.Services
         public async Task<TransportOrderSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
         {
             var settings = await SettingsAsync(cancellationToken);
-            return new TransportOrderSettingsDto { Language = settings.TransportOrderLanguage, PalletKind = settings.TransportOrderPalletKind };
+            return new TransportOrderSettingsDto { Language = settings.TransportOrderLanguage, PalletKind = settings.TransportOrderPalletKind, ShowGgn = settings.TransportOrderShowGgn };
         }
 
         // Geldt voor nieuwe versies; een bestaande versie houdt haar snapshot.
@@ -185,6 +185,7 @@ namespace AgfAdmin.Services
             if (settings == null) db.CompanySettings.Add(settings = new CompanySettings());
             settings.TransportOrderLanguage = language;
             settings.TransportOrderPalletKind = palletKind;
+            if (request.ShowGgn is bool showGgn) settings.TransportOrderShowGgn = showGgn;
             await db.SaveChangesAsync(cancellationToken);
             return ServiceResult<TransportOrderSettingsDto>.Ok(await GetSettingsAsync(cancellationToken));
         }

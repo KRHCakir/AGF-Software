@@ -51,13 +51,18 @@ namespace AgfAdmin.Services
         decimal TotalQuantity, decimal? TotalPallets, decimal? TotalNetKg,
         DateTime ConfirmedAt, string ConfirmedBy,
         // Met hoeveel decimalen deze versie haar gewichten toont (0 of 1); null = een bon van vóór deze instelling, met de oude weergave.
-        int? WeightDecimals = null);
+        int? WeightDecimals = null,
+        // Certificaten deel 2: het eigen CoC-nummer in de koptekst (null = geen of een bon van vóór deze ronde).
+        // Een null-veld staat wel in SnapshotJson ("ownCocNumber": null), maar telt niet mee in de vingerafdruk: Hash gebruikt HashJson
+        // met WhenWritingNull. Een bon zonder GGN en CoC houdt dus de vingerafdruk van vóór deze ronde (geen onbedoelde nieuwe versie).
+        string OwnCocNumber = null);
 
     // Eén rij: een orderregel, en per pallet of partij waar dat al vastligt (gereserveerd); wat nog niet gereserveerd is een eigen rij.
     // Pallets niet afgerond (de bon toont twee decimalen), zelfde berekening als op de orderregel (PurchaseLineMath).
+    // Certificaten deel 2: Ggn = het GGN van het product van die pallet of partij (null = geen, de instelling staat uit, of een bon van vóór deze ronde).
     public sealed record LoadingSlipRow(
         decimal Quantity, string Unit, decimal? Pallets, string Description, string Variety, string Packaging, string Brand, string Size,
-        string Origin, decimal? NetKg, string Supplier, string PalletReference);
+        string Origin, decimal? NetKg, string Supplier, string PalletReference, string Ggn = null);
 
     // Emballage die mee gaat (Pallet wegwerp, Euro-pallet, Krat): alleen het aantal, nooit een prijs.
     public sealed record LoadingSlipPackagingRow(int Quantity, string Description);
@@ -71,16 +76,17 @@ namespace AgfAdmin.Services
 
         // De order moet geladen zijn met klant, verkoop-partij, regels (artikel, product, reserveringen met pallet, partij en de leverancier
         // van de inkooporder) en emballage (kostenartikel).
-        public static LoadingSlipSnapshot Build(SalesOrder order, CompanySettings settings)
+        public static LoadingSlipSnapshot Build(SalesOrder order, CompanySettings settings, string ownCoc = null)
         {
             var rows = new List<LoadingSlipRow>();
             foreach (var line in order.Lines.OrderBy(l => l.Id))
             {
                 var variant = line.ProductVariant;
                 var perPallet = PurchaseLineMath.PackagesPerPallet(line.PackagesPerPallet, variant?.DefaultPackagesPerPallet);
-                LoadingSlipRow Row(decimal quantity, decimal? netKg, string supplier, string pallet) => new(
+                LoadingSlipRow Row(decimal quantity, decimal? netKg, string supplier, string pallet, string ggn) => new(
                     quantity, line.Unit, PurchaseLineMath.Pallets(quantity, perPallet), variant?.Product?.Name, variant?.Name, Blank(variant?.Packaging), Blank(variant?.Brand),
-                    Blank(variant?.SizeCategory), Blank(variant?.OriginCountryCode) ?? Blank(variant?.Origin), netKg, settings.LoadingSlipShowSupplier ? supplier : null, pallet);
+                    Blank(variant?.SizeCategory), Blank(variant?.OriginCountryCode) ?? Blank(variant?.Origin), netKg, settings.LoadingSlipShowSupplier ? supplier : null, pallet,
+                    settings.LoadingSlipShowGgn ? Blank(ggn) : null);
                 decimal? Share(decimal quantity) => line.NetWeightKg is decimal kg && line.Quantity > 0m ? Math.Round(kg * quantity / line.Quantity, 3, MidpointRounding.AwayFromZero) : null;
 
                 // Gereserveerd of al verzonden: per pallet (fysiek) of per orderregel van de inkoop (direct trade); vrijgegeven telt niet.
@@ -95,10 +101,10 @@ namespace AgfAdmin.Services
                     var kg = group.All(r => r.NetWeightKg != null) ? group.Sum(r => r.NetWeightKg.Value) : Share(quantity);
                     var lot = content?.Partij?.Number ?? Blank(content?.LotNumber) ?? supplyLine?.Partij?.Number ?? supplyLine?.SupplyCommitment?.Partij?.Number;
                     var vendor = supplyLine?.SupplyCommitment?.Vendor?.Name;
-                    rows.Add(Row(quantity, kg, Join(vendor, lot), content?.Pallet?.Reference));
+                    rows.Add(Row(quantity, kg, Join(vendor, lot), content?.Pallet?.Reference, ProductGgn(first)));
                 }
                 var open = line.Quantity - reserved.Sum(r => r.Quantity);
-                if (open > 0m) rows.Add(Row(open, Share(open), null, null));
+                if (open > 0m) rows.Add(Row(open, Share(open), null, null, null));
             }
             var packaging = order.PackagingLines.OrderBy(p => p.Id).Select(p => new LoadingSlipPackagingRow(p.Quantity, p.CostArticle?.Name)).ToList();
             var pallets = rows.Where(r => r.Pallets != null).Select(r => r.Pallets.Value).ToList();
@@ -111,8 +117,13 @@ namespace AgfAdmin.Services
                 settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.SalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
                 Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : Second(order.LoadAt.Value), Blank(order.LicensePlate),
                 rows, packaging, rows.Sum(r => r.Quantity), pallets.Count == 0 ? null : pallets.Sum(), kgs.Count == 0 ? null : kgs.Sum(),
-                Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals));
+                Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals), Blank(ownCoc));
         }
+
+        // Het GGN van het product van een reservering: bij een pallet wat bij ontvangst is vastgelegd (ook bewust leeg), bij direct trade
+        // (nog geen pallet) dat van de inkoopregel.
+        public static string ProductGgn(StockReservation reservation) =>
+            reservation.PalletContentLine != null ? Blank(reservation.PalletContentLine.Ggn) : Blank(reservation.SupplyCommitmentLine?.Ggn);
 
         public static string Serialize(LoadingSlipSnapshot snapshot) => JsonSerializer.Serialize(snapshot, Json);
         public static LoadingSlipSnapshot Deserialize(string json) => JsonSerializer.Deserialize<LoadingSlipSnapshot>(json, Json);
