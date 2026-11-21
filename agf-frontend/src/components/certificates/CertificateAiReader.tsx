@@ -18,6 +18,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 import CertificateStatusBadge from './CertificateStatusBadge';
 import type { CertificateOwner, useCertificates } from './useCertificates';
 
+const CUSTOM_PREFIX = 'custom:';
 type Certificates = ReturnType<typeof useCertificates>;
 
 // Certificaten deel 2: in het blok Certificaten een PDF of foto laten lezen, naast handmatig invullen (dat blijft precies zoals het was).
@@ -99,7 +100,8 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
     // Een ander nummer of een andere soort is een ander certificaat: het doel voor een nieuwe versie vervalt dan (de keuze wordt opnieuw gevraagd).
     const edit = (patch: Partial<AiDraft['row']>) => setDraft((current) => {
         if (current === null) return current;
-        const identityChanged = (patch.number !== undefined && patch.number !== current.row.number) || (patch.typeCode !== undefined && patch.typeCode !== current.row.typeCode);
+        const identityChanged = (patch.number !== undefined && patch.number !== current.row.number) || (patch.typeCode !== undefined && patch.typeCode !== current.row.typeCode)
+            || (patch.customTypeName !== undefined && patch.customTypeName.trim().toLowerCase() !== current.row.customTypeName.trim().toLowerCase());
         return { ...current, row: { ...current.row, ...patch }, targetId: identityChanged ? null : current.targetId };
     });
     const link = (index: number, text: string) => setDraft((current) => {
@@ -120,6 +122,15 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         setDraft((current) => (current === null ? current : { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: null, suggested: false } : l)) }));
     };
 
+    // Soort: de vaste lijst, de eigen soorten van het bedrijf (zoals in het blok) of een nieuwe eigen soort met de naam uit het document.
+    const listedCustom = draft !== null && draft.row.typeCode === CUSTOM_TYPE
+        ? reference?.customTypes.find((name) => name.toLowerCase() === draft.row.customTypeName.trim().toLowerCase()) : undefined;
+    const typeValue = draft === null ? '' : listedCustom !== undefined ? `${CUSTOM_PREFIX}${listedCustom}` : draft.row.typeCode;
+    const chooseType = (value: string) => {
+        if (value.startsWith(CUSTOM_PREFIX)) edit({ typeCode: CUSTOM_TYPE, customTypeName: value.slice(CUSTOM_PREFIX.length) });
+        else if (value === CUSTOM_TYPE) edit({ typeCode: CUSTOM_TYPE, customTypeName: listedCustom !== undefined ? '' : draft?.row.customTypeName ?? '' });
+        else edit({ typeCode: value });
+    };
     const mark = (field: string) => (extraction === null ? null : fieldMark(extraction, field));
     const ring = (field: string) => (mark(field) === 'doubt' ? 'ring-2 ring-amber-400 bg-amber-50' : '');
     const markText = (field: string) => {
@@ -127,7 +138,8 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         if (m === null || extraction === null) return null;
         const codes = problemCodes(extraction, field);
         const key = m === 'missing' ? 'cert_ai_missing' : codes.includes('ggnInvalid') ? 'cert_ai_ggn_invalid' : codes.includes('ggnCheckDigit') ? 'cert_warning_ggn_check_digit'
-            : codes.includes('invalidDate') ? 'cert_ai_invalid_date' : codes.includes('tooLong') ? 'cert_ai_too_long' : codes.includes('truncated') ? 'cert_ai_products_truncated' : 'cert_ai_doubt';
+            : codes.includes('invalidDate') ? 'cert_ai_invalid_date' : codes.includes('tooLong') ? 'cert_ai_too_long'
+            : codes.includes('truncated') ? (field === 'sites' ? 'cert_ai_sites_truncated' : 'cert_ai_products_truncated') : 'cert_ai_doubt';
         return <span className={`block text-xs ${m === 'missing' ? 'text-gray-700' : 'font-medium text-amber-900'}`} data-testid={`cert-ai-mark-${field}`}>{t(key)}</span>;
     };
     const today = todayInAmsterdam();
@@ -169,17 +181,24 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                     <div>
                                         <label htmlFor={`${listId}-type-input`} className="text-xs font-medium text-gray-700">{t('cert_type')} *</label>
-                                        <select {...fieldProps(`${listId}-type`, problems.typeCode)} value={draft.row.typeCode} className={`${inputClass} ${ring('typeCode')}`}
-                                            onChange={(event) => edit({ typeCode: event.target.value })} data-testid="cert-ai-type">
+                                        <select {...fieldProps(`${listId}-type`, problems.typeCode)} value={typeValue} className={`${inputClass} ${ring('typeCode')}`}
+                                            onChange={(event) => chooseType(event.target.value)} data-testid="cert-ai-type">
                                             <option value="">{t('cert_type_choose')}</option>
-                                            {reference.types.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
+                                            <optgroup label={t('cert_type_group_builtin')}>
+                                                {reference.types.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
+                                            </optgroup>
+                                            {reference.customTypes.length > 0 && (
+                                                <optgroup label={t('cert_type_group_custom')}>
+                                                    {reference.customTypes.map((name) => <option key={name} value={`${CUSTOM_PREFIX}${name}`}>{name}</option>)}
+                                                </optgroup>
+                                            )}
                                             <option value={CUSTOM_TYPE}>{t('cert_type_custom_new')}</option>
                                         </select>
                                         {markText('typeCode')}
                                         {proposal.documentTypeName && <span className="block text-xs text-gray-600">{t('cert_ai_in_document', { text: proposal.documentTypeName })}</span>}
                                         <FieldError id={`${listId}-type`} messages={problems.typeCode} />
                                     </div>
-                                    {draft.row.typeCode === CUSTOM_TYPE && (
+                                    {typeValue === CUSTOM_TYPE && (
                                         <div>
                                             <label htmlFor={`${listId}-custom-input`} className="text-xs font-medium text-gray-700">{t('cert_custom_name')} *</label>
                                             <input {...fieldProps(`${listId}-custom`, problems.customTypeName)} value={draft.row.customTypeName} maxLength={80} className={inputClass}
@@ -260,6 +279,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                     <div className="text-xs text-gray-700" data-testid="cert-ai-sites">
                                         <span className="font-medium">{t('cert_ai_sites')}</span>{' '}
                                         {proposal.sites.map((s) => (s.country ? `${s.name} (${s.country})` : s.name)).join(', ')}
+                                        {markText('sites')}
                                     </div>
                                 )}
                                 {error && <ErrorNotice error={error} />}
