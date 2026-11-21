@@ -62,6 +62,12 @@ describe('purchase order: certificate check', () => {
         assert.ok(dialog()!.textContent!.includes('cert_check_not_covered'));
         assert.ok(dialog()!.textContent!.includes('cert_check_expires_before'));
         assert.equal(window.document.activeElement, button('cert_check_no'), 'No has the focus');
+        // Focusval: Tab blijft tussen Nee en Ja.
+        const tabKey = (shiftKey = false) => act(async () => { dialog()!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })); });
+        await tabKey();
+        assert.equal(window.document.activeElement, button('cert_check_yes'));
+        await tabKey();
+        assert.equal(window.document.activeElement, button('cert_check_no'), 'Tab wraps around inside the question');
         await act(async () => { button('cert_check_yes').click(); });
         await mounted.waitFor(() => posted.length === 2, 'sent again');
         const [first, second] = posted.map((p) => JSON.parse(p.body));
