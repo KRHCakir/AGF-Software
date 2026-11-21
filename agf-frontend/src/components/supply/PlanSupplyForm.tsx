@@ -178,7 +178,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         const product = line.productVariantId === '' ? undefined : productOfVariant.get(Number(line.productVariantId));
         return product === undefined ? [] : [product];
     }))].sort((a, b) => a - b).join(',');
-    const proposalDate = (() => { const parsed = parseDateInput(header.expectedDate); return parsed !== null && isDateOnly(parsed) ? parsed : null; })();
+    const proposalDate = useMemo(() => { const parsed = parseDateInput(header.expectedDate); return parsed !== null && isDateOnly(parsed) ? parsed : null; }, [header.expectedDate]);
     const [ggnProposals, setGgnProposals] = useState<ReadonlyMap<number, GgnProposal>>(() => new Map());
     useEffect(() => {
         setGgnProposals(new Map());

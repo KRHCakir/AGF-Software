@@ -63,6 +63,16 @@ public class CertificateProposalsTests
         json["nummer"] = "4063061591013";
         Build(json, out problems);
         Assert.Contains(problems, x => (x.Field, x.Code) == ("number", CertificateProposals.ProblemGgnCheckDigit));
+        // Te lang: gemarkeerd, niet ingekort; meer producten dan het voorstel toont: gemeld.
+        json["nummer"] = new string('7', CertificateRules.MaxNumberLength + 5);
+        json["soort"] = "Skal";
+        var longNumber = Build(json, out problems);
+        Assert.Equal(CertificateRules.MaxNumberLength + 5, longNumber.Number.Length);
+        Assert.Contains(problems, x => (x.Field, x.Code) == ("number", CertificateProposals.ProblemTooLong));
+        var many = Example();
+        many["producten"] = new JsonArray(Enumerable.Range(1, CertificateProposals.MaxProducts + 3).Select(i => (JsonNode)new JsonObject { ["tekst"] = $"Product {i}", ["pagina"] = 1 }).ToArray());
+        Assert.Equal(CertificateProposals.MaxProducts, Build(many, out problems).Products.Count);
+        Assert.Contains(problems, x => (x.Field, x.Code) == ("products", CertificateProposals.ProblemTruncated));
         // Een soort die niet in de lijst staat: een eigen soort met de naam uit het document.
         json["soort"] = CertificateSchema.Other;
         json["soort_naam"] = "Demeter biodynamisch";
