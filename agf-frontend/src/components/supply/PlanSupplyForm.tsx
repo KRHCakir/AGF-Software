@@ -18,7 +18,9 @@ import SupplierReferenceNotice from '../purchase/SupplierReferenceNotice';
 import { SaveResult, createSupplyCommitment } from '../../services/supplyService';
 import CertificateCheckDialog from '../certificates/CertificateCheckDialog';
 import { type CertificateCheck, certificateChecksOf } from '../../types/certificate';
-import { updatePurchaseOrder } from '../../services/purchaseOrderService';
+import { getGgnProposals, updatePurchaseOrder } from '../../services/purchaseOrderService';
+import { applyGgnProposals } from '../../lib/productGgn';
+import type { GgnProposal } from '../../types/productGgn';
 import { type OrderEdit, lineLimits, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
 import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
 import { MAX_NOTE_LENGTH } from '../../lib/purchaseOrderRules';
@@ -167,6 +169,37 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
 
     // Het artikel van een regel: eenheid, netto en bruto per colli, colli per pallet, merk, land, maat en inhoud.
     const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
+
+    // Certificaten deel 2: het voorgestelde GGN van het product per regel, uit de geldige GGN-certificaten van de leverancier op de verwachte
+    // leverdatum. Opnieuw opgehaald bij een andere leverancier, andere producten of een andere datum; lukt het niet, dan blijft het veld
+    // gewoon in te vullen (geen voorstel, geen fout).
+    const productOfVariant = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, product.id] as const))), [products]);
+    const productIdsKey = [...new Set(lines.flatMap((line) => {
+        const product = line.productVariantId === '' ? undefined : productOfVariant.get(Number(line.productVariantId));
+        return product === undefined ? [] : [product];
+    }))].sort((a, b) => a - b).join(',');
+    const proposalDate = (() => { const parsed = parseDateInput(header.expectedDate); return parsed !== null && isDateOnly(parsed) ? parsed : null; })();
+    const [ggnProposals, setGgnProposals] = useState<ReadonlyMap<number, GgnProposal>>(() => new Map());
+    useEffect(() => {
+        setGgnProposals(new Map());
+        if (header.vendorId === '' || productIdsKey === '') return;
+        const controller = new AbortController();
+        getGgnProposals(Number(header.vendorId), productIdsKey.split(',').map(Number), proposalDate, controller.signal)
+            .then((result) => setGgnProposals(new Map(result.proposals.map((proposal) => [proposal.productId, proposal]))))
+            .catch(() => { /* geen voorstel: het GGN blijft gewoon in te vullen */ });
+        return () => controller.abort();
+    }, [header.vendorId, productIdsKey, proposalDate]);
+    const ggnProposalOf = (line: PurchaseLineDraft): GgnProposal | undefined => {
+        const product = line.productVariantId === '' ? undefined : productOfVariant.get(Number(line.productVariantId));
+        return product === undefined ? undefined : ggnProposals.get(product);
+    };
+    // Regels die de gebruiker niet zelf aanraakte, volgen het voorstel (één treffer = voorgevuld, anders leeg).
+    useEffect(() => {
+        if (result !== null) return;
+        setLines((current) => applyGgnProposals(current, ggnProposalOf) as PurchaseLineDraft[]);
+        // ggnProposalOf hangt alleen af van de voorstellen en de artikelen.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ggnProposals, productOfVariant, lines, result]);
 
     const edited = () => {
         // Na een definitieve weigering (of niets verstuurd) hoort een gewijzigde invoer bij een nieuw verzoek.
@@ -595,7 +628,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 <legend className="text-sm font-semibold text-gray-900">{t('supply_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
                 <PurchaseOrderLines currency={money.currency} rate={effectiveRate(money)} lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
-                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor} limits={limitsOf}
+                    errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor} limits={limitsOf} ggnProposalOf={ggnProposalOf}
                     productExtra={(line, index) => (newArticleFor === line.key ? (
                         <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
                             onUse={(variantId, created) => {

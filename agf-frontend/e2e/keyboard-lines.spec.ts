@@ -78,7 +78,7 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await page.locator('[data-tour="supply-expected"]').press('Enter');
         await expect(page.locator('[data-tour="supply-expected"]')).toHaveValue('04-11-2026');
 
-        // Nieuwe indeling: artikel, aantal, prijs; eenheid en kg komen uit het artikel en worden overgeslagen.
+        // Nieuwe indeling: artikel, aantal, prijs, GGN; eenheid en kg komen uit het artikel en worden overgeslagen.
         await page.locator('[id="lines[0].productVariantId-input"]').focus();
         await page.keyboard.type(article.shortcutCode!);
         await page.waitForTimeout(200);
@@ -88,11 +88,16 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await page.keyboard.press('Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
         await page.keyboard.type('12');
+        // Certificaten deel 2: na de prijs het GGN van het product (een voorstel of leeg); Tab daarop maakt de nieuwe regel.
+        await page.keyboard.press('Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[0].ggn-input');
         await page.keyboard.press('Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[1].productVariantId-input');
         await expect(page.locator('[id="lines[0].unitPrice-input"]')).toHaveValue('12,00');
         await expect(page.locator('[data-testid="line-totals-amount"]')).toHaveText(/^84,00/);
         // Terug naar de prijs en Enter: opslaan; de lege tweede regel telt niet mee.
+        await page.keyboard.press('Shift+Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[0].ggn-input');
         await page.keyboard.press('Shift+Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
         await page.keyboard.press('Enter');

@@ -57,7 +57,7 @@ describe('PlanSupplyForm: editing a purchase order', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('opens with the stored values; an untouched line goes back as stored; Tab on the last price adds a line', async () => {
+    test('opens with the stored values; an untouched line goes back as stored; Tab on the last GGN adds a line', async () => {
         await render(order());
         assert.equal(field('supplierReference-input').value, '45-21');
         assert.equal(field('note-input').value, 'Bel bij aankomst');
@@ -68,8 +68,8 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         assert.equal(testId('supplier-reference-duplicate'), null, 'its own number is no duplicate');
 
         await type('lines[0].unitPrice-input', '13');
-        await act(async () => { field('lines[0].unitPrice-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
-        assert.ok(field('lines[1].productVariantId-input'), 'Tab on the last price makes a new line');
+        await act(async () => { field('lines[0].ggn-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
+        assert.ok(field('lines[1].productVariantId-input'), 'Tab on the last GGN makes a new line');
         await submit();
         await mounted.waitFor(() => puts.length === 1, 'PUT');
         assert.equal(puts[0].url.endsWith('/purchase-orders/5'), true);
