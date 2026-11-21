@@ -3,6 +3,7 @@
 import AiReadingSetting from '../../../components/settings/AiReadingSetting';
 import CostArticlesAdmin from '../../../components/settings/CostArticlesAdmin';
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
+import CertificatesSetting from '../../../components/settings/CertificatesSetting';
 import PartijNumberingSetting from '../../../components/settings/PartijNumberingSetting';
 import WeightDisplaySetting from '../../../components/settings/WeightDisplaySetting';
 import PurchaseCurrenciesSetting from '../../../components/settings/PurchaseCurrenciesSetting';
@@ -37,6 +38,7 @@ export default function SettingsPage() {
             <PaymentConditionsAdmin />
             <CostArticlesAdmin />
             <GlobalGapPortalSetting />
+            <CertificatesSetting />
             <AiReadingSetting />
         </div>
     );
