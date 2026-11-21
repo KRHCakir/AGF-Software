@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useId, useRef, useState, type ChangeEvent } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { type AiDraft, approvalRows, draftFromProposal, fieldMark, linkedProductIds, problemCodes } from '../../lib/certificateAiProposal';
 import { certificateStatus, daysLeft } from '../../lib/certificateRules';
@@ -39,6 +39,7 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
     const [error, setError] = useState<ApiError | null>(null);
     const [problems, setProblems] = useState<Record<string, string[]>>({});
     const [notice, setNotice] = useState<string | null>(null);
+    const [searches, setSearches] = useState<Record<number, string>>({});
     const file = useRef<File | null>(null);
     const listId = useId();
     const relationId = owner.kind === 'own' ? null : owner.id;
@@ -100,6 +101,14 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         const product = certificates.products.find((p) => p.name.toLowerCase() === text.trim().toLowerCase());
         return { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: text.trim() === '' ? null : product?.id ?? l.productId, suggested: false } : l)) };
     });
+    // Tijdens het typen wordt alleen de zoektekst bewaard; koppelen gebeurt pas bij een keuze uit de lijst, Enter of het verlaten van het veld.
+    const search = (index: number, event: ChangeEvent<HTMLInputElement>) => {
+        const text = event.target.value;
+        const inputType = (event.nativeEvent as InputEvent).inputType;
+        const typed = inputType !== undefined && inputType !== 'insertReplacementText';
+        setSearches((current) => ({ ...current, [index]: text }));
+        if (!typed) link(index, text);
+    };
     const unlink = (index: number) => setDraft((current) => (current === null ? current : { ...current, links: current.links.map((l, i) => (i === index ? { ...l, productId: null, suggested: false } : l)) }));
 
     const mark = (field: string) => (extraction === null ? null : fieldMark(extraction, field));
@@ -224,7 +233,9 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
                                                             <span className="text-xs font-medium text-amber-900">{t('cert_ai_unlinked')}</span>
                                                             <label htmlFor={`${listId}-link-${i}`} className="sr-only">{t('cert_ai_link_label', { text: l.text })}</label>
                                                             <input id={`${listId}-link-${i}`} type="search" list={`${listId}-product-list`} placeholder={t('cert_ai_link_placeholder')}
-                                                                className={`${inputClass} !mt-0 w-44`} onChange={(event) => link(i, event.target.value)} data-testid={`cert-ai-link-${i}`} />
+                                                                className={`${inputClass} !mt-0 w-44`} value={searches[i] ?? ''} onChange={(event) => search(i, event)}
+                                                                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); link(i, searches[i] ?? ''); } }}
+                                                                onBlur={() => link(i, searches[i] ?? '')} data-testid={`cert-ai-link-${i}`} />
                                                         </>
                                                     )}
                                                 </li>
