@@ -376,6 +376,14 @@ namespace AgfAdmin.Services
             return settings;
         }
 
+        // Het aantal aangepaste velden; onleesbaar (zou niet mogen) telt als 0, zodat de lijst altijd te tonen blijft.
+        private static int AdjustedCount(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return 0;
+            try { return System.Text.Json.Nodes.JsonNode.Parse(json) is System.Text.Json.Nodes.JsonArray changed ? changed.Count : 0; }
+            catch (System.Text.Json.JsonException) { return 0; }
+        }
+
         private static CertificateFileDto FileDto(RelationCertificateFile f) => new()
         {
             Id = f.Id, Version = f.Version, FileName = f.FileName, MediaType = f.MediaType, SizeBytes = f.SizeBytes, Sha256 = f.Sha256,
@@ -383,7 +391,7 @@ namespace AgfAdmin.Services
             Ai = f.AiExtraction is { ApprovedAt: DateTime approvedAt } ai ? new CertificateFileAiDto
             {
                 ApprovedBy = ai.ApprovedBy, ApprovedAt = DateTime.SpecifyKind(approvedAt, DateTimeKind.Utc), Model = ai.Model, ModelName = AiModelNames.Display(ai.Model),
-                ModelVersion = ai.ModelVersion, AdjustedFields = string.IsNullOrEmpty(ai.AdjustmentsJson) ? 0 : System.Text.Json.Nodes.JsonNode.Parse(ai.AdjustmentsJson) is System.Text.Json.Nodes.JsonArray changed ? changed.Count : 0,
+                ModelVersion = ai.ModelVersion, AdjustedFields = AdjustedCount(ai.AdjustmentsJson),
             } : null,
         };
 

@@ -88,9 +88,12 @@ export default function CertificateAiReader({ owner, certificates, blockedReason
         if (outcome === 'Manual' && draft !== null) {
             // Handmatig verder: de waarden als gewone regel in het blok en het document als openstaand bestand bij die regel (ook bij een
             // bestaand certificaat). Alles gaat pas mee bij het gewone opslaan, met de foutafhandeling daarvan; niet opslaan = niets opgeslagen.
-            const { rows, index } = approvalRows(certificates.rows, draft);
+            // Vanuit de actuele regels: wat de gebruiker tijdens het sluiten in het blok veranderde, blijft staan.
             const pending = file.current !== null ? [file.current] : [];
-            certificates.setRows(rows.map((r, i) => (i === index ? { ...r, pendingFiles: [...r.pendingFiles, ...pending] } : r)));
+            certificates.updateRows((current) => {
+                const { rows, index } = approvalRows(current, draft);
+                return rows.map((r, i) => (i === index ? { ...r, pendingFiles: [...r.pendingFiles, ...pending] } : r));
+            });
             done(t('cert_ai_manual_done'));
             return;
         }
