@@ -37,6 +37,11 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
     const shown = matches.slice(0, MAX_LISTED);
     useEffect(() => { setHighlight(0); }, [query]);
     useEffect(() => { if (open) search.current?.focus(); }, [open]);
+    // Pijltjes verplaatsen alleen de selectie; de begrensde lijst scrolt mee zodat de gekozen optie in beeld blijft.
+    const activeId = shown[highlight]?.variantId;
+    useEffect(() => {
+        if (open && activeId !== undefined) document.getElementById(`${listId}-${activeId}`)?.scrollIntoView?.({ block: 'nearest' });
+    }, [open, activeId, listId]);
 
     const close = (focusButton: boolean) => {
         setOpen(false);
