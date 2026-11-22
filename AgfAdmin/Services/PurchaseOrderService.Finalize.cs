@@ -37,6 +37,10 @@ namespace AgfAdmin.Services
             return true;
         }
 
+        // Certificaten deel 2: het voorgestelde GGN van het product per regel (zie ProductGgnRules).
+        public Task<ServiceResult<ProductGgnProposalsDto>> GgnProposalsAsync(int vendorId, IReadOnlyCollection<int> productIds, DateOnly? date, CancellationToken cancellationToken = default) =>
+            ProductGgnRules.ProposalsAsync(_db, vendorId, productIds, date ?? _db.BusinessCalendar.Today(), cancellationToken);
+
         public async Task<ServiceResult<PurchaseOrderDetailDto>> CorrectAsync(int id, CorrectPurchaseOrderDto request, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, List<string>>();
@@ -50,9 +54,12 @@ namespace AgfAdmin.Services
             var note = Blank(request.Note);
             if (note?.Length > PurchaseOrderRules.MaxNoteLength) AddError(errors, "note", $"At most {PurchaseOrderRules.MaxNoteLength} characters.");
             var lines = request.Lines ?? new List<CorrectPurchaseOrderLineDto>();
+            var ggns = new string[lines.Count];
             for (var i = 0; i < lines.Count; i++)
             {
                 if (lines[i]?.UnitPrice is { } price && !CostArticleRules.IsUnitPrice(price)) AddError(errors, $"lines[{i}].unitPrice", "Unit price, when given, must be 0 or more with at most 2 decimals.");
+                // GGN van het product: weggelaten = ongewijzigd; leeg = leegmaken; anders 13 cijfers.
+                if (lines[i]?.Ggn != null) ggns[i] = ProductGgnRules.Validate(lines[i].Ggn, $"lines[{i}].ggn", errors, AddError);
                 if (lines[i] != null && lines.Take(i).Any(other => other?.Id == lines[i].Id)) AddError(errors, $"lines[{i}]", $"Line {lines[i].Id} is given more than once.");
             }
             if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);
@@ -88,13 +95,18 @@ namespace AgfAdmin.Services
             for (var i = 0; i < lines.Count; i++)
             {
                 var line = order.Lines.Single(l => l.Id == lines[i].Id);
+                if (lines[i].Ggn != null && !string.Equals(line.Ggn, ggns[i], StringComparison.Ordinal))
+                {
+                    fields.Add(new(PurchaseOrderDocumentRules.FieldGgn, line.Id, PurchaseOrderDocumentRules.ActionChanged, line.Ggn, ggns[i]));
+                    line.Ggn = ggns[i];
+                }
                 if (lines[i].UnitPrice == null || line.UnitPrice == lines[i].UnitPrice) continue;
                 fields.Add(new(PurchaseOrderDocumentRules.FieldUnitPrice, line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(line.UnitPrice), Number(lines[i].UnitPrice)));
                 line.UnitPrice = lines[i].UnitPrice;
             }
             if (fields.Count == 0)
             {
-                AddError(errors, "correction", "Change at least one price, the supplier's order number or the note.");
+                AddError(errors, "correction", "Change at least one price, GGN, the supplier's order number or the note.");
                 return Validation<PurchaseOrderDetailDto>(errors);
             }
             return await SaveChangeAsync(order, request.RequestId!.Value, PurchaseOrderDocumentRules.KindCorrection, reason, fields, cancellationToken);

@@ -28,6 +28,13 @@ namespace AgfAdmin.Models
         public decimal? LoosePackages { get; set; }
         public string LotNumber { get; set; } // optioneel
 
+        // Certificaten deel 2: het GGN van het product (van de teler), zoals op de factuur van de leverancier. Voorgesteld uit de geldige
+        // GGN-certificaten van de leverancier waarin het product staat (één treffer voorgevuld, meer = kiezen, geen = leeg); altijd te
+        // overschrijven of leeg te maken, want een handelaar factureert het GGN van zijn teler, dat niet in zijn eigen certificaat staat.
+        // 13 cijfers als tekst of null. Op een Open order met een Edit, op een definitieve order alleen met een correctie (regel 34).
+        // Gaat bij ontvangst mee naar de pallet of partij (PalletContentLine.Ggn) en zo naar de laadbon en de transportopdracht.
+        public string Ggn { get; set; }
+
         // Inkoopprijs per verpakking (de eenheid van de regel), excl. btw. Optioneel: een prijs kan ook pas bij afrekening komen.
         // Vast na aanmaken (TraceabilityGuard); het regeltotaal is aantal × prijs (PurchaseLineMath), nooit opgeslagen.
         public decimal? UnitPrice { get; set; }

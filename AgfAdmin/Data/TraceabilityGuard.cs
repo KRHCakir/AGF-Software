@@ -120,6 +120,8 @@ namespace AgfAdmin.Data
     //    concept verandert niet meer, en het document en de order waar het bij hoort liggen vast.
     // 33. certificaten (zie TraceabilityGuard.Certificates.cs): een certificaat wordt nooit verwijderd en blijft bij zijn relatie; bestanden
     //    en bevestigingen "Klopt dit?" bij inkoop zijn append-only, en een nieuw bestand is de volgende versie van dat certificaat.
+    // 34. het GGN van het product op een inkoopregel (zie TraceabilityGuard.ProductGgn.cs): verandert na het aanmaken alleen samen met een
+    //    auditregel van die order (Open: Edit; definitief: Correction met reden).
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -247,6 +249,7 @@ namespace AgfAdmin.Data
             await CheckSalesOrderDocumentsAsync(db, async, cancellationToken);
             await CheckMailDraftsAsync(db, async, cancellationToken);
             await CheckCertificatesAsync(db, async, cancellationToken);
+            await CheckProductGgnAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

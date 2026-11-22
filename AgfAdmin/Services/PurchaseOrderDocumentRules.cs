@@ -37,6 +37,8 @@ namespace AgfAdmin.Services
         public const string FieldSupplierReference = "supplierReference";
         public const string FieldNote = "note";
         public const string FieldUnitPrice = "unitPrice";
+        // Certificaten deel 2: het GGN van het product op een regel (aanpassen bij Open, corrigeren met reden bij Definitive).
+        public const string FieldGgn = "ggn";
         // Valuta-ronde: valuta en koers van de order (alleen bij aanpassen van een Open order, nooit met een correctie).
         public const string FieldCurrency = "currency";
         public const string FieldExchangeRate = "exchangeRate";

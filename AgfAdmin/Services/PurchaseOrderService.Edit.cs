@@ -69,7 +69,7 @@ namespace AgfAdmin.Services
                 {
                     ProductVariantId = l.ProductVariantId, ExpectedQuantity = l.ExpectedQuantity, ExpectedUnit = l.ExpectedUnit, ExpectedNetWeightKg = l.ExpectedNetWeightKg,
                     ExpectedGrossWeightKg = l.ExpectedGrossWeightKg, WeightSource = l.WeightSource, LotNumber = l.LotNumber, PalletCount = l.PalletCount,
-                    PackagesPerPallet = l.PackagesPerPallet, LoosePackages = l.LoosePackages, UnitPrice = l.UnitPrice,
+                    PackagesPerPallet = l.PackagesPerPallet, LoosePackages = l.LoosePackages, UnitPrice = l.UnitPrice, Ggn = l.Ggn,
                 }).ToList(),
             }, _db.BusinessCalendar.Today(), errors);
             if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);
@@ -447,6 +447,9 @@ namespace AgfAdmin.Services
                     (line.PalletCount, line.PackagesPerPallet, line.LoosePackages) = (wanted.PalletCount, wanted.PackagesPerPallet, wanted.LoosePackages);
                 }
                 Field("lotNumber", line.LotNumber, wanted.LotNumber, () => line.LotNumber = wanted.LotNumber);
+                // GGN van het product: ook na ontvangst aan te passen zolang de order Open is (wat al ontvangen is, houdt het GGN van de ontvangst).
+                // Een weggelaten ggn (null) laat de opgeslagen waarde staan; een lege tekst wist het GGN bewust.
+                if (request.Lines[i].Ggn != null) Field(PurchaseOrderDocumentRules.FieldGgn, line.Ggn, wanted.Ggn, () => line.Ggn = wanted.Ggn);
             }
         }
 
