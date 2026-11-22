@@ -73,6 +73,19 @@ describe('ArticleAddButton', () => {
         assert.deepEqual(picked, [11], 'the first article (Green), not the one highlighted before');
     });
 
+    test('review #313: a click or the focus outside the list closes it without choosing', async () => {
+        const outside = window.document.createElement('button');
+        window.document.body.appendChild(outside);
+        await open();
+        await act(async () => { outside.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true })); });
+        assert.equal(mounted.container.querySelector('[data-testid="article-add-list"]'), null, 'closed by a click outside');
+        await open();
+        await act(async () => { outside.focus(); });
+        assert.equal(mounted.container.querySelector('[data-testid="article-add-list"]'), null, 'closed when the focus leaves (Tab)');
+        assert.deepEqual(picked, []);
+        outside.remove();
+    });
+
     test('a click chooses as well; "New article" asks for the side panel', async () => {
         await open();
         await act(async () => { (mounted.container.querySelectorAll<HTMLElement>('[role="option"]')[2]).click(); });

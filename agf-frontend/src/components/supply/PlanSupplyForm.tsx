@@ -702,7 +702,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                             title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
                     )} />
                 <div className="flex flex-wrap items-start gap-2">
-                    <ArticleAddButton products={products} disabled={locked || lines.length >= MAX_LINES} dataTour="supply-article-add"
+                    <ArticleAddButton products={products} disabled={locked || (lines.length >= MAX_LINES && !(lines.length > 0 && isBlankPurchaseLine(lines[lines.length - 1])))} dataTour="supply-article-add"
                         onPick={(variantId) => putArticle(variantId, null)} onNewArticle={() => setNewArticleFor(null)} />
                     <button type="button" tabIndex={-1} onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
                         + {t('supply_add_line')}
