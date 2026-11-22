@@ -83,16 +83,21 @@ export const newLineKey = () => `line-${Date.now().toString(36)}-${(lineCounter+
 // zonder tarief verandert niets; het volgende artikel met een tarief zet zijn tarief weer.
 export function proposedVat(current: string, itemVat: number | null, manual: boolean | undefined, fallback: { defaultVat: number; previousItemVat: number | null }): string {
     if (itemVat === null || manual === true) return current;
-    if (manual === false) return String(itemVat);
-    const untouched = current.trim() === String(fallback.defaultVat) || (fallback.previousItemVat !== null && current.trim() === String(fallback.previousItemVat));
-    return untouched ? String(itemVat) : current;
+    return manual === false || olderLineUntouched(current, fallback) ? String(itemVat) : current;
+}
+
+// Een regel uit een ouder concept (zonder vatManual) heeft nog het voorstel als het tarief het standaardtarief of dat van het vorige artikel is.
+function olderLineUntouched(current: string, fallback: { defaultVat: number; previousItemVat: number | null }): boolean {
+    return current.trim() === String(fallback.defaultVat) || (fallback.previousItemVat !== null && current.trim() === String(fallback.previousItemVat));
 }
 
 // Wat een artikelkeuze met het btw-veld van een regel doet: het voorgestelde tarief, en bij een regel uit een ouder concept die het voorstel
 // overneemt ook vatManual false, zodat de volgende keuze gewoon volgt (review #312: geen blijvend tarief na een artikel zonder tarief).
 export function vatAfterPick(line: Pick<LineDraft, 'vat' | 'vatManual'>, itemVat: number | null, fallback: { defaultVat: number; previousItemVat: number | null }): Pick<LineDraft, 'vat' | 'vatManual'> {
     const vat = proposedVat(line.vat, itemVat, line.vatManual, fallback);
-    const followed = line.vatManual === undefined && itemVat !== null && vat === String(itemVat);
+    // Alleen als het tarief echt nog het voorstel was (dezelfde voorwaarde als proposedVat), niet omdat een met de hand getypt tarief
+    // toevallig gelijk is aan dat van het artikel (review #312).
+    const followed = line.vatManual === undefined && itemVat !== null && olderLineUntouched(line.vat, fallback);
     return followed ? { vat, vatManual: false } : { vat };
 }
 
