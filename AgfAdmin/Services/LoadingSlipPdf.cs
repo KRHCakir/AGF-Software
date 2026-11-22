@@ -87,6 +87,8 @@ namespace AgfAdmin.Services
                         if (!string.IsNullOrWhiteSpace(slip.LogoImage)) company.Item().Width(110).Image(Convert.FromBase64String(slip.LogoImage));
                         company.Item().Text(slip.CompanyName).Bold().FontSize(11);
                         if (slip.CompanyAddress != null) company.Item().Text(slip.CompanyAddress).FontSize(8);
+                        // Certificaten deel 2: het eigen CoC-nummer (GLOBALG.A.P. Chain of Custody) uit de snapshot.
+                        if (slip.OwnCocNumber != null) company.Item().Text($"GLOBALG.A.P. CoC {slip.OwnCocNumber}").FontSize(8);
                     });
                     row.ConstantItem(200).AlignRight().Column(title =>
                     {
@@ -140,7 +142,12 @@ namespace AgfAdmin.Services
                         IContainer Cell(IContainer cell) => (shade ? cell.Background(Colors.Grey.Lighten3) : cell).PaddingVertical(3).PaddingHorizontal(2);
                         table.Cell().Element(Cell).AlignRight().Text($"{Quantity(row.Quantity)}");
                         table.Cell().Element(Cell).AlignRight().Text(Pallets(row.Pallets));
-                        table.Cell().Element(Cell).Text(row.Description ?? "");
+                        // Het GGN van het product onder de omschrijving (A4 is te smal voor een eigen kolom); zonder GGN niets.
+                        table.Cell().Element(Cell).Column(cell =>
+                        {
+                            cell.Item().Text(row.Description ?? "");
+                            if (row.Ggn != null) cell.Item().Text($"GGN {row.Ggn}").FontSize(7);
+                        });
                         table.Cell().Element(Cell).Text(row.Variety ?? "");
                         table.Cell().Element(Cell).Text(row.Packaging ?? "");
                         table.Cell().Element(Cell).Text(row.Brand ?? "");

@@ -82,6 +82,7 @@ namespace AgfAdmin.Services
                         if (!string.IsNullOrWhiteSpace(order.LogoImage)) company.Item().Width(110).Image(Convert.FromBase64String(order.LogoImage));
                         company.Item().Text(order.CompanyName).Bold().FontSize(11);
                         if (order.CompanyAddress != null) company.Item().Text(order.CompanyAddress).FontSize(8);
+                        if (order.OwnCocNumber != null) company.Item().Text($"GLOBALG.A.P. CoC {order.OwnCocNumber}").FontSize(8);
                     });
                     row.ConstantItem(220).AlignRight().Column(title =>
                     {
@@ -154,7 +155,11 @@ namespace AgfAdmin.Services
                         var shade = index++ % 2 == 1;
                         IContainer Cell(IContainer cell) => (shade ? cell.Background(Colors.Grey.Lighten3) : cell).PaddingVertical(3).PaddingHorizontal(2);
                         table.Cell().Element(Cell).AlignRight().Text(LoadingSlipPdf.Quantity(row.Quantity));
-                        table.Cell().Element(Cell).Text(row.Description ?? "");
+                        table.Cell().Element(Cell).Column(cell =>
+                        {
+                            cell.Item().Text(row.Description ?? "");
+                            if (row.Ggn != null) cell.Item().Text($"GGN {row.Ggn}").FontSize(7);
+                        });
                         table.Cell().Element(Cell).Text(row.Class ?? "");
                         table.Cell().Element(Cell).Text(row.Origin ?? "");
                         table.Cell().Element(Cell).Text(order.PalletKind ?? "");
