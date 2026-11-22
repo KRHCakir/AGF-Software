@@ -194,5 +194,7 @@ describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
         line = { ...line, ...vatAfterPick(line, 21, { defaultVat: 21, previousItemVat: null }) };
         assert.equal(line.vat, '21');
         assert.deepEqual(vatAfterPick({ vat: '6' }, 21, { defaultVat: 21, previousItemVat: 9 }), { vat: '6' }, 'typed by hand in an older draft: untouched, no flag');
+        // Een met de hand getypt 0 in een ouder concept, gelijk aan het tarief van het gekozen artikel: blijft handmatig (geen vlag).
+        assert.deepEqual(vatAfterPick({ vat: '0' }, 0, { defaultVat: 21, previousItemVat: 9 }), { vat: '0' });
     });
 });
