@@ -37,8 +37,11 @@ export const ORDER_CORE: TourStep[] = [
         { kind: 'highlight', target: 'supply-partij-choose' },
         { kind: 'type', target: 'supply-supplier-lot', text: 'LOT-{{tourRef}}' },
     ]),
+    // Feedback 22 november: "Artikel toevoegen" is een lijst van bestaande artikelen; de keuze staat direct op de regel, cursor op Aantal.
     order('article', '/purchase-orders/new', [
-        { kind: 'pick', target: 'supply-line-product-0', text: '{{productCode}}' },
+        { kind: 'click', target: 'supply-article-add' },
+        { kind: 'type', target: 'article-add-search', text: '{{productCode}}' },
+        { kind: 'click', target: 'article-add-option:{{productCode}}' },
         { kind: 'assert', target: 'supply-expected', value: '{{expectedDateFull}}' },
         { kind: 'type', target: 'supply-line-quantity:0', text: '{{quantity}}' },
         { kind: 'type', target: 'supply-line-price:0', text: '12,50' },

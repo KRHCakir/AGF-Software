@@ -84,6 +84,10 @@ export const ARTICLE_STEPS = [
         { kind: 'pick', target: 'article-class', text: 'I' },
         { kind: 'type', target: 'article-brand', text: '{{tourRef}}' },
     ]),
+    // Feedback 22 november: het btw-tarief hoort bij het artikel; 9% (onbewerkt) staat al klaar, 21% is voor bewerkte producten.
+    master('article-vat', '/articles', [
+        { kind: 'select', target: 'article-vat', value: '9' },
+    ]),
     master('article-packaging', '/articles', [
         { kind: 'select', target: 'article-packaging-unit', value: 'colli' },
         { kind: 'type', target: 'article-packaging', text: '4 kg doos' },

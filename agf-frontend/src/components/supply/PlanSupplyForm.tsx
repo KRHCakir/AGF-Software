@@ -553,7 +553,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             className={`space-y-4 rounded-md border bg-white p-4 ${isDirect ? 'border-2 border-violet-300' : 'border-gray-300'}`}
         >
             {/* Schone start: zonder leverancier (en bij klantgebonden aanvoer klant) zegt het formulier wat eerst moet. Een artikel kan ook hier via "+ Nieuw artikel". */}
-            <MissingMasterDataNotice missing={missingMasterData({ vendors: reference.vendors, customers: reference.customers, products }, isDirect ? ['vendor', 'customer', 'article'] : ['vendor', 'article'])} />
+            <MissingMasterDataNotice missing={missingMasterData({ vendors: reference.vendors, customers: reference.customers, products }, isDirect ? ['vendor', 'customer', 'article'] : ['vendor', 'article'])}
+                actions={locked ? {} : { article: () => setNewArticleFor(null) }} />
             {isDirect && (
                 <p className="flex items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-2 text-sm font-medium text-violet-900">
                     <span aria-hidden="true">🔒</span>{t('supply_direct_banner')}
