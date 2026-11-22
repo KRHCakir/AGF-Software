@@ -171,13 +171,19 @@ describe('lines, amounts and payload', () => {
 });
 
 describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
-    test('the rate of the chosen article or service is the proposal until the user changes the rate by hand', () => {
-        assert.equal(proposedVat('21', 9), '9', 'standard 21 -> ginger 9');
-        assert.equal(proposedVat('9', 21), '21', 'article 9 -> juice 21');
-        assert.equal(proposedVat('9', null), '9', 'an article without a rate changes nothing');
-        assert.equal(proposedVat('9', 21), '21', 'review #312: after an article without a rate the next rate still follows');
-        assert.equal(proposedVat('6', 21, true), '6', 'typed by hand: stays');
-        assert.equal(proposedVat('21', 9, true), '21', 'chosen by hand (equal to the standard): stays');
-        assert.equal(proposedVat(' 21 ', 0), '0');
+    const fallback = { defaultVat: 21, previousItemVat: null };
+    test('a new line follows every chosen article until the user changes the rate by hand', () => {
+        assert.equal(proposedVat('21', 9, false, fallback), '9', 'standard 21 -> ginger 9');
+        assert.equal(proposedVat('9', 21, false, fallback), '21', 'article 9 -> juice 21');
+        assert.equal(proposedVat('9', null, false, fallback), '9', 'an article without a rate changes nothing');
+        assert.equal(proposedVat('9', 21, false, fallback), '21', 'review #312: after an article without a rate the next rate still follows');
+        assert.equal(proposedVat('6', 21, true, fallback), '6', 'typed by hand: stays');
+        assert.equal(proposedVat('21', 9, true, fallback), '21', 'chosen by hand (equal to the standard): stays');
+        assert.equal(emptyLine(21).vatManual, false, 'a new line knows it has not been touched');
+    });
+    test('review #312: a line from an older draft (no flag) only takes the proposal over the standard or the previous article rate', () => {
+        assert.equal(proposedVat('21', 9, undefined, fallback), '9', 'the standard rate');
+        assert.equal(proposedVat('9', 21, undefined, { defaultVat: 21, previousItemVat: 9 }), '21', 'the previous article rate');
+        assert.equal(proposedVat('6', 21, undefined, { defaultVat: 21, previousItemVat: 9 }), '6', 'anything else was typed by hand: stays');
     });
 });
