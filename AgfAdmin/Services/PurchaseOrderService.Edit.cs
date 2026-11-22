@@ -57,9 +57,18 @@ namespace AgfAdmin.Services
             var refused = Refusal(order, request.ExpectedVersion!.Value, PurchaseOrderDocumentRules.KindEdit);
             if (refused != null) return refused;
 
+            // Een oude order met alleen een herkomsttekst (geen land): stuurt een bestaande client die tekst ongewijzigd terug, dan blijft ze
+            // staan en wordt ze niet opnieuw gevalideerd; een nieuw ingevoerde tekst wordt wel gevalideerd.
+            var origin = request.Origin;
+            if (order.OriginCountryCode == null && string.IsNullOrWhiteSpace(request.OriginCountryCode) && Blank(request.Origin) != null
+                && string.Equals(Blank(request.Origin), Blank(order.Origin), StringComparison.Ordinal))
+            {
+                origin = null;
+            }
+
             var candidate = SupplyCommitmentService.BuildCandidate(new CreateSupplyCommitmentDto
             {
-                RequestId = request.RequestId, VendorId = request.VendorId, Route = SupplyRules.RouteWarehouse, Origin = request.Origin, OriginCountryCode = request.OriginCountryCode,
+                RequestId = request.RequestId, VendorId = request.VendorId, Route = SupplyRules.RouteWarehouse, Origin = origin, OriginCountryCode = request.OriginCountryCode,
                 ExpectedAt = request.ExpectedAt,
                 SupplierReference = request.SupplierReference, OrderedOn = request.OrderedOn ?? order.OrderedOn, OrderChannel = request.OrderChannel, Note = request.Note,
                 PartijId = request.PartijId, NewPartij = request.NewPartij, SupplierLotReference = request.SupplierLotReference,
