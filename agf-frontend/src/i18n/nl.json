@@ -3230,5 +3230,11 @@
   "inspection_sort_pallet": "Pallet",
   "inspection_sort_received": "Ontvangen",
   "inspection_sort_location": "Locatie",
-  "inspection_sort_product": "Product"
+  "inspection_sort_product": "Product",
+  "mail_drafts_sort_order": "Ordernummer",
+  "mail_drafts_sort_document": "Document",
+  "mail_drafts_sort_to": "Aan",
+  "mail_drafts_sort_status": "Status",
+  "mail_drafts_sort_created": "Aangemaakt",
+  "sales_awaiting_sort_reservable": "Nu te reserveren"
 }

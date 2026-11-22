@@ -1,7 +1,7 @@
 import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted } from '../../test/reactHarness.ts';
+import { Mounted, click } from '../../test/reactHarness.ts';
 import { SalesOrder } from '../../types/salesOrder';
 import SalesOrderList from './SalesOrderList';
 
@@ -59,5 +59,34 @@ describe('SalesOrderList as its own scroll area', () => {
         assert.equal(scrollTop(), 630 - 400 + 8, 'row 5 (530–630) is scrolled into view, plus a small margin');
         await mounted.render(<SalesOrderList orders={orders} selectedId={1} onSelect={() => {}} />);
         assert.equal(scrollTop(), 0, 'row 1 is brought back below the sticky header');
+    });
+});
+
+// Feedback 22 november: sorteren op de kolomkoppen; ordernummers natuurlijk (VO-2 voor VO-10), klant op naam, leverdatum als datum.
+describe('SalesOrderList sorting', () => {
+    beforeEach(() => { window.localStorage.clear(); mounted = new Mounted(); });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('order number naturally, customer by name, delivery by date; the third click restores the default', async () => {
+        const sales = [
+            { ...order(1), orderNumber: 'VO-2026-0010', customerName: 'Zeeman', requestedDeliveryDate: '2026-11-03T23:00:00.000Z' },
+            { ...order(2), orderNumber: 'VO-2026-0002', customerName: 'appelboer', requestedDeliveryDate: '2026-11-01T23:00:00.000Z' },
+            { ...order(3), orderNumber: 'VO-2026-0009', customerName: 'Bakker', requestedDeliveryDate: '2026-11-02T23:00:00.000Z' },
+        ] as SalesOrder[];
+        await mounted.render(<SalesOrderList orders={sales} selectedId={null} onSelect={() => {}} />);
+        const ids = () => Array.from(mounted.container.querySelectorAll('tbody tr')).map((row) => row.getAttribute('data-order-id'));
+        const header = (key: string) => mounted.container.querySelector<HTMLButtonElement>(`[data-sort-key="${key}"]`)!;
+        await click(header('order'));
+        assert.deepEqual(ids(), ['2', '3', '1']);
+        await click(header('customer'));
+        assert.deepEqual(ids(), ['2', '3', '1']);
+        assert.equal(header('order').closest('th')!.getAttribute('aria-sort'), 'ascending', 'the column with the customer button carries aria-sort');
+        await click(header('customer'));
+        assert.deepEqual(ids(), ['1', '3', '2']);
+        await click(header('delivery'));
+        assert.deepEqual(ids(), ['2', '3', '1']);
+        await click(header('delivery'));
+        await click(header('delivery'));
+        assert.deepEqual(ids(), ['1', '2', '3']);
     });
 });
