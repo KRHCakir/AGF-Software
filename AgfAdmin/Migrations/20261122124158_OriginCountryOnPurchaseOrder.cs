@@ -72,9 +72,8 @@ WHERE o.""Id"" = m.""Id"" AND m.countries = 1;";
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Terug: de oude tekst weer in Origin, daarna de kolommen weg.
-            migrationBuilder.Sql(@"UPDATE ""SupplyCommitments"" SET ""Origin"" = ""OriginLegacyText"" WHERE ""OriginLegacyText"" IS NOT NULL;");
-
+            // Terug: alleen de kolommen weg. Origin behoudt de actuele waarde (ook wijzigingen na de migratie); de oorspronkelijke
+            // tekst blijft na een omzetting niet terug te zetten zonder die latere wijzigingen te overschrijven.
             migrationBuilder.DropForeignKey(
                 name: "FK_SupplyCommitments_Countries_OriginCountryCode",
                 table: "SupplyCommitments");

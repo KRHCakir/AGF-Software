@@ -82,6 +82,24 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         await mounted.waitFor(() => saved.length === 1, 'onSaved');
     });
 
+    // Review #309: een oude herkomsttekst zonder land blijft staan zonder keuze (origin gaat niet mee); "Tekst weghalen" stuurt origin "".
+    test('an old origin text stays unless the user removes it on purpose', async () => {
+        await render(order({ origin: 'Peru (DEMO)', originCountryCode: null }));
+        assert.ok(testId('supply-origin-legacy')?.textContent?.includes('supply_origin_legacy'));
+        await submit();
+        await mounted.waitFor(() => puts.length === 1, 'PUT');
+        assert.equal('origin' in JSON.parse(puts[0].body), false, 'no choice: the text stays');
+        await mounted.unmount();
+        mounted = new Mounted();
+        await render(order({ origin: 'Peru (DEMO)', originCountryCode: null }));
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-tour="supply-origin-legacy-clear"]')!.click(); });
+        assert.equal(testId('supply-origin-legacy'), null);
+        await submit();
+        await mounted.waitFor(() => puts.length === 2, 'PUT');
+        const body = JSON.parse(puts[1].body);
+        assert.deepEqual([body.origin, body.originCountryCode], ['', null]);
+    });
+
     test('after a receipt every limit is explained: article fixed, never below received, the line stays, the supplier is fixed', async () => {
         await render(order({ vendorFixed: true, partijFixed: true, lines: [storedLine({ inUse: true, receivedQuantity: 40 })] }));
         assert.equal(field('lines[0].productVariantId-input').disabled, true);
