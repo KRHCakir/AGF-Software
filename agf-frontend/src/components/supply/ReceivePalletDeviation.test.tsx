@@ -120,12 +120,12 @@ describe('ReceivePalletForm blind entry', () => {
         const text = mounted.container.textContent ?? '';
         assert.equal(text.includes('Peru'), false, 'no ordered origin');
         assert.equal(text.includes('40 kg'), false, 'no ordered kg');
-        // Klasse en merk worden altijd gevraagd en staan leeg; herkomst, maat en klasse hebben een sterretje, verpakking en merk zijn optioneel.
+        // Klasse en merk worden altijd gevraagd en staan leeg; herkomst en klasse hebben een sterretje, maat, verpakking en merk zijn optioneel.
         for (const field of ['line.501.tradeClass', 'line.501.brand']) assert.equal(input(field).value, '', field);
         const label = (field: string) => mounted.container.querySelector(`label[for="${field}-input"]`)?.textContent ?? '';
         assert.equal(label('line.501.origin'), 'receipt_attr_origin *');
-        for (const field of ['size', 'tradeClass']) assert.equal(label(`line.501.${field}`), `${field === 'size' ? 'receipt_attr_size' : 'receipt_attr_trade_class'} *`, field);
-        for (const field of ['packaging', 'brand']) assert.ok(label(`line.501.${field}`).endsWith('field_optional') && !label(`line.501.${field}`).includes('*'), field);
+        assert.equal(label('line.501.tradeClass'), 'receipt_attr_trade_class *');
+        for (const field of ['size', 'packaging', 'brand']) assert.ok(label(`line.501.${field}`).endsWith('field_optional') && !label(`line.501.${field}`).includes('*'), field);
     });
 
     test('keyboard order: origin, size, packaging, class, brand, lot, quantity, kg', async () => {
@@ -304,15 +304,15 @@ describe('ReceivePalletForm blind entry', () => {
         assert.equal('expectedShownBeforeEntry' in contentPosts()[0], false);
     });
 
-    test('origin, size and class are required before anything is checked; packaging and brand may stay empty', async () => {
+    test('origin and class are required before anything is checked; size, packaging and brand may stay empty', async () => {
         await arrange();
         await type(input('line.501.lotNumber'), 'TEST-001');
         await type(input('line.501.quantity'), '10');
         await type(input('line.501.netKgPerPackage'), '4');
         await submit();
-        for (const field of ['origin', 'size', 'tradeClass']) assert.equal(input(`line.501.${field}`).getAttribute('aria-invalid'), 'true', field);
-        for (const field of ['packaging', 'brand']) assert.notEqual(input(`line.501.${field}`).getAttribute('aria-invalid'), 'true', field);
-        assert.ok(mounted.hasText('articles_error_size_required') && mounted.hasText('articles_error_class_required'));
+        for (const field of ['origin', 'tradeClass']) assert.equal(input(`line.501.${field}`).getAttribute('aria-invalid'), 'true', field);
+        for (const field of ['size', 'packaging', 'brand']) assert.notEqual(input(`line.501.${field}`).getAttribute('aria-invalid'), 'true', field);
+        assert.ok(mounted.hasText('articles_error_class_required'));
         assert.equal(previews().length, 0);
     });
 

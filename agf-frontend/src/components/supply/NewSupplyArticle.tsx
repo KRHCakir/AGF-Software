@@ -79,8 +79,8 @@ export default function NewSupplyArticle({ index, products, currentVariantId, on
         setError(null);
     };
 
-    // Zelfde regels als in Artikelen en bij ontvangst: herkomst, maat en klasse (vaste lijst) verplicht.
-    const complete = entered.origin !== null && entered.size.trim() !== '' && normalizeTradeClass(entered.tradeClass) !== null;
+    // Zelfde regels als in Artikelen en bij ontvangst: herkomst en klasse (vaste lijst) verplicht; maat optioneel.
+    const complete = entered.origin !== null && normalizeTradeClass(entered.tradeClass) !== null;
 
     const create = async () => {
         if (kind === null || !complete || entered.origin === null || (perPackage !== null && !perPackage.ok)) return;

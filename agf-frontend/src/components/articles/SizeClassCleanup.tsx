@@ -38,7 +38,7 @@ export default function SizeClassCleanup({ reloadToken, onArticleChanged }: {
     }, [reloadToken]);
 
     const edit = (id: number, patch: Partial<Choice>) => setChosen((current) => ({ ...current, [id]: { ...(current[id] ?? { size: '', tradeClass: '' }), ...patch } }));
-    const ready = (id: number) => (chosen[id]?.size.trim() ?? '') !== '' && normalizeTradeClass(chosen[id]?.tradeClass) !== null;
+    const ready = (id: number) => normalizeTradeClass(chosen[id]?.tradeClass) !== null;
 
     const save = async (item: SizeClassCleanupItem) => {
         const choice = chosen[item.id];
@@ -68,11 +68,11 @@ export default function SizeClassCleanup({ reloadToken, onArticleChanged }: {
                         <span className="col-span-2 min-w-0 break-words md:col-span-1">
                             <span className="font-medium text-gray-900">{item.description}</span>
                             <span className="block text-xs text-gray-600">
-                                {t('size_class_cleanup_now', { size: item.sizeCategory ?? '–', tradeClass: item.tradeClass ?? '–' })}
+                                {t(item.sizeCategory === null ? 'size_class_cleanup_now_no_size' : 'size_class_cleanup_now', { size: item.sizeCategory ?? '', tradeClass: item.tradeClass ?? '–' })}
                             </span>
                         </span>
                         <label className="text-xs font-medium text-gray-700">
-                            {t('articles_field_size')} *
+                            {t('articles_field_size')}
                             <input value={chosen[item.id]?.size ?? ''} maxLength={100} disabled={busy} placeholder={t('articles_hint_size')} className={inputClass}
                                 onChange={(event) => edit(item.id, { size: event.target.value })} />
                         </label>
