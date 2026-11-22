@@ -14,10 +14,14 @@ const rows: Row[] = [{ id: 1, name: 'Peer', amount: 3 }, { id: 2, name: 'appel',
 const columns: SortColumns<Row> = { name: { kind: 'text', value: (row) => row.name }, amount: { kind: 'number', value: (row) => row.amount } };
 const KEYS = Object.keys(columns);
 
+const seen: { screen: string; ready: boolean; key: string | null }[] = [];
+
 function List({ screen = 'test-list' }: { screen?: string }) {
-    const { sort, toggle, setSort } = useListSort(screen, KEYS);
+    const { sort, toggle, setSort, ready } = useListSort(screen, KEYS);
+    seen.push({ screen, ready, key: sort?.key ?? null });
     return (
         <>
+            <button type="button" data-testid="unknown-column" onClick={() => toggle('id')}>x</button>
             <SortSelect id="sort-test" options={[{ key: 'name', label: 'Naam', kind: 'text' }, { key: 'amount', label: 'Bedrag', kind: 'number' }]} sort={sort} onChange={setSort} />
             <table>
                 <thead><tr>
@@ -121,5 +125,23 @@ describe('SortHeader and SortSelect', () => {
         await act(async () => { setSelectValue(select(), ''); });
         assert.deepEqual(names(), ['Peer', 'appel', 'Kiwi']);
         assert.equal(window.localStorage.getItem('agf_sort_test-list'), null);
+    });
+
+    // Review #316: wisselt het scherm zonder te ontkoppelen, dan nooit de sortering van het vorige scherm met ready = true.
+    test('switching screens never reports the previous screen\'s sort as ready', async () => {
+        window.localStorage.setItem('agf_sort_other-list', 'name:desc');
+        await click('amount');
+        seen.length = 0;
+        await mounted.render(<List screen="other-list" />);
+        assert.ok(seen.every((entry) => !(entry.screen === 'other-list' && entry.ready && entry.key === 'amount')), JSON.stringify(seen));
+        assert.equal(th('name').getAttribute('aria-sort'), 'descending');
+        assert.deepEqual(names(), ['Peer', 'Kiwi', 'appel']);
+    });
+
+    test('an unknown column is ignored', async () => {
+        await click('name');
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-testid="unknown-column"]')!.click(); });
+        assert.equal(window.localStorage.getItem('agf_sort_test-list'), 'name:asc');
+        assert.equal(th('name').getAttribute('aria-sort'), 'ascending');
     });
 });
