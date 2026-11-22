@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Article } from '../types/article';
-import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, groupArticleErrors, normalizeGoodsCode, searchArticles } from './articleRules.ts';
+import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, goodsCodeToCheck, groupArticleErrors, normalizeGoodsCode, searchArticles } from './articleRules.ts';
 
 // Artikelregels: productsoort, land, maat en klasse verplicht (klasse uit de vaste lijst), leeg = niet vastgelegd, goederencode als tekst met stelsel en voorloopnullen,
 // bruto nooit kleiner dan netto, lijstfilter met exacte zoekcode bovenaan.
@@ -44,6 +44,11 @@ describe('article payload', () => {
             assert.equal(result.ok, false, `${JSON.stringify(bad)} must be refused`);
             if (!result.ok) assert.deepEqual(groupArticleErrors(result.errors), { goodsCode: ['invalid'] }, `${JSON.stringify(bad)} gives an inline goods code error`);
         }
+        assert.equal(goodsCodeToCheck('0910 11 00', 'CN'), '09101100');
+        assert.equal(goodsCodeToCheck('0910.11', 'HS'), '091011');
+        assert.equal(goodsCodeToCheck('0910 11', 'CN'), null, 'incomplete');
+        assert.equal(goodsCodeToCheck('0910 11 00', ''), null, 'no system');
+        assert.equal(goodsCodeToCheck('0910A100', 'CN'), null, 'letters');
         assert.equal(formatGoodsCode('07020000'), '0702 00 00');
         assert.equal(formatGoodsCode('070200'), '0702 00');
         assert.equal(formatGoodsCode('0702000010'), '0702 00 00 10');

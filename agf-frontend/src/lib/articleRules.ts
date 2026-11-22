@@ -78,6 +78,12 @@ export function isDigitsOnly(value: string): boolean {
     return /^[0-9]+$/.test(value);
 }
 
+// De code om in de lijst na te kijken (waarschuwing "niet in de lijst"): alleen een volledige code van het gekozen stelsel, anders null.
+export function goodsCodeToCheck(code: string, system: string): string | null {
+    const digits = normalizeGoodsCode(code);
+    return isGoodsCodeSystem(system) && isDigitsOnly(digits) && digits.length === GOODS_CODE_LENGTH[system] ? digits : null;
+}
+
 // Leesbare schrijfwijze: 0804 40 00 (CN), 0804 40 (HS), 0804 40 00 90 (TARIC). Alleen voor geldige, opgeslagen codes.
 export function formatGoodsCode(code: string): string {
     const digits = normalizeGoodsCode(code);

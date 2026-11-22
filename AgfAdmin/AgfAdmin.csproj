@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Content Update="Data\Reference\goods-codes.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="Data\Reference\goods-code-synonyms.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

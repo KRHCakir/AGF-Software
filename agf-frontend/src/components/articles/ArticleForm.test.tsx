@@ -83,6 +83,28 @@ describe('ArticleForm', () => {
         assert.equal((calls.find((call) => call.method === 'PUT')!.body as { season: string | null }).season, 'Mei - Augustus', 'the stored value is not cleared');
     });
 
+    test('a code typed by hand that is not in the list gives a warning, never a block; a known code gives none', async () => {
+        respond = (call) => call.url.includes('/articles/goods-codes')
+            ? json(200, { system: 'CN', source: { system: 'CN', name: 'GN 2026', url: null, version: null, validFrom: null, retrievedAt: null, note: null, lookupUrl: null }, complete: false, totalEntries: 602, matches: [], known: call.url.includes('09101100') })
+            : json(404, {});
+        await mounted.render(<ArticleForm article={null} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('button[aria-controls="article-trade"]')!.click(); });
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="goodsCodeSystem-input"]')!, 'CN'); });
+        await type(input('goodsCode'), '0603 11');
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        assert.equal(calls.length, 0, 'an incomplete code is not checked');
+        await type(input('goodsCode'), '0603 11 00');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="goods-code-unknown"]') !== null, 'warning shown');
+        assert.ok(calls[0].url.includes('query=06031100') && calls[0].url.includes('system=CN'));
+        assert.ok(text().includes('articles_goods_unknown'));
+        await type(input('goodsCode'), '0910 11 00');
+        assert.equal(mounted.container.querySelector('[data-testid="goods-code-unknown"]'), null, 'the old warning goes at once');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+        await mounted.waitFor(() => calls.length === 2, 'known code checked');
+        assert.equal(mounted.container.querySelector('[data-testid="goods-code-unknown"]'), null);
+    });
+
     test('validation keeps the input and shows inline errors; gross below net and a goods code without system are refused before any request', async () => {
         await mounted.render(<ArticleForm article={null} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
         await type(input('productName'), 'Avocado');

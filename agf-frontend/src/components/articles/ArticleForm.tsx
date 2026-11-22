@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { ArticleDraft, buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, groupArticleErrors } from '../../lib/articleRules';
+import { ArticleDraft, buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, goodsCodeToCheck, groupArticleErrors } from '../../lib/articleRules';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { unitLabelKey } from '../../lib/units';
 import { WEIGHT_METHODS, isWeightMethod } from '../../lib/weight';
 import { ApiError, toApiError } from '../../services/apiClient';
-import { createArticle, updateArticle } from '../../services/articleService';
+import { createArticle, searchGoodsCodes, updateArticle } from '../../services/articleService';
 import { PACKAGE_UNITS } from '../../types/availability';
 import type { Article, ArticleReference, GoodsCodeSystem } from '../../types/article';
 import type { CountryReference } from '../../types/country';
@@ -51,6 +51,21 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
     const [tradeOpen, setTradeOpen] = useState<boolean>(() => article !== null && hasTradeValues(draftFromArticle(article)));
     const [lookupOpen, setLookupOpen] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
+    // Een met de hand getypte code die niet in de lijst staat: alleen een waarschuwing, opslaan blijft mogelijk.
+    const [unknownCode, setUnknownCode] = useState<string | null>(null);
+    const toCheck = goodsCodeToCheck(draft.goodsCode, draft.goodsCodeSystem);
+    useEffect(() => {
+        setUnknownCode(null);
+        if (toCheck === null || !isGoodsCodeSystem(draft.goodsCodeSystem)) return;
+        const controller = new AbortController();
+        const system = draft.goodsCodeSystem;
+        const timer = setTimeout(() => {
+            searchGoodsCodes(toCheck, system, controller.signal)
+                .then((found) => { if (found.known === false) setUnknownCode(toCheck); })
+                .catch(() => { /* geen lijst bereikbaar: geen waarschuwing, het veld blijft gewoon bruikbaar */ });
+        }, 300);
+        return () => { clearTimeout(timer); controller.abort(); };
+    }, [toCheck, draft.goodsCodeSystem]);
     const inFlight = useRef(false);
     const firstInput = useRef<HTMLInputElement | null>(null);
 
@@ -236,6 +251,9 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                                 <button type="button" tabIndex={-1} className={`${secondaryButtonClass} mt-1 shrink-0 px-2`} aria-expanded={lookupOpen} onClick={() => setLookupOpen((open) => !open)} disabled={submitting}>🔍</button>
                             </div>
                             <span className="block text-xs text-gray-500">{t('articles_hint_goods_code')}</span>
+                            {unknownCode !== null && unknownCode === toCheck && (
+                                <span role="status" className="block text-xs text-amber-800" data-testid="goods-code-unknown">{t('articles_goods_unknown', { code: formatGoodsCode(unknownCode) })}</span>
+                            )}
                             <FieldError id="goodsCode" messages={e('goodsCode')} />
                         </div>
                         {lookupOpen && (

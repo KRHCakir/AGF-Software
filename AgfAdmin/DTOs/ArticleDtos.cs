@@ -129,6 +129,9 @@ namespace AgfAdmin.DTOs
         public bool Complete { get; set; }
         public int TotalEntries { get; set; }
         public List<GoodsCodeMatchDto> Matches { get; set; } = new();
+        // Is de zoekterm een volledige code van dit stelsel (HS 6, CN 8, TARIC 10 cijfers): staat hij in de lijst (true) of niet
+        // (false = waarschuwing "niet in de lijst", nooit een blokkade). Null bij een naam of een deel van een code.
+        public bool? Known { get; set; }
     }
 
     public sealed class GoodsCodeSourceDto
