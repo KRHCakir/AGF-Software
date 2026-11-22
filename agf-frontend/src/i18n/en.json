@@ -3216,5 +3216,15 @@
   "tour_aicert_review_why": "The AI only proposes and never creates a product. You link with the search field or leave it open.",
   "tour_aicert_approve_title": "Approve",
   "tour_aicert_approve_what": "We click Approve. The certificate is saved like any certificate; the PDF becomes a version of the file, with 'AI proposal approved by' you.",
-  "tour_aicert_approve_why": "Without that click the AI saves nothing. If the same number is already there, it becomes a new version of that certificate instead of a second one."
+  "tour_aicert_approve_why": "Without that click the AI saves nothing. If the same number is already there, it becomes a new version of that certificate instead of a second one.",
+  "sort_by": "Sort by",
+  "sort_default": "Default",
+  "sort_text_asc": "A–Z",
+  "sort_text_desc": "Z–A",
+  "sort_number_asc": "ascending",
+  "sort_number_desc": "descending",
+  "sort_amount_asc": "low–high",
+  "sort_amount_desc": "high–low",
+  "sort_date_asc": "old–new",
+  "sort_date_desc": "new–old"
 }
