@@ -110,9 +110,23 @@ public class PurchaseOrderOriginTests : IDisposable
         var legacy = await _h.DetailAsync(order.Id);
         var edit = PurchaseOrderEditHarness.EditOf(legacy);
         edit.Note = "alleen de notitie";
+        edit.Origin = "Peru (DEMO)"; // een bestaande client stuurt de opgeslagen tekst ongewijzigd mee
         var kept = await _h.RunAsync(s => s.UpdateAsync(order.Id, edit));
         Assert.Equal(ServiceResultStatus.Ok, kept.Status);
         Assert.Equal(("Peru (DEMO)", (string)null), (kept.Value.Origin, kept.Value.OriginCountryCode));
+
+        var omitted = PurchaseOrderEditHarness.EditOf(kept.Value);
+        omitted.Note = "nog een notitie";
+        omitted.Origin = null; // weggelaten veld is geen wisactie: de tekst blijft staan
+        omitted.OriginCountryCode = null;
+        var stays = await _h.RunAsync(s => s.UpdateAsync(order.Id, omitted));
+        Assert.Equal(ServiceResultStatus.Ok, stays.Status);
+        Assert.Equal(("Peru (DEMO)", (string)null), (stays.Value.Origin, stays.Value.OriginCountryCode));
+        kept = stays;
+
+        var retyped = PurchaseOrderEditHarness.EditOf(kept.Value);
+        retyped.Origin = "Peru (ANDERS)"; // een nieuw ingevoerde, niet-herkende tekst wordt wel geweigerd
+        Assert.Equal(ServiceResultStatus.Validation, (await _h.RunAsync(s => s.UpdateAsync(order.Id, retyped))).Status);
 
         var choose = PurchaseOrderEditHarness.EditOf(kept.Value);
         choose.OriginCountryCode = "PE";
