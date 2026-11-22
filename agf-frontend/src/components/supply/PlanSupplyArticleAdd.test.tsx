@@ -133,4 +133,18 @@ describe('PlanSupplyForm: article from the list and a new article in a side pane
         assert.equal(field('supplierReference-input').value, 'NP-2');
         assert.equal(posted.length, 0);
     });
+
+    // Zonder artikelen in het systeem: de link "Artikel toevoegen" in "Eerst nodig" opent het zijpaneel en verlaat de order niet.
+    test('with no article at all, the notice opens the side panel instead of leaving the order', async () => {
+        await mounted.unmount();
+        mounted = new Mounted();
+        await mounted.render(
+            <LeaveGuardProvider>
+                <PlanSupplyForm route="Warehouse" reference={{ ...reference, products: [] }} onReceive={() => {}} />
+            </LeaveGuardProvider>,
+        );
+        await act(async () => { tour('missing-article-action').click(); });
+        await mounted.waitFor(() => window.document.querySelector('[data-testid="new-article-panel"]'), 'panel open');
+        assert.equal(window.location.pathname, '/purchase-orders/new', 'still on the order');
+    });
 });
