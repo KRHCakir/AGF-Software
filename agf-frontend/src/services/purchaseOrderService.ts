@@ -2,6 +2,8 @@ import { ApiError, getJson, postJson, putJson } from './apiClient';
 import { type GgnProposals, isGgnProposals } from '../types/productGgn';
 import type { SaveResult } from './supplyService';
 import {
+    type PurchaseOrderOriginCheck,
+    isPurchaseOrderOriginCheckList,
     AddInvoiceRefRequest,
     CorrectPurchaseOrderRequest,
     FinalizePurchaseOrderRequest,
@@ -119,5 +121,12 @@ export async function getGgnProposals(vendorId: number, productIds: readonly num
     if (date !== null) query.set('date', date);
     const json = await getJson(`/purchase-orders/ggn-proposals?${query.toString()}`, signal);
     if (!isGgnProposals(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het GGN-voorstel.');
+    return json;
+}
+
+// "Herkomst controleren": orders met een oude herkomsttekst zonder land (Stamgegevens › Artikelen).
+export async function getPurchaseOrderOriginCheck(signal?: AbortSignal): Promise<PurchaseOrderOriginCheck[]> {
+    const json = await getJson('/purchase-orders/origin-check', signal);
+    if (!isPurchaseOrderOriginCheckList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij Herkomst controleren.');
     return json;
 }

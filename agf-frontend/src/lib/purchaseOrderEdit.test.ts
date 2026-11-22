@@ -26,12 +26,15 @@ const order = (lines: PurchaseOrderLine[], over: Partial<PurchaseOrderDetail> = 
 describe('purchase order edit', () => {
     test('the form opens with the stored values in nl notation, the version and the expected date in Amsterdam', () => {
         const { header, lines, edit } = orderEditOf(order([line({ unitPrice: 12.5, weightSource: 'Entered', expectedGrossWeightKg: 990 })]));
-        assert.deepEqual(header, { vendorId: '3', origin: '', expectedDate: '2026-11-14', supplierReference: '45-21', orderedOn: '2026-11-10', supplierLotReference: '', note: 'Bel bij aankomst' });
+        assert.deepEqual(header, { vendorId: '3', originCountryCode: null, legacyOrigin: null, expectedDate: '2026-11-14', supplierReference: '45-21', orderedOn: '2026-11-10', supplierLotReference: '', note: 'Bel bij aankomst' });
         assert.deepEqual(lines[0], { key: 'line-7', productVariantId: '1', quantity: '221', unitPrice: '12,50', grossKg: '990,00', grossKgEntered: true, unit: 'colli', lotNumber: '', ggn: '', ggnTouched: true });
         // Een opgeslagen GGN opent zoals het is en telt als keuze: het voorstel komt er niet overheen.
         assert.deepEqual([orderEditOf(order([line({ ggn: '4049928415684' })])).lines[0].ggn], ['4049928415684']);
         assert.equal(edit.version, 2);
         assert.equal(edit.lines.get('line-7')?.lineId, 7);
+        // Herkomst: het land opent als land; een oude tekst zonder land alleen als melding (de tekst blijft staan zonder keuze).
+        assert.deepEqual([orderEditOf(order([], { origin: 'Peru', originCountryCode: 'PE' })).header.originCountryCode, orderEditOf(order([], { origin: 'Peru', originCountryCode: 'PE' })).header.legacyOrigin], ['PE', null]);
+        assert.deepEqual([orderEditOf(order([], { origin: ' Peru (DEMO) ', originCountryCode: null })).header.originCountryCode, orderEditOf(order([], { origin: ' Peru (DEMO) ', originCountryCode: null })).header.legacyOrigin], [null, 'Peru (DEMO)']);
     });
 
     test('an untouched line goes back exactly as stored (kg and pallet input), with only the price as typed; a changed line is rebuilt', () => {

@@ -228,6 +228,8 @@ export interface PurchaseOrderDetail {
     route: string;
     customerName: string | null;
     origin: string;
+    // Land van de herkomst (ISO-code); null zonder land. origin zonder land = een oude tekst die nog gecontroleerd moet worden.
+    originCountryCode?: string | null;
     linesOrigin?: string | null;
     destination: string | null;
     expectedAt: string | null;
@@ -286,7 +288,8 @@ export interface UpdatePurchaseOrderRequest {
     requestId: string;
     expectedVersion: number;
     vendorId: number;
-    origin: string;
+    originCountryCode?: string | null;
+    origin?: string;
     expectedAt: string;
     supplierReference?: string;
     orderedOn?: string;
@@ -459,4 +462,12 @@ export function isInvoiceCandidateList(value: unknown): value is InvoiceCandidat
     return Array.isArray(value) && value.every((order) => typeof order === 'object' && order !== null && typeof (order as InvoiceCandidate).id === 'number'
         && typeof (order as InvoiceCandidate).orderNumber === 'string' && typeof (order as InvoiceCandidate).priceAdjustable === 'boolean'
         && Array.isArray((order as InvoiceCandidate).lines) && (order as InvoiceCandidate).lines.every(isCandidateLine));
+}
+
+// "Herkomst controleren" (feedback 22 november): een order met een oude herkomsttekst die geen land uit de lijst is.
+export interface PurchaseOrderOriginCheck { id: number; orderNumber: string; vendorName: string | null; origin: string; definitive: boolean; suggestions: string[] }
+
+export function isPurchaseOrderOriginCheckList(value: unknown): value is PurchaseOrderOriginCheck[] {
+    return isArrayOf(value, (item): item is PurchaseOrderOriginCheck => isObject(item) && isNumber(item.id) && isString(item.orderNumber)
+        && isNullableString(item.vendorName) && isString(item.origin) && typeof item.definitive === 'boolean' && isArrayOf(item.suggestions, isString));
 }

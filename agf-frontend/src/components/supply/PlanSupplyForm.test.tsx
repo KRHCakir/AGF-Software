@@ -44,7 +44,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
     test('net and gross come from the article; Bruto aanpassen changes only this line, below net is refused before sending', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         await chooseVendor('supb');
-        await type('origin-input', 'Peru');
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
@@ -77,7 +76,34 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('lines[0].expectedQuantity-input', '10');
         await submit();
         await mounted.waitFor(() => posted.length > 0, 'POST without an origin');
-        assert.equal(JSON.parse(posted[0].body).origin, '');
+        const body = JSON.parse(posted[0].body);
+        assert.equal('originCountryCode' in body, false, 'no country: nothing sent');
+        assert.equal('origin' in body, false, 'never a free text any more');
+    });
+
+    test('feedback 22 November: the order origin is a country, chosen by code or name, shown as "PE Peru" and sent as the code', async () => {
+        await mounted.unmount();
+        posted = stubFetch({
+            onGet: (url) => (url.includes('/countries') ? json(200, { countries: [{ code: 'PE', nameNl: 'Peru', nameEn: 'Peru' }, { code: 'ZA', nameNl: 'Zuid-Afrika', nameEn: 'South Africa' }], aliases: [] }) : json(404, {})),
+            nextPost: () => answer(),
+        });
+        mounted = new Mounted();
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="originCountryCode-input"]'), 'countries loaded');
+        await chooseVendor('supb');
+        await type('expectedAt-input', '2026-10-30');
+        await type('originCountryCode-input', 'south africa');
+        await enter('originCountryCode-input');
+        // De naam in de taal van het scherm (zonder LanguageProvider Engels; in het Nederlands "ZA Zuid-Afrika").
+        assert.equal(field('originCountryCode-input').value, 'ZA South Africa');
+        await type('lines[0].productVariantId-input', 'hass');
+        await enter('lines[0].productVariantId-input');
+        await type('lines[0].expectedQuantity-input', '10');
+        await submit();
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        const body = JSON.parse(posted[0].body);
+        assert.equal(body.originCountryCode, 'ZA');
+        assert.equal('origin' in body, false);
     });
 
     test('supplier is typed with suggestions (name, search code, VAT number), not picked from a dropdown; inactive suppliers are not offered', async () => {
@@ -89,7 +115,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('vendorId-input', 'nl001');
         await enter('vendorId-input');
         assert.ok(field('vendorId-input').value.includes("Nature's Pride"));
-        await type('origin-input', 'Peru');
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await enter('lines[0].productVariantId-input');
@@ -110,7 +135,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await enter('customerId-input');
         assert.ok(field('customerId-input').value.includes('Lommerse Groothandel'));
         await chooseVendor('supb');
-        await type('origin-input', 'Peru');
         await type('destination-input', 'DC Barendrecht');
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
@@ -128,7 +152,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         await type('supplierReference-input', '  NP-88123 ');
         assert.equal(mounted.button('po_channel_phone'), null);
         await chooseVendor('supb');
-        await type('origin-input', 'Peru');
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
@@ -156,7 +179,6 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
     test('without supplier reference the payload stays as before (fields omitted)', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         await chooseVendor('supb');
-        await type('origin-input', 'Peru');
         await type('expectedAt-input', '2026-10-30');
         await type('lines[0].productVariantId-input', 'hass');
         await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });

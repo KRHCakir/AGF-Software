@@ -23,7 +23,9 @@ export const isDefinitive = (order: { documentStatus?: string | null }): boolean
 // De kop zoals het formulier hem kent (zelfde velden als bij aanmaken, plus de notitie).
 export interface EditHeader {
     vendorId: string;
-    origin: string;
+    // Land van de herkomst; legacyOrigin = een oude tekst zonder land (alleen getoond, blijft staan zolang er geen land gekozen wordt).
+    originCountryCode: string | null;
+    legacyOrigin: string | null;
     expectedDate: string;
     supplierReference: string;
     orderedOn: string;
@@ -74,7 +76,8 @@ export function orderEditOf(order: PurchaseOrderDetail): { header: EditHeader; l
     return {
         header: {
             vendorId: String(order.vendorId),
-            origin: order.origin ?? '',
+            originCountryCode: order.originCountryCode ?? null,
+            legacyOrigin: (order.originCountryCode ?? null) === null && (order.origin ?? '').trim() !== '' ? order.origin.trim() : null,
             expectedDate: order.expectedAt === null ? '' : amsterdamDateOf(order.expectedAt) ?? '',
             supplierReference: order.supplierReference ?? '',
             orderedOn: order.orderedOn,

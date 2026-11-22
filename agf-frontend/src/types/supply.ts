@@ -29,7 +29,9 @@ export interface CreateSupplyCommitmentRequest {
     vendorId: number;
     customerId: number | null;
     route: SupplyRoute;
-    origin: string;
+    // Herkomst van de order als land (ISO-code); weggelaten = geen. origin (tekst) alleen nog in oudere bevroren opdrachten.
+    originCountryCode?: string | null;
+    origin?: string;
     destination: string | null;
     expectedAt: string;
     // Inkooporder (optioneel): alleen meegestuurd als ingevuld, zodat oudere bevroren opdrachten gelijk blijven.
@@ -98,6 +100,7 @@ export interface SupplyCommitment {
     status: string;
     // Optioneel bijschrift van de order ("" = leeg); de herkomst van de regels (afgeleid) staat in linesOrigin.
     origin: string;
+    originCountryCode?: string | null;
     linesOrigin?: string | null;
     destination: string | null;
     expectedAt: string | null;
