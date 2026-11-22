@@ -16,6 +16,8 @@ namespace AgfAdmin.Services.DocumentAi
         public const string StatusManual = "Manual";
         public const string StatusFailed = "Failed";
         public const string DocumentPurchaseInvoice = "PurchaseInvoice";
+        // Certificaten deel 2: een certificaat van een relatie of van het eigen bedrijf.
+        public const string DocumentCertificate = "Certificate";
 
         // Codes van de controles (de frontend toont er een korte tekst bij).
         public const string Missing = "missing";             // niet gevonden
