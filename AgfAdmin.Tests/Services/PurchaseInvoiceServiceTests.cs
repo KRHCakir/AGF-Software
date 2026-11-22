@@ -20,7 +20,8 @@ public class PurchaseInvoiceServiceTests : IDisposable
     {
         await using var db = _factory.CreateContext();
         var vendor = new Vendor { Name = "The Greenery", VATNumber = "NL001", DefaultCurrency = "EUR", PaymentTermsDays = 30 };
-        var variant = new ProductVariant { Product = new Product { Name = "Avocado" }, Name = "Hass", Origin = "Peru", Packaging = "4kg Box", DefaultPrice = 12.5m };
+        // Een artikel zonder btw-tarief (zoals van vóór 22 november): een regel zonder tarief valt dan terug op de standaard van de instellingen.
+        var variant = new ProductVariant { Product = new Product { Name = "Avocado" }, Name = "Hass", Origin = "Peru", Packaging = "4kg Box", DefaultPrice = 12.5m, VatPercentage = null };
         db.AddRange(vendor, variant, new Inventory { ProductVariant = variant, Location = "A1", Quantity = 10 });
         await db.SaveChangesAsync();
         _vendorId = vendor.Id;

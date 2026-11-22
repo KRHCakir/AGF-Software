@@ -47,6 +47,9 @@ namespace AgfAdmin.Controllers
             return Ok(_goodsCodes.Result(query, chosen));
         }
 
+        [HttpGet("vat-check")]
+        public async Task<IActionResult> VatCheck() => Ok(await _service.VatCheckAsync(HttpContext?.RequestAborted ?? default));
+
         [HttpGet("origin-cleanup")]
         public async Task<IActionResult> OriginCleanup() => Ok(await _service.OriginCleanupAsync(HttpContext?.RequestAborted ?? default));
 

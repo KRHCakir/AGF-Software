@@ -18,7 +18,8 @@ namespace AgfAdmin.Models
         // Soort (CostArticleRules.Kinds): Cost = kosten op een factuur van derden (P2); Packaging = emballage (fust) zoals pallets en kratten,
         // ook als regel op een verkooporder. Verandert nooit (guard-regel 27).
         public string Kind { get; set; } = Services.CostArticleRules.KindCost;
-        // Alleen bij emballage: optionele standaardprijs per stuk (excl. btw) en het btw-percentage voor een verkoopregel.
+        // Alleen bij emballage: optionele standaardprijs per stuk (excl. btw). Btw-percentage: bij emballage verplicht (verkoopregel); bij
+        // een Dienst sinds 22 november het btw-tarief (0, 9 of 21, standaard 21) als voorstel op een factuurregel.
         public decimal? DefaultUnitPrice { get; set; }
         public decimal? VatPercentage { get; set; }
 

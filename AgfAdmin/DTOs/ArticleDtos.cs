@@ -26,6 +26,8 @@ namespace AgfAdmin.DTOs
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
         public decimal DefaultPrice { get; set; }
+        // Btw-tarief (0, 9 of 21); null = nog in te vullen (alleen een artikel van vóór de btw).
+        public decimal? VatPercentage { get; set; }
         // Gearchiveerd (inactief): niet meer in keuzelijsten en suggesties; terugzetten kan altijd.
         public bool IsArchived { get; set; }
         public DateTime? ArchivedAt { get; set; }
@@ -107,6 +109,8 @@ namespace AgfAdmin.DTOs
         public string GoodsCode { get; set; }
         public string GoodsCodeSystem { get; set; }
         public string TradeClass { get; set; }
+        // Btw-tarief: 9, 21 of 0. Weggelaten bij aanmaken = 9 (de standaard); weggelaten bij wijzigen = ongewijzigd.
+        public decimal? VatPercentage { get; set; }
     }
 
     // Keuzelijsten en bestaande productsoorten voor het formulier.
@@ -187,5 +191,13 @@ namespace AgfAdmin.DTOs
     {
         public string SizeCategory { get; set; }
         public string TradeClass { get; set; }
+    }
+
+    // "Btw nog invullen": een artikel (Kind = Article) of kostenartikel (Cost of Packaging) zonder btw-tarief.
+    public sealed class VatCheckItemDto
+    {
+        public string Kind { get; set; }
+        public int Id { get; set; }
+        public string Description { get; set; }
     }
 }

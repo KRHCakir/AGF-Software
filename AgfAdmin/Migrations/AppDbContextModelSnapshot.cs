@@ -565,7 +565,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("CostArticles", t =>
                         {
-                            t.HasCheckConstraint("CK_CostArticles_Kind", "(\"Kind\" = 'Cost' AND \"DefaultUnitPrice\" IS NULL AND \"VatPercentage\" IS NULL) OR (\"Kind\" = 'Packaging' AND \"VatPercentage\" IS NOT NULL AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100 AND (\"DefaultUnitPrice\" IS NULL OR CAST(\"DefaultUnitPrice\" AS NUMERIC) >= 0))");
+                            t.HasCheckConstraint("CK_CostArticles_Kind", "(\"Kind\" = 'Cost' AND \"DefaultUnitPrice\" IS NULL AND (\"VatPercentage\" IS NULL OR CAST(\"VatPercentage\" AS NUMERIC) IN (0, 9, 21))) OR (\"Kind\" = 'Packaging' AND \"VatPercentage\" IS NOT NULL AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100 AND (\"DefaultUnitPrice\" IS NULL OR CAST(\"DefaultUnitPrice\" AS NUMERIC) >= 0))");
 
                             t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0");
                         });
@@ -4111,6 +4111,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<decimal?>("VatPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.Property<string>("WeightMethod")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -4143,6 +4147,8 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
 
                             t.HasCheckConstraint("CK_ProductVariants_GoodsCodeSystem_Allowed", "\"GoodsCodeSystem\" IS NULL OR \"GoodsCodeSystem\" IN ('HS', 'CN', 'TARIC')");
+
+                            t.HasCheckConstraint("CK_ProductVariants_VatPercentage_Allowed", "\"VatPercentage\" IS NULL OR CAST(\"VatPercentage\" AS NUMERIC) IN (0, 9, 21)");
 
                             t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
                         });
