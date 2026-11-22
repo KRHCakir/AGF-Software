@@ -1,0 +1,20 @@
+{
+  "note": "Zoekhulp bij de goederencodes (goods-codes.json): een gangbare naam die niet letterlijk in de GN-omschrijving staat, zoekt ook op het woord dat er wel staat. Handmatig bijgehouden; elk zoekwoord moet in de lijst voorkomen (test GoodsCodeCatalogTests). Geen indeling: de gebruiker kiest zelf de code.",
+  "synonyms": [
+    { "terms": ["paprika", "puntpaprika", "bell pepper", "sweet pepper", "chili", "chilipeper", "chilli", "peper", "pepers"], "search": ["capsicum"] },
+    { "terms": ["blauwe bes", "blauwe bessen", "bosbes", "bosbessen", "blueberry", "blueberries"], "search": ["vaccinium"] },
+    { "terms": ["limoen", "limoenen", "limes"], "search": ["lemmetjes", "limes"] },
+    { "terms": ["kaki", "kakis", "sharon", "sharonfruit"], "search": ["dadelpruimen", "persimmons"] },
+    { "terms": ["olijf"], "search": ["olijven"] },
+    { "terms": ["champignon", "champignons"], "search": ["agaricus"] },
+    { "terms": ["cherrytomaat", "cherrytomaten", "snoeptomaat", "snoeptomaten", "cherry tomato", "cherry tomatoes"], "search": ["minder dan 47 mm"] },
+    { "terms": ["trostomaat", "trostomaten"], "search": ["trossen"] },
+    { "terms": ["ijsbergsla", "iceberg"], "search": ["kropsla"] },
+    { "terms": ["zoete aardappel", "zoete aardappelen"], "search": ["bataten"] },
+    { "terms": ["cassave", "cassava"], "search": ["maniok"] },
+    { "terms": ["drakenvrucht", "pitaya", "dragon fruit"], "search": ["pitahaya"] },
+    { "terms": ["lychee", "litchi", "lychees"], "search": ["lychees"] },
+    { "terms": ["zucchini"], "search": ["courgettes"] },
+    { "terms": ["eggplant"], "search": ["aubergines"] }
+  ]
+}

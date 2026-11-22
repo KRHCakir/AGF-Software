@@ -130,6 +130,8 @@ export interface GoodsCodeSearch {
     complete: boolean;
     totalEntries: number;
     matches: GoodsCodeMatch[];
+    // Bij een volledige code: staat hij in de lijst (false = waarschuwing, nooit een blokkade); anders null.
+    known?: boolean | null;
 }
 
 const isNullableUnit = (value: unknown): value is PackageUnit | null => value === null || (isString(value) && (PACKAGE_UNITS as readonly string[]).includes(value));
@@ -164,5 +166,6 @@ function isGoodsCodeMatch(value: unknown): value is GoodsCodeMatch {
 }
 
 export function isGoodsCodeSearch(value: unknown): value is GoodsCodeSearch {
-    return isObject(value) && isString(value.system) && isGoodsCodeSource(value.source) && typeof value.complete === 'boolean' && isNumber(value.totalEntries) && isArrayOf(value.matches, isGoodsCodeMatch);
+    return isObject(value) && isString(value.system) && isGoodsCodeSource(value.source) && typeof value.complete === 'boolean' && isNumber(value.totalEntries) && isArrayOf(value.matches, isGoodsCodeMatch)
+        && (value.known === undefined || value.known === null || typeof value.known === 'boolean');
 }

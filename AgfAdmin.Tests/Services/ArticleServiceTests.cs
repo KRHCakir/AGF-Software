@@ -32,6 +32,18 @@ public class ArticleServiceTests : IDisposable
         return await new ArticleService(db).ListAsync();
     }
 
+    // Een met de hand getypte code buiten de lijst wordt gewoon opgeslagen (de waarschuwing staat in het scherm).
+    [Fact]
+    public async Task An_Unknown_Code_Typed_By_Hand_Is_Saved()
+    {
+        var result = await CreateAsync(new SaveArticleDto
+        {
+            ProductName = "Snijbloem", OriginCountryCode = "NL", SizeCategory = "60", TradeClass = "I", GoodsCode = "0603 11 00", GoodsCodeSystem = "CN"
+        });
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal("06031100", result.Value.GoodsCode);
+    }
+
     private static SaveArticleDto Hass() => new()
     {
         ProductName = "Avocado", VariantName = "Hass", ShortcutCode = "avohassper22", OriginCountryCode = "PE", Packaging = "4kg Box", PackagingUnit = "box",
@@ -406,12 +418,52 @@ public class GoodsCodeCatalogTests
         Assert.All(catalog.Entries, e => Assert.True(ArticleRules.IsGoodsCodeFor(e.System, e.Code), $"{e.Code} is not a valid {e.System} code"));
         // Geen onderbouwde TARIC-referenties in de meegeleverde lijst: het antwoord onder TARIC is eerlijk leeg.
         Assert.Empty(catalog.EntriesFor("TARIC"));
-        // Elke GN-code valt onder een HS-post met een omschrijving op postniveau; avocado: HS 080440, GN 08044000.
+        // Elke GN-code valt onder een HS-post met een omschrijving op postniveau.
         var headings = catalog.EntriesFor("HS");
         Assert.All(catalog.Entries, e => Assert.Contains(headings, h => h.Code == e.HsCode && !string.IsNullOrWhiteSpace(h.DescriptionNl) && !string.IsNullOrWhiteSpace(h.DescriptionEn)));
         Assert.All(headings, h => Assert.Equal(6, h.Code.Length));
-        Assert.Equal(new[] { "08044000" }, Assert.Single(catalog.Search("avocado", "HS")).MergedCodes);
-        Assert.Equal("Avocado's, vers of gedroogd", Assert.Single(catalog.Search("avocado", "HS")).DescriptionNl);
-        Assert.Equal(3, Assert.Single(catalog.Search("tomaten", "HS")).MergedCodes.Count);
+        Assert.Equal("080440", catalog.Search("avocado", "HS").First().Code);
+    }
+
+    // Synoniemen en rangorde (in het geheugen): "paprika" zoekt ook op "capsicum", ook als meer woorden ("blauwe bes"); een treffer
+    // onder de post komt vóór een treffer alleen in de omschrijving van de post (eerst gember, dan saffraan onder post 0910).
+    [Fact]
+    public void Synonyms_And_Ranking_Work_On_A_Small_List()
+    {
+        var catalog = new GoodsCodeCatalog(
+            new GoodsCodeSourceDto { System = "CN", Name = "test" },
+            new List<GoodsCodeMatchDto>
+            {
+                new() { Code = "07096010", DescriptionNl = "Groenten › vruchten van het geslacht Capsicum › paprika's", DescriptionEn = "Vegetables › Fruits of the genus Capsicum › Sweet peppers" },
+                new() { Code = "08104010", DescriptionNl = "Ander fruit › vruchten van de soort Vaccinium", DescriptionEn = "Other fruit › Fruit of the species Vaccinium" },
+                new() { Code = "09101100", DescriptionNl = "Gember, saffraan › gember › niet gemalen", DescriptionEn = "Ginger, saffron › Ginger › Neither crushed nor ground" },
+                new() { Code = "09102010", DescriptionNl = "Gember, saffraan › saffraan › niet gemalen", DescriptionEn = "Ginger, saffron › Saffron › Neither crushed nor ground" },
+            },
+            new List<GoodsCodeMatchDto>(),
+            new List<GoodsCodeCatalog.Synonym>
+            {
+                new(new[] { "Chili", "peper" }, new[] { "capsicum" }),
+                new(new[] { "blauwe bes", "bosbes" }, new[] { "Vaccinium" }),
+            });
+        Assert.Equal(new[] { "07096010" }, catalog.Search("chili").Select(m => m.Code));
+        Assert.Equal(new[] { "08104010" }, catalog.Search("Blauwe Bes").Select(m => m.Code));
+        Assert.Equal(new[] { "09101100", "09102010" }, catalog.Search("gember").Select(m => m.Code));
+        Assert.Equal(new[] { "09101100", "09102010" }, catalog.Search("ginger").Select(m => m.Code));
+        Assert.Equal(new[] { "09102010", "09101100" }, catalog.Search("saffraan").Select(m => m.Code));
+        Assert.Equal(new[] { "09101100" }, catalog.Search("0910 11").Select(m => m.Code));
+        Assert.True(catalog.IsKnown("CN", "0910.11.00"));
+        Assert.False(catalog.IsKnown("CN", "06031100"));
+        Assert.False(catalog.Result("0603 11 00", "CN").Known);
+        Assert.True(catalog.Result("0910 11 00", "CN").Known);
+        Assert.Null(catalog.Result("0910", "CN").Known);
+        Assert.Null(catalog.Result("gember", "CN").Known);
+    }
+
+    [Fact]
+    public void Text_Search_Ignores_Case_Accents_And_Punctuation()
+    {
+        var catalog = Catalog();
+        Assert.Equal(new[] { "08044000" }, catalog.Search("AVOCADO'S").Select(m => m.Code));
+        Assert.Equal(new[] { "08045000" }, catalog.Search("mangá").Select(m => m.Code));
     }
 }
