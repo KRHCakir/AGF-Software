@@ -171,11 +171,13 @@ describe('lines, amounts and payload', () => {
 });
 
 describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
-    test('the rate of the chosen article or service replaces the standard or the previous article, never a rate typed by hand', () => {
-        assert.equal(proposedVat('21', 21, null, 9), '9', 'standard 21 -> ginger 9');
-        assert.equal(proposedVat('9', 21, 9, 21), '21', 'previous article 9 -> juice 21');
-        assert.equal(proposedVat('6', 21, 9, 21), '6', 'typed by hand: stays');
-        assert.equal(proposedVat('21', 21, null, null), '21', 'article without a rate: unchanged');
-        assert.equal(proposedVat(' 21 ', 21, null, 0), '0');
+    test('the rate of the chosen article or service is the proposal until the user changes the rate by hand', () => {
+        assert.equal(proposedVat('21', 9), '9', 'standard 21 -> ginger 9');
+        assert.equal(proposedVat('9', 21), '21', 'article 9 -> juice 21');
+        assert.equal(proposedVat('9', null), '9', 'an article without a rate changes nothing');
+        assert.equal(proposedVat('9', 21), '21', 'review #312: after an article without a rate the next rate still follows');
+        assert.equal(proposedVat('6', 21, true), '6', 'typed by hand: stays');
+        assert.equal(proposedVat('21', 9, true), '21', 'chosen by hand (equal to the standard): stays');
+        assert.equal(proposedVat(' 21 ', 0), '0');
     });
 });

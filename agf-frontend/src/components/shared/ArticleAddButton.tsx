@@ -37,10 +37,16 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
     const shown = matches.slice(0, MAX_LISTED);
     useEffect(() => { setHighlight(0); }, [query]);
     useEffect(() => { if (open) search.current?.focus(); }, [open]);
+    // Pijltjes verplaatsen alleen de selectie; de begrensde lijst scrolt mee zodat de gekozen optie in beeld blijft.
+    const activeId = shown[highlight]?.variantId;
+    useEffect(() => {
+        if (open && activeId !== undefined) document.getElementById(`${listId}-${activeId}`)?.scrollIntoView?.({ block: 'nearest' });
+    }, [open, activeId, listId]);
 
     const close = (focusButton: boolean) => {
         setOpen(false);
         setQuery('');
+        setHighlight(0); // review #313: heropenen begint weer bij het eerste artikel, ook als de zoekterm al leeg was
         if (focusButton) setTimeout(() => button.current?.focus(), 0);
     };
     const pick = (match: VariantMatch) => {
@@ -55,7 +61,11 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
             event.preventDefault();
             const match = shown[highlight];
             if (match) pick(match);
-        } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
+        }
+    };
+    // Escape sluit de lijst vanaf elk element erin (zoekveld, opties, "Nieuw artikel"), focus terug naar de knop.
+    const onListKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
     };
 
     return (
@@ -64,7 +74,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
             <button ref={button} type="button" className={primaryButtonClass} disabled={disabled} aria-expanded={open} aria-controls={open ? listId : undefined}
                 onClick={() => (open ? close(true) : setOpen(true))} data-tour={dataTour}>+ {t('article_add_button')}</button>
             {open && (
-                <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border border-gray-300 bg-white p-2 shadow-lg sm:right-auto sm:w-[36rem]" data-testid="article-add-list">
+                <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border border-gray-300 bg-white p-2 shadow-lg sm:right-auto sm:w-[36rem]" data-testid="article-add-list" onKeyDown={onListKeyDown}>
                     <label htmlFor={`${listId}-search`} className="sr-only">{t('article_add_search')}</label>
                     <input ref={search} id={`${listId}-search`} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown}
                         role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={shown[highlight] ? `${listId}-${shown[highlight].variantId}` : undefined}
@@ -82,7 +92,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
                     </ul>
                     {matches.length > shown.length && <p className="mt-1 px-2 text-xs text-gray-600">{t('article_add_more', { count: String(matches.length - shown.length) })}</p>}
                     {onNewArticle && (
-                        <button type="button" className="mt-2 text-sm font-medium text-blue-800 underline underline-offset-2" onClick={() => { close(false); onNewArticle(); }} data-tour="article-add-new">
+                        <button type="button" className="mt-2 text-sm font-medium text-blue-800 underline underline-offset-2" onClick={() => { button.current?.focus(); close(false); onNewArticle(); }} data-tour="article-add-new">
                             + {t('article_add_new')}
                         </button>
                     )}

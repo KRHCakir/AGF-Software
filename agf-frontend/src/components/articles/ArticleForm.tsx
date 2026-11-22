@@ -45,12 +45,13 @@ function hasTradeValues(draft: ArticleDraft): boolean {
 // eenheid en kg per colli; "Meer velden" toont de rest. Een fout in een verborgen veld klapt de rest vanzelf open.
 const COMPACT_FIELDS = ['productName', 'originCountryCode', 'tradeClass', 'vatPercentage', 'packagingUnit', 'defaultNetKgPerPackage'];
 
-export default function ArticleForm({ article, reference, countries, onSaved, onClose, compact = false }: {
+export default function ArticleForm({ article, reference, countries, onSaved, onClose, onBusyChange, compact = false }: {
     article: Article | null;
     reference: ArticleReference;
     countries: CountryReference;
     onSaved: (article: Article, created: boolean) => void;
     onClose: () => void;
+    onBusyChange?: (busy: boolean) => void;
     compact?: boolean;
 }) {
     const [more, setMore] = useState(false);
@@ -63,6 +64,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
     const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [serverError, setServerError] = useState<ApiError | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    useEffect(() => { onBusyChange?.(submitting); }, [submitting, onBusyChange]);
     const [tradeOpen, setTradeOpen] = useState<boolean>(() => article !== null && hasTradeValues(draftFromArticle(article)));
     const [lookupOpen, setLookupOpen] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
