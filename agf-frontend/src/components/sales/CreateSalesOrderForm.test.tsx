@@ -204,4 +204,14 @@ describe('CreateSalesOrderForm: packaging next to the goods', () => {
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
         assert.equal(window.document.activeElement, field('lines[1].quantity-input'));
     });
+
+    // Review #314: Nieuw artikel per regel is ook met alleen het toetsenbord bereikbaar: Alt+A in een veld van de regel.
+    test('Alt+A in a line opens the new-article side panel for that line', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await act(async () => {
+            field('lines[0].quantity-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, bubbles: true, cancelable: true }));
+        });
+        await mounted.waitFor(() => window.document.querySelector('[data-testid="new-article-panel"]'), 'panel open');
+    });
 });

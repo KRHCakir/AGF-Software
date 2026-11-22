@@ -34,6 +34,7 @@ import { LineKgFields } from '../shared/LineKgInput';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import ArticleAddButton from '../shared/ArticleAddButton';
+import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import NewArticlePanel from '../articles/NewArticlePanel';
 import { withArticle } from '../../lib/articleFromEntry';
 import type { Article } from '../../types/article';
@@ -247,6 +248,10 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     // Een artikel uit de lijst "Artikel toevoegen" of uit het zijpaneel: op de regel waar de gebruiker was, anders op een lege laatste
     // regel, anders op een nieuwe; de eenheid van het artikel vult een lege eenheid voor. Daarna de cursor naar Aantal.
     const focusQuantityOf = useRef<string | null>(null);
+    const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
+    // Review #314: op de limiet kan de lijst nog een lege laatste regel vullen.
+    const lastLine = draft.lines[draft.lines.length - 1];
+    const lastLineBlank = lastLine !== undefined && lastLine.productVariantId === '' && lastLine.quantity.trim() === '';
     const putArticle = (variantId: number, lineKey: string | null, articleUnit: string | null = null) => {
         if (locked) return;
         const last = draft.lines[draft.lines.length - 1];
@@ -498,7 +503,10 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                                 const prefix = `lines[${index}]`;
                                 const unitText = line.unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(line.unit)).toLowerCase();
                                 return (
-                                    <tr key={line.key} className="align-top">
+                                    <tr key={line.key} className="align-top" onKeyDown={(event) => {
+                                        // Review #314: Alt+A (zoals op de inkooporder) opent Nieuw artikel voor deze regel, ook met alleen het toetsenbord.
+                                        if (!locked && matchShortcut(event, isMac) === 'newArticle') { event.preventDefault(); setNewArticleFor(line.key); }
+                                    }}>
                                         <td className="w-96 px-2 py-1.5">
                                             <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
                                             <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`sales-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
@@ -513,7 +521,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                                                 }} />
                                             {!locked && (
                                                 <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
-                                                    data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                                                    title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
                                             )}
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
@@ -546,7 +554,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 </div>
                 <KgTotals totals={totals} lineCount={draft.lines.length} testId="order-kg-totals" />
                 <div className="flex flex-wrap items-start gap-2">
-                    <ArticleAddButton products={products} disabled={locked || draft.lines.length >= MAX_ORDER_LINES} dataTour="sales-article-add"
+                    <ArticleAddButton products={products} disabled={locked || (draft.lines.length >= MAX_ORDER_LINES && !lastLineBlank)} dataTour="sales-article-add"
                         onPick={(variantId) => putArticle(variantId, null)} onNewArticle={() => setNewArticleFor(null)} />
                     <button type="button" onClick={addLine} disabled={locked || draft.lines.length >= MAX_ORDER_LINES} className={secondaryButtonClass}>
                         + {t('supply_add_line')}
