@@ -29,6 +29,7 @@ import type { RecipientAddressOption } from '../../types/documentMail';
 import SubmitErrors from '../shared/SubmitErrors';
 import { useFormLeaveGuard } from '../shared/LeaveGuard';
 import CertificatesEditor from '../certificates/CertificatesEditor';
+import CertificateAiReader from '../certificates/CertificateAiReader';
 import { certificateMessages, useCertificates } from '../certificates/useCertificates';
 import { certificateStatus, needsAttention } from '../../lib/certificateRules';
 
@@ -765,12 +766,17 @@ export default function RelationForm({ relation, reference, onSaved, onClose, in
                             <button type="button" className="rounded border border-gray-300 px-2 py-1 text-sm" onClick={certificates.reload} data-testid="certificates-reload">{t('cert_reload')}</button>
                         )}
                         {certificates.conflict && <p role="alert" className="text-sm text-amber-950">{t('cert_conflict')}</p>}
+                        {certificates.reference !== null && !locked && (
+                            // Certificaten deel 2: een PDF of foto laten lezen; pas bij een opgeslagen relatie en zonder openstaande wijzigingen in het blok.
+                            <CertificateAiReader owner={{ kind: 'relation', id: relation?.id ?? null }} certificates={certificates} dataTour="relation-certificate"
+                                blockedReason={relation === null ? t('cert_ai_save_relation_first') : certificates.changed ? t('cert_ai_save_changes_first') : null} />
+                        )}
                         {certificates.reference === null
                             ? (!certificates.failed && <p className="text-xs text-gray-600">{t('cert_loading')}</p>)
                             : (
                                 <CertificatesEditor idPrefix="relation-certificates" rows={certificates.rows} onChange={certificates.setRows} reference={certificates.reference}
                                     products={certificates.products} errors={certificateMessages(certificates.errors, certificates.problems, t)} today={today} warningDays={certificates.warningDays}
-                                    disabled={locked || certificates.loading || certificates.failed} onOpenFile={(id, file) => void certificates.openFile(id, file)}
+                                    disabled={locked || certificates.loading || certificates.failed || certificates.approving} onOpenFile={(id, file) => void certificates.openFile(id, file)}
                                     onAddFile={(row, file) => void certificates.addFile(row, file)} uploading={certificates.uploading} dataTour="relation-certificate" />
                             )}
                     </div>
