@@ -3236,5 +3236,9 @@
   "mail_drafts_sort_to": "To",
   "mail_drafts_sort_status": "Status",
   "mail_drafts_sort_created": "Created",
-  "sales_awaiting_sort_reservable": "Reservable now"
+  "sales_awaiting_sort_reservable": "Reservable now",
+  "worklist_sort_article": "Article",
+  "worklist_sort_where": "Where to fill in",
+  "worklist_sort_origin_text": "Old origin text",
+  "worklist_sort_size": "Size"
 }

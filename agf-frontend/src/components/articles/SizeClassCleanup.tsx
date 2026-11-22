@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { normalizeTradeClass } from '../../lib/tradeClass';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -10,12 +10,24 @@ import TradeClassPicker from '../shared/TradeClassPicker';
 import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
 import { secondaryButtonClass } from '../supply/SuccessPanel';
+import { type SortColumns, sortRows } from '../../lib/listSort';
+import { SortSelect } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
 
 interface Choice { size: string; tradeClass: string }
 
 // "Maat en klasse opschonen" in Artikelen, naast "Herkomst opschonen": oudere artikelen zonder maat, zonder klasse of met een klasse
 // die niet in de vaste lijst staat (de migratie zette alleen eenduidige waarden om). Ze blijven bruikbaar; hier vult de gebruiker maat
 // en klasse aan. Er wordt nooit automatisch gekozen: een herkende oude schrijfwijze staat alleen alvast als voorstel klaar.
+// Sorteren (feedback 22 november): een keuzelijst "Sorteren op" (de werklijst heeft geen kolomkoppen).
+const CLEANUP_COLUMNS: SortColumns<SizeClassCleanupItem> = {
+    description: { kind: 'text', value: (item) => item.description },
+    code: { kind: 'natural', value: (item) => item.shortcutCode },
+    size: { kind: 'natural', value: (item) => item.sizeCategory },
+    tradeClass: { kind: 'text', value: (item) => item.tradeClass },
+};
+const CLEANUP_SORT_KEYS = Object.keys(CLEANUP_COLUMNS);
+
 export default function SizeClassCleanup({ reloadToken, onArticleChanged }: {
     reloadToken: number;
     onArticleChanged: (article: Article) => void;
@@ -25,6 +37,8 @@ export default function SizeClassCleanup({ reloadToken, onArticleChanged }: {
     const [chosen, setChosen] = useState<Record<number, Choice>>({});
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
+    const { sort, setSort } = useListSort('size-class-cleanup', CLEANUP_SORT_KEYS);
+    const sorted = useMemo(() => sortRows(items ?? [], CLEANUP_COLUMNS, sort), [items, sort]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -62,8 +76,16 @@ export default function SizeClassCleanup({ reloadToken, onArticleChanged }: {
             {error && <div className="mt-2"><ErrorNotice error={error} /></div>}
             {items === null && error === null && <p className="mt-2 text-sm text-gray-600">{t('articles_loading')}</p>}
             {items !== null && items.length === 0 && <p className="mt-2 text-sm text-green-800">{t('size_class_cleanup_empty')}</p>}
+            {sorted.length > 1 && (
+                <SortSelect id="size-class-cleanup-sort" className="mt-2 max-w-md" sort={sort} onChange={setSort} options={[
+                    { key: 'description', label: t('worklist_sort_article'), kind: 'text' },
+                    { key: 'code', label: t('articles_col_code'), kind: 'natural' },
+                    { key: 'size', label: t('worklist_sort_size'), kind: 'natural' },
+                    { key: 'tradeClass', label: t('articles_col_trade_class'), kind: 'text' },
+                ]} />
+            )}
             <ul className="mt-2 divide-y divide-gray-100 text-sm">
-                {(items ?? []).map((item) => (
+                {sorted.map((item) => (
                     <li key={item.id} className="grid grid-cols-2 gap-2 py-2 md:grid-cols-[minmax(0,1fr)_8rem_10rem_auto] md:items-end" data-testid={`size-class-cleanup-${item.id}`}>
                         <span className="col-span-2 min-w-0 break-words md:col-span-1">
                             <span className="font-medium text-gray-900">{item.description}</span>

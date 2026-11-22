@@ -1,11 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getVatCheck } from '../../services/articleService';
 import type { VatCheckItem } from '../../types/article';
 import ErrorNotice from '../supply/ErrorNotice';
+import { type SortColumns, sortRows } from '../../lib/listSort';
+import { SortSelect } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
+
+// Sorteren (feedback 22 november): een keuzelijst "Sorteren op" (de werklijst heeft geen kolomkoppen).
+const KIND_ORDER = ['Article', 'Cost', 'Packaging'];
+const VAT_CHECK_COLUMNS: SortColumns<VatCheckItem> = {
+    description: { kind: 'text', value: (item) => item.description },
+    where: { kind: 'number', value: (item) => KIND_ORDER.indexOf(item.kind) },
+};
+const VAT_CHECK_SORT_KEYS = Object.keys(VAT_CHECK_COLUMNS);
 
 // "Btw nog invullen" (feedback 22 november): artikelen en kostenartikelen zonder btw-tarief. De migratie gaf producten 9% en diensten
 // 21%; emballage hield haar eigen tarief. Een artikel open je in de lijst hierboven, een Dienst onder Instellingen › Kostenartikelen,
@@ -14,6 +25,8 @@ export default function VatCheck({ reloadToken, onOpenArticle }: { reloadToken: 
     const { t } = useTranslation();
     const [items, setItems] = useState<VatCheckItem[] | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
+    const { sort, setSort } = useListSort('vat-check', VAT_CHECK_SORT_KEYS);
+    const sorted = useMemo(() => sortRows(items ?? [], VAT_CHECK_COLUMNS, sort), [items, sort]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -29,8 +42,14 @@ export default function VatCheck({ reloadToken, onOpenArticle }: { reloadToken: 
             <h2 id="vat-check" className="text-sm font-semibold text-gray-900">{t('vat_check_title')}</h2>
             <p className="text-xs text-gray-700">{t('vat_check_hint')}</p>
             {error && <div className="mt-2"><ErrorNotice error={error} /></div>}
+            {sorted.length > 1 && (
+                <SortSelect id="vat-check-sort" className="mt-2 max-w-md" sort={sort} onChange={setSort} options={[
+                    { key: 'description', label: t('worklist_sort_article'), kind: 'text' },
+                    { key: 'where', label: t('worklist_sort_where'), kind: 'natural' },
+                ]} />
+            )}
             <ul className="mt-2 divide-y divide-amber-200 text-sm">
-                {(items ?? []).map((item) => (
+                {sorted.map((item) => (
                     <li key={`${item.kind}-${item.id}`} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5" data-testid={`vat-check-${item.kind}-${item.id}`}>
                         {item.kind === 'Article'
                             ? <button type="button" className="text-left font-semibold text-blue-800 underline underline-offset-2" onClick={() => onOpenArticle(item.id)}>{item.description}</button>
