@@ -131,6 +131,6 @@ describe('PlanSupplyForm: lot on the purchase order', () => {
         const focusable = Array.from(mounted.container.querySelectorAll<HTMLElement>('input, button, select')).filter((element) => element.tabIndex >= 0).map((element) => element.id || element.dataset.tour);
         assert.deepEqual(focusable.slice(0, 3), ['vendorId-input', 'supplierReference-input', 'orderedOn-input']);
         const at = (id: string) => focusable.indexOf(id);
-        assert.ok(at('expectedAt-input') < at('originCountryCode-input') && at('originCountryCode-input') < at('partij-input') && at('partij-input') < at('supplierLotReference-input'), focusable.join(' '));
+        assert.ok(at('expectedAt-input') < at('orderOriginCountryCode-input') && at('orderOriginCountryCode-input') < at('partij-input') && at('partij-input') < at('supplierLotReference-input'), focusable.join(' '));
     });
 });

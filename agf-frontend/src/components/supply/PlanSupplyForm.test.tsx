@@ -89,13 +89,13 @@ describe('PlanSupplyForm: net and gross kg on the supply line', () => {
         });
         mounted = new Mounted();
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
-        await mounted.waitFor(() => mounted.container.querySelector('[id="originCountryCode-input"]'), 'countries loaded');
+        await mounted.waitFor(() => mounted.container.querySelector('[id="orderOriginCountryCode-input"]'), 'countries loaded');
         await chooseVendor('supb');
         await type('expectedAt-input', '2026-10-30');
-        await type('originCountryCode-input', 'south africa');
-        await enter('originCountryCode-input');
+        await type('orderOriginCountryCode-input', 'south africa');
+        await enter('orderOriginCountryCode-input');
         // De naam in de taal van het scherm (zonder LanguageProvider Engels; in het Nederlands "ZA Zuid-Afrika").
-        assert.equal(field('originCountryCode-input').value, 'ZA South Africa');
+        assert.equal(field('orderOriginCountryCode-input').value, 'ZA South Africa');
         await type('lines[0].productVariantId-input', 'hass');
         await enter('lines[0].productVariantId-input');
         await type('lines[0].expectedQuantity-input', '10');

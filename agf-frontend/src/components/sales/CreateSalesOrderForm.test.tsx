@@ -187,4 +187,31 @@ describe('CreateSalesOrderForm: packaging next to the goods', () => {
         assert.deepEqual(body.lines, []);
         assert.deepEqual(body.packagingLines, [{ costArticleId: 11, quantity: 4, unitPrice: 0 }]);
     });
+
+    // Feedback 22 november: "Artikel toevoegen" kiest uit de bestaande artikelen; Enter zet het direct op de regel met de eenheid van het
+    // artikel en de cursor op Aantal; kiezen in de regel zelf springt ook naar Aantal.
+    test('Enter in the article list puts the article on the line with its unit and the cursor on Aantal', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await act(async () => { mounted.container.querySelector<HTMLButtonElement>('[data-tour="sales-article-add"]')!.click(); });
+        await act(async () => { setValue(mounted.container.querySelector<HTMLInputElement>('[data-tour="article-add-search"]')!, 'green'); });
+        await act(async () => { mounted.container.querySelector<HTMLInputElement>('[data-tour="article-add-search"]')!.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+        assert.ok(field('lines[0].productVariantId-input').value.startsWith('Avocado · Green'));
+        assert.equal(window.document.activeElement, field('lines[0].quantity-input'));
+        await click(mounted.button('+ supply_add_line')!);
+        await chooseVariant(1, 'hass');
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+        assert.equal(window.document.activeElement, field('lines[1].quantity-input'));
+    });
+
+    // Review #314: Nieuw artikel per regel is ook met alleen het toetsenbord bereikbaar: Alt+A in een veld van de regel.
+    test('Alt+A in a line opens the new-article side panel for that line', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await act(async () => {
+            field('lines[0].quantity-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, bubbles: true, cancelable: true }));
+        });
+        await mounted.waitFor(() => window.document.querySelector('[data-testid="new-article-panel"]'), 'panel open');
+    });
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import { focusQuantityAfterPick } from '../../lib/productSearch';
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
@@ -129,7 +130,11 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                         value={line.productVariantId} disabled={locked || limit.articleFixed} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
                                         describedBy={(errors(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
-                                        onChange={(variantId) => onChange(line.key, { productVariantId: variantId, unit: '' })} />
+                                        onChange={(variantId) => {
+                                            onChange(line.key, { productVariantId: variantId, unit: '' });
+                                            // Feedback 22 november: een gekozen artikel staat direct op de regel en de cursor springt naar Aantal.
+                                            if (variantId !== '') focusQuantityAfterPick(`${prefix}.productVariantId-input`, `${prefix}.expectedQuantity-input`);
+                                        }} />
                                     <FieldError id={`${prefix}.productVariantId`} messages={errors(`${prefix}.productVariantId`)} />
                                     <FieldError id={prefix} messages={errors(prefix)} />
                                     {limit.articleFixed && (

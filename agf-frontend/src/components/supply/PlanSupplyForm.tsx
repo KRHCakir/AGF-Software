@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { availabilityHref, singleVariantId } from '../../lib/availabilityLinks';
 import { formatDateTime, formatQuantity } from '../../lib/availability';
-import { type PurchaseLineDraft, emptyPurchaseLine, purchaseLinePayloads, purchaseLineRow } from '../../lib/purchaseOrderLines';
+import { type PurchaseLineDraft, emptyPurchaseLine, isBlankPurchaseLine, purchaseLinePayloads, purchaseLineRow } from '../../lib/purchaseOrderLines';
 import { withArticle } from '../../lib/articleFromEntry';
 import { isDateOnly, parseDateInput, toLocalMidnightIso, todayInAmsterdam } from '../../lib/calendarDate';
 import { MAX_SUPPLIER_REFERENCE_LENGTH } from '../../lib/purchaseOrderRules';
@@ -37,7 +37,8 @@ import DateField from '../shared/DateField';
 import VendorPicker from '../purchase/VendorPicker';
 import PartijField, { NO_PARTIJ, type PartijChoice, partijPayload } from '../partij/PartijField';
 import CustomerPicker from '../sales/CustomerPicker';
-import NewSupplyArticle from './NewSupplyArticle';
+import ArticleAddButton from '../shared/ArticleAddButton';
+import NewArticlePanel from '../articles/NewArticlePanel';
 import PurchaseOrderLines from './PurchaseOrderLines';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
@@ -136,7 +137,16 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const inFlight = useRef(false);
     // Artikelen van dit formulier: de referentielijst plus wat hier met "Nieuw artikel" is aangemaakt; per regel het open blok.
     const [products, setProducts] = useState(reference.products);
-    const [newArticleFor, setNewArticleFor] = useState<string | null>(null);
+    // Zijpaneel "Nieuw artikel" (feedback 22 november): voor deze regel (key), of voor een nieuwe regel (null); undefined = dicht.
+    const [newArticleFor, setNewArticleFor] = useState<string | null | undefined>(undefined);
+    // Na "Artikel toevoegen" of een nieuw artikel: de cursor naar Aantal van deze regel zodra die er staat.
+    const focusQuantityOf = useRef<string | null>(null);
+    useEffect(() => {
+        if (focusQuantityOf.current === null) return;
+        const index = lines.findIndex((line) => line.key === focusQuantityOf.current);
+        focusQuantityOf.current = null;
+        if (index >= 0) setTimeout(() => document.getElementById(`lines[${index}].expectedQuantity-input`)?.focus(), 0);
+    }, [lines]);
     // Partij (kop): het voorstel volgens de bedrijfsinstelling (null in modus Eigen of als het niet te laden is), de keuze en de open
     // vraag "Partij … bestaat al, wil je die gebruiken?".
     const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -284,6 +294,22 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const addLine = () => {
         if (locked || lines.length >= MAX_LINES) return;
         setLines((current) => [...current, emptyLine()]);
+        edited();
+    };
+
+    // Een artikel uit de lijst (of net aangemaakt) op de order: op de regel waar de gebruiker was, anders op een lege laatste regel,
+    // anders op een nieuwe regel; daarna de cursor naar Aantal. Geen tussenstap.
+    const putArticle = (variantId: number, lineKey: string | null) => {
+        if (locked) return;
+        const last = lines[lines.length - 1];
+        const target = lineKey !== null && lines.some((line) => line.key === lineKey) ? lineKey
+            : last !== undefined && isBlankPurchaseLine(last) ? last.key : null;
+        if (target === null && lines.length >= MAX_LINES) return;
+        const fresh = target === null ? emptyLine() : null;
+        setLines((current) => (fresh !== null
+            ? [...current, { ...fresh, productVariantId: String(variantId) }]
+            : current.map((line) => (line.key === target ? { ...line, productVariantId: String(variantId), unit: '' } : line))));
+        focusQuantityOf.current = fresh?.key ?? target;
         edited();
     };
 
@@ -594,10 +620,10 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
-                    <label htmlFor="originCountryCode-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
+                    <label htmlFor="orderOriginCountryCode-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
                     {countries === null
                         ? <p className="mt-1 text-xs text-gray-600">{t('supply_open_loading')}</p>
-                        : <CountryPicker id="originCountryCode" dataTour="supply-origin" countries={countries} value={header.originCountryCode} onChange={updateOrigin}
+                        : <CountryPicker id="orderOriginCountryCode" dataTour="supply-origin" countries={countries} value={header.originCountryCode} onChange={updateOrigin}
                             disabled={locked} invalid={(e('originCountryCode') ?? e('origin')) !== undefined} describedBy="origin-hint" />}
                     <span id="origin-hint" className="block text-xs text-gray-500">{t('supply_origin_hint')}</span>
                     {header.legacyOrigin !== null && header.originCountryCode === null && (
@@ -606,7 +632,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                             {!locked && <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={clearLegacyOrigin} data-tour="supply-origin-legacy-clear">{t('supply_origin_legacy_clear')}</button>}
                         </span>
                     )}
-                    <FieldError id="originCountryCode" messages={[...(e('originCountryCode') ?? []), ...(e('origin') ?? [])]} />
+                    <FieldError id="orderOriginCountryCode" messages={[...(e('originCountryCode') ?? []), ...(e('origin') ?? [])]} />
                 </div>
                 {/* Valuta-ronde: valuta en koers in de kop (na de vaste volgorde Leverancier, Ordernummer, Besteldatum, Verwacht, Herkomst). */}
                 <div className="col-span-2 md:col-span-3">
@@ -670,20 +696,24 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 <FieldError id="lines" messages={e('lines')} />
                 <PurchaseOrderLines currency={money.currency} rate={effectiveRate(money)} lines={lines} rows={lineRows} products={products} variantOf={(variantId) => variants.get(variantId)} locked={locked} isDirect={isDirect}
                     errors={e} onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={setNewArticleFor} limits={limitsOf} ggnProposalOf={ggnProposalOf}
-                    productExtra={(line, index) => (newArticleFor === line.key ? (
-                        <NewSupplyArticle index={index} products={products} currentVariantId={line.productVariantId} onClose={() => setNewArticleFor(null)}
-                            onUse={(variantId, created) => {
-                                if (created !== null) setProducts((current) => withArticle(current, created));
-                                updateLine(line.key, { productVariantId: String(variantId) });
-                                setNewArticleFor(null);
-                            }} />
-                    ) : !locked && !limitsOf(line.key).articleFixed && (
+                    productExtra={(line, index) => !locked && !limitsOf(line.key).articleFixed && (
                         <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
                             title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="supply-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
-                    ))} />
-                <button type="button" tabIndex={-1} onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
-                    + {t('supply_add_line')}
-                </button>
+                    )} />
+                <div className="flex flex-wrap items-start gap-2">
+                    <ArticleAddButton products={products} disabled={locked || (lines.length >= MAX_LINES && !(lines.length > 0 && isBlankPurchaseLine(lines[lines.length - 1])))} dataTour="supply-article-add"
+                        onPick={(variantId) => putArticle(variantId, null)} onNewArticle={() => setNewArticleFor(null)} />
+                    <button type="button" tabIndex={-1} onClick={addLine} disabled={locked || lines.length >= MAX_LINES} className={secondaryButtonClass}>
+                        + {t('supply_add_line')}
+                    </button>
+                </div>
+                {newArticleFor !== undefined && (
+                    <NewArticlePanel onClose={() => setNewArticleFor(undefined)} onSaved={(article) => {
+                        setProducts((current) => withArticle(current, article));
+                        putArticle(article.id, newArticleFor);
+                        setNewArticleFor(undefined);
+                    }} />
+                )}
             </fieldset>
 
             <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-3">
