@@ -31,6 +31,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
     const [query, setQuery] = useState('');
     const [highlight, setHighlight] = useState(0);
     const search = useRef<HTMLInputElement | null>(null);
+    const root = useRef<HTMLDivElement | null>(null);
     const button = useRef<HTMLButtonElement | null>(null);
 
     const matches = useMemo(() => (query.trim() === '' ? allVariants(products) : searchVariants(products, query)), [products, query]);
@@ -63,6 +64,15 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
             if (match) pick(match);
         }
     };
+    // Review #313: een klik buiten de lijst of de knop, of de focus die de lijst verlaat (Tab), sluit de lijst zonder te kiezen.
+    useEffect(() => {
+        if (!open) return;
+        const outside = (event: Event) => { if (root.current && event.target instanceof Node && !root.current.contains(event.target)) close(false); };
+        document.addEventListener('mousedown', outside);
+        document.addEventListener('focusin', outside);
+        return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('focusin', outside); };
+    }, [open]);
+
     // Escape sluit de lijst vanaf elk element erin (zoekveld, opties, "Nieuw artikel"), focus terug naar de knop.
     const onListKeyDown = (event: KeyboardEvent<HTMLElement>) => {
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
@@ -70,7 +80,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
 
     return (
         // Smal scherm (390 px): de lijst is zo breed als de regel waarin de knop staat; breed scherm: 36rem onder de knop.
-        <div className="relative w-full sm:w-auto">
+        <div ref={root} className="relative w-full sm:w-auto">
             <button ref={button} type="button" className={primaryButtonClass} disabled={disabled} aria-expanded={open} aria-controls={open ? listId : undefined}
                 onClick={() => (open ? close(true) : setOpen(true))} data-tour={dataTour}>+ {t('article_add_button')}</button>
             {open && (
