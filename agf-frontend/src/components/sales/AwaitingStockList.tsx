@@ -19,7 +19,8 @@ const AWAITING_COLUMNS: SortColumns<AwaitingStockLine> = {
     delivery: { kind: 'date', value: (line) => line.requestedDeliveryDate },
     order: { kind: 'natural', value: (line) => line.orderNumber },
     customer: { kind: 'text', value: (line) => line.customerName },
-    product: { kind: 'text', value: (line) => `${line.productName} ${line.variantName}` },
+    // Review #320: een artikel zonder variant (gember) sorteert op de productnaam, nooit op de tekst "null".
+    product: { kind: 'text', value: (line) => [line.productName, line.variantName].filter((part) => part !== null && part !== undefined && part !== '').join(' ') },
     reservable: { kind: 'number', value: (line) => line.reservableNow },
 };
 const AWAITING_SORT_KEYS = Object.keys(AWAITING_COLUMNS);
