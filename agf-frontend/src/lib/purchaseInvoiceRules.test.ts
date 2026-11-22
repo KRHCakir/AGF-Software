@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
     addDays, buildPurchaseInvoicePayload, changeDueDate, changeInvoiceDate, changePaymentTerms, describeVendor, draftTotals, dueDateDeviation,
-    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor, proposedVat } from './purchaseInvoiceRules.ts';
+    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor, proposedVat, vatAfterPick } from './purchaseInvoiceRules.ts';
 import type { InvoiceDraft } from './purchaseInvoiceRules.ts';
 import type { PurchaseInvoiceSettings, PurchaseVendor } from '../types/purchaseInvoice';
 
@@ -185,5 +185,14 @@ describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
         assert.equal(proposedVat('21', 9, undefined, fallback), '9', 'the standard rate');
         assert.equal(proposedVat('9', 21, undefined, { defaultVat: 21, previousItemVat: 9 }), '21', 'the previous article rate');
         assert.equal(proposedVat('6', 21, undefined, { defaultVat: 21, previousItemVat: 9 }), '6', 'anything else was typed by hand: stays');
+    });
+    test('review #312: once an older line takes a proposal it follows like a new line (21 -> 9 -> no rate -> 21 gives 21)', () => {
+        let line: { vat: string; vatManual?: boolean } = { vat: '21' };
+        line = { ...line, ...vatAfterPick(line, 9, { defaultVat: 21, previousItemVat: null }) };
+        assert.deepEqual(line, { vat: '9', vatManual: false });
+        line = { ...line, ...vatAfterPick(line, null, { defaultVat: 21, previousItemVat: 9 }) };
+        line = { ...line, ...vatAfterPick(line, 21, { defaultVat: 21, previousItemVat: null }) };
+        assert.equal(line.vat, '21');
+        assert.deepEqual(vatAfterPick({ vat: '6' }, 21, { defaultVat: 21, previousItemVat: 9 }), { vat: '6' }, 'typed by hand in an older draft: untouched, no flag');
     });
 });
