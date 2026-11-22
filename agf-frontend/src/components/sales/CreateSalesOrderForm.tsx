@@ -1,5 +1,6 @@
 'use client';
 
+import { focusQuantityAfterPick } from '../../lib/productSearch';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
@@ -32,6 +33,10 @@ import KgTotals from '../shared/KgTotals';
 import { LineKgFields } from '../shared/LineKgInput';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
+import ArticleAddButton from '../shared/ArticleAddButton';
+import NewArticlePanel from '../articles/NewArticlePanel';
+import { withArticle } from '../../lib/articleFromEntry';
+import type { Article } from '../../types/article';
 import QuantityInput from '../shared/QuantityInput';
 import UnitSelect from '../shared/UnitSelect';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -77,7 +82,7 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
 // geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren en boven dit formulier bewaard:
 // bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
-export default function CreateSalesOrderForm({ customers: knownCustomers, products, prefill = null, onSaved, onOpen, onCancel, onCustomerCreated }: {
+export default function CreateSalesOrderForm({ customers: knownCustomers, products: givenProducts, prefill = null, onSaved, onOpen, onCancel, onCustomerCreated }: {
     prefill?: SellPrefill | null;
     customers: CustomerOption[];
     products: ProductOption[];
@@ -88,6 +93,10 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     onCustomerCreated?: (customer: CreatedCustomer) => void;
 }) {
     const { t, locale } = useTranslation();
+    // Artikelen die in het zijpaneel "Nieuw artikel" zijn aangemaakt (feedback 22 november), bij de lijst van de pagina opgeteld.
+    const [addedArticles, setAddedArticles] = useState<Article[]>([]);
+    const products = useMemo(() => addedArticles.reduce<ProductOption[]>((current, article) => withArticle(current, article), givenProducts), [givenProducts, addedArticles]);
+    const [newArticleFor, setNewArticleFor] = useState<string | null | undefined>(undefined);
     const [pending, setPending, clearPending] = usePendingCommand<CreateOrderCommand>(CREATE_ORDER_KEY);
     const { commands } = usePendingCommands();
     // Nieuwe klant: paneel naast de klantkeuze. Een onafgeronde klantopdracht opent het paneel altijd (ook na sluiten,
@@ -234,6 +243,29 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         setDraft((current) => ({ ...current, lines: [...current.lines, emptyLine()] }));
         edited();
     };
+
+    // Een artikel uit de lijst "Artikel toevoegen" of uit het zijpaneel: op de regel waar de gebruiker was, anders op een lege laatste
+    // regel, anders op een nieuwe; de eenheid van het artikel vult een lege eenheid voor. Daarna de cursor naar Aantal.
+    const focusQuantityOf = useRef<string | null>(null);
+    const putArticle = (variantId: number, lineKey: string | null, articleUnit: string | null = null) => {
+        if (locked) return;
+        const last = draft.lines[draft.lines.length - 1];
+        const blank = (line: typeof last) => line.productVariantId === '' && line.quantity.trim() === '';
+        const target = lineKey !== null && draft.lines.some((line) => line.key === lineKey) ? lineKey : last !== undefined && blank(last) ? last.key : null;
+        if (target === null && draft.lines.length >= MAX_ORDER_LINES) return;
+        const unit = articleUnit ?? variantUnits.get(variantId) ?? null;
+        const fresh = target === null ? emptyLine() : null;
+        const withVariant = <T extends { productVariantId: string; unit: string }>(line: T): T => ({ ...line, productVariantId: String(variantId), ...(line.unit === '' && unit ? { unit } : {}) });
+        setDraft((current) => ({ ...current, lines: fresh !== null ? [...current.lines, withVariant(fresh)] : current.lines.map((line) => (line.key === target ? withVariant(line) : line)) }));
+        focusQuantityOf.current = fresh?.key ?? target;
+        edited();
+    };
+    useEffect(() => {
+        if (focusQuantityOf.current === null) return;
+        const index = draft.lines.findIndex((line) => line.key === focusQuantityOf.current);
+        focusQuantityOf.current = null;
+        if (index >= 0) setTimeout(() => document.getElementById(`lines[${index}].quantity-input`)?.focus(), 0);
+    }, [draft.lines]);
 
     const removeLine = (key: string) => {
         if (locked || draft.lines.length <= 1) return;
@@ -476,7 +508,13 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                                                     updateLine(line.key, 'productVariantId', variantId);
                                                     const unit = variantUnits.get(Number(variantId));
                                                     if (line.unit === '' && unit) updateLine(line.key, 'unit', unit);
+                                                    // Feedback 22 november: na de keuze direct naar Aantal.
+                                                    if (variantId !== '') focusQuantityAfterPick(`${prefix}.productVariantId-input`, `${prefix}.quantity-input`);
                                                 }} />
+                                            {!locked && (
+                                                <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                                                    data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                                            )}
                                             <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
                                             <FieldError id={prefix} messages={e(prefix)} />
                                         </td>
@@ -507,9 +545,20 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                     </table>
                 </div>
                 <KgTotals totals={totals} lineCount={draft.lines.length} testId="order-kg-totals" />
-                <button type="button" onClick={addLine} disabled={locked || draft.lines.length >= MAX_ORDER_LINES} className={secondaryButtonClass}>
-                    + {t('supply_add_line')}
-                </button>
+                <div className="flex flex-wrap items-start gap-2">
+                    <ArticleAddButton products={products} disabled={locked || draft.lines.length >= MAX_ORDER_LINES} dataTour="sales-article-add"
+                        onPick={(variantId) => putArticle(variantId, null)} onNewArticle={() => setNewArticleFor(null)} />
+                    <button type="button" onClick={addLine} disabled={locked || draft.lines.length >= MAX_ORDER_LINES} className={secondaryButtonClass}>
+                        + {t('supply_add_line')}
+                    </button>
+                </div>
+                {newArticleFor !== undefined && (
+                    <NewArticlePanel onClose={() => setNewArticleFor(undefined)} onSaved={(article) => {
+                        setAddedArticles((current) => [...current, article]);
+                        putArticle(article.id, newArticleFor, article.packagingUnit);
+                        setNewArticleFor(undefined);
+                    }} />
+                )}
             </fieldset>
 
             {packagingFailed && (

@@ -82,3 +82,14 @@ export function findVariant(products: readonly SearchableProduct[], variantId: n
     }
     return null;
 }
+
+// Na het kiezen van een artikel in een regel de cursor naar Aantal (feedback 22 november), maar alleen als de cursor nog in het
+// productveld staat: na Enter of een klik. Met Tab zet de browser de cursor zelf verder; een keuze die iets later binnenkomt mag de
+// cursor dan nooit terughalen van waar de gebruiker al is.
+export function focusQuantityAfterPick(productInputId: string, quantityInputId: string): void {
+    setTimeout(() => {
+        const product = document.getElementById(productInputId);
+        if (product !== null && document.activeElement !== product) return;
+        document.getElementById(quantityInputId)?.focus();
+    }, 0);
+}
