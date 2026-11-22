@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { ArticleDraft, buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, goodsCodeToCheck, groupArticleErrors } from '../../lib/articleRules';
+import { ArticleDraft, VAT_RATES, buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCode, goodsCodeToCheck, groupArticleErrors, isVatRate } from '../../lib/articleRules';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { unitLabelKey } from '../../lib/units';
 import { WEIGHT_METHODS, isWeightMethod } from '../../lib/weight';
@@ -193,6 +193,16 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                         <span className="block text-xs text-amber-900">{t('articles_class_old_text', { tradeClass: article.tradeClass })}</span>
                     )}
                     <FieldError id="tradeClass" messages={e('tradeClass')} />
+                </div>
+                <div>
+                    <label htmlFor="vatPercentage-input" className="text-xs font-medium text-gray-700">{t('articles_field_vat')} *</label>
+                    <select {...fieldProps('vatPercentage', e('vatPercentage'))} data-tour="article-vat" value={draft.vatPercentage} disabled={submitting} className={inputClass}
+                        onChange={(event) => update({ vatPercentage: event.target.value })}>
+                        {!isVatRate(draft.vatPercentage) && <option value="">{t('articles_vat_choose')}</option>}
+                        {VAT_RATES.map((rate) => <option key={rate} value={rate}>{t(`articles_vat_${rate}`)}</option>)}
+                    </select>
+                    <span className="block text-xs text-gray-500">{t('articles_hint_vat')}</span>
+                    <FieldError id="vatPercentage" messages={e('vatPercentage')} />
                 </div>
                 {textField('brand', 'articles_field_brand', { optional: true })}
                 <div>

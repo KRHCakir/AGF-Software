@@ -5,7 +5,8 @@ import { useTranslation } from '../../i18n/LanguageContext';
 import { MAX_COST_ARTICLE_NAME_LENGTH, costArticleNameKey } from '../../lib/costArticles';
 import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
-import { createCostArticle, listCostArticles, setCostArticleActive } from '../../services/costArticleService';
+import { createCostArticle, listCostArticles, setCostArticleActive, setCostArticleVat } from '../../services/costArticleService';
+import { DEFAULT_SERVICE_VAT, VAT_RATES } from '../../lib/articleRules';
 import type { CostArticle } from '../../types/costArticle';
 import CreatedNotice, { useCreated } from '../shared/CreatedNotice';
 import ErrorNotice from '../supply/ErrorNotice';
@@ -20,6 +21,8 @@ export default function CostArticlesAdmin() {
     const [articles, setArticles] = useState<CostArticle[] | null>(null);
     const [loadError, setLoadError] = useState<ApiError | null>(null);
     const [name, setName] = useState('');
+    // Btw-tarief van een nieuwe Dienst: standaard 21% (handling, transport enzovoort; feedback 22 november).
+    const [vat, setVat] = useState<string>(DEFAULT_SERVICE_VAT);
     const [requestId, setRequestId] = useState(newRequestId);
     const [errors, setErrors] = useState<string[] | undefined>(undefined);
     // Fixes 5b: weggaan met een fout of niet-opgeslagen invoer vraagt eerst (LeaveGuard).
@@ -49,9 +52,10 @@ export default function CostArticlesAdmin() {
         setBusy(true);
         setError(null);
         try {
-            const saved = await createCostArticle({ requestId, name: name.trim() });
+            const saved = await createCostArticle({ requestId, name: name.trim(), vatPercentage: Number(vat) });
             created.announce({ id: saved.value.id, text: t('cost_article_created', { name: saved.value.name }) });
             setName('');
+            setVat(DEFAULT_SERVICE_VAT);
             leave.saved();
             setRequestId(newRequestId());
             setReloadToken((n) => n + 1);
@@ -59,6 +63,20 @@ export default function CostArticlesAdmin() {
             const apiError = toApiError(caught);
             if (apiError.status === 409) setErrors([t('cost_article_exists', { name: name.trim() })]);
             else { setError(apiError); setErrors(apiError.fieldErrors.name); }
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const changeVat = async (article: CostArticle, rate: string) => {
+        if (busy || rate === '') return;
+        setBusy(true);
+        setError(null);
+        try {
+            await setCostArticleVat(article.id, Number(rate));
+            setReloadToken((n) => n + 1);
+        } catch (caught) {
+            setError(toApiError(caught));
         } finally {
             setBusy(false);
         }
@@ -96,9 +114,17 @@ export default function CostArticlesAdmin() {
                                 {article.isStandard && <span className="ml-2 rounded bg-gray-100 px-1 text-xs text-gray-700">{t('cost_article_standard')}</span>}
                                 {article.lineCount > 0 && <span className="ml-2 text-xs text-gray-600">{t('cost_article_used', { count: String(article.lineCount) })}</span>}
                             </span>
-                            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void toggle(article)}>
-                                {t(article.isActive ? 'cost_article_deactivate' : 'cost_article_activate')}
-                            </button>
+                            <span className="flex items-center gap-2">
+                                <label htmlFor={`cost-article-${article.id}-vat`} className="sr-only">{t('articles_field_vat')} {article.name}</label>
+                                <select id={`cost-article-${article.id}-vat`} value={article.vatPercentage === null || article.vatPercentage === undefined ? '' : String(article.vatPercentage)}
+                                    disabled={busy} onChange={(event) => void changeVat(article, event.target.value)} className={`${inputClass} mt-0 w-auto`} data-tour="cost-article-vat" data-tour-key={article.name}>
+                                    {(article.vatPercentage === null || article.vatPercentage === undefined) && <option value="">{t('articles_vat_choose')}</option>}
+                                    {VAT_RATES.map((rate) => <option key={rate} value={rate}>{t(`articles_vat_${rate}`)}</option>)}
+                                </select>
+                                <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void toggle(article)}>
+                                    {t(article.isActive ? 'cost_article_deactivate' : 'cost_article_activate')}
+                                </button>
+                            </span>
                         </li>
                     ))}
                 </ul>
@@ -109,6 +135,12 @@ export default function CostArticlesAdmin() {
                     <input {...fieldProps('costArticleName', errors)} value={name} maxLength={MAX_COST_ARTICLE_NAME_LENGTH} placeholder={t('cost_article_new_placeholder')}
                         onChange={(event) => { setName(event.target.value); setErrors(undefined); }} className={inputClass} />
                     <FieldError id="costArticleName" messages={errors} />
+                </div>
+                <div>
+                    <label htmlFor="costArticleVat-input" className="text-xs font-medium text-gray-700">{t('articles_field_vat')}</label>
+                    <select id="costArticleVat-input" value={vat} onChange={(event) => setVat(event.target.value)} className={`${inputClass} w-auto`} data-tour="cost-article-new-vat">
+                        {VAT_RATES.map((rate) => <option key={rate} value={rate}>{t(`articles_vat_${rate}`)}</option>)}
+                    </select>
                 </div>
                 <button type="submit" className={primaryButtonClass} disabled={busy} data-tour="cost-article-add">{t('cost_article_add')}</button>
             </form>

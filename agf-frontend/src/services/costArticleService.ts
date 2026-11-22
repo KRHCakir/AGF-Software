@@ -9,7 +9,7 @@ export async function listCostArticles(includeInactive: boolean, signal?: AbortS
     return json;
 }
 
-export async function createCostArticle(request: { requestId: string; name: string }, signal?: AbortSignal): Promise<SaveResult<CostArticle>> {
+export async function createCostArticle(request: { requestId: string; name: string; vatPercentage?: number }, signal?: AbortSignal): Promise<SaveResult<CostArticle>> {
     const { status, json } = await postJson('/cost-articles', request, signal);
     if (!isCostArticle(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het aanmaken van het kostenartikel.');
     return { value: json, replayed: status === 200 };
@@ -18,6 +18,13 @@ export async function createCostArticle(request: { requestId: string; name: stri
 export async function setCostArticleActive(id: number, isActive: boolean, signal?: AbortSignal): Promise<CostArticle> {
     const { json } = await putJson(`/cost-articles/${id}/active`, { isActive }, signal);
     if (!isCostArticle(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het wijzigen van het kostenartikel.');
+    return json;
+}
+
+// Btw-tarief van een Dienst (0, 9 of 21; feedback 22 november).
+export async function setCostArticleVat(id: number, vatPercentage: number, signal?: AbortSignal): Promise<CostArticle> {
+    const { json } = await putJson(`/cost-articles/${id}/vat`, { vatPercentage }, signal);
+    if (!isCostArticle(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het wijzigen van het btw-tarief.');
     return json;
 }
 

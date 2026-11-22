@@ -1,5 +1,5 @@
 import { ApiError, getJson, postJson, putJson } from './apiClient';
-import { Article, ArticleReference, ArticleUsage, EmptyProduct, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, SizeClassCleanupItem, isArticle, isArticleList, isArticleReference, isArticleUsage, isEmptyProductList, isGoodsCodeSearch, isSizeClassCleanupList } from '../types/article';
+import { Article, ArticleReference, ArticleUsage, EmptyProduct, GoodsCodeSearch, GoodsCodeSystem, SaveArticleRequest, SizeClassCleanupItem, isArticle, isArticleList, isArticleReference, isArticleUsage, isEmptyProductList, isGoodsCodeSearch, isSizeClassCleanupList, type VatCheckItem, isVatCheckList } from '../types/article';
 
 // Artikelwerkplek via api/articles: beheer van productsoorten en artikelen (ProductVariants). Raakt nooit documenten of voorraad.
 
@@ -101,4 +101,11 @@ export function existingArticle(caught: unknown): Article | null {
     if (!(caught instanceof ApiError) || caught.status !== 409 || typeof caught.body !== 'object' || caught.body === null) return null;
     const body = caught.body as Record<string, unknown>;
     return body.code === 'article-exists' && isArticle(body.article) ? body.article : null;
+}
+
+// "Btw nog invullen": artikelen en kostenartikelen zonder btw-tarief (feedback 22 november).
+export async function getVatCheck(signal?: AbortSignal): Promise<VatCheckItem[]> {
+    const json = await getJson('/articles/vat-check', signal);
+    if (!isVatCheckList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij Btw nog invullen.');
+    return json;
 }

@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
     addDays, buildPurchaseInvoicePayload, changeDueDate, changeInvoiceDate, changePaymentTerms, describeVendor, draftTotals, dueDateDeviation,
-    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor,
-} from './purchaseInvoiceRules.ts';
+    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor, proposedVat, vatAfterPick } from './purchaseInvoiceRules.ts';
 import type { InvoiceDraft } from './purchaseInvoiceRules.ts';
 import type { PurchaseInvoiceSettings, PurchaseVendor } from '../types/purchaseInvoice';
 
@@ -168,5 +167,34 @@ describe('lines, amounts and payload', () => {
         assert.equal(sum.ok, false);
         if (!sum.ok) assert.deepEqual(groupErrors(sum.errors), { lines: ['too_large'] });
         assert.equal(buildPurchaseInvoicePayload({ ...base, lines: [big] }, settings).ok, true, 'one line of 9.999.999.999.999.000 still fits');
+    });
+});
+
+describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
+    const fallback = { defaultVat: 21, previousItemVat: null };
+    test('a new line follows every chosen article until the user changes the rate by hand', () => {
+        assert.equal(proposedVat('21', 9, false, fallback), '9', 'standard 21 -> ginger 9');
+        assert.equal(proposedVat('9', 21, false, fallback), '21', 'article 9 -> juice 21');
+        assert.equal(proposedVat('9', null, false, fallback), '9', 'an article without a rate changes nothing');
+        assert.equal(proposedVat('9', 21, false, fallback), '21', 'review #312: after an article without a rate the next rate still follows');
+        assert.equal(proposedVat('6', 21, true, fallback), '6', 'typed by hand: stays');
+        assert.equal(proposedVat('21', 9, true, fallback), '21', 'chosen by hand (equal to the standard): stays');
+        assert.equal(emptyLine(21).vatManual, false, 'a new line knows it has not been touched');
+    });
+    test('review #312: a line from an older draft (no flag) only takes the proposal over the standard or the previous article rate', () => {
+        assert.equal(proposedVat('21', 9, undefined, fallback), '9', 'the standard rate');
+        assert.equal(proposedVat('9', 21, undefined, { defaultVat: 21, previousItemVat: 9 }), '21', 'the previous article rate');
+        assert.equal(proposedVat('6', 21, undefined, { defaultVat: 21, previousItemVat: 9 }), '6', 'anything else was typed by hand: stays');
+    });
+    test('review #312: once an older line takes a proposal it follows like a new line (21 -> 9 -> no rate -> 21 gives 21)', () => {
+        let line: { vat: string; vatManual?: boolean } = { vat: '21' };
+        line = { ...line, ...vatAfterPick(line, 9, { defaultVat: 21, previousItemVat: null }) };
+        assert.deepEqual(line, { vat: '9', vatManual: false });
+        line = { ...line, ...vatAfterPick(line, null, { defaultVat: 21, previousItemVat: 9 }) };
+        line = { ...line, ...vatAfterPick(line, 21, { defaultVat: 21, previousItemVat: null }) };
+        assert.equal(line.vat, '21');
+        assert.deepEqual(vatAfterPick({ vat: '6' }, 21, { defaultVat: 21, previousItemVat: 9 }), { vat: '6' }, 'typed by hand in an older draft: untouched, no flag');
+        // Een met de hand getypt 0 in een ouder concept, gelijk aan het tarief van het gekozen artikel: blijft handmatig (geen vlag).
+        assert.deepEqual(vatAfterPick({ vat: '0' }, 0, { defaultVat: 21, previousItemVat: 9 }), { vat: '0' });
     });
 });

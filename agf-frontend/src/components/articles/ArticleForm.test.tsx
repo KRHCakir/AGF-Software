@@ -15,7 +15,7 @@ const countries: CountryReference = { countries: [{ code: 'PE', nameNl: 'Peru', 
 const hass: Article = {
     id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru', originCountryCode: 'PE', brand: null,
     sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box', season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: null,
-    defaultPackagesPerPallet: 120, goodsCode: null, goodsCodeSystem: null, tradeClass: null, defaultPrice: 12.5,
+    defaultPackagesPerPallet: 120, goodsCode: null, goodsCodeSystem: null, tradeClass: null, defaultPrice: 12.5, vatPercentage: 9,
 };
 
 interface Call { method: string; url: string; body: unknown }
@@ -66,7 +66,9 @@ describe('ArticleForm', () => {
         assert.deepEqual(calls[0].body, {
             productName: 'Tomaat', variantName: null, shortcutCode: 'tom', originCountryCode: 'PE', brand: null, sizeCategory: null, packaging: null, packagingUnit: null, season: null, notes: null,
             weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: 'I',
+            vatPercentage: 9,
         });
+        assert.equal(mounted.container.querySelector<HTMLSelectElement>('[id="vatPercentage-input"]')!.value, '9', 'a new article starts at 9%');
         await mounted.waitFor(() => saved !== null, 'onSaved called');
         assert.ok(text().includes('articles_created'));
     });

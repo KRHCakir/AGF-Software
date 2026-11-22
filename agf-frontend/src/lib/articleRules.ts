@@ -32,9 +32,19 @@ export interface ArticleDraft {
     goodsCode: string;
     goodsCodeSystem: GoodsCodeSystem | '';
     tradeClass: string;
+    // Btw-tarief als tekst van de keuzelijst: '9', '21' of '0' (standaard '9'; feedback 22 november).
+    vatPercentage: string;
 }
 
-export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length' | 'class_required' | 'class_invalid';
+// Btw-tarief van een artikel: 9% onbewerkt (de standaard), 21% bewerkt, 0%. Een Dienst is standaard 21%.
+export const VAT_RATES = ['9', '21', '0'] as const;
+export const DEFAULT_ARTICLE_VAT = '9';
+export const DEFAULT_SERVICE_VAT = '21';
+export function isVatRate(value: string): value is typeof VAT_RATES[number] {
+    return (VAT_RATES as readonly string[]).includes(value);
+}
+
+export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length' | 'vat_required' | 'class_required' | 'class_invalid';
 export interface ArticleRuleError { field: string; code: ArticleRuleCode }
 export type ArticleBuildResult = { ok: true; value: SaveArticleRequest } | { ok: false; errors: ArticleRuleError[] };
 
@@ -49,7 +59,7 @@ export const GOODS_CODE_LENGTH: Readonly<Record<GoodsCodeSystem, number>> = { HS
 export function emptyArticleDraft(): ArticleDraft {
     return {
         productName: '', variantName: '', shortcutCode: '', originCountryCode: '', brand: '', sizeCategory: '', packaging: '', packagingUnit: '', season: '', notes: '',
-        weightMethod: 'Weighed', defaultNetKgPerPackage: '', defaultGrossKgPerPackage: '', defaultPackagesPerPallet: '', goodsCode: '', goodsCodeSystem: '', tradeClass: '',
+        weightMethod: 'Weighed', defaultNetKgPerPackage: '', defaultGrossKgPerPackage: '', defaultPackagesPerPallet: '', goodsCode: '', goodsCodeSystem: '', tradeClass: '', vatPercentage: DEFAULT_ARTICLE_VAT,
     };
 }
 
@@ -65,6 +75,8 @@ export function draftFromArticle(article: Article): ArticleDraft {
         season: article.season ?? '', notes: article.notes ?? '', weightMethod: article.weightMethod,
         defaultNetKgPerPackage: kg(article.defaultNetKgPerPackage), defaultGrossKgPerPackage: kg(article.defaultGrossKgPerPackage), defaultPackagesPerPallet: num(article.defaultPackagesPerPallet),
         goodsCode: article.goodsCode ?? '', goodsCodeSystem: article.goodsCodeSystem ?? '', tradeClass: normalizeTradeClass(article.tradeClass) ?? article.tradeClass ?? '',
+        // Een artikel zonder tarief (van vóór de btw) opent leeg: de gebruiker kiest het, zodat het niet stil 9% wordt.
+        vatPercentage: article.vatPercentage === null || article.vatPercentage === undefined ? '' : String(article.vatPercentage),
     };
 }
 
@@ -143,6 +155,7 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     }
     const tradeClass = normalizeTradeClass(draft.tradeClass);
     if (tradeClass === null) errors.push({ field: 'tradeClass', code: draft.tradeClass.trim() === '' ? 'class_required' : 'class_invalid' });
+    if (!isVatRate(draft.vatPercentage)) errors.push({ field: 'vatPercentage', code: 'vat_required' });
 
     if (errors.length > 0) return { ok: false, errors };
     return {
@@ -151,6 +164,7 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
             productName, variantName, shortcutCode, originCountryCode, brand, sizeCategory, packaging, packagingUnit, season, notes, weightMethod,
             defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross, defaultPackagesPerPallet: perPallet,
             goodsCode: goodsCode === null ? null : goodsCode, goodsCodeSystem: goodsCode === null ? null : goodsCodeSystem, tradeClass,
+            vatPercentage: Number(draft.vatPercentage),
         },
     };
 }

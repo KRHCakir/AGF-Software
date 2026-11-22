@@ -9,7 +9,7 @@ import { buildArticlePayload, draftFromArticle, emptyArticleDraft, formatGoodsCo
 const article = (over: Partial<Article> = {}): Article => ({
     id: 1, productId: 1, productName: 'Avocado', variantName: 'Hass', description: 'Avocado · Hass · 4kg Box · Peru', shortcutCode: 'avohassper22', origin: 'Peru', originCountryCode: 'PE',
     brand: null, sizeCategory: null, packaging: '4kg Box', packagingUnit: 'box', season: null, notes: null, weightMethod: 'Calculated',
-    defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I', defaultPrice: 12.5, ...over,
+    defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I', defaultPrice: 12.5, vatPercentage: 9, ...over,
 });
 
 describe('article payload', () => {
@@ -88,7 +88,12 @@ describe('article payload', () => {
         if (rebuilt.ok) assert.deepEqual(rebuilt.value, {
             productName: 'Avocado', variantName: 'Hass', shortcutCode: 'avohassper22', originCountryCode: 'PE', brand: null, sizeCategory: '18', packaging: '4kg Box', packagingUnit: 'box',
             season: null, notes: null, weightMethod: 'Calculated', defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 120, goodsCode: '08044000', goodsCodeSystem: 'CN', tradeClass: 'I',
+            vatPercentage: 9,
         });
+        // Een artikel zonder tarief (van vóór de btw) opent leeg en moet gekozen worden; 21 blijft 21.
+        assert.equal(draftFromArticle(article({ vatPercentage: null })).vatPercentage, '');
+        assert.deepEqual(groupArticleErrors((buildArticlePayload(draftFromArticle(article({ sizeCategory: '18', vatPercentage: null }))) as { ok: false; errors: never[] }).errors), { vatPercentage: ['vat_required'] });
+        assert.equal(draftFromArticle(article({ vatPercentage: 21 })).vatPercentage, '21');
     });
 });
 

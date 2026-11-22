@@ -23,6 +23,8 @@ export interface LineDraft {
     unitPrice: string;
     discount: string;
     vat: string;
+    // true zodra de gebruiker het btw-tarief zelf heeft aangepast: dan overschrijft een artikelkeuze het nooit meer. Ontbreekt in oudere concepten.
+    vatManual?: boolean;
     // Regel uit de bon (stap 4b): de orderregel die deze regel factureert, met wat er op de bon staat (lib/invoiceOrderLink.ts).
     orderLine?: OrderLineLink;
 }
@@ -75,8 +77,32 @@ export const MAX_PAYMENT_TERMS_DAYS = 365;
 let lineCounter = 0;
 export const newLineKey = () => `line-${Date.now().toString(36)}-${(lineCounter++).toString(36)}`;
 
+// Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel, zolang de gebruiker het tarief op die regel
+// niet zelf heeft aangepast. Een nieuwe regel weet dat (vatManual false of true). Een regel uit een ouder concept heeft die vlag niet: dan
+// telt het tarief alleen als voorstel als het nog het standaardtarief of het tarief van het vorige artikel is (review #312). Een artikel
+// zonder tarief verandert niets; het volgende artikel met een tarief zet zijn tarief weer.
+export function proposedVat(current: string, itemVat: number | null, manual: boolean | undefined, fallback: { defaultVat: number; previousItemVat: number | null }): string {
+    if (itemVat === null || manual === true) return current;
+    return manual === false || olderLineUntouched(current, fallback) ? String(itemVat) : current;
+}
+
+// Een regel uit een ouder concept (zonder vatManual) heeft nog het voorstel als het tarief het standaardtarief of dat van het vorige artikel is.
+function olderLineUntouched(current: string, fallback: { defaultVat: number; previousItemVat: number | null }): boolean {
+    return current.trim() === String(fallback.defaultVat) || (fallback.previousItemVat !== null && current.trim() === String(fallback.previousItemVat));
+}
+
+// Wat een artikelkeuze met het btw-veld van een regel doet: het voorgestelde tarief, en bij een regel uit een ouder concept die het voorstel
+// overneemt ook vatManual false, zodat de volgende keuze gewoon volgt (review #312: geen blijvend tarief na een artikel zonder tarief).
+export function vatAfterPick(line: Pick<LineDraft, 'vat' | 'vatManual'>, itemVat: number | null, fallback: { defaultVat: number; previousItemVat: number | null }): Pick<LineDraft, 'vat' | 'vatManual'> {
+    const vat = proposedVat(line.vat, itemVat, line.vatManual, fallback);
+    // Alleen als het tarief echt nog het voorstel was (dezelfde voorwaarde als proposedVat), niet omdat een met de hand getypt tarief
+    // toevallig gelijk is aan dat van het artikel (review #312).
+    const followed = line.vatManual === undefined && itemVat !== null && olderLineUntouched(line.vat, fallback);
+    return followed ? { vat, vatManual: false } : { vat };
+}
+
 export function emptyLine(defaultVat: number): LineDraft {
-    return { key: newLineKey(), productVariantId: '', description: '', quantity: '', unit: '', unitPrice: '', discount: '0', vat: String(defaultVat) };
+    return { key: newLineKey(), productVariantId: '', description: '', quantity: '', unit: '', unitPrice: '', discount: '0', vat: String(defaultVat), vatManual: false };
 }
 
 export function emptyDraft(today: string, settings: PurchaseInvoiceSettings): InvoiceDraft {
