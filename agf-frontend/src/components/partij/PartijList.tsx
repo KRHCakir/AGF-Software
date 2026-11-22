@@ -8,13 +8,35 @@ import { PACKAGE_UNITS, type PackageUnit } from '../../types/availability';
 import type { PartijTotals } from '../../types/partij';
 import PartijStatusBadge from './PartijStatusBadge';
 import { listRowClass, rowClick } from '../../lib/listRows';
+import type { SortState } from '../../lib/listSort';
+import { SortHeader, SortSelect, type SortOption } from '../shared/SortHeader';
+
+// Sorteervelden (feedback 22 november): de server sorteert (de lijst bladert op de server); zie AgfAdmin/Services/ListSortFields.cs.
+export const PURCHASE_PARTIJ_SORT_KEYS = ['number', 'vendor', 'product', 'purchased', 'received', 'onHand', 'sold', 'status'] as const;
 
 const th = 'px-2 py-1.5 align-top';
 
 // Partijlijst: nummer, leverancier(s), product(en), ingekocht, ontvangen, op voorraad, verkocht (colli) en status. Breed een tabel,
 // op 390 px per partij een kaart onder elkaar (niets afgekapt).
-export default function PartijList({ items, selectedId, onOpen }: { items: PartijTotals[]; selectedId: number | null; onOpen: (id: number) => void }) {
+export default function PartijList({ items, selectedId, onOpen, sort, onSort, onSortChange }: {
+    items: PartijTotals[];
+    selectedId: number | null;
+    onOpen: (id: number) => void;
+    sort: SortState | null;
+    onSort: (key: string) => void;
+    onSortChange: (next: SortState | null) => void;
+}) {
     const { t, locale } = useTranslation();
+    const options: SortOption[] = [
+        { key: 'number', label: t('partij_col_number'), kind: 'natural' },
+        { key: 'vendor', label: t('partij_col_vendors'), kind: 'text' },
+        { key: 'product', label: t('partij_col_products'), kind: 'text' },
+        { key: 'purchased', label: t('partij_col_purchased'), kind: 'number' },
+        { key: 'received', label: t('partij_col_received'), kind: 'number' },
+        { key: 'onHand', label: t('partij_col_on_hand'), kind: 'number' },
+        { key: 'sold', label: t('partij_col_sold'), kind: 'number' },
+        { key: 'status', label: t('partij_col_status'), kind: 'natural' },
+    ];
     const qty = (value: number) => formatQuantity(value, locale);
     const unit = (item: PartijTotals) => (item.unit !== null && (PACKAGE_UNITS as readonly string[]).includes(item.unit) ? t(unitLabelKey(item.unit as PackageUnit)) : t('partij_unit_mixed'));
     return (
@@ -23,14 +45,9 @@ export default function PartijList({ items, selectedId, onOpen }: { items: Parti
                 <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                         <tr>
-                            <th scope="col" className={th}>{t('partij_col_number')}</th>
-                            <th scope="col" className={th}>{t('partij_col_vendors')}</th>
-                            <th scope="col" className={th}>{t('partij_col_products')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('partij_col_purchased')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('partij_col_received')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('partij_col_on_hand')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('partij_col_sold')}</th>
-                            <th scope="col" className={th}>{t('partij_col_status')}</th>
+                            {options.map((option) => (
+                                <SortHeader key={option.key} className={option.kind === 'number' ? `${th} text-right` : th} label={option.label} sortKey={option.key} sort={sort} onSort={onSort} />
+                            ))}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -54,6 +71,7 @@ export default function PartijList({ items, selectedId, onOpen }: { items: Parti
                 </table>
             </div>
 
+            <SortSelect id="partij-sort" className="mb-2 md:hidden" options={options} sort={sort} onChange={onSortChange} />
             <ul className="space-y-2 md:hidden">
                 {items.map((item) => (
                     <li key={item.id}>

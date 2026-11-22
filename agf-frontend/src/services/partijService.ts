@@ -25,12 +25,16 @@ export interface PartijQuery {
     kind?: PartijKind | 'all';
     page: number;
     pageSize: number;
+    // Sorteren (feedback 22 november): een veld uit PURCHASE_PARTIJ_SORT_KEYS of SALES_PARTIJ_SORT_KEYS; leeg = standaard (nieuwste eerst).
+    sort?: string;
+    direction?: 'asc' | 'desc';
 }
 
 export async function listPartijen(query: PartijQuery, signal?: AbortSignal): Promise<PartijList> {
     const params = new URLSearchParams({ status: query.status, page: String(query.page), pageSize: String(query.pageSize) });
     if (query.query.trim() !== '') params.set('query', query.query.trim());
     if (query.kind) params.set('kind', query.kind);
+    if (query.sort) { params.set('sort', query.sort); params.set('direction', query.direction ?? 'asc'); }
     const json = await getJson(`/partijen?${params.toString()}`, signal);
     if (!isPartijList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de partijen.');
     return json;

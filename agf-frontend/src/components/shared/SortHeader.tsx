@@ -8,8 +8,9 @@ import { type SortKind, type SortState, ariaSort, parseSort, sortOptionValue } f
 // klik sorteert oplopend, nog eens aflopend, een derde keer terug naar de standaard. Het pijltje toont de richting; aria-sort staat op de
 // gesorteerde kolom. Extra inhoud onder de titel (bijvoorbeeld "in euro", of een tweede SortButton voor een tweede nummer in dezelfde
 // kolom) staat in `children`; `alsoKeys` noemt de sleutels van die tweede knop, zodat aria-sort ook dan op deze kolom staat.
-export function SortHeader({ label, sortKey, sort, onSort, className = '', alsoKeys = [], children }: {
+export function SortHeader({ label, sortKey, sort, onSort, className = '', alsoKeys = [], rowSpan, children }: {
     label: ReactNode;
+    rowSpan?: number;
     sortKey: string;
     sort: SortState | null;
     onSort: (key: string) => void;
@@ -19,7 +20,7 @@ export function SortHeader({ label, sortKey, sort, onSort, className = '', alsoK
 }) {
     const direction = [sortKey, ...alsoKeys].map((key) => ariaSort(sort, key)).find((value) => value !== undefined);
     return (
-        <th scope="col" className={className} aria-sort={direction}>
+        <th scope="col" rowSpan={rowSpan} className={className} aria-sort={direction}>
             <SortButton label={label} sortKey={sortKey} sort={sort} onSort={onSort} />
             {children}
         </th>

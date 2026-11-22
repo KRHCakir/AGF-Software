@@ -6,13 +6,34 @@ import { unitLabelKey } from '../../lib/units';
 import { PACKAGE_UNITS, type PackageUnit } from '../../types/availability';
 import type { PartijTotals } from '../../types/partij';
 import { listRowClass, rowClick } from '../../lib/listRows';
+import type { SortState } from '../../lib/listSort';
+import { SortButton, SortHeader, SortSelect, type SortOption } from '../shared/SortHeader';
+
+// Sorteervelden (feedback 22 november): de server sorteert; zie AgfAdmin/Services/ListSortFields.cs.
+export const SALES_PARTIJ_SORT_KEYS = ['number', 'salesOrder', 'customer', 'product', 'ordered', 'sold', 'sources'] as const;
 
 const th = 'px-2 py-1.5 align-top';
 
 // Verkoop-partijen: nummer, verkooporder en klant, product(en), besteld en verkocht (gereserveerd of verzonden) en uit welke inkoop-partijen
 // de colli komen. Breed een tabel, op 390 px per partij een kaart.
-export default function SalesPartijList({ items, selectedId, onOpen }: { items: PartijTotals[]; selectedId: number | null; onOpen: (id: number) => void }) {
+export default function SalesPartijList({ items, selectedId, onOpen, sort, onSort, onSortChange }: {
+    items: PartijTotals[];
+    selectedId: number | null;
+    onOpen: (id: number) => void;
+    sort: SortState | null;
+    onSort: (key: string) => void;
+    onSortChange: (next: SortState | null) => void;
+}) {
     const { t, locale } = useTranslation();
+    const options: SortOption[] = [
+        { key: 'number', label: t('partij_col_number'), kind: 'natural' },
+        { key: 'salesOrder', label: t('partij_col_sales_order'), kind: 'natural' },
+        { key: 'customer', label: t('availability_col_customer'), kind: 'text' },
+        { key: 'product', label: t('partij_col_products'), kind: 'text' },
+        { key: 'ordered', label: t('partij_col_ordered'), kind: 'number' },
+        { key: 'sold', label: t('partij_col_sold'), kind: 'number' },
+        { key: 'sources', label: t('partij_col_sources'), kind: 'natural' },
+    ];
     const qty = (value: number) => formatQuantity(value, locale);
     const unit = (item: PartijTotals) => (item.unit !== null && (PACKAGE_UNITS as readonly string[]).includes(item.unit) ? t(unitLabelKey(item.unit as PackageUnit)) : t('partij_unit_mixed'));
     const sources = (item: PartijTotals) => item.sourcePartijen.join(', ') || t('partij_sources_none_short');
@@ -22,12 +43,14 @@ export default function SalesPartijList({ items, selectedId, onOpen }: { items: 
                 <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                         <tr>
-                            <th scope="col" className={th}>{t('partij_col_number')}</th>
-                            <th scope="col" className={th}>{t('partij_col_sales_order')}</th>
-                            <th scope="col" className={th}>{t('partij_col_products')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('partij_col_ordered')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('partij_col_sold')}</th>
-                            <th scope="col" className={th}>{t('partij_col_sources')}</th>
+                            <SortHeader className={th} label={t('partij_col_number')} sortKey="number" sort={sort} onSort={onSort} />
+                            <SortHeader className={th} label={t('partij_col_sales_order')} sortKey="salesOrder" sort={sort} onSort={onSort} alsoKeys={['customer']}>
+                                <SortButton small label={t('availability_col_customer')} sortKey="customer" sort={sort} onSort={onSort} />
+                            </SortHeader>
+                            <SortHeader className={th} label={t('partij_col_products')} sortKey="product" sort={sort} onSort={onSort} />
+                            <SortHeader className={`${th} text-right`} label={t('partij_col_ordered')} sortKey="ordered" sort={sort} onSort={onSort} />
+                            <SortHeader className={`${th} text-right`} label={t('partij_col_sold')} sortKey="sold" sort={sort} onSort={onSort} />
+                            <SortHeader className={th} label={t('partij_col_sources')} sortKey="sources" sort={sort} onSort={onSort} />
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -51,6 +74,7 @@ export default function SalesPartijList({ items, selectedId, onOpen }: { items: 
                 </table>
             </div>
 
+            <SortSelect id="sales-partij-sort" className="mb-2 md:hidden" options={options} sort={sort} onChange={onSortChange} />
             <ul className="space-y-2 md:hidden">
                 {items.map((item) => (
                     <li key={item.id}>

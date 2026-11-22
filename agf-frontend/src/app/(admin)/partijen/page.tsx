@@ -5,8 +5,10 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import { FirstStepLink } from '../../../components/shared/FirstStep';
 import PartijDetail from '../../../components/partij/PartijDetail';
-import PartijList from '../../../components/partij/PartijList';
-import SalesPartijList from '../../../components/partij/SalesPartijList';
+import PartijList, { PURCHASE_PARTIJ_SORT_KEYS } from '../../../components/partij/PartijList';
+import SalesPartijList, { SALES_PARTIJ_SORT_KEYS } from '../../../components/partij/SalesPartijList';
+import { useListSort } from '../../../components/shared/useListSort';
+import { sortParams } from '../../../lib/listSort';
 import { inputClass } from '../../../components/supply/FieldError';
 import { secondaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { useTranslation } from '../../../i18n/LanguageContext';
@@ -53,12 +55,15 @@ function PartijenWorkspace() {
         const handle = setTimeout(() => setDebounced(query.trim()), 250);
         return () => clearTimeout(handle);
     }, [query]);
-    useEffect(() => { setPage(1); }, [debounced, status, kind]);
+    // Sorteren op een kolom (feedback 22 november): op de server, over alle partijen; per soort onthouden in deze browser.
+    const { sort, ready: sortReady, toggle: toggleSort, setSort } = useListSort(kind === 'Sales' ? 'partijen-sales' : 'partijen-purchase', kind === 'Sales' ? SALES_PARTIJ_SORT_KEYS : PURCHASE_PARTIJ_SORT_KEYS);
+    useEffect(() => { setPage(1); }, [debounced, status, kind, sort]);
 
     useEffect(() => {
+        if (!sortReady) return;
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        listPartijen({ query: debounced, status: kind === 'Sales' ? 'all' : status, kind, page, pageSize: PAGE_SIZE }, controller.signal)
+        listPartijen({ query: debounced, status: kind === 'Sales' ? 'all' : status, kind, page, pageSize: PAGE_SIZE, ...sortParams(sort) }, controller.signal)
             .then((data) => {
                 // Lege pagina na verwijderen (of een kleiner totaal): spring naar de laatste pagina die nog bestaat.
                 if (data.items.length === 0 && data.total > 0 && page > 1) { setPage(Math.max(1, Math.ceil(data.total / PAGE_SIZE))); return; }
@@ -66,7 +71,7 @@ function PartijenWorkspace() {
             })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [debounced, status, kind, page, reloadToken]);
+    }, [debounced, status, kind, page, reloadToken, sort, sortReady]);
 
     useEffect(() => {
         if (selectedId === null) { setDetail(null); return; }
@@ -156,8 +161,8 @@ function PartijenWorkspace() {
             {list.status === 'ready' && list.data.items.length > 0 && (
                 <>
                     {kind === 'Sales'
-                        ? <SalesPartijList items={list.data.items} selectedId={selectedId} onOpen={open} />
-                        : <PartijList items={list.data.items} selectedId={selectedId} onOpen={open} />}
+                        ? <SalesPartijList items={list.data.items} selectedId={selectedId} onOpen={open} sort={sort} onSort={toggleSort} onSortChange={setSort} />
+                        : <PartijList items={list.data.items} selectedId={selectedId} onOpen={open} sort={sort} onSort={toggleSort} onSortChange={setSort} />}
                     {pages > 1 && (
                         <nav className="flex items-center gap-2 text-sm" aria-label={t('po_paging')}>
                             <button type="button" className={secondaryButtonClass} disabled={page <= 1} onClick={() => setPage((n) => n - 1)}>‹</button>
