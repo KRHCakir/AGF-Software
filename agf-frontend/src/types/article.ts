@@ -35,6 +35,8 @@ export interface Article {
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
     defaultPrice: number;
+    // Btw-tarief (9, 21 of 0); null = nog in te vullen (een artikel van vóór de btw). Optioneel voor oudere antwoorden.
+    vatPercentage?: number | null;
     // Gearchiveerd (inactief): niet meer in keuzelijsten en suggesties; terugzetten kan altijd. Optioneel voor oudere antwoorden.
     isArchived?: boolean;
     archivedAt?: string | null;
@@ -92,6 +94,8 @@ export interface SaveArticleRequest {
     goodsCode: string | null;
     goodsCodeSystem: GoodsCodeSystem | null;
     tradeClass: string | null;
+    // Btw-tarief: 9, 21 of 0 (verplicht in het formulier, standaard 9).
+    vatPercentage?: number;
 }
 
 export interface ArticleReference {
@@ -168,4 +172,12 @@ function isGoodsCodeMatch(value: unknown): value is GoodsCodeMatch {
 export function isGoodsCodeSearch(value: unknown): value is GoodsCodeSearch {
     return isObject(value) && isString(value.system) && isGoodsCodeSource(value.source) && typeof value.complete === 'boolean' && isNumber(value.totalEntries) && isArrayOf(value.matches, isGoodsCodeMatch)
         && (value.known === undefined || value.known === null || typeof value.known === 'boolean');
+}
+
+// "Btw nog invullen" (api/articles/vat-check): een artikel (Article) of kostenartikel (Cost, Packaging) zonder btw-tarief.
+export interface VatCheckItem { kind: 'Article' | 'Cost' | 'Packaging'; id: number; description: string }
+
+export function isVatCheckList(value: unknown): value is VatCheckItem[] {
+    return isArrayOf(value, (item): item is VatCheckItem => isObject(item) && (item.kind === 'Article' || item.kind === 'Cost' || item.kind === 'Packaging')
+        && isNumber(item.id) && isString(item.description));
 }

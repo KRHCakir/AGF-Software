@@ -22,6 +22,7 @@ import type { CountryReference } from '../../../types/country';
 import OriginSettings from '../../../components/articles/OriginSettings';
 import SizeClassCleanup from '../../../components/articles/SizeClassCleanup';
 import OrderOriginCheck from '../../../components/articles/OrderOriginCheck';
+import VatCheck from '../../../components/articles/VatCheck';
 import PackagingArticles from '../../../components/articles/PackagingArticles';
 import { listRowClass, rowClick } from '../../../lib/listRows';
 
@@ -219,6 +220,7 @@ export default function ArticlesPage() {
                     </div>
                     {!nothingYet && <EmptyProducts reloadToken={reloadToken + emptyProductsToken} onDeleted={(name) => setState((current) => (current.status === 'ready'
                         ? { status: 'ready', data: { ...current.data, reference: { ...current.data.reference, productNames: current.data.reference.productNames.filter((n) => n !== name) } } } : current))} />}
+                    {!nothingYet && <VatCheck reloadToken={reloadToken} onOpenArticle={(id) => { const found = state.data.articles.find((candidate) => candidate.id === id); if (found) openArticle(found); }} />}
                     {!nothingYet && <SizeClassCleanup reloadToken={reloadToken} onArticleChanged={(saved) => setState((current) => (current.status === 'ready'
                         ? { status: 'ready', data: { ...current.data, articles: current.data.articles.map((a) => (a.id === saved.id ? saved : a)) } } : current))} />}
                     <OrderOriginCheck countries={state.data.countries} reloadToken={reloadToken} />

@@ -79,6 +79,8 @@ export interface VariantOption {
     // Standaard netto en bruto kg per verpakking: alleen voor de rekenregel onder het aantal.
     defaultNetKgPerPackage?: number | null;
     defaultGrossKgPerPackage?: number | null;
+    // Btw-tarief van het artikel (9, 21 of 0): het voorstel op een nieuwe factuurregel; null = nog niet ingevuld.
+    vatPercentage?: number | null;
 }
 
 export interface ProductOption {
@@ -144,6 +146,7 @@ export function toVariantOption(value: Named): VariantOption {
         packagingUnit: isPackageUnit(value.packagingUnit) ? value.packagingUnit : null,
         defaultNetKgPerPackage: typeof value.defaultNetKgPerPackage === 'number' ? value.defaultNetKgPerPackage : null,
         defaultGrossKgPerPackage: typeof value.defaultGrossKgPerPackage === 'number' ? value.defaultGrossKgPerPackage : null,
+        vatPercentage: typeof value.vatPercentage === 'number' ? value.vatPercentage : null,
         // Alleen true telt: een ontbrekend veld (oudere backend) is een actief artikel.
         isArchived: value.isArchived === true,
     };

@@ -75,6 +75,14 @@ export const MAX_PAYMENT_TERMS_DAYS = 365;
 let lineCounter = 0;
 export const newLineKey = () => `line-${Date.now().toString(36)}-${(lineCounter++).toString(36)}`;
 
+// Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel. Alleen als de regel nog het standaardtarief
+// of het tarief van het vorige artikel heeft: een met de hand gewijzigd tarief blijft staan. Zonder tarief op het artikel: ongewijzigd.
+export function proposedVat(current: string, defaultVat: number, previousItemVat: number | null, itemVat: number | null): string {
+    if (itemVat === null) return current;
+    const untouched = current.trim() === String(defaultVat) || (previousItemVat !== null && current.trim() === String(previousItemVat));
+    return untouched ? String(itemVat) : current;
+}
+
 export function emptyLine(defaultVat: number): LineDraft {
     return { key: newLineKey(), productVariantId: '', description: '', quantity: '', unit: '', unitPrice: '', discount: '0', vat: String(defaultVat) };
 }

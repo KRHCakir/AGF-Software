@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
     addDays, buildPurchaseInvoicePayload, changeDueDate, changeInvoiceDate, changePaymentTerms, describeVendor, draftTotals, dueDateDeviation,
-    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor,
-} from './purchaseInvoiceRules.ts';
+    dueDateBasis, emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, searchVendors, selectVendor, proposedVat } from './purchaseInvoiceRules.ts';
 import type { InvoiceDraft } from './purchaseInvoiceRules.ts';
 import type { PurchaseInvoiceSettings, PurchaseVendor } from '../types/purchaseInvoice';
 
@@ -168,5 +167,15 @@ describe('lines, amounts and payload', () => {
         assert.equal(sum.ok, false);
         if (!sum.ok) assert.deepEqual(groupErrors(sum.errors), { lines: ['too_large'] });
         assert.equal(buildPurchaseInvoicePayload({ ...base, lines: [big] }, settings).ok, true, 'one line of 9.999.999.999.999.000 still fits');
+    });
+});
+
+describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
+    test('the rate of the chosen article or service replaces the standard or the previous article, never a rate typed by hand', () => {
+        assert.equal(proposedVat('21', 21, null, 9), '9', 'standard 21 -> ginger 9');
+        assert.equal(proposedVat('9', 21, 9, 21), '21', 'previous article 9 -> juice 21');
+        assert.equal(proposedVat('6', 21, 9, 21), '6', 'typed by hand: stays');
+        assert.equal(proposedVat('21', 21, null, null), '21', 'article without a rate: unchanged');
+        assert.equal(proposedVat(' 21 ', 21, null, 0), '0');
     });
 });
