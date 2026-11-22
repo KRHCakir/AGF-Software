@@ -46,13 +46,13 @@ public class GoodsCodeListTests
     [Theory]
     [InlineData("gember")]
     [InlineData("Ginger")]
-    [InlineData("GEMBER vers")]
+    [InlineData("GEMBER")]
     public void Ginger_Is_Found_By_Its_Dutch_And_English_Name(string query)
     {
         var catalog = Shipped();
-        Assert.Equal("091011", catalog.Search(query.Replace(" vers", ""), "HS").First().Code);
-        Assert.Equal(new[] { "091011", "091012" }, catalog.Search(query.Replace(" vers", ""), "HS").Take(2).Select(m => m.Code));
-        Assert.Equal("09101100", catalog.Search(query.Replace(" vers", ""), "CN").First().Code);
+        Assert.Equal("091011", catalog.Search(query, "HS").First().Code);
+        Assert.Equal(new[] { "091011", "091012" }, catalog.Search(query, "HS").Take(2).Select(m => m.Code));
+        Assert.Equal("09101100", catalog.Search(query, "CN").First().Code);
     }
 
     [Fact]
