@@ -69,7 +69,7 @@ export default function CostArticlesAdmin() {
     };
 
     const changeVat = async (article: CostArticle, rate: string) => {
-        if (busy) return;
+        if (busy || rate === '') return;
         setBusy(true);
         setError(null);
         try {
