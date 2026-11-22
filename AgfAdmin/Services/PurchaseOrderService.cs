@@ -30,20 +30,22 @@ namespace AgfAdmin.Services
 
         // Status: leeg of "open" = Besteld + Deels ontvangen (standaard), "all" = alles, of één weergavestatus. De weergavestatus volgt
         // uit ontvangen en afgekeurde hoeveelheden en wordt daarom na de SQL-filters (zoeken, leverancier) in het geheugen bepaald;
-        // daarna sorteren (nieuwste eerst) en pagineren op de server.
+        // daarna sorteren (standaard nieuwste eerst, of op de gekozen kolom) en pagineren op de server.
         public async Task<ServiceResult<PurchaseOrderListDto>> ListAsync(string query, string status, int? vendorId, int page, int pageSize, string supplierReference = null,
-            CancellationToken cancellationToken = default, string document = null, string billing = null)
+            CancellationToken cancellationToken = default, string document = null, string billing = null, SortRequest sort = null)
         {
             var all = await ListAllAsync(query, status, vendorId, supplierReference, cancellationToken, document, billing);
             if (all.Status != ServiceResultStatus.Ok) return ServiceResult<PurchaseOrderListDto>.Validation(all.Errors);
+            // Sorteren op een kolom (feedback 22 november): over alle gefilterde orders, vóór het pagineren; gelijke waarden houden de standaardvolgorde.
+            var sorted = ListSort.Apply(all.Value, sort, ListSortFields.PurchaseOrders);
             page = Math.Max(1, page);
             pageSize = pageSize <= 0 ? PurchaseOrderRules.DefaultPageSize : Math.Min(pageSize, PurchaseOrderRules.MaxPageSize);
             return ServiceResult<PurchaseOrderListDto>.Ok(new PurchaseOrderListDto
             {
-                Total = all.Value.Count,
+                Total = sorted.Count,
                 Page = page,
                 PageSize = pageSize,
-                Items = all.Value.Skip((page - 1) * pageSize).Take(pageSize).ToList()
+                Items = sorted.Skip((page - 1) * pageSize).Take(pageSize).ToList()
             });
         }
 

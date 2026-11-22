@@ -22,8 +22,11 @@ namespace AgfAdmin.Controllers
         [HttpGet]
         public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] int? vendorId,
             [FromQuery] int page = 1, [FromQuery] int pageSize = PurchaseOrderRules.DefaultPageSize, [FromQuery] string supplierReference = null,
-            [FromQuery] string document = null, [FromQuery] string billing = null) =>
-            this.ToActionResult(await _service.ListAsync(query, status, vendorId, page, pageSize, supplierReference, HttpContext?.RequestAborted ?? default, document, billing));
+            [FromQuery] string document = null, [FromQuery] string billing = null, [FromQuery] string sort = null, [FromQuery] string direction = null)
+        {
+            if (!this.TryReadSort(sort, direction, ListSortFields.PurchaseOrders, out var order, out var rejected)) return rejected;
+            return this.ToActionResult(await _service.ListAsync(query, status, vendorId, page, pageSize, supplierReference, HttpContext?.RequestAborted ?? default, document, billing, order));
+        }
 
         // Orders van een leverancier om een inkoopfactuur aan te koppelen (stap 4b): met open regels, of alles wat bij de zoekterm past
         // (ordernummer leverancier, IO-nummer, partij, factuurnummer); met orderId precies die order.

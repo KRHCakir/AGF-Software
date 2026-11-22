@@ -21,8 +21,12 @@ namespace AgfAdmin.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] string kind, [FromQuery] int page = 1, [FromQuery] int pageSize = PartijService.DefaultPageSize) =>
-            this.ToActionResult(await _service.ListAsync(query, status, page, pageSize, HttpContext?.RequestAborted ?? default, kind));
+        public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] string kind, [FromQuery] int page = 1, [FromQuery] int pageSize = PartijService.DefaultPageSize,
+            [FromQuery] string sort = null, [FromQuery] string direction = null)
+        {
+            if (!this.TryReadSort(sort, direction, ListSortFields.Partijen, out var order, out var rejected)) return rejected;
+            return this.ToActionResult(await _service.ListAsync(query, status, page, pageSize, HttpContext?.RequestAborted ?? default, kind, order));
+        }
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id) =>
