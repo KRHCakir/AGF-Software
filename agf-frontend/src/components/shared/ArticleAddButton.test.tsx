@@ -64,6 +64,15 @@ describe('ArticleAddButton', () => {
         assert.equal(window.document.activeElement, mounted.container.querySelector('[data-tour="supply-article-add"]'));
     });
 
+    test('review #313: reopening an unfiltered list starts at the first article again', async () => {
+        await open();
+        await key('ArrowDown');
+        await key('Escape');
+        await open();
+        await key('Enter');
+        assert.deepEqual(picked, [11], 'the first article (Green), not the one highlighted before');
+    });
+
     test('a click chooses as well; "New article" asks for the side panel', async () => {
         await open();
         await act(async () => { (mounted.container.querySelectorAll<HTMLElement>('[role="option"]')[2]).click(); });

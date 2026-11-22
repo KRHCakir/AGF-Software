@@ -46,6 +46,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
     const close = (focusButton: boolean) => {
         setOpen(false);
         setQuery('');
+        setHighlight(0); // review #313: heropenen begint weer bij het eerste artikel, ook als de zoekterm al leeg was
         if (focusButton) setTimeout(() => button.current?.focus(), 0);
     };
     const pick = (match: VariantMatch) => {
