@@ -60,7 +60,11 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
             event.preventDefault();
             const match = shown[highlight];
             if (match) pick(match);
-        } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
+        }
+    };
+    // Escape sluit de lijst vanaf elk element erin (zoekveld, opties, "Nieuw artikel"), focus terug naar de knop.
+    const onListKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
     };
 
     return (
@@ -69,7 +73,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
             <button ref={button} type="button" className={primaryButtonClass} disabled={disabled} aria-expanded={open} aria-controls={open ? listId : undefined}
                 onClick={() => (open ? close(true) : setOpen(true))} data-tour={dataTour}>+ {t('article_add_button')}</button>
             {open && (
-                <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border border-gray-300 bg-white p-2 shadow-lg sm:right-auto sm:w-[36rem]" data-testid="article-add-list">
+                <div className="absolute left-0 right-0 z-30 mt-1 rounded-md border border-gray-300 bg-white p-2 shadow-lg sm:right-auto sm:w-[36rem]" data-testid="article-add-list" onKeyDown={onListKeyDown}>
                     <label htmlFor={`${listId}-search`} className="sr-only">{t('article_add_search')}</label>
                     <input ref={search} id={`${listId}-search`} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={onKeyDown}
                         role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={shown[highlight] ? `${listId}-${shown[highlight].variantId}` : undefined}

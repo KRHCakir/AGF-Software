@@ -33,7 +33,18 @@ export default function NewArticlePanel({ onSaved, onClose }: { onSaved: (articl
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
     }, []);
-    useEffect(() => { if (asking) stayButton.current?.focus(); }, [asking]);
+    // De vraag neemt de focus over; bij "Doorgaan met invullen" of Escape gaat die terug naar het veld waar de gebruiker was.
+    const returnFocus = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        if (asking) {
+            returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            stayButton.current?.focus();
+            return;
+        }
+        const target = returnFocus.current;
+        returnFocus.current = null;
+        if (target?.isConnected) target.focus();
+    }, [asking]);
 
     // Tijdens het opslaan sluit het paneel niet (✕, Escape en Annuleren): anders wordt het artikel ongezien aangemaakt.
     const requestClose = () => {
