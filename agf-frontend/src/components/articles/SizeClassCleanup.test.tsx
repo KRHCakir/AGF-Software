@@ -59,4 +59,20 @@ describe('SizeClassCleanup', () => {
         assert.deepEqual(post.body, { sizeCategory: 'n.v.t.', tradeClass: 'II' });
         assert.equal(mounted.container.querySelector('[data-testid="size-class-cleanup-3"]'), null, 'the article leaves the list');
     });
+
+    // Review #308: alleen een klasse kiezen bij een artikel dat al een maat heeft, bewaart die maat (het veld begint met de opgeslagen
+    // maat, niet leeg); en een artikel zonder maat kan nu ook zonder maat worden opgeslagen.
+    test('choosing only a class keeps the stored size; an article without size saves without one', async () => {
+        await mounted.render(<SizeClassCleanup reloadToken={0} onArticleChanged={(article) => changed.push(article)} />);
+        await mounted.waitFor(() => row(9), 'list loaded');
+        assert.equal(row(9).querySelector<HTMLInputElement>('input')!.value, '65+', 'the stored size is in the field');
+        await act(async () => { setValue(input('size-class-cleanup-9-class'), 'I'); });
+        await act(async () => { input('size-class-cleanup-9-class').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        await act(async () => { saveButton(9).click(); });
+        await mounted.waitFor(() => calls.some((call) => call.method === 'POST'), 'saved');
+        assert.deepEqual(calls.find((call) => call.method === 'POST')!.body, { sizeCategory: '65+', tradeClass: 'I' });
+        await act(async () => { setValue(input('size-class-cleanup-3-class'), 'I'); });
+        await act(async () => { input('size-class-cleanup-3-class').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        assert.equal(saveButton(3).disabled, false, 'no size needed');
+    });
 });
