@@ -2378,7 +2378,7 @@
   "tour_master_article-size-class_why": "At receiving you enter the class of what is actually there, and the size if the product has one. Class is one of Extra, I and II.",
   "tour_master_article-vat_title": "VAT rate",
   "tour_master_article-vat_what": "The VAT rate of the article: 9% for unprocessed fruit and vegetables is already set.",
-  "tour_master_article-vat_why": "The rate is the proposal on every new invoice line with this article; you can change it per line. Processed products are 21%.",
+  "tour_master_article-vat_why": "The rate is the proposal on every new invoice line with this article; you can change it per line. Which rate applies depends on the product; when in doubt, the accountant decides.",
   "tour_master_article-packaging_title": "Packaging and weight",
   "tour_master_article-packaging_what": "Unit colli, packaging 4 kg box, weight calculated at 4 kg net per colli, and 240 colli per pallet.",
   "tour_master_article-packaging_why": "Calculated: the system derives the weight from the quantity (quantity × kg per colli), when purchasing, receiving and reserving. Choose Weighed when every pallet is actually weighed.",

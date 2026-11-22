@@ -2378,7 +2378,7 @@
   "tour_master_article-size-class_why": "Bij ontvangst vul je de klasse in van wat er werkelijk staat, en de maat als het product er een heeft. Klasse kies je uit Extra, I en II.",
   "tour_master_article-vat_title": "Btw-tarief",
   "tour_master_article-vat_what": "Het btw-tarief van het artikel: 9% voor onbewerkte groente en fruit staat al klaar.",
-  "tour_master_article-vat_why": "Het tarief is het voorstel op elke nieuwe factuurregel met dit artikel; per regel kun je het aanpassen. Bewerkte producten zijn 21%.",
+  "tour_master_article-vat_why": "Het tarief is het voorstel op elke nieuwe factuurregel met dit artikel; per regel kun je het aanpassen. Welk tarief geldt, hangt af van het product; bij twijfel beslist de accountant.",
   "tour_master_article-packaging_title": "Verpakking en gewicht",
   "tour_master_article-packaging_what": "Eenheid colli, verpakking 4 kg doos, gewicht berekend met 4 kg netto per colli, en 240 colli per pallet.",
   "tour_master_article-packaging_why": "Berekend: het systeem rekent het gewicht uit het aantal (aantal × kg per colli), bij inkoop, ontvangst en reserveren. Gewogen kies je als elke pallet echt gewogen wordt.",
