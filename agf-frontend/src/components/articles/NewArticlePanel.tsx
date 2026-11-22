@@ -22,6 +22,7 @@ export default function NewArticlePanel({ onSaved, onClose }: { onSaved: (articl
     const [countries, setCountries] = useState<CountryReference | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
     const [asking, setAsking] = useState(false);
+    const [saving, setSaving] = useState(false);
     const dirty = useRef(false);
     const stayButton = useRef<HTMLButtonElement | null>(null);
 
@@ -32,30 +33,58 @@ export default function NewArticlePanel({ onSaved, onClose }: { onSaved: (articl
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setError(apiError); });
         return () => controller.abort();
     }, []);
-    useEffect(() => { if (asking) stayButton.current?.focus(); }, [asking]);
+    // De vraag neemt de focus over; bij "Doorgaan met invullen" of Escape gaat die terug naar het veld waar de gebruiker was.
+    const returnFocus = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        if (asking) {
+            returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            stayButton.current?.focus();
+            return;
+        }
+        const target = returnFocus.current;
+        returnFocus.current = null;
+        if (target?.isConnected) target.focus();
+    }, [asking]);
 
+    // Tijdens het opslaan sluit het paneel niet (✕, Escape en Annuleren): anders wordt het artikel ongezien aangemaakt.
     const requestClose = () => {
+        if (saving) return;
         if (asking) { setAsking(false); return; }
         if (dirty.current) setAsking(true);
         else onClose();
     };
 
+    // Tab blijft binnen de bevestiging (ook de ✕ van het paneel is dan niet bereikbaar met Tab).
+    const trapTab = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key !== 'Tab') return;
+        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled])'));
+        if (buttons.length === 0) return;
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+        else if (!buttons.includes(active as HTMLElement)) { event.preventDefault(); first.focus(); }
+    };
+
     return (
         <SidePanel title={t('new_article_panel_title')} onRequestClose={requestClose} testId="new-article-panel" dataTour="new-article-panel">
-            <div onInput={() => { dirty.current = true; }} onChange={() => { dirty.current = true; }}>
+            {/* Modaal: zolang de vraag open staat is het formulier inert (geen focus, geen invoer, geen opslaan). */}
+            <div onInput={() => { dirty.current = true; }} onChange={() => { dirty.current = true; }} inert={asking}>
                 {error && <ErrorNotice error={error} />}
                 {error === null && (reference === null || countries === null) && <p className="text-sm text-gray-600">{t('articles_loading')}</p>}
                 {reference !== null && countries !== null && (
-                    <ArticleForm compact article={null} reference={reference} countries={countries} onClose={requestClose}
+                    <ArticleForm compact article={null} reference={reference} countries={countries} onClose={requestClose} onBusyChange={setSaving}
                         onSaved={(article) => { dirty.current = false; onSaved(article); }} />
                 )}
             </div>
-            {asking && (
-                <div role="alertdialog" aria-modal="true" aria-labelledby="new-article-discard-title" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3" data-testid="new-article-discard">
+            {asking && !saving && (
+                <div role="alertdialog" aria-modal="true" aria-labelledby="new-article-discard-title" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3" data-testid="new-article-discard"
+                    onKeyDown={trapTab}>
                     <p id="new-article-discard-title" className="text-sm font-semibold text-gray-900">{t('new_article_panel_discard_question')}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                         <button ref={stayButton} type="button" className={primaryButtonClass} onClick={() => setAsking(false)}>{t('new_article_panel_stay')}</button>
-                        <button type="button" className={secondaryButtonClass} onClick={onClose} data-tour="new-article-discard">{t('new_article_panel_discard')}</button>
+                        <button type="button" className={secondaryButtonClass} onClick={() => { if (!saving) onClose(); }} data-tour="new-article-discard">{t('new_article_panel_discard')}</button>
                     </div>
                 </div>
             )}
