@@ -82,7 +82,8 @@ interface ContentDraft {
     expectedShownAt: string | null;
 }
 
-// Startwaarden uit de variant (methode, standaard kg per verpakking) en de leverancier (GGN), per regel aanpasbaar.
+// Startwaarden uit de variant (methode, standaard kg per verpakking) en het GGN: dat van de inkoopregel (certificaten deel 2), anders de
+// enige actieve GGN van de leverancier; per regel aanpasbaar.
 const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOption[]): ContentDraft => ({
     lot: line.lotNumber ?? '',
     quantity: '',
@@ -90,7 +91,7 @@ const draftFor = (line: SupplyCommitmentLine, vendorGgns: readonly VendorGgnOpti
     // Blind: ook het etiketgewicht vult de gebruiker zelf in (de bestelling wordt niet vooraf getoond).
     kgPerPackage: '',
     netKg: '',
-    ggn: proposedGgn(vendorGgns) ?? '',
+    ggn: line.ggn || (proposedGgn(vendorGgns) ?? ''),
     entered: emptyEntered(),
     matchedVariantId: null,
     expectedShownAt: null,
@@ -104,9 +105,12 @@ export function proposedGgn(vendorGgns: readonly VendorGgnOption[]): string | nu
 }
 
 // Herkenbare toelichting bij de GGN-invoer ten opzichte van de leveranciers-GGN's (voorstel, gekozen, aangepast, leeggemaakt, kiezen).
-export type GgnStateKey = 'supply_ggn_from_vendor' | 'supply_ggn_chosen' | 'supply_ggn_adjusted' | 'supply_ggn_cleared' | 'supply_ggn_choose' | 'supply_ggn_none_in_vendor';
-export function ggnStateKey(draftGgn: string, vendorGgns: readonly VendorGgnOption[]): GgnStateKey | null {
+export type GgnStateKey = 'supply_ggn_from_vendor' | 'supply_ggn_chosen' | 'supply_ggn_adjusted' | 'supply_ggn_cleared' | 'supply_ggn_choose' | 'supply_ggn_none_in_vendor'
+    | 'supply_ggn_from_line';
+export function ggnStateKey(draftGgn: string, vendorGgns: readonly VendorGgnOption[], lineGgn: string | null = null): GgnStateKey | null {
     const normalized = normalizeGgn(draftGgn);
+    // Het GGN van de inkoopregel (bijvoorbeeld dat van de teler op de factuur van een handelaar) gaat voor.
+    if (lineGgn !== null && normalized === lineGgn) return 'supply_ggn_from_line';
     if (vendorGgns.length === 0) return normalized === '' ? 'supply_ggn_none_in_vendor' : null;
     if (normalized === '') return vendorGgns.length === 1 ? 'supply_ggn_cleared' : 'supply_ggn_choose';
     if (vendorGgns.length === 1) return normalized === vendorGgns[0].ggn ? 'supply_ggn_from_vendor' : 'supply_ggn_adjusted';
@@ -1037,7 +1041,7 @@ export default function ReceivePalletForm({ preselected, onPreselectedConsumed }
                                         )}
                                     </div>
                                     <span className="block text-xs text-gray-500" data-testid={`ggn-state-${id}`}>
-                                        {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
+                                        {(() => { const state = ggnStateKey(draft.ggn, entry.commitment.vendorGgns, entry.line.ggn || null); return state === null ? '' : t(state, { ggn: entry.commitment.vendorGgns[0]?.ggn ?? '', count: String(entry.commitment.vendorGgns.length) }); })()}
                                     </span>
                                     {(() => {
                                         const warning = ggnCertificateWarning(draft.ggn, entry.commitment.vendorGgns, todayInAmsterdam());

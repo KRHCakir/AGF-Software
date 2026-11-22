@@ -85,6 +85,9 @@ describe('ReceivePalletForm GGN', () => {
         assert.equal(ggnStateKey('0049929000009', two), 'supply_ggn_adjusted');
         assert.equal(ggnStateKey('', []), 'supply_ggn_none_in_vendor');
         assert.equal(ggnStateKey('0049929000002', []), null);
+        // Certificaten deel 2: het GGN van de inkoopregel (het GGN van de teler op de factuur) gaat vóór de GGN's van de leverancier.
+        assert.equal(ggnStateKey('4049928415684', two, '4049928415684'), 'supply_ggn_from_line');
+        assert.equal(ggnStateKey('0049929000002', two, '4049928415684'), 'supply_ggn_chosen');
     });
 
     test('a chosen supplier GGN warns (never blocks) when its certificate expired or it was never checked', () => {

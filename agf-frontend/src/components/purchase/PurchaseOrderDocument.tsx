@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { isGgn, normalizeGgn } from '../../lib/ggn';
 import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatQuantity } from '../../lib/availability';
@@ -93,6 +94,8 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
     const [reference, setReference] = useState(order.supplierReference ?? '');
     const [note, setNote] = useState(order.note ?? '');
     const [prices, setPrices] = useState<Record<number, string>>(() => Object.fromEntries(order.lines.map((line) => [line.id, line.unitPrice == null ? '' : formatAmountInput(line.unitPrice)])));
+    // Certificaten deel 2: het GGN van het product per regel (leeg = leegmaken, met de reden erbij).
+    const [ggns, setGgns] = useState<Record<number, string>>(() => Object.fromEntries(order.lines.map((line) => [line.id, line.ggn ?? ''])));
     const [reason, setReason] = useState('');
     const [errors, setErrors] = useState<Record<string, string[]>>({});
     const [error, setError] = useState<ApiError | null>(null);
@@ -104,12 +107,16 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
     const build = (): CorrectPurchaseOrderRequest | null => {
         const found: Record<string, string[]> = {};
         if (reason.trim() === '') found.reason = [t('po_correct_reason_required')];
-        const lines: { id: number; unitPrice: number | null }[] = [];
+        const lines: { id: number; unitPrice: number | null; ggn?: string }[] = [];
         for (const line of order.lines) {
             // Een leeg prijsveld laat de prijs staan (een correctie wist geen prijs); alleen een andere prijs gaat mee.
             const parsed = parseUnitPrice(prices[line.id] ?? '');
             if (!parsed.ok) { found[`price-${line.id}`] = [t(decimalErrorKey(parsed.error))]; continue; }
-            if (parsed.value !== null && parsed.value !== (line.unitPrice ?? null)) lines.push({ id: line.id, unitPrice: parsed.value });
+            const ggn = normalizeGgn(ggns[line.id] ?? '');
+            if (ggn !== '' && !isGgn(ggn)) { found[`ggn-${line.id}`] = [t('supply_error_ggn')]; continue; }
+            const price = parsed.value !== null && parsed.value !== (line.unitPrice ?? null) ? parsed.value : null;
+            const ggnChanged = ggn !== (line.ggn ?? '');
+            if (price !== null || ggnChanged) lines.push({ id: line.id, unitPrice: price, ...(ggnChanged ? { ggn } : {}) });
         }
         const blank = (value: string) => (value.trim() === '' ? null : value.trim());
         if (lines.length === 0 && blank(reference) === (order.supplierReference ?? null) && blank(note) === (order.note ?? null)) found.correction = [t('po_correct_nothing')];
@@ -166,6 +173,10 @@ function CorrectionPanel({ order, onClose, onSaved }: { order: PurchaseOrderDeta
                         <input {...fieldProps(`price-${line.id}`, errors[`price-${line.id}`])} inputMode="decimal" data-decimals={2} value={prices[line.id] ?? ''} disabled={busy} data-tour="po-correction-price" data-tour-key={line.id}
                             className={`${inputClass} !mt-0 w-28 text-right`} onChange={(event) => { setPrices((current) => ({ ...current, [line.id]: event.target.value })); edited(); }} />
                         <FieldError id={`price-${line.id}`} messages={errors[`price-${line.id}`]} />
+                        <label htmlFor={`ggn-${line.id}-input`} className="text-xs text-gray-700">{t('po_line_col_ggn')}</label>
+                        <input {...fieldProps(`ggn-${line.id}`, errors[`ggn-${line.id}`])} inputMode="numeric" maxLength={20} value={ggns[line.id] ?? ''} disabled={busy} data-tour="po-correction-ggn" data-tour-key={line.id}
+                            className={`${inputClass} !mt-0 w-40 font-mono`} onChange={(event) => { setGgns((current) => ({ ...current, [line.id]: event.target.value })); edited(); }} />
+                        <FieldError id={`ggn-${line.id}`} messages={errors[`ggn-${line.id}`]} />
                     </li>
                 ))}
             </ul>
