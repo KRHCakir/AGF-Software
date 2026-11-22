@@ -115,5 +115,16 @@ public class GoodsCodeListTests
         }
     }
 
+    // De lijst is de officiële tekst, zoals het script hem maakt: nooit met de hand aanpassen. De Nederlandse GN-tekst van 0704 10 10 is
+    // "bloemkool" (de Engelse noemt ook headed broccoli); zoeken op broccoli vindt de code via de Engelse omschrijving.
+    [Fact]
+    public void The_List_Keeps_The_Official_Text_And_Broccoli_Is_Found_Through_The_English_Description()
+    {
+        var cauliflower = Shipped().EntriesFor("CN").Single(e => e.Code == "07041010");
+        Assert.EndsWith("› bloemkool", cauliflower.DescriptionNl);
+        Assert.EndsWith("› Cauliflowers and headed broccoli", cauliflower.DescriptionEn);
+        Assert.Contains(Shipped().Search("broccoli", "CN"), m => m.Code == "07041010");
+    }
+
     private static GoodsCodeCatalog Shipped() => GoodsCodeCatalog.Load(Path.Combine(AppContext.BaseDirectory, GoodsCodeCatalog.DefaultRelativePath));
 }
