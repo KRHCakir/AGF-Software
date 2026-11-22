@@ -25,6 +25,9 @@ import { type OrderEdit, lineLimits, orderEditOf, updateLinePayload } from '../.
 import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
 import { MAX_NOTE_LENGTH } from '../../lib/purchaseOrderRules';
 import { getNextPartijNumber } from '../../services/partijService';
+import { getCountries } from '../../services/countryService';
+import type { CountryReference } from '../../types/country';
+import CountryPicker from '../shared/CountryPicker';
 import { type PartijSummary, isPartijExistsConflict } from '../../types/partij';
 import { SupplyRoute } from '../../types/availability';
 import { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData';
@@ -60,7 +63,11 @@ export interface ReferenceData {
 interface HeaderDraft {
     vendorId: string;
     customerId: string;
-    origin: string;
+    // Herkomst van de order: een land uit de vaste lijst (feedback 22 november); legacyOrigin = oude tekst zonder land (alleen tonen).
+    originCountryCode: string | null;
+    legacyOrigin: string | null;
+    // De oude tekst bewust weghalen (zonder land te kiezen): bij Aanpassen gaat dan origin "" mee (review #309).
+    clearLegacyOrigin: boolean;
     destination: string;
     expectedDate: string;
     // Inkooporder: referentie van de leverancier en besteldatum (standaard vandaag).
@@ -87,7 +94,7 @@ function editConflict(error: ApiError): string | null {
     return typeof body?.code === 'string' ? EDIT_CONFLICTS[body.code] ?? null : null;
 }
 const emptyLine = (): PurchaseLineDraft => emptyPurchaseLine(newRequestId());
-const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', origin: '', destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), supplierLotReference: '', note: '' });
+const emptyHeader = (): HeaderDraft => ({ vendorId: '', customerId: '', originCountryCode: null, legacyOrigin: null, clearLegacyOrigin: false, destination: '', expectedDate: '', supplierReference: '', orderedOn: todayInAmsterdam(), supplierLotReference: '', note: '' });
 
 // De partij van een order die wordt aangepast, als "bestaande partij" in het partijveld (alleen id en nummer zijn nodig).
 const orderPartij = (order: PurchaseOrderDetail): PartijChoice => order.partijId && order.partijNumber
@@ -142,6 +149,13 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
         : draftFromDocument(editing.order.currency, editing.order.exchangeRate, editing.order.exchangeRateSource, editing.order.exchangeRateDate, locale)));
     const [currencies, setCurrencies] = useState<PurchaseCurrency[]>([{ code: EURO, hasEcbRate: false }]);
+    // De landenlijst voor de herkomst van de order; null zolang ze laadt.
+    const [countries, setCountries] = useState<CountryReference | null>(null);
+    useEffect(() => {
+        const controller = new AbortController();
+        getCountries(controller.signal).then(setCountries).catch(() => setCountries({ countries: [], aliases: [] }));
+        return () => controller.abort();
+    }, []);
     // Lukt het laden van de valutalijst niet, dan blijven euro en de valuta van de order; het scherm zegt dat en kan het opnieuw proberen.
     const [currenciesFailed, setCurrenciesFailed] = useState(false);
     const [currenciesAttempt, setCurrenciesAttempt] = useState(0);
@@ -217,9 +231,19 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setCertificateCheck(null);
     };
 
-    const updateHeader = (field: keyof HeaderDraft, value: string) => {
+    const updateHeader = (field: Exclude<keyof HeaderDraft, 'originCountryCode' | 'legacyOrigin' | 'clearLegacyOrigin'>, value: string) => {
         if (locked) return;
         setHeader((current) => ({ ...current, [field]: value }));
+        edited();
+    };
+    const updateOrigin = (code: string | null) => {
+        if (locked) return;
+        setHeader((current) => ({ ...current, originCountryCode: code }));
+        edited();
+    };
+    const clearLegacyOrigin = () => {
+        if (locked) return;
+        setHeader((current) => ({ ...current, legacyOrigin: null, clearLegacyOrigin: true }));
         edited();
     };
 
@@ -281,9 +305,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         const customerId = Number(header.customerId);
         if (isDirect && !header.customerId) addError(found, 'customerId', t('supply_error_required_customer'));
 
-        // Herkomst van de order is optioneel: de herkomst staat per regel bij het artikel.
-        const origin = header.origin.trim();
-        if (origin.length > 200) addError(found, 'origin', t('supply_error_too_long', { max: '200' }));
+        // Herkomst van de order is optioneel (de herkomst staat per regel bij het artikel) en een land uit de lijst.
+        const originCountryCode = header.originCountryCode;
 
         const destination = header.destination.trim();
         if (isDirect && destination === '') addError(found, 'destination', t('supply_error_required_destination'));
@@ -341,7 +364,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 vendorId,
                 customerId: isDirect ? customerId : null,
                 route,
-                origin,
+                ...(originCountryCode === null ? {} : { originCountryCode }),
+                ...(originCountryCode === null && header.clearLegacyOrigin ? { origin: '' } : {}),
                 destination: destination === '' ? null : destination,
                 expectedAt,
                 ...(supplierReference === '' ? {} : { supplierReference }),
@@ -369,7 +393,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             submission = edit === null ? { requestId, payload: { requestId, ...payload } } : {
                 requestId,
                 payload: {
-                    requestId, expectedVersion: edit.version, vendorId: payload.vendorId, origin: payload.origin, expectedAt: payload.expectedAt,
+                    requestId, expectedVersion: edit.version, vendorId: payload.vendorId, originCountryCode: payload.originCountryCode ?? null, expectedAt: payload.expectedAt,
+                    ...(payload.origin === '' ? { origin: '' } : {}),
                     ...(payload.supplierReference === undefined ? {} : { supplierReference: payload.supplierReference }),
                     ...(payload.orderedOn === undefined ? {} : { orderedOn: payload.orderedOn }), ...(payload.note === undefined ? {} : { note: payload.note }),
                     ...partijPayload(partij), ...(payload.supplierLotReference === undefined ? {} : { supplierLotReference: payload.supplierLotReference }),
@@ -569,11 +594,19 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
 
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <div>
-                    <label htmlFor="origin-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
-                    <input {...fieldProps('origin', e('origin'))} data-tour="supply-origin" value={header.origin} disabled={locked} maxLength={200}
-                        onChange={(event) => updateHeader('origin', event.target.value)} className={inputClass} aria-describedby="origin-hint" />
+                    <label htmlFor="originCountryCode-input" className="text-xs font-medium text-gray-700">{t('supply_origin')}</label>
+                    {countries === null
+                        ? <p className="mt-1 text-xs text-gray-600">{t('supply_open_loading')}</p>
+                        : <CountryPicker id="originCountryCode" dataTour="supply-origin" countries={countries} value={header.originCountryCode} onChange={updateOrigin}
+                            disabled={locked} invalid={(e('originCountryCode') ?? e('origin')) !== undefined} describedBy="origin-hint" />}
                     <span id="origin-hint" className="block text-xs text-gray-500">{t('supply_origin_hint')}</span>
-                    <FieldError id="origin" messages={e('origin')} />
+                    {header.legacyOrigin !== null && header.originCountryCode === null && (
+                        <span className="block text-xs text-amber-800" data-testid="supply-origin-legacy">
+                            {t('supply_origin_legacy', { text: header.legacyOrigin })}{' '}
+                            {!locked && <button type="button" className="font-medium text-blue-800 underline underline-offset-2" onClick={clearLegacyOrigin} data-tour="supply-origin-legacy-clear">{t('supply_origin_legacy_clear')}</button>}
+                        </span>
+                    )}
+                    <FieldError id="originCountryCode" messages={[...(e('originCountryCode') ?? []), ...(e('origin') ?? [])]} />
                 </div>
                 {/* Valuta-ronde: valuta en koers in de kop (na de vaste volgorde Leverancier, Ordernummer, Besteldatum, Verwacht, Herkomst). */}
                 <div className="col-span-2 md:col-span-3">

@@ -138,7 +138,7 @@ describe('ReceivePalletForm blind entry', () => {
     test('the shortcut "PE" chooses Peru and the sizes follow the chosen origin (only existing combinations)', async () => {
         await arrange();
         await pick('line.501.origin', 'PE');
-        assert.equal(input('line.501.origin').value, 'Peru');
+        assert.equal(input('line.501.origin').value, 'PE Peru', 'code and name, "PE Peru"');
         await type(input('line.501.size'), '2');
         assert.ok(mounted.hasText('20'), 'Peru has size 20');
         await type(input('line.501.size'), '');

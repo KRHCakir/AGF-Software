@@ -56,7 +56,7 @@ describe('ArticleForm', () => {
         assert.ok(text().includes('articles_error_class_required'));
         await type(input('originCountryCode'), 'PE');
         await act(async () => { input('originCountryCode').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-        assert.equal(input('originCountryCode').value, 'Peru', 'the country is shown, not the abbreviation');
+        assert.equal(input('originCountryCode').value, 'PE Peru', 'the code with the country name, never only the abbreviation');
         await type(input('tradeClass'), '1');
         await act(async () => { input('tradeClass').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
         assert.equal(input('tradeClass').value, 'I', 'the fixed class is shown, never the typed spelling');

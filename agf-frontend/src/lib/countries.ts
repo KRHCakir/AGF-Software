@@ -22,6 +22,14 @@ export function countryName(reference: CountryReference | null, code: string | n
     return reference?.countries.find((country) => country.code === code)?.nameNl ?? code;
 }
 
+// Weergave in een keuzelijst (feedback 22 november): de code en de naam in de taal van het scherm, "PE Peru". Onbekende code: alleen de code.
+export function countryLabel(reference: CountryReference | null, code: string | null, locale: string = 'nl'): string {
+    if (code === null) return '';
+    const country = reference?.countries.find((candidate) => candidate.code === code);
+    if (!country) return code;
+    return `${country.code} ${locale === 'nl' ? country.nameNl : country.nameEn}`;
+}
+
 // Volgorde: exact (code, alias, naam), dan begint met, dan bevat; binnen een groep op Nederlandse naam.
 export function searchCountries(reference: CountryReference, query: string, max = MAX_COUNTRY_SUGGESTIONS): CountryMatch[] {
     const term = countryKey(query);
