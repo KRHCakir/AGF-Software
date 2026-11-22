@@ -46,13 +46,13 @@ public class GoodsCodeListTests
     [Theory]
     [InlineData("gember")]
     [InlineData("Ginger")]
-    [InlineData("GEMBER vers")]
+    [InlineData("GEMBER")]
     public void Ginger_Is_Found_By_Its_Dutch_And_English_Name(string query)
     {
         var catalog = Shipped();
-        Assert.Equal("091011", catalog.Search(query.Replace(" vers", ""), "HS").First().Code);
-        Assert.Equal(new[] { "091011", "091012" }, catalog.Search(query.Replace(" vers", ""), "HS").Take(2).Select(m => m.Code));
-        Assert.Equal("09101100", catalog.Search(query.Replace(" vers", ""), "CN").First().Code);
+        Assert.Equal("091011", catalog.Search(query, "HS").First().Code);
+        Assert.Equal(new[] { "091011", "091012" }, catalog.Search(query, "HS").Take(2).Select(m => m.Code));
+        Assert.Equal("09101100", catalog.Search(query, "CN").First().Code);
     }
 
     [Fact]
@@ -113,6 +113,17 @@ public class GoodsCodeListTests
                 Assert.True(texts.Any(t => t.Contains(word)), $"zoekwoord '{word}' staat niet in de lijst");
             }
         }
+    }
+
+    // De lijst is de officiële tekst, zoals het script hem maakt: nooit met de hand aanpassen. De Nederlandse GN-tekst van 0704 10 10 is
+    // "bloemkool" (de Engelse noemt ook headed broccoli); zoeken op broccoli vindt de code via de Engelse omschrijving.
+    [Fact]
+    public void The_List_Keeps_The_Official_Text_And_Broccoli_Is_Found_Through_The_English_Description()
+    {
+        var cauliflower = Shipped().EntriesFor("CN").Single(e => e.Code == "07041010");
+        Assert.EndsWith("› bloemkool", cauliflower.DescriptionNl);
+        Assert.EndsWith("› Cauliflowers and headed broccoli", cauliflower.DescriptionEn);
+        Assert.Contains(Shipped().Search("broccoli", "CN"), m => m.Code == "07041010");
     }
 
     private static GoodsCodeCatalog Shipped() => GoodsCodeCatalog.Load(Path.Combine(AppContext.BaseDirectory, GoodsCodeCatalog.DefaultRelativePath));
