@@ -10,7 +10,7 @@ import { unitLabelKey } from '../../lib/units';
 import {
     InvoiceDraft, LineDraft, buildPurchaseInvoicePayload, changeCurrency, changeDueDate, changeRate, invoiceCurrencyDraft, changeInvoiceDate, changePaymentTerms, draftTotals, dueDateDeviation,
     emptyDraft, emptyLine, followPaymentTerms, groupErrors, isBlankLine, lineAmounts, newLineKey, selectVendor,
-    proposedVat,
+    vatAfterPick,
 } from '../../lib/purchaseInvoiceRules';
 import { PendingSave, clearDraft, clearPending, loadDraft, loadExtraOpen, loadPending, saveDraft, saveExtraOpen, savePending } from '../../lib/purchaseInvoiceStore';
 import { ShortcutAction, isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
@@ -607,7 +607,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                                 // Kostenartikel: omschrijving = de naam, aantal 1 als er nog niets staat (het bedrag is dan de prijs).
                                                 const picked = pickedItem(variantId);
                                                 // Btw: het tarief van het gekozen artikel of de Dienst is het voorstel (niet op een regel van het AI-voorstel: daar telt de factuur; nieuwe regels wel).
-                                                const vatOf = (itemVat: number | null | undefined) => (aiIndex >= 0 ? {} : { vat: proposedVat(line.vat, itemVat ?? null, line.vatManual, { defaultVat: settings.defaultVatPercentage, previousItemVat: itemVatOf(line) }) });
+                                                const vatOf = (itemVat: number | null | undefined) => (aiIndex >= 0 ? {} : vatAfterPick(line, itemVat ?? null, { defaultVat: settings.defaultVatPercentage, previousItemVat: itemVatOf(line) }));
                                                 if (picked.kind === 'cost') {
                                                     const cost = costArticles.find((candidate) => String(candidate.id) === picked.costArticleId);
                                                     updateLine(line.key, { productVariantId: '', costArticleId: picked.costArticleId, description: cost?.name ?? '', ...(line.quantity.trim() === '' ? { quantity: '1' } : {}), ...vatOf(cost?.vatPercentage) });
