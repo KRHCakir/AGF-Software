@@ -138,19 +138,12 @@ namespace AgfAdmin.Services
         // (een oude, niet herkende waarde is alleen gelijk aan dezelfde tekst); leeg = "".
         public static string TradeClassKey(string value) => NormalizeTradeClass(value) ?? AttributeKey(value);
 
-        // Maat is verplicht; heeft een product echt geen maat, dan is "n.v.t." een gewone waarde die ook vergeleken wordt.
-        public const string SizeNotApplicable = "n.v.t.";
-
-        // Maat en klasse van een nieuw of gewijzigd artikel: allebei verplicht; de klasse wordt de vaste waarde (Extra, I, II).
-        // Bestaande artikelen zonder maat of klasse blijven bruikbaar (en staan in "Opschonen"); pas bij bewerken moeten ze gevuld.
-        public static (string Size, string TradeClass) RequiredSizeAndClass(string size, string tradeClass, Action<string, string> addError)
+        // Maat is optioneel (22 november: gember heeft geen maat); leeg = null en toont niets, ook niet op documenten. Twee artikelen die
+        // alleen verschillen in "geen maat" en "maat 13" zijn verschillend (SameIdentity). Klasse blijft verplicht, uit de vaste lijst.
+        public static (string Size, string TradeClass) SizeAndRequiredClass(string size, string tradeClass, Action<string, string> addError)
         {
             var typedSize = TypedText(size);
-            if (typedSize == null)
-            {
-                addError("sizeCategory", $"Enter the size; use \"{SizeNotApplicable}\" when the product really has no size.");
-            }
-            else if (typedSize.Length > MaxTextLength)
+            if (typedSize != null && typedSize.Length > MaxTextLength)
             {
                 addError("sizeCategory", $"This field may contain at most {MaxTextLength} characters.");
                 typedSize = null;
@@ -172,6 +165,18 @@ namespace AgfAdmin.Services
             }
             return (typedSize, normalized);
         }
+
+        // Dezelfde combinatie onder dezelfde productsoort: ras, herkomst, maat, verpakking, klasse en merk gelijk (leeg = leeg; "geen
+        // maat" en "maat 13" zijn dus verschillend, twee keer "geen maat" is hetzelfde). Herkomst met een land aan beide kanten op de code.
+        // Zelfde sleutel in Artikelen (ArticleService: geen dubbel aanmaken) en bij aanmaken vanuit aanvoer/ontvangst (ArticleFromEntryService).
+        public static bool SameIdentity(string nameA, string countryA, string originA, string sizeA, string packagingA, string classA, string brandA,
+            string nameB, string countryB, string originB, string sizeB, string packagingB, string classB, string brandB) =>
+            AttributeKey(nameA) == AttributeKey(nameB)
+            && (countryA != null && countryB != null ? countryA == countryB : AttributeKey(originA) == AttributeKey(originB))
+            && AttributeKey(sizeA) == AttributeKey(sizeB)
+            && AttributeKey(packagingA) == AttributeKey(packagingB)
+            && TradeClassKey(classA) == TradeClassKey(classB)
+            && AttributeKey(brandA) == AttributeKey(brandB);
 
         private static readonly Regex Shortcut = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$", RegexOptions.Compiled);
 

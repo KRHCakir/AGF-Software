@@ -69,11 +69,11 @@ namespace AgfAdmin.Services
             return ServiceResult<ArticleDto>.Ok(ToDto(variant));
         }
 
-        // "Maat en klasse opschonen": artikelen (niet gearchiveerd) zonder maat, zonder klasse of met een klasse buiten de vaste lijst.
-        // Ze blijven bruikbaar; hier vult de gebruiker maat en klasse aan. Er wordt nooit automatisch gekozen.
+        // "Klasse opschonen": artikelen (niet gearchiveerd) zonder klasse of met een klasse buiten de vaste lijst. Een lege maat hoort
+        // daar niet meer bij (maat is optioneel). Ze blijven bruikbaar; hier vult de gebruiker de klasse aan. Nooit automatisch gekozen.
         public async Task<IReadOnlyList<SizeClassCleanupItemDto>> SizeClassCleanupAsync(CancellationToken cancellationToken = default) =>
             (await _db.ProductVariants.AsNoTracking().Include(v => v.Product)
-                    .Where(v => !v.IsArchived && (v.SizeCategory == null || v.SizeCategory.Trim() == "" || v.TradeClass == null
+                    .Where(v => !v.IsArchived && (v.TradeClass == null
                         || (v.TradeClass != ArticleRules.ClassExtra && v.TradeClass != ArticleRules.ClassI && v.TradeClass != ArticleRules.ClassII)))
                     .ToListAsync(cancellationToken))
                 .Select(v => new SizeClassCleanupItemDto
@@ -87,11 +87,11 @@ namespace AgfAdmin.Services
                 .OrderBy(i => i.Description, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
-        // Alleen maat en klasse van een artikel zetten (vanuit "Opschonen"); allebei verplicht, de rest blijft zoals het is.
+        // Alleen maat en klasse van een artikel zetten (vanuit "Opschonen"); klasse verplicht, maat optioneel, de rest blijft zoals het is.
         public async Task<ServiceResult<ArticleDto>> SetSizeClassAsync(int id, SetSizeClassDto request, CancellationToken cancellationToken = default)
         {
             var errors = new Dictionary<string, List<string>>();
-            var (size, tradeClass) = ArticleRules.RequiredSizeAndClass(request?.SizeCategory, request?.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
+            var (size, tradeClass) = ArticleRules.SizeAndRequiredClass(request?.SizeCategory, request?.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
             if (errors.Count > 0)
             {
                 return ServiceResult<ArticleDto>.Validation(ValidationErrors.ToArrays(errors));
@@ -116,7 +116,12 @@ namespace AgfAdmin.Services
                 return ServiceResult<ArticleDto>.Validation(ValidationErrors.ToArrays(errors));
             }
 
-            var product = await FindProductAsync(values.ProductName, cancellationToken) ?? new Product { Name = values.ProductName };
+            var product = await FindProductAsync(values.ProductName, cancellationToken);
+            if (product != null && await DuplicateAsync(product.Id, values, null, cancellationToken) is { } duplicate)
+            {
+                return DuplicateResult(duplicate);
+            }
+            product ??= new Product { Name = values.ProductName };
             var variant = new ProductVariant { Product = product, DefaultPrice = 0m };
             Apply(variant, values);
             _db.ProductVariants.Add(variant);
@@ -138,6 +143,14 @@ namespace AgfAdmin.Services
                 return ServiceResult<ArticleDto>.Validation(ValidationErrors.ToArrays(errors));
             }
 
+            var targetProduct = await FindProductAsync(values.ProductName, cancellationToken);
+            if (targetProduct != null && await DuplicateAsync(targetProduct.Id, values, id, cancellationToken) is { } duplicate
+                && (variant.ProductId != targetProduct.Id || !ArticleRules.SameIdentity(variant.Name, variant.OriginCountryCode, variant.Origin, variant.SizeCategory, variant.Packaging, variant.TradeClass, variant.Brand,
+                    values.VariantName, values.OriginCountryCode, values.Origin, values.SizeCategory, values.Packaging, values.TradeClass, values.Brand)))
+            {
+                // Alleen als deze wijziging het artikel gelijk maakt aan een ander; een al bestaand dubbel blijft te bewerken.
+                return DuplicateResult(duplicate);
+            }
             if (!string.Equals(variant.Product.Name.Trim(), values.ProductName, StringComparison.OrdinalIgnoreCase))
             {
                 // Productsoort gewijzigd: naar de bestaande soort met die naam, anders een nieuwe; is dit het enige artikel
@@ -180,6 +193,27 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<ArticleDto>.Validation(new Dictionary<string, string[]> { ["shortcutCode"] = new[] { $"Search code '{shortcut}' is already used by another article." } });
             }
+        }
+
+        // Een ander artikel met precies dezelfde combinatie onder deze productsoort (ArticleRules.SameIdentity), ook gearchiveerd.
+        private async Task<ProductVariant> DuplicateAsync(int productId, Values values, int? selfId, CancellationToken cancellationToken)
+        {
+            var siblings = await _db.ProductVariants.AsNoTracking().Include(v => v.Product)
+                .Where(v => v.ProductId == productId && v.Id != selfId).ToListAsync(cancellationToken);
+            return siblings
+                .Where(v => ArticleRules.SameIdentity(v.Name, v.OriginCountryCode, v.Origin, v.SizeCategory, v.Packaging, v.TradeClass, v.Brand,
+                    values.VariantName, values.OriginCountryCode, values.Origin, values.SizeCategory, values.Packaging, values.TradeClass, values.Brand))
+                .OrderBy(v => v.IsArchived).ThenBy(v => v.Id).FirstOrDefault();
+        }
+
+        public const string DuplicateCode = "ARTICLE_EXISTS";
+
+        private static ServiceResult<ArticleDto> DuplicateResult(ProductVariant duplicate)
+        {
+            var message = duplicate.IsArchived
+                ? $"This article already exists as article #{duplicate.Id} ({Describe(duplicate)}), archived; restore it in Articles instead."
+                : $"This article already exists as article #{duplicate.Id} ({Describe(duplicate)}).";
+            return ServiceResult<ArticleDto>.Conflict(message, new { message, code = DuplicateCode, articleId = duplicate.Id, archived = duplicate.IsArchived });
         }
 
         private Task<Product> FindProductAsync(string name, CancellationToken cancellationToken)
@@ -232,7 +266,7 @@ namespace AgfAdmin.Services
                     : $"Country '{request.OriginCountryCode}' is not in the country list.");
             }
             var brand = ValidationErrors.OptionalText(request.Brand, ArticleRules.MaxTextLength, "brand", errors);
-            var (size, tradeClass) = ArticleRules.RequiredSizeAndClass(request.SizeCategory, request.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
+            var (size, tradeClass) = ArticleRules.SizeAndRequiredClass(request.SizeCategory, request.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
             var packaging = ValidationErrors.OptionalText(request.Packaging, ArticleRules.MaxTextLength, "packaging", errors);
             var packagingUnit = string.IsNullOrWhiteSpace(request.PackagingUnit) ? null : request.PackagingUnit.Trim();
             if (packagingUnit != null && !SupplyRules.IsPackageUnit(packagingUnit))

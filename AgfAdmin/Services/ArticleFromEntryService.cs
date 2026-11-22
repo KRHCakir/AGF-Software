@@ -159,8 +159,8 @@ namespace AgfAdmin.Services
                 }
                 return text;
             }
-            // Zelfde regels als in Artikelen: maat en klasse verplicht, klasse uit de vaste lijst; verpakking en merk optioneel (leeg = "geen").
-            var (size, tradeClass) = ArticleRules.RequiredSizeAndClass(request.SizeCategory, request.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
+            // Zelfde regels als in Artikelen: klasse verplicht uit de vaste lijst; maat, verpakking en merk optioneel (leeg = "geen").
+            var (size, tradeClass) = ArticleRules.SizeAndRequiredClass(request.SizeCategory, request.TradeClass, (key, message) => ValidationErrors.Add(errors, key, message));
             var packaging = Text(request.Packaging, ArticleRules.MaxTextLength, "packaging");
             var brand = Text(request.Brand, ArticleRules.MaxTextLength, "brand");
             if (request.NetKgPerPackage != null && !SupplyRules.IsPositiveDecimal18_3(request.NetKgPerPackage.Value))
@@ -180,13 +180,8 @@ namespace AgfAdmin.Services
         }
 
         private static bool SameIdentity(ProductVariant variant, Entry entry) =>
-            (variant.OriginCountryCode != null
-                ? variant.OriginCountryCode == entry.CountryCode
-                : ArticleRules.AttributeKey(variant.Origin) == ArticleRules.AttributeKey(entry.CountryName))
-            && ArticleRules.AttributeKey(variant.SizeCategory) == ArticleRules.AttributeKey(entry.Size)
-            && ArticleRules.AttributeKey(variant.Packaging) == ArticleRules.AttributeKey(entry.Packaging)
-            && ArticleRules.TradeClassKey(variant.TradeClass) == ArticleRules.TradeClassKey(entry.TradeClass)
-            && ArticleRules.AttributeKey(variant.Brand) == ArticleRules.AttributeKey(entry.Brand);
+            ArticleRules.SameIdentity(variant.Name, variant.OriginCountryCode, variant.Origin, variant.SizeCategory, variant.Packaging, variant.TradeClass, variant.Brand,
+                variant.Name, entry.CountryCode, entry.CountryName, entry.Size, entry.Packaging, entry.TradeClass, entry.Brand);
 
         // Herhaald verzoek: hetzelfde artikel terug (200). Een RequestId die voor een andere combinatie, een ander artikel (productsoort + ras)
         // of een andere bron werd gebruikt: 409.

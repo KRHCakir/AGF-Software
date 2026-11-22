@@ -114,6 +114,17 @@ public sealed class TradeClassTests : IDisposable
         Assert.Empty(new AgfAdmin.Migrations.NormalizeTradeClasses().DownOperations);
     }
 
+    // Migratie ClearSizeNotApplicable: de oude verplichte waarde "n.v.t." (en een lege tekst) wordt echt leeg, alleen in de artikelen.
+    [Fact]
+    public void Migration_Clears_Only_The_Old_Not_Applicable_Size_Of_Articles()
+    {
+        var sql = new AgfAdmin.Migrations.ClearSizeNotApplicable().UpOperations.OfType<SqlOperation>().Single().Sql;
+        Assert.StartsWith("UPDATE \"ProductVariants\" SET \"SizeCategory\" = NULL", sql.Trim());
+        Assert.Contains("'n.v.t.'", sql);
+        Assert.DoesNotContain("PalletContentLines", sql);
+        Assert.Empty(new AgfAdmin.Migrations.ClearSizeNotApplicable().DownOperations);
+    }
+
     private static SaveArticleDto Article(string size, string tradeClass, string packaging, string brand) => new()
     {
         ProductName = "Avocado", VariantName = "Hass", OriginCountryCode = "PE", SizeCategory = size, TradeClass = tradeClass, Packaging = packaging, Brand = brand,
@@ -126,21 +137,22 @@ public sealed class TradeClassTests : IDisposable
         from brand in new[] { "Verita", null }
         select new object[] { size, tradeClass, packaging, brand };
 
+    // 22 november: maat is optioneel (gember heeft geen maat); klasse blijft verplicht; verpakking en merk zijn optioneel.
     [Theory]
     [MemberData(nameof(Combinations))]
-    public async Task Size_And_Class_Are_Required_Packaging_And_Brand_Are_Not(string size, string tradeClass, string packaging, string brand)
+    public async Task Class_Is_Required_Size_Packaging_And_Brand_Are_Not(string size, string tradeClass, string packaging, string brand)
     {
         await using var db = _factory.CreateContext();
         var result = await new ArticleService(db).CreateAsync(Article(size, tradeClass, packaging, brand));
-        if (size != null && tradeClass != null)
+        if (tradeClass != null)
         {
             Assert.Equal(ServiceResultStatus.Created, result.Status);
-            Assert.Equal(("18", "I", packaging, brand), (result.Value.SizeCategory, result.Value.TradeClass, result.Value.Packaging, result.Value.Brand));
+            Assert.Equal((size, "I", packaging, brand), (result.Value.SizeCategory, result.Value.TradeClass, result.Value.Packaging, result.Value.Brand));
             return;
         }
         Assert.Equal(ServiceResultStatus.Validation, result.Status);
-        Assert.Equal(size == null, result.Errors.ContainsKey("sizeCategory"));
-        Assert.Equal(tradeClass == null, result.Errors.ContainsKey("tradeClass"));
+        Assert.False(result.Errors.ContainsKey("sizeCategory"));
+        Assert.True(result.Errors.ContainsKey("tradeClass"));
         Assert.False(result.Errors.ContainsKey("packaging"));
         Assert.False(result.Errors.ContainsKey("brand"));
         Assert.Equal(0, await db.ProductVariants.CountAsync());
@@ -156,23 +168,59 @@ public sealed class TradeClassTests : IDisposable
     }
 
     [Fact]
-    public async Task A_New_Article_Without_Size_Or_Class_Gets_A_400_With_A_Clear_Message_And_N_V_T_Is_A_Real_Size()
+    public async Task A_New_Article_Without_Class_Gets_A_400_With_A_Clear_Message_And_No_Size_Is_Simply_Empty()
     {
         await using var controllerDb = _factory.CreateContext();
         var controller = new AgfAdmin.Controllers.ArticlesController(new ArticleService(controllerDb), null, null, null);
         var refused = await controller.Create(Article(" ", "klasse A", null, null));
         var bad = Assert.IsType<Microsoft.AspNetCore.Mvc.BadRequestObjectResult>(refused);
         var problem = Assert.IsType<Microsoft.AspNetCore.Mvc.ValidationProblemDetails>(bad.Value);
-        Assert.Contains("n.v.t.", problem.Errors["sizeCategory"].Single());
+        Assert.False(problem.Errors.ContainsKey("sizeCategory"));
         Assert.Contains("Extra, I or II", problem.Errors["tradeClass"].Single());
 
         await using var db = _factory.CreateContext();
-        var created = await new ArticleService(db).CreateAsync(Article("n.v.t.", "Extra", null, null));
-        Assert.Equal(("n.v.t.", "Extra"), (created.Value.SizeCategory, created.Value.TradeClass));
+        var created = await new ArticleService(db).CreateAsync(Article("  ", "Extra", null, null));
+        Assert.Equal((null, "Extra"), (created.Value.SizeCategory, created.Value.TradeClass));
+        Assert.Equal("Avocado · Hass · Peru", created.Value.Description); // geen streepje of "n.v.t." voor de lege maat
+    }
+
+    // De sleutel van een artikel: "geen maat" en "maat 13" zijn twee artikelen; twee keer "geen maat" met verder alles gelijk is een
+    // dubbel en wordt geweigerd (ook tegen een gearchiveerd artikel, met de vraag om dat terug te zetten).
+    [Fact]
+    public async Task No_Size_And_Size_13_Are_Different_Twice_No_Size_Is_A_Duplicate()
+    {
+        await using var db = _factory.CreateContext();
+        var service = new ArticleService(db);
+        var none = await service.CreateAsync(Article(null, "I", "4 kg doos", null));
+        Assert.Equal(ServiceResultStatus.Created, none.Status);
+        var thirteen = await service.CreateAsync(Article("13", "I", "4 kg doos", null));
+        Assert.Equal(ServiceResultStatus.Created, thirteen.Status);
+        var twice = await service.CreateAsync(Article(" ", "1", "4 KG doos", null));
+        Assert.Equal(ServiceResultStatus.Conflict, twice.Status);
+        Assert.Contains($"#{none.Value.Id}", twice.Message);
+        Assert.Equal(2, await db.ProductVariants.CountAsync());
+        // Een ander merk of een andere klasse is wel een eigen artikel.
+        Assert.Equal(ServiceResultStatus.Created, (await service.CreateAsync(Article(null, "II", "4 kg doos", null))).Status);
+        // Bewerken naar dezelfde combinatie als een ander artikel: geweigerd; het artikel zelf ongewijzigd opslaan kan altijd.
+        var toNone = await service.UpdateAsync(thirteen.Value.Id, Article(null, "I", "4 kg doos", null));
+        Assert.Equal(ServiceResultStatus.Conflict, toNone.Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await service.UpdateAsync(thirteen.Value.Id, Article("13", "I", "4 kg doos", "Verita"))).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await service.UpdateAsync(none.Value.Id, Article(null, "I", "4 kg doos", null))).Status);
     }
 
     [Fact]
-    public async Task An_Existing_Article_Without_Size_Or_Class_Stays_Usable_Is_Listed_For_Cleanup_And_Must_Be_Completed_When_Edited()
+    public async Task A_Duplicate_Of_An_Archived_Article_Points_To_Restoring_It()
+    {
+        await using var db = _factory.CreateContext();
+        db.Add(new ProductVariant { Product = new Product { Name = "Avocado" }, Name = "Hass", Origin = "Peru", OriginCountryCode = "PE", TradeClass = "I", DefaultPrice = 0m, IsArchived = true, ArchivedAt = DateTime.UtcNow, ArchivedBy = "Jan" });
+        await db.SaveChangesAsync();
+        var twice = await new ArticleService(db).CreateAsync(Article(null, "I", null, null));
+        Assert.Equal(ServiceResultStatus.Conflict, twice.Status);
+        Assert.Contains("restore", twice.Message);
+    }
+
+    [Fact]
+    public async Task An_Existing_Article_Without_Class_Stays_Usable_Is_Listed_For_Cleanup_And_Must_Be_Completed_When_Edited()
     {
         var seed = await SalesTestData.SeedAsync(_factory); // oude artikelen: zonder maat en klasse
         int oldClass;
@@ -204,10 +252,11 @@ public sealed class TradeClassTests : IDisposable
         {
             cleanup = await new ArticleService(db).SizeClassCleanupAsync();
         }
+        // Zonder klasse of met een klasse buiten de lijst; een lege maat alleen is geen reden meer.
         Assert.Equal(new[] { "Avocado · Hass · 4kg Box · Peru", "Mango · Kent · 4kg Box · Peru", "Peer · Conference · Nederland · 65+" }, cleanup.Select(i => i.Description));
         Assert.Equal(("65+", "klasse A"), (cleanup[2].SizeCategory, cleanup[2].TradeClass));
 
-        // Bewerken zonder maat en klasse: geweigerd; met beide: opgeslagen en uit het overzicht.
+        // Bewerken zonder klasse: geweigerd (alleen om de klasse); met klasse: opgeslagen en uit het overzicht, ook zonder maat.
         await using (var db = _factory.CreateContext())
         {
             var service = new ArticleService(db);
@@ -215,16 +264,20 @@ public sealed class TradeClassTests : IDisposable
             var edit = new SaveArticleDto { ProductName = article.ProductName, VariantName = article.VariantName, OriginCountryCode = "PE", Packaging = article.Packaging };
             var refused = await service.UpdateAsync(seed.MangoId, edit);
             Assert.Equal(ServiceResultStatus.Validation, refused.Status);
-            Assert.True(refused.Errors.ContainsKey("sizeCategory") && refused.Errors.ContainsKey("tradeClass"));
+            Assert.True(!refused.Errors.ContainsKey("sizeCategory") && refused.Errors.ContainsKey("tradeClass"));
             var noClass = await service.SetSizeClassAsync(oldClass, new SetSizeClassDto { SizeCategory = "65+", TradeClass = "A" });
             Assert.Equal(ServiceResultStatus.Validation, noClass.Status);
             var fixedUp = await service.SetSizeClassAsync(oldClass, new SetSizeClassDto { SizeCategory = " 65+ ", TradeClass = "kl. 2" });
             Assert.Equal(("65+", "II"), (fixedUp.Value.SizeCategory, fixedUp.Value.TradeClass));
+            var noSize = await service.SetSizeClassAsync(seed.MangoId, new SetSizeClassDto { SizeCategory = "", TradeClass = "I" });
+            Assert.Equal((null, "I"), (noSize.Value.SizeCategory, noSize.Value.TradeClass));
             Assert.Equal(ServiceResultStatus.NotFound, (await service.SetSizeClassAsync(999, new SetSizeClassDto { SizeCategory = "1", TradeClass = "I" })).Status);
         }
         await using (var db = _factory.CreateContext())
         {
-            Assert.DoesNotContain(await new ArticleService(db).SizeClassCleanupAsync(), i => i.Id == oldClass);
+            var left = await new ArticleService(db).SizeClassCleanupAsync();
+            Assert.DoesNotContain(left, i => i.Id == oldClass);
+            Assert.DoesNotContain(left, i => i.Id == seed.MangoId);
         }
     }
 
@@ -251,7 +304,7 @@ public sealed class TradeClassTests : IDisposable
             var service = new ArticleFromEntryService(db);
             var missing = await service.CreateAsync(Entry("", ""));
             Assert.Equal(ServiceResultStatus.Validation, missing.Status);
-            Assert.True(missing.Errors.ContainsKey("sizeCategory") && missing.Errors.ContainsKey("tradeClass"));
+            Assert.True(!missing.Errors.ContainsKey("sizeCategory") && missing.Errors.ContainsKey("tradeClass"));
             Assert.Equal(ServiceResultStatus.Validation, (await service.CreateAsync(Entry("18", "klasse A"))).Status);
 
             // "I" bij een artikel met de oude schrijfwijze "1": hetzelfde artikel, nooit een tweede.
@@ -262,6 +315,10 @@ public sealed class TradeClassTests : IDisposable
         {
             var created = await new ArticleFromEntryService(db).CreateAsync(Entry("16", "klasse 2"));
             Assert.Equal(("16", "II"), (created.Value.Article.SizeCategory, created.Value.Article.TradeClass));
+            // Zonder maat: een eigen artikel naast maat 18 en 16; nog een keer zonder maat is hetzelfde artikel (nooit een tweede).
+            var noSize = await new ArticleFromEntryService(db).CreateAsync(Entry(" ", "I"));
+            Assert.Null(noSize.Value.Article.SizeCategory);
+            Assert.Equal(ServiceResultStatus.Conflict, (await new ArticleFromEntryService(db).CreateAsync(Entry("", "1"))).Status);
         }
     }
 

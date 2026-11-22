@@ -34,7 +34,7 @@ export interface ArticleDraft {
     tradeClass: string;
 }
 
-export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length' | 'size_required' | 'class_required' | 'class_invalid';
+export type ArticleRuleCode = 'required' | 'empty' | 'invalid' | 'separator' | 'not_positive' | 'negative' | 'too_many_decimals' | 'too_large' | 'too_long' | 'gross_below_net' | 'system_required' | 'wrong_length' | 'class_required' | 'class_invalid';
 export interface ArticleRuleError { field: string; code: ArticleRuleCode }
 export type ArticleBuildResult = { ok: true; value: SaveArticleRequest } | { ok: false; errors: ArticleRuleError[] };
 
@@ -115,9 +115,8 @@ export function buildArticlePayload(draft: ArticleDraft): ArticleBuildResult {
     const originCountryCode = draft.originCountryCode.trim();
     if (originCountryCode === '') errors.push({ field: 'originCountryCode', code: 'required' });
     const brand = text(draft.brand, MAX_NAME_LENGTH, 'brand', errors);
-    // Maat en klasse zijn verplicht (geen maat: "n.v.t."); klasse uit de vaste lijst, bewaard als de vaste waarde.
+    // Klasse is verplicht, uit de vaste lijst en bewaard als de vaste waarde; maat is optioneel (leeg = geen maat, toont niets).
     const sizeCategory = text(draft.sizeCategory, MAX_NAME_LENGTH, 'sizeCategory', errors);
-    if (draft.sizeCategory.trim() === '') errors.push({ field: 'sizeCategory', code: 'size_required' });
     const packaging = text(draft.packaging, MAX_NAME_LENGTH, 'packaging', errors);
     const packagingUnit = draft.packagingUnit === '' ? null : draft.packagingUnit;
     if (packagingUnit !== null && !(PACKAGE_UNITS as readonly string[]).includes(packagingUnit)) errors.push({ field: 'packagingUnit', code: 'invalid' });

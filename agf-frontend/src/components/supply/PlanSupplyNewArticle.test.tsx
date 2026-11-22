@@ -94,11 +94,15 @@ describe('PlanSupplyForm: new article on a supply line', () => {
         assert.equal(JSON.parse(posted[1].body).lines[0].productVariantId, 50);
     });
 
-    test('origin, size and class are required: without them nothing can be created yet', async () => {
+    test('origin and class are required (size is optional): without a class nothing can be created yet', async () => {
         await openNewArticle();
         assert.ok(mounted.container.querySelector('[data-testid="new-article-text"]'));
         await type(tour<HTMLInputElement>('supply-new-article-size'), '');
-        assert.equal(mounted.container.querySelector('[data-testid="new-article-text"]'), null, 'no size: no "create" yet');
+        assert.ok(mounted.container.querySelector('[data-testid="new-article-text"]'), 'no size is fine');
+        // De gekozen klasse wissen (Backspace op een keuze maakt het veld leeg).
+        await act(async () => { tour('supply-new-article-tradeClass').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true })); });
+        assert.equal(tour<HTMLInputElement>('supply-new-article-tradeClass').value, '');
+        assert.equal(mounted.container.querySelector('[data-testid="new-article-text"]'), null, 'no class: no "create" yet');
         assert.ok(mounted.hasText('supply_new_article_required'));
     });
 

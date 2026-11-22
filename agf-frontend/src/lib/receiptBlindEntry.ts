@@ -10,7 +10,8 @@ import { normalizeTradeClass, tradeClassKey } from './tradeClass.ts';
 
 export type ReceiptAttribute = 'size' | 'packaging' | 'tradeClass' | 'brand';
 export const RECEIPT_ATTRIBUTES: readonly ReceiptAttribute[] = ['size', 'packaging', 'tradeClass', 'brand'];
-export const REQUIRED_ATTRIBUTES: readonly ReceiptAttribute[] = ['size', 'tradeClass'];
+// Maat is sinds 22 november optioneel (gember heeft geen maat); klasse blijft verplicht.
+export const REQUIRED_ATTRIBUTES: readonly ReceiptAttribute[] = ['tradeClass'];
 
 export interface EnteredAttributes {
     // Land (ISO-code) uit de landkiezer; null = nog niet gekozen.

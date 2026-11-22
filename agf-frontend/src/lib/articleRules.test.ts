@@ -13,7 +13,7 @@ const article = (over: Partial<Article> = {}): Article => ({
 });
 
 describe('article payload', () => {
-    test('product kind, country, size and class are required; everything else stays empty (null) when not recorded', () => {
+    test('product kind, country and class are required; size and everything else stay empty (null) when not recorded', () => {
         const result = buildArticlePayload({ ...emptyArticleDraft(), sizeCategory: '18', tradeClass: 'I', originCountryCode: 'PE', productName: ' Tomaat ' });
         assert.equal(result.ok, true);
         if (!result.ok) return;
@@ -26,10 +26,10 @@ describe('article payload', () => {
         assert.equal(result.value.weightMethod, 'Weighed');
         const missing = buildArticlePayload(emptyArticleDraft());
         assert.equal(missing.ok, false);
-        if (!missing.ok) assert.deepEqual(groupArticleErrors(missing.errors), { productName: ['required'], originCountryCode: ['required'], sizeCategory: ['size_required'], tradeClass: ['class_required'] });
-        const typed = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', sizeCategory: 'n.v.t.', tradeClass: 'klasse 2' });
+        if (!missing.ok) assert.deepEqual(groupArticleErrors(missing.errors), { productName: ['required'], originCountryCode: ['required'], tradeClass: ['class_required'] });
+        const typed = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Gember', sizeCategory: '  ', tradeClass: 'klasse 2' });
         assert.equal(typed.ok, true);
-        if (typed.ok) assert.deepEqual([typed.value.sizeCategory, typed.value.tradeClass], ['n.v.t.', 'II'], 'the fixed class is sent, never the typed spelling; n.v.t. is a real size');
+        if (typed.ok) assert.deepEqual([typed.value.sizeCategory, typed.value.tradeClass], [null, 'II'], 'the fixed class is sent, never the typed spelling; no size is null');
         const unknown = buildArticlePayload({ ...emptyArticleDraft(), originCountryCode: 'PE', productName: 'Tomaat', sizeCategory: '18', tradeClass: 'klasse A' });
         assert.equal(unknown.ok, false);
         if (!unknown.ok) assert.deepEqual(groupArticleErrors(unknown.errors), { tradeClass: ['class_invalid'] });

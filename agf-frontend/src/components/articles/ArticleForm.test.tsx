@@ -41,7 +41,7 @@ describe('ArticleForm', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('a new article needs a product kind, a country, a size and a class; "PE" chooses Peru, "1" chooses class I; optional fields are null', async () => {
+    test('a new article needs a product kind, a country and a class (size is optional); "PE" chooses Peru, "1" chooses class I; optional fields are null', async () => {
         let saved: Article | null = null;
         respond = (call) => json(201, { ...hass, id: 7, productName: call.body && typeof call.body === 'object' ? (call.body as { productName: string }).productName : '', variantName: '', description: 'Tomaat', shortcutCode: 'tom', packagingUnit: null, weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultPackagesPerPallet: null });
         await mounted.render(<ArticleForm article={null} reference={reference} countries={countries} onSaved={(article) => { saved = article; }} onClose={() => {}} />);
@@ -50,14 +50,13 @@ describe('ArticleForm', () => {
         await type(input('shortcutCode'), 'tom');
         await type(input('productName'), 'Tomaat');
         await save();
-        assert.equal(calls.length, 0, 'no country, size or class: nothing sent');
+        assert.equal(calls.length, 0, 'no country or class: nothing sent');
         assert.ok(text().includes('articles_error_required'));
-        assert.ok(text().includes('articles_error_size_required'));
+        assert.notEqual(input('sizeCategory').getAttribute('aria-invalid'), 'true', 'an empty size is fine');
         assert.ok(text().includes('articles_error_class_required'));
         await type(input('originCountryCode'), 'PE');
         await act(async () => { input('originCountryCode').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
         assert.equal(input('originCountryCode').value, 'Peru', 'the country is shown, not the abbreviation');
-        await type(input('sizeCategory'), 'n.v.t.');
         await type(input('tradeClass'), '1');
         await act(async () => { input('tradeClass').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
         assert.equal(input('tradeClass').value, 'I', 'the fixed class is shown, never the typed spelling');
@@ -65,7 +64,7 @@ describe('ArticleForm', () => {
         await mounted.waitFor(() => calls.length === 1, 'posted');
         assert.equal(calls[0].method, 'POST');
         assert.deepEqual(calls[0].body, {
-            productName: 'Tomaat', variantName: null, shortcutCode: 'tom', originCountryCode: 'PE', brand: null, sizeCategory: 'n.v.t.', packaging: null, packagingUnit: null, season: null, notes: null,
+            productName: 'Tomaat', variantName: null, shortcutCode: 'tom', originCountryCode: 'PE', brand: null, sizeCategory: null, packaging: null, packagingUnit: null, season: null, notes: null,
             weightMethod: 'Weighed', defaultNetKgPerPackage: null, defaultGrossKgPerPackage: null, defaultPackagesPerPallet: null, goodsCode: null, goodsCodeSystem: null, tradeClass: 'I',
         });
         await mounted.waitFor(() => saved !== null, 'onSaved called');
@@ -81,6 +80,15 @@ describe('ArticleForm', () => {
         await save();
         await mounted.waitFor(() => calls.some((call) => call.method === 'PUT'), 'saved');
         assert.equal((calls.find((call) => call.method === 'PUT')!.body as { season: string | null }).season, 'Mei - Augustus', 'the stored value is not cleared');
+    });
+
+    test('the same combination twice (also twice without size) gets a clear message pointing to the existing article', async () => {
+        respond = () => json(409, { message: 'exists', code: 'ARTICLE_EXISTS', articleId: 12, archived: false });
+        await mounted.render(<ArticleForm article={{ ...hass, sizeCategory: null, tradeClass: 'I' }} reference={reference} countries={countries} onSaved={() => {}} onClose={() => {}} />);
+        await save();
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="article-duplicate"]') !== null, 'duplicate shown');
+        assert.ok(text().includes('articles_error_duplicate'));
+        assert.equal((calls[0].body as { sizeCategory: unknown }).sizeCategory, null);
     });
 
     test('a code typed by hand that is not in the list gives a warning, never a block; a known code gives none', async () => {

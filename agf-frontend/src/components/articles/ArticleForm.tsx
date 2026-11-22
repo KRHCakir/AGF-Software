@@ -29,6 +29,14 @@ import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
 const codeKey = (code: string) => `articles_error_${code}`;
 
+// 409 ARTICLE_EXISTS: precies deze combinatie (productsoort, ras, herkomst, maat, verpakking, klasse, merk) bestaat al.
+function duplicateOf(error: ApiError): { articleId: number; archived: boolean } | null {
+    const body = error.body;
+    if (error.status !== 409 || typeof body !== 'object' || body === null) return null;
+    const value = body as { code?: unknown; articleId?: unknown; archived?: unknown };
+    return value.code === 'ARTICLE_EXISTS' && typeof value.articleId === 'number' ? { articleId: value.articleId, archived: value.archived === true } : null;
+}
+
 function hasTradeValues(draft: ArticleDraft): boolean {
     return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.notes !== '';
 }
@@ -155,7 +163,11 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                 <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting}>{t('articles_cancel')}</button>
             </div>
             {notice && <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900" data-tour="article-notice">{notice}</p>}
-            {serverError && <ErrorNotice error={serverError} />}
+            {serverError && duplicateOf(serverError) !== null
+                ? <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-2 text-sm text-red-900" data-testid="article-duplicate">
+                    {t(duplicateOf(serverError)!.archived ? 'articles_error_duplicate_archived' : 'articles_error_duplicate', { id: String(duplicateOf(serverError)!.articleId) })}
+                </p>
+                : serverError && <ErrorNotice error={serverError} />}
 
             <fieldset className="grid grid-cols-2 gap-3 md:grid-cols-4" disabled={submitting}>
                 <legend className="px-1 text-sm font-semibold text-gray-900">{t('articles_section_identity')}</legend>
@@ -172,7 +184,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     )}
                     <FieldError id="originCountryCode" messages={e('originCountryCode')} />
                 </div>
-                {textField('sizeCategory', 'articles_field_size', { required: true, hintKey: 'articles_hint_size' })}
+                {textField('sizeCategory', 'articles_field_size', { hintKey: 'articles_hint_size' })}
                 <div>
                     <label htmlFor="tradeClass-input" className="text-xs font-medium text-gray-700">{t('articles_field_trade_class')} *</label>
                     <TradeClassPicker id="tradeClass" dataTour="article-class" value={draft.tradeClass} onChange={(tradeClass) => update({ tradeClass })} disabled={submitting}
