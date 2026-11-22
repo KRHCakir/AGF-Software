@@ -8,7 +8,9 @@ import { FirstStepLink } from '../../../components/shared/FirstStep';
 import InvoiceRefActions from '../../../components/purchase/InvoiceRefActions';
 import { BILLING_STATUSES } from '../../../types/purchaseOrder';
 import PurchaseOrderDetail from '../../../components/purchase/PurchaseOrderDetail';
-import PurchaseOrderList from '../../../components/purchase/PurchaseOrderList';
+import PurchaseOrderList, { PURCHASE_ORDER_SORT_KEYS } from '../../../components/purchase/PurchaseOrderList';
+import { useListSort } from '../../../components/shared/useListSort';
+import { sortParams } from '../../../lib/listSort';
 import PendingCommandsBanner from '../../../components/sales/PendingCommandsBanner';
 import { HydratedGate, PendingCommandsProvider, usePendingCommands } from '../../../components/sales/PendingCommandsContext';
 import { inputClass } from '../../../components/supply/FieldError';
@@ -84,7 +86,9 @@ function PurchaseOrdersWorkspace() {
         const handle = setTimeout(() => { setDebounced(query.trim()); setDebouncedReference(reference.trim()); }, 250);
         return () => clearTimeout(handle);
     }, [query, reference]);
-    useEffect(() => { setPage(1); }, [debounced, debouncedReference, status, vendorId, documentFilter, billingFilter]);
+    // Sorteren op een kolom (feedback 22 november): op de server, over alle orders; onthouden per scherm in deze browser.
+    const { sort, ready: sortReady, toggle: toggleSort, setSort } = useListSort('purchase-orders', PURCHASE_ORDER_SORT_KEYS);
+    useEffect(() => { setPage(1); }, [debounced, debouncedReference, status, vendorId, documentFilter, billingFilter, sort]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -93,13 +97,14 @@ function PurchaseOrdersWorkspace() {
     }, []);
 
     useEffect(() => {
+        if (!sortReady) return;
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        listPurchaseOrders({ query: debounced, status, vendorId: vendorId === '' ? null : Number(vendorId), supplierReference: debouncedReference, document: documentFilter, billing: billingFilter, page, pageSize: PAGE_SIZE }, controller.signal)
+        listPurchaseOrders({ query: debounced, status, vendorId: vendorId === '' ? null : Number(vendorId), supplierReference: debouncedReference, document: documentFilter, billing: billingFilter, page, pageSize: PAGE_SIZE, ...sortParams(sort) }, controller.signal)
             .then((data) => setList({ status: 'ready', data }))
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [debounced, debouncedReference, status, vendorId, documentFilter, billingFilter, page, reloadToken]);
+    }, [debounced, debouncedReference, status, vendorId, documentFilter, billingFilter, page, reloadToken, sort, sortReady]);
 
     useEffect(() => {
         if (selectedId === null) { setDetail(null); return; }
@@ -191,7 +196,7 @@ function PurchaseOrdersWorkspace() {
                 : <EmptyState title={t('po_list_empty')} />)}
             {list.status === 'ready' && list.data.items.length > 0 && (
                 <>
-                    <PurchaseOrderList items={list.data.items} selectedId={selectedId} onOpen={open} />
+                    <PurchaseOrderList items={list.data.items} selectedId={selectedId} onOpen={open} sort={sort} onSort={toggleSort} onSortChange={setSort} />
                     {pages > 1 && (
                         <nav className="flex items-center gap-2 text-sm" aria-label={t('po_paging')}>
                             <button type="button" className={secondaryButtonClass} disabled={page <= 1} onClick={() => setPage((n) => n - 1)}>‹</button>

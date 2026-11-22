@@ -55,7 +55,7 @@ describe('purchase order invoices', () => {
             customerName: null, status: 'Ordered', storedStatus: 'Expected', expectedQuantity: 264, expectedNetWeightKg: null, receivedQuantity: 0, rejectedQuantity: 0,
             invoiceNumbers: [], invoiceIndicator: 'None', documentStatus: 'Open', ...over,
         });
-        await mounted.render(<PurchaseOrderList items={[item({ billingStatus: 'None' }), item({ id: 57, orderNumber: 'IO-2026-0057', billingStatus: 'Full' })]} selectedId={null} onOpen={() => {}} />);
+        await mounted.render(<PurchaseOrderList items={[item({ billingStatus: 'None' }), item({ id: 57, orderNumber: 'IO-2026-0057', billingStatus: 'Full' })]} selectedId={null} onOpen={() => {}} sort={null} onSort={() => {}} onSortChange={() => {}} />);
         // De lijst staat er als tabel en (smal scherm) als kaarten: elke order heeft haar badge.
         const keys = [...mounted.container.querySelectorAll('[data-tour="po-billing-status"]')].map((badge) => badge.getAttribute('data-tour-key'));
         assert.deepEqual([...new Set(keys)], ['None', 'Full']);

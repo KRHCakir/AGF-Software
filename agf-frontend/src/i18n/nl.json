@@ -3226,5 +3226,9 @@
   "sort_amount_asc": "laag–hoog",
   "sort_amount_desc": "hoog–laag",
   "sort_date_asc": "oud–nieuw",
-  "sort_date_desc": "nieuw–oud"
+  "sort_date_desc": "nieuw–oud",
+  "inspection_sort_pallet": "Pallet",
+  "inspection_sort_received": "Ontvangen",
+  "inspection_sort_location": "Locatie",
+  "inspection_sort_product": "Product"
 }

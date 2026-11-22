@@ -45,6 +45,7 @@ const select = (id: string) => mounted.container.querySelector<HTMLSelectElement
 describe('Purchase orders page', () => {
     beforeEach(() => {
         window.sessionStorage.clear();
+        window.localStorage.clear();
         listUrls = [];
         current = detail();
         listItems = [item()];
@@ -158,5 +159,35 @@ describe('Purchase orders page', () => {
         await mounted.waitFor(() => posted.length === 1, 'POST');
         assert.match(posted[0].url, /\/purchase-orders\/7\/invoice-refs$/);
         await mounted.waitFor(() => listUrls.length >= 2 && (mounted.container.textContent ?? '').split('F-4712').length > 2, 'number in detail and list');
+    });
+
+    test('sorting on a column header asks the server (over all pages), resets to page 1 and is remembered for this screen', async () => {
+        navigate('/purchase-orders');
+        await mounted.render(<PurchaseOrdersPage />);
+        await mounted.waitFor(() => mounted.hasText('IO-2026-0007'), 'list');
+        assert.ok(!listUrls[0].includes('sort='), 'default order: no sort parameter');
+        const vendor = () => mounted.container.querySelector<HTMLButtonElement>('table [data-sort-key="vendor"]')!;
+        await click(vendor());
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('sort=vendor') && url.includes('direction=asc') && url.includes('page=1')), 'ascending request');
+        assert.equal(vendor().closest('th')!.getAttribute('aria-sort'), 'ascending');
+        await click(vendor());
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('sort=vendor') && url.includes('direction=desc')), 'descending request');
+        assert.equal(window.localStorage.getItem('agf_sort_purchase-orders'), 'vendor:desc');
+        // De tweede knop in de nummerkolom sorteert op het eigen IO-nummer; aria-sort staat dan op die kolom.
+        await click(mounted.container.querySelector<HTMLButtonElement>('table [data-sort-key="orderNumber"]')!);
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('sort=orderNumber')), 'own number');
+        assert.equal(mounted.container.querySelector('table [data-sort-key="number"]')!.closest('th')!.getAttribute('aria-sort'), 'ascending');
+        // Op 390 px: de keuzelijst met dezelfde velden.
+        assert.equal(select('po-sort').value, 'orderNumber:asc');
+        await act(async () => { setSelectValue(select('po-sort'), 'amount:desc'); });
+        await mounted.waitFor(() => listUrls.some((url) => url.includes('sort=amount') && url.includes('direction=desc')), 'select request');
+
+        // Opnieuw openen: de eerste vraag aan de server is al gesorteerd.
+        await mounted.unmount();
+        listUrls = [];
+        mounted = new Mounted();
+        await mounted.render(<PurchaseOrdersPage />);
+        await mounted.waitFor(() => listUrls.length > 0, 'list after reload');
+        assert.ok(listUrls[0].includes('sort=amount') && listUrls[0].includes('direction=desc'), listUrls[0]);
     });
 });

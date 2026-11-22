@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import PurchaseInvoiceDetail from '../../../components/costs/PurchaseInvoiceDetail';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import { FirstStepLink } from '../../../components/shared/FirstStep';
@@ -16,6 +16,21 @@ import { listPurchaseInvoices } from '../../../services/purchaseInvoiceService';
 import type { PurchaseInvoice } from '../../../types/purchaseInvoice';
 import { primaryButtonClass } from '../../../components/supply/SuccessPanel';
 import { listRowClass, rowClick } from '../../../lib/listRows';
+import { type SortColumns, sortRows } from '../../../lib/listSort';
+import { SortHeader } from '../../../components/shared/SortHeader';
+import { useListSort } from '../../../components/shared/useListSort';
+
+// Sorteren op de kolomkoppen (feedback 22 november). De lijst toont de 200 nieuwste facturen (zoeken vindt oudere); er wordt binnen de
+// getoonde facturen gesorteerd. Het bedrag sorteert op het bedrag in euro.
+const INVOICE_COLUMNS: SortColumns<PurchaseInvoice> = {
+    date: { kind: 'date', value: (invoice) => invoice.invoiceDate },
+    number: { kind: 'natural', value: (invoice) => invoice.invoiceNumber },
+    vendor: { kind: 'text', value: (invoice) => invoice.vendorName },
+    due: { kind: 'date', value: (invoice) => invoice.dueDate },
+    total: { kind: 'number', value: (invoice) => invoice.totalAmountEur ?? (isEuro(invoice.currency) ? invoice.totalAmount : null) },
+    status: { kind: 'text', value: (invoice) => invoice.status },
+};
+const INVOICE_SORT_KEYS = Object.keys(INVOICE_COLUMNS);
 
 // Valuta-ronde: het totaal in euro (vastgelegde koers), met het bedrag in de factuurvaluta eronder; nooit valuta door elkaar. Een oudere
 // factuur in een andere valuta zonder vastgelegde koers heeft nog geen eurobedrag ("–").
@@ -64,6 +79,8 @@ function PurchaseInvoicesWorkspace() {
             }), query === '' ? 0 : 300);
         return () => { clearTimeout(timer); controller.abort(); };
     }, [reloadToken, query]);
+    const { sort, toggle } = useListSort('purchase-invoices', INVOICE_SORT_KEYS);
+    const rows = useMemo(() => (state.status === 'ready' ? sortRows(state.data, INVOICE_COLUMNS, sort) : []), [state, sort]);
 
 
     return (
@@ -91,12 +108,12 @@ function PurchaseInvoicesWorkspace() {
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
-                                <th scope="col" className="px-3 py-2">{t('invoice_date')}</th>
-                                <th scope="col" className="px-3 py-2">{t('invoice_number')}</th>
-                                <th scope="col" className="px-3 py-2">{t('purchase_vendor')}</th>
-                                <th scope="col" className="px-3 py-2">{t('purchase_due_date')}</th>
-                                <th scope="col" className="px-3 py-2 text-right">{t('purchase_col_total')}<span className="block font-normal normal-case">{t('po_amount_eur_hint')}</span></th>
-                                <th scope="col" className="px-3 py-2">{t('purchase_col_status')}</th>
+                                <SortHeader className="px-3 py-2 align-top" label={t('invoice_date')} sortKey="date" sort={sort} onSort={toggle} />
+                                <SortHeader className="px-3 py-2 align-top" label={t('invoice_number')} sortKey="number" sort={sort} onSort={toggle} />
+                                <SortHeader className="px-3 py-2 align-top" label={t('purchase_vendor')} sortKey="vendor" sort={sort} onSort={toggle} />
+                                <SortHeader className="px-3 py-2 align-top" label={t('purchase_due_date')} sortKey="due" sort={sort} onSort={toggle} />
+                                <SortHeader className="px-3 py-2 text-right align-top" label={t('purchase_col_total')} sortKey="total" sort={sort} onSort={toggle}><span className="block font-normal normal-case">{t('po_amount_eur_hint')}</span></SortHeader>
+                                <SortHeader className="px-3 py-2 align-top" label={t('purchase_col_status')} sortKey="status" sort={sort} onSort={toggle} />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -106,7 +123,7 @@ function PurchaseInvoicesWorkspace() {
                                         action={<FirstStepLink href="/purchase-invoices/new" label={t('purchase_new_title')} />} />
                                 </td></tr>
                             )}
-                            {state.data.map((invoice, index) => (
+                            {rows.map((invoice, index) => (
                                 <tr key={invoice.id} aria-selected={invoice.id === selected} className={listRowClass(index, { selected: invoice.id === selected, clickable: true })}
                                     onClick={rowClick(() => open(invoice.id))} data-testid={`purchase-invoice-row-${invoice.id}`}>
                                     <td className="px-3 py-2">{invoice.invoiceDate ? formatCalendarDate(invoice.invoiceDate, locale) : '–'}</td>
