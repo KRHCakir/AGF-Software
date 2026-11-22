@@ -8,6 +8,8 @@ import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { resolveLineWeight, weightPayload, type LineWeight } from './lineWeight.ts';
 import { parseUnitPrice } from './packaging.ts';
 import { lineTotal, packagesPerPallet, pallets, sumLines, type PurchaseLineTotals } from './purchaseLine.ts';
+import { normalizeGgn } from './ggn.ts';
+import { ggnProblem } from './productGgn.ts';
 
 export interface PurchaseLineDraft {
     key: string;
@@ -21,6 +23,9 @@ export interface PurchaseLineDraft {
     // eenheid van het artikel; op de regel kiezen kan niet meer (fixes 5b). Een ander artikel kiezen maakt dit veld leeg.
     unit: PackageUnit | '';
     lotNumber: string;
+    // Certificaten deel 2: GGN van het product (zie productGgn.ts); ggnTouched = door de gebruiker gezet of opgeslagen.
+    ggn: string;
+    ggnTouched?: boolean;
 }
 
 // Wat de regel van het artikel nodig heeft (een VariantOption voldoet).
@@ -31,14 +36,15 @@ export interface PurchaseArticle {
     defaultPackagesPerPallet: number | null;
 }
 
-export const emptyPurchaseLine = (key: string): PurchaseLineDraft => ({ key, productVariantId: '', quantity: '', unitPrice: '', unit: '', lotNumber: '' });
+export const emptyPurchaseLine = (key: string): PurchaseLineDraft => ({ key, productVariantId: '', quantity: '', unitPrice: '', unit: '', lotNumber: '', ggn: '' });
 
 // Een lege regel (bijvoorbeeld de nieuwe regel na Tab op het laatste veld) telt niet mee bij opslaan, zolang er een gevulde regel is.
 export function isBlankPurchaseLine(line: PurchaseLineDraft): boolean {
-    return line.productVariantId === '' && line.quantity.trim() === '' && line.unitPrice.trim() === '' && !line.grossKgEntered && line.lotNumber.trim() === '';
+    return line.productVariantId === '' && line.quantity.trim() === '' && line.unitPrice.trim() === '' && !line.grossKgEntered && line.lotNumber.trim() === ''
+        && (line.ggn ?? '').trim() === '';
 }
 
-export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity' | 'expectedUnit' | 'expectedGrossWeightKg' | 'unitPrice'; code: DecimalError | 'required' | 'gross_below_net' };
+export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity' | 'expectedUnit' | 'expectedGrossWeightKg' | 'unitPrice' | 'ggn'; code: DecimalError | 'required' | 'gross_below_net' | 'ggn_13_digits' };
 
 export interface PurchaseLineRow {
     quantity: number | null;
@@ -66,6 +72,7 @@ export function purchaseLineRow(line: PurchaseLineDraft, article: PurchaseArticl
     if (!resolved.ok) for (const error of resolved.errors) errors.push({ field: 'expectedGrossWeightKg', code: error.code });
     const price = parseUnitPrice(line.unitPrice);
     if (!price.ok) errors.push({ field: 'unitPrice', code: price.error });
+    if (ggnProblem(line.ggn ?? '') === 'ggn_13_digits') errors.push({ field: 'ggn', code: 'ggn_13_digits' });
     const perPallet = packagesPerPallet(null, article?.defaultPackagesPerPallet);
     return {
         quantity, unit, weight: resolved.ok ? resolved.value : null, price: price.ok ? price.value : null,
@@ -97,6 +104,7 @@ export function purchaseLinePayloads(lines: readonly PurchaseLineDraft[], articl
             expectedUnit: (row.unit === '' ? 'box' : row.unit) as PackageUnit,
             expectedNetWeightKg: null,
             lotNumber: lot === '' ? null : lot,
+            ggn: normalizeGgn(line.ggn ?? '') === '' ? null : normalizeGgn(line.ggn ?? ''),
             palletCount: null,
             packagesPerPallet: null,
             ...(row.weight !== null ? weightPayload(row.weight, 'expectedNetWeightKg', 'expectedGrossWeightKg') : {}),

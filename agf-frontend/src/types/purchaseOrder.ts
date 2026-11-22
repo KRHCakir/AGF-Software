@@ -77,6 +77,8 @@ export interface PurchaseOrderLine {
     packaging?: string | null;
     brand?: string | null;
     lotNumber: string | null;
+    // Certificaten deel 2: GGN van het product op de regel (ontbreekt bij een oudere server).
+    ggn?: string | null;
     partijId?: number | null;
     partijNumber?: string | null;
     // Stap 4b (ontbreekt bij een oudere server): al gefactureerd en nog open om te factureren.
@@ -272,6 +274,7 @@ export interface UpdatePurchaseOrderLineRequest {
     expectedGrossWeightKg?: number | null;
     weightSource?: string | null;
     lotNumber: string | null;
+    ggn?: string | null;
     palletCount: number | null;
     packagesPerPallet: number | null;
     loosePackages?: number | null;
@@ -312,7 +315,8 @@ export interface CorrectPurchaseOrderRequest {
     reason: string;
     supplierReference: string | null;
     note: string | null;
-    lines: { id: number; unitPrice: number | null }[];
+    // Certificaten deel 2: ggn weggelaten = ongewijzigd, '' = leegmaken.
+    lines: { id: number; unitPrice: number | null; ggn?: string }[];
 }
 
 export interface PurchaseLineTotalsDto {

@@ -274,7 +274,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         for (const { index, error } of built.errors) {
             const message = error.code === 'required'
                 ? t(error.field === 'expectedUnit' ? 'po_line_unit_missing' : 'supply_error_required')
-                : error.code === 'gross_below_net' ? t('line_kg_gross_below_net') : t(decimalErrorKey(error.code));
+                : error.code === 'gross_below_net' ? t('line_kg_gross_below_net') : error.code === 'ggn_13_digits' ? t('supply_error_ggn') : t(decimalErrorKey(error.code));
             addError(found, `lines[${index}].${error.field}`, message);
         }
         const seen = new Set<string>();

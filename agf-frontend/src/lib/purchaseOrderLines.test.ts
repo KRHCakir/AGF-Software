@@ -39,15 +39,23 @@ describe('purchase order line drafts', () => {
     test('an empty line is skipped when there is a filled one, keeping the form index for the error keys; totals ignore it', () => {
         assert.ok(isBlankPurchaseLine(emptyPurchaseLine('x')));
         assert.equal(isBlankPurchaseLine({ ...emptyPurchaseLine('x'), unitPrice: '1' }), false);
+        assert.equal(isBlankPurchaseLine({ ...emptyPurchaseLine('x'), ggn: '4049928415684' }), false, 'a typed GGN is not an empty line');
         const lines = [emptyPurchaseLine('a'), line({ quantity: '', unitPrice: '2' }), emptyPurchaseLine('c')];
         const built = purchaseLinePayloads(lines, () => avocado);
         assert.deepEqual(built.lines.map((entry) => entry.index), [1]);
         assert.deepEqual(built.errors, [{ index: 1, error: { field: 'expectedQuantity', code: 'required' } }]);
         const ok = purchaseLinePayloads([line({ quantity: '7', unitPrice: '12' }), emptyPurchaseLine('b')], () => avocado);
-        assert.deepEqual(ok.lines.map((entry) => entry.payload), [{ productVariantId: 1, expectedQuantity: 7, expectedUnit: 'colli', expectedNetWeightKg: 28, lotNumber: null, palletCount: null, packagesPerPallet: null, expectedGrossWeightKg: 30.8, weightSource: 'Calculated', unitPrice: 12 }]);
+        assert.deepEqual(ok.lines.map((entry) => entry.payload), [{ productVariantId: 1, expectedQuantity: 7, expectedUnit: 'colli', expectedNetWeightKg: 28, lotNumber: null, ggn: null, palletCount: null, packagesPerPallet: null, expectedGrossWeightKg: 30.8, weightSource: 'Calculated', unitPrice: 12 }]);
         assert.deepEqual(purchaseLinePayloads([emptyPurchaseLine('a')], () => avocado).errors.map((entry) => entry.error.field), ['productVariantId', 'expectedQuantity'], 'only empty lines: the first one is checked');
         assert.deepEqual(purchaseLinePayloads([emptyPurchaseLine('a'), emptyPurchaseLine('b'), emptyPurchaseLine('c')], () => avocado).errors.map((entry) => entry.index), [0, 0], 'several empty lines: only the first gets the messages');
         const totals = purchaseLineTotals([purchaseLineRow(line({ quantity: '100', unitPrice: '12,50' }), avocado), purchaseLineRow(line({ quantity: '30' }), noUnit)]);
         assert.deepEqual([totals.quantity, totals.netKg, totals.amount, totals.linesWithoutPrice, totals.linesWithoutPallets], [130, 400, 1250, 1, 1]);
+    });
+
+    test('the GGN of the product goes along normalized, empty is none, and not 13 digits is an error on the line', () => {
+        const built = purchaseLinePayloads([line({ quantity: '7', ggn: '404 9928 415684' }), line({ quantity: '3', ggn: '' })], () => avocado);
+        assert.deepEqual(built.lines.map((entry) => entry.payload.ggn), ['4049928415684', null]);
+        assert.deepEqual(purchaseLineRow(line({ quantity: '7', ggn: '1234' }), avocado).errors, [{ field: 'ggn', code: 'ggn_13_digits' }]);
+        assert.deepEqual(purchaseLineRow(line({ quantity: '7', ggn: '4049928415685' }), avocado).errors, [], 'a wrong check digit is only a warning');
     });
 });
