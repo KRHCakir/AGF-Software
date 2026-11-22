@@ -5916,6 +5916,15 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("OriginCountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character(2)")
+                        .IsFixedLength();
+
+                    b.Property<string>("OriginLegacyText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int?>("PartijId")
                         .HasColumnType("integer");
 
@@ -5956,6 +5965,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("OrderNumber")
                         .IsUnique();
+
+                    b.HasIndex("OriginCountryCode");
 
                     b.HasIndex("PartijId");
 
@@ -7501,6 +7512,11 @@ namespace AgfAdmin.Migrations
                     b.HasOne("AgfAdmin.Models.Customer", "Customer")
                         .WithMany()
                         .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.Country", null)
+                        .WithMany()
+                        .HasForeignKey("OriginCountryCode")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.Partij", "Partij")

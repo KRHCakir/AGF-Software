@@ -92,6 +92,8 @@ namespace AgfAdmin.DTOs
         public int? CustomerId { get; set; }
         public string CustomerName { get; set; }
         public string Origin { get; set; }
+        // Land van de herkomst (ISO-code); null zonder land. Origin zonder land = een oude tekst die nog gecontroleerd moet worden.
+        public string OriginCountryCode { get; set; }
         public string LinesOrigin { get; set; }
         public string Destination { get; set; }
         public DateTime? ExpectedAt { get; set; }
@@ -149,6 +151,8 @@ namespace AgfAdmin.DTOs
         public Guid? RequestId { get; set; }
         public int? ExpectedVersion { get; set; }
         public int VendorId { get; set; }
+        // Zoals bij aanmaken: OriginCountryCode is het land; weggelaten bij een order die nog een oude tekst zonder land heeft = ongewijzigd.
+        public string OriginCountryCode { get; set; }
         public string Origin { get; set; }
         public DateTimeOffset? ExpectedAt { get; set; }
         public string SupplierReference { get; set; }
@@ -414,5 +418,16 @@ namespace AgfAdmin.DTOs
         public decimal OpenQuantity { get; set; }
         public decimal? UnitPrice { get; set; }
         public string PartijNumber { get; set; }
+    }
+
+    // "Herkomst controleren": een order met een oude herkomsttekst zonder land. Definitive = de kop verandert niet meer (alleen ter info).
+    public sealed class PurchaseOrderOriginCheckDto
+    {
+        public int Id { get; set; }
+        public string OrderNumber { get; set; }
+        public string VendorName { get; set; }
+        public string Origin { get; set; }
+        public bool Definitive { get; set; }
+        public List<string> Suggestions { get; set; } = new();
     }
 }

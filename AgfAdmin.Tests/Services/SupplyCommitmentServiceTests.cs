@@ -470,7 +470,7 @@ public class SupplyCommitmentServiceTests : IDisposable
 
         await using var verify = _factory.CreateContext();
         var stored = await verify.SupplyCommitments.Include(c => c.Lines).SingleAsync();
-        Assert.Equal("Kenya", stored.Origin);
+        Assert.Equal(("Kenia", "KE"), (stored.Origin, stored.OriginCountryCode)); // een eenduidige landnaam wordt het land
         Assert.Equal("Turkey", stored.Destination);
         Assert.Equal("LOT-K1", stored.Lines.Single().LotNumber);
     }

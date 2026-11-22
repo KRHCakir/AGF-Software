@@ -9,7 +9,7 @@ namespace AgfAdmin.Data
     {
         private sealed record StoredOrderDocument(int Id, string Route, int VendorId, string SupplierReference, DateOnly OrderedOn, DateTime? ExpectedAt, string Origin,
             string Note, string SupplierLotReference, string OrderChannel, string Status, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia,
-            string Currency, decimal ExchangeRate, DateOnly? ExchangeRateDate, string ExchangeRateSource);
+            string Currency, decimal ExchangeRate, DateOnly? ExchangeRateDate, string ExchangeRateSource, string OriginCountryCode);
 
         private sealed record StoredOrderLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, decimal ExpectedQuantity, decimal? ExpectedNetWeightKg,
             decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, int? ReplacesLineId);
@@ -114,7 +114,8 @@ namespace AgfAdmin.Data
             var orderIds = modifiedOrders.Select(e => e.Entity.Id).Concat(changes.Keys).Concat(edited.Select(e => e.OrderId)).Distinct().ToList();
             var stored = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(c => orderIds.Contains(c.Id))
                 .Select(c => new StoredOrderDocument(c.Id, c.Route, c.VendorId, c.SupplierReference, c.OrderedOn, c.ExpectedAt, c.Origin, c.Note, c.SupplierLotReference, c.OrderChannel,
-                    c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia, c.Currency, c.ExchangeRate, c.ExchangeRateDate, c.ExchangeRateSource)), async, cancellationToken)).ToDictionary(c => c.Id);
+                    c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia, c.Currency, c.ExchangeRate, c.ExchangeRateDate, c.ExchangeRateSource,
+                    c.OriginCountryCode)), async, cancellationToken)).ToDictionary(c => c.Id);
             var trackedOrders = modifiedOrders.ToDictionary(e => e.Entity.Id, e => e.Entity);
 
             foreach (var orderId in orderIds)
@@ -266,6 +267,8 @@ namespace AgfAdmin.Data
             Check(order.OrderedOn != before.OrderedOn, nameof(SupplyCommitment.OrderedOn));
             Check(order.ExpectedAt != before.ExpectedAt, nameof(SupplyCommitment.ExpectedAt));
             Check(!string.Equals(order.Origin, before.Origin, StringComparison.Ordinal), nameof(SupplyCommitment.Origin));
+            // Feedback 22 november: het land van de herkomst hoort bij de kop, net als de tekst.
+            Check(!string.Equals(order.OriginCountryCode, before.OriginCountryCode, StringComparison.Ordinal), nameof(SupplyCommitment.OriginCountryCode));
             Check(!string.Equals(order.Note, before.Note, StringComparison.Ordinal), nameof(SupplyCommitment.Note));
             Check(!string.Equals(order.SupplierLotReference, before.SupplierLotReference, StringComparison.Ordinal), nameof(SupplyCommitment.SupplierLotReference));
             Check(!string.Equals(order.OrderChannel, before.OrderChannel, StringComparison.Ordinal), nameof(SupplyCommitment.OrderChannel));

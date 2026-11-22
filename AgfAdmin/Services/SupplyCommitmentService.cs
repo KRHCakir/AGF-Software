@@ -278,8 +278,9 @@ namespace AgfAdmin.Services
                 AddError(errors, "customerId", "A Warehouse commitment must not be linked to a customer.");
             }
 
-            // Herkomst van de order is optioneel (de herkomst staat per regel bij het artikel); leeg = "" (de kolom blijft verplicht).
-            var origin = string.IsNullOrWhiteSpace(request.Origin) ? "" : ValidateText(request.Origin, required: false, MaxOriginLength, "origin", errors) ?? "";
+            // Herkomst van de order is optioneel (de herkomst staat per regel bij het artikel) en een land uit de vaste lijst; leeg = "".
+            var originCountry = SupplyRules.OriginCountry(request.OriginCountryCode, request.Origin, (key, message) => AddError(errors, key, message));
+            var origin = originCountry?.NameNl ?? "";
             var destination = ValidateText(request.Destination, required: routeIsValid && isDirectTrade, MaxDestinationLength, "destination", errors);
 
             if (request.ExpectedAt == null)
@@ -359,6 +360,7 @@ namespace AgfAdmin.Services
                 Route = request.Route,
                 Status = SupplyRules.StatusExpected,
                 Origin = origin,
+                OriginCountryCode = originCountry?.Code,
                 Destination = destination,
                 ExpectedAt = ToStoredUtc(request.ExpectedAt!.Value),
                 SupplierReference = supplierReference,
@@ -581,6 +583,8 @@ namespace AgfAdmin.Services
                 || existing.CustomerId != candidate.CustomerId
                 || !string.Equals(existing.Route, candidate.Route, StringComparison.Ordinal)
                 || !string.Equals(existing.Origin, candidate.Origin, StringComparison.Ordinal)
+                // Een order van vóór de landcode (alleen tekst) wordt op de tekst herkend; daarna telt ook het land.
+                || (existing.OriginCountryCode != null && !string.Equals(existing.OriginCountryCode, candidate.OriginCountryCode, StringComparison.Ordinal))
                 || !string.Equals(existing.Destination, candidate.Destination, StringComparison.Ordinal)
                 || existing.ExpectedAt?.Ticks != candidate.ExpectedAt?.Ticks)
             {
@@ -657,6 +661,7 @@ namespace AgfAdmin.Services
             Route = commitment.Route,
             Status = commitment.Status,
             Origin = commitment.Origin,
+            OriginCountryCode = commitment.OriginCountryCode,
             Destination = commitment.Destination,
             ExpectedAt = commitment.ExpectedAt == null ? null : DateTime.SpecifyKind(commitment.ExpectedAt.Value, DateTimeKind.Utc),
             CreatedAt = DateTime.SpecifyKind(commitment.CreatedAt, DateTimeKind.Utc),

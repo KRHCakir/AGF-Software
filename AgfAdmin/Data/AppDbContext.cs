@@ -611,6 +611,11 @@ namespace AgfAdmin.Data
                 b.Property(c => c.Route).IsRequired().HasMaxLength(32);
                 b.Property(c => c.Status).IsRequired().HasMaxLength(32);
                 b.Property(c => c.Origin).IsRequired().HasMaxLength(200);
+                // Herkomst als land uit de vaste lijst (zie SupplyCommitment); de oude tekst alleen voor de audit.
+                b.Property(c => c.OriginCountryCode).HasMaxLength(2).IsFixedLength();
+                b.HasIndex(c => c.OriginCountryCode);
+                b.HasOne<Country>().WithMany().HasForeignKey(c => c.OriginCountryCode).OnDelete(DeleteBehavior.Restrict);
+                b.Property(c => c.OriginLegacyText).HasMaxLength(200);
                 b.Property(c => c.Destination).HasMaxLength(200);
 
                 b.HasOne(c => c.Vendor)

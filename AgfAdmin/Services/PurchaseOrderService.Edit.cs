@@ -59,7 +59,8 @@ namespace AgfAdmin.Services
 
             var candidate = SupplyCommitmentService.BuildCandidate(new CreateSupplyCommitmentDto
             {
-                RequestId = request.RequestId, VendorId = request.VendorId, Route = SupplyRules.RouteWarehouse, Origin = request.Origin, ExpectedAt = request.ExpectedAt,
+                RequestId = request.RequestId, VendorId = request.VendorId, Route = SupplyRules.RouteWarehouse, Origin = request.Origin, OriginCountryCode = request.OriginCountryCode,
+                ExpectedAt = request.ExpectedAt,
                 SupplierReference = request.SupplierReference, OrderedOn = request.OrderedOn ?? order.OrderedOn, OrderChannel = request.OrderChannel, Note = request.Note,
                 PartijId = request.PartijId, NewPartij = request.NewPartij, SupplierLotReference = request.SupplierLotReference,
                 Currency = request.Currency ?? order.Currency,
@@ -377,7 +378,11 @@ namespace AgfAdmin.Services
             Text(PurchaseOrderDocumentRules.FieldSupplierReference, order.SupplierReference, candidate.SupplierReference, () => order.SupplierReference = candidate.SupplierReference);
             Text("orderedOn", Date(order.OrderedOn), Date(candidate.OrderedOn), () => order.OrderedOn = candidate.OrderedOn);
             Text("expectedAt", ExpectedDate(order.ExpectedAt), ExpectedDate(candidate.ExpectedAt), () => order.ExpectedAt = candidate.ExpectedAt);
-            Text("origin", Blank(order.Origin), Blank(candidate.Origin), () => order.Origin = candidate.Origin);
+            // Herkomst: het land telt. Een oude order met alleen een tekst zonder land houdt die tekst zolang er geen land gekozen wordt.
+            if (candidate.OriginCountryCode != null || order.OriginCountryCode != null)
+            {
+                Text("origin", order.OriginCountryCode ?? Blank(order.Origin), candidate.OriginCountryCode, () => { order.OriginCountryCode = candidate.OriginCountryCode; order.Origin = candidate.Origin; });
+            }
             Text(PurchaseOrderDocumentRules.FieldNote, order.Note, candidate.Note, () => order.Note = candidate.Note);
             Text("supplierLotReference", order.SupplierLotReference, candidate.SupplierLotReference, () => order.SupplierLotReference = candidate.SupplierLotReference);
             Text("orderChannel", order.OrderChannel, candidate.OrderChannel, () => order.OrderChannel = candidate.OrderChannel);

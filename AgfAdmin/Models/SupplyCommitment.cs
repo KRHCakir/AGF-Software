@@ -17,7 +17,14 @@ namespace AgfAdmin.Models
 
         public string Route { get; set; }       // "Warehouse" of "DirectTrade"
         public string Status { get; set; }      // "Expected", "PartiallyReceived", "Received", "Cancelled", "Delivered", "Rejected"
+        // Herkomst van de order als bijschrift (optioneel; de herkomst per regel staat bij het artikel). Sinds 22 november een land uit de
+        // vaste lijst: OriginCountryCode (ISO 3166-1 alfa-2) is de bron, Origin de Nederlandse naam ("" = geen herkomst). Een oude vrije
+        // tekst die niet eenduidig een land was, blijft in Origin staan zonder code ("Herkomst controleren" in Artikelen).
         public string Origin { get; set; }
+        public string? OriginCountryCode { get; set; }
+        // De herkomsttekst zoals die vóór de omzetting naar een landcode was (migratie OriginCountryOnPurchaseOrder), voor de audit.
+        // Alleen door die migratie gevuld en daarna nooit meer gewijzigd (guardregel 35); null bij orders van na de omzetting.
+        public string? OriginLegacyText { get; set; }
         public string Destination { get; set; } // fysieke bestemming; verplicht voor DirectTrade (afgedwongen in servicecode)
         public DateTime? ExpectedAt { get; set; }
 
