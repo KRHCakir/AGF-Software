@@ -70,6 +70,9 @@ namespace AgfAdmin.Models
         public string DisplayMediaType { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public string CreatedBy { get; set; }
+        // Certificaten deel 2: deze versie is het origineel van een goedgekeurd AI-voorstel (met model, versie, wie en wanneer); anders leeg.
+        public int? AiExtractionId { get; set; }
+        public AiExtraction AiExtraction { get; set; }
     }
 
     // "Klopt dit?" bij inkoop: een product dat niet in het GGN-certificaat van de leverancier staat, of een certificaat dat verlopen is of

@@ -9,7 +9,12 @@ namespace AgfAdmin.Models
     {
         public int Id { get; set; }
         public string Status { get; set; }          // Proposed, Approved, Rejected, Manual, Failed (AiReadingRules)
-        public string DocumentType { get; set; }    // PurchaseInvoice
+        public string DocumentType { get; set; }    // PurchaseInvoice of Certificate (certificaten deel 2)
+        // Certificaten deel 2: bij welke relatie het certificaat gelezen werd (leeg = het eigen bedrijf) en, na goedkeuren, welk certificaat.
+        public int? RelationId { get; set; }
+        public Relation Relation { get; set; }
+        public int? RelationCertificateId { get; set; }
+        public RelationCertificate RelationCertificate { get; set; }
 
         public string FileName { get; set; }
         public string MediaType { get; set; }       // van het origineel (application/pdf, image/jpeg, image/png, image/heic)
