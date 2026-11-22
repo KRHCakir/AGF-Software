@@ -61,6 +61,17 @@ namespace AgfAdmin.Services
             });
         }
 
+        // Btw-tarief van een artikel (feedback 22 november): 9% voor onbewerkte groente en fruit (de standaard), 21% voor bewerkte
+        // producten, 0% waar dat geldt. Een Dienst (handling, transport) is standaard 21%. Btw per land (verlegd, export) komt later.
+        public const decimal VatLow = 9m;
+        public const decimal VatHigh = 21m;
+        public const decimal VatZero = 0m;
+        public static readonly IReadOnlyList<decimal> VatRates = new[] { VatLow, VatHigh, VatZero };
+        public const decimal DefaultVat = VatLow;
+        public const decimal DefaultServiceVat = VatHigh;
+
+        public static bool IsVatRate(decimal value) => VatRates.Contains(value);
+
         // Codestelsels voor goederencodes: HS (WCO, 6 cijfers), CN/GN (EU gecombineerde nomenclatuur, 8 cijfers),
         // TARIC (EU geïntegreerd tarief, 10 cijfers). Een code wordt als tekst bewaard, zodat voorloopnullen blijven.
         public const string SystemHs = "HS";

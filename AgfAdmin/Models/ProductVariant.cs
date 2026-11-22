@@ -57,6 +57,9 @@ namespace AgfAdmin.Models
         // Oude standaard-GGN (vóór de verplaatsing naar leveranciers-GGN's in de relatiewerkplek). Niet meer in de artikelinvoer en
         // nergens meer voorgesteld; de kolom blijft bewaard en wordt gerapporteerd tot de waarden handmatig aan een leverancier zijn toegewezen.
         public string? DefaultGgn { get; set; }
+        // Btw-tarief van het artikel (feedback 22 november): 9 (onbewerkt, de standaard), 21 (bewerkt) of 0. Het voorstel op een nieuwe
+        // factuurregel; per regel aan te passen. Null alleen bij een artikel van vóór de btw dat nog geen tarief heeft ("Btw nog invullen").
+        public decimal? VatPercentage { get; set; } = ArticleRules.DefaultVat;
 
         // Beschikbaarheidseenheid voor nieuwe voorraadflows: "Kilogram" of "Package".
         // Optioneel tijdens de overgang; nooit afgeleid uit maat of verpakking.

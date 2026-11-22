@@ -307,7 +307,8 @@ namespace AgfAdmin.Services
                     {
                         ValidationErrors.Add(errors, $"{key}.discountPercentage", "Discount must be between 0 and 100 with at most 2 decimals.");
                     }
-                    var vat = line.VatPercentage ?? settings.PurchaseInvoiceDefaultVatPercentage;
+                    // Feedback 22 november: zonder ingevuld tarief het tarief van het artikel of kostenartikel, anders de standaard.
+                    var vat = line.VatPercentage ?? variant?.VatPercentage ?? cost?.VatPercentage ?? settings.PurchaseInvoiceDefaultVatPercentage;
                     if (!IsPercentage(vat))
                     {
                         ValidationErrors.Add(errors, $"{key}.vatPercentage", "VAT percentage must be between 0 and 100 with at most 2 decimals.");

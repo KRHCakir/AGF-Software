@@ -50,6 +50,17 @@ namespace AgfAdmin.Services
                 .OrderBy(i => i.Description, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
+        // "Btw nog invullen" (feedback 22 november): artikelen en kostenartikelen (Dienst of emballage) zonder btw-tarief. De migratie gaf
+        // producten 9% en diensten 21%; wat hier staat, kreeg geen tarief (zoals emballage waarover de accountant nog beslist).
+        public async Task<IReadOnlyList<VatCheckItemDto>> VatCheckAsync(CancellationToken cancellationToken = default)
+        {
+            var variants = (await _db.ProductVariants.AsNoTracking().Include(v => v.Product).Where(v => v.VatPercentage == null && !v.IsArchived).ToListAsync(cancellationToken))
+                .Select(v => new VatCheckItemDto { Kind = "Article", Id = v.Id, Description = Describe(v) });
+            var costs = await _db.CostArticles.AsNoTracking().Where(c => c.VatPercentage == null && c.IsActive)
+                .Select(c => new VatCheckItemDto { Kind = c.Kind, Id = c.Id, Description = c.Name }).ToListAsync(cancellationToken);
+            return variants.Concat(costs).OrderBy(i => i.Kind).ThenBy(i => i.Description, StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
         // Alleen het land van een artikel zetten (vanuit "Herkomst opschonen"); de rest van het artikel blijft zoals het is.
         public async Task<ServiceResult<ArticleDto>> SetOriginCountryAsync(int id, SetOriginCountryDto request, CancellationToken cancellationToken = default)
         {
@@ -225,7 +236,7 @@ namespace AgfAdmin.Services
         private sealed record Values(
             string ProductName, string VariantName, string ShortcutCode, string OriginCountryCode, string Origin, string Brand, string SizeCategory, string Packaging,
             string PackagingUnit, string Season, string Notes, string WeightMethod, decimal? NetKg, decimal? GrossKg, decimal? PackagesPerPallet,
-            string GoodsCode, string GoodsCodeSystem, string TradeClass);
+            string GoodsCode, string GoodsCodeSystem, string TradeClass, decimal? VatPercentage);
 
         private async Task<Values> ValidateAsync(SaveArticleDto request, int? selfId, Dictionary<string, List<string>> errors, CancellationToken cancellationToken)
         {
@@ -329,10 +340,16 @@ namespace AgfAdmin.Services
                 system = null; // een stelsel zonder code wordt niet vastgelegd
             }
 
+            // Btw-tarief: 9, 21 of 0; weggelaten = 9 bij aanmaken en ongewijzigd bij wijzigen (Apply).
+            if (request.VatPercentage is { } vat && !ArticleRules.IsVatRate(vat))
+            {
+                ValidationErrors.Add(errors, "vatPercentage", "Choose the VAT rate: 9, 21 or 0 percent.");
+            }
+
             // GGN is geen artikelstandaard meer (leveranciers beheren hun GGN's in de relatiewerkplek). Een oude waarde in
             // ProductVariant.DefaultGgn blijft staan en wordt via api/relations/reference gerapporteerd voor handmatige toewijzing.
             return new Values(productName, variantName, shortcut, country?.Code, country?.NameNl, brand, size, packaging, packagingUnit, season, notes, method,
-                request.DefaultNetKgPerPackage, request.DefaultGrossKgPerPackage, request.DefaultPackagesPerPallet, goodsCode, system, tradeClass);
+                request.DefaultNetKgPerPackage, request.DefaultGrossKgPerPackage, request.DefaultPackagesPerPallet, goodsCode, system, tradeClass, request.VatPercentage);
         }
 
         private static void Apply(ProductVariant variant, Values values)
@@ -354,6 +371,10 @@ namespace AgfAdmin.Services
             variant.GoodsCode = values.GoodsCode;
             variant.GoodsCodeSystem = values.GoodsCodeSystem;
             variant.TradeClass = values.TradeClass;
+            if (values.VatPercentage != null || variant.Id == 0)
+            {
+                variant.VatPercentage = values.VatPercentage ?? ArticleRules.DefaultVat;
+            }
         }
 
         // Zelfde opbouw als describeVariant in de frontend (lib/productSearch.ts): soort · ras · verpakking · herkomst · maat.
@@ -387,7 +408,8 @@ namespace AgfAdmin.Services
             IsArchived = v.IsArchived,
             ArchivedAt = v.ArchivedAt == null ? null : DateTime.SpecifyKind(v.ArchivedAt.Value, DateTimeKind.Utc),
             ArchivedBy = Blank(v.ArchivedBy),
-            DefaultPrice = v.DefaultPrice
+            DefaultPrice = v.DefaultPrice,
+            VatPercentage = v.VatPercentage
         };
 
         private static string Blank(string value) => string.IsNullOrWhiteSpace(value) ? null : value;

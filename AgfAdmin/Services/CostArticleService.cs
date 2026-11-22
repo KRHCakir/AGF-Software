@@ -43,8 +43,35 @@ namespace AgfAdmin.Services
                 .ToListAsync(cancellationToken);
         }
 
+        // Dienst: naam en btw-tarief (0, 9 of 21; weggelaten = 21, feedback 22 november).
         public Task<ServiceResult<CostArticleDto>> CreateAsync(CreateCostArticleDto request, CancellationToken cancellationToken = default) =>
-            CreateAsync(request?.RequestId, request?.Name, CostArticleRules.KindCost, null, null, new Dictionary<string, string[]>(), cancellationToken);
+            CreateAsync(request?.RequestId, request?.Name, CostArticleRules.KindCost, null, request?.VatPercentage ?? ArticleRules.DefaultServiceVat,
+                ServiceVatErrors(request?.VatPercentage), cancellationToken);
+
+        // Btw-tarief van een Dienst; geldt voor nieuwe factuurregels, opgeslagen regels houden hun eigen btw.
+        public async Task<ServiceResult<CostArticleDto>> SetServiceVatAsync(int id, SetCostArticleVatDto request, CancellationToken cancellationToken = default)
+        {
+            var errors = request?.VatPercentage == null
+                ? new Dictionary<string, string[]> { ["vatPercentage"] = new[] { "Choose the VAT rate: 9, 21 or 0 percent." } }
+                : ServiceVatErrors(request.VatPercentage);
+            if (errors.Count > 0)
+            {
+                return ServiceResult<CostArticleDto>.Validation(errors);
+            }
+            var article = await _db.CostArticles.SingleOrDefaultAsync(c => c.Id == id && c.Kind == CostArticleRules.KindCost, cancellationToken);
+            if (article == null)
+            {
+                return ServiceResult<CostArticleDto>.NotFound($"Cost article {id} does not exist.");
+            }
+            article.VatPercentage = request.VatPercentage;
+            await _db.SaveChangesAsync(cancellationToken);
+            return ServiceResult<CostArticleDto>.Ok(await DtoAsync(id, cancellationToken));
+        }
+
+        private static Dictionary<string, string[]> ServiceVatErrors(decimal? vat) =>
+            vat is { } value && !ArticleRules.IsVatRate(value)
+                ? new Dictionary<string, string[]> { ["vatPercentage"] = new[] { "Choose the VAT rate: 9, 21 or 0 percent." } }
+                : new Dictionary<string, string[]>();
 
         // Emballage-artikel: naam, optionele standaardprijs per stuk en een verplicht btw-percentage.
         public Task<ServiceResult<CostArticleDto>> CreatePackagingAsync(SavePackagingArticleDto request, CancellationToken cancellationToken = default) =>

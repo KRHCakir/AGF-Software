@@ -67,6 +67,8 @@ namespace AgfAdmin.Services
                 Packaging = entry.Packaging,
                 TradeClass = entry.TradeClass,
                 Brand = entry.Brand,
+                // Btw-tarief zoals het sjabloon (zelfde product); zonder tarief de standaard 9%.
+                VatPercentage = template.VatPercentage ?? ArticleRules.DefaultVat,
                 // Standaarden van hetzelfde artikel (invoerhulpen, per regel aanpasbaar); het ingevulde kg per verpakking gaat voor.
                 WeightMethod = template.WeightMethod,
                 PackagingUnit = template.PackagingUnit,

@@ -20,6 +20,14 @@ namespace AgfAdmin.DTOs
     {
         public Guid? RequestId { get; set; }
         public string Name { get; set; }
+        // Btw-tarief van de Dienst: 0, 9 of 21; weggelaten = 21 (de standaard voor handling, transport enzovoort).
+        public decimal? VatPercentage { get; set; }
+    }
+
+    // Btw-tarief van een Dienst aanpassen (0, 9 of 21); geldt voor nieuwe factuurregels, opgeslagen regels houden hun eigen btw.
+    public sealed class SetCostArticleVatDto
+    {
+        public decimal? VatPercentage { get; set; }
     }
 
     public sealed class SetCostArticleActiveDto

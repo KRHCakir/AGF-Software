@@ -27,6 +27,11 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Create([FromBody] CreateCostArticleDto request) =>
             this.ToActionResult(await _service.CreateAsync(request, HttpContext?.RequestAborted ?? default));
 
+        // Btw-tarief van een Dienst (feedback 22 november): 0, 9 of 21.
+        [HttpPut("{id:int}/vat")]
+        public async Task<IActionResult> SetVat(int id, [FromBody] SetCostArticleVatDto request) =>
+            this.ToActionResult(await _service.SetServiceVatAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         [HttpPut("{id:int}/active")]
         public async Task<IActionResult> SetActive(int id, [FromBody] SetCostArticleActiveDto request) =>
             this.ToActionResult(await _service.SetActiveAsync(id, request, HttpContext?.RequestAborted ?? default));

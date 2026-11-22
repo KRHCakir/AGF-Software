@@ -474,8 +474,9 @@ namespace AgfAdmin.Data
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_CostArticles_Name_NotBlank", "length(trim(\"Name\")) > 0");
-                    // Kosten hebben geen prijs of btw; emballage altijd een btw-percentage en een eventuele prijs van 0 of meer.
-                    t.HasCheckConstraint("CK_CostArticles_Kind", "(\"Kind\" = 'Cost' AND \"DefaultUnitPrice\" IS NULL AND \"VatPercentage\" IS NULL) OR "
+                    // Kosten hebben geen prijs en een btw-tarief van 0, 9 of 21 (of nog geen); emballage altijd een btw-percentage en een eventuele
+                    // prijs van 0 of meer.
+                    t.HasCheckConstraint("CK_CostArticles_Kind", "(\"Kind\" = 'Cost' AND \"DefaultUnitPrice\" IS NULL AND (\"VatPercentage\" IS NULL OR CAST(\"VatPercentage\" AS NUMERIC) IN (0, 9, 21))) OR "
                         + "(\"Kind\" = 'Packaging' AND \"VatPercentage\" IS NOT NULL AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100 "
                         + "AND (\"DefaultUnitPrice\" IS NULL OR CAST(\"DefaultUnitPrice\" AS NUMERIC) >= 0))");
                 });
@@ -582,6 +583,7 @@ namespace AgfAdmin.Data
                 b.Property(v => v.GoodsCodeSystem).HasMaxLength(8);
                 b.Property(v => v.TradeClass).HasMaxLength(50);
                 b.Property(v => v.DefaultGgn).HasMaxLength(13);
+                b.Property(v => v.VatPercentage).HasPrecision(5, 2);
                 // Herkomst als land uit de vaste lijst; Origin blijft de weergavenaam (zie ProductVariant).
                 b.Property(v => v.OriginCountryCode).HasMaxLength(2).IsFixedLength();
                 b.HasIndex(v => v.OriginCountryCode);
@@ -597,6 +599,7 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_ProductVariants_Archived_HasMoment", "NOT \"IsArchived\" OR \"ArchivedAt\" IS NOT NULL");
                     t.HasCheckConstraint("CK_ProductVariants_WeightMethod_Allowed", "\"WeightMethod\" IN ('Weighed', 'Calculated')");
+                    t.HasCheckConstraint("CK_ProductVariants_VatPercentage_Allowed", "\"VatPercentage\" IS NULL OR CAST(\"VatPercentage\" AS NUMERIC) IN (0, 9, 21)");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultNetKgPerPackage_Positive", "\"DefaultNetKgPerPackage\" IS NULL OR CAST(\"DefaultNetKgPerPackage\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultPackagesPerPallet_Positive", "\"DefaultPackagesPerPallet\" IS NULL OR CAST(\"DefaultPackagesPerPallet\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_ProductVariants_DefaultGrossKgPerPackage_Positive", "\"DefaultGrossKgPerPackage\" IS NULL OR CAST(\"DefaultGrossKgPerPackage\" AS NUMERIC) > 0");
