@@ -1919,6 +1919,7 @@
   "country_alias_remove": "Remove shortcut {alias}",
   "supply_origin_hint": "Only when all lines come from the same country; search by code (PE) or name. Otherwise leave empty; the origin is on each line's article.",
   "supply_origin_legacy": "Check origin: this order said \"{text}\", which is not a country from the list. Choose the country; without a choice the text stays.",
+  "supply_origin_legacy_clear": "Remove text",
   "deviation_attr_weight": "Weight",
   "deviation_without_origin": "without origin",
   "deviation_without_size": "without size",

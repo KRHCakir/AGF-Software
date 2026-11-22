@@ -1919,6 +1919,7 @@
   "country_alias_remove": "Snelkoppeling {alias} verwijderen",
   "supply_origin_hint": "Alleen als alle regels uit hetzelfde land komen; zoek op code (PE) of naam. Anders leeg laten; de herkomst staat per regel bij het artikel.",
   "supply_origin_legacy": "Herkomst controleren: hier stond de tekst \"{text}\", die geen land uit de lijst is. Kies het land; zonder keuze blijft de tekst staan.",
+  "supply_origin_legacy_clear": "Tekst weghalen",
   "deviation_attr_weight": "Gewicht",
   "deviation_without_origin": "zonder herkomst",
   "deviation_without_size": "zonder maat",
