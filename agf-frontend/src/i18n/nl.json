@@ -3116,5 +3116,13 @@
   "cert_check_no": "Nee, ik pas het aan",
   "cert_check_declined": "Niet geboekt, na de vraag over het GGN-certificaat van de leverancier. Pas de regel aan of stop met deze ontvangst.",
   "cert_expiry_more": "De eerste {shown} van {total}; filter hieronder om de rest te zien.",
-  "cert_page_count": "{shown} van {total} certificaten"
+  "cert_page_count": "{shown} van {total} certificaten",
+  "po_line_col_ggn": "GGN",
+  "po_line_ggn_choose_label": "Kies het GGN voor regel {n}",
+  "po_line_ggn_choose": "Kies een GGN…",
+  "po_line_ggn_hint_proposed": "Voorgesteld uit het GGN-certificaat van de leverancier.",
+  "po_line_ggn_hint_choose": "{count} GGN's van de leverancier gelden voor dit product: kies er een of vul het GGN van de factuur in.",
+  "po_line_ggn_hint_chosen": "Uit het GGN-certificaat van de leverancier.",
+  "po_line_ggn_hint_own": "Niet in het GGN-certificaat van de leverancier (bij een handelaar is dat het GGN van de teler).",
+  "po_line_ggn_hint_none": "Geen GGN van de leverancier voor dit product. Staat er een GGN op de factuur, vul dat in."
 }

@@ -9,6 +9,9 @@ import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { type PurchaseArticle, type PurchaseLineDraft, type PurchaseLineRow, isBlankPurchaseLine, purchaseLineTotals } from '../../lib/purchaseOrderLines';
 import { type LineLimits, lineLimits } from '../../lib/purchaseOrderEdit';
+import { ggnHint, ggnProblem } from '../../lib/productGgn';
+import { normalizeGgn } from '../../lib/ggn';
+import type { GgnProposal } from '../../types/productGgn';
 import { unitLabelKey } from '../../lib/units';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
 import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
@@ -18,15 +21,17 @@ import { secondaryButtonClass } from './SuccessPanel';
 
 const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underline underline-offset-2 disabled:text-gray-500';
 
-// De regels van Inkooporder aanmaken in de nieuwe indeling (zie PurchaseLineTable). Tab loopt per regel door Product, Aantal en Prijs
+// De regels van Inkooporder aanmaken in de nieuwe indeling (zie PurchaseLineTable). Tab loopt per regel door Product, Aantal, Prijs en GGN
 // (bij klantgebonden aanvoer daarna de partij); alles wat uit het artikel komt is tekst. Tab op het laatste veld van de laatste regel
 // maakt een nieuwe regel en zet de cursor in haar productveld; een lege regel telt bij opslaan niet mee. De knoppen (Bruto aanpassen,
 // Bruto van het artikel, ✕) staan buiten de Tab-volgorde, zoals de eigenaar wil en net als ⧉ en ✕ bij de inkoopfactuur; met het
 // toetsenbord bereik je ze vanuit elk veld van de regel met Alt+B (Bruto aanpassen), Alt+A (Nieuw artikel) en Alt+R (regel verwijderen), wat onder de tabel
 // staat. Een aangepaste bruto leegmaken zet de regel terug op de bruto van het artikel. Bij aanpassen (stap 4a) zegt `limits` per regel
 // wat vastligt na ontvangst: dan staat de uitleg bij het veld (artikel vast, nooit onder ontvangen, regel blijft staan).
+// Certificaten deel 2: na Prijs het GGN van het product (Tab: Product, Aantal, Prijs, GGN). Het voorstel uit de GGN-certificaten van de
+// leverancier staat eronder (voorgesteld, kiezen bij meer, of geen); de gebruiker mag altijd een eigen nummer typen of het leegmaken.
 export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
-    currency = null, rate = null }: {
+    currency = null, rate = null, ggnProposalOf = () => undefined }: {
     lines: PurchaseLineDraft[];
     // Valuta-ronde: valuta van de order (prijzen en totalen staan erin) en de koers voor het eurobedrag onder het totaal.
     currency?: string | null;
@@ -43,6 +48,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
     onNewArticle?: (key: string) => void;
     productExtra: (line: PurchaseLineDraft, index: number) => ReactNode;
     limits?: (key: string) => LineLimits;
+    ggnProposalOf?: (line: PurchaseLineDraft) => GgnProposal | undefined;
 }) {
     const { t, locale } = useTranslation();
     const labels = usePurchaseLineLabels();
@@ -60,7 +66,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
     const text = (value: string | null | undefined) => (value && value.trim() !== '' ? value : '–');
 
     // Tab op het laatste veld van de laatste (gevulde) regel: een nieuwe regel, cursor in haar product.
-    const onLastField = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
+    const onLastField = (event: KeyboardEvent<HTMLElement>, index: number) => {
         if (event.key !== 'Tab' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || locked) return;
         if (index !== lines.length - 1 || isBlankPurchaseLine(lines[index])) return;
         event.preventDefault();
@@ -99,6 +105,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         <div className="rounded border border-gray-200 max-md:border-0">
             <table className={purchaseLineTableClass} data-testid="purchase-lines">
                 <PurchaseLineHead trailing={<>
+                    <th scope="col" className="px-2 py-1.5">{t('po_line_col_ggn')}</th>
                     {isDirect && <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>}
                     <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                 </>} />
@@ -108,7 +115,12 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         const row = rows[index];
                         const variant = line.productVariantId === '' ? undefined : variantOf(Number(line.productVariantId));
                         const editingGross = line.grossKgEntered === true || grossOpen.has(line.key);
-                        const last = isDirect ? 'lot' : 'price';
+                        const last = isDirect ? 'lot' : 'ggn';
+                        const proposal = line.productVariantId === '' ? undefined : ggnProposalOf(line);
+                        const hint = ggnHint(line, proposal);
+                        const problem = ggnProblem(line.ggn ?? '');
+                        // De keuzelijst staat er bij meer treffers, zolang er geen eigen nummer (buiten de lijst) is ingevuld; dan is zij het laatste veld.
+                        const choosing = proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')));
                         const limit = limits(line.key);
                         return (
                             <tr key={line.key} className={purchaseLineRowClass(index)} data-tour="supply-line" data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
@@ -179,11 +191,32 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} inputMode="decimal" data-decimals={2} value={line.unitPrice} disabled={locked}
                                         data-tour="supply-line-price" data-tour-key={index} onChange={(event) => onChange(line.key, { unitPrice: event.target.value })}
                                         onBlur={() => { const price = parseUnitPrice(line.unitPrice); if (price.ok && price.value !== null) onChange(line.key, { unitPrice: formatAmountInput(price.value) }); }}
-                                        onKeyDown={last === 'price' ? (event) => onLastField(event, index) : undefined}
                                         className={`${inputClass} !mt-0 w-24 text-right`} />
                                     <FieldError id={`${prefix}.unitPrice`} messages={errors(`${prefix}.unitPrice`)} />
                                 </td>
                                 <td {...lineCell('total', labels.total)} data-testid={`${prefix}.total`}>{row?.total == null ? '–' : formatMoney(row.total, currency, locale)}</td>
+                                <td {...lineCell('extra', t('po_line_col_ggn'), 'min-w-[10rem]')}>
+                                    <div className="space-y-1 max-md:text-right">
+                                        <label htmlFor={`${prefix}.ggn-input`} className="sr-only">{t('po_line_col_ggn')} {index + 1}</label>
+                                        <input {...fieldProps(`${prefix}.ggn`, errors(`${prefix}.ggn`))} value={line.ggn ?? ''} disabled={locked} inputMode="numeric" maxLength={20}
+                                            data-tour="supply-line-ggn" data-tour-key={index} onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}
+                                            onKeyDown={last === 'ggn' && !choosing ? (event) => onLastField(event, index) : undefined}
+                                            className={`${inputClass} !mt-0 w-40 font-mono`} />
+                                        {/* Kiezen bij meer treffers; met een eigen nummer (niet in de lijst) is er niets te kiezen. */}
+                                        {proposal?.kind === 'Many' && choosing && (
+                                            <select aria-label={t('po_line_ggn_choose_label', { n: String(index + 1) })} disabled={locked} className={`${inputClass} !mt-0 w-40 text-xs`}
+                                                onKeyDown={last === 'ggn' ? (event) => onLastField(event, index) : undefined}
+                                                value={proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')) ? normalizeGgn(line.ggn ?? '') : ''} data-testid={`${prefix}.ggn-choice`}
+                                                onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}>
+                                                <option value="">{t('po_line_ggn_choose')}</option>
+                                                {proposal.options.map((o) => <option key={o.ggn} value={o.ggn}>{o.ggn}{o.producerName ? ` · ${o.producerName}` : ''}</option>)}
+                                            </select>
+                                        )}
+                                        {hint && <span className="block text-xs text-gray-600" data-testid={`${prefix}.ggn-hint`}>{t(`po_line_ggn_hint_${hint}`, { count: String(proposal?.options.length ?? 0) })}</span>}
+                                        {problem === 'ggn_check_digit' && <span className="block text-xs font-medium text-amber-900" data-testid={`${prefix}.ggn-check-digit`}>{t('cert_warning_ggn_check_digit')}</span>}
+                                        <FieldError id={`${prefix}.ggn`} messages={errors(`${prefix}.ggn`)} />
+                                    </div>
+                                </td>
                                 {isDirect && (
                                     <td {...lineCell('extra', t('supply_lot_optional'))}>
                                         <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
@@ -201,7 +234,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         );
                     })}
                 </tbody>
-                <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 2 : 1} currency={currency} rate={rate} />
+                <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 3 : 2} currency={currency} rate={rate} />
             </table>
             {!locked && <p className="px-2 py-1 text-xs text-gray-600" data-testid="purchase-lines-keys">{t('po_line_keys_hint', { gross: shortcutLabel('adjustGross', isMac), article: shortcutLabel('newArticle', isMac), remove: shortcutLabel('removeLine', isMac) })}</p>}
         </div>
