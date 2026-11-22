@@ -65,9 +65,10 @@ namespace AgfAdmin.Services
             {
                 origin = null;
             }
-            // Wist de client de oude tekst (leeg Origin, geen land), dan moet die tekst echt verdwijnen en dat moet in de audit staan.
+            // Wist de client de oude tekst expliciet (Origin aanwezig maar leeg, geen land), dan moet die tekst echt verdwijnen en dat moet in
+            // de audit staan. Een weggelaten Origin (null) is geen wisactie: de tekst blijft dan staan.
             var clearsLegacyOrigin = order.OriginCountryCode == null && string.IsNullOrWhiteSpace(request.OriginCountryCode)
-                && Blank(request.Origin) == null && Blank(order.Origin) != null;
+                && request.Origin != null && Blank(request.Origin) == null && Blank(order.Origin) != null;
 
             var candidate = SupplyCommitmentService.BuildCandidate(new CreateSupplyCommitmentDto
             {
