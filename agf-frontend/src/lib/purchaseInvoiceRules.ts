@@ -88,6 +88,14 @@ export function proposedVat(current: string, itemVat: number | null, manual: boo
     return untouched ? String(itemVat) : current;
 }
 
+// Wat een artikelkeuze met het btw-veld van een regel doet: het voorgestelde tarief, en bij een regel uit een ouder concept die het voorstel
+// overneemt ook vatManual false, zodat de volgende keuze gewoon volgt (review #312: geen blijvend tarief na een artikel zonder tarief).
+export function vatAfterPick(line: Pick<LineDraft, 'vat' | 'vatManual'>, itemVat: number | null, fallback: { defaultVat: number; previousItemVat: number | null }): Pick<LineDraft, 'vat' | 'vatManual'> {
+    const vat = proposedVat(line.vat, itemVat, line.vatManual, fallback);
+    const followed = line.vatManual === undefined && itemVat !== null && vat === String(itemVat);
+    return followed ? { vat, vatManual: false } : { vat };
+}
+
 export function emptyLine(defaultVat: number): LineDraft {
     return { key: newLineKey(), productVariantId: '', description: '', quantity: '', unit: '', unitPrice: '', discount: '0', vat: String(defaultVat), vatManual: false };
 }
