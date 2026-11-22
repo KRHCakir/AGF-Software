@@ -43,9 +43,23 @@ export default function NewArticlePanel({ onSaved, onClose }: { onSaved: (articl
         else onClose();
     };
 
+    // Tab blijft binnen de bevestiging (ook de ✕ van het paneel is dan niet bereikbaar met Tab).
+    const trapTab = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key !== 'Tab') return;
+        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled])'));
+        if (buttons.length === 0) return;
+        const first = buttons[0];
+        const last = buttons[buttons.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+        else if (!buttons.includes(active as HTMLElement)) { event.preventDefault(); first.focus(); }
+    };
+
     return (
         <SidePanel title={t('new_article_panel_title')} onRequestClose={requestClose} testId="new-article-panel" dataTour="new-article-panel">
-            <div onInput={() => { dirty.current = true; }} onChange={() => { dirty.current = true; }}>
+            {/* Modaal: zolang de vraag open staat is het formulier inert (geen focus, geen invoer, geen opslaan). */}
+            <div onInput={() => { dirty.current = true; }} onChange={() => { dirty.current = true; }} inert={asking}>
                 {error && <ErrorNotice error={error} />}
                 {error === null && (reference === null || countries === null) && <p className="text-sm text-gray-600">{t('articles_loading')}</p>}
                 {reference !== null && countries !== null && (
@@ -54,7 +68,8 @@ export default function NewArticlePanel({ onSaved, onClose }: { onSaved: (articl
                 )}
             </div>
             {asking && !saving && (
-                <div role="alertdialog" aria-modal="true" aria-labelledby="new-article-discard-title" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3" data-testid="new-article-discard">
+                <div role="alertdialog" aria-modal="true" aria-labelledby="new-article-discard-title" className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3" data-testid="new-article-discard"
+                    onKeyDown={trapTab}>
                     <p id="new-article-discard-title" className="text-sm font-semibold text-gray-900">{t('new_article_panel_discard_question')}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                         <button ref={stayButton} type="button" className={primaryButtonClass} onClick={() => setAsking(false)}>{t('new_article_panel_stay')}</button>

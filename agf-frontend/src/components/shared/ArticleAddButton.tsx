@@ -87,7 +87,7 @@ export default function ArticleAddButton({ products, onPick, onNewArticle, disab
                     </ul>
                     {matches.length > shown.length && <p className="mt-1 px-2 text-xs text-gray-600">{t('article_add_more', { count: String(matches.length - shown.length) })}</p>}
                     {onNewArticle && (
-                        <button type="button" className="mt-2 text-sm font-medium text-blue-800 underline underline-offset-2" onClick={() => { close(false); onNewArticle(); }} data-tour="article-add-new">
+                        <button type="button" className="mt-2 text-sm font-medium text-blue-800 underline underline-offset-2" onClick={() => { button.current?.focus(); close(false); onNewArticle(); }} data-tour="article-add-new">
                             + {t('article_add_new')}
                         </button>
                     )}
