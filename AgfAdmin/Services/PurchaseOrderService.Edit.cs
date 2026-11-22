@@ -65,6 +65,9 @@ namespace AgfAdmin.Services
             {
                 origin = null;
             }
+            // Wist de client de oude tekst (leeg Origin, geen land), dan moet die tekst echt verdwijnen en dat moet in de audit staan.
+            var clearsLegacyOrigin = order.OriginCountryCode == null && string.IsNullOrWhiteSpace(request.OriginCountryCode)
+                && Blank(request.Origin) == null && Blank(order.Origin) != null;
 
             var candidate = SupplyCommitmentService.BuildCandidate(new CreateSupplyCommitmentDto
             {
@@ -174,7 +177,7 @@ namespace AgfAdmin.Services
 
             var fields = new List<PurchaseOrderChangeField>();
             ApplyCurrency(order, money, fields);
-            await ApplyHeaderAsync(order, candidate, partijChange, request.PartijId, newPartij, fields, cancellationToken);
+            await ApplyHeaderAsync(order, candidate, partijChange, request.PartijId, newPartij, clearsLegacyOrigin, fields, cancellationToken);
             await ApplyLinesAsync(order, request, next, stored, kept, fields, cancellationToken);
             if (fields.Count == 0)
             {
@@ -370,7 +373,7 @@ namespace AgfAdmin.Services
             : $"1 EUR = {rate.ToString("0.######", CultureInfo.InvariantCulture)} {currency} · {source}{(date == null ? "" : " " + date.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}";
 
         private async Task ApplyHeaderAsync(SupplyCommitment order, SupplyCommitment candidate, PartijChangeKind partijChange, int? partijId, Partij newPartij,
-            List<PurchaseOrderChangeField> fields, CancellationToken cancellationToken)
+            bool clearsLegacyOrigin, List<PurchaseOrderChangeField> fields, CancellationToken cancellationToken)
         {
             void Text(string field, string before, string after, Action apply)
             {
@@ -388,7 +391,11 @@ namespace AgfAdmin.Services
             Text("orderedOn", Date(order.OrderedOn), Date(candidate.OrderedOn), () => order.OrderedOn = candidate.OrderedOn);
             Text("expectedAt", ExpectedDate(order.ExpectedAt), ExpectedDate(candidate.ExpectedAt), () => order.ExpectedAt = candidate.ExpectedAt);
             // Herkomst: het land telt. Een oude order met alleen een tekst zonder land houdt die tekst zolang er geen land gekozen wordt.
-            if (candidate.OriginCountryCode != null || order.OriginCountryCode != null)
+            if (clearsLegacyOrigin)
+            {
+                Text("origin", Blank(order.Origin), null, () => order.Origin = "");
+            }
+            else if (candidate.OriginCountryCode != null || order.OriginCountryCode != null)
             {
                 Text("origin", order.OriginCountryCode ?? Blank(order.Origin), candidate.OriginCountryCode, () => { order.OriginCountryCode = candidate.OriginCountryCode; order.Origin = candidate.Origin; });
             }
