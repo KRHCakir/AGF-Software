@@ -23,6 +23,8 @@ export interface LineDraft {
     unitPrice: string;
     discount: string;
     vat: string;
+    // true zodra de gebruiker het btw-tarief zelf heeft aangepast: dan overschrijft een artikelkeuze het nooit meer. Ontbreekt in oudere concepten.
+    vatManual?: boolean;
     // Regel uit de bon (stap 4b): de orderregel die deze regel factureert, met wat er op de bon staat (lib/invoiceOrderLink.ts).
     orderLine?: OrderLineLink;
 }
@@ -75,10 +77,11 @@ export const MAX_PAYMENT_TERMS_DAYS = 365;
 let lineCounter = 0;
 export const newLineKey = () => `line-${Date.now().toString(36)}-${(lineCounter++).toString(36)}`;
 
-// Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel. Alleen als de regel nog het standaardtarief
-// of het tarief van het vorige artikel heeft: een met de hand gewijzigd tarief blijft staan. Zonder tarief op het artikel: ongewijzigd.
-export function proposedVat(current: string, defaultVat: number, previousItemVat: number | null, itemVat: number | null): string {
-    if (itemVat === null) return current;
+// Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel. Een met de hand gewijzigd tarief (vatManual)
+// blijft altijd staan, ook als het gelijk is aan het standaardtarief. Anders alleen als de regel nog het standaardtarief of het tarief
+// van het vorige artikel heeft. Zonder tarief op het artikel: ongewijzigd.
+export function proposedVat(current: string, defaultVat: number, previousItemVat: number | null, itemVat: number | null, manual = false): string {
+    if (itemVat === null || manual) return current;
     const untouched = current.trim() === String(defaultVat) || (previousItemVat !== null && current.trim() === String(previousItemVat));
     return untouched ? String(itemVat) : current;
 }

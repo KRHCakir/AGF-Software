@@ -607,7 +607,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                                 // Kostenartikel: omschrijving = de naam, aantal 1 als er nog niets staat (het bedrag is dan de prijs).
                                                 const picked = pickedItem(variantId);
                                                 // Btw: het tarief van het gekozen artikel of de Dienst is het voorstel (niet bij een AI-voorstel: daar telt de factuur).
-                                                const vatOf = (itemVat: number | null | undefined) => (ai !== null ? {} : { vat: proposedVat(line.vat, settings.defaultVatPercentage, itemVatOf(line), itemVat ?? null) });
+                                                const vatOf = (itemVat: number | null | undefined) => (ai !== null ? {} : { vat: proposedVat(line.vat, settings.defaultVatPercentage, itemVatOf(line), itemVat ?? null, line.vatManual === true) });
                                                 if (picked.kind === 'cost') {
                                                     const cost = costArticles.find((candidate) => String(candidate.id) === picked.costArticleId);
                                                     updateLine(line.key, { productVariantId: '', costArticleId: picked.costArticleId, description: cost?.name ?? '', ...(line.quantity.trim() === '' ? { quantity: '1' } : {}), ...vatOf(cost?.vatPercentage) });
@@ -657,7 +657,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                     </td>
                                     <td className={`w-20 px-2 py-1.5 ${aiFieldClass(aiLine('vatPercentage'))}`}>
                                         <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{t('purchase_col_vat')} {index + 1}</label>
-                                        <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} inputMode="decimal" value={line.vat} disabled={locked} onChange={(event) => updateLine(line.key, { vat: event.target.value })} className={inputClass} />
+                                        <input {...fieldProps(`${prefix}.vatPercentage`, e(`${prefix}.vatPercentage`))} inputMode="decimal" value={line.vat} disabled={locked} onChange={(event) => updateLine(line.key, { vat: event.target.value, vatManual: true })} className={inputClass} />
                                         <FieldError id={`${prefix}.vatPercentage`} messages={e(`${prefix}.vatPercentage`)} />
                                         <AiFieldHint codes={aiLine('vatPercentage')} />
                                     </td>

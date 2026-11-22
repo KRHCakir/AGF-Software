@@ -177,5 +177,7 @@ describe('btw-voorstel uit het artikel (feedback 22 november)', () => {
         assert.equal(proposedVat('6', 21, 9, 21), '6', 'typed by hand: stays');
         assert.equal(proposedVat('21', 21, null, null), '21', 'article without a rate: unchanged');
         assert.equal(proposedVat(' 21 ', 21, null, 0), '0');
+        assert.equal(proposedVat('21', 21, null, 9, true), '21', 'chosen by hand (equal to standard): stays');
+        assert.equal(proposedVat('9', 21, 9, 21, true), '9', 'chosen by hand (equal to previous article): stays');
     });
 });
