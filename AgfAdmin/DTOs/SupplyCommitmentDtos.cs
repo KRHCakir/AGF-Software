@@ -6,6 +6,9 @@ namespace AgfAdmin.DTOs
         public int VendorId { get; set; }
         public int? CustomerId { get; set; }
         public string Route { get; set; }
+        // Herkomst van de order: een land uit de vaste lijst (ISO-code, bijvoorbeeld "PE"); weggelaten of leeg = geen herkomst. Origin als
+        // tekst blijft voor oudere aanroepen: alleen een eenduidige landnaam of code wordt aangenomen ("Peru", "PE"), anders een fout.
+        public string OriginCountryCode { get; set; }
         public string Origin { get; set; }
         public string Destination { get; set; }
         public DateTimeOffset? ExpectedAt { get; set; }
@@ -78,6 +81,8 @@ namespace AgfAdmin.DTOs
         public string Status { get; set; }
         // Optioneel bijschrift van de order ("" = leeg); de herkomst van de regels staat in LinesOrigin.
         public string Origin { get; set; }
+        // Land van de herkomst (ISO-code); null zonder land.
+        public string OriginCountryCode { get; set; }
         // Afgeleid van de regels (SupplyRules.LinesOrigin): "Peru" of "Chili, Peru"; null zonder herkomst op de regels.
         public string LinesOrigin { get; set; }
         public string Destination { get; set; }

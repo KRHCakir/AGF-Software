@@ -14,6 +14,26 @@ namespace AgfAdmin.Services
             return origins.Count == 0 ? null : string.Join(", ", origins);
         }
 
+        // Herkomst van een order (22 november: een landcode, geen vrije tekst). De code wint; zonder code mag een oudere aanroeper nog een
+        // tekst sturen, maar alleen een eenduidige landnaam of code ("Peru", "peru", "PE") wordt aangenomen. Leeg = geen herkomst (null).
+        public static CountryList.Entry OriginCountry(string code, string text, Action<string, string> addError)
+        {
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                var country = CountryRules.Find(code.Trim().ToUpperInvariant());
+                if (country == null) addError("originCountryCode", $"Country '{code.Trim()}' is not in the country list.");
+                return country;
+            }
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var unambiguous = CountryRules.Unambiguous(text);
+            if (unambiguous == null)
+            {
+                addError("origin", $"Origin '{(text.Trim().Length > 60 ? text.Trim()[..60] + "…" : text.Trim())}' is not one country from the country list; choose the country (for example PE).");
+                return null;
+            }
+            return CountryRules.Find(unambiguous);
+        }
+
         public const string RouteWarehouse = "Warehouse";
         public const string RouteDirectTrade = "DirectTrade";
 

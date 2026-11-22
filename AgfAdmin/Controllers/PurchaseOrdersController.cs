@@ -42,6 +42,10 @@ namespace AgfAdmin.Controllers
                 .Select(part => int.TryParse(part, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
                 .Where(id => id > 0).Distinct().ToList();
 
+        // "Herkomst controleren": orders met een oude herkomsttekst die niet eenduidig een land was (feedback 22 november).
+        [HttpGet("origin-check")]
+        public async Task<IActionResult> OriginCheck() => Ok(await _service.OriginCheckAsync(HttpContext?.RequestAborted ?? default));
+
         [HttpGet("by-supplier-reference")]
         public async Task<IActionResult> BySupplierReference([FromQuery] string supplierReference, [FromQuery] int vendorId) =>
             Ok(await _service.FindBySupplierReferenceAsync(supplierReference, vendorId, HttpContext?.RequestAborted ?? default));

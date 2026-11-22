@@ -395,6 +395,7 @@ namespace AgfAdmin.Services
                 CustomerId = commitment.CustomerId,
                 CustomerName = commitment.Customer?.Name,
                 Origin = commitment.Origin,
+                OriginCountryCode = commitment.OriginCountryCode,
                 LinesOrigin = facts.LinesOrigin,
                 Destination = commitment.Destination,
                 ExpectedAt = commitment.ExpectedAt == null ? null : Utc(commitment.ExpectedAt.Value),

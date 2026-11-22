@@ -32,7 +32,7 @@ public sealed class PurchaseOrderEditHarness(SqliteAppDbContextFactory factory)
     // Het formulier zoals het opent: alle opgeslagen waarden, elke regel met haar id.
     public static UpdatePurchaseOrderDto EditOf(PurchaseOrderDetailDto d) => new()
     {
-        RequestId = Guid.NewGuid(), ExpectedVersion = d.EditVersion, VendorId = d.VendorId, Origin = d.Origin, ExpectedAt = d.ExpectedAt == null ? null : new DateTimeOffset(d.ExpectedAt.Value),
+        RequestId = Guid.NewGuid(), ExpectedVersion = d.EditVersion, VendorId = d.VendorId, OriginCountryCode = d.OriginCountryCode, ExpectedAt = d.ExpectedAt == null ? null : new DateTimeOffset(d.ExpectedAt.Value),
         SupplierReference = d.SupplierReference, OrderedOn = d.OrderedOn, OrderChannel = d.OrderChannel, Note = d.Note, PartijId = d.PartijId, SupplierLotReference = d.SupplierLotReference,
         Lines = d.Lines.Select(l => new UpdatePurchaseOrderLineDto
         {
