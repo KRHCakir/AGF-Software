@@ -78,14 +78,18 @@ let lineCounter = 0;
 export const newLineKey = () => `line-${Date.now().toString(36)}-${(lineCounter++).toString(36)}`;
 
 // Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel, zolang de gebruiker het tarief op die regel
-// niet zelf heeft aangepast (vatManual). Een met de hand gewijzigd tarief blijft altijd staan. Een artikel zonder tarief verandert niets;
-// het volgende artikel met een tarief zet zijn tarief weer (review #312: geen blijvend vorig voorstel).
-export function proposedVat(current: string, itemVat: number | null, manual = false): string {
-    return itemVat === null || manual ? current : String(itemVat);
+// niet zelf heeft aangepast. Een nieuwe regel weet dat (vatManual false of true). Een regel uit een ouder concept heeft die vlag niet: dan
+// telt het tarief alleen als voorstel als het nog het standaardtarief of het tarief van het vorige artikel is (review #312). Een artikel
+// zonder tarief verandert niets; het volgende artikel met een tarief zet zijn tarief weer.
+export function proposedVat(current: string, itemVat: number | null, manual: boolean | undefined, fallback: { defaultVat: number; previousItemVat: number | null }): string {
+    if (itemVat === null || manual === true) return current;
+    if (manual === false) return String(itemVat);
+    const untouched = current.trim() === String(fallback.defaultVat) || (fallback.previousItemVat !== null && current.trim() === String(fallback.previousItemVat));
+    return untouched ? String(itemVat) : current;
 }
 
 export function emptyLine(defaultVat: number): LineDraft {
-    return { key: newLineKey(), productVariantId: '', description: '', quantity: '', unit: '', unitPrice: '', discount: '0', vat: String(defaultVat) };
+    return { key: newLineKey(), productVariantId: '', description: '', quantity: '', unit: '', unitPrice: '', discount: '0', vat: String(defaultVat), vatManual: false };
 }
 
 export function emptyDraft(today: string, settings: PurchaseInvoiceSettings): InvoiceDraft {
