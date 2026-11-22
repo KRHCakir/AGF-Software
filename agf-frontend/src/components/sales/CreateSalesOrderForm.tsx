@@ -52,6 +52,11 @@ import { ruleErrorsToFieldErrors } from './ruleMessages';
 import SubmitErrors from '../shared/SubmitErrors';
 import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
+// Een regel is pas leeg als geen enkel inhoudelijk veld is ingevuld (ook pallets, losse stuks, kg en een gekozen bron).
+const isBlankLine = (line: OrderLineDraft): boolean =>
+    line.productVariantId === '' && line.unit === '' && !line.sourceTouched
+    && [line.quantity, line.palletCount, line.packagesPerPallet, line.loosePackages ?? '', line.netKg ?? '', line.grossKg ?? ''].every((value) => value.trim() === '');
+
 const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()], packagingLines: [] });
 // Voorinvulling vanuit "Verkopen" in Beschikbaarheid: één regel met dit artikel, deze eenheid en dit aantal; de rest kiest de gebruiker.
@@ -251,12 +256,11 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     // Review #314: op de limiet kan de lijst nog een lege laatste regel vullen.
     const lastLine = draft.lines[draft.lines.length - 1];
-    const lastLineBlank = lastLine !== undefined && lastLine.productVariantId === '' && lastLine.quantity.trim() === '';
+    const lastLineBlank = lastLine !== undefined && isBlankLine(lastLine);
     const putArticle = (variantId: number, lineKey: string | null, articleUnit: string | null = null) => {
         if (locked) return;
         const last = draft.lines[draft.lines.length - 1];
-        const blank = (line: typeof last) => line.productVariantId === '' && line.quantity.trim() === '';
-        const target = lineKey !== null && draft.lines.some((line) => line.key === lineKey) ? lineKey : last !== undefined && blank(last) ? last.key : null;
+        const target = lineKey !== null && draft.lines.some((line) => line.key === lineKey) ? lineKey : last !== undefined && isBlankLine(last) ? last.key : null;
         if (target === null && draft.lines.length >= MAX_ORDER_LINES) return;
         const unit = articleUnit ?? variantUnits.get(variantId) ?? null;
         const fresh = target === null ? emptyLine() : null;
