@@ -41,13 +41,21 @@ function hasTradeValues(draft: ArticleDraft): boolean {
     return draft.goodsCode !== '' || draft.goodsCodeSystem !== '' || draft.notes !== '';
 }
 
-export default function ArticleForm({ article, reference, countries, onSaved, onClose }: {
+// Compact (zijpaneel "Nieuw artikel" vanuit een order, feedback 22 november): eerst alleen product, herkomst, klasse, btw-tarief,
+// eenheid en kg per colli; "Meer velden" toont de rest. Een fout in een verborgen veld klapt de rest vanzelf open.
+const COMPACT_FIELDS = ['productName', 'originCountryCode', 'tradeClass', 'vatPercentage', 'packagingUnit', 'defaultNetKgPerPackage'];
+
+export default function ArticleForm({ article, reference, countries, onSaved, onClose, onBusyChange, compact = false }: {
     article: Article | null;
     reference: ArticleReference;
     countries: CountryReference;
     onSaved: (article: Article, created: boolean) => void;
     onClose: () => void;
+    onBusyChange?: (busy: boolean) => void;
+    compact?: boolean;
 }) {
+    const [more, setMore] = useState(false);
+    const full = !compact || more;
     const { t } = useTranslation();
     const isMac = typeof navigator !== 'undefined' && isMacPlatform(navigator.userAgent);
     const [draft, setDraft] = useState<ArticleDraft>(() => (article === null ? emptyArticleDraft() : draftFromArticle(article)));
@@ -56,6 +64,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
     const leave = useFormLeaveGuard(Object.keys(errors).length > 0);
     const [serverError, setServerError] = useState<ApiError | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    useEffect(() => { onBusyChange?.(submitting); }, [submitting, onBusyChange]);
     const [tradeOpen, setTradeOpen] = useState<boolean>(() => article !== null && hasTradeValues(draftFromArticle(article)));
     const [lookupOpen, setLookupOpen] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
@@ -94,6 +103,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
         if (!built.ok) {
             const grouped = groupArticleErrors(built.errors);
             setErrors(Object.fromEntries(Object.entries(grouped).map(([field, codes]) => [field, codes.map((code) => t(codeKey(code)))])));
+            if (Object.keys(grouped).some((field) => !COMPACT_FIELDS.includes(field))) setMore(true);
             if (Object.keys(grouped).some((field) => ['goodsCode', 'goodsCodeSystem', 'notes'].includes(field))) setTradeOpen(true);
             const first = Object.keys(grouped)[0];
             setTimeout(() => document.getElementById(`${first}-input`)?.focus(), 0);
@@ -112,6 +122,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
             const apiError = toApiError(caught);
             setServerError(apiError);
             setErrors(apiError.fieldErrors);
+            if (Object.keys(apiError.fieldErrors).some((field) => !COMPACT_FIELDS.includes(field))) setMore(true);
             if (Object.keys(apiError.fieldErrors).some((field) => ['goodsCode', 'goodsCodeSystem'].includes(field))) setTradeOpen(true);
         } finally {
             inFlight.current = false;
@@ -158,10 +169,12 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
 
     return (
         <form ref={leave.ref} noValidate aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }} className="space-y-3 rounded-md border border-gray-300 bg-white p-3" data-testid="article-form">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-                <h2 className="text-lg font-semibold text-gray-900">{article === null ? t('articles_new') : t('articles_edit', { id: String(article.id) })}</h2>
-                <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting}>{t('articles_cancel')}</button>
-            </div>
+            {!compact && (
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-lg font-semibold text-gray-900">{article === null ? t('articles_new') : t('articles_edit', { id: String(article.id) })}</h2>
+                    <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting}>{t('articles_cancel')}</button>
+                </div>
+            )}
             {notice && <p role="status" className="rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-900" data-tour="article-notice">{notice}</p>}
             {serverError && duplicateOf(serverError) !== null
                 ? <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-2 text-sm text-red-900" data-testid="article-duplicate">
@@ -169,12 +182,12 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                 </p>
                 : serverError && <ErrorNotice error={serverError} />}
 
-            <fieldset className="grid grid-cols-2 gap-3 md:grid-cols-4" disabled={submitting}>
+            <fieldset className={`grid grid-cols-2 gap-3 ${compact ? '' : 'md:grid-cols-4'}`} disabled={submitting}>
                 <legend className="px-1 text-sm font-semibold text-gray-900">{t('articles_section_identity')}</legend>
-                {textField('shortcutCode', 'articles_field_shortcut', { ref: true, hintKey: 'articles_hint_shortcut', mono: true, maxLength: 32 })}
-                {textField('productName', 'articles_field_product', { list: 'article-product-names' })}
+                {full && textField('shortcutCode', 'articles_field_shortcut', { ref: !compact, hintKey: 'articles_hint_shortcut', mono: true, maxLength: 32 })}
+                {textField('productName', 'articles_field_product', { list: 'article-product-names', ref: compact })}
                 <datalist id="article-product-names">{reference.productNames.map((name) => <option key={name} value={name} />)}</datalist>
-                {textField('variantName', 'articles_field_variant')}
+                {full && textField('variantName', 'articles_field_variant')}
                 <div>
                     <label htmlFor="originCountryCode-input" className="text-xs font-medium text-gray-700">{t('articles_field_origin')} *</label>
                     <CountryPicker id="originCountryCode" dataTour="article-origin" countries={countries} value={draft.originCountryCode === '' ? null : draft.originCountryCode}
@@ -184,7 +197,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     )}
                     <FieldError id="originCountryCode" messages={e('originCountryCode')} />
                 </div>
-                {textField('sizeCategory', 'articles_field_size', { hintKey: 'articles_hint_size' })}
+                {full && textField('sizeCategory', 'articles_field_size', { hintKey: 'articles_hint_size' })}
                 <div>
                     <label htmlFor="tradeClass-input" className="text-xs font-medium text-gray-700">{t('articles_field_trade_class')} *</label>
                     <TradeClassPicker id="tradeClass" dataTour="article-class" value={draft.tradeClass} onChange={(tradeClass) => update({ tradeClass })} disabled={submitting}
@@ -204,7 +217,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     <span className="block text-xs text-gray-500">{t('articles_hint_vat')}</span>
                     <FieldError id="vatPercentage" messages={e('vatPercentage')} />
                 </div>
-                {textField('brand', 'articles_field_brand', { optional: true })}
+                {full && textField('brand', 'articles_field_brand', { optional: true })}
                 <div>
                     <label htmlFor="packagingUnit-input" className="text-xs font-medium text-gray-700">{t('articles_field_packaging_unit')}</label>
                     <select {...fieldProps('packagingUnit', e('packagingUnit'))} data-tour="article-packaging-unit" value={draft.packagingUnit} disabled={submitting} className={inputClass}
@@ -214,41 +227,47 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     </select>
                     <FieldError id="packagingUnit" messages={e('packagingUnit')} />
                 </div>
-                {textField('packaging', 'articles_field_packaging', { optional: true })}
+                {full && textField('packaging', 'articles_field_packaging', { optional: true })}
             </fieldset>
 
-            <fieldset className="grid grid-cols-2 gap-3 md:grid-cols-4" disabled={submitting}>
+            <fieldset className={`grid grid-cols-2 gap-3 ${compact ? '' : 'md:grid-cols-4'}`} disabled={submitting}>
                 <legend className="px-1 text-sm font-semibold text-gray-900">{t('articles_section_weight')}</legend>
-                <div>
-                    <label htmlFor="weightMethod-input" className="text-xs font-medium text-gray-700">{t('articles_field_weight_method')}</label>
-                    <select {...fieldProps('weightMethod', e('weightMethod'))} data-tour="article-weight-method" value={draft.weightMethod} disabled={submitting} className={inputClass}
-                        onChange={(event) => { if (isWeightMethod(event.target.value)) update({ weightMethod: event.target.value }); }}>
-                        {WEIGHT_METHODS.map((method) => <option key={method} value={method}>{t(method === 'Weighed' ? 'products_weight_method_weighed' : 'products_weight_method_calculated')}</option>)}
-                    </select>
-                    <FieldError id="weightMethod" messages={e('weightMethod')} />
-                </div>
+                {full && (
+                    <div>
+                        <label htmlFor="weightMethod-input" className="text-xs font-medium text-gray-700">{t('articles_field_weight_method')}</label>
+                        <select {...fieldProps('weightMethod', e('weightMethod'))} data-tour="article-weight-method" value={draft.weightMethod} disabled={submitting} className={inputClass}
+                            onChange={(event) => { if (isWeightMethod(event.target.value)) update({ weightMethod: event.target.value }); }}>
+                            {WEIGHT_METHODS.map((method) => <option key={method} value={method}>{t(method === 'Weighed' ? 'products_weight_method_weighed' : 'products_weight_method_calculated')}</option>)}
+                        </select>
+                        <FieldError id="weightMethod" messages={e('weightMethod')} />
+                    </div>
+                )}
                 <div>
                     <label htmlFor="defaultNetKgPerPackage-input" className="text-xs font-medium text-gray-700">{t('articles_field_net_kg', { unit })}</label>
                     <input {...fieldProps('defaultNetKgPerPackage', e('defaultNetKgPerPackage'))} data-tour="article-net-kg" inputMode="decimal" data-decimals={2} value={draft.defaultNetKgPerPackage} disabled={submitting}
                         onChange={(event) => update({ defaultNetKgPerPackage: event.target.value })} className={inputClass} />
                     <FieldError id="defaultNetKgPerPackage" messages={e('defaultNetKgPerPackage')} />
                 </div>
-                <div>
-                    <label htmlFor="defaultGrossKgPerPackage-input" className="text-xs font-medium text-gray-700">{t('articles_field_gross_kg', { unit })}</label>
-                    <input {...fieldProps('defaultGrossKgPerPackage', e('defaultGrossKgPerPackage'))} inputMode="decimal" data-decimals={2} value={draft.defaultGrossKgPerPackage} disabled={submitting}
-                        onChange={(event) => update({ defaultGrossKgPerPackage: event.target.value })} className={inputClass} />
-                    <FieldError id="defaultGrossKgPerPackage" messages={e('defaultGrossKgPerPackage')} />
-                </div>
-                <div>
-                    <label htmlFor="defaultPackagesPerPallet-input" className="text-xs font-medium text-gray-700">{t('articles_field_cpp', { unit })}</label>
-                    <input {...fieldProps('defaultPackagesPerPallet', e('defaultPackagesPerPallet'))} data-tour="article-cpp" inputMode="decimal" value={draft.defaultPackagesPerPallet} disabled={submitting}
-                        onChange={(event) => update({ defaultPackagesPerPallet: event.target.value })} className={inputClass} />
-                    <FieldError id="defaultPackagesPerPallet" messages={e('defaultPackagesPerPallet')} />
-                </div>
+                {full && (
+                    <div>
+                        <label htmlFor="defaultGrossKgPerPackage-input" className="text-xs font-medium text-gray-700">{t('articles_field_gross_kg', { unit })}</label>
+                        <input {...fieldProps('defaultGrossKgPerPackage', e('defaultGrossKgPerPackage'))} inputMode="decimal" data-decimals={2} value={draft.defaultGrossKgPerPackage} disabled={submitting}
+                            onChange={(event) => update({ defaultGrossKgPerPackage: event.target.value })} className={inputClass} />
+                        <FieldError id="defaultGrossKgPerPackage" messages={e('defaultGrossKgPerPackage')} />
+                    </div>
+                )}
+                {full && (
+                    <div>
+                        <label htmlFor="defaultPackagesPerPallet-input" className="text-xs font-medium text-gray-700">{t('articles_field_cpp', { unit })}</label>
+                        <input {...fieldProps('defaultPackagesPerPallet', e('defaultPackagesPerPallet'))} data-tour="article-cpp" inputMode="decimal" value={draft.defaultPackagesPerPallet} disabled={submitting}
+                            onChange={(event) => update({ defaultPackagesPerPallet: event.target.value })} className={inputClass} />
+                        <FieldError id="defaultPackagesPerPallet" messages={e('defaultPackagesPerPallet')} />
+                    </div>
+                )}
             </fieldset>
 
             {/* Handelsgegevens en aanvullend: ingeklapt, open zodra er iets in staat of een fout erin zit. */}
-            <section className="rounded-md border border-gray-200">
+            {full && <section className="rounded-md border border-gray-200">
                 <button type="button" aria-expanded={tradeOpen} aria-controls="article-trade" onClick={() => setTradeOpen((open) => !open)}
                     className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-semibold text-gray-900">
                     <span>{tradeOpen ? '▾' : '▸'} {t('articles_section_trade')}{!tradeOpen && hasTradeValues(draft) ? ` · ${[draft.goodsCode && `${draft.goodsCodeSystem} ${formatGoodsCode(draft.goodsCode)}`].filter(Boolean).join(' · ')}` : ''}</span>
@@ -290,13 +309,17 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                         </div>
                     </div>
                 )}
-            </section>
+            </section>}
 
+            {compact && !more && (
+                <button type="button" className="text-sm font-medium text-blue-800 underline underline-offset-2" onClick={() => setMore(true)} data-tour="article-more-fields">{t('articles_more_fields')}</button>
+            )}
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
+                {compact && <button type="button" className={secondaryButtonClass} onClick={onClose} disabled={submitting} data-tour="article-panel-cancel">{t('articles_cancel')}</button>}
                 <button type="submit" className={primaryButtonClass} disabled={submitting} data-tour="article-save">{submitting ? t('supply_saving') : t('articles_save')} <kbd className="ml-1 text-xs opacity-80">{shortcutLabel('save', isMac)}</kbd></button>
                 <span className="text-xs text-gray-600">{t('articles_hint_defaults')}</span>
             </div>
-            <details className="text-xs text-gray-600">
+            {!compact && <details className="text-xs text-gray-600">
                 <summary className="cursor-pointer">{t('articles_used_by_title')}</summary>
                 <ul className="mt-1 list-disc pl-5">
                     <li>{t('articles_used_by_purchase')}</li>
@@ -304,7 +327,7 @@ export default function ArticleForm({ article, reference, countries, onSaved, on
                     <li>{t('articles_used_by_supply')}</li>
                     <li>{t('articles_used_by_none')}</li>
                 </ul>
-            </details>
+            </details>}
         </form>
     );
 }
