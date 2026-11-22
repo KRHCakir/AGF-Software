@@ -115,12 +115,6 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
     const focusLine = useRef<string | null>(null);
 
     const vendor = useMemo(() => vendors.find((candidate) => String(candidate.id) === draft.header.vendorId) ?? null, [vendors, draft.header.vendorId]);
-    // Het btw-tarief van het artikel of de Dienst dat nu op de regel staat (om te weten of het tarief nog het voorstel is).
-    const itemVatOf = (line: { productVariantId: string; costArticleId?: string }): number | null => {
-        if (line.costArticleId) return costArticles.find((candidate) => String(candidate.id) === line.costArticleId)?.vatPercentage ?? null;
-        if (line.productVariantId === '') return null;
-        return products.flatMap((product) => product.variants).find((variant) => String(variant.id) === line.productVariantId)?.vatPercentage ?? null;
-    };
     const pickerProducts = useMemo(() => {
         // Kosten en emballage (pallets, kratten die een leverancier in rekening brengt) als twee groepen; beide zijn een kostenregel.
         const groups = [costArticleGroup(costArticles.filter((article) => article.kind !== 'Packaging'), t('cost_articles_group')),
@@ -607,7 +601,7 @@ export default function PurchaseInvoiceForm({ vendors, products, costArticles = 
                                                 // Kostenartikel: omschrijving = de naam, aantal 1 als er nog niets staat (het bedrag is dan de prijs).
                                                 const picked = pickedItem(variantId);
                                                 // Btw: het tarief van het gekozen artikel of de Dienst is het voorstel (niet op een regel van het AI-voorstel: daar telt de factuur; nieuwe regels wel).
-                                                const vatOf = (itemVat: number | null | undefined) => (aiIndex >= 0 ? {} : { vat: proposedVat(line.vat, settings.defaultVatPercentage, itemVatOf(line), itemVat ?? null, line.vatManual === true) });
+                                                const vatOf = (itemVat: number | null | undefined) => (aiIndex >= 0 ? {} : { vat: proposedVat(line.vat, itemVat ?? null, line.vatManual === true) });
                                                 if (picked.kind === 'cost') {
                                                     const cost = costArticles.find((candidate) => String(candidate.id) === picked.costArticleId);
                                                     updateLine(line.key, { productVariantId: '', costArticleId: picked.costArticleId, description: cost?.name ?? '', ...(line.quantity.trim() === '' ? { quantity: '1' } : {}), ...vatOf(cost?.vatPercentage) });

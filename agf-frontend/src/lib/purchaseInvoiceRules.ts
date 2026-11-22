@@ -77,13 +77,11 @@ export const MAX_PAYMENT_TERMS_DAYS = 365;
 let lineCounter = 0;
 export const newLineKey = () => `line-${Date.now().toString(36)}-${(lineCounter++).toString(36)}`;
 
-// Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel. Een met de hand gewijzigd tarief (vatManual)
-// blijft altijd staan, ook als het gelijk is aan het standaardtarief. Anders alleen als de regel nog het standaardtarief of het tarief
-// van het vorige artikel heeft. Zonder tarief op het artikel: ongewijzigd.
-export function proposedVat(current: string, defaultVat: number, previousItemVat: number | null, itemVat: number | null, manual = false): string {
-    if (itemVat === null || manual) return current;
-    const untouched = current.trim() === String(defaultVat) || (previousItemVat !== null && current.trim() === String(previousItemVat));
-    return untouched ? String(itemVat) : current;
+// Feedback 22 november: kies je een artikel of Dienst, dan is zijn btw-tarief het voorstel, zolang de gebruiker het tarief op die regel
+// niet zelf heeft aangepast (vatManual). Een met de hand gewijzigd tarief blijft altijd staan. Een artikel zonder tarief verandert niets;
+// het volgende artikel met een tarief zet zijn tarief weer (review #312: geen blijvend vorig voorstel).
+export function proposedVat(current: string, itemVat: number | null, manual = false): string {
+    return itemVat === null || manual ? current : String(itemVat);
 }
 
 export function emptyLine(defaultVat: number): LineDraft {
