@@ -37,7 +37,8 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
     const deliveryOf = (reservation: StockReservation) => deliveries.find((d) => d.reservationIds.includes(reservation.id)) ?? deliveries[0];
     const canSplit = !readOnly && order.status === 'Open' && order.lines.length > 0 && deliveries.length > 0;
 
-    if (deliveries.length <= 1 && !canSplit) return null;
+    // Ook een enige levering van een gesloten order blijft zichtbaar; canSplit bepaalt alleen de knop Deellevering.
+    if (deliveries.length === 0) return null;
 
     const start = () => {
         const pending = uncertain.current;
@@ -91,7 +92,7 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                                 <PartijNumberLink partijId={delivery.partijId} partijNumber={delivery.partijNumber} lotNumber={delivery.partijNumber} />
                             </span>
                         )}
-                        <span className="text-gray-700">{t('so_delivery_pallets', { count: String(delivery.reservationIds.length) })}</span>
+                        <span className="text-gray-700">{t('so_delivery_pallets', { count: String(reservations.filter(({ reservation }) => delivery.reservationIds.includes(reservation.id)).length) })}</span>
                         {delivery.last && deliveries.length > 1 && <span className="text-xs text-gray-600">{t('so_delivery_rest')}</span>}
                     </li>
                 ))}
