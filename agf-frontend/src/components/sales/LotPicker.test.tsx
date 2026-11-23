@@ -70,6 +70,24 @@ describe('lot picker', () => {
         assert.deepEqual(chosen, { partijId: 2, number: 'I-2611002' });
     });
 
+    test('Enter on an exactly typed number takes that lot, also when the list is still loading', async () => {
+        let release: () => void = () => undefined;
+        const loaded = new Promise<void>((resolve) => { release = resolve; });
+        answer = (_method, url) => (url.includes('/lot-options') ? json(200, options) : json(201, []));
+        const plain = globalThis.fetch;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => { await loaded; return plain(input, init); }) as typeof fetch;
+        let chosen: ChosenLot | null = null;
+        await mounted.render(<LotPicker id="lot" productVariantId={7} unit="colli" value={null} onChange={(lot) => { chosen = lot; }} label="Partij" />);
+        const input = one('#lot') as HTMLInputElement;
+        await act(async () => { setValue(input, '2611001'); });
+        await key(input, 'Escape');
+        await key(input, 'Enter');
+        assert.equal(chosen, null, 'nothing yet while loading');
+        await act(async () => { release(); });
+        await mounted.waitFor(() => (chosen !== null ? true : null), 'taken after loading');
+        assert.deepEqual(chosen, { partijId: 1, number: 'I-2611001' });
+    });
+
     test('the chosen lot goes with the order line payload; an empty choice sends nothing', () => {
         const line = { ...emptySalesLine('k'), productVariantId: '7', quantity: '10', unit: 'colli' as const, partijId: 2, partijNumber: 'I-2611002' };
         assert.equal(salesLinePayload(line, 'lines[0]', undefined).payload.partijId, 2);

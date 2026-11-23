@@ -61,6 +61,18 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     }, [productVariantId, unit]);
 
     const shown = matchingLots(options ?? [], value !== null && text === known ? '' : text).filter((option) => option.partijId !== exclude);
+    // Enter op een precies getypt nummer kiest die partij, ook als de lijst dicht is of nog laadt (Chrome-proef: snel typen en Enter).
+    const enterPending = useRef(false);
+    const takeExact = (from: readonly LotOption[]) => {
+        const exact = exactLot(from, text);
+        if (exact !== null && exact.partijId !== exclude && exact.partijId !== value?.partijId) choose(exact);
+        else setOpen(false);
+    };
+    useEffect(() => {
+        if (options === null || !enterPending.current) return;
+        enterPending.current = false;
+        takeExact(options);
+    }, [options]); // eslint-disable-line react-hooks/exhaustive-deps -- alleen bij binnenkomende opties
     const choose = (option: LotOption | null) => {
         if (option === null) { onChange(null); setText(''); }
         else { onChange({ partijId: option.partijId!, number: option.number! }); setText(option.number!); }
@@ -74,13 +86,14 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
             // Enter mag in een partijkeuze nooit het formulier verzenden.
             event.preventDefault();
             if (open && shown[active]) choose(shown[active]);
-            else setOpen(false);
+            else if (options === null && text.trim() !== '') enterPending.current = true;
+            else takeExact(options ?? []);
         }
     };
     // Verlaten: precies een bestaand nummer kiest die partij, leeg haalt de keuze weg; iets anders blijft staan met een melding.
     const onBlur = () => {
         setOpen(false);
-        if (text.trim() === '') { if (value !== null) choose(null); return; }
+        if (text.trim() === '') { enterPending.current = false; if (value !== null) choose(null); return; }
         const exact = exactLot(options ?? [], text);
         if (exact !== null && exact.partijId !== exclude && exact.partijId !== value?.partijId) choose(exact);
     };
