@@ -222,7 +222,7 @@ namespace AgfAdmin.Services
                 .Where(l => l.PalletContentLine.PartijId == partij.Id)
                 .Select(l => new
                 {
-                    l.Quantity, l.Unit, l.SalesDispatch.DispatchedAt, l.SalesDispatch.SalesOrderId, OrderNumber = l.SalesDispatch.SalesOrder.OrderNumber,
+                    l.Quantity, l.Unit, l.SalesDispatchId, l.SalesDispatch.DispatchedAt, l.SalesDispatch.SalesOrderId, OrderNumber = l.SalesDispatch.SalesOrder.OrderNumber,
                     Customer = l.SalesDispatch.SalesOrder.Customer.Name,
                     LotId = l.StockReservation.SalesDeliveryId != null ? l.StockReservation.SalesDelivery.PartijId
                         : l.SalesDispatch.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => (int?)d.PartijId).FirstOrDefault(),
@@ -238,11 +238,12 @@ namespace AgfAdmin.Services
             {
                 Unit = unit, Received = single?.Received ?? 0m, Shipped = single?.Shipped ?? 0m, Returned = single?.Returned ?? 0m,
                 Rejected = single?.Rejected ?? 0m, OnHand = single?.OnHand ?? 0m, Difference = single?.Difference ?? 0m, ByUnit = byUnit,
-                Destinations = shipments.GroupBy(s => new { s.LotId, s.LotNumber, s.SalesOrderId, s.OrderNumber, s.Customer, s.Unit })
+                // Per verzending een eigen regel met haar eigen datum (review): twee verzendingen op verschillende dagen worden nooit één datum.
+                Destinations = shipments.GroupBy(s => new { s.SalesDispatchId, s.DispatchedAt, s.LotId, s.LotNumber, s.SalesOrderId, s.OrderNumber, s.Customer, s.Unit })
                     .Select(g => new PartijDestinationDto
                     {
                         SalesPartijId = g.Key.LotId, SalesPartijNumber = g.Key.LotNumber, SalesOrderId = g.Key.SalesOrderId, Reference = g.Key.OrderNumber, CustomerName = g.Key.Customer,
-                        Quantity = g.Sum(s => s.Quantity), Unit = g.Key.Unit, Date = DateTime.SpecifyKind(g.Max(s => s.DispatchedAt), DateTimeKind.Utc)
+                        Quantity = g.Sum(s => s.Quantity), Unit = g.Key.Unit, Date = DateTime.SpecifyKind(g.Key.DispatchedAt, DateTimeKind.Utc)
                     })
                     .OrderBy(d => d.Date).ThenBy(d => d.SalesPartijNumber).ToList(),
                 DirectInvoices = invoices.GroupBy(i => new { i.LotId, i.LotNumber, i.InvoiceNumber, i.CustomCustomerName, i.Unit, i.InvoiceDate })
