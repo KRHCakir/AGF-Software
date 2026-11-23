@@ -251,6 +251,8 @@ export interface SalesOrderAuditEvent {
 
 export interface StockReservation {
     id: number;
+    // Feedback 22 november: de levering van deze reservering; leeg (of ontbrekend bij een oudere server) = de eerste levering.
+    salesDeliveryId?: number | null;
     requestId: string | null;
     salesOrderId: number;
     salesOrderLineId: number;
@@ -358,6 +360,22 @@ export interface SalesOrderLine {
     pallets?: number | null;
 }
 
+// Feedback 22 november: een levering van de order (één vracht naar één klant) met een eigen verkoop-partij (V-nummer). De eerste levering
+// bestaat altijd; Deellevering voegt er een toe. reservationIds: de reserveringen die met deze levering meegaan; wat nog niet gereserveerd
+// is, staat op de laatste levering. Laden op en kenteken: van de levering (de eerste: die van de order).
+export interface SalesDelivery {
+    id: number;
+    sequence: number;
+    partijId: number;
+    partijNumber: string | null;
+    last: boolean;
+    loadAt: string | null;
+    licensePlate: string | null;
+    reservationIds: number[];
+    createdAt: string;
+    createdBy: string;
+}
+
 export interface SalesOrder {
     id: number;
     // Eigen verkoopordernummer VO-jjjj-nnnn; ontbreekt in oudere antwoorden.
@@ -367,6 +385,8 @@ export interface SalesOrder {
     salesPartijId?: number | null;
     salesPartijNumber?: string | null;
     salesPartijFixed?: boolean;
+    // Feedback 22 november: de leveringen; ontbreken bij een oudere server (dan één levering met de verkoop-partij van de order).
+    deliveries?: SalesDelivery[];
     requestId: string;
     customerId: number;
     customerName: string | null;
@@ -553,6 +573,7 @@ export function isSalesOrder(value: unknown): value is SalesOrder {
         && (value.orderNumber === undefined || isString(value.orderNumber))
         && (value.salesPartijNumber === undefined || isNullableString(value.salesPartijNumber))
         && (value.salesPartijId === undefined || value.salesPartijId === null || isNumber(value.salesPartijId))
+        && (value.deliveries === undefined || isArrayOf(value.deliveries, isSalesDelivery))
         && (value.shortageWarnings === undefined || value.shortageWarnings === null || isArrayOf(value.shortageWarnings, isSalesShortageWarning))
         && (value.shortage === undefined || typeof value.shortage === 'boolean')
         && (value.awaitingStock === undefined || typeof value.awaitingStock === 'boolean')
@@ -953,3 +974,8 @@ export function isDeliveryConfirmation(value: unknown): value is DeliveryConfirm
         && (value.retraction === null || (isDeliveryRetraction(value.retraction) && value.retraction.shipmentDeliveryConfirmationId === value.id));
 }
 
+
+function isSalesDelivery(value: unknown): value is SalesDelivery {
+    return isObject(value) && isNumber(value.id) && isNumber(value.sequence) && isNumber(value.partijId) && isNullableString(value.partijNumber)
+        && typeof value.last === 'boolean' && isNullableString(value.loadAt) && isNullableString(value.licensePlate) && isArrayOf(value.reservationIds, isNumber);
+}

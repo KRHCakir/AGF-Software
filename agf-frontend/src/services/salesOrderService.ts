@@ -201,6 +201,16 @@ export async function releaseReservation(reservationId: number, request: Release
 
 // Annuleren geeft 200 bij succes én bij een exacte herhaling; 409 bij een verouderde versie, een niet-Open order,
 // afgeboekte reserveringen of een hergebruikte requestId met een andere payload.
+// Deellevering (feedback 22 november): een nieuwe levering met een nieuw V-nummer en de gekozen actieve reserveringen. Idempotent via
+// requestId: een herhaling met dezelfde sleutel en keuze geeft dezelfde levering (200), een andere keuze 409.
+export async function createSalesDelivery(orderId: number, request: { requestId: string; reservationIds: number[] }, signal?: AbortSignal): Promise<SalesOrder> {
+    const { json } = await postJson(`/sales-orders/${orderId}/deliveries`, request, signal);
+    if (!isSalesOrder(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de deellevering.');
+    }
+    return json;
+}
+
 export async function cancelSalesOrder(orderId: number, request: CancelSalesOrderRequest, signal?: AbortSignal): Promise<SalesOrder> {
     const { json } = await postJson(`/sales-orders/${orderId}/cancel`, request, signal);
     if (!isSalesOrder(json)) {
