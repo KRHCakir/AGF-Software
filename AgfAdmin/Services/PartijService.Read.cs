@@ -95,6 +95,28 @@ namespace AgfAdmin.Services
             return ServiceResult<PartijListDto>.Ok(new PartijListDto { Total = total, Page = page, PageSize = pageSize, Items = items });
         }
 
+        // Voorraad zonder partij: palletregels die nog iets op voorraad hebben (niet geannuleerd) en geen partij. Sinds regel 41 kan dat niet
+        // meer ontstaan; in een oude kopie kan het nog bestaan. De gebruiker koppelt de order via Partij › Inkooporder koppelen (met reden).
+        public async Task<IReadOnlyList<MissingPartijLineDto>> MissingAsync(CancellationToken cancellationToken = default)
+        {
+            var lines = await _db.PalletContentLines.AsNoTracking()
+                .Where(c => c.PartijId == null && c.Pallet.LogisticsStatus != PalletRules.StatusCancelled && c.Quantity - c.DispatchedQuantity - c.SplitOffQuantity > 0m)
+                .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id)
+                .Select(c => new MissingPartijLineDto
+                {
+                    PalletContentLineId = c.Id, PalletId = c.PalletId, PalletReference = c.Pallet.Reference, SupplyCommitmentId = c.SupplyCommitmentLine.SupplyCommitmentId,
+                    OrderNumber = c.SupplyCommitmentLine.SupplyCommitment.OrderNumber, VendorName = c.SupplyCommitmentLine.SupplyCommitment.Vendor.Name,
+                    Product = c.SupplyCommitmentLine.ProductVariant.Product.Name + " " + c.SupplyCommitmentLine.ProductVariant.Name, LotNumber = c.LotNumber,
+                    OnHandQuantity = c.Quantity - c.DispatchedQuantity - c.SplitOffQuantity, Unit = c.Unit, ReceivedAt = c.CreatedAt
+                })
+                .ToListAsync(cancellationToken);
+            foreach (var line in lines)
+            {
+                line.ReceivedAt = DateTime.SpecifyKind(line.ReceivedAt, DateTimeKind.Utc);
+            }
+            return lines;
+        }
+
         public async Task<ServiceResult<PartijDetailDto>> GetAsync(int id, CancellationToken cancellationToken = default)
         {
             var partij = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, cancellationToken);

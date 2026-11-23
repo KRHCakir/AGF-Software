@@ -24,6 +24,22 @@ namespace AgfAdmin.DTOs
         public string Suggestion { get; set; }
     }
 
+    // Eén palletregel met voorraad maar zonder partij (werklijst "Partij ontbreekt").
+    public sealed class MissingPartijLineDto
+    {
+        public int PalletContentLineId { get; set; }
+        public int PalletId { get; set; }
+        public string PalletReference { get; set; }
+        public int SupplyCommitmentId { get; set; }
+        public string OrderNumber { get; set; }
+        public string VendorName { get; set; }
+        public string Product { get; set; }
+        public string LotNumber { get; set; }
+        public decimal OnHandQuantity { get; set; }
+        public string Unit { get; set; }
+        public DateTime ReceivedAt { get; set; }
+    }
+
     public sealed class PartijSummaryDto
     {
         public int Id { get; set; }

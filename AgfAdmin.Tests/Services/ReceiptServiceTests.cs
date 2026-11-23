@@ -57,7 +57,11 @@ public class ReceiptServiceTests : IDisposable
         Assert.False(await db.SupplyReceiptDeviations.AnyAsync());
         var content = await db.PalletContentLines.Include(c => c.Pallet).SingleAsync();
         Assert.Equal((line.Id, "Received", "Warehouse", "Calculated", 4m), (content.SupplyCommitmentLineId, content.Pallet.LogisticsStatus, content.Pallet.LocationContext, content.WeightMethod, content.NetKgPerPackage));
-        Assert.Equal(order.OrderNumber, content.LotNumber);
+        // Feedback 22 november: de order had nog geen partij; deze ontvangst gaf haar het voorgestelde I-nummer (nooit voorraad zonder partij).
+        var partij = await db.Partijen.SingleAsync();
+        Assert.StartsWith("I-", partij.Number, StringComparison.Ordinal);
+        Assert.Equal((partij.Id, partij.Number), (content.PartijId, content.LotNumber));
+        Assert.Equal(partij.Id, (await db.SupplyCommitments.SingleAsync(c => c.Id == order.Id)).PartijId);
     }
 
     [Fact]

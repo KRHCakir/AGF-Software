@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import { FirstStepLink } from '../../../components/shared/FirstStep';
+import MissingPartijWorklist from '../../../components/partij/MissingPartijWorklist';
 import PartijDetail from '../../../components/partij/PartijDetail';
 import PartijList, { PURCHASE_PARTIJ_SORT_KEYS } from '../../../components/partij/PartijList';
 import SalesPartijList, { SALES_PARTIJ_SORT_KEYS } from '../../../components/partij/SalesPartijList';
@@ -157,6 +158,8 @@ function PartijenWorkspace() {
                     </select>
                 </div>
             </div>
+
+            {kind === 'Purchase' && <MissingPartijWorklist reloadToken={reloadToken} />}
 
             {otherKindCount > 0 && (
                 <p className="flex flex-wrap items-center gap-2 text-sm text-gray-700" data-testid="partij-other-kind">

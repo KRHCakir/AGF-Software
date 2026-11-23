@@ -2,11 +2,13 @@ import { ApiError, deleteJson, getJson, postJson, putJson } from './apiClient';
 import type { SaveResult } from './supplyService';
 import type { PartijKind } from '../lib/partijRules';
 import {
+    MissingPartijLine,
     PartijDetail,
     PartijList,
     PartijNextNumber,
     PartijSettings,
     PartijSummary,
+    isMissingPartijLines,
     isPartijDetail,
     isPartijList,
     isPartijNextNumber,
@@ -37,6 +39,13 @@ export async function listPartijen(query: PartijQuery, signal?: AbortSignal): Pr
     if (query.sort) { params.set('sort', query.sort); params.set('direction', query.direction ?? 'asc'); }
     const json = await getJson(`/partijen?${params.toString()}`, signal);
     if (!isPartijList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de partijen.');
+    return json;
+}
+
+// Voorraad zonder partij (werklijst "Partij ontbreekt"); leeg zolang alles een partij heeft.
+export async function getMissingPartijen(signal?: AbortSignal): Promise<MissingPartijLine[]> {
+    const json = await getJson('/partijen/missing', signal);
+    if (!isMissingPartijLines(json)) throw new ApiError('shape', 'Onverwacht antwoord bij voorraad zonder partij.');
     return json;
 }
 

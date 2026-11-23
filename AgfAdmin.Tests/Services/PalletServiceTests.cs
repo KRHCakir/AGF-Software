@@ -747,7 +747,6 @@ public class PalletServiceTests : IDisposable
 
         var first = ContentRequest(seed.WarehouseLine);
         var second = ContentRequest(seed.WarehouseLine);
-        second.LotNumber = "LOT-6B";
         second.Quantity = 3m;
         second.NetWeightKg = 11.987m; // binnen de gewichtstolerantie van de bronregel (4 kg per doos)
         await AddContentAsync(palletId, first);
@@ -785,8 +784,6 @@ public class PalletServiceTests : IDisposable
     [InlineData("request-id-missing", "requestId")]
     [InlineData("request-id-empty", "requestId")]
     [InlineData("source-missing", "supplyCommitmentLineId")]
-    [InlineData("lot-missing", "lotNumber")]
-    [InlineData("lot-blank", "lotNumber")]
     [InlineData("lot-too-long", "lotNumber")]
     [InlineData("quantity-missing", "quantity")]
     [InlineData("quantity-zero", "quantity")]
@@ -866,10 +863,8 @@ public class PalletServiceTests : IDisposable
         var first = ContentRequest(seed.WarehouseLine);
         first.NetWeightKg = 300m;
         var second = ContentRequest(seed.WarehouseLine);
-        second.LotNumber = "LOT-6B";
         second.NetWeightKg = 100.5m; // 25 + 300 + 100.5 = 425.5: precies gelijk aan bruto
         var third = ContentRequest(seed.WarehouseLine);
-        third.LotNumber = "LOT-6C";
         third.NetWeightKg = 0.001m;
 
         Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(palletId, first)).Status);
@@ -963,8 +958,9 @@ public class PalletServiceTests : IDisposable
         var palletId = await CreatedPalletIdAsync(request);
 
         var first = await AddContentAsync(palletId, ContentRequest(seed.DirectLineCustomer1));
+        // Feedback 22 november: de orderregel heeft na de eerste ontvangst haar partij; een tweede ontvangst zonder lotnummer volgt die.
         var sameCustomer = ContentRequest(seed.DirectLineCustomer1);
-        sameCustomer.LotNumber = "LOT-6B";
+        sameCustomer.LotNumber = null;
         var second = await AddContentAsync(palletId, sameCustomer);
 
         Assert.Equal(ServiceResultStatus.Created, first.Status);
@@ -973,8 +969,10 @@ public class PalletServiceTests : IDisposable
         Assert.Equal(seed.CustomerId1, first.Value.CustomerId);
     }
 
+    // Feedback 22 november (partij is de sleutel): de eerste ontvangst geeft de order een partij met het gegeven lotnummer; een tweede
+    // lotnummer op dezelfde orderregel wordt geweigerd (partijen worden nooit gemengd), dezelfde partij over meerdere pallets mag.
     [Fact]
-    public async Task Multiple_Lots_On_One_Pallet_And_One_Source_Over_Multiple_Pallets_Are_Allowed()
+    public async Task One_Lot_Per_Order_Line_Over_Multiple_Pallets_And_A_Second_Lot_On_The_Line_Is_Refused()
     {
         var seed = await SeedAsync();
         var pallet1 = await CreatedPalletIdAsync(SupplierPalletRequest("PAL-A"));
@@ -986,9 +984,35 @@ public class PalletServiceTests : IDisposable
         var otherPallet = ContentRequest(seed.WarehouseLine);
 
         Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(pallet1, lotA)).Status);
-        Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(pallet1, lotB)).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await AddContentAsync(pallet1, lotB)).Status);
         Assert.Equal(ServiceResultStatus.Created, (await AddContentAsync(pallet2, otherPallet)).Status);
-        Assert.Equal((2, 3, 5), await CountsAsync());
+        Assert.Equal((2, 2, 4), await CountsAsync());
+        await using var db = _factory.CreateContext();
+        var partij = await db.Partijen.SingleAsync();
+        Assert.Equal((PartijRules.KindPurchase, lotA.LotNumber), (partij.Kind, partij.Number));
+        Assert.All(await db.PalletContentLines.ToListAsync(), c => Assert.Equal(partij.Id, c.PartijId));
+    }
+
+    // Zonder lotnummer en zonder partij op de order: het volgende voorstel (I-…), voor de order en al haar regels.
+    [Fact]
+    public async Task A_Receipt_Without_Lot_On_An_Order_Without_Lot_Gets_The_Suggested_Lot_For_The_Whole_Order()
+    {
+        var seed = await SeedAsync();
+        var palletId = await CreatedPalletIdAsync(SupplierPalletRequest("PAL-A"));
+        var request = ContentRequest(seed.WarehouseLine);
+        request.LotNumber = "  ";
+
+        var result = await AddContentAsync(palletId, request);
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        await using var db = _factory.CreateContext();
+        var partij = await db.Partijen.SingleAsync();
+        Assert.StartsWith("I-", partij.Number);
+        Assert.Equal(PartijRules.LinkedAtReceiptReason, partij.Note);
+        Assert.Equal(partij.Number, result.Value.LotNumber);
+        var line = await db.SupplyCommitmentLines.Include(l => l.SupplyCommitment).ThenInclude(c => c.Lines).SingleAsync(l => l.Id == seed.WarehouseLine);
+        Assert.Equal(partij.Id, line.SupplyCommitment.PartijId);
+        Assert.All(line.SupplyCommitment.Lines, l => Assert.Equal(partij.Id, l.PartijId));
     }
 
     [Theory]
@@ -1072,7 +1096,6 @@ public class PalletServiceTests : IDisposable
         var palletId = await CreatedPalletIdAsync(PalletRequest());
         var first = ContentRequest(seed.WarehouseLine);
         var second = ContentRequest(seed.WarehouseLine);
-        second.LotNumber = "LOT-6B";
         second.NetWeightKg = 11.111m;
         await AddContentAsync(palletId, first);
         await AddContentAsync(palletId, second);

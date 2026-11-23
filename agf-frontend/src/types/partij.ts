@@ -225,3 +225,24 @@ export function isPartijDetail(value: unknown): value is PartijDetail {
 export function isPartijExistsConflict(value: unknown): value is PartijExistsConflict {
     return isRecord(value) && value.code === 'PARTIJ_EXISTS' && isPartijSummary(value.partij);
 }
+
+// Werklijst "Partij ontbreekt" (feedback 22 november): palletregels met voorraad maar zonder partij. Kan alleen nog bestaan in oude
+// gegevens; sinds deze ronde krijgt een order zonder partij er bij de eerste ontvangst een.
+export interface MissingPartijLine {
+    palletContentLineId: number;
+    palletId: number;
+    palletReference: string;
+    supplyCommitmentId: number;
+    orderNumber: string;
+    vendorName: string | null;
+    product: string;
+    lotNumber: string | null;
+    onHandQuantity: number;
+    unit: string;
+    receivedAt: string;
+}
+
+export function isMissingPartijLines(value: unknown): value is MissingPartijLine[] {
+    return Array.isArray(value) && value.every((v) => isRecord(v) && isNumber(v.palletContentLineId) && isNumber(v.supplyCommitmentId) && isString(v.palletReference)
+        && isString(v.orderNumber) && isNumber(v.onHandQuantity) && isString(v.unit) && isString(v.receivedAt));
+}

@@ -443,7 +443,9 @@ namespace AgfAdmin.Services
                 {
                     return await ResultForContentLineRetryAsync(concurrent, candidate, request.ReceivedProductVariantId, cancellationToken);
                 }
-                if (exception is DbUpdateConcurrencyException)
+                // Ook een gelijktijdige eerste ontvangst op dezelfde order zonder partij: die gaf de order net een partij (unieke index op
+                // het volgnummer of de sleutel); opnieuw proberen volgt dan die partij.
+                if (exception is DbUpdateConcurrencyException || DbErrors.IsUniqueViolation(exception))
                 {
                     return ServiceResult<PalletContentLineDto>.Conflict(ConcurrentChangeMessage(deviation != null ? $"Supply commitment line {source.Id}" : $"Pallet {palletId}"));
                 }
@@ -585,14 +587,13 @@ namespace AgfAdmin.Services
 
         // De ontvangen regel neemt de partij van de orderregel over, met het partijnummer als LotNumber. Een meegestuurd lotnummer moet
         // dan bij die partij horen (zelfde sleutel): een andere partij op een order met partij is een vergissing, nooit een tweede partij.
-        // Zonder partij op de orderregel blijft het lotnummer verplicht en de regel zonder partij (later te koppelen via de order).
+        // Feedback 22 november: voorraad zonder partij kan niet meer ontstaan (regel 41). Heeft de orderregel nog geen partij, dan krijgt de
+        // order er bij deze ontvangst een (zie LinkPartijAtReceiptAsync).
         private async Task<ServiceResult<PalletContentLineDto>> ApplyPartijAsync(SupplyCommitmentLine source, PalletContentLine candidate, CancellationToken cancellationToken)
         {
             if (source.PartijId == null)
             {
-                return candidate.LotNumber == null
-                    ? ServiceResult<PalletContentLineDto>.Validation(new Dictionary<string, string[]> { ["lotNumber"] = new[] { "This field is required and must not be blank." } })
-                    : null;
+                return await LinkPartijAtReceiptAsync(source, candidate, cancellationToken);
             }
             var number = await _db.Partijen.AsNoTracking().Where(p => p.Id == source.PartijId).Select(p => p.Number).SingleAsync(cancellationToken);
             if (candidate.LotNumber != null && PartijRules.NumberKey(candidate.LotNumber) != PartijRules.NumberKey(number))
@@ -601,6 +602,48 @@ namespace AgfAdmin.Services
             }
             candidate.PartijId = source.PartijId;
             candidate.LotNumber = number;
+            return null;
+        }
+
+        // Een order zonder partij (van vóór de partij, of zonder partij aangemaakt) krijgt bij de eerste ontvangst een partij, in dezelfde
+        // save: de partij van de order als die er is, anders een nieuwe inkoop-partij met het meegestuurde lotnummer (na de dubbelcontrole:
+        // een bestaand nummer geeft 409 PARTIJ_EXISTS) of, zonder lotnummer, het volgende voorstel (alleen in modus Auto). Alle regels van de
+        // order zonder partij krijgen haar. Er wordt niets verzonnen: het nummer is wat de gebruiker gaf of wat de nummering voorstelt.
+        private async Task<ServiceResult<PalletContentLineDto>> LinkPartijAtReceiptAsync(SupplyCommitmentLine source, PalletContentLine candidate, CancellationToken cancellationToken)
+        {
+            var order = await _db.SupplyCommitments.Include(c => c.Lines).Include(c => c.Partij).SingleAsync(c => c.Id == source.SupplyCommitmentId, cancellationToken);
+            var partij = order.Partij;
+            if (partij == null)
+            {
+                var built = await new PartijService(_db, _user).BuildNewAsync<PalletContentLineDto>(candidate.LotNumber, "lotNumber", PartijRules.KindPurchase, cancellationToken);
+                if (built.Refused != null)
+                {
+                    return built.Refused;
+                }
+                partij = built.Partij;
+                _db.Partijen.Add(partij);
+                order.Partij = partij;
+                order.UpdatedAt = DateTime.UtcNow;
+            }
+            foreach (var line in order.Lines.Where(l => l.PartijId == null))
+            {
+                line.Partij = partij;
+            }
+            // Een bestaande partij van de order krijgt een historieregel; een nieuwe partij legt het aanmaken (wie, wanneer) zelf vast.
+            if (partij.Id > 0)
+            {
+                _db.PartijAuditEvents.Add(new PartijAuditEvent
+                {
+                    PartijId = partij.Id, EventType = PartijRules.EventOrderLinked, SupplyCommitmentId = order.Id, NewValue = partij.Number,
+                    Reason = PartijRules.LinkedAtReceiptReason, ActorReference = _user.Actor(PartijRules.MaxActorLength), OccurredAt = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                partij.Note = PartijRules.LinkedAtReceiptReason;
+            }
+            candidate.Partij = partij;
+            candidate.LotNumber = partij.Number;
             return null;
         }
 

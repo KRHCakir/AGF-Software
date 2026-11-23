@@ -73,18 +73,39 @@ public class PartijReceiptTests : IDisposable
         Assert.Equal(0, await db.PalletContentLines.CountAsync());
     }
 
+    // Feedback 22 november: voorraad zonder partij kan niet meer ontstaan. Een order zonder partij krijgt bij de eerste ontvangst de partij
+    // met het getypte lotnummer (of, zonder lotnummer, het voorstel); een tweede ontvangst volgt die partij. Een lotnummer dat al als
+    // partij bestaat, wordt nooit stilletjes gebruikt (409 met die partij).
     [Fact]
-    public async Task Without_A_Lot_On_The_Order_The_Lot_Number_Stays_Required()
+    public async Task Without_A_Lot_On_The_Order_The_First_Receipt_Gives_The_Order_Its_Lot()
     {
         var a = await ArrangeAsync(withPartij: false);
-        var missing = await ReceiveAsync(a.PalletId, a.LineId, "  ");
-        Assert.Equal(ServiceResultStatus.Validation, missing.Status);
-        Assert.Contains("lotNumber", missing.Errors.Keys);
-
         var typed = await ReceiveAsync(a.PalletId, a.LineId, "OUD-7");
         Assert.Equal(ServiceResultStatus.Created, typed.Status);
-        Assert.Null(typed.Value.PartijId);
+        Assert.NotNull(typed.Value.PartijId);
         Assert.Equal("OUD-7", typed.Value.LotNumber);
+
+        var second = await ReceiveAsync(a.PalletId, a.LineId, null);
+        Assert.Equal((typed.Value.PartijId, "OUD-7"), (second.Value.PartijId, second.Value.LotNumber));
+        await using var db = _factory.CreateContext();
+        var order = await db.SupplyCommitments.Include(c => c.Lines).SingleAsync(c => c.Id == a.OrderId);
+        Assert.Equal(typed.Value.PartijId, order.PartijId);
+        Assert.All(order.Lines, l => Assert.Equal(typed.Value.PartijId, l.PartijId));
+        var partij = await db.Partijen.SingleAsync();
+        Assert.Equal((PartijRules.KindPurchase, PartijRules.LinkedAtReceiptReason), (partij.Kind, partij.Note));
+    }
+
+    [Fact]
+    public async Task A_Typed_Lot_Number_That_Already_Exists_Is_Never_Used_Silently()
+    {
+        var a = await ArrangeAsync(withPartij: false);
+        await PartijTestData.CreateAsync(_factory, "2610251");
+        var taken = await ReceiveAsync(a.PalletId, a.LineId, "2610-251");
+        Assert.Equal(ServiceResultStatus.Conflict, taken.Status);
+        Assert.Equal("2610251", ((PartijExistsConflictDto)taken.ConflictBody).Partij.Number);
+        await using var db = _factory.CreateContext();
+        Assert.Equal(0, await db.PalletContentLines.CountAsync());
+        Assert.Null((await db.SupplyCommitments.SingleAsync(c => c.Id == a.OrderId)).PartijId);
     }
 
     [Fact]

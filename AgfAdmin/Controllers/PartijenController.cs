@@ -28,6 +28,11 @@ namespace AgfAdmin.Controllers
             return this.ToActionResult(await _service.ListAsync(query, status, page, pageSize, HttpContext?.RequestAborted ?? default, kind, order));
         }
 
+        // Werklijst "Partij ontbreekt": voorraad zonder partij (alleen van vóór regel 41, bijvoorbeeld in een kopie). Alleen tonen, niets verzinnen.
+        [HttpGet("missing")]
+        public async Task<IActionResult> Missing() =>
+            Ok(await _service.MissingAsync(HttpContext?.RequestAborted ?? default));
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id) =>
             this.ToActionResult(await _service.GetAsync(id, HttpContext?.RequestAborted ?? default));
