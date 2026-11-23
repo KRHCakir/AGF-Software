@@ -57,7 +57,11 @@ namespace AgfAdmin.Services
         decimal SplitOffQuantity = 0m,
         decimal SplitOffNetWeightKg = 0m,
         // Zelf zo'n afgesplitste regel: telt net als correctie-inhoud niet als registratie tegen de bronregel.
-        bool FromRejectionSplit = false)
+        bool FromRejectionSplit = false,
+        // Feedback 22 november: de voorraadlocatie van de pallet (null = de eigen loods), met soort en land ("Onderweg naar Griekenland").
+        string StockLocationName = null,
+        string StockLocationKind = null,
+        string StockLocationCountry = null)
     {
         public string Origin => FromCorrection ? "DispatchCorrection" : FromRejectionSplit ? "RejectionSplit" : "Receipt";
         public decimal OnHandQuantity => ReservationRules.OnHandQuantity(Quantity, DispatchedQuantity, SplitOffQuantity);
@@ -85,6 +89,8 @@ namespace AgfAdmin.Services
             public QualityBreakdownDto InTransit { get; } = new();
             public QualityBreakdownDto ExpectedOnPallets { get; } = new();
             public decimal Unregistered { get; set; }
+            // Feedback 22 november: voorraad per andere locatie dan de eigen loods (naam, soort, land) in deze rij.
+            public Dictionary<(string Name, string Kind, string Country), decimal> Locations { get; } = new();
             public decimal ReservedQuantity { get; set; }
             public decimal ReservedNetWeightKg { get; set; }
             public decimal OnHoldQuantity { get; set; }
@@ -149,6 +155,11 @@ namespace AgfAdmin.Services
 
                 // Kwaliteitsemmers tellen de voorraad (ontvangst minus afgeboekt); verzonden goederen zijn geen voorraad meer.
                 Add(group.For(category), content.QualityStatus, content.OnHandQuantity, content.OnHandNetWeightKg);
+                if (content.StockLocationName != null && content.OnHandQuantity > 0m)
+                {
+                    var location = (content.StockLocationName, content.StockLocationKind, content.StockLocationCountry);
+                    group.Locations[location] = group.Locations.GetValueOrDefault(location) + content.OnHandQuantity;
+                }
                 if (content.OnHandQuantity > 0m)
                 {
                     if (content.WeightMethod == WeightRules.Calculated) group.HasCalculated = true; else group.HasWeighed = true;
@@ -250,6 +261,9 @@ namespace AgfAdmin.Services
                     LogisticsStatus = c.Fact.LogisticsStatus,
                     LocationContext = c.Fact.LocationContext,
                     WarehouseLocation = c.Fact.WarehouseLocation,
+                    StockLocationName = c.Fact.StockLocationName,
+                    StockLocationKind = c.Fact.StockLocationKind,
+                    StockLocationCountry = c.Fact.StockLocationCountry,
                     Route = c.Fact.Route,
                     CustomerId = c.Fact.CustomerId,
                     CustomerName = c.Fact.CustomerName,
@@ -425,7 +439,9 @@ namespace AgfAdmin.Services
             ExpectedOnPallets = group.ExpectedOnPallets,
             ExpectedUnregistered = new ExpectedUnregisteredDto { Quantity = group.Unregistered },
             Warnings = group.Warnings,
-            WeightBasis = group.WeightBasis
+            WeightBasis = group.WeightBasis,
+            StockLocations = group.Locations.OrderBy(l => l.Key.Name, StringComparer.Ordinal)
+                .Select(l => new AvailabilityStockLocationDto { Name = l.Key.Name, Kind = l.Key.Kind, CountryCode = l.Key.Country, Quantity = l.Value }).ToList()
         };
 
         private static DirectTradeSupplyDto ToDirectTradeSupply(Group group) => new()

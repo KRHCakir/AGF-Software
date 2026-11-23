@@ -203,7 +203,7 @@ namespace AgfAdmin.Services
             {
                 SalesOrderId = order.Id, Exists = transport != null, Mode = transport?.Mode, CarrierRelationId = transport?.CarrierRelationId,
                 CarrierName = transport?.CarrierRelation?.Name, CarrierAddress = TransportOrderBuilder.AddressText(TransportOrderBuilder.CarrierAddress(transport?.CarrierRelation)),
-                LoadingPlace = transport?.LoadingPlace, DefaultLoadingPlace = TransportOrderBuilder.LoadingPlace(null, settings),
+                LoadingPlace = transport?.LoadingPlace, DefaultLoadingPlace = TransportOrderBuilder.LoadingPlace(null, settings, await PalletLoadingPlaceAsync(order.Id, cancellationToken)),
                 UnloadingAddressId = transport?.UnloadingAddressId, UnloadingPlace = transport?.UnloadingPlace,
                 DefaultUnloadingPlace = TransportOrderBuilder.UnloadingPlace(order, new SalesOrderTransport { UnloadingAddress = transport?.UnloadingAddress }),
                 UnloadingAddresses = addresses,
@@ -224,6 +224,26 @@ namespace AgfAdmin.Services
                 .Include(o => o.Transport).ThenInclude(t => t.UnloadingAddress)
                 .AsSplitQuery();
             return (tracking ? query : query.AsNoTracking()).SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+        }
+
+        // Feedback 22 november: de laadplaats uit de locatie van de gereserveerde pallets (zoals de transportopdracht hem kiest).
+        // Zonder actieve reserveringen (verzonden): de verbruikte reserveringen van de meest recente verzending, zoals de opdracht zelf.
+        private async Task<string> PalletLoadingPlaceAsync(int orderId, CancellationToken cancellationToken)
+        {
+            var reservations = db.StockReservations.AsNoTracking().Where(r => r.SalesOrderLine.SalesOrderId == orderId && r.PalletContentLineId != null);
+            var active = reservations.Where(r => r.Status == ReservationRules.StatusActive);
+            if (!await active.AnyAsync(cancellationToken))
+            {
+                var latest = await reservations.Where(r => r.Status == "Consumed" && r.DispatchLine != null).Select(r => (int?)r.DispatchLine.SalesDispatchId).MaxAsync(cancellationToken);
+                active = reservations.Where(r => r.Status == "Consumed" && r.DispatchLine != null && r.DispatchLine.SalesDispatchId == latest);
+            }
+            return TransportOrderBuilder.PalletLoadingPlace(await active
+                .Select(r => new Pallet
+                {
+                    StockLocationId = r.PalletContentLine.Pallet.StockLocationId,
+                    StockLocation = r.PalletContentLine.Pallet.StockLocation == null ? null
+                        : new StockLocation { Name = r.PalletContentLine.Pallet.StockLocation.Name, Address = r.PalletContentLine.Pallet.StockLocation.Address },
+                }).ToListAsync(cancellationToken));
         }
 
         private async Task<CompanySettings> SettingsAsync(CancellationToken cancellationToken) =>

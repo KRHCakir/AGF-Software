@@ -64,6 +64,14 @@ namespace AgfAdmin.DTOs
 
     // Een verkooporder die van deze inkooporder reserveert (Active) of verzonden heeft (Consumed), per eenheid opgeteld.
     // Vrijgegeven en teruggenomen reserveringen tellen niet. Afgeleid uit StockReservation.SupplyCommitmentLineId; niets opgeslagen.
+    // Feedback 22 november: naam en adres van de leverancier (laadadres als we ophalen) en van de klant (afleveradres bij directe handel), zoals
+    // op de transportopdracht; null als de relatie geen adres heeft.
+    public sealed class OrderAddressProposalsDto
+    {
+        public string VendorAddress { get; set; }
+        public string CustomerAddress { get; set; }
+    }
+
     public sealed class PurchaseOrderSalesLinkDto
     {
         public int SalesOrderId { get; set; }
@@ -88,6 +96,12 @@ namespace AgfAdmin.DTOs
         public string SupplierReference { get; set; }
         // Feedback 22 november: de leveringsconditie van deze order (null = geen).
         public DeliveryTermDto DeliveryTerm { get; set; }
+        // Feedback 22 november: ontvangstlocatie (null = eigen loods, met naam en soort), laadadres en afleveradres.
+        public int? ReceiveLocationId { get; set; }
+        public string ReceiveLocationName { get; set; }
+        public string ReceiveLocationKind { get; set; }
+        public string LoadingAddress { get; set; }
+        public string DeliveryAddress { get; set; }
         public DateOnly OrderedOn { get; set; }
         public string OrderChannel { get; set; }
         public string Note { get; set; }
@@ -177,6 +191,8 @@ namespace AgfAdmin.DTOs
         public List<UpdatePurchaseOrderLineDto> Lines { get; set; }
         // Feedback 22 november: de leveringsconditie; weggelaten = ongewijzigd, met een lege soort = geen. Alleen bij een Open order (Edit).
         public DeliveryTermDto DeliveryTerm { get; set; }
+        // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres; weggelaten = ongewijzigd.
+        public OrderLogisticsDto Logistics { get; set; }
         // Certificaten deel 1: zoals bij aanmaken; gevraagd wordt alleen naar producten die nieuw op de order komen (of alle bij een andere leverancier).
         public List<int> ConfirmedCertificateProductIds { get; set; }
     }

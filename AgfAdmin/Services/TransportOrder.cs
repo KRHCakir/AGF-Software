@@ -52,7 +52,7 @@ namespace AgfAdmin.Services
                 SalesOrderDocumentRules.Languages.Contains(settings.TransportOrderLanguage) ? settings.TransportOrderLanguage : SalesOrderDocumentRules.LanguageEnglish,
                 settings.CompanyName, LoadingSlipBuilder.Blank(settings.Address), LoadingSlipBuilder.LogoImageOf(settings.LogoPath),
                 own, own ? null : transport.CarrierRelation?.Name, own ? null : AddressText(CarrierAddress(transport.CarrierRelation)),
-                order.OrderNumber, order.Customer?.Name, LoadingPlace(transport, settings), UnloadingPlace(order, transport),
+                order.OrderNumber, order.Customer?.Name, LoadingPlace(transport, settings, PalletLoadingPlace(order)), UnloadingPlace(order, transport),
                 LoadingSlipBuilder.Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : LoadingSlipBuilder.Second(order.LoadAt.Value),
                 transport.UnloadDate == null ? null : DateTime.SpecifyKind(transport.UnloadDate.Value.Date, DateTimeKind.Utc), transport.TemperatureC,
                 LoadingSlipBuilder.Blank(transport.LoadingReference), LoadingSlipBuilder.Blank(transport.UnloadingReference) ?? LoadingSlipBuilder.Blank(order.CustomerReference),
@@ -81,10 +81,36 @@ namespace AgfAdmin.Services
         public static decimal? GrossKg(SalesOrderLine line) =>
             line.GrossWeightKg ?? (line.ProductVariant?.DefaultGrossKgPerPackage is decimal perPackage ? Math.Round(perPackage * line.Quantity, 3, MidpointRounding.AwayFromZero) : null);
 
-        // De laadplaats: per order overschreven, anders de loods uit de instellingen, anders bedrijfsnaam en -adres.
-        public static string LoadingPlace(SalesOrderTransport transport, CompanySettings settings) =>
-            LoadingSlipBuilder.Blank(transport?.LoadingPlace) ?? LoadingSlipBuilder.Blank(settings.LoadingSlipWarehouseAddress)
+        // De laadplaats: per levering overschreven, anders de locatie van de gereserveerde pallets (feedback 22 november: een cross-dock, externe
+        // opslag of de leverancier), anders de loods uit de instellingen, anders bedrijfsnaam en -adres.
+        public static string LoadingPlace(SalesOrderTransport transport, CompanySettings settings, string palletLoadingPlace = null) =>
+            LoadingSlipBuilder.Blank(transport?.LoadingPlace) ?? LoadingSlipBuilder.Blank(palletLoadingPlace) ?? LoadingSlipBuilder.Blank(settings.LoadingSlipWarehouseAddress)
             ?? string.Join(", ", new[] { settings.CompanyName, settings.Address }.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()));
+
+        // Feedback 22 november: liggen alle gereserveerde pallets van de order op dezelfde voorraadlocatie (geen eigen loods), dan is dat de
+        // laadplaats: naam en adres van die locatie. Alleen actieve reserveringen (de openstaande levering); al verzonden pallets van een
+        // eerdere levering tellen niet mee. Eén pallet in de eigen loods, of pallets op verschillende locaties: null (de loods).
+        // Zijn er geen actieve reserveringen meer omdat de levering is verzonden (de reserveringen zijn dan verbruikt), dan geldt de laadplaats van
+        // de meest recente verzending (de verbruikte reserveringen van die verzending), zodat een opnieuw opgebouwde opdracht niet terugvalt op de loods.
+        public static string PalletLoadingPlace(SalesOrder order)
+        {
+            var reservations = order.Lines.SelectMany(l => l.Reservations).Where(r => r.PalletContentLine?.Pallet != null).ToList();
+            var active = reservations.Where(r => r.Status is "Active").ToList();
+            if (active.Count == 0)
+            {
+                var latest = reservations.Where(r => r.Status is "Consumed" && r.DispatchLine != null).Select(r => r.DispatchLine.SalesDispatchId).DefaultIfEmpty(0).Max();
+                if (latest != 0) active = reservations.Where(r => r.Status is "Consumed" && r.DispatchLine?.SalesDispatchId == latest).ToList();
+            }
+            return PalletLoadingPlace(active.Select(r => r.PalletContentLine.Pallet));
+        }
+
+        public static string PalletLoadingPlace(IEnumerable<Pallet> pallets)
+        {
+            var list = pallets.ToList();
+            if (list.Count == 0 || list.Any(p => p.StockLocationId == null) || list.Select(p => p.StockLocationId).Distinct().Count() > 1) return null;
+            var location = list.Select(p => p.StockLocation).FirstOrDefault(l => l != null);
+            return location == null ? null : string.Join("\n", new[] { location.Name, location.Address }.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()));
+        }
 
         // De losplaats: een afwijkend adres, anders het gekozen adres, het standaard afleveradres of het hoofdadres, met de klantnaam ervoor.
         public static string UnloadingPlace(SalesOrder order, SalesOrderTransport transport)

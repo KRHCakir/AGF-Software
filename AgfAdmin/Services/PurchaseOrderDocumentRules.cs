@@ -47,6 +47,10 @@ namespace AgfAdmin.Services
         // Feedback 22 november, splitsen: het open deel van een deels ontvangen regel werd een nieuwe regel (oud: de regel, nieuw: de nieuwe
         // regel), en het restant van de oude regel wordt nog verwacht of vervalt (vervallen: oud en nieuw vervallen aantal).
         public const string FieldSplit = "split";
+        // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres van de order.
+        public const string FieldReceiveLocation = "receiveLocation";
+        public const string FieldLoadingAddress = "loadingAddress";
+        public const string FieldDeliveryAddress = "deliveryAddress";
         public const string FieldCancelledQuantity = "cancelledQuantity";
         public const string RemainderExpected = "Expected";
         public const string RemainderCancelled = "Cancelled";

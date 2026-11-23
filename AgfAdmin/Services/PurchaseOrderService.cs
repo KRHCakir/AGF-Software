@@ -208,6 +208,24 @@ namespace AgfAdmin.Services
                 .ToListAsync(cancellationToken);
         }
 
+        // Feedback 22 november: laadadres = de leverancier (hoofdadres), afleveradres = de klant (standaard afleveradres, anders hoofdadres),
+        // elk als "naam, adres" zoals de transportopdracht. Alleen lezen.
+        public async Task<OrderAddressProposalsDto> AddressProposalsAsync(int? vendorId, int? customerId, CancellationToken cancellationToken = default)
+        {
+            var vendor = vendorId == null ? null : await _db.Vendors.AsNoTracking().Include(v => v.Relation).ThenInclude(r => r.Addresses).SingleOrDefaultAsync(v => v.Id == vendorId, cancellationToken);
+            var customer = customerId == null ? null : await _db.Customers.AsNoTracking().Include(c => c.Relation).ThenInclude(r => r.Addresses).SingleOrDefaultAsync(c => c.Id == customerId, cancellationToken);
+            static string Text(string name, RelationAddress address)
+            {
+                var text = TransportOrderBuilder.AddressText(address);
+                return text == null ? null : string.Join("\n", new[] { name, text }.Where(p => !string.IsNullOrWhiteSpace(p)));
+            }
+            return new OrderAddressProposalsDto
+            {
+                VendorAddress = vendor == null ? null : Text(vendor.Relation?.Name ?? vendor.Name, TransportOrderBuilder.CarrierAddress(vendor.Relation)),
+                CustomerAddress = customer == null ? null : Text(customer.Relation?.Name ?? customer.Name, TransportOrderBuilder.DeliveryAddress(customer.Relation)),
+            };
+        }
+
         // ---------------- Detail ----------------
 
         public async Task<ServiceResult<PurchaseOrderDetailDto>> GetAsync(int id, CancellationToken cancellationToken = default)
@@ -216,6 +234,7 @@ namespace AgfAdmin.Services
                 .Include(c => c.Vendor)
                 .Include(c => c.Customer)
                 .Include(c => c.Partij)
+                .Include(c => c.ReceiveLocation)
                 .Include(c => c.Lines).ThenInclude(l => l.Partij)
                 .Include(c => c.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .AsSplitQuery()
@@ -395,6 +414,11 @@ namespace AgfAdmin.Services
                 VendorId = commitment.VendorId,
                 VendorName = commitment.Vendor?.Name,
                 DeliveryTerm = commitment.DeliveryTermKind == null ? null : DeliveryTermDto.From(commitment),
+                ReceiveLocationId = commitment.ReceiveLocationId,
+                ReceiveLocationName = commitment.ReceiveLocation?.Name,
+                ReceiveLocationKind = commitment.ReceiveLocation?.Kind ?? StockLocationRules.KindOwnWarehouse,
+                LoadingAddress = commitment.LoadingAddress,
+                DeliveryAddress = commitment.DeliveryAddress,
                 SupplierReference = commitment.SupplierReference,
                 PartijId = commitment.PartijId,
                 PartijNumber = commitment.Partij?.Number,
