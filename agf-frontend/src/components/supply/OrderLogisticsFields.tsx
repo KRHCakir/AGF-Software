@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { type OrderLogisticsDraft, isInTransit, locationChoices } from '../../lib/orderLogistics';
 import { getAddressProposals } from '../../services/purchaseOrderService';
@@ -25,30 +25,91 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     const [customerId, setCustomerId] = useState('');
     const [problem, setProblem] = useState<string | null>(null);
     const inTransit = isInTransit(locations, value.receiveLocationId);
+    // Antwoorden komen asynchroon binnen: werk op de actuele waarde bij en negeer verouderde antwoorden.
+    const latest = useRef(value);
+    latest.current = value;
+    const pickUpRequest = useRef(0);
+    const customerRequest = useRef(0);
+    const proposedDelivery = useRef<string | null>(null);
 
-    const pickUp = async (checked: boolean) => {
+    const proposedLoading = useRef<string | null>(null);
+
+    // Haalt het leveranciersadres op en vult het laadadres, tenzij de gebruiker dat zelf heeft ingevuld of aangepast.
+    const proposeLoading = async (vendor: number | null) => {
+        const request = ++pickUpRequest.current;
         setProblem(null);
-        if (!checked) { onChange({ ...value, pickUp: false, loadingAddress: '' }); return; }
-        if (vendorId === null) { onChange({ ...value, pickUp: true }); return; }
+        const stale = proposedLoading.current;
+        if (vendor === null) {
+            if (stale !== null && latest.current.loadingAddress === stale) onChange({ ...latest.current, loadingAddress: '' });
+            proposedLoading.current = null;
+            return;
+        }
         try {
-            const proposals = await getAddressProposals(vendorId, null);
-            onChange({ ...value, pickUp: true, loadingAddress: value.loadingAddress.trim() !== '' ? value.loadingAddress : proposals.vendorAddress ?? '' });
+            const proposals = await getAddressProposals(vendor, null);
+            if (request !== pickUpRequest.current) return;
+            const current = latest.current;
+            if (!current.pickUp) return;
+            const untouched = current.loadingAddress.trim() === '' || (stale !== null && current.loadingAddress === stale);
+            if (untouched) {
+                proposedLoading.current = proposals.vendorAddress;
+                onChange({ ...current, loadingAddress: proposals.vendorAddress ?? '' });
+            }
             if (proposals.vendorAddress === null) setProblem(t('po_logistics_vendor_no_address'));
         } catch {
-            onChange({ ...value, pickUp: true });
+            if (request !== pickUpRequest.current) return;
             setProblem(t('po_logistics_address_failed'));
         }
     };
 
+    const pickUp = async (checked: boolean) => {
+        if (!checked) {
+            pickUpRequest.current++;
+            setProblem(null);
+            proposedLoading.current = null;
+            onChange({ ...latest.current, pickUp: false, loadingAddress: '' });
+            return;
+        }
+        latest.current = { ...latest.current, pickUp: true };
+        onChange(latest.current);
+        await proposeLoading(vendorId);
+    };
+
+    // Een andere leverancier: vernieuw het voorstel en negeer lopende antwoorden voor de vorige leverancier.
+    const previousVendor = useRef(vendorId);
+    useEffect(() => {
+        if (previousVendor.current === vendorId) return;
+        previousVendor.current = vendorId;
+        pickUpRequest.current++;
+        if (latest.current.pickUp) void proposeLoading(vendorId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [vendorId]);
+
+    // Een lopend klantverzoek vervalt zodra het afleveradres handmatig wijzigt of de locatie geen Onderweg meer is.
+    const cancelCustomerRequest = () => { customerRequest.current++; proposedDelivery.current = null; };
+    useEffect(() => {
+        if (!inTransit) cancelCustomerRequest();
+    }, [inTransit]);
+
     const chooseCustomer = async (customer: CustomerOption | null) => {
+        const request = ++customerRequest.current;
         setCustomerId(customer === null ? '' : String(customer.id));
         setProblem(null);
+        // Het voorstel van de vorige klant vervalt, tenzij de gebruiker het adres inmiddels zelf heeft aangepast.
+        if (proposedDelivery.current !== null && latest.current.deliveryAddress === proposedDelivery.current) {
+            onChange({ ...latest.current, deliveryAddress: '' });
+        }
+        proposedDelivery.current = null;
         if (customer === null) return;
         try {
             const proposals = await getAddressProposals(null, customer.id);
+            if (request !== customerRequest.current) return;
             if (proposals.customerAddress === null) setProblem(t('po_logistics_customer_no_address'));
-            else onChange({ ...value, deliveryAddress: proposals.customerAddress });
+            else {
+                proposedDelivery.current = proposals.customerAddress;
+                onChange({ ...latest.current, deliveryAddress: proposals.customerAddress });
+            }
         } catch {
+            if (request !== customerRequest.current) return;
             setProblem(t('po_logistics_address_failed'));
         }
     };
@@ -88,7 +149,7 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
                 )}
                 <textarea {...fieldProps('logistics.deliveryAddress', errors('logistics.deliveryAddress'))} rows={3} maxLength={500} value={value.deliveryAddress} disabled={locked}
                     placeholder={t('po_logistics_delivery_placeholder')} data-tour="supply-delivery-address" className={inputClass}
-                    onChange={(event) => onChange({ ...value, deliveryAddress: event.target.value })} />
+                    onChange={(event) => { cancelCustomerRequest(); onChange({ ...value, deliveryAddress: event.target.value }); }} />
                 <FieldError id="logistics.deliveryAddress" messages={errors('logistics.deliveryAddress')} />
             </div>
             {problem && <p role="status" className="text-xs text-amber-900 md:col-span-3">{problem}</p>}

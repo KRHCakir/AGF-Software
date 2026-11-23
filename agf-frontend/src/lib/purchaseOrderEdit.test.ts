@@ -78,6 +78,10 @@ describe('purchase order edit', () => {
         assert.equal(openQuantityOf(edit.lines.get('line-7')!), edit.lines.get('line-7')!.stored.expectedQuantity - 40);
         // Iets anders hangt aan de regel (bijvoorbeeld een reservering) en er is niets ontvangen: het artikel ligt vast.
         assert.deepEqual(lineLimits({ ...edit.lines.get('line-7')!, received: 0 }), { articleFixed: true, minimumQuantity: null, removable: false, splitReceived: null });
+        // Helemaal ontvangen: geen open deel, dus geen splitsing; het artikel ligt vast (zoals de server).
+        const full = { ...edit.lines.get('line-7')!, received: edit.lines.get('line-7')!.stored.expectedQuantity };
+        assert.deepEqual(lineLimits(full, other), { articleFixed: true, minimumQuantity: full.received, removable: false, splitReceived: null });
+        assert.equal(isSplit(other, full), false);
         assert.deepEqual(removedInUse(edit, new Set(['line-8'])).map((l) => l.lineId), [7]);
         assert.deepEqual(removedInUse(edit, new Set(['line-7'])), []);
     });

@@ -105,7 +105,7 @@ export default function StockLocationsSetting() {
                     <label className="text-sm text-gray-800">{t('stock_location_kind')}
                         <select {...fieldProps('stock-location-kind', e('kind'))} value={draft.kind} disabled={draft.inUse} data-tour="stock-location-kind"
                             onChange={(event) => setDraft({ ...draft, kind: event.target.value as StockLocationKind })} className={inputClass}>
-                            {STOCK_LOCATION_KINDS.map((kind) => <option key={kind} value={kind}>{t(`stock_location_kind_${kind}`)}</option>)}
+                            {STOCK_LOCATION_KINDS.filter((kind) => kind !== 'OwnWarehouse' || draft.kind === 'OwnWarehouse').map((kind) => <option key={kind} value={kind}>{t(`stock_location_kind_${kind}`)}</option>)}
                         </select>
                         {draft.inUse && <span className="block text-xs text-gray-700">{t('stock_location_kind_fixed')}</span>}
                         <FieldError id="stock-location-kind" messages={e('kind')} />
