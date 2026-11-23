@@ -2924,7 +2924,7 @@
   "so_delivery_heading": "Delivery {sequence} · {partij}",
   "so_deliveries": "Deliveries",
   "so_delivery_label": "Delivery {sequence}",
-  "so_delivery_pallets": "{count} reserved pallet(s)",
+  "so_delivery_pallets": "{count} pallet(s)",
   "so_delivery_rest": "with what is not reserved yet",
   "so_partial_delivery": "Partial delivery",
   "so_partial_delivery_text": "A partial delivery is a second load to the same customer: it gets its own sales lot (V number) and its own loading slip. Choose which reserved pallets go with the partial delivery. What is not reserved yet always goes with the newest delivery; pallets already shipped stay with their delivery.",
