@@ -68,7 +68,14 @@ namespace AgfAdmin.Services
                     ActorReference = _user.Actor(PartijRules.MaxActorLength), OccurredAt = DateTime.UtcNow
                 });
                 partij.Color = color;
-                await db.SaveChangesAsync(cancellationToken);
+                try
+                {
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return ServiceResult<PartijSummaryDto>.Conflict($"The color of lot {partij.Number} was changed at the same time; reload and try again.");
+                }
             }
             return ServiceResult<PartijSummaryDto>.Ok(await new PartijService(db, _user).SummaryAsync(partij, cancellationToken));
         }
