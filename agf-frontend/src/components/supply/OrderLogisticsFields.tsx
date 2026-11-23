@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { type OrderLogisticsDraft, isInTransit, locationChoices } from '../../lib/orderLogistics';
 import { getAddressProposals } from '../../services/purchaseOrderService';
@@ -25,30 +25,51 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     const [customerId, setCustomerId] = useState('');
     const [problem, setProblem] = useState<string | null>(null);
     const inTransit = isInTransit(locations, value.receiveLocationId);
+    // Antwoorden komen asynchroon binnen: werk op de actuele waarde bij en negeer verouderde antwoorden.
+    const latest = useRef(value);
+    latest.current = value;
+    const pickUpRequest = useRef(0);
+    const customerRequest = useRef(0);
+    const proposedDelivery = useRef<string | null>(null);
 
     const pickUp = async (checked: boolean) => {
+        const request = ++pickUpRequest.current;
         setProblem(null);
-        if (!checked) { onChange({ ...value, pickUp: false, loadingAddress: '' }); return; }
-        if (vendorId === null) { onChange({ ...value, pickUp: true }); return; }
+        if (!checked) { onChange({ ...latest.current, pickUp: false, loadingAddress: '' }); return; }
+        if (vendorId === null) { onChange({ ...latest.current, pickUp: true }); return; }
         try {
             const proposals = await getAddressProposals(vendorId, null);
-            onChange({ ...value, pickUp: true, loadingAddress: value.loadingAddress.trim() !== '' ? value.loadingAddress : proposals.vendorAddress ?? '' });
+            if (request !== pickUpRequest.current) return;
+            const current = latest.current;
+            onChange({ ...current, pickUp: true, loadingAddress: current.loadingAddress.trim() !== '' ? current.loadingAddress : proposals.vendorAddress ?? '' });
             if (proposals.vendorAddress === null) setProblem(t('po_logistics_vendor_no_address'));
         } catch {
-            onChange({ ...value, pickUp: true });
+            if (request !== pickUpRequest.current) return;
+            onChange({ ...latest.current, pickUp: true });
             setProblem(t('po_logistics_address_failed'));
         }
     };
 
     const chooseCustomer = async (customer: CustomerOption | null) => {
+        const request = ++customerRequest.current;
         setCustomerId(customer === null ? '' : String(customer.id));
         setProblem(null);
+        // Het voorstel van de vorige klant vervalt, tenzij de gebruiker het adres inmiddels zelf heeft aangepast.
+        if (proposedDelivery.current !== null && latest.current.deliveryAddress === proposedDelivery.current) {
+            onChange({ ...latest.current, deliveryAddress: '' });
+        }
+        proposedDelivery.current = null;
         if (customer === null) return;
         try {
             const proposals = await getAddressProposals(null, customer.id);
+            if (request !== customerRequest.current) return;
             if (proposals.customerAddress === null) setProblem(t('po_logistics_customer_no_address'));
-            else onChange({ ...value, deliveryAddress: proposals.customerAddress });
+            else {
+                proposedDelivery.current = proposals.customerAddress;
+                onChange({ ...latest.current, deliveryAddress: proposals.customerAddress });
+            }
         } catch {
+            if (request !== customerRequest.current) return;
             setProblem(t('po_logistics_address_failed'));
         }
     };
