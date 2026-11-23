@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
@@ -46,16 +46,32 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
     );
     // Feedback 22 november: per order uitklappen tot een overzicht per regel (besteld, ontvangen, open, partij, status), pas bij openen geladen.
     const [expanded, setExpanded] = useState<Record<number, LoadState<PurchaseOrderLine[]>>>({});
-    const toggle = (id: number) => {
+    // Bij welke versie van de ordergegevens de geladen regels horen: verandert de order in de lijst (ontvangst, wijziging), dan worden ze opnieuw geladen.
+    const signature = (item: PurchaseOrderListItem) => [item.status, item.expectedQuantity, item.receivedQuantity, item.rejectedQuantity, item.lineCount, item.receivedLineCount, item.openQuantity, item.documentStatus, item.hasDeviation, item.expectedNetWeightKg].join('|');
+    const loadedSignature = useRef<Record<number, string>>({});
+    const load = (id: number, sig: string) => {
+        loadedSignature.current[id] = sig;
+        getPurchaseOrder(id)
+            .then((order) => setExpanded((current) => (current[id] === undefined || loadedSignature.current[id] !== sig ? current : { ...current, [id]: { status: 'ready', data: order.lines } })))
+            .catch((caught: unknown) => setExpanded((current) => (current[id] === undefined || loadedSignature.current[id] !== sig ? current : { ...current, [id]: { status: 'error', error: toApiError(caught) } })));
+    };
+    const toggle = (item: PurchaseOrderListItem) => {
+        const id = item.id;
         if (expanded[id] !== undefined) {
+            delete loadedSignature.current[id];
             setExpanded((current) => { const next = { ...current }; delete next[id]; return next; });
             return;
         }
         setExpanded((current) => ({ ...current, [id]: { status: 'loading' } }));
-        getPurchaseOrder(id)
-            .then((order) => setExpanded((current) => (current[id] === undefined ? current : { ...current, [id]: { status: 'ready', data: order.lines } })))
-            .catch((caught: unknown) => setExpanded((current) => (current[id] === undefined ? current : { ...current, [id]: { status: 'error', error: toApiError(caught) } })));
+        load(id, signature(item));
     };
+    useEffect(() => {
+        const stale = items.filter((item) => expanded[item.id] !== undefined && loadedSignature.current[item.id] !== undefined && loadedSignature.current[item.id] !== signature(item));
+        if (stale.length === 0) return;
+        setExpanded((current) => { const next = { ...current }; for (const item of stale) next[item.id] = { status: 'loading' }; return next; });
+        for (const item of stale) load(item.id, signature(item));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [items]);
     const partial = (item: PurchaseOrderListItem) => {
         const summary = partialSummary(item);
         return summary && (
@@ -66,7 +82,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
     };
     const expandButton = (item: PurchaseOrderListItem, controls: string) => (
         <button type="button" aria-expanded={expanded[item.id] !== undefined} aria-controls={controls} data-tour="po-list-expand" data-tour-key={item.orderNumber}
-            onClick={(event) => { event.stopPropagation(); toggle(item.id); }}
+            onClick={(event) => { event.stopPropagation(); toggle(item); }}
             className="mt-1 inline-block text-xs font-medium text-blue-800 underline underline-offset-2">
             {expanded[item.id] !== undefined ? t('po_lines_collapse') : t('po_lines_expand')}
         </button>

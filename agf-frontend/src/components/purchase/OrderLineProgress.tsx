@@ -2,7 +2,7 @@
 
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
-import { type LineProgressStatus, lineProgress } from '../../lib/orderLineProgress';
+import { type LineProgressStatus, activeLines, lineProgress } from '../../lib/orderLineProgress';
 import type { PurchaseOrderLine } from '../../types/purchaseOrder';
 
 const STATUS_STYLE: Record<LineProgressStatus, string> = {
@@ -14,7 +14,8 @@ const STATUS_STYLE: Record<LineProgressStatus, string> = {
 
 // Per regel besteld, ontvangen, open, partijnummer en status (in de inkooporderlijst uitgeklapt en op het detail). Compact, zodat ook een
 // order met 30 regels in één oogopslag leesbaar is; op een smal scherm staat elke regel als één blok.
-export default function OrderLineProgress({ lines }: { lines: PurchaseOrderLine[] }) {
+export default function OrderLineProgress({ lines: allLines }: { lines: PurchaseOrderLine[] }) {
+    const lines = activeLines(allLines);
     const { t, locale } = useTranslation();
     const q = (value: number) => formatQuantity(value, locale);
     const number = new Map(lines.map((line, index) => [line.id, index + 1]));
