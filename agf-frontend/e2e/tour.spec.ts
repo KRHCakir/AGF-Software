@@ -103,7 +103,8 @@ test('hoofdstuk Kennismaken: langs de vier menugroepen, geen enkele schrijfactie
     page.on('request', (request) => { if (request.url().startsWith(API) && request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`); });
     const result = await play(page, 'screens');
     expectAllSteps(result);
-    expect(result.total).toBe(10);
+    // Feedback 22 november: Direct trade is geen eigen scherm meer in het menu (negen schermen).
+    expect(result.total).toBe(9);
     expect(writes).toEqual([]);
     await page.close();
 });
