@@ -195,6 +195,17 @@ namespace AgfAdmin.DTOs
 
     // Inkoop-partij: ontvangen = geleverd (min teruggenomen) + afgekeurd + nog op voorraad; Verschil is wat daarvan afwijkt (0 als de
     // boekingen kloppen). Directe facturen staan apart: die boeken geen voorraad af en tellen dus niet mee in de som.
+    public sealed class PartijRecallUnitDto
+    {
+        public string Unit { get; set; }
+        public decimal Received { get; set; }
+        public decimal Shipped { get; set; }
+        public decimal Returned { get; set; }
+        public decimal Rejected { get; set; }
+        public decimal OnHand { get; set; }
+        public decimal Difference { get; set; }
+    }
+
     public sealed class PartijRecallDto
     {
         public string Unit { get; set; }
@@ -204,6 +215,8 @@ namespace AgfAdmin.DTOs
         public decimal Rejected { get; set; }
         public decimal OnHand { get; set; }
         public decimal Difference { get; set; }
+        // Balans per eenheid; de totalen hierboven (en Unit) zijn alleen gevuld als er precies één eenheid is.
+        public List<PartijRecallUnitDto> ByUnit { get; set; } = new();
         public List<PartijDestinationDto> Destinations { get; set; } = new();
         public List<PartijDestinationDto> DirectInvoices { get; set; } = new();
     }

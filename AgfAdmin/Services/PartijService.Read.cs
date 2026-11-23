@@ -205,11 +205,19 @@ namespace AgfAdmin.Services
         private async Task<PartijRecallDto> RecallAsync(Partij partij, Facts facts, string unit, CancellationToken cancellationToken)
         {
             var live = facts.Contents.Where(c => c.PalletStatus != PalletRules.StatusCancelled).ToList();
-            var received = live.Where(IsPhysicalReceipt).Sum(c => c.Quantity);
-            var returned = live.Where(c => c.FromCorrection).Sum(c => c.Quantity);
-            var shipped = live.Sum(c => c.Dispatched);
-            var rejected = live.Where(c => c.QualityStatus == PalletRules.QualityRejected).Sum(OnHand);
-            var onHand = live.Where(c => c.QualityStatus != PalletRules.QualityRejected).Sum(OnHand);
+            // Nooit verschillende eenheden bij elkaar optellen: per eenheid een eigen balans; de totalen bovenaan gelden alleen bij één eenheid.
+            var byUnit = live.GroupBy(c => c.Unit).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
+            {
+                var rec = g.Where(IsPhysicalReceipt).Sum(c => c.Quantity);
+                var ret = g.Where(c => c.FromCorrection).Sum(c => c.Quantity);
+                var shp = g.Sum(c => c.Dispatched);
+                var rej = g.Where(c => c.QualityStatus == PalletRules.QualityRejected).Sum(OnHand);
+                var hand = g.Where(c => c.QualityStatus != PalletRules.QualityRejected).Sum(OnHand);
+                return new PartijRecallUnitDto { Unit = g.Key, Received = rec, Shipped = shp, Returned = ret, Rejected = rej, OnHand = hand, Difference = rec - (shp - ret) - rej - hand };
+            }).ToList();
+            var single = byUnit.Count == 1 ? byUnit[0] : null;
+            if (single != null) unit = single.Unit;
+            else if (byUnit.Count > 1) unit = null;
             var shipments = await _db.SalesDispatchLines.AsNoTracking()
                 .Where(l => l.PalletContentLine.PartijId == partij.Id)
                 .Select(l => new
@@ -227,8 +235,8 @@ namespace AgfAdmin.Services
                 .ToListAsync(cancellationToken);
             return new PartijRecallDto
             {
-                Unit = unit, Received = received, Shipped = shipped, Returned = returned, Rejected = rejected, OnHand = onHand,
-                Difference = received - (shipped - returned) - rejected - onHand,
+                Unit = unit, Received = single?.Received ?? 0m, Shipped = single?.Shipped ?? 0m, Returned = single?.Returned ?? 0m,
+                Rejected = single?.Rejected ?? 0m, OnHand = single?.OnHand ?? 0m, Difference = single?.Difference ?? 0m, ByUnit = byUnit,
                 Destinations = shipments.GroupBy(s => new { s.LotId, s.LotNumber, s.SalesOrderId, s.OrderNumber, s.Customer, s.Unit })
                     .Select(g => new PartijDestinationDto
                     {
@@ -449,7 +457,7 @@ namespace AgfAdmin.Services
                 .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, l.ProductVariantId, Number = l.Partij.Number,
                     Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault() })
                 .ToListAsync(cancellationToken);
-            // Inkoopprijs van de inkoop-partij: bij voorkeur de inkoopregel van hetzelfde product, anders de eerste met een prijs.
+            // Inkoopprijs van de inkoop-partij: alleen de inkoopregel van hetzelfde product; zonder passende regel blijft de prijs onbekend.
             var purchasePartijIds = lines.Where(l => l.PartijId != null).Select(l => l.PartijId.Value).Distinct().ToList();
             var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.UnitPrice != null)
                 .OrderBy(c => c.Id)
@@ -460,7 +468,7 @@ namespace AgfAdmin.Services
                     .Select(l =>
                     {
                         var mine = costs.Where(c => c.PartijId == l.PartijId).ToList();
-                        var cost = mine.FirstOrDefault(c => c.ProductVariantId == l.ProductVariantId) ?? mine.FirstOrDefault();
+                        var cost = mine.FirstOrDefault(c => c.ProductVariantId == l.ProductVariantId);
                         return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight,
                             null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m);
                     }).ToList()));
@@ -548,11 +556,12 @@ namespace AgfAdmin.Services
         }
 
         // Inkoopwaarde in euro (feedback 22 november, Verdeel naar waarde): aantal × prijs min korting, gedeeld door de koers van de order, op
-        // centen. Regels zonder prijs tellen niet mee; zonder enige prijs null (dan doet de partij niet mee met verdelen naar waarde).
+        // centen. Heeft één regel geen prijs, dan is de waarde onvolledig en dus null
+        // (dan doet de partij niet mee met verdelen naar waarde); een te lage waarde zou de verdeling vertekenen.
         private static decimal? Value(IEnumerable<(decimal Quantity, decimal? UnitPrice, decimal? Discount, decimal Rate)> parts)
         {
-            var priced = parts.Where(p => p.UnitPrice != null).ToList();
-            if (priced.Count == 0) return null;
+            var priced = parts.ToList();
+            if (priced.Count == 0 || priced.Any(p => p.UnitPrice == null)) return null;
             return priced.Sum(p => ExchangeRateRules.ToEuro(OrderLineMath.LineAmount(p.Quantity, p.UnitPrice, p.Discount) ?? 0m, p.Rate > 0m ? p.Rate : 1m));
         }
 
