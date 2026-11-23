@@ -63,7 +63,8 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
     }, [t]);
 
     // Eén regel ontvangen; true als het gelukt is. De server geeft de bijgewerkte order terug (ook wat er nu nog open staat).
-    const receive = async (line: ReceiptLine, draft: ReceiveDraft): Promise<boolean> => {
+    // 'stop': de GGN-melding is veranderd; Alles ontvangen stopt dan en het scherm toont eerst de actuele stand (review).
+    const receive = async (line: ReceiptLine, draft: ReceiveDraft): Promise<boolean | 'stop'> => {
         const built = requestFor(line, draft);
         if (!built.ok) {
             setErrors((current) => ({ ...current, [line.id]: built.errors.map(draftErrorText) }));
@@ -99,8 +100,10 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
             // De GGN-melding is intussen veranderd (of nog niet getoond): de actuele melding ophalen en tonen; de invoer blijft staan.
             if (error.status === 409 && certificateChecksOf(error.body) !== null) {
                 setErrors((current) => ({ ...current, [line.id]: [t('receipt_certificate_changed')] }));
-                getReceiptOrder(orderId).then((fresh) => setState({ status: 'ready', data: fresh })).catch(() => { /* de melding staat er al */ });
-                return false;
+                try {
+                    setState({ status: 'ready', data: await getReceiptOrder(orderId) });
+                } catch { /* de melding staat er al */ }
+                return 'stop';
             }
             const messages = Object.values(error.fieldErrors).flat();
             setErrors((current) => ({ ...current, [line.id]: messages.length > 0 ? messages : [error.message] }));
@@ -130,7 +133,9 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
         let received = 0;
         try {
             for (const line of openLines(state.data)) {
-                if (await receive(line, drafts[line.id] ?? draftFor(line))) received += 1;
+                const outcome = await receive(line, drafts[line.id] ?? draftFor(line));
+                if (outcome === 'stop') break;
+                if (outcome) received += 1;
             }
         } finally {
             inFlight.current = false;
