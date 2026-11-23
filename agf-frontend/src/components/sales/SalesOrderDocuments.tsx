@@ -28,9 +28,13 @@ export function deliveryGroups(data: Documents): DeliveryGroup[] {
         return [{ id: deliveries[0]?.salesDeliveryId ?? null, sequence: 1, partijNumber: deliveries[0]?.partijNumber ?? null, loadAt: data.loadAt, licensePlate: data.licensePlate,
             needsResend: data.needsResend, transportOrderNeedsResend: data.transportOrderNeedsResend === true, documents: data.documents }];
     }
-    return [...deliveries].sort((a, b) => a.sequence - b.sequence).map((d) => ({
+    const sorted = [...deliveries].sort((a, b) => a.sequence - b.sequence);
+    // Een document zonder salesDeliveryId hoort bij de eerste levering (oudere server of historisch document).
+    const firstId = sorted[0].salesDeliveryId;
+    return sorted.map((d) => ({
         id: d.salesDeliveryId, sequence: d.sequence, partijNumber: d.partijNumber, loadAt: d.loadAt, licensePlate: d.licensePlate, needsResend: d.needsResend,
-        transportOrderNeedsResend: d.transportOrderNeedsResend, documents: data.documents.filter((document) => document.salesDeliveryId === d.salesDeliveryId),
+        transportOrderNeedsResend: d.transportOrderNeedsResend,
+        documents: data.documents.filter((document) => (document.salesDeliveryId ?? firstId) === d.salesDeliveryId),
     }));
 }
 import ErrorNotice from '../supply/ErrorNotice';

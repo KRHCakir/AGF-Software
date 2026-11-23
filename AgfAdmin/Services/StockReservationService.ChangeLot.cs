@@ -98,8 +98,8 @@ namespace AgfAdmin.Services
                 .Where(c => contentIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, cancellationToken);
             var reservedOnContent = await SalesOrderService.ReservedByContentLineAsync(_db, contentIds, cancellationToken);
             var reservedOnLine = await SalesOrderService.CommittedOnOrderLineAsync(_db, line.Id, cancellationToken) - reservation.Quantity;
-            // De eerste levering is een lege levering; bij meer leveringen blijft de nieuwe reservering expliciet bij dezelfde levering.
-            var deliveryId = reservation.SalesDeliveryId ?? (line.SalesOrder.Deliveries.Count > 1 ? line.SalesOrder.Deliveries.OrderBy(d => d.Sequence).First().Id : null);
+            // De nieuwe reservering behoudt exact de levering (of ontbrekende koppeling) van de oorspronkelijke reservering.
+            var deliveryId = reservation.SalesDeliveryId;
             var created = new List<StockReservation>();
             for (var i = 0; i < items.Count; i++)
             {
