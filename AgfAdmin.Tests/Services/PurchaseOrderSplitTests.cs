@@ -128,6 +128,25 @@ public class PurchaseOrderSplitTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Fully_Received_Line_Is_Not_Split_And_Keeps_Its_Article()
+    {
+        var (order, _, peruId) = await MangoAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var received = await new ReceiptService(db).ReceiveLineAsync(order.Id, order.Lines.Single().Id, new ReceiveLineDto { RequestId = Guid.NewGuid(), Quantity = 60m });
+            Assert.Equal(ServiceResultStatus.Created, received.Status);
+        }
+        var full = await _h.DetailAsync(order.Id);
+        foreach (var remainder in new[] { PurchaseOrderDocumentRules.RemainderCancelled, PurchaseOrderDocumentRules.RemainderExpected })
+        {
+            var refused = await _h.RunAsync(s => s.UpdateAsync(full.Id, SplitTo(full, peruId, 60m, remainder)));
+            Assert.Equal(ServiceResultStatus.Validation, refused.Status);
+            Assert.Contains("lines[0].productVariantId", refused.Errors.Keys);
+        }
+        Assert.Single((await _h.DetailAsync(full.Id)).Lines);
+    }
+
+    [Fact]
     public async Task Guard_Rule_39_Keeps_Received_Quantities_And_Splits_Consistent()
     {
         var (order, _, peruId) = await MangoAsync();
