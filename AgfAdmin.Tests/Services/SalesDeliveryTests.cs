@@ -121,6 +121,24 @@ public sealed class SalesDeliveryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Replay_With_Another_Own_V_Number_Is_A_Conflict_And_The_Same_Number_Is_A_Replay()
+    {
+        var a = await ArrangeAsync();
+        var key = Guid.NewGuid();
+        async Task<ServiceResult<SalesOrderDto>> Send(string number)
+        {
+            await using var db = _factory.CreateContext();
+            return await new SalesDeliveryService(db).CreateAsync(a.OrderId, new CreateSalesDeliveryDto { RequestId = key, ReservationIds = new List<int> { a.Second }, PartijNumber = number });
+        }
+        Assert.Equal(ServiceResultStatus.Created, (await Send("V-EIGEN-1")).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await Send(" v-eigen-1 ")).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await Send("V-EIGEN-2")).Status);
+        Assert.Equal(ServiceResultStatus.Conflict, (await Send(null)).Status);
+        await using var check = _factory.CreateContext();
+        Assert.Equal(2, await check.SalesDeliveries.CountAsync(d => d.SalesOrderId == a.OrderId));
+    }
+
+    [Fact]
     public async Task Without_Reservations_The_Open_Rest_Moves_And_A_Later_Reservation_Goes_With_The_Last_Delivery()
     {
         var a = await ArrangeAsync(confirm: false);
