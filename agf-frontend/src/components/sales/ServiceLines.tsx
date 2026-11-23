@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatMoney } from '../../lib/availability';
+import { formatMoney, formatQuantity } from '../../lib/availability';
 import { VAT_RATES, formatPercent } from '../../lib/orderLineMath';
 import { type ServiceLineDraft, emptyServiceLine, serviceLineRow } from '../../lib/serviceLines';
 import { newRequestId } from '../../lib/requestId';
@@ -123,7 +123,7 @@ export function ServiceLinesView({ lines }: { lines: SalesOrderServiceLine[] }) 
                 {lines.map((line) => (
                     <li key={line.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1">
                         <span className="text-gray-900">
-                            {line.name} · {formatPercent(line.quantity, locale)} × {money(line.unitPrice)}
+                            {line.name} · {formatQuantity(line.quantity, locale)} × {money(line.unitPrice)}
                             {line.discountPercentage != null && <> · {t('service_discount', { discount: formatPercent(line.discountPercentage, locale) })}</>}
                         </span>
                         <span className="font-mono text-gray-900">{line.lineTotal === null ? '–' : money(line.lineTotal)}
