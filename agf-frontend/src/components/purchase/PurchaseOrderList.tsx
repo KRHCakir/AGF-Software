@@ -46,30 +46,32 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
     );
     // Feedback 22 november: per order uitklappen tot een overzicht per regel (besteld, ontvangen, open, partij, status), pas bij openen geladen.
     const [expanded, setExpanded] = useState<Record<number, LoadState<PurchaseOrderLine[]>>>({});
-    // Bij welke versie van de ordergegevens de geladen regels horen: verandert de order in de lijst (ontvangst, wijziging), dan worden ze opnieuw geladen.
-    const signature = (item: PurchaseOrderListItem) => [item.status, item.expectedQuantity, item.receivedQuantity, item.rejectedQuantity, item.lineCount, item.receivedLineCount, item.openQuantity, item.documentStatus, item.hasDeviation, item.expectedNetWeightKg].join('|');
-    const loadedSignature = useRef<Record<number, string>>({});
-    const load = (id: number, sig: string) => {
-        loadedSignature.current[id] = sig;
+    // Het lijstitem kent geen versie van de regels (een wijziging van artikel, herkomst of partij laat de totalen gelijk): daarom worden de
+    // uitgeklapte regels opnieuw geladen zodra de lijst ververst (nieuwe items); de oude regels blijven zichtbaar tot de nieuwe binnen zijn.
+    const requestSeq = useRef<Record<number, number>>({});
+    const load = (id: number) => {
+        const seq = (requestSeq.current[id] ?? 0) + 1;
+        requestSeq.current[id] = seq;
+        const latest = () => requestSeq.current[id] === seq;
         getPurchaseOrder(id)
-            .then((order) => setExpanded((current) => (current[id] === undefined || loadedSignature.current[id] !== sig ? current : { ...current, [id]: { status: 'ready', data: order.lines } })))
-            .catch((caught: unknown) => setExpanded((current) => (current[id] === undefined || loadedSignature.current[id] !== sig ? current : { ...current, [id]: { status: 'error', error: toApiError(caught) } })));
+            .then((order) => { if (latest()) setExpanded((current) => (current[id] === undefined ? current : { ...current, [id]: { status: 'ready', data: order.lines } })); })
+            .catch((caught: unknown) => { if (latest()) setExpanded((current) => (current[id] === undefined ? current : { ...current, [id]: { status: 'error', error: toApiError(caught) } })); });
     };
     const toggle = (item: PurchaseOrderListItem) => {
         const id = item.id;
         if (expanded[id] !== undefined) {
-            delete loadedSignature.current[id];
+            requestSeq.current[id] = (requestSeq.current[id] ?? 0) + 1;
             setExpanded((current) => { const next = { ...current }; delete next[id]; return next; });
             return;
         }
         setExpanded((current) => ({ ...current, [id]: { status: 'loading' } }));
-        load(id, signature(item));
+        load(id);
     };
+    const previousItems = useRef(items);
     useEffect(() => {
-        const stale = items.filter((item) => expanded[item.id] !== undefined && loadedSignature.current[item.id] !== undefined && loadedSignature.current[item.id] !== signature(item));
-        if (stale.length === 0) return;
-        setExpanded((current) => { const next = { ...current }; for (const item of stale) next[item.id] = { status: 'loading' }; return next; });
-        for (const item of stale) load(item.id, signature(item));
+        if (previousItems.current === items) return;
+        previousItems.current = items;
+        for (const item of items) if (expanded[item.id] !== undefined) load(item.id);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [items]);
     const partial = (item: PurchaseOrderListItem) => {
