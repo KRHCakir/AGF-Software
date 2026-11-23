@@ -53,6 +53,7 @@ describe('sales deliveries (partial delivery)', () => {
         let changed = 0;
         await mounted.render(<SalesDeliveries order={order()} readOnly={false} onChanged={() => { changed++; }} />);
         assert.equal(all('[data-testid="so-delivery"]').length, 1);
+        assert.equal(one('[data-testid="so-delivery-pallets"]')!.getAttribute('data-count'), '3', 'two active and one shipped pallet');
         await act(async () => { one('[data-tour="so-partial-delivery"]')!.click(); });
         const boxes = all('[data-tour="so-partial-delivery-reservation"]') as HTMLInputElement[];
         assert.equal(boxes.length, 2, 'a shipped pallet stays with its delivery and is not offered');
@@ -120,6 +121,13 @@ describe('sales deliveries (partial delivery)', () => {
         await act(async () => { one('[data-tour="so-partial-delivery"]')!.click(); });
         assert.equal(one('[data-testid="so-partial-delivery-uncertain"]'), null, 'after the answer a new choice is free');
         assert.ok(!(all('[data-tour="so-partial-delivery-reservation"]')[0] as HTMLInputElement).closest('fieldset')!.disabled);
+    });
+
+    test('a delivery counts its shipped pallets too, never released ones', async () => {
+        const shipped = order({ lines: [{ id: 1, productName: 'Mango', productVariantName: 'Kent', reservations: [
+            reservation(201, 'P-1', { status: 'Consumed' }), reservation(202, 'P-2', { status: 'Consumed' }), reservation(203, 'P-3', { status: 'Released' })] }] as never });
+        await mounted.render(<SalesDeliveries order={shipped} readOnly={false} onChanged={() => undefined} />);
+        assert.equal(one('[data-testid="so-delivery-pallets"]')!.getAttribute('data-count'), '2');
     });
 
     test('two deliveries are listed with their V-numbers; a closed order offers no partial delivery', async () => {
