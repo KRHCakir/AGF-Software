@@ -19,7 +19,7 @@ export const emptySalesLine = (key: string): SalesLineDraft => emptyPurchaseLine
 
 // De veldnamen van de inkoopregel (formulier) naar die van de verkooporder (server): lines[i].quantity in plaats van expectedQuantity.
 export const SALES_LINE_FIELD: Record<PurchaseLineError['field'], string> = {
-    productVariantId: 'productVariantId', expectedQuantity: 'quantity', expectedUnit: 'unit', expectedGrossWeightKg: 'grossWeightKg', unitPrice: 'unitPrice',
+    productVariantId: 'productVariantId', expectedQuantity: 'quantity', expectedUnit: 'unit', expectedGrossWeightKg: 'grossWeightKg', expectedNetWeightKg: 'netWeightKg', unitPrice: 'unitPrice',
     ggn: 'ggn', discountPercentage: 'discountPercentage', vatPercentage: 'vatPercentage',
 };
 
