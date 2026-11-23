@@ -2427,6 +2427,7 @@
   "po_logistics_vendor_no_address": "The supplier has no address; type the loading address.",
   "po_logistics_customer_no_address": "This customer has no address; type the delivery address.",
   "po_logistics_address_failed": "The address could not be loaded; type it yourself.",
+  "po_logistics_locations_failed": "The stock locations could not be loaded; only Own warehouse is in the list now.",
   "inspection_empty_action": "Go to Receiving",
   "sales_empty_action": "Create first sales order",
   "purchase_empty_text": "Your suppliers' invoices appear here, with total, due date and status.",
