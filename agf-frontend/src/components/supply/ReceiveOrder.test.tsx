@@ -65,6 +65,22 @@ describe('ReceiveOrder', () => {
         assert.equal(bodies()[0].requestId, bodies()[1].requestId);
     });
 
+    test('after an uncertain error a changed quantity first replays the original request with the same requestId', async () => {
+        setup(order([line(1, 100)]));
+        await mounted.render(<ReceiveOrder orderId={7} />);
+        await mounted.waitFor(() => quantityOf(1), 'quantity');
+        await act(async () => setValue(quantityOf(1), '60'));
+        replies.push(json(500, { message: 'verbinding verbroken' }));
+        await click(mounted.button('receipt_receive')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[role="alert"]'), 'error shown');
+        await act(async () => setValue(quantityOf(1), '30'));
+        replies.push(json(201, received([line(1, 40)], 60)));
+        await click(mounted.button('receipt_receive')!);
+        await mounted.waitFor(() => posted.length === 2 && quantityOf(1).value === '40', 'original replayed');
+        assert.equal(bodies()[1].quantity, 60);
+        assert.equal(bodies()[0].requestId, bodies()[1].requestId);
+    });
+
     test('pallet numbers are optional: count and numbers are sent only when opened, empty numbers are made by the server', async () => {
         setup(order([line(1, 100)]));
         await mounted.render(<ReceiveOrder orderId={7} />);
