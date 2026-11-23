@@ -69,6 +69,10 @@ export const ORDER_CHAPTER: TourChapter = {
     steps: [
         ...MASTER_FOR_PURCHASE,
         ...ORDER_CORE,
+        // Sorteren (feedback 22 november): alleen aanwijzen, niet klikken; een klik zou de gekozen sortering in deze browser onthouden.
+        order('sort', '/purchase-orders', [
+            { kind: 'highlight', target: 'sort-header:vendor' },
+        ]),
         order('find', '/purchase-orders', [
             // Terugvinden op het ordernummer van de leverancier; de titel toont dat nummer met het eigen IO-nummer klein eronder.
             { kind: 'type', target: 'po-search', text: '{{tourRef}}' },

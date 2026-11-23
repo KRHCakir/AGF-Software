@@ -37,7 +37,7 @@ export function SortButton({ label, sortKey, sort, onSort, small = false }: {
 }) {
     const direction = ariaSort(sort, sortKey);
     return (
-        <button type="button" onClick={() => onSort(sortKey)} data-sort-key={sortKey}
+        <button type="button" onClick={() => onSort(sortKey)} data-sort-key={sortKey} data-tour="sort-header" data-tour-key={sortKey}
             className={`items-center gap-1 rounded text-left hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${small ? 'mt-0.5 flex font-normal normal-case tracking-normal' : 'inline-flex uppercase tracking-wide'}`}>
             <span>{label}</span>
             <span aria-hidden="true" className={direction === undefined ? 'text-gray-400' : 'text-blue-800'} data-testid="sort-arrow">
