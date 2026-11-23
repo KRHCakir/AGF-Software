@@ -78,11 +78,16 @@ export function salesPartijPayload(text: string | null, suggestion: string | nul
     return { ok: true, value };
 }
 
+// Een lege goederenregel (bijvoorbeeld de nieuwe regel na Tab op het laatste veld, feedback 22 november) gaat niet mee zodra de order iets
+// anders heeft: een gevulde goederenregel, emballage of een dienst. Alleen lege regels: de eerste wordt gecontroleerd (zoals bij inkoop).
+function skipsBlankLines(draft: OrderDraft): boolean {
+    return (draft.packagingLines ?? []).length > 0 || (draft.serviceLines ?? []).length > 0 || draft.lines.some((line) => !isBlankOrderLine(line));
+}
+
 // Backendsleutels lines[i] verwijzen naar de meegestuurde regels; lege goederenregels blijven in het formulier staan maar gaan niet mee.
 // Vertaalt die sleutels terug naar de formulierindex, zodat de fout bij de juiste regel verschijnt.
 export function remapPayloadLineKeys<T>(fieldErrors: Record<string, T>, draft: OrderDraft): Record<string, T> {
-    const hasPackaging = (draft.packagingLines ?? []).length > 0 || (draft.serviceLines ?? []).length > 0;
-    const formIndexes = draft.lines.flatMap((line, index) => (hasPackaging && isBlankOrderLine(line) ? [] : [index]));
+    const formIndexes = draft.lines.flatMap((line, index) => (skipsBlankLines(draft) && isBlankOrderLine(line) ? [] : [index]));
     const result: Record<string, T> = {};
     for (const [key, value] of Object.entries(fieldErrors)) {
         result[key.replace(/^lines\[(\d+)\]/, (match, n: string) => {
@@ -129,7 +134,7 @@ export function buildOrderPayload(draft: OrderDraft, articleOf: (variantId: numb
 
     const packagingDrafts = draft.packagingLines ?? [];
     const serviceDrafts = draft.serviceLines ?? [];
-    const skip = (line: OrderLineDraft) => (packagingDrafts.length > 0 || serviceDrafts.length > 0) && isBlankOrderLine(line);
+    const skip = (line: OrderLineDraft) => skipsBlankLines(draft) && isBlankOrderLine(line);
     const goodsCount = draft.lines.filter((line) => !skip(line)).length;
     if (goodsCount === 0 && packagingDrafts.length === 0 && serviceDrafts.length === 0) errors.push({ field: 'lines', code: 'required' });
     else if (goodsCount > MAX_ORDER_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });

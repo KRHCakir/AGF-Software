@@ -3,13 +3,12 @@ import { ensureFlowMasterData } from './fixtures';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 // Een volledige orderregel alleen met het toetsenbord (Tab, pijlen, Enter) op Inkooporder aanmaken en op een nieuwe verkooporder,
-// en opslaan. Inkooporder (feedback 11 november): artikel, aantal, prijs; Tab op het laatste veld maakt een nieuwe regel. Verkooporder:
-// artikel, aantal, eenheid, kg (de eenheid wordt niet overgeslagen). De kop van het
+// en opslaan. Feedback 22 november: inkoop- en verkooporder hebben dezelfde regel: artikel, aantal, prijs, korting, btw (inkoop daarna GGN);
+// eenheid en kg komen uit het artikel; Tab op het laatste veld maakt een nieuwe regel. De kop van het
 // formulier (leverancier of klant, datum) wordt gewoon ingevuld; het gaat om de regel. Draait mee met `npm run test:tour` (zelfde
 // frontend en API, zie docs/demo-tour.md) en schrijft echte orders met referentie E2E-KEYS-… in de testdatabase.
 
 const API = process.env.TOUR_API_URL ?? 'http://localhost:5198/api';
-const UNITS = ['box', 'colli', 'tray', 'piece', 'dozen'];
 
 type Variant = { id: number; name: string; shortcutCode: string | null; packagingUnit: string | null; defaultNetKgPerPackage: number | null; isArchived?: boolean };
 
@@ -26,9 +25,8 @@ async function tourArticle(request: APIRequestContext): Promise<Variant> {
 
 const focusedId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? '');
 
-// Vanaf het artikelveld: code typen, Tab neemt de suggestie; aantal; Tab naar de eenheid; pijlen tot de eenheid van het artikel;
-// Enter naar de kg. Geeft de id van het kg-veld terug.
-async function keyboardLine(page: Page, prefix: string, quantityField: string, unitField: string, article: Variant, quantity: string) {
+// Vanaf het artikelveld: code typen, Tab neemt de suggestie; aantal, prijs, korting (leeg) en btw (voorstel uit het artikel) met Tab.
+async function keyboardLine(page: Page, prefix: string, quantityField: string, article: Variant, quantity: string, price: string) {
     await page.locator(`[id="${prefix}.productVariantId-input"]`).focus();
     await page.keyboard.type(article.shortcutCode!);
     await page.waitForTimeout(200);
@@ -36,16 +34,12 @@ async function keyboardLine(page: Page, prefix: string, quantityField: string, u
     await expect.poll(() => focusedId(page)).toBe(`${prefix}.${quantityField}-input`);
     await page.keyboard.type(quantity);
     await page.keyboard.press('Tab');
-    await expect.poll(() => focusedId(page)).toBe(`${prefix}.${unitField}-input`);
-    const unit = page.locator(`[id="${prefix}.${unitField}-input"]`);
-    const target = UNITS.indexOf(article.packagingUnit!);
-    // Altijd met de pijlen naar de juiste eenheid, ook als die al was voorgevuld: eerst helemaal naar boven, dan omlaag.
-    for (let i = 0; i < UNITS.length; i++) await page.keyboard.press('ArrowUp');
-    await expect(unit).toHaveValue(UNITS[0]);
-    for (let i = 0; i < target; i++) await page.keyboard.press('ArrowDown');
-    await expect(unit).toHaveValue(article.packagingUnit!);
-    await page.keyboard.press('Enter');
-    await expect.poll(() => focusedId(page)).toMatch(new RegExp(`^${prefix.replace(/[[\]]/g, '\\$&')}\\.(expected)?[nN]etWeightKg-input$`));
+    await expect.poll(() => focusedId(page)).toBe(`${prefix}.unitPrice-input`);
+    await page.keyboard.type(price);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => focusedId(page)).toBe(`${prefix}.discountPercentage-input`);
+    await page.keyboard.press('Tab');
+    await expect.poll(() => focusedId(page)).toBe(`${prefix}.vatPercentage-input`);
 }
 
 test.describe('orderregel met alleen het toetsenbord', () => {
@@ -78,17 +72,9 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await page.locator('[data-tour="supply-expected"]').press('Enter');
         await expect(page.locator('[data-tour="supply-expected"]')).toHaveValue('04-11-2026');
 
-        // Nieuwe indeling: artikel, aantal, prijs, GGN; eenheid en kg komen uit het artikel en worden overgeslagen.
-        await page.locator('[id="lines[0].productVariantId-input"]').focus();
-        await page.keyboard.type(article.shortcutCode!);
-        await page.waitForTimeout(200);
-        await page.keyboard.press('Tab');
-        await expect.poll(() => focusedId(page)).toBe('lines[0].expectedQuantity-input');
-        await page.keyboard.type('7');
-        await page.keyboard.press('Tab');
-        await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
-        await page.keyboard.type('12');
-        // Certificaten deel 2: na de prijs het GGN van het product (een voorstel of leeg); Tab daarop maakt de nieuwe regel.
+        // Artikel, aantal, prijs, korting, btw, GGN; eenheid en kg komen uit het artikel en worden overgeslagen.
+        await keyboardLine(page, 'lines[0]', 'expectedQuantity', article, '7', '12');
+        // Certificaten deel 2: na de btw het GGN van het product (een voorstel of leeg); Tab daarop maakt de nieuwe regel.
         await page.keyboard.press('Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[0].ggn-input');
         await page.keyboard.press('Tab');
@@ -98,7 +84,7 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         // Terug naar de prijs en Enter: opslaan; de lege tweede regel telt niet mee.
         await page.keyboard.press('Shift+Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[0].ggn-input');
-        await page.keyboard.press('Shift+Tab');
+        for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+Tab');
         await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
         await page.keyboard.press('Enter');
         // Het ordernummer van de leverancier is het hoofdnummer, het eigen IO-nummer staat eronder als intern nummer.
@@ -113,7 +99,7 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         expect(detail.lines.map((line) => [line.unitPrice, line.lineTotal, line.unit])).toEqual([[12, 84, article.packagingUnit]]);
     });
 
-    test('Nieuwe verkooporder: artikel, aantal, eenheid met pijlen, kg en opslaan met Enter', async ({ page, request }) => {
+    test('Nieuwe verkooporder: artikel, aantal, prijs, korting, btw zoals de inkooporder; Tab op de btw maakt een nieuwe regel; opslaan met Enter', async ({ page, request }) => {
         const article = await tourArticle(request);
         const reference = `E2E-KEYS-${randomUUID().slice(0, 8)}`;
         await page.goto('/sales-orders');
@@ -129,14 +115,21 @@ test.describe('orderregel met alleen het toetsenbord', () => {
         await page.locator('[data-tour="sales-delivery"]').press('Tab');
         await expect(page.locator('[data-tour="sales-delivery"]')).toHaveValue('04-11-2026');
 
-        await keyboardLine(page, 'lines[0]', 'quantity', 'unit', article, '2');
+        await keyboardLine(page, 'lines[0]', 'quantity', article, '2', '13,35');
+        await page.keyboard.press('Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[1].productVariantId-input');
+        await expect(page.locator('[data-testid="sales-lines"] [data-testid="line-totals-amount"]')).toHaveText(/26,70/);
+        // Terug met Shift+Tab: langs de bronkeuze onder de regel (Uit voorraad / Uit verwachte aanvoer), Btw en Korting naar Prijs.
+        for (let i = 0; i < 8 && (await focusedId(page)) !== 'lines[0].unitPrice-input'; i++) await page.keyboard.press('Shift+Tab');
+        await expect.poll(() => focusedId(page)).toBe('lines[0].unitPrice-input');
         await page.keyboard.press('Enter');
         await expect(page.locator('[data-tour="sales-saved-number"]')).toContainText(/VO-\d{4}-\d{4}/, { timeout: 30_000 });
 
         const saved = await request.get(`${API}/sales-orders?q=${reference}`);
-        const body = (await saved.json()) as { items?: { customerReference: string; lines: { quantity: number; unit: string }[] }[] } | { customerReference: string; lines: { quantity: number; unit: string }[] }[];
+        type Saved = { customerReference: string; lines: { quantity: number; unit: string; unitPrice: number; lineTotal: number }[] };
+        const body = (await saved.json()) as { items?: Saved[] } | Saved[];
         const orders = (Array.isArray(body) ? body : body.items ?? []).filter((order) => order.customerReference === reference);
         expect(orders).toHaveLength(1);
-        expect(orders[0].lines.map((line) => [line.quantity, line.unit])).toEqual([[2, article.packagingUnit]]);
+        expect(orders[0].lines.map((line) => [line.quantity, line.unit, line.unitPrice, line.lineTotal])).toEqual([[2, article.packagingUnit, 13.35, 26.7]]);
     });
 });

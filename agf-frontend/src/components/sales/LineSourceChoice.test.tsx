@@ -53,7 +53,8 @@ describe('CreateSalesOrderForm: source per line', () => {
         await mounted.waitFor(() => text('lines[0].balance') !== '', 'balance');
         assert.equal(field('lines[0].quantity-input').value, '50');
         assert.ok(text('lines[0].balance').includes('sales_balance_line'));
-        assert.ok(text('lines[0].pallets').includes('sales_pallet_equivalent'), '= 2,5 pallets as information');
+        // De bron staat onder de regel (feedback 22 november); de regel zelf toont haar pallets in de kolom Aantal.
+        assert.ok((mounted.container.querySelector('[data-testid="lines[0].extra"] [data-testid="lines[0].pallets"]')?.textContent ?? '').includes('sales_pallet_equivalent'), '= 2,5 pallets as information');
         assert.equal(source(0), null, 'only partly free: no source chosen yet, the proposal is shown (the server never gets a 409 for this)');
         assert.ok(text('lines[0].split-proposal').includes('sales_stock_not_enough'));
         assert.equal(mounted.container.querySelector('[data-testid="lines[0].shortage"]'), null, '50 fits in 60: no shortage');

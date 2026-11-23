@@ -85,7 +85,7 @@ export function ServiceLinesInput({ lines, articles, locked, errors, onChange }:
                                         </td>
                                         <td {...cell(t('po_line_col_vat'))}>
                                             <select {...fieldProps(`${prefix}.vatPercentage`, errors(`${prefix}.vatPercentage`))} value={String(row.vat)} disabled={locked} aria-label={`${t('po_line_col_vat')} ${index + 1}`}
-                                                className={`${inputClass} !mt-0 w-20 text-right`} onChange={(event) => update(line.key, { vat: event.target.value })}>
+                                                className={`${inputClass} !mt-0 w-24 min-w-[5.5rem] text-right`} onChange={(event) => update(line.key, { vat: event.target.value })}>
                                                 {VAT_RATES.map((rate) => <option key={rate} value={String(rate)}>{formatPercent(rate, locale)}%</option>)}
                                             </select>
                                         </td>
