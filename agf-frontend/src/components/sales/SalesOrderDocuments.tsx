@@ -220,7 +220,7 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
                     )}
                     {!cancelled && data.hasTransport === false && multiple && <p className="text-sm text-gray-700" data-testid="so-transport-order-missing">{t('so_transport_order_missing')}</p>}
                     {groups.map((group) => (
-                        <DeliveryDocumentsBlock key={group.id ?? 0} order={order} group={group} multiple={multiple} busy={busy} cancelled={cancelled} deliveryDate={delivery}
+                        <DeliveryDocumentsBlock key={`${order.id}-${group.id ?? 0}`} order={order} group={group} multiple={multiple} busy={busy} cancelled={cancelled} deliveryDate={delivery}
                             confirmedText={t('so_confirmed_by', { date: formatDateTime(data.confirmedAt!, locale), name: data.confirmedBy ?? '–' })}
                             hasTransportMissing={!cancelled && data.hasTransport === false && !multiple}
                             onRun={run} onPdf={pdf} onChanged={onChanged} />
