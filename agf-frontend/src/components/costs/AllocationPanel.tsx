@@ -27,14 +27,14 @@ export function targetFromTotals(item: PartijTotals): CostTarget {
         partijId: item.id, number: item.number, kind: sales ? 'Sales' : 'Purchase',
         party: sales ? [item.customerName, item.salesOrderNumber].filter(Boolean).join(' · ') || null : item.vendors.join(', ') || null,
         products: item.products.join(', ') || null,
-        quantity: sales ? item.orderedQuantity : item.receivedQuantity, unit: item.unit, netKg: item.netKg ?? 0,
+        quantity: sales ? item.orderedQuantity : item.receivedQuantity, unit: item.unit, netKg: item.netKg ?? 0, value: item.purchaseValue ?? null,
     };
 }
 
 const rowsFrom = (line: InvoiceLineAllocation): Row[] => line.allocations.map((allocation) => ({
     target: {
         partijId: allocation.partijId, number: allocation.number, kind: allocation.partijKind, party: allocation.party ?? null, products: allocation.products ?? null,
-        quantity: allocation.quantity ?? 0, unit: allocation.unit ?? null, netKg: allocation.netKg ?? 0,
+        quantity: allocation.quantity ?? 0, unit: allocation.unit ?? null, netKg: allocation.netKg ?? 0, value: allocation.value ?? null,
     },
     amount: formatAmountInput(allocation.amount),
 }));
@@ -201,7 +201,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                                         <span className="font-mono font-semibold">{row.target.number}</span>{' '}
                                         <span className="text-xs text-gray-600">{t(row.target.kind === 'Sales' ? 'partij_kind_sales' : 'partij_kind_purchase')}</span>
                                         <span className="block text-gray-800">{[row.target.party, row.target.products, basis(row.target)].filter(Boolean).join(' · ')}</span>
-                                        {skipped?.ids.includes(row.target.partijId) && <span className="block text-xs text-amber-900">{t(skipped.mode === 'kg' ? 'allocation_skipped_kg' : 'allocation_skipped_colli')}</span>}
+                                        {skipped?.ids.includes(row.target.partijId) && <span className="block text-xs text-amber-900">{t(skipped.mode === 'kg' ? 'allocation_skipped_kg' : skipped.mode === 'value' ? 'allocation_skipped_value' : 'allocation_skipped_colli')}</span>}
                                     </span>
                                     <label htmlFor={`${prefix}-amount-${row.target.partijId}`} className="sr-only">{t('allocation_amount_for', { number: row.target.number })}</label>
                                     <input id={`${prefix}-amount-${row.target.partijId}`} inputMode="decimal" data-decimals={2} value={row.amount} onChange={(event) => setAmount(row.target.partijId, event.target.value)}
@@ -220,7 +220,7 @@ export default function AllocationPanel({ invoiceId, line, canAllocate, currency
                     )}
                     {rows.length > 0 && (
                         <div className="flex flex-wrap gap-2">
-                            {(['equal', 'kg', 'colli'] as const).map((how) => (
+                            {(['equal', 'kg', 'colli', 'value'] as const).map((how) => (
                                 <button key={how} type="button" className={secondaryButtonClass} data-tour="allocation-spread" data-tour-key={how} onClick={() => spread(how)}>{t(`allocation_spread_${how}`)}</button>
                             ))}
                         </div>

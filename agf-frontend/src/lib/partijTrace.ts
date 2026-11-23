@@ -1,0 +1,48 @@
+// Herleidbaarheid als CSV (feedback 22 november: af te drukken en te exporteren voor een recall). Pure module, te toetsen met node:test.
+// Puntkomma als scheiding en getallen zoals op het scherm (nl: komma), zodat Excel het in Nederland meteen goed opent.
+import type { PartijRecall, SalesLotTrace } from '../types/partij';
+
+export type Cell = string | number | null | undefined;
+
+export function csvCell(value: Cell, number: (value: number) => string): string {
+    const text = value === null || value === undefined ? '' : typeof value === 'number' ? number(value) : value;
+    return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function csvRows(rows: Cell[][], number: (value: number) => string): string {
+    return rows.map((row) => row.map((cell) => csvCell(cell, number)).join(';')).join('\r\n') + '\r\n';
+}
+
+export interface RecallLabels {
+    lot: string; received: string; shipped: string; returned: string; rejected: string; onHand: string; difference: string;
+    salesLot: string; customer: string; reference: string; quantity: string; date: string; directInvoice: string;
+}
+
+// Inkoop-partij: eerst de som (ontvangen, geleverd, teruggenomen, afgekeurd, op voorraad, verschil), dan per bestemming een regel.
+export function recallCsv(number: string, recall: PartijRecall, labels: RecallLabels, format: { number: (value: number) => string; date: (iso: string) => string }): string {
+    const rows: Cell[][] = [
+        [labels.lot, number],
+        [labels.received, recall.received], [labels.shipped, recall.shipped], [labels.returned, recall.returned],
+        [labels.rejected, recall.rejected], [labels.onHand, recall.onHand], [labels.difference, recall.difference],
+        [],
+        [labels.salesLot, labels.customer, labels.reference, labels.quantity, labels.date],
+        ...recall.destinations.map((d) => [d.salesPartijNumber, d.customerName, d.reference, d.quantity, d.date === null ? null : format.date(d.date)]),
+        ...recall.directInvoices.map((d) => [d.salesPartijNumber, d.customerName, `${labels.directInvoice} ${d.reference ?? ''}`.trim(), d.quantity, d.date === null ? null : format.date(d.date)]),
+    ];
+    return csvRows(rows, format.number);
+}
+
+export interface DeliveryLabels { lot: string; customer: string; reference: string; date: string; product: string; quantity: string; purchaseLot: string; supplier: string; origin: string }
+
+// Verkoop-partij: klant, order en leverdatum, dan per regel en inkoop-partij een regel (product, colli, inkoop-partij, leverancier, herkomst).
+export function deliveryCsv(number: string, trace: SalesLotTrace, labels: DeliveryLabels, format: { number: (value: number) => string; date: (iso: string) => string }): string {
+    const rows: Cell[][] = [
+        [labels.lot, number], [labels.customer, trace.customerName], [labels.reference, trace.reference], [labels.date, trace.deliveryDate === null ? null : format.date(trace.deliveryDate)],
+        [],
+        [labels.product, labels.quantity, labels.purchaseLot, labels.supplier, labels.origin],
+        ...trace.lines.flatMap((line) => (line.sources.length === 0
+            ? [[line.product, line.quantity, null, null, null]]
+            : line.sources.map((source) => [line.product, source.quantity, source.number, source.vendorName, source.origin]))),
+    ];
+    return csvRows(rows, format.number);
+}

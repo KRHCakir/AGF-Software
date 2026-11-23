@@ -41,6 +41,8 @@ export interface PartijTotals {
     id: number;
     number: string;
     color?: string | null;
+    // Feedback 22 november: inkoopwaarde in euro (Verdeel naar waarde); null of ontbrekend = geen prijzen.
+    purchaseValue?: number | null;
     kind: PartijKind;
     // Alleen bij een verkoop-partij: de order (1-op-1), de klant, wat er besteld is en uit welke inkoop-partijen de colli komen.
     salesOrderId: number | null;
@@ -166,6 +168,9 @@ export interface PartijDetail extends PartijTotals {
     note: string | null;
     // De kleuren die deze partij mag hebben (de lijsten van haar producten); ontbreekt bij een oudere server.
     allowedColors?: string[];
+    // Feedback 22 november: herleidbaarheid. Inkoop-partij: de recall; verkoop-partij: de levering. Ontbreken bij een oudere server.
+    recall?: PartijRecall | null;
+    delivery?: SalesLotTrace | null;
     createdBy: string;
     linked: boolean;
     // Het nummer verandert alleen met reden (inkoop-partij met koppelingen; verkoop-partij na reserveren of leveren).
@@ -257,4 +262,40 @@ export interface ProductColors { productId: number; productName: string; colors:
 
 export function isProductColors(value: unknown): value is ProductColors {
     return isRecord(value) && isNumber(value.productId) && isString(value.productName) && Array.isArray(value.colors) && value.colors.every(isString);
+}
+
+// Inkoop-partij: ontvangen = geleverd - teruggenomen + afgekeurd + op voorraad; difference is wat daarvan afwijkt (0 als het klopt).
+export interface PartijDestination {
+    salesPartijId: number | null;
+    salesPartijNumber: string | null;
+    salesOrderId: number | null;
+    reference: string | null;
+    customerName: string | null;
+    quantity: number;
+    unit: string | null;
+    date: string | null;
+}
+
+export interface PartijRecall {
+    unit: string | null;
+    received: number;
+    shipped: number;
+    returned: number;
+    rejected: number;
+    onHand: number;
+    difference: number;
+    destinations: PartijDestination[];
+    directInvoices: PartijDestination[];
+}
+
+export interface SalesLotTraceSource { partijId: number | null; number: string | null; vendorName: string | null; origin: string | null; quantity: number; status: string }
+export interface SalesLotTraceLine { product: string | null; quantity: number; unit: string | null; sources: SalesLotTraceSource[] }
+export interface SalesLotTrace {
+    customerName: string | null;
+    salesOrderId: number | null;
+    reference: string | null;
+    sequence: number | null;
+    deliveryDate: string | null;
+    shipped: boolean;
+    lines: SalesLotTraceLine[];
 }

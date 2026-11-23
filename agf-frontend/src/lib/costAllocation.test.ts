@@ -4,8 +4,8 @@ import { type CostTarget, checkAllocation, distribute } from './costAllocation.t
 
 // Kosten verdelen: gelijk, naar kg en naar colli, in centen, met het restcent op de grootste partij; een partij zonder kg of colli doet
 // niet mee. Controle: nooit meer dan het regelbedrag, een rest is algemene kosten.
-const target = (partijId: number, quantity: number, netKg: number): CostTarget => ({
-    partijId, number: String(partijId), kind: 'Sales', party: null, products: null, quantity, unit: 'colli', netKg,
+const target = (partijId: number, quantity: number, netKg: number, value: number | null = null): CostTarget => ({
+    partijId, number: String(partijId), kind: 'Sales', party: null, products: null, quantity, unit: 'colli', netKg, value,
 });
 
 describe('cost allocation', () => {
@@ -30,6 +30,15 @@ describe('cost allocation', () => {
         assert.deepEqual(result.skipped, [1]);
         assert.deepEqual(distribute(600, [target(1, 10, 0), target(2, 0, 50), target(3, 20, 100)], 'colli').skipped, [2]);
         assert.deepEqual(distribute(600, [target(1, 0, 0)], 'kg'), { amounts: [null], skipped: [1] });
+    });
+
+    // Feedback 22 november: Verdeel naar waarde. 100 over inkoopwaarden 380 + 200 + 20 = 600: 63,33 + 33,33 + 3,33 = 99,99; de restcent naar de
+    // grootste (63,34). Een partij zonder prijzen doet niet mee.
+    test('by value: rounded to cents, the rest cent on the largest purchase value; a lot without prices does not take part', () => {
+        const targets = [target(1, 0, 0, 380), target(2, 0, 0, 200), target(3, 0, 0, 20), target(4, 10, 10, null)];
+        const result = distribute(100, targets, 'value');
+        assert.deepEqual(result.amounts, [63.34, 33.33, 3.33, null]);
+        assert.deepEqual(result.skipped, [4]);
     });
 
     test('the check: 500 + 1000 out of 5000 leaves 3500 general costs; more than the line is refused; amounts with at most two decimals', () => {
