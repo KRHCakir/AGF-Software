@@ -2085,6 +2085,8 @@
   "direct_trade_archive_intro": "Direct trade is no longer a separate part. Direct trade is now a normal purchase order with a receiving location of the kind In transit. Below the customer-bound supply from before, read only; allocations and shipments are on the sales order.",
   "direct_trade_archive_new": "New direct trade: create a purchase order with location In transit",
   "direct_trade_archive_empty": "There is no customer-bound supply from before.",
+  "direct_trade_archive_lot": "Lot",
+  "direct_trade_archive_open": "Open order (read-only)",
   "chain_label": "Chain of this document",
   "chain_step_order": "Purchase order",
   "chain_step_receipt": "Receipt",

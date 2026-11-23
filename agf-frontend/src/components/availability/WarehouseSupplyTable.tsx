@@ -1,8 +1,8 @@
 'use client';
 
 import { useTranslation } from '../../i18n/LanguageContext';
-import { WarehouseRow, breakdownTotal, formatQuantity } from '../../lib/availability';
-import type { AvailabilityStockLocation } from '../../types/availability';
+import { WarehouseRow, breakdownTotal } from '../../lib/availability';
+import StockLocationBadges from './StockLocationBadges';
 import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import QualityBadge from './QualityBadge';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
@@ -28,21 +28,6 @@ export type AvailabilityView = 'sales' | 'compact' | 'detailed';
 
 // Magazijnaanbod: één rij per variant + eenheid. Compact toont fysiek in magazijn, gereserveerd, beschikbaar na reserveringen,
 // quarantaine en verwachte aanvoer; "Alle kolommen" toont de volledige uitsplitsing. Aantal en kg staan altijd apart.
-// Feedback 22 november: waar voorraad buiten de eigen loods ligt ("120 · Onderweg naar Griekenland"); telt mee in de voorraad ernaast.
-function StockLocationBadges({ locations }: { locations: AvailabilityStockLocation[] | undefined }) {
-    const { locale } = useTranslation();
-    if (!locations || locations.length === 0) return null;
-    return (
-        <span className="mt-0.5 block space-y-0.5" data-tour="availability-stock-location">
-            {locations.map((location) => (
-                <span key={location.name} className={`block rounded px-1 text-xs ${location.kind === 'InTransit' ? 'bg-sky-50 text-sky-900' : 'bg-gray-100 text-gray-800'}`}>
-                    {formatQuantity(location.quantity, locale)} · {location.name}
-                </span>
-            ))}
-        </span>
-    );
-}
-
 export default function WarehouseSupplyTable({ rows: unsorted, onOpen, focus = null, view = 'compact' }: {
     rows: WarehouseRow[];
     onOpen: (row: WarehouseRow) => void;

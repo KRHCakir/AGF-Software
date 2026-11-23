@@ -2085,6 +2085,8 @@
   "direct_trade_archive_intro": "Direct trade is geen apart onderdeel meer. Directe handel is nu een gewone inkooporder met als ontvangstlocatie een locatie van de soort Onderweg. Hieronder de klantgebonden aanvoer van vroeger, alleen om te lezen; toewijzingen en verzendingen staan op de verkooporder.",
   "direct_trade_archive_new": "Nieuwe directe handel: inkooporder aanmaken met locatie Onderweg",
   "direct_trade_archive_empty": "Er is geen klantgebonden aanvoer van vroeger.",
+  "direct_trade_archive_lot": "Lot",
+  "direct_trade_archive_open": "Order openen (alleen lezen)",
   "chain_label": "Keten van dit document",
   "chain_step_order": "Inkooporder",
   "chain_step_receipt": "Ontvangst",

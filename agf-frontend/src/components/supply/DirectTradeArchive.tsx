@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { commitmentStatusKey, formatDateTime, formatQuantity } from '../../lib/availability';
+import { commitmentStatusKey, formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
 import { toApiError } from '../../services/apiClient';
 import { getJson } from '../../services/apiClient';
 import { isSupplyCommitmentList, type SupplyCommitment } from '../../types/supply';
@@ -57,9 +57,16 @@ export default function DirectTradeArchive() {
                                     {commitmentStatusKey(commitment.status) ? t(commitmentStatusKey(commitment.status)!) : commitment.status}
                                 </span>
                             </span>
-                            <span className="block text-xs text-gray-600">
-                                {commitment.lines.map((line) => `${line.productName ?? ''} ${line.productVariantName ?? ''} · ${formatQuantity(line.expectedQuantity, locale)}${line.expectedUnit ? ` ${line.expectedUnit}` : ''}`).join(' — ')}
-                            </span>
+                            <ul className="mt-0.5 text-xs text-gray-600" data-testid={`direct-trade-archive-lines-${commitment.id}`}>
+                                {commitment.lines.map((line) => (
+                                    <li key={line.id} data-testid={`direct-trade-archive-line-${line.id}`}>
+                                        {`${line.productName ?? ''} ${line.productVariantName ?? ''} · ${formatQuantity(line.expectedQuantity, locale)}${line.expectedUnit ? ` ${line.expectedUnit}` : ''}`}
+                                        {line.expectedNetWeightKg != null && ` · ${formatKg(line.expectedNetWeightKg, locale)}`}
+                                        {line.lotNumber && ` · ${t('direct_trade_archive_lot')} ${line.lotNumber}`}
+                                    </li>
+                                ))}
+                            </ul>
+                            <Link href={`/purchase-orders?id=${commitment.id}`} className="text-xs font-medium text-blue-800 underline underline-offset-2" data-testid={`direct-trade-archive-open-${commitment.id}`}>{t('direct_trade_archive_open')}</Link>
                         </li>
                     ))}
                 </ul>
