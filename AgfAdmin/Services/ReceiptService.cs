@@ -197,6 +197,15 @@ namespace AgfAdmin.Services
                 return ServiceResult<ReceiveLineResultDto>.Conflict(CertificateCheck.ConflictMessage(lineWarnings), CertificateCheck.ConflictBody(lineWarnings));
             }
 
+            // Het RequestId hoort bij de hele aanvraag: een eerdere ontvangst is atomair vastgelegd, dus bestaan er pallets onder dit RequestId,
+            // dan moet de herhaling precies evenveel pallets vragen. Anders (andere verdeling of aantal) wordt niets bijgemaakt.
+            var derivedKeys = Enumerable.Range(0, MaxPallets).Select(i => (Guid?)Derived(requestId, $"pallet:{i}")).ToList();
+            var existingPallets = await _db.Pallets.AsNoTracking().CountAsync(p => derivedKeys.Contains(p.RequestId), cancellationToken);
+            if (existingPallets > 0 && existingPallets != shares.Count)
+            {
+                return ServiceResult<ReceiveLineResultDto>.Conflict($"RequestId {requestId} was already used for a receipt with {existingPallets} pallet(s); use a new requestId for different input.");
+            }
+
             // Alles of niets: alle pallets en regels in één transactie; bij een fout wordt niets opgeslagen, zodat een herhaling niets dubbel ontvangt.
             await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             var pallets = new PalletService(_db, _user);
