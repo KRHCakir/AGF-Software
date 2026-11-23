@@ -102,6 +102,10 @@ export interface PurchaseOrderLine {
     // Afwijkende ontvangst: deze regel vervangt die regel, of is (deels) vervangen door die regels.
     replacesLineId?: number | null;
     replacedByLineIds?: number[];
+    // Feedback 22 november, splitsen: het open deel van die regel, of gesplitst in die regels; vervallen restant (null = niets vervallen).
+    splitFromLineId?: number | null;
+    splitIntoLineIds?: number[];
+    cancelledQuantity?: number | null;
     receivedQuantity: number;
     receivedNetWeightKg: number;
     rejectedQuantity: number;
@@ -290,6 +294,8 @@ export interface UpdatePurchaseOrderLineRequest {
     unitPrice?: number | null;
     discountPercentage?: number | null;
     vatPercentage?: number | null;
+    // Feedback 22 november, splitsen: wat er met het restant van een deels ontvangen regel met een ander artikel gebeurt.
+    splitRemainder?: 'Expected' | 'Cancelled' | null;
 }
 
 // PUT /api/purchase-orders/{id}: hetzelfde als aanmaken, plus de verwachte versie en per bestaande regel haar id.

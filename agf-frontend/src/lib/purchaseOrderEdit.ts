@@ -111,11 +111,26 @@ export function isUntouched(draft: PurchaseLineDraft, edit: EditLine): boolean {
         && Boolean(draft.grossKgEntered) === Boolean(opened.grossKgEntered) && (draft.grossKgEntered ? (draft.grossKg ?? '').trim() === (opened.grossKg ?? '') : true);
 }
 
+// Feedback 22 november, splitsen: een deels ontvangen regel met een ander artikel wordt bij opslaan gesplitst (het ontvangen deel blijft op
+// de oude regel, het open deel wordt een nieuwe regel met dit artikel). Wat er met het restant gebeurt, kiest de gebruiker.
+export type SplitRemainder = 'Expected' | 'Cancelled';
+
+export function isSplit(draft: PurchaseLineDraft, edit: EditLine | undefined): boolean {
+    return edit !== undefined && edit.received > 0 && draft.productVariantId !== '' && draft.productVariantId !== edit.opened.productVariantId;
+}
+
+// Het open deel van de oude regel: besteld min ontvangen (het voorstel voor het aantal van de nieuwe regel).
+export function openQuantityOf(edit: EditLine): number {
+    return Math.max(0, edit.stored.expectedQuantity - edit.received);
+}
+
 // Het GGN van een opgeslagen regel gaat altijd mee: leeg als '' (bewust leegmaken), want weggelaten (null) betekent voor de server
 // "ongewijzigd" (zo wist een oudere client nooit een GGN).
-export function updateLinePayload(draft: PurchaseLineDraft, payload: CreateSupplyCommitmentLineRequest, edit: EditLine | undefined): UpdatePurchaseOrderLineRequest {
+export function updateLinePayload(draft: PurchaseLineDraft, payload: CreateSupplyCommitmentLineRequest, edit: EditLine | undefined,
+    remainder: SplitRemainder | null = null): UpdatePurchaseOrderLineRequest {
     const price = payload.unitPrice ?? null;
     if (edit === undefined) return { ...payload, id: null, unitPrice: price };
+    if (isSplit(draft, edit)) return { ...payload, id: edit.lineId, unitPrice: price, ggn: payload.ggn ?? '', splitRemainder: remainder };
     if (!isUntouched(draft, edit)) return { ...payload, id: edit.lineId, unitPrice: price, ggn: payload.ggn ?? '' };
     const stored = edit.stored;
     return {
@@ -128,15 +143,20 @@ export function updateLinePayload(draft: PurchaseLineDraft, payload: CreateSuppl
 }
 
 // De grenzen van een regel na ontvangst, met de uitleg die het formulier toont (nooit een grijs veld zonder reden).
+// Een deels ontvangen regel mag een ander artikel krijgen (dan splitst ze, splitReceived = wat ontvangen is en op de oude regel blijft);
+// een regel waaraan iets anders hangt (reservering, afwijking) houdt haar artikel.
 export interface LineLimits {
     articleFixed: boolean;
     minimumQuantity: number | null;
     removable: boolean;
+    splitReceived: number | null;
 }
 
-export function lineLimits(edit: EditLine | undefined): LineLimits {
-    if (edit === undefined || !edit.inUse) return { articleFixed: false, minimumQuantity: null, removable: true };
-    return { articleFixed: true, minimumQuantity: edit.received > 0 ? edit.received : null, removable: false };
+export function lineLimits(edit: EditLine | undefined, draft?: PurchaseLineDraft): LineLimits {
+    if (edit === undefined || !edit.inUse) return { articleFixed: false, minimumQuantity: null, removable: true, splitReceived: null };
+    if (edit.received <= 0) return { articleFixed: true, minimumQuantity: null, removable: false, splitReceived: null };
+    const split = draft !== undefined && isSplit(draft, edit);
+    return { articleFixed: false, minimumQuantity: split ? null : edit.received, removable: false, splitReceived: split ? edit.received : null };
 }
 
 // Opgeslagen regels die niet meer in het formulier staan, maar wel moeten blijven (er hangt iets aan): de server weigert dat ook.
@@ -150,6 +170,6 @@ const FIELD_KEYS: Readonly<Record<string, string>> = {
     note: 'po_note', supplierLotReference: 'partij_supplier_lot', orderChannel: 'po_change_channel', partij: 'partij_field', line: 'po_change_line',
     article: 'po_change_article', expectedQuantity: 'po_change_quantity', expectedUnit: 'po_change_unit', unitPrice: 'po_change_price', discountPercentage: 'po_change_discount', vatPercentage: 'po_change_vat',
     expectedNetWeightKg: 'po_change_net', expectedGrossWeightKg: 'po_change_gross', weightSource: 'po_change_weight_source', pallets: 'po_change_pallets',
-    lotNumber: 'supply_lot', ggn: 'po_line_col_ggn', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
+    lotNumber: 'supply_lot', ggn: 'po_line_col_ggn', split: 'po_change_split', cancelledQuantity: 'po_change_cancelled', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
 };
 export const changeFieldKey = (field: string): string | null => FIELD_KEYS[field] ?? null;

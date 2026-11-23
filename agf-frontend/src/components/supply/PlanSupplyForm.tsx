@@ -21,7 +21,9 @@ import { type CertificateCheck, certificateChecksOf } from '../../types/certific
 import { getGgnProposals, updatePurchaseOrder } from '../../services/purchaseOrderService';
 import { applyGgnProposals } from '../../lib/productGgn';
 import type { GgnProposal } from '../../types/productGgn';
-import { type OrderEdit, lineLimits, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
+import { formatDecimalInput } from '../../lib/decimal';
+import { type OrderEdit, type SplitRemainder, isSplit, lineLimits, openQuantityOf, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
+import SplitLineDialog, { type SplitQuestion } from './SplitLineDialog';
 import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
 import { MAX_NOTE_LENGTH } from '../../lib/purchaseOrderRules';
 import { getNextPartijNumber } from '../../services/partijService';
@@ -130,6 +132,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     // Certificaten deel 1: de vraag "Klopt dit?" (product niet in het GGN-certificaat van de leverancier, of verlopen); Ja stuurt dezelfde
     // opdracht opnieuw met de bevestigde producten.
     const [certificateCheck, setCertificateCheck] = useState<CertificateCheck[] | null>(null);
+    // Feedback 22 november, splitsen: de vraag wat er met het restant van een deels ontvangen regel met een ander artikel gebeurt.
+    const [splitQuestions, setSplitQuestions] = useState<SplitQuestion[] | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
@@ -202,6 +206,12 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     // Certificaten deel 2: het voorgestelde GGN van het product per regel, uit de geldige GGN-certificaten van de leverancier op de verwachte
     // leverdatum. Opnieuw opgehaald bij een andere leverancier, andere producten of een andere datum; lukt het niet, dan blijft het veld
     // gewoon in te vullen (geen voorstel, geen fout).
+    // "Mango Kent · Peru · 12": product, ras en de kenmerken waarin een gesplitste regel verschilt (splitsvraag).
+    const variantLabel = (id: string) => {
+        const variant = variants.get(Number(id));
+        const product = products.find((candidate) => candidate.variants.some((option) => option.id === Number(id)));
+        return variant === undefined ? id : [`${product?.name ?? ''} ${variant.name}`.trim(), variant.origin, variant.sizeCategory].filter(Boolean).join(' · ');
+    };
     const productOfVariant = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, product.id] as const))), [products]);
     const productIdsKey = [...new Set(lines.flatMap((line) => {
         const product = line.productVariantId === '' ? undefined : productOfVariant.get(Number(line.productVariantId));
@@ -294,8 +304,19 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
 
     const updateLine = (key: string, patch: Partial<Omit<PurchaseLineDraft, 'key'>>) => {
         if (locked) return;
-        setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+        setLines((current) => current.map((line) => (line.key === key ? withSplitQuantity(line, { ...line, ...patch }) : line)));
         edited();
+    };
+
+    // Splitsen: krijgt een deels ontvangen regel een ander artikel, dan stelt het formulier het open deel voor als aantal van de nieuwe
+    // regel (zolang de gebruiker het aantal niet zelf veranderde); terug naar het oude artikel zet het bestelde aantal terug.
+    const withSplitQuantity = (before: PurchaseLineDraft, after: PurchaseLineDraft): PurchaseLineDraft => {
+        const stored = edit?.lines.get(after.key);
+        if (stored === undefined || stored.received <= 0 || before.productVariantId === after.productVariantId) return after;
+        const open = formatDecimalInput(openQuantityOf(stored));
+        if (isSplit(after, stored) && after.quantity.trim() === stored.opened.quantity) return { ...after, quantity: open };
+        if (!isSplit(after, stored) && after.quantity.trim() === open) return { ...after, quantity: stored.opened.quantity };
+        return after;
     };
 
     // Per regel wat uit het artikel en de invoer volgt (kg, totaal, pallets); ook voor de totalen onder de regels.
@@ -323,7 +344,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         edited();
     };
 
-    const limitsOf = (key: string) => lineLimits(edit?.lines.get(key));
+    const limitsOf = (key: string) => lineLimits(edit?.lines.get(key), lines.find((line) => line.key === key));
 
     const removeLine = (key: string) => {
         if (locked || lines.length <= 1 || !limitsOf(key).removable) return;
@@ -331,7 +352,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         edited();
     };
 
-    const validate = (): { payload: Omit<CreateSupplyCommitmentRequest, 'requestId'> | null; errors: FieldErrors; editLines?: UpdatePurchaseOrderRequest['lines'] } => {
+    const validate = (remainders: Readonly<Record<string, SplitRemainder>> = {}): { payload: Omit<CreateSupplyCommitmentRequest, 'requestId'> | null; errors: FieldErrors; editLines?: UpdatePurchaseOrderRequest['lines'] } => {
         const found: FieldErrors = {};
         const vendorId = Number(header.vendorId);
         if (!header.vendorId) addError(found, 'vendorId', t('supply_error_required'));
@@ -418,17 +439,26 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             },
             errors: {},
             // Aanpassen: per regel haar id; een niet aangeraakte regel gaat exact terug zoals ze was opgeslagen.
-            editLines: edit === null ? [] : built.lines.map(({ index, payload }) => updateLinePayload(lines[index], payload, edit.lines.get(lines[index].key))),
+            editLines: edit === null ? [] : built.lines.map(({ index, payload }) => updateLinePayload(lines[index], payload, edit.lines.get(lines[index].key), remainders[lines[index].key] ?? null)),
         };
     };
 
-    const submit = async (confirmed: PendingSubmission | null = null) => {
+    const submit = async (confirmed: PendingSubmission | null = null, remainders: Readonly<Record<string, SplitRemainder>> | null = null) => {
         if (inFlight.current || result !== null) return;
         let submission = confirmed ?? pending;
         if (submission === null) {
-            const { payload, errors: found, editLines } = validate();
+            const { payload, errors: found, editLines } = validate(remainders ?? {});
             setErrors(found);
             if (payload === null) return;
+            // Splitsen: eerst vragen wat er met het restant gebeurt (één vraag voor alle gesplitste regels), daarna pas opslaan.
+            const questions = edit === null || remainders !== null ? [] : lines.flatMap((line, index) => {
+                const stored = edit.lines.get(line.key);
+                return stored !== undefined && isSplit(line, stored) ? [{ key: line.key, index, stored, draft: line }] : [];
+            });
+            if (questions.length > 0) {
+                setSplitQuestions(questions);
+                return;
+            }
             const requestId = newRequestId();
             submission = edit === null ? { requestId, payload: { requestId, ...payload } } : {
                 requestId,
@@ -749,6 +779,10 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     <p role="status" className="text-sm text-amber-900" data-tour="supply-partij-none">{t('partij_none_warning')}</p>
                 )}
             </div>
+            {splitQuestions !== null && (
+                <SplitLineDialog questions={splitQuestions} variantName={variantLabel} onCancel={() => setSplitQuestions(null)}
+                    onConfirm={(choices) => { setSplitQuestions(null); void submit(null, choices); }} />
+            )}
             {certificateCheck !== null && <CertificateCheckDialog checks={certificateCheck} onNo={declineCertificates} onYes={confirmCertificates} />}
         </form>
     );

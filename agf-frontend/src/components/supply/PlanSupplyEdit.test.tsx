@@ -112,10 +112,11 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         assert.deepEqual([body.origin, body.originCountryCode], ['', null]);
     });
 
-    test('after a receipt every limit is explained: article fixed, never below received, the line stays, the supplier is fixed', async () => {
-        await render(order({ vendorFixed: true, partijFixed: true, lines: [storedLine({ inUse: true, receivedQuantity: 40 })] }));
-        assert.equal(field('lines[0].productVariantId-input').disabled, true);
-        assert.ok(testId('lines[0].article-fixed')!.textContent!.includes('po_edit_article_fixed'));
+    test('after a receipt every limit is explained: never below received, the line stays, the supplier is fixed; with other ties the article is fixed', async () => {
+        await render(order({ vendorFixed: true, partijFixed: true, lines: [storedLine({ inUse: true, receivedQuantity: 40 }), storedLine({ id: 8, inUse: true, receivedQuantity: 0 })] }));
+        assert.equal(field('lines[0].productVariantId-input').disabled, false, 'a partly received line may get another article (it splits)');
+        assert.equal(field('lines[1].productVariantId-input').disabled, true, 'reserved but not received: the article is fixed');
+        assert.ok(testId('lines[1].article-fixed')!.textContent!.includes('po_edit_article_fixed'));
         assert.ok(testId('lines[0].minimum')!.textContent!.includes('po_edit_min_quantity'));
         const remove = mounted.container.querySelector<HTMLButtonElement>('tr[data-tour="supply-line"] td:last-child button');
         assert.ok(remove, 'remove button present');
@@ -126,13 +127,35 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         assert.ok(testId('po-edit-partij-fixed'));
 
         // Alt+A (Nieuw artikel) opent bij een vast artikel niets: ook via de sneltoets wijzigt het artikel niet.
-        await act(async () => { field('lines[0].expectedQuantity-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, bubbles: true, cancelable: true })); });
+        await act(async () => { field('lines[1].expectedQuantity-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'a', code: 'KeyA', altKey: true, bubbles: true, cancelable: true })); });
         assert.equal(mounted.container.querySelector('[data-tour="supply-new-article"]'), null, 'no new-article panel on a fixed article');
 
         await type('lines[0].expectedQuantity-input', '39');
         await submit();
         assert.equal(puts.length, 0);
         assert.ok(mounted.hasText('po_edit_min_quantity'));
+    });
+
+    test('feedback 22 november: another article on a partly received line proposes the open part and asks what happens with the rest', async () => {
+        const withKent: ReferenceData = { ...reference, products: [{ ...reference.products[0], variants: [...reference.products[0].variants,
+            { id: 2, name: 'Hass', origin: 'Chili', packaging: null, sizeCategory: null, shortcutCode: 'hassc', defaultPackagesPerPallet: null, packagingUnit: 'colli', defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 }] }] };
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={withKent} onReceive={() => {}} editing={{ order: order({ lines: [storedLine({ inUse: true, receivedQuantity: 40, palletInputCount: null, palletInputPackagesPerPallet: null })] }), onSaved: (x) => saved.push(x) }} />);
+        // Zoals een gebruiker: Backspace wist het gekozen artikel, dan het nieuwe zoeken en met Enter kiezen.
+        await act(async () => { field('lines[0].productVariantId-input').focus(); field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true })); });
+        await type('lines[0].productVariantId-input', 'hassc');
+        await act(async () => { field('lines[0].productVariantId-input').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => field('lines[0].expectedQuantity-input').value === '181', 'open part proposed (221 - 40)');
+        assert.ok(testId('lines[0].split'), 'hint that the line will split');
+        await submit();
+        // Het venster staat in een portal op document.body.
+        const dialog = await mounted.waitFor(() => window.document.body.querySelector<HTMLElement>('[data-testid="split-dialog"]'), 'split question');
+        assert.equal(puts.length, 0, 'nothing saved before the choice');
+        assert.equal(dialog.querySelector<HTMLInputElement>('input[value="Cancelled"]')!.checked, true, 'cancelled is the default: nothing counts twice');
+        await act(async () => { dialog.querySelector<HTMLInputElement>('input[value="Expected"]')!.click(); });
+        await act(async () => { dialog.querySelector<HTMLButtonElement>('[data-tour="split-confirm"]')!.click(); });
+        await mounted.waitFor(() => puts.length === 1, 'PUT');
+        const line = JSON.parse(puts[0].body).lines[0];
+        assert.deepEqual([line.id, line.productVariantId, line.expectedQuantity, line.splitRemainder], [7, 2, 181, 'Expected']);
     });
 
     test('a stale version (409) says so in plain words with a reload', async () => {
