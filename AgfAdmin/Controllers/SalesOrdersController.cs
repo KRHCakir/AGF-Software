@@ -22,9 +22,12 @@ namespace AgfAdmin.Controllers
         private readonly IDirectTradeShipmentCorrectionService _shipmentCorrections;
         private readonly IDeliveryConfirmationService _deliveries;
         private readonly IDeliveryRetractionService _retractions;
+        private readonly SalesDeliveryService _salesDeliveries;
 
-        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections, IDeliveryConfirmationService deliveries, IDeliveryRetractionService retractions)
+        public SalesOrdersController(ISalesOrderService orders, IStockReservationService reservations, ISalesDispatchService dispatches, ISalesDispatchCorrectionService corrections, IDirectTradeAllocationService allocations, IDirectTradeShipmentService shipments, IDirectTradeShipmentCorrectionService shipmentCorrections, IDeliveryConfirmationService deliveries, IDeliveryRetractionService retractions,
+            SalesDeliveryService salesDeliveries)
         {
+            _salesDeliveries = salesDeliveries;
             _deliveries = deliveries;
             _retractions = retractions;
             _shipmentCorrections = shipmentCorrections;
@@ -168,6 +171,15 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Reserve(int id, int lineId, [FromBody] CreateStockReservationDto request)
         {
             var result = await _reservations.ReserveAsync(id, lineId, request, HttpContext?.RequestAborted ?? default);
+            return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
+        }
+
+        // Deellevering (feedback 22 november): een nieuwe levering met een nieuw V-nummer en de gekozen actieve reserveringen; idempotent via
+        // requestId. De laadbon en transportopdracht van de levering(en) ververst RefreshLoadingSlip na deze opdracht.
+        [HttpPost("{id:int}/deliveries")]
+        public async Task<IActionResult> CreateDelivery(int id, [FromBody] CreateSalesDeliveryDto request)
+        {
+            var result = await _salesDeliveries.CreateAsync(id, request, HttpContext?.RequestAborted ?? default);
             return this.ToActionResult(result, created => CreatedAtAction(nameof(GetById), new { id }, created));
         }
 

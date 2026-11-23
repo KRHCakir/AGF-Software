@@ -24,7 +24,7 @@ public class SalesOrdersControllerTests : IDisposable
     private async Task<IActionResult> Orders(Func<SalesOrdersController, Task<IActionResult>> action)
     {
         await using var db = _factory.CreateContext();
-        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DirectTradeShipmentCorrectionService(db), new DeliveryConfirmationService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DeliveryRetractionService(db)));
+        return await action(new SalesOrdersController(new SalesOrderService(db), new StockReservationService(db), new SalesDispatchService(db), new SalesDispatchCorrectionService(db), new DirectTradeAllocationService(db), new DirectTradeShipmentService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DirectTradeShipmentCorrectionService(db), new DeliveryConfirmationService(db, new FixedBusinessCalendar(new DateOnly(2026, 10, 20))), new DeliveryRetractionService(db), new SalesDeliveryService(db)));
     }
 
     private async Task<IActionResult> Reservations(Func<StockReservationsController, Task<IActionResult>> action)
