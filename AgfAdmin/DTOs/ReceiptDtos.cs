@@ -24,6 +24,8 @@ namespace AgfAdmin.DTOs
         // Certificaten deel 1: staat een product niet in het GGN-certificaat van de leverancier (of is dat vandaag verlopen), dan een regel op
         // het scherm in plaats van een venster. Ontvangen legt vast dat de ontvanger de melding zag (CurrentUser, context Receipt).
         public List<CertificateCheckDto> CertificateWarnings { get; set; } = new();
+        // Kenmerk van de getoonde meldingen (null zonder meldingen): de client stuurt het terug bij Ontvangen (ReceiveLineDto.CertificateWarningToken).
+        public string CertificateWarningToken { get; set; }
     }
 
     public sealed class ReceiptLineDto
@@ -65,6 +67,9 @@ namespace AgfAdmin.DTOs
     public sealed class ReceiveLineDto
     {
         public Guid? RequestId { get; set; }
+        // Het kenmerk van de certificaatmeldingen die de ontvanger zag (ReceiptOrderDto.CertificateWarningToken). Bij een melding zonder
+        // (of met een verouderd) kenmerk weigert de server met 409 en de actuele melding; alleen een gezien kenmerk legt een bevestiging vast.
+        public string CertificateWarningToken { get; set; }
         public decimal? Quantity { get; set; }
         // Alleen als de order geen kg per verpakking kent (NetKgPerPackage null): het netto kg van wat er ontvangen wordt.
         public decimal? NetWeightKg { get; set; }

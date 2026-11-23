@@ -57,6 +57,24 @@ public class StockLocationTests : IDisposable
             (await db.StockLocations.SingleAsync(l => l.Id == external.Id)).Kind = StockLocationRules.KindInTransit;
             await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
         }
+        // Een nieuwe verwijzing in dezelfde save telt ook als gebruik.
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.StockLocations.SingleAsync(l => l.Id == unused.Id)).Kind = StockLocationRules.KindInTransit;
+            (await db.SupplyCommitments.SingleAsync(c => c.Id == order.Id)).ReceiveLocationId = unused.Id;
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+        // Een inactieve locatie blokkeert de ontvangst van een order die haar al had niet.
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.StockLocations.SingleAsync(l => l.Id == external.Id)).IsActive = false;
+            await db.SaveChangesAsync();
+            var again = await new ReceiptService(db).ReceiveLineAsync(order.Id, order.Lines.Single().Id, new ReceiveLineDto { RequestId = Guid.NewGuid(), Quantity = 5m });
+            Assert.Equal(ServiceResultStatus.Created, again.Status);
+            (await db.StockLocations.SingleAsync(l => l.Id == external.Id)).IsActive = true;
+            await db.SaveChangesAsync();
+            external = (await new StockLocationService(db).ListAsync()).Single(l => l.Id == external.Id);
+        }
         await using (var db = _factory.CreateContext())
         {
             var service = new StockLocationService(db);

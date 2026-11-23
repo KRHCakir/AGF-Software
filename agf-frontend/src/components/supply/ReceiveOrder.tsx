@@ -8,6 +8,7 @@ import { DraftError, ReceiveDraft, draftFor, openLines, progressOf, referenceInp
 import { newRequestId } from '../../lib/requestId';
 import { toApiError } from '../../services/apiClient';
 import { getReceiptOrder, receiveLine } from '../../services/receiptService';
+import { certificateChecksOf } from '../../types/certificate';
 import type { PackageUnit } from '../../types/availability';
 import type { ReceiptLine, ReceiptOrder } from '../../types/receipt';
 import QualityBadge from '../availability/QualityBadge';
@@ -75,8 +76,11 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
             requests.current.set(line.id, request);
         }
         try {
-            const result = await receiveLine(orderId, line.id, { ...built.request, requestId: request.requestId });
+            // Het kenmerk van de GGN-melding die op het scherm staat: zo legt de server vast dat de ontvanger haar zag.
+            const certificateWarningToken = state.status === 'ready' ? state.data.certificateWarningToken ?? null : null;
+            const result = await receiveLine(orderId, line.id, { ...built.request, requestId: request.requestId, certificateWarningToken });
             requests.current.delete(line.id);
+            setErrors((current) => { const next = { ...current }; delete next[line.id]; return next; });
             setState({ status: 'ready', data: result.order });
             const updated = result.order.lines.find((candidate) => candidate.id === line.id);
             setDrafts((current) => ({ ...current, [line.id]: updated ? draftFor(updated) : current[line.id] }));
@@ -88,6 +92,12 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
             return true;
         } catch (caught) {
             const error = toApiError(caught);
+            // De GGN-melding is intussen veranderd (of nog niet getoond): de actuele melding ophalen en tonen; de invoer blijft staan.
+            if (error.status === 409 && certificateChecksOf(error.body) !== null) {
+                setErrors((current) => ({ ...current, [line.id]: [t('receipt_certificate_changed')] }));
+                getReceiptOrder(orderId).then((fresh) => setState({ status: 'ready', data: fresh })).catch(() => { /* de melding staat er al */ });
+                return false;
+            }
             const messages = Object.values(error.fieldErrors).flat();
             setErrors((current) => ({ ...current, [line.id]: messages.length > 0 ? messages : [error.message] }));
             return false;
@@ -254,11 +264,11 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
                                 {t('receipt_pallet_numbers')}
                             </button>
                         )}
-                        {toInspect.length > 0 && (
-                            <Link href={`/inspection?palletId=${toInspect[0].palletId}`} className={secondaryButtonClass} data-tour="receive-line-inspect" data-tour-key={line.id}>
-                                {t('receipt_inspect')}
+                        {toInspect.map((pallet) => (
+                            <Link key={pallet.palletId} href={`/inspection?palletId=${pallet.palletId}`} className={secondaryButtonClass} data-tour="receive-line-inspect" data-tour-key={line.id}>
+                                {toInspect.length > 1 ? `${t('receipt_inspect')} ${pallet.reference}` : t('receipt_inspect')}
                             </Link>
-                        )}
+                        ))}
                     </div>
                 </td>
             </tr>

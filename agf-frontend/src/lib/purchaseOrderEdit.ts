@@ -115,8 +115,11 @@ export function isUntouched(draft: PurchaseLineDraft, edit: EditLine): boolean {
 // de oude regel, het open deel wordt een nieuwe regel met dit artikel). Wat er met het restant gebeurt, kiest de gebruiker.
 export type SplitRemainder = 'Expected' | 'Cancelled';
 
+// Deels ontvangen: meer dan niets en minder dan besteld (een volledig ontvangen regel heeft geen open deel; zoals de server).
+const partlyReceived = (edit: EditLine) => edit.received > 0 && edit.received < edit.stored.expectedQuantity;
+
 export function isSplit(draft: PurchaseLineDraft, edit: EditLine | undefined): boolean {
-    return edit !== undefined && edit.received > 0 && draft.productVariantId !== '' && draft.productVariantId !== edit.opened.productVariantId;
+    return edit !== undefined && partlyReceived(edit) && draft.productVariantId !== '' && draft.productVariantId !== edit.opened.productVariantId;
 }
 
 // Het open deel van de oude regel: besteld min ontvangen (het voorstel voor het aantal van de nieuwe regel).
@@ -155,6 +158,7 @@ export interface LineLimits {
 export function lineLimits(edit: EditLine | undefined, draft?: PurchaseLineDraft): LineLimits {
     if (edit === undefined || !edit.inUse) return { articleFixed: false, minimumQuantity: null, removable: true, splitReceived: null };
     if (edit.received <= 0) return { articleFixed: true, minimumQuantity: null, removable: false, splitReceived: null };
+    if (!partlyReceived(edit)) return { articleFixed: true, minimumQuantity: edit.received, removable: false, splitReceived: null };
     const split = draft !== undefined && isSplit(draft, edit);
     return { articleFixed: false, minimumQuantity: split ? null : edit.received, removable: false, splitReceived: split ? edit.received : null };
 }
