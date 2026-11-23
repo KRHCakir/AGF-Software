@@ -115,6 +115,7 @@ public sealed class AreaAuthorizationTests
         new object[] { typeof(AvailabilityController), Permissions.Stock },
         new object[] { typeof(InventoryController), Permissions.Stock },
         new object[] { typeof(PalletsController), Permissions.Stock },
+        new object[] { typeof(ReceiptsController), Permissions.Stock },
         new object[] { typeof(SalesOrdersController), Permissions.Sales },
         new object[] { typeof(StockReservationsController), Permissions.Sales },
         new object[] { typeof(CustomersController), Permissions.Sales },
