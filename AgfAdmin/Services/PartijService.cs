@@ -326,6 +326,15 @@ namespace AgfAdmin.Services
             });
             partij.Number = number;
             partij.NumberKey = key;
+            // Directe factuur: het nummer staat ook op de factuur zelf (Invoice.BatchNumber), dat moet meebewegen.
+            if (partij.Kind == PartijRules.KindSales && partij.SalesOrderId == null && partij.InvoiceId != null)
+            {
+                var invoice = await _db.Invoices.SingleOrDefaultAsync(i => i.Id == partij.InvoiceId.Value, cancellationToken);
+                if (invoice != null)
+                {
+                    invoice.BatchNumber = number;
+                }
+            }
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);

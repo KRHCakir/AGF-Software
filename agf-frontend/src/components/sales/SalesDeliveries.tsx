@@ -15,6 +15,31 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 // altijd; Deellevering maakt een tweede levering met een nieuw V-nummer en een eigen laadbon. De gebruiker kiest welke gereserveerde pallets
 // met de nieuwe levering meegaan; wat nog niet gereserveerd is, gaat altijd mee met de nieuwste levering. Al verzonden pallets blijven bij
 // hun levering. Eén sleutel per poging: een herhaling na een netwerkfout maakt geen tweede levering.
+// Onzekere opdrachten per order in sessionStorage: een verversing of heropende pagina gebruikt dezelfde sleutel en keuze (de server herkent de herhaling).
+const PENDING_KEY = 'agf_sales_delivery_pending';
+interface StoredDelivery { requestId: string; chosen: number[]; posted: boolean }
+function readStored(): Record<string, StoredDelivery> {
+    try {
+        const parsed: unknown = JSON.parse(window.sessionStorage.getItem(PENDING_KEY) ?? '{}');
+        return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, StoredDelivery> : {};
+    } catch { return {}; }
+}
+function writeStored(orderId: number, value: StoredDelivery | null) {
+    try {
+        const all = readStored();
+        if (value === null) delete all[String(orderId)]; else all[String(orderId)] = value;
+        if (Object.keys(all).length === 0) window.sessionStorage.removeItem(PENDING_KEY);
+        else window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(all));
+    } catch { /* geen opslag (privémodus): de opdracht blijft dan alleen in het geheugen */ }
+}
+function loadStored(orderId: number): { requestId: string; chosen: number[] } | null {
+    const stored = readStored()[String(orderId)];
+    if (!stored || typeof stored.requestId !== 'string' || !Array.isArray(stored.chosen)) return null;
+    // Al verstuurd vóór de pagina verdween: de order is nu vers geladen, dus de opdracht is verwerkt en afgerond.
+    if (stored.posted) { writeStored(orderId, null); return null; }
+    return { requestId: stored.requestId, chosen: stored.chosen };
+}
+
 export default function SalesDeliveries({ order, readOnly, onChanged }: { order: SalesOrder; readOnly: boolean; onChanged: () => Promise<unknown> | void }) {
     const { t, locale } = useTranslation();
     const deliveries = [...(order.deliveries ?? [])].sort((a, b) => a.sequence - b.sequence);
@@ -22,11 +47,16 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
     const [chosen, setChosen] = useState<number[]>([]);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
+    // De levering is aangemaakt maar de order kon nog niet worden ververst: geen nieuwe opdracht tot het verversen lukt.
+    const [refreshFailed, setRefreshFailed] = useState(false);
     const requestId = useRef<string | null>(null);
     // Opdracht met onzekere uitkomst (netwerk-/vormfout): blijft ook na Annuleren bewaard, zodat heropenen dezelfde sleutel en keuze gebruikt.
     const uncertain = useRef<{ requestId: string; chosen: number[] } | null>(null);
 
-    useEffect(() => { setOpen(false); setChosen([]); setError(null); requestId.current = null; uncertain.current = null; }, [order.id]);
+    useEffect(() => {
+        setOpen(false); setChosen([]); setError(null); setRefreshFailed(false); requestId.current = null;
+        uncertain.current = loadStored(order.id);
+    }, [order.id]);
 
     const reservations = order.lines.flatMap((line) => line.reservations.map((reservation) => ({ line, reservation })))
         .filter(({ reservation }) => reservation.status === 'Active');
@@ -35,7 +65,7 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         return line ? [line.productName, line.productVariantName].filter(Boolean).join(' ') : '';
     };
     const deliveryOf = (reservation: StockReservation) => deliveries.find((d) => d.reservationIds.includes(reservation.id)) ?? deliveries[0];
-    const canSplit = !readOnly && order.status === 'Open' && order.lines.length > 0 && deliveries.length > 0;
+    const canSplit = !readOnly && !refreshFailed && order.status === 'Open' && order.lines.length > 0 && deliveries.length > 0;
 
     // Ook een enige levering van een gesloten order blijft zichtbaar; canSplit bepaalt alleen de knop Deellevering.
     if (deliveries.length === 0) return null;
@@ -51,7 +81,20 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         // Een andere keuze is een andere opdracht: dan ook een nieuwe sleutel (anders weigert de server de herhaling).
         requestId.current = newRequestId();
         uncertain.current = null;
+        writeStored(order.id, null);
         setChosen((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+    };
+    // Verversen na een geslaagde POST: pas als de order bijgewerkt is, vervalt de bewaarde opdracht.
+    const refresh = async () => {
+        let ok = true;
+        try { ok = (await onChanged()) !== false; } catch { ok = false; }
+        if (ok) { uncertain.current = null; writeStored(order.id, null); }
+        setRefreshFailed(!ok);
+    };
+    const retryRefresh = async () => {
+        if (busy) return;
+        setBusy(true);
+        try { await refresh(); } finally { setBusy(false); }
     };
     const submit = async (event: FormEvent) => {
         event.preventDefault();
@@ -59,16 +102,19 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         if (busy || key === null) return;
         setBusy(true);
         setError(null);
+        // Vooraf bewaren: ook als de pagina tijdens het verzenden verdwijnt, blijft de sleutel beschikbaar.
+        uncertain.current = { requestId: key, chosen };
+        writeStored(order.id, { requestId: key, chosen, posted: false });
         try {
             await createSalesDelivery(order.id, { requestId: key, reservationIds: chosen });
+            writeStored(order.id, { requestId: key, chosen, posted: true });
             setOpen(false);
             requestId.current = null;
-            uncertain.current = null;
-            await onChanged();
+            await refresh();
         } catch (caught) {
             // Dezelfde sleutel blijft staan: opnieuw proberen is dezelfde opdracht.
             const apiError = toApiError(caught);
-            uncertain.current = apiError.isDefinitiveRejection ? null : { requestId: key, chosen };
+            if (apiError.isDefinitiveRejection) { uncertain.current = null; writeStored(order.id, null); }
             setError(apiError);
         } finally {
             setBusy(false);
@@ -97,6 +143,12 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                     </li>
                 ))}
             </ul>
+            {refreshFailed && (
+                <div role="alert" className="space-y-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950" data-testid="so-delivery-refresh-failed">
+                    <p>{t('sales_refresh_failed')}</p>
+                    <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void retryRefresh()}>{t('sales_refresh')}</button>
+                </div>
+            )}
             {open && (
                 <form onSubmit={(event) => void submit(event)} className="space-y-2 rounded border border-blue-200 bg-blue-50 px-3 py-2" data-testid="so-partial-delivery-form">
                     <p className="text-sm text-blue-950">{t('so_partial_delivery_text')}</p>
