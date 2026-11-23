@@ -81,6 +81,24 @@ public sealed class PartijTraceTests : IDisposable
         Assert.True(second > 0);
     }
 
+    // Review: twee verzendingen van dezelfde order uit dezelfde partij blijven twee regels, elk met de datum van die verzending.
+    [Fact]
+    public async Task Each_Dispatch_Is_Its_Own_Destination_With_Its_Own_Date()
+    {
+        await ArrangeAsync();
+        var order = (await _s.CreateAsync(_s.Order((20m, "Stock")))).Value;
+        var first = await ReserveAsync(order.Id, order.Lines[0].Id, _palletA1, 12m);
+        await SalesTestData.ConsumeAsync(_s.Factory, first);
+        var second = await ReserveAsync(order.Id, order.Lines[0].Id, _palletA1, 8m);
+        await SalesTestData.ConsumeAsync(_s.Factory, second);
+
+        var recall = (await DetailAsync(_lotA)).Recall;
+        Assert.Equal(new[] { 12m, 8m }, recall.Destinations.Select(d => d.Quantity));
+        await using var db = _s.Factory.CreateContext();
+        var dates = await db.SalesDispatches.AsNoTracking().Where(d => d.SalesOrderId == order.Id).OrderBy(d => d.DispatchedAt).Select(d => d.DispatchedAt).ToListAsync();
+        Assert.Equal(dates.Select(d => DateTime.SpecifyKind(d, DateTimeKind.Utc)), recall.Destinations.Select(d => d.Date!.Value));
+    }
+
     [Fact]
     public async Task A_Sales_Lot_Shows_The_Purchase_Lots_Per_Line_With_Supplier_And_Origin_And_The_Delivery_Date()
     {

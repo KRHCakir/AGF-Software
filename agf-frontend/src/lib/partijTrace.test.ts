@@ -5,7 +5,7 @@ import { csvCell, deliveryCsv, recallCsv } from './partijTrace.ts';
 const number = (value: number) => String(value).replace('.', ',');
 const date = (iso: string) => iso.slice(0, 10);
 const recallLabels = { lot: 'Partij', received: 'Ontvangen', shipped: 'Geleverd', returned: 'Teruggenomen', rejected: 'Afgekeurd', onHand: 'Op voorraad', difference: 'Verschil',
-    salesLot: 'Verkoop-partij', customer: 'Klant', reference: 'Order', quantity: 'Colli', date: 'Datum', directInvoice: 'Directe factuur' };
+    salesLot: 'Verkoop-partij', customer: 'Klant', reference: 'Order', quantity: 'Aantal', unit: 'Eenheid', date: 'Datum', directInvoice: 'Directe factuur', directInvoiceNote: 'Directe facturen boeken geen voorraad af.' };
 
 describe('traceability export', () => {
     test('a cell with a separator, quote or line break is quoted', () => {
@@ -34,9 +34,11 @@ describe('traceability export', () => {
         }, recallLabels, { number, date });
         const lines = csv.trimEnd().split('\r\n');
         assert.equal(lines[0], 'Partij;I-2611010');
-        assert.equal(lines[1], 'Ontvangen;38');
-        assert.equal(lines[9], 'V-2611001;Groothandel G;VO-2026-0009;12;2026-11-23');
-        assert.equal(lines[10], 'V-2611002;Balieklant;Directe factuur FAC-1;4;2026-11-23');
+        assert.equal(lines[1], 'Ontvangen;38;colli');
+        assert.equal(lines[8], 'Verkoop-partij;Klant;Order;Aantal;Eenheid;Datum');
+        assert.equal(lines[9], 'V-2611001;Groothandel G;VO-2026-0009;12;colli;2026-11-23');
+        assert.equal(lines[10], 'V-2611002;Balieklant;Directe factuur FAC-1;4;colli;2026-11-23');
+        assert.equal(lines[12], 'Directe facturen boeken geen voorraad af.');
     });
 
     test('the delivery has a line per order line and purchase lot', () => {
@@ -45,10 +47,10 @@ describe('traceability export', () => {
             lines: [{ product: 'Tomaat Ronde', quantity: 25, unit: 'colli', sources: [
                 { partijId: 1, number: 'I-2611010', vendorName: 'Kweker K', origin: 'Spanje', quantity: 12, status: 'Consumed' },
                 { partijId: 2, number: 'I-2611011', vendorName: 'Kweker K', origin: 'Marokko', quantity: 13, status: 'Active' }] }],
-        }, { lot: 'Partij', customer: 'Klant', reference: 'Order', date: 'Leverdatum', product: 'Product', quantity: 'Colli', purchaseLot: 'Inkoop-partij', supplier: 'Leverancier', origin: 'Herkomst', status: 'Status', delivered: 'Geleverd', planned: 'Gepland' }, { number, date });
+        }, { lot: 'Partij', customer: 'Klant', reference: 'Order', date: 'Leverdatum', product: 'Product', quantity: 'Aantal', unit: 'Eenheid', purchaseLot: 'Inkoop-partij', supplier: 'Leverancier', origin: 'Herkomst', status: 'Status', delivered: 'Geleverd', planned: 'Gepland' }, { number, date });
         const lines = csv.trimEnd().split('\r\n');
         assert.equal(lines[3], 'Leverdatum;2026-11-23');
         assert.equal(lines[4], 'Status;Geleverd');
-        assert.deepEqual(lines.slice(7), ['Tomaat Ronde;12;I-2611010;Kweker K;Spanje', 'Tomaat Ronde;13;I-2611011;Kweker K;Marokko']);
+        assert.deepEqual(lines.slice(7), ['Tomaat Ronde;12;colli;I-2611010;Kweker K;Spanje', 'Tomaat Ronde;13;colli;I-2611011;Kweker K;Marokko']);
     });
 });
