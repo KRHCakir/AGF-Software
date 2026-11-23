@@ -230,7 +230,8 @@ namespace AgfAdmin.Services
                         : l.SalesDispatch.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => d.Partij.Number).FirstOrDefault(),
                 })
                 .ToListAsync(cancellationToken);
-            var invoices = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.PartijId == partij.Id)
+            // Alleen directe facturen (een factuur met een eigen verkoop-partij); een orderfactuur telt via de levering (review).
+            var invoices = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.PartijId == partij.Id && l.Invoice.SalesPartij != null)
                 .Select(l => new { l.Quantity, l.Unit, l.Invoice.InvoiceNumber, l.Invoice.InvoiceDate, l.Invoice.CustomCustomerName, LotId = (int?)l.Invoice.SalesPartij.Id, LotNumber = l.Invoice.SalesPartij.Number })
                 .ToListAsync(cancellationToken);
             return new PartijRecallDto
