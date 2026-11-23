@@ -408,10 +408,8 @@ namespace AgfAdmin.Services
             // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet + losse verpakkingen, of moet daar exact aan gelijk zijn.
             var total = PackagingRules.Validate(line.PalletCount, line.PackagesPerPallet, line.LoosePackages, line.ExpectedQuantity, key, "expectedQuantity", errors, AddError);
 
-            if (line.UnitPrice != null && !CostArticleRules.IsUnitPrice(line.UnitPrice.Value))
-            {
-                AddError(errors, $"{key}.unitPrice", "Unit price, when given, must be 0 or more with at most 2 decimals.");
-            }
+            // Prijs, korting en btw (feedback 22 november): de server vult niets zelf in; het scherm stelt de btw van het artikel voor.
+            OrderLineMath.Validate(line.UnitPrice, line.DiscountPercentage, line.VatPercentage, key, errors, AddError);
 
             if (errors.Count > errorCount || total == null)
             {
@@ -431,7 +429,9 @@ namespace AgfAdmin.Services
                 WeightSource = weightSource,
                 LotNumber = lotNumber,
                 Ggn = ggn,
-                UnitPrice = line.UnitPrice
+                UnitPrice = line.UnitPrice,
+                DiscountPercentage = line.DiscountPercentage,
+                VatPercentage = line.VatPercentage
             };
         }
 
@@ -609,6 +609,8 @@ namespace AgfAdmin.Services
                 && pair.First.PackagesPerPallet == pair.Second.PackagesPerPallet
                 && pair.First.LoosePackages == pair.Second.LoosePackages
                 && pair.First.UnitPrice == pair.Second.UnitPrice
+                && pair.First.DiscountPercentage == pair.Second.DiscountPercentage
+                && pair.First.VatPercentage == pair.Second.VatPercentage
                 && string.Equals(pair.First.LotNumber, pair.Second.LotNumber, StringComparison.Ordinal)
                 && string.Equals(pair.First.Ggn, pair.Second.Ggn, StringComparison.Ordinal));
         }
@@ -702,7 +704,9 @@ namespace AgfAdmin.Services
                         ? DirectTradeAllocationService.Remaining(l.ExpectedQuantity, allocated.GetValueOrDefault(l.Id)) : null,
                     ReplacesLineId = l.ReplacesLineId,
                     UnitPrice = l.UnitPrice,
-                    LineTotal = PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice)
+                    DiscountPercentage = l.DiscountPercentage,
+                    VatPercentage = l.VatPercentage,
+                    LineTotal = PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice, l.DiscountPercentage)
                 })
                 .ToList(),
             LinesOrigin = SupplyRules.LinesOrigin(commitment.Lines.Where(l => l.ExpectedQuantity > 0m).Select(l => l.ProductVariant?.Origin))

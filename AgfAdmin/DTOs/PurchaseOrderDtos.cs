@@ -188,6 +188,13 @@ namespace AgfAdmin.DTOs
         public decimal? PackagesPerPallet { get; set; }
         public decimal? LoosePackages { get; set; }
         public decimal? UnitPrice { get; set; }
+        // Feedback 22 november: zoals bij aanmaken (leeg = geen korting, btw niet vastgelegd).
+        // Weggelaten in de JSON = ongewijzigd (opgeslagen waarde blijft); een expliciete null wist de waarde.
+        private decimal? _discountPercentage, _vatPercentage;
+        public decimal? DiscountPercentage { get => _discountPercentage; set { _discountPercentage = value; DiscountPercentageSpecified = true; } }
+        public decimal? VatPercentage { get => _vatPercentage; set { _vatPercentage = value; VatPercentageSpecified = true; } }
+        [System.Text.Json.Serialization.JsonIgnore] public bool DiscountPercentageSpecified { get; private set; }
+        [System.Text.Json.Serialization.JsonIgnore] public bool VatPercentageSpecified { get; private set; }
     }
 
     public sealed class PurchaseOrderLineTotalsDto
@@ -204,6 +211,23 @@ namespace AgfAdmin.DTOs
         public int LinesWithoutGross { get; set; }
         public int LinesWithoutPrice { get; set; }
         public int LinesWithoutPallets { get; set; }
+        // Feedback 22 november: totaal excl. btw, btw per tarief en totaal incl. btw (in de valuta van de order).
+        public OrderAmountsDto Amounts { get; set; }
+
+        // De totalenrij onder de regels (kg, aantal, pallets, bedrag) en de btw-samenvatting; gedeeld door inkoop- en verkooporder.
+        public static PurchaseOrderLineTotalsDto From(IReadOnlyCollection<AgfAdmin.Services.PurchaseLineMath.Line> lines,
+            IEnumerable<AgfAdmin.Services.OrderLineMath.Line> amountLines, decimal exchangeRate)
+        {
+            var totals = AgfAdmin.Services.PurchaseLineMath.Sum(lines);
+            return new PurchaseOrderLineTotalsDto
+            {
+                Quantity = totals.Quantity, NetWeightKg = totals.NetKg, GrossWeightKg = totals.GrossKg, Amount = totals.Amount, Pallets = totals.Pallets,
+                AmountEur = totals.Amount is decimal amount ? AgfAdmin.Services.ExchangeRateRules.ToEuro(amount, exchangeRate) : null,
+                LinesWithoutNet = totals.LinesWithoutNet, LinesWithoutGross = totals.LinesWithoutGross, LinesWithoutPrice = totals.LinesWithoutPrice,
+                LinesWithoutPallets = totals.LinesWithoutPallets,
+                Amounts = OrderAmountsDto.From(AgfAdmin.Services.OrderLineMath.Summarize(amountLines)),
+            };
+        }
     }
 
     public sealed class PurchaseOrderLineDto
@@ -230,6 +254,9 @@ namespace AgfAdmin.DTOs
         // Calculated = kg uit het artikel; Entered = (bruto) op de regel aangepast; null = geen kg.
         public string WeightSource { get; set; }
         public decimal? UnitPrice { get; set; }
+        public decimal? DiscountPercentage { get; set; }
+        public decimal? VatPercentage { get; set; }
+        // Aantal × prijs min korting, op centen (null zonder prijs).
         public decimal? LineTotal { get; set; }
         // Colli per pallet (eigen palletinvoer van de regel, anders het artikel) en pallets op twee decimalen; null = telt niet mee.
         public decimal? PackagesPerPallet { get; set; }
