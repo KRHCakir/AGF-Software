@@ -182,5 +182,12 @@ public sealed class PartijTraceTests : IDisposable
         await ReserveAsync(order.Id, order.Lines[0].Id, _palletA1, 12m);
         await ReserveAsync(order.Id, order.Lines[0].Id, _palletB, 13m);
         Assert.Equal(250m, (await DetailAsync(order.SalesPartijId!.Value)).PurchaseValue);
+
+        // Review: een prijs per andere verpakking dan de reservering wordt nooit zomaar vermenigvuldigd; dan is de waarde onbekend.
+        await using (var db = _s.Factory.CreateContext())
+        {
+            await db.SupplyCommitmentLines.Where(l => l.PartijId == _lotB).ExecuteUpdateAsync(u => u.SetProperty(l => l.ExpectedUnit, "box"));
+        }
+        Assert.Null((await DetailAsync(order.SalesPartijId!.Value)).PurchaseValue);
     }
 }

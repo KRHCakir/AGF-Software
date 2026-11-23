@@ -23,7 +23,8 @@ namespace AgfAdmin.Services
         private sealed record SalesSide(int PartijId, int SalesOrderId, string OrderNumber, string OrderStatus, string CustomerName, List<(int LineId, string Product, decimal Quantity, string Unit, decimal? NetKg)> Lines,
             List<SourceFact> Sources);
         private sealed record SourceFact(int SalesOrderId, int SalesOrderLineId, int? PartijId, string Number, string VendorName, string Product, string Status, decimal Quantity, string Unit, decimal NetKg,
-            int? DeliveryId = null, string Origin = null, decimal? UnitPrice = null, decimal? Discount = null, decimal Rate = 1m, DateTime? ShippedAt = null);
+            int? DeliveryId = null, string Origin = null, decimal? UnitPrice = null, decimal? Discount = null, decimal Rate = 1m, DateTime? ShippedAt = null,
+            string PriceUnit = null);
         private sealed record Facts(List<LineFact> Lines, List<ContentFact> Contents, List<SaleFact> Sales)
         {
             public ILookup<int, LineFact> LinesByPartij { get; } = Lines.ToLookup(l => l.PartijId);
@@ -422,7 +423,7 @@ namespace AgfAdmin.Services
                     r.Status, r.Quantity, r.Unit, r.NetWeightKg ?? 0m, r.SalesDeliveryId,
                     r.SupplyCommitmentLine.SupplyCommitment.Origin ?? r.SupplyCommitmentLine.ProductVariant.OriginCountryCode,
                     r.SupplyCommitmentLine.UnitPrice, r.SupplyCommitmentLine.DiscountPercentage, r.SupplyCommitmentLine.SupplyCommitment.ExchangeRate,
-                    r.DispatchLine != null ? r.DispatchLine.SalesDispatch.DispatchedAt : (DateTime?)null))
+                    r.DispatchLine != null ? r.DispatchLine.SalesDispatch.DispatchedAt : (DateTime?)null, r.SupplyCommitmentLine.ExpectedUnit))
                 .ToListAsync(cancellationToken);
             var result = new Dictionary<int, SalesSide>();
             foreach (var delivery in deliveries)
@@ -479,7 +480,7 @@ namespace AgfAdmin.Services
                             && (l.ProductVariantId == null || c.ProductVariantId == l.ProductVariantId)).ToList();
                         var cost = sameUnit.Count == 1 ? sameUnit[0] : null;
                         return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight,
-                            null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m);
+                            null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m, null, cost?.ExpectedUnit);
                     }).ToList()));
         }
 
@@ -529,7 +530,9 @@ namespace AgfAdmin.Services
                     // Per orderregel: de kg van de regel, en voor een regel zonder kg de gereserveerde kg van die regel (nooit dubbel).
                     NetKg = side.Lines.Sum(l => l.NetKg ?? side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.NetKg)),
                     // Alleen een volledig gedekte levering heeft een inkoopwaarde: elke regel moet in zijn geheel uit (geprijsde) bronnen komen.
+                    // De inkoopprijs geldt per verpakking van de inkoopregel: een bron in een andere eenheid maakt de waarde onbekend (review).
                     PurchaseValue = side.Lines.All(l => side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.Quantity) >= l.Quantity)
+                        && side.Sources.All(s => s.PriceUnit != null && string.Equals(s.PriceUnit, s.Unit, StringComparison.OrdinalIgnoreCase))
                         ? Value(side.Sources.Select(s => (s.Quantity, s.UnitPrice, s.Discount, s.Rate))) : null
                 };
             }
