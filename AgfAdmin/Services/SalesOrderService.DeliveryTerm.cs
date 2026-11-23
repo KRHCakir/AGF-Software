@@ -26,16 +26,26 @@ namespace AgfAdmin.Services
             {
                 ValidationErrors.Add(errors, "expectedOrderVersion", "The order version the change is based on is required.");
             }
-            var term = DeliveryTermRules.Normalize(DeliveryTermRules.Of(request.DeliveryTerm), "deliveryTerm", errors);
+            // Weggelaten (null) = ongewijzigd; wissen kan alleen met een meegestuurd object met een lege soort.
+            var term = request.DeliveryTerm == null ? null : DeliveryTermRules.Normalize(DeliveryTermRules.Of(request.DeliveryTerm), "deliveryTerm", errors);
             if (errors.Count > 0)
             {
                 return ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors));
             }
-
-            // Dezelfde opdracht nog eens (zelfde requestId): de order zoals ze nu is.
-            if (await _db.SalesOrderAuditEvents.AsNoTracking().AnyAsync(e => e.RequestId == request.RequestId && e.SalesOrderId == salesOrderId, cancellationToken))
+            if (term == null)
             {
                 return await GetAsync(salesOrderId, cancellationToken);
+            }
+
+            // Dezelfde opdracht nog eens (zelfde requestId): de order zoals ze nu is, mits het dezelfde wijziging is.
+            var previous = await _db.SalesOrderAuditEvents.AsNoTracking()
+                .Where(e => e.RequestId == request.RequestId && e.SalesOrderId == salesOrderId)
+                .Select(e => new { e.EventType, e.NewValue }).FirstOrDefaultAsync(cancellationToken);
+            if (previous != null)
+            {
+                return IsSameTermChange(previous.EventType, previous.NewValue, term)
+                    ? await GetAsync(salesOrderId, cancellationToken)
+                    : ServiceResult<SalesOrderDto>.Conflict($"RequestId {request.RequestId} was already used for a different change.");
             }
 
             var order = await _db.SalesOrders.SingleOrDefaultAsync(o => o.Id == salesOrderId, cancellationToken);
@@ -78,14 +88,22 @@ namespace AgfAdmin.Services
             {
                 // Gelijktijdig: dezelfde opdracht al opgeslagen (unieke requestId), of de order is intussen veranderd.
                 _db.ChangeTracker.Clear();
-                if (await _db.SalesOrderAuditEvents.AsNoTracking().AnyAsync(e => e.RequestId == request.RequestId && e.SalesOrderId == salesOrderId, cancellationToken))
+                var saved = await _db.SalesOrderAuditEvents.AsNoTracking()
+                    .Where(e => e.RequestId == request.RequestId && e.SalesOrderId == salesOrderId)
+                    .Select(e => new { e.EventType, e.NewValue }).FirstOrDefaultAsync(cancellationToken);
+                if (saved != null)
                 {
-                    return await GetAsync(salesOrderId, cancellationToken);
+                    return IsSameTermChange(saved.EventType, saved.NewValue, term)
+                        ? await GetAsync(salesOrderId, cancellationToken)
+                        : ServiceResult<SalesOrderDto>.Conflict($"RequestId {request.RequestId} was already used for a different change.");
                 }
                 return ServiceResult<SalesOrderDto>.Conflict($"Sales order {salesOrderId} changed in the meantime; reload it and decide again.");
             }
             _db.ChangeTracker.Clear();
             return await GetAsync(salesOrderId, cancellationToken);
         }
+
+        private static bool IsSameTermChange(string eventType, string newValue, DeliveryTermRules.DeliveryTerm term) =>
+            eventType == ReservationRules.DeliveryTermChangedEvent && newValue == DeliveryTermRules.Describe(term);
     }
 }
