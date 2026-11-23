@@ -6,27 +6,43 @@ import { type SortKind, type SortState, ariaSort, parseSort, sortOptionValue } f
 
 // Een klikbare kolomkop (feedback 22 november): de kop is een knop, dus bereikbaar met Tab en te bedienen met Enter en spatie. Een
 // klik sorteert oplopend, nog eens aflopend, een derde keer terug naar de standaard. Het pijltje toont de richting; aria-sort staat op de
-// gesorteerde kolom. Extra inhoud onder de titel (bijvoorbeeld "in euro") staat in `children`.
-export function SortHeader({ label, sortKey, sort, onSort, className = '', children }: {
+// gesorteerde kolom. Extra inhoud onder de titel (bijvoorbeeld "in euro", of een tweede SortButton voor een tweede nummer in dezelfde
+// kolom) staat in `children`; `alsoKeys` noemt de sleutels van die tweede knop, zodat aria-sort ook dan op deze kolom staat.
+export function SortHeader({ label, sortKey, sort, onSort, className = '', alsoKeys = [], children }: {
     label: ReactNode;
     sortKey: string;
     sort: SortState | null;
     onSort: (key: string) => void;
     className?: string;
+    alsoKeys?: readonly string[];
     children?: ReactNode;
+}) {
+    const direction = [sortKey, ...alsoKeys].map((key) => ariaSort(sort, key)).find((value) => value !== undefined);
+    return (
+        <th scope="col" className={className} aria-sort={direction}>
+            <SortButton label={label} sortKey={sortKey} sort={sort} onSort={onSort} />
+            {children}
+        </th>
+    );
+}
+
+// De knop zelf; `small` voor een tweede sorteersleutel onder de titel (gewone letters, kleiner).
+export function SortButton({ label, sortKey, sort, onSort, small = false }: {
+    label: ReactNode;
+    sortKey: string;
+    sort: SortState | null;
+    onSort: (key: string) => void;
+    small?: boolean;
 }) {
     const direction = ariaSort(sort, sortKey);
     return (
-        <th scope="col" className={className} aria-sort={direction}>
-            <button type="button" onClick={() => onSort(sortKey)} data-sort-key={sortKey}
-                className="inline-flex items-center gap-1 rounded text-left uppercase tracking-wide hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
-                <span>{label}</span>
-                <span aria-hidden="true" className={direction === undefined ? 'text-gray-400' : 'text-blue-800'} data-testid="sort-arrow">
-                    {direction === 'ascending' ? '▲' : direction === 'descending' ? '▼' : '↕'}
-                </span>
-            </button>
-            {children}
-        </th>
+        <button type="button" onClick={() => onSort(sortKey)} data-sort-key={sortKey}
+            className={`items-center gap-1 rounded text-left hover:text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 ${small ? 'mt-0.5 flex font-normal normal-case tracking-normal' : 'inline-flex uppercase tracking-wide'}`}>
+            <span>{label}</span>
+            <span aria-hidden="true" className={direction === undefined ? 'text-gray-400' : 'text-blue-800'} data-testid="sort-arrow">
+                {direction === 'ascending' ? '▲' : direction === 'descending' ? '▼' : '↕'}
+            </span>
+        </button>
     );
 }
 

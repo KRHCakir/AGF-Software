@@ -12,13 +12,22 @@ import { orderNumbers } from '../../lib/purchaseOrderRules';
 import OrderNumberText from './OrderNumberText';
 import { formatEuro } from '../../lib/documentCurrency';
 import { isEuro } from '../../lib/exchangeRate';
+import type { SortState } from '../../lib/listSort';
+import { SortButton, SortHeader, SortSelect, type SortOption } from '../shared/SortHeader';
+
+// Sorteervelden van de inkooporderlijst (feedback 22 november): de server sorteert (de lijst bladert op de server) en kent precies deze
+// velden (AgfAdmin/Services/ListSortFields.cs). "number" is het hoofdnummer zoals getoond (leveranciersnummer, anders IO-nummer).
+export const PURCHASE_ORDER_SORT_KEYS = ['number', 'orderNumber', 'vendor', 'partij', 'orderedOn', 'expected', 'status', 'packages', 'netKg', 'amount', 'invoices'] as const;
 
 // Lijst "Inkoopopdrachten": vanaf md een tabel, smaller kaarten met dezelfde gegevens. Het ordernummer van de leverancier is het hoofdnummer
 // (een lang nummer afgekapt met …, volledig in het detail), het eigen IO-nummer staat er klein en grijs onder.
-export default function PurchaseOrderList({ items, selectedId, onOpen }: {
+export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onSort, onSortChange }: {
     items: PurchaseOrderListItem[];
     selectedId: number | null;
     onOpen: (id: number) => void;
+    sort: SortState | null;
+    onSort: (key: string) => void;
+    onSortChange: (next: SortState | null) => void;
 }) {
     const { t, locale } = useTranslation();
     const invoices = (item: PurchaseOrderListItem) => item.invoiceNumbers.length === 0 ? '–'
@@ -29,6 +38,20 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
         <span className="block text-xs text-red-800">{t('po_rejected_of', { rejected: formatQuantity(item.rejectedQuantity, locale), total: formatQuantity(item.receivedQuantity, locale) })}</span>
     );
     const th = 'px-2 py-2';
+    const head = 'px-2 py-2 align-top';
+    const sortOptions: SortOption[] = [
+        { key: 'number', label: t('po_col_number'), kind: 'natural' },
+        { key: 'orderNumber', label: t('po_internal_number'), kind: 'natural' },
+        { key: 'vendor', label: t('po_col_vendor'), kind: 'text' },
+        { key: 'partij', label: t('partij_field'), kind: 'natural' },
+        { key: 'orderedOn', label: t('po_col_ordered_on'), kind: 'date' },
+        { key: 'expected', label: t('po_col_expected'), kind: 'date' },
+        { key: 'status', label: t('po_col_status'), kind: 'natural' },
+        { key: 'packages', label: t('po_col_packages'), kind: 'number' },
+        { key: 'netKg', label: t('po_col_net_kg'), kind: 'number' },
+        { key: 'amount', label: t('po_col_amount'), kind: 'number' },
+        { key: 'invoices', label: t('po_col_invoices'), kind: 'natural' },
+    ];
 
     // Valuta-ronde: het bedrag in euro (de lijst telt alleen euro's op); bij een andere valuta het bedrag in die valuta eronder.
     const amount = (item: PurchaseOrderListItem) => item.amountEur == null ? '–' : (
@@ -44,16 +67,18 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                         <tr>
-                            <th scope="col" className={th}>{t('po_col_number')}</th>
-                            <th scope="col" className={th}>{t('po_col_vendor')}</th>
-                            <th scope="col" className={th}>{t('partij_field')}</th>
-                            <th scope="col" className={th}>{t('po_col_ordered_on')}</th>
-                            <th scope="col" className={th}>{t('po_col_expected')}</th>
-                            <th scope="col" className={th}>{t('po_col_status')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('po_col_packages')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('po_col_net_kg')}</th>
-                            <th scope="col" className={`${th} text-right`}>{t('po_col_amount')}<span className="block font-normal normal-case">{t('po_amount_eur_hint')}</span></th>
-                            <th scope="col" className={th}>{t('po_col_invoices')}</th>
+                            <SortHeader className={head} label={t('po_col_number')} sortKey="number" sort={sort} onSort={onSort} alsoKeys={['orderNumber']}>
+                                <SortButton small label={t('po_internal_number')} sortKey="orderNumber" sort={sort} onSort={onSort} />
+                            </SortHeader>
+                            <SortHeader className={head} label={t('po_col_vendor')} sortKey="vendor" sort={sort} onSort={onSort} />
+                            <SortHeader className={head} label={t('partij_field')} sortKey="partij" sort={sort} onSort={onSort} />
+                            <SortHeader className={head} label={t('po_col_ordered_on')} sortKey="orderedOn" sort={sort} onSort={onSort} />
+                            <SortHeader className={head} label={t('po_col_expected')} sortKey="expected" sort={sort} onSort={onSort} />
+                            <SortHeader className={head} label={t('po_col_status')} sortKey="status" sort={sort} onSort={onSort} />
+                            <SortHeader className={`${head} text-right`} label={t('po_col_packages')} sortKey="packages" sort={sort} onSort={onSort} />
+                            <SortHeader className={`${head} text-right`} label={t('po_col_net_kg')} sortKey="netKg" sort={sort} onSort={onSort} />
+                            <SortHeader className={`${head} text-right`} label={t('po_col_amount')} sortKey="amount" sort={sort} onSort={onSort}><span className="block font-normal normal-case">{t('po_amount_eur_hint')}</span></SortHeader>
+                            <SortHeader className={head} label={t('po_col_invoices')} sortKey="invoices" sort={sort} onSort={onSort} />
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -89,6 +114,7 @@ export default function PurchaseOrderList({ items, selectedId, onOpen }: {
                 </table>
             </div>
 
+            <SortSelect id="po-sort" className="mb-2 md:hidden" options={sortOptions} sort={sort} onChange={onSortChange} />
             <ul className="space-y-2 md:hidden">
                 {items.map((item) => (
                     <li key={item.id}>

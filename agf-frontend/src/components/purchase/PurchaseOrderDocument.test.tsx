@@ -117,7 +117,7 @@ describe('purchase order document status', () => {
             customerName: null, status: 'Ordered', storedStatus: 'Expected', expectedQuantity: 20, expectedNetWeightKg: null, receivedQuantity: 0, rejectedQuantity: 0,
             invoiceNumbers: [], invoiceIndicator: 'None', documentStatus: 'Open', ...over,
         });
-        await mounted.render(<PurchaseOrderList items={[item({}), item({ id: 6, orderNumber: 'IO-2026-0006', documentStatus: 'Definitive' })]} selectedId={null} onOpen={() => {}} />);
+        await mounted.render(<PurchaseOrderList items={[item({}), item({ id: 6, orderNumber: 'IO-2026-0006', documentStatus: 'Definitive' })]} selectedId={null} onOpen={() => {}} sort={null} onSort={() => {}} onSortChange={() => {}} />);
         const edits = [...mounted.container.querySelectorAll('[data-tour="po-list-edit"]')].map((link) => link.getAttribute('href'));
         assert.deepEqual(edits, ['/purchase-orders/edit?id=5']);
         assert.ok(mounted.container.querySelector('[data-tour="po-document-status"][data-tour-key="Definitive"]'));

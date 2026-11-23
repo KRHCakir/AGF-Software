@@ -16,6 +16,19 @@ import { InspectionPallet, getAvailableNow, isReceivedInWarehouse, loadInspectio
 import { QualityStatus } from '../../../types/availability';
 import { PalletDetailLine } from '../../../types/inspection';
 import { SignedInAs } from '../../../components/shared/CurrentUserContext';
+import { SortSelect } from '../../../components/shared/SortHeader';
+import { useListSort } from '../../../components/shared/useListSort';
+import { type SortColumns, sortRows } from '../../../lib/listSort';
+
+// Sorteren (feedback 22 november): de keuring staat als kaarten per pallet, dus een keuzelijst "Sorteren op" (op elk scherm). Standaard
+// blijft de nieuwste pallet eerst.
+const PALLET_COLUMNS: SortColumns<InspectionPallet> = {
+    pallet: { kind: 'natural', value: (context) => context.pallet.reference },
+    received: { kind: 'date', value: (context) => context.receiptRegisteredAt },
+    location: { kind: 'natural', value: (context) => context.pallet.warehouseLocation },
+    product: { kind: 'text', value: (context) => context.pallet.contentLines.map((line) => `${line.productName ?? ''} ${line.productVariantName ?? ''}`.trim()).find((name) => name !== '') ?? null },
+};
+const PALLET_SORT_KEYS = Object.keys(PALLET_COLUMNS);
 
 // Kwaliteitswerkplek "Keuring": uitsluitend per PalletContentLine op een pallet die Received + Warehouse is.
 // Geen bulk, geen palletbrede goedkeuring, geen DirectTrade-keuring, geen foto's en geen voorraadmutaties.
@@ -52,7 +65,8 @@ function InspectionWorkspace() {
     const [page, setPage] = useState(1);
     useEffect(() => { if (searchParam !== null) setSearch(searchParam); }, [searchParam]);
     // Gewijzigde filters: terug naar pagina 1. Een te hoge pagina na een actie wordt door paginate() zelf teruggezet.
-    useEffect(() => { setPage(1); }, [search, statusFilter]);
+    const { sort, setSort } = useListSort('inspection', PALLET_SORT_KEYS);
+    useEffect(() => { setPage(1); }, [search, statusFilter, sort]);
 
     // Met ?palletId= laden we die pallet rechtstreeks (met alleen zijn eigen audit- en aanvoercontext), nooit eerst de wachtrij.
     useEffect(() => {
@@ -184,6 +198,12 @@ function InspectionWorkspace() {
                             </label>
                         ))}
                     </fieldset>
+                    <SortSelect id="inspection-sort" className="w-full sm:w-auto" sort={sort} onChange={setSort} options={[
+                        { key: 'pallet', label: t('inspection_sort_pallet'), kind: 'natural' },
+                        { key: 'received', label: t('inspection_sort_received'), kind: 'date' },
+                        { key: 'location', label: t('inspection_sort_location'), kind: 'natural' },
+                        { key: 'product', label: t('inspection_sort_product'), kind: 'text' },
+                    ]} />
                 </div>
             )}
 
@@ -203,7 +223,7 @@ function InspectionWorkspace() {
                     );
                 }
                 // Eerst zoeken en kwaliteitsfilters, dan pagineren; pallets zonder passende regels verdwijnen volledig.
-                const visible = single ? state.data : filterPallets(state.data, statusFilter, search);
+                const visible = single ? state.data : sortRows(filterPallets(state.data, statusFilter, search), PALLET_COLUMNS, sort);
                 if (!single && visible.length === 0) {
                     return (
                         <p role="status" className="rounded-md border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-sm text-gray-800">

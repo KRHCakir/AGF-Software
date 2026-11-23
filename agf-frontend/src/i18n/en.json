@@ -3226,5 +3226,9 @@
   "sort_amount_asc": "low–high",
   "sort_amount_desc": "high–low",
   "sort_date_asc": "old–new",
-  "sort_date_desc": "new–old"
+  "sort_date_desc": "new–old",
+  "inspection_sort_pallet": "Pallet",
+  "inspection_sort_received": "Received",
+  "inspection_sort_location": "Location",
+  "inspection_sort_product": "Product"
 }
