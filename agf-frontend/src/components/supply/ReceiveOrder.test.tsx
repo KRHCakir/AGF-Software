@@ -116,6 +116,15 @@ describe('ReceiveOrder', () => {
         assert.deepEqual([bodies()[1].quantity, bodies()[1].netWeightKg], [50, 201.5]);
     });
 
+    test('feedback 22 november: on a location in transit (direct to a customer) the buttons say Delivered and the location is shown', async () => {
+        setup(order([line(1, 100)], { locationId: 5, locationName: 'Onderweg naar Griekenland', locationKind: 'InTransit' }));
+        await mounted.render(<ReceiveOrder orderId={7} />);
+        await mounted.waitFor(() => mounted.button('receipt_deliver'), 'Delivered button');
+        assert.ok(mounted.button('receipt_deliver_all'));
+        assert.equal(mounted.button('receipt_receive'), null);
+        assert.ok(mounted.container.querySelector('[data-tour="receive-location"]'));
+    });
+
     test('the token of the shown GGN warning goes along; a changed warning is loaded again and the input stays', async () => {
         const warning = { productId: 1, productName: 'Mango', supplierName: 'Fruit Peru', kinds: ['NotCovered'], deliveryDate: '2026-11-23',
             certificates: [{ certificateId: 1, number: '4049928000001', validUntil: null, productNames: ['Limoen'] }], message: 'x' };

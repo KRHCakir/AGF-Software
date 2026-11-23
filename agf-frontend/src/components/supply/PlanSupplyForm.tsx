@@ -24,6 +24,10 @@ import type { GgnProposal } from '../../types/productGgn';
 import { formatDecimalInput } from '../../lib/decimal';
 import { type OrderEdit, type SplitRemainder, isSplit, lineLimits, openQuantityOf, orderEditOf, updateLinePayload } from '../../lib/purchaseOrderEdit';
 import SplitLineDialog, { type SplitQuestion } from './SplitLineDialog';
+import OrderLogisticsFields from './OrderLogisticsFields';
+import { type OrderLogisticsDraft, emptyLogistics, logisticsOf, logisticsPayload } from '../../lib/orderLogistics';
+import { listStockLocations } from '../../services/stockLocationService';
+import type { StockLocation } from '../../types/stockLocation';
 import type { PurchaseOrderDetail, UpdatePurchaseOrderRequest } from '../../types/purchaseOrder';
 import { MAX_NOTE_LENGTH } from '../../lib/purchaseOrderRules';
 import { getNextPartijNumber } from '../../services/partijService';
@@ -163,6 +167,19 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const partijTouched = useRef(editing !== null);
     // Feedback 22 november: de leveringsconditie van deze order (bij aanpassen zoals opgeslagen); volgt de leverancier tot de gebruiker haar aanpast.
     const [deliveryTerm, setDeliveryTerm] = useState<DeliveryTermDraft>(() => deliveryTermDraftOf(editing?.order.deliveryTerm));
+    // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres (alleen eigen-magazijnorders; de lijst met locaties uit Instellingen).
+    const [logistics, setLogistics] = useState<OrderLogisticsDraft>(() => (editing ? logisticsOf(editing.order) : emptyLogistics()));
+    const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
+    const [locationsFailed, setLocationsFailed] = useState(false);
+    const [locationsAttempt, setLocationsAttempt] = useState(0);
+    useEffect(() => {
+        if (route !== 'Warehouse') return;
+        const controller = new AbortController();
+        setLocationsFailed(false);
+        listStockLocations(controller.signal).then(setStockLocations)
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setLocationsFailed(true); });
+        return () => controller.abort();
+    }, [route, locationsAttempt]);
     const termTouched = useRef(editing !== null);
     // Valuta-ronde: valuta en koers van de order (euro standaard; bij aanpassen de vastgelegde) en de lijst om uit te kiezen.
     const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
@@ -435,6 +452,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 ...(note === '' ? {} : { note }),
                 ...(currency.ok ? currency.value : {}),
                 ...(term.ok ? { deliveryTerm: term.value } : {}),
+                ...(isDirect ? {} : { logistics: logisticsPayload(logistics) }),
                 lines: payloadLines,
             },
             errors: {},
@@ -470,6 +488,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     ...partijPayload(partij), ...(payload.supplierLotReference === undefined ? {} : { supplierLotReference: payload.supplierLotReference }),
                     currency: payload.currency, exchangeRate: payload.exchangeRate, exchangeRateSource: payload.exchangeRateSource,
                     ...(payload.deliveryTerm === undefined ? {} : { deliveryTerm: payload.deliveryTerm }),
+                    ...(payload.logistics === undefined ? {} : { logistics: payload.logistics }),
                     lines: editLines ?? [],
                 },
             };
@@ -537,6 +556,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setPartij(editing === null ? NO_PARTIJ : orderPartij(editing.order));
         termTouched.current = editing !== null;
         setDeliveryTerm(deliveryTermDraftOf(editing?.order.deliveryTerm));
+        setLogistics(editing ? logisticsOf(editing.order) : emptyLogistics());
         setPartijExists(null);
         setSuggestionToken((token) => token + 1);
     };
@@ -699,6 +719,12 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     )}
                 </div>
             </div>
+
+            {!isDirect && (
+                <OrderLogisticsFields value={logistics} onChange={(next) => { if (locked) return; setLogistics(next); edited(); }} locations={stockLocations}
+                    vendorId={header.vendorId === '' ? null : Number(header.vendorId)} customers={reference.customers} locked={locked} errors={e}
+                    locationsFailed={locationsFailed} onRetryLocations={() => setLocationsAttempt((n) => n + 1)} />
+            )}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
                 <div className="sm:col-span-1 md:col-span-2">

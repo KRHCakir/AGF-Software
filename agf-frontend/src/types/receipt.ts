@@ -39,6 +39,10 @@ export interface ReceiptOrder {
     vendorName: string | null;
     expectedAt: string | null;
     partijNumber: string | null;
+    // Feedback 22 november: waar ontvangen wordt (null = de eigen loods); op een locatie van de soort Onderweg heet de knop Afgeleverd.
+    locationId?: number | null;
+    locationName?: string | null;
+    locationKind?: string | null;
     status: string;
     receivable: boolean;
     notReceivableReason: string | null;

@@ -77,6 +77,8 @@ export interface WarehouseSupply {
     // Verkoopstand van deze variant en eenheid (Voorraad, Verwacht, Verkocht, Vrij); ontbreekt in oudere antwoorden. Een variant die
     // alleen verkocht is, heeft een rij met nullen en alleen deze stand.
     sales?: SalesBalance | null;
+    // Feedback 22 november: voorraad op een andere locatie dan de eigen loods ("Onderweg naar Griekenland"); telt mee in de voorraad.
+    stockLocations?: AvailabilityStockLocation[];
 }
 
 // Klantgebonden aanvoer: bewust zonder availableBeforeReservations, warehouse of reserved.
@@ -126,6 +128,13 @@ export interface SourceLineAvailability {
     warnings: AvailabilityWarning[];
 }
 
+export interface AvailabilityStockLocation {
+    name: string;
+    kind: string;
+    countryCode: string | null;
+    quantity: number;
+}
+
 export interface ContentLineAvailability {
     palletContentLineId: number;
     palletId: number;
@@ -134,6 +143,8 @@ export interface ContentLineAvailability {
     logisticsStatus: LogisticsStatus;
     locationContext: LocationContext;
     warehouseLocation: string | null;
+    // Feedback 22 november: voorraadlocatie van de pallet (null = de eigen loods).
+    stockLocationName?: string | null;
     route: SupplyRoute;
     customerId: number | null;
     customerName: string | null;

@@ -154,6 +154,9 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
     if (state.status === 'error') return <ErrorState error={state.error} onRetry={() => setToken((n) => n + 1)} />;
     const order = state.data;
     const open = openLines(order);
+    // Onderweg / direct naar klant: de goederen gaan niet langs de loods, dus Ontvangen heet daar Afgeleverd.
+    const delivered = order.locationKind === 'InTransit';
+    const word = (key: string) => (delivered ? key.replace('receipt_receive', 'receipt_deliver') : key);
 
     return (
         <section aria-labelledby="receipt-expected" className="space-y-4 rounded-md border border-gray-300 bg-white p-4" data-testid="receive-order">
@@ -165,12 +168,13 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
                         <span>· {order.vendorName ?? '–'}</span>
                         {order.expectedAt && <span>· {t('supply_expected_on', { date: formatDateTime(order.expectedAt, locale) })}</span>}
                         {order.partijNumber && <span>· {t('supply_lot')} <span className="font-mono font-semibold">{order.partijNumber}</span></span>}
+                        <span data-tour="receive-location">· {t('receipt_location', { location: order.locationName ?? t('stock_location_own') })}</span>
                     </p>
                     <p className="mt-1 text-sm text-gray-600">{t('receipt_expected_hint')}</p>
                 </div>
                 {order.receivable && open.length > 0 && (
                     <button type="button" className={`${primaryButtonClass} shrink-0`} data-tour="receive-all" disabled={busy !== null} onClick={() => void receiveAll()}>
-                        {busy === 'all' ? t('receipt_receiving') : t('receipt_receive_all')}
+                        {busy === 'all' ? t('receipt_receiving') : t(word('receipt_receive_all'))}
                     </button>
                 )}
             </div>
@@ -204,7 +208,7 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
                     </thead>
                     {order.lines.map((line) => (
                         <ReceiveLineRows key={line.id} line={line} draft={drafts[line.id] ?? draftFor(line)} errors={errors[line.id]} busy={busy}
-                            receivable={order.receivable && line.receivable} onEdit={(change) => edit(line.id, change)} onReceive={() => void receiveOne(line)}
+                            receivable={order.receivable && line.receivable} receiveLabel={t(word('receipt_receive'))} onEdit={(change) => edit(line.id, change)} onReceive={() => void receiveOne(line)}
                             onEnter={enterReceives(line)} />
                     ))}
                 </table>
@@ -213,12 +217,13 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
     );
 }
 
-function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onReceive, onEnter }: {
+function ReceiveLineRows({ line, draft, errors, busy, receivable, receiveLabel, onEdit, onReceive, onEnter }: {
     line: ReceiptLine;
     draft: ReceiveDraft;
     errors: string[] | undefined;
     busy: number | 'all' | null;
     receivable: boolean;
+    receiveLabel: string;
     onEdit: (change: Partial<ReceiveDraft>) => void;
     onReceive: () => void;
     onEnter: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -266,7 +271,7 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
                     <div className="flex flex-wrap gap-2">
                         {receivable && (
                             <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={onReceive} data-tour="receive-line-button" data-tour-key={line.id}>
-                                {busy === line.id ? t('receipt_receiving') : t('receipt_receive')}
+                                {busy === line.id ? t('receipt_receiving') : receiveLabel}
                             </button>
                         )}
                         {receivable && (

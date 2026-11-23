@@ -134,3 +134,14 @@ export async function getPurchaseOrderOriginCheck(signal?: AbortSignal): Promise
     if (!isPurchaseOrderOriginCheckList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij Herkomst controleren.');
     return json;
 }
+
+// Feedback 22 november: naam en adres van de leverancier (laadadres als we ophalen) en van de klant (afleveradres bij directe handel).
+export async function getAddressProposals(vendorId: number | null, customerId: number | null, signal?: AbortSignal): Promise<{ vendorAddress: string | null; customerAddress: string | null }> {
+    const params = new URLSearchParams();
+    if (vendorId !== null) params.set('vendorId', String(vendorId));
+    if (customerId !== null) params.set('customerId', String(customerId));
+    const json = await getJson(`/purchase-orders/address-proposals?${params.toString()}`, signal);
+    if (typeof json !== 'object' || json === null) throw new ApiError('shape', 'Onverwacht antwoord bij het adresvoorstel.');
+    const value = json as { vendorAddress?: unknown; customerAddress?: unknown };
+    return { vendorAddress: typeof value.vendorAddress === 'string' ? value.vendorAddress : null, customerAddress: typeof value.customerAddress === 'string' ? value.customerAddress : null };
+}

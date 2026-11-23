@@ -101,6 +101,12 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 <p className="mt-1 text-sm text-gray-900" data-testid="po-delivery-term" data-tour="po-delivery-term">
                     {t('relations_terms_delivery')}: <span className="font-medium">{describeDeliveryTerm(order.deliveryTerm, t) ?? t('delivery_term_none')}</span>
                 </p>
+                {/* Feedback 22 november: waar ontvangen wordt, het laadadres en het afleveradres (leeg = de eigen loods / de leverancier levert). */}
+                <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-gray-900 sm:grid-cols-3" data-testid="po-logistics" data-tour="po-logistics">
+                    <div><dt className="text-xs text-gray-600">{t('po_logistics_location')}</dt><dd className="font-medium">{order.receiveLocationName ?? t('stock_location_own')}</dd></div>
+                    <div><dt className="text-xs text-gray-600">{t('po_logistics_loading')}</dt><dd className="whitespace-pre-line">{order.loadingAddress ?? t('po_logistics_loading_placeholder')}</dd></div>
+                    <div><dt className="text-xs text-gray-600">{t('po_logistics_delivery')}</dt><dd className="whitespace-pre-line">{order.deliveryAddress ?? t('po_logistics_delivery_placeholder')}</dd></div>
+                </dl>
                 {/* Valuta-ronde: valuta en de vastgelegde koers (eenheden valuta per 1 euro), met bron en datum. */}
                 {order.currency && !isEuro(order.currency) && order.exchangeRate ? (
                     <p className="mt-1 text-sm text-gray-900" data-testid="po-currency" data-tour="po-currency">

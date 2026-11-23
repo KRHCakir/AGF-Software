@@ -174,6 +174,7 @@ const FIELD_KEYS: Readonly<Record<string, string>> = {
     note: 'po_note', supplierLotReference: 'partij_supplier_lot', orderChannel: 'po_change_channel', partij: 'partij_field', line: 'po_change_line',
     article: 'po_change_article', expectedQuantity: 'po_change_quantity', expectedUnit: 'po_change_unit', unitPrice: 'po_change_price', discountPercentage: 'po_change_discount', vatPercentage: 'po_change_vat',
     expectedNetWeightKg: 'po_change_net', expectedGrossWeightKg: 'po_change_gross', weightSource: 'po_change_weight_source', pallets: 'po_change_pallets',
-    lotNumber: 'supply_lot', ggn: 'po_line_col_ggn', split: 'po_change_split', cancelledQuantity: 'po_change_cancelled', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
+    lotNumber: 'supply_lot', ggn: 'po_line_col_ggn', split: 'po_change_split', cancelledQuantity: 'po_change_cancelled',
+    receiveLocation: 'po_logistics_location', loadingAddress: 'po_logistics_loading', deliveryAddress: 'po_logistics_delivery', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
 };
 export const changeFieldKey = (field: string): string | null => FIELD_KEYS[field] ?? null;

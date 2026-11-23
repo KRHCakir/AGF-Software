@@ -1,3 +1,4 @@
+import type { OrderLogisticsPayload } from '../lib/orderLogistics';
 import type { DeliveryTerm } from '../lib/deliveryTerm';
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from './availability';
@@ -54,6 +55,8 @@ export interface CreateSupplyCommitmentRequest {
     lines: CreateSupplyCommitmentLineRequest[];
     // Feedback 22 november: de leveringsconditie van deze order (voorgevuld uit de leverancier); weggelaten = die van de leverancier.
     deliveryTerm?: DeliveryTerm;
+    // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres (weggelaten = eigen loods, geen adressen).
+    logistics?: OrderLogisticsPayload;
     // Certificaten deel 1: de producten waarvoor "Ja, klopt" gekozen is na de vraag over het GGN-certificaat.
     confirmedCertificateProductIds?: number[];
 }

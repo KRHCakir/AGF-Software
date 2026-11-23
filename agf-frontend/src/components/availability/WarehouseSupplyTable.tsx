@@ -2,6 +2,7 @@
 
 import { useTranslation } from '../../i18n/LanguageContext';
 import { WarehouseRow, breakdownTotal } from '../../lib/availability';
+import StockLocationBadges from './StockLocationBadges';
 import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import QualityBadge from './QualityBadge';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
@@ -76,7 +77,7 @@ export default function WarehouseSupplyTable({ rows: unsorted, onOpen, focus = n
                             <tr key={row.key} className={listRowClass(index)}>
                                 {nameCell(row)}
                                 <td className={td}><UnitBadge unit={row.supply.unit} /><WeightBasisBadge basis={row.supply.weightBasis} /></td>
-                                <td className={td}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
+                                <td className={td}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /><StockLocationBadges locations={row.supply.stockLocations} /></td>
                                 <td className={td}><QuantityCell value={row.supply.reserved} /></td>
                                 <td className={`${td} bg-emerald-50/60`} data-tour="availability-available" data-tour-key={row.variant.productVariantId}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
                                 <td className={`${td} ${marked('quarantine')}`} data-tour="availability-quarantine" data-tour-key={row.variant.productVariantId}><QuantityCell value={row.supply.warehouse.quarantine} /></td>
@@ -129,7 +130,7 @@ export default function WarehouseSupplyTable({ rows: unsorted, onOpen, focus = n
                             <td className={td}><QuantityCell value={row.supply.reserved} /></td>
                             <td className={`${td} bg-emerald-50/60`}><QuantityCell value={row.supply.availableAfterReservations} emphasis /></td>
                             <td className={td}><QuantityCell value={row.supply.reservedOnHold} /></td>
-                            <td className={`${td} border-l border-gray-100`}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /></td>
+                            <td className={`${td} border-l border-gray-100`}><QuantityCell value={breakdownTotal(row.supply.warehouse)} /><StockLocationBadges locations={row.supply.stockLocations} /></td>
                             <td className={`${td} ${marked('quarantine')}`}><QuantityCell value={row.supply.warehouse.quarantine} /></td>
                             <td className={td}><QuantityCell value={row.supply.warehouse.blocked} /></td>
                             <td className={td}><QuantityCell value={row.supply.warehouse.rejected} /></td>

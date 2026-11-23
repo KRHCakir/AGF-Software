@@ -94,6 +94,7 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
             <td className={td}>
                 {label(locationKey(line.locationContext), line.locationContext)}
                 {line.warehouseLocation && <span className="block font-mono text-xs text-gray-500">{line.warehouseLocation}</span>}
+                {line.stockLocationName && <span className="block text-xs font-medium text-sky-900">{line.stockLocationName}</span>}
             </td>
             <td className={td}><QualityBadge status={line.qualityStatus} /></td>
             <td className={`${td} text-right`}>
