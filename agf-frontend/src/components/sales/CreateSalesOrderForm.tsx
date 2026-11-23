@@ -70,7 +70,9 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         unitPrice: line.unitPrice == null ? '' : formatAmountInput(line.unitPrice),
         discount: line.discountPercentage == null ? '' : formatDecimalInput(line.discountPercentage, 2),
         vat: line.vatPercentage == null ? '' : String(line.vatPercentage), vatTouched: true,
-        // Een aangepaste bruto als aangepast terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
+        // Ingevulde netto en aangepaste bruto als ingevuld terugzetten (ook bij opdrachten van vóór de nieuwe regel); berekende kg rekent het
+        // (vergrendelde) concept zelf opnieuw uit.
+        ...(line.weightSource === 'Entered' && line.netWeightKg != null ? { netKg: formatKgInput(line.netWeightKg), netKgEntered: true } : {}),
         ...(line.weightSource === 'Entered' && line.grossWeightKg != null ? { grossKg: formatKgInput(line.grossWeightKg), grossKgEntered: true } : {}),
     })).concat(command.payload.lines.length === 0 ? [emptyLine()] : []),
     packagingLines: (command.payload.packagingLines ?? []).map((line) => packagingDraftFrom(line, newRequestId())),
@@ -226,7 +228,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         setDraft((current) => ({
             ...current,
             lines: current.lines.flatMap((line, index) => (line.key !== key ? [line] : [
-                { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
+                { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
                 { ...emptyLine(), productVariantId: line.productVariantId, unit: unitOf(index) as OrderLineDraft['unit'], quantity: formatDecimalInput(expected), unitPrice: line.unitPrice,
                     discount: line.discount, vat: line.vat, vatTouched: line.vatTouched, supplySource: 'Expected' as const, sourceTouched: true },
             ])),
@@ -490,8 +492,19 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                     productExtra={(line, index) => {
                         const unit = unitOf(index);
                         const unitText = unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(unit)).toLowerCase();
+                        // Een bevroren opdracht van vóór de nieuwe regel kan palletinvoer hebben; die staat dan zoals verstuurd bij de regel.
+                        const frozen = pending?.payload.lines[index];
+                        const frozenPallets = frozen?.palletCount != null && frozen.packagesPerPallet != null ? frozen : null;
                         return (
                             <>
+                                {frozenPallets !== null && (
+                                    <span className="mt-1 block text-xs text-gray-700" data-testid={`lines[${index}].frozen-pallets`}>
+                                        {t('sales_line_frozen_pallets', {
+                                            pallets: formatDecimalInput(frozenPallets.palletCount ?? 0), perPallet: formatDecimalInput(frozenPallets.packagesPerPallet ?? 0),
+                                            loose: frozenPallets.loosePackages ? t('sales_line_frozen_loose', { loose: formatDecimalInput(frozenPallets.loosePackages) }) : '',
+                                        })}
+                                    </span>
+                                )}
                                 {!locked && (
                                     <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
                                         title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>

@@ -190,7 +190,17 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         {fields.net && <FieldError id={`${prefix}.${fields.net}`} messages={errors(`${prefix}.${fields.net}`)} />}
                                     </div>
                                 </td>
-                                <td {...lineCell('net', labels.net)} data-testid={`${prefix}.net`}>{kg(row?.weight?.netWeightKg)}</td>
+                                {fields.net && variant && !(variant.defaultNetKgPerPackage != null && variant.defaultNetKgPerPackage > 0) ? (
+                                    // Verkooporder, artikel zonder standaard netto: het totale netto van de regel is hier in te voeren (zoals voorheen).
+                                    <td {...lineCell('net', labels.net, 'min-w-[7rem]')}>
+                                        <label htmlFor={`${prefix}.${fields.net}-input`} className="sr-only">{t('sales_line_net_input')} {index + 1}</label>
+                                        <input {...fieldProps(`${prefix}.${fields.net}`, errors(`${prefix}.${fields.net}`))} inputMode="decimal" data-decimals={2} value={line.netKg ?? ''} disabled={locked}
+                                            data-tour={`${tourPrefix}-net`} data-tour-key={index} onChange={(event) => onChange(line.key, { netKg: event.target.value, netKgEntered: true } as Partial<D>)}
+                                            className={`${inputClass} !mt-0 w-24 text-right`} />
+                                    </td>
+                                ) : (
+                                    <td {...lineCell('net', labels.net)} data-testid={`${prefix}.net`}>{kg(row?.weight?.netWeightKg)}</td>
+                                )}
                                 <td {...lineCell('quantity', labels.quantity, 'min-w-[8rem]')}>
                                     <div className="space-y-1">
                                         <div className="flex items-center justify-end gap-1.5">
