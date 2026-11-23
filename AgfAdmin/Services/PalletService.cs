@@ -85,7 +85,8 @@ namespace AgfAdmin.Services
                 candidate.Reference = $"P-tmp-{Guid.NewGuid():N}";
             }
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            // Binnen een transactie van de aanroeper (ontvangst: alle pallets of niets) committen of terugdraaien we niet zelf.
+            await using var transaction = _db.Database.CurrentTransaction == null ? await _db.Database.BeginTransactionAsync(cancellationToken) : null;
             try
             {
                 _db.Pallets.Add(candidate);
@@ -122,12 +123,12 @@ namespace AgfAdmin.Services
                 });
 
                 await _db.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                if (transaction != null) await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException)
             {
                 // Gelijktijdige retry of race op RequestId/referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
-                await transaction.RollbackAsync(cancellationToken);
+                if (transaction != null) await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
                 var concurrent = await FindExistingAsync(candidate, ownReference, cancellationToken);
                 if (concurrent != null)
