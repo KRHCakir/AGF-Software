@@ -192,6 +192,9 @@ namespace AgfAdmin.DTOs
         public decimal? PackagesPerPallet { get; set; }
         public decimal? LoosePackages { get; set; }
         public decimal? UnitPrice { get; set; }
+        // Feedback 22 november, splitsen: verandert het artikel van een deels ontvangen regel, dan zegt dit wat er met het restant van de
+        // oude regel gebeurt: Expected (wordt nog verwacht) of Cancelled (vervalt). De overige velden beschrijven dan de nieuwe regel.
+        public string SplitRemainder { get; set; }
         // Feedback 22 november: zoals bij aanmaken (leeg = geen korting, btw niet vastgelegd).
         // Weggelaten in de JSON = ongewijzigd (opgeslagen waarde blijft); een expliciete null wist de waarde.
         private decimal? _discountPercentage, _vatPercentage;
@@ -279,6 +282,11 @@ namespace AgfAdmin.DTOs
         // Afwijkende ontvangst: deze regel vervangt (een deel van) die regel, of is (deels) vervangen door die regels.
         public int? ReplacesLineId { get; set; }
         public List<int> ReplacedByLineIds { get; set; } = new();
+        // Feedback 22 november, splitsen: deze regel is het open deel van die regel; of deze regel is gesplitst in die regels. Vervallen =
+        // het restant dat niet meer verwacht wordt (besteld = verwacht + vervallen).
+        public int? SplitFromLineId { get; set; }
+        public List<int> SplitIntoLineIds { get; set; } = new();
+        public decimal? CancelledQuantity { get; set; }
         // Ontvangen = fysieke ontvangst in de eenheid van de regel (geen correctie- of afgesplitste inhoud, geen geannuleerde pallet).
         // Al gefactureerd (afgewezen facturen niet) en wat nog openstaat: ontvangen zodra er iets ontvangen is, anders besteld (stap 4b).
         public decimal InvoicedQuantity { get; set; }

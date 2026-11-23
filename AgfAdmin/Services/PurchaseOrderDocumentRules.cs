@@ -44,6 +44,13 @@ namespace AgfAdmin.Services
         public const string FieldDeliveryTerm = "deliveryTerm";
         // Certificaten deel 2: het GGN van het product op een regel (aanpassen bij Open, corrigeren met reden bij Definitive).
         public const string FieldGgn = "ggn";
+        // Feedback 22 november, splitsen: het open deel van een deels ontvangen regel werd een nieuwe regel (oud: de regel, nieuw: de nieuwe
+        // regel), en het restant van de oude regel wordt nog verwacht of vervalt (vervallen: oud en nieuw vervallen aantal).
+        public const string FieldSplit = "split";
+        public const string FieldCancelledQuantity = "cancelledQuantity";
+        public const string RemainderExpected = "Expected";
+        public const string RemainderCancelled = "Cancelled";
+        public static bool IsRemainder(string value) => value is RemainderExpected or RemainderCancelled;
         // Valuta-ronde: valuta en koers van de order (alleen bij aanpassen van een Open order, nooit met een correctie).
         public const string FieldCurrency = "currency";
         public const string FieldExchangeRate = "exchangeRate";

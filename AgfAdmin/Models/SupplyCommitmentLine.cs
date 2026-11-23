@@ -52,6 +52,15 @@ namespace AgfAdmin.Models
         public int? ReplacesLineId { get; set; }
         public SupplyCommitmentLine ReplacesLine { get; set; }
 
+        // Feedback 22 november: splitsen. Verandert het artikel van een deels ontvangen regel, dan blijft het ontvangen deel op die regel en
+        // wordt het open deel een nieuwe regel met het nieuwe artikel; die nieuwe regel wijst hier naar de oude. Alleen bij aanmaken gezet,
+        // samen met een Edit-auditregel van de order (guard-regel 39); daarna onveranderlijk. Los van ReplacesLineId (afwijking, regel 18).
+        public int? SplitFromLineId { get; set; }
+        public SupplyCommitmentLine SplitFromLine { get; set; }
+        // Vervallen restant: wat bij het splitsen niet meer verwacht wordt (null = niets vervallen). ExpectedQuantity is dan het ontvangen
+        // aantal; besteld was ExpectedQuantity + CancelledQuantity. Telt niet in Verwacht of in de totalen; stijgt alleen met een Edit (regel 39).
+        public decimal? CancelledQuantity { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Optimistisch concurrency-token: wordt aangeraakt bij elke DirectTrade-toewijzing of vrijgave op deze regel,

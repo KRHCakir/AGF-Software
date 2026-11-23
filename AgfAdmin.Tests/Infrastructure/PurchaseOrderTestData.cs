@@ -26,7 +26,15 @@ public static class PurchaseOrderTestData
         return new PurchaseOrderSeed(vendor.Id, other.Id, hass.Id, kent.Id);
     }
 
-    public static CreateSupplyCommitmentDto OrderRequest(PurchaseOrderSeed seed, Guid? requestId = null, decimal quantity = 221m, int? vendorId = null, int? variantId = null) => new()
+    public static CreateSupplyCommitmentDto OrderRequest(PurchaseOrderSeed seed, Guid? requestId = null, decimal quantity = 221m, int? vendorId = null, int? variantId = null,
+        Action<CreateSupplyCommitmentDto> change = null)
+    {
+        var request = BaseRequest(seed, requestId, quantity, vendorId, variantId);
+        change?.Invoke(request);
+        return request;
+    }
+
+    private static CreateSupplyCommitmentDto BaseRequest(PurchaseOrderSeed seed, Guid? requestId, decimal quantity, int? vendorId, int? variantId) => new()
     {
         RequestId = requestId ?? Guid.NewGuid(),
         VendorId = vendorId ?? seed.VendorId,

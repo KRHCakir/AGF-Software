@@ -72,7 +72,9 @@ public class PurchaseOrderEditTests : IDisposable
             return result.Errors;
         }
         Assert.Contains("lines[0].expectedQuantity", (await Refused(e => e.Lines[0].ExpectedQuantity = 39m)).Keys);
-        Assert.Contains("lines[0].productVariantId", (await Refused(e => e.Lines[0].ProductVariantId = _h.Seed.KentId)).Keys);
+        // Feedback 22 november: een ander artikel op een deels ontvangen regel wordt een splitsing; eerst kiezen wat er met het restant gebeurt.
+        Assert.Contains("lines[0].splitRemainder", (await Refused(e => e.Lines[0].ProductVariantId = _h.Seed.KentId)).Keys);
+        Assert.Contains("lines[0].productVariantId", (await Refused(e => e.Lines[0].ExpectedUnit = "colli")).Keys);
         Assert.Contains("lines", (await Refused(e => e.Lines[0] = new UpdatePurchaseOrderLineDto { ProductVariantId = _h.Seed.KentId, ExpectedQuantity = 5m, ExpectedUnit = "box", ExpectedNetWeightKg = 20m, WeightSource = "Calculated" })).Keys);
         Assert.Contains("vendorId", (await Refused(e => e.VendorId = _h.Seed.OtherVendorId)).Keys);
         Assert.Contains("partijId", (await Refused(e => e.NewPartij = new NewPartijForOrderDto { Number = "2611001" })).Keys);

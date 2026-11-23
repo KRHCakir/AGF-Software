@@ -130,6 +130,10 @@ namespace AgfAdmin.Data
     //    auditregel DeliveryTermChanged (oud en nieuw), die van een inkooporder alleen met een Edit die het veld deliveryTerm vastlegt.
     // 38. dienstregels (zie TraceabilityGuard.ServiceLines.cs): een dienstregel op een verkooporder heeft een artikel van de soort Cost
     //    (Dienst) en verandert of verdwijnt nooit; de factuur neemt haar later over.
+    // 39. een deels ontvangen inkooporderregel splitsen (zie TraceabilityGuard.LineSplits.cs): het open deel als nieuwe regel ontstaat alleen
+    //    met een Edit-auditregel en wijst naar een deels ontvangen regel van dezelfde order (onveranderlijk); het vervallen restant staat
+    //    nooit op een nieuwe regel, daalt nooit en stijgt alleen met een Edit, met precies de verlaging van het verwachte aantal. Ontvangen
+    //    hoeveelheden veranderen nooit: aantal, eenheid, netto kg en gewichtsmethode van een opgeslagen palletregel liggen vast.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -262,6 +266,7 @@ namespace AgfAdmin.Data
             await CheckSalesLinePricesAsync(db, async, cancellationToken);
             await CheckDeliveryTermsAsync(db, async, cancellationToken);
             await CheckServiceLinesAsync(db, async, cancellationToken);
+            await CheckLineSplitsAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----
