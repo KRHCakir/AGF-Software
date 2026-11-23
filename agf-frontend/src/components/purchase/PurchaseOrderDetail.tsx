@@ -158,7 +158,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                             </tr>
                         ))}
                     </tbody>
-                    {order.totals && <PurchaseLineTotalsRow totals={{ ...order.totals, netKg: order.totals.netWeightKg, grossKg: order.totals.grossWeightKg,
+                    {order.totals && <PurchaseLineTotalsRow totals={{ ...order.totals, quantity: order.totals.quantity ?? 0, netKg: order.totals.netWeightKg, grossKg: order.totals.grossWeightKg,
                         shownNetKg: order.totals.netWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedNetWeightKg)),
                         shownGrossKg: order.totals.grossWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedGrossWeightKg)) }}
                         currency={order.currency ?? null} rate={order.exchangeRate ?? null} />}
