@@ -14,8 +14,24 @@ namespace AgfAdmin.Data
         // Dat nieuwe voorraad altijd een partij heeft, regelt de enige schrijver van ontvangen palletregels (PalletService.ApplyPartijAsync,
         // ook via het ontvangstscherm): een order zonder partij krijgt er bij de eerste ontvangst een. Hier staat het niet, omdat voorraad van
         // vóór de partij (meerdere lotteksten op één orderregel) als gegeven blijft bestaan en regel 23 die regels per orderregel bewaakt.
+        //
+        // Directe factuur: de inkoop-partij van een factuurregel wordt alleen bij aanmaken gezet en verandert daarna nooit (de herkomst van
+        // wat er verkocht is, blijft staan). Dat het een inkoop-partij is, bewaakt regel 24 (CheckPurchaseOnlyLinksAsync).
         private static async Task CheckLotNumberingAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
+            // Vergeleken met de opgeslagen waarde in de database, niet met OriginalValues (die kunnen buiten de service om gezet zijn).
+            var invoiceLines = db.ChangeTracker.Entries<InvoiceLine>().Where(e => e.State == EntityState.Modified).ToList();
+            if (invoiceLines.Count > 0)
+            {
+                var ids = invoiceLines.Select(e => e.Entity.Id).ToList();
+                var storedLots = (await ToListAsync(db.Set<InvoiceLine>().AsNoTracking().Where(l => ids.Contains(l.Id)).Select(l => new { l.Id, l.PartijId }), async, cancellationToken))
+                    .ToDictionary(l => l.Id, l => l.PartijId);
+                if (invoiceLines.Any(e => storedLots.TryGetValue(e.Entity.Id, out var before) && before != e.Property(l => l.PartijId).CurrentValue))
+                {
+                    throw new TraceabilityViolationException("The purchase lot of a direct invoice line is set when the invoice is made and never changes.");
+                }
+            }
+
             var numbered = db.ChangeTracker.Entries<Partij>()
                 .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(p => p.NumberKey).IsModified))
                 .Select(e => e.Entity).ToList();

@@ -243,6 +243,29 @@ namespace AgfAdmin.Services
             return (new Partij { Kind = kind, Number = number, NumberKey = PartijRules.NumberKey(number), CreatedAt = now, CreatedBy = actor }, null);
         }
 
+        // ---------------- Directe factuur ----------------
+
+        // De eigen verkoop-partij van een directe factuur (feedback 22 november): zonder nummer het volgende V-nummer (alleen in modus Auto),
+        // met een eigen nummer alleen als dat nog nergens als partij bestaat. Een bestaand nummer, van welke soort ook, wordt geweigerd met
+        // uitleg (409 PARTIJ_TAKEN): een directe factuur deelt haar partij nooit met een inkoop of een andere verkoop.
+        public const string PartijTakenCode = "PARTIJ_TAKEN";
+
+        public async Task<(Partij Partij, ServiceResult<T> Refused)> BuildDirectInvoiceLotAsync<T>(string requestedNumber, string field, CancellationToken cancellationToken)
+        {
+            if (!string.IsNullOrWhiteSpace(requestedNumber) && NumberError(requestedNumber) == null)
+            {
+                var key = PartijRules.NumberKey(requestedNumber);
+                var taken = await _db.Partijen.AsNoTracking().Where(p => p.NumberKey == key).Select(p => new { p.Number, p.Kind }).FirstOrDefaultAsync(cancellationToken);
+                if (taken != null)
+                {
+                    var message = $"Lot number {taken.Number} already exists as a {(taken.Kind == PartijRules.KindSales ? "sales" : "purchase")} lot. A direct invoice always gets "
+                        + "its own sales lot: choose another number, or leave it empty for the next V-number.";
+                    return (null, ServiceResult<T>.Conflict(message, new { code = PartijTakenCode, message, field, number = taken.Number, kind = taken.Kind }));
+                }
+            }
+            return await BuildNewAsync<T>(requestedNumber, field, PartijRules.KindSales, cancellationToken);
+        }
+
         // ---------------- Nummer corrigeren ----------------
 
         // Een verkoop-partij waarvan de order nog niets gereserveerd of geleverd heeft (en niet geannuleerd is) mag zonder reden worden
@@ -266,8 +289,9 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<PartijSummaryDto>.NotFound($"Lot {id} does not exist.");
             }
-            var reasonRequired = partij == null || partij.Kind != PartijRules.KindSales
-                || await SalesNumberFixedAsync(_db, partij.SalesOrderId!.Value, async: true, cancellationToken);
+            // De partij van een directe factuur (zonder verkooporder) staat al op de factuur: altijd met reden.
+            var reasonRequired = partij == null || partij.Kind != PartijRules.KindSales || partij.SalesOrderId == null
+                || await SalesNumberFixedAsync(_db, partij.SalesOrderId.Value, async: true, cancellationToken);
             if (reason == null && reasonRequired && !errors.ContainsKey("reason"))
             {
                 errors["reason"] = new[] { partij?.Kind == PartijRules.KindSales
@@ -517,7 +541,8 @@ namespace AgfAdmin.Services
             && (string.IsNullOrWhiteSpace(number) ? existing.Sequence != null : PartijRules.NumberKey(number) == existing.NumberKey);
 
         private async Task<bool> IsLinkedAsync(int id, CancellationToken cancellationToken) =>
-            await _db.Partijen.AsNoTracking().AnyAsync(p => p.Id == id && p.SalesOrderId != null, cancellationToken)
+            await _db.Partijen.AsNoTracking().AnyAsync(p => p.Id == id && (p.SalesOrderId != null || p.InvoiceId != null), cancellationToken)
+            || await _db.Set<InvoiceLine>().AsNoTracking().AnyAsync(l => l.PartijId == id, cancellationToken)
             || await _db.SupplyCommitments.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken)
             || await _db.SupplyCommitmentLines.AsNoTracking().AnyAsync(l => l.PartijId == id, cancellationToken)
             || await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == id, cancellationToken)
