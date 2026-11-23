@@ -69,11 +69,19 @@ describe('purchase order lines: the new layout', () => {
         assert.ok(amounts().querySelector('[data-testid="order-amounts-vat-9"]'), 'VAT 9% line');
         assert.equal(amounts().querySelector('[data-testid="order-amounts-gross"]')!.textContent, '425.63 EUR');
         await act(async () => { setSelectValue(vat, '21'); });
+        await act(async () => { setSelectValue(vat, '21'); });
         assert.ok(amounts().querySelector('[data-testid="order-amounts-vat-21"]'));
         assert.equal(amounts().querySelector('[data-testid="order-amounts-gross"]')!.textContent, '472.49 EUR');
         await type('lines[0].discountPercentage-input', '120');
         await submit();
         assert.ok((mounted.container.textContent ?? '').includes('order_line_discount_range'));
+    });
+
+    test('review: choosing an article always brings the VAT proposal of that article, never an earlier choice', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].vatPercentage-input"]')!, '21'); });
+        await pick(0, 'AVOHASSPER18');
+        assert.equal(mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].vatPercentage-input"]')!.value, '9');
     });
 
     test('fixes 5b: the unit is text from the article ("200 box"), never a choice', async () => {
