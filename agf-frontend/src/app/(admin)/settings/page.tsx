@@ -13,6 +13,7 @@ import WarehouseRecipientsSetting from '../../../components/settings/WarehouseRe
 import MailSenderSetting from '../../../components/settings/MailSenderSetting';
 import MailTemplatesSetting from '../../../components/settings/MailTemplatesSetting';
 import PaymentConditionsAdmin from '../../../components/settings/PaymentConditionsAdmin';
+import StockLocationsSetting from '../../../components/settings/StockLocationsSetting';
 import { useTranslation } from '../../../i18n/LanguageContext';
 
 // Instellingen: bedrijfsbrede keuzelijsten en adressen (één bedrijf, geen tenantstructuur). Betalingscondities worden door
@@ -30,6 +31,7 @@ export default function SettingsPage() {
             <PartijNumberingSetting />
             <WeightDisplaySetting />
             <PurchaseCurrenciesSetting />
+            <StockLocationsSetting />
             <LoadingSlipSetting />
             <TransportOrderSetting />
             <WarehouseRecipientsSetting />
