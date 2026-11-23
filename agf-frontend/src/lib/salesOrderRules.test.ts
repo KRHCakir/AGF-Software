@@ -55,6 +55,17 @@ describe('buildOrderPayload', () => {
         assert.deepEqual(codes(below), { 'lines[0].grossWeightKg': ['gross_below_net'] });
     });
 
+    test('feedback 22 november: price, discount and VAT go along like on the purchase line; the unit comes from the article', () => {
+        const articleOf = () => article({ vatPercentage: 21 });
+        const priced = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '30', ''), unitPrice: '13,35', discount: '2,5' }] }, articleOf);
+        assert.deepEqual(priced.ok && priced.value.lines[0], { productVariantId: 1, quantity: 30, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 300, grossWeightKg: 309,
+            weightSource: 'Calculated', unitPrice: 13.35, discountPercentage: 2.5, vatPercentage: 21 });
+        const chosen = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '30', ''), vat: '9', vatTouched: true }] }, articleOf);
+        assert.equal(chosen.ok && chosen.value.lines[0].vatPercentage, 9, 'a chosen VAT wins over the article');
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '30', ''), discount: '120' }] }, articleOf)), { 'lines[0].discountPercentage': ['out_of_range'] });
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [line('1', '30', '')] }, () => article({ packagingUnit: null }))), { 'lines[0].unit': ['required'] });
+    });
+
     test('a blank reference becomes null', () => {
         const result = buildOrderPayload({ ...validDraft(), customerReference: '   ' });
         assert.equal(result.ok && result.value.customerReference, null);

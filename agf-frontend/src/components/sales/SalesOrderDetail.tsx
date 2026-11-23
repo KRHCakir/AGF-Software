@@ -23,6 +23,7 @@ import DirectTradeShipmentPanel from './DirectTradeShipmentPanel';
 import DirectTradeShipmentCorrectionPanel from './DirectTradeShipmentCorrectionPanel';
 import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
+import SalesOrderLineTable from './SalesOrderLineTable';
 import { PackagingLinesView } from './PackagingLines';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
@@ -511,6 +512,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                 </section>
             )}
 
+            {/* Feedback 22 november: de regels met prijs, korting, btw en totalen zoals bij de inkooporder; daaronder per regel reserveren. */}
+            <SalesOrderLineTable order={order} />
             {order.lines.map((line) => (
                 <OrderLinePanel key={line.id} order={order} line={line} readOnly={readOnly} onOrderChanged={onOrderChanged} openFifo={line.id === fifoLineId} />
             ))}
