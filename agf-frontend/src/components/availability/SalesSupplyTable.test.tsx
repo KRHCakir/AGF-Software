@@ -59,6 +59,14 @@ describe('SalesSupplyTable', () => {
         assert.equal(sell?.getAttribute('href'), '/sales-orders?new=1&variantId=7&unit=colli&quantity=60');
     });
 
+    test('feedback 22 november: stock on a location in transit is shown with the location under the product', async () => {
+        const base = row(balance(40, 20, 0));
+        const onTheWay = { ...base, supply: { ...base.supply, stockLocations: [{ name: 'Onderweg naar Griekenland', kind: 'InTransit', countryCode: 'GR', quantity: 240 }] } };
+        await mounted.render(<SalesSupplyTable rows={[onTheWay]} onOpen={() => {}} />);
+        const badge = mounted.container.querySelector('[data-tour="availability-stock-location"]');
+        assert.ok(badge?.textContent?.includes('Onderweg naar Griekenland'), badge?.textContent ?? 'no badge');
+    });
+
     test('70 sold: free -10 in red with the word Tekort, and Verkopen still works with 1', async () => {
         await mounted.render(<SalesSupplyTable rows={[row(balance(40, 20, 70))]} onOpen={() => {}} />);
         assert.equal(mounted.container.querySelector('[data-free-state]')?.getAttribute('data-free-state'), 'shortage');
