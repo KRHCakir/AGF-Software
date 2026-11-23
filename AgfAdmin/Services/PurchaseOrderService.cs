@@ -120,9 +120,9 @@ namespace AgfAdmin.Services
             // Valuta-ronde: het bedrag per order (regels met een prijs), in de valuta van de order en in euro.
             var headerIds = headers.Select(h => h.Id).ToList();
             var priced = (await _db.SupplyCommitmentLines.AsNoTracking().Where(l => headerIds.Contains(l.SupplyCommitmentId) && l.UnitPrice != null)
-                    .Select(l => new { l.SupplyCommitmentId, l.ExpectedQuantity, l.UnitPrice }).ToListAsync(cancellationToken))
+                    .Select(l => new { l.SupplyCommitmentId, l.ExpectedQuantity, l.UnitPrice, l.DiscountPercentage }).ToListAsync(cancellationToken))
                 .GroupBy(l => l.SupplyCommitmentId)
-                .ToDictionary(g => g.Key, g => g.Sum(l => PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice) ?? 0m));
+                .ToDictionary(g => g.Key, g => g.Sum(l => PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice, l.DiscountPercentage) ?? 0m));
             var facts = await LoadFactsAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
             var withDeviation = await OrdersWithDeviationAsync(headers.Select(h => h.Id).ToList(), cancellationToken);
 
@@ -366,7 +366,9 @@ namespace AgfAdmin.Services
                     ExpectedGrossWeightKg = l.ExpectedGrossWeightKg,
                     WeightSource = l.WeightSource,
                     UnitPrice = l.UnitPrice,
-                    LineTotal = PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice),
+                    DiscountPercentage = l.DiscountPercentage,
+                    VatPercentage = l.VatPercentage,
+                    LineTotal = PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice, l.DiscountPercentage),
                     PackagesPerPallet = PurchaseLineMath.PackagesPerPallet(l.PackagesPerPallet, l.ProductVariant?.DefaultPackagesPerPallet),
                     Pallets = PalletsOf(l),
                     ReplacesLineId = l.ReplacesLineId,
@@ -630,15 +632,12 @@ namespace AgfAdmin.Services
 
         private static PurchaseOrderLineTotalsDto TotalsOf(IEnumerable<SupplyCommitmentLine> lines, decimal exchangeRate)
         {
-            var totals = PurchaseLineMath.Sum(lines.Select(l => new PurchaseLineMath.Line(l.ExpectedQuantity, l.ExpectedNetWeightKg, l.ExpectedGrossWeightKg,
-                PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice), ExactPallets(l))).ToList());
-            return new PurchaseOrderLineTotalsDto
-            {
-                Quantity = totals.Quantity, NetWeightKg = totals.NetKg, GrossWeightKg = totals.GrossKg, Amount = totals.Amount, Pallets = totals.Pallets,
-                AmountEur = totals.Amount is decimal amount ? ExchangeRateRules.ToEuro(amount, exchangeRate) : null,
-                LinesWithoutNet = totals.LinesWithoutNet, LinesWithoutGross = totals.LinesWithoutGross, LinesWithoutPrice = totals.LinesWithoutPrice,
-                LinesWithoutPallets = totals.LinesWithoutPallets
-            };
+            var list = lines.ToList();
+            return PurchaseOrderLineTotalsDto.From(
+                list.Select(l => new PurchaseLineMath.Line(l.ExpectedQuantity, l.ExpectedNetWeightKg, l.ExpectedGrossWeightKg,
+                    PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice, l.DiscountPercentage), ExactPallets(l))).ToList(),
+                list.Select(l => new OrderLineMath.Line(PurchaseLineMath.LineTotal(l.ExpectedQuantity, l.UnitPrice, l.DiscountPercentage), l.VatPercentage)),
+                exchangeRate);
         }
 
         private static DateTime Utc(DateTime value) => DateTime.SpecifyKind(value, DateTimeKind.Utc);

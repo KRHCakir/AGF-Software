@@ -5,9 +5,10 @@ namespace AgfAdmin.Services
     // de regel (aantal, kg, prijs) en de colli per pallet.
     public static class PurchaseLineMath
     {
-        // Aantal × prijs per verpakking, op centen (half van nul af). Zonder prijs geen totaal.
-        public static decimal? LineTotal(decimal quantity, decimal? unitPrice) =>
-            unitPrice == null ? null : Math.Round(quantity * unitPrice.Value, 2, MidpointRounding.AwayFromZero);
+        // Aantal × prijs per verpakking min de korting, op centen (half van nul af). Zonder prijs geen totaal; zonder korting is dit
+        // precies aantal × prijs, zoals vóór de korting (feedback 22 november, zie OrderLineMath).
+        public static decimal? LineTotal(decimal quantity, decimal? unitPrice, decimal? discountPercentage = null) =>
+            OrderLineMath.LineAmount(quantity, unitPrice, discountPercentage);
 
         // Colli per pallet van een regel: de eigen palletinvoer van een oudere regel ("3 pallets × 120"), anders die van het artikel.
         public static decimal? PackagesPerPallet(decimal? linePackagesPerPallet, decimal? articleDefault) =>

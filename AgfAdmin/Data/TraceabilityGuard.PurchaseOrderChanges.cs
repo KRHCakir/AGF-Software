@@ -12,7 +12,7 @@ namespace AgfAdmin.Data
             string Currency, decimal ExchangeRate, DateOnly? ExchangeRateDate, string ExchangeRateSource, string OriginCountryCode);
 
         private sealed record StoredOrderLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, decimal ExpectedQuantity, decimal? ExpectedNetWeightKg,
-            decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, int? ReplacesLineId);
+            decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, decimal? DiscountPercentage, decimal? VatPercentage, int? ReplacesLineId);
 
         // ---- Regel 29: inkooporder aanpassen, definitief maken en corrigeren (zie PurchaseOrderService.Edit.cs) ----
         //
@@ -86,7 +86,7 @@ namespace AgfAdmin.Data
             var storedLines = storedLineIds.Count == 0 ? new Dictionary<int, StoredOrderLine>()
                 : (await ToListAsync(db.SupplyCommitmentLines.AsNoTracking().Where(l => storedLineIds.Contains(l.Id))
                     .Select(l => new StoredOrderLine(l.Id, l.SupplyCommitmentId, l.ProductVariantId, l.ExpectedUnit, l.ExpectedQuantity, l.ExpectedNetWeightKg, l.ExpectedGrossWeightKg,
-                        l.WeightSource, l.PalletCount, l.PackagesPerPallet, l.LoosePackages, l.UnitPrice, l.ReplacesLineId)), async, cancellationToken)).ToDictionary(l => l.Id);
+                        l.WeightSource, l.PalletCount, l.PackagesPerPallet, l.LoosePackages, l.UnitPrice, l.DiscountPercentage, l.VatPercentage, l.ReplacesLineId)), async, cancellationToken)).ToDictionary(l => l.Id);
 
             // Regels onder een afwijking in dezelfde save horen bij regel 18; de rest van de regelwijzigingen vraagt een auditregel.
             var deviationOrders = db.ChangeTracker.Entries<SupplyReceiptDeviation>().Where(e => e.State == EntityState.Added)
@@ -246,7 +246,8 @@ namespace AgfAdmin.Data
 
         private static bool LineDiffers(SupplyCommitmentLine line, StoredOrderLine before) =>
             line.SupplyCommitmentId != before.SupplyCommitmentId || line.ReplacesLineId != before.ReplacesLineId || line.ProductVariantId != before.ProductVariantId
-            || !string.Equals(line.ExpectedUnit, before.ExpectedUnit, StringComparison.Ordinal) || line.UnitPrice != before.UnitPrice || ShapeDiffers(line, before);
+            || !string.Equals(line.ExpectedUnit, before.ExpectedUnit, StringComparison.Ordinal) || line.UnitPrice != before.UnitPrice
+            || line.DiscountPercentage != before.DiscountPercentage || line.VatPercentage != before.VatPercentage || ShapeDiffers(line, before);
 
         private static bool ShapeDiffers(SupplyCommitmentLine line, StoredOrderLine before) =>
             line.ExpectedQuantity != before.ExpectedQuantity || line.ExpectedNetWeightKg != before.ExpectedNetWeightKg || line.ExpectedGrossWeightKg != before.ExpectedGrossWeightKg

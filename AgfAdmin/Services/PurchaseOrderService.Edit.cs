@@ -84,6 +84,7 @@ namespace AgfAdmin.Services
                     ProductVariantId = l.ProductVariantId, ExpectedQuantity = l.ExpectedQuantity, ExpectedUnit = l.ExpectedUnit, ExpectedNetWeightKg = l.ExpectedNetWeightKg,
                     ExpectedGrossWeightKg = l.ExpectedGrossWeightKg, WeightSource = l.WeightSource, LotNumber = l.LotNumber, PalletCount = l.PalletCount,
                     PackagesPerPallet = l.PackagesPerPallet, LoosePackages = l.LoosePackages, UnitPrice = l.UnitPrice, Ggn = l.Ggn,
+                    DiscountPercentage = l.DiscountPercentage, VatPercentage = l.VatPercentage,
                 }).ToList(),
             }, _db.BusinessCalendar.Today(), errors);
             if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);
@@ -460,6 +461,8 @@ namespace AgfAdmin.Services
                 Amount("expectedQuantity", line.ExpectedQuantity, wanted.ExpectedQuantity, () => line.ExpectedQuantity = wanted.ExpectedQuantity);
                 Field("expectedUnit", line.ExpectedUnit, wanted.ExpectedUnit, () => line.ExpectedUnit = wanted.ExpectedUnit);
                 Amount(PurchaseOrderDocumentRules.FieldUnitPrice, line.UnitPrice, wanted.UnitPrice, () => line.UnitPrice = wanted.UnitPrice);
+                Amount(PurchaseOrderDocumentRules.FieldDiscount, line.DiscountPercentage, wanted.DiscountPercentage, () => line.DiscountPercentage = wanted.DiscountPercentage);
+                Amount(PurchaseOrderDocumentRules.FieldVat, line.VatPercentage, wanted.VatPercentage, () => line.VatPercentage = wanted.VatPercentage);
                 Amount("expectedNetWeightKg", line.ExpectedNetWeightKg, wanted.ExpectedNetWeightKg, () => line.ExpectedNetWeightKg = wanted.ExpectedNetWeightKg);
                 Amount("expectedGrossWeightKg", line.ExpectedGrossWeightKg, wanted.ExpectedGrossWeightKg, () => line.ExpectedGrossWeightKg = wanted.ExpectedGrossWeightKg);
                 Field("weightSource", line.WeightSource, wanted.WeightSource, () => line.WeightSource = wanted.WeightSource);

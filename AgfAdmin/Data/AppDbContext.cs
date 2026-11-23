@@ -388,6 +388,20 @@ namespace AgfAdmin.Data
                 $"OR (\"WeightSource\" IS NOT NULL AND \"WeightSource\" IN ('Calculated', 'Entered') AND (\"{netColumn}\" IS NOT NULL OR \"{grossColumn}\" IS NOT NULL))");
         }
 
+        // Prijs, korting en btw op een orderregel (spiegel van OrderLineMath.Validate): prijs leeg of >= 0, korting leeg of 0 tot en met
+        // 100, btw leeg of een van de tarieven 0, 9 en 21 (zoals op het artikel). De inkoopregel had haar prijscontrole al.
+        private static void PriceChecks(Microsoft.EntityFrameworkCore.Metadata.Builders.TableBuilder table, string name, bool withUnitPrice = true)
+        {
+            if (withUnitPrice)
+            {
+                table.HasCheckConstraint($"CK_{name}_UnitPrice_NotNegative", "\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0");
+            }
+            table.HasCheckConstraint($"CK_{name}_DiscountPercentage_Range",
+                "\"DiscountPercentage\" IS NULL OR CAST(\"DiscountPercentage\" AS NUMERIC) BETWEEN 0 AND 100");
+            table.HasCheckConstraint($"CK_{name}_VatPercentage_Allowed",
+                "\"VatPercentage\" IS NULL OR CAST(\"VatPercentage\" AS NUMERIC) IN (0, 9, 21)");
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -830,10 +844,13 @@ namespace AgfAdmin.Data
                 b.Property(l => l.ExpectedGrossWeightKg).HasPrecision(18, 3);
                 b.Property(l => l.WeightSource).HasMaxLength(16);
                 b.Property(l => l.UnitPrice).HasPrecision(18, 2);
+                b.Property(l => l.DiscountPercentage).HasPrecision(5, 2);
+                b.Property(l => l.VatPercentage).HasPrecision(5, 2);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
                 b.ToTable(t =>
                 {
+                    PriceChecks(t, "SupplyCommitmentLines", withUnitPrice: false);
                     // Palletinvoer: alles leeg, of pallets en per pallet positief, losse verpakkingen leeg of heel en >= 0, en ExpectedQuantity
                     // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
                     t.HasCheckConstraint("CK_SupplyCommitmentLines_PalletInput_Consistent", PalletInputCheck("ExpectedQuantity"));
@@ -1375,6 +1392,9 @@ namespace AgfAdmin.Data
                 b.Property(l => l.GrossWeightKg).HasPrecision(18, 3);
                 b.Property(l => l.WeightSource).HasMaxLength(16);
                 b.Property(l => l.SupplySource).IsRequired().HasMaxLength(16).HasDefaultValue(Services.SalesSupplyRules.SourceStock);
+                b.Property(l => l.UnitPrice).HasPrecision(18, 2);
+                b.Property(l => l.DiscountPercentage).HasPrecision(5, 2);
+                b.Property(l => l.VatPercentage).HasPrecision(5, 2);
                 b.Property(l => l.Version).IsConcurrencyToken();
 
                 // Eén regel per variant + eenheid + bron per order: een gesplitste regel (deel uit voorraad, rest verwacht) zijn twee regels;
@@ -1390,6 +1410,7 @@ namespace AgfAdmin.Data
                     // exact pallets × per pallet + los (3 decimalen). Hele pallets alleen in de regels: oudere regels hebben soms een breuk.
                     t.HasCheckConstraint("CK_SalesOrderLines_PalletInput_Consistent", PalletInputCheck("Quantity"));
                     LineWeightChecks(t, "SalesOrderLines", "NetWeightKg", "GrossWeightKg");
+                    PriceChecks(t, "SalesOrderLines");
                 });
 
                 b.HasOne(l => l.SalesOrder)

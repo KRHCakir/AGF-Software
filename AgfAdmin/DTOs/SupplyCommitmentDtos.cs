@@ -54,6 +54,10 @@ namespace AgfAdmin.DTOs
         public decimal? LoosePackages { get; set; }
         // Optioneel: inkoopprijs per verpakking (eenheid van de regel), excl. btw, >= 0 met hooguit 2 decimalen. Weggelaten = geen prijs.
         public decimal? UnitPrice { get; set; }
+        // Feedback 22 november: korting in procenten (0 tot en met 100; weggelaten = geen) en het btw-tarief van de regel (0, 9 of 21;
+        // weggelaten = niet vastgelegd). Het scherm stelt de btw van het artikel voor; de server vult nooit zelf iets in.
+        public decimal? DiscountPercentage { get; set; }
+        public decimal? VatPercentage { get; set; }
     }
 
     public sealed class SupplyCommitmentFilter
@@ -149,8 +153,10 @@ namespace AgfAdmin.DTOs
         public decimal? DirectTradeRemainingQuantity { get; set; }
         // Vervangende regel na een afwijkende ontvangst: de oorspronkelijke regel (anders null).
         public int? ReplacesLineId { get; set; }
-        // Prijs per verpakking en aantal × prijs (null zonder prijs).
+        // Prijs per verpakking, korting, btw en aantal × prijs min korting (null zonder prijs).
         public decimal? UnitPrice { get; set; }
+        public decimal? DiscountPercentage { get; set; }
+        public decimal? VatPercentage { get; set; }
         public decimal? LineTotal { get; set; }
     }
 }

@@ -29,6 +29,13 @@ namespace AgfAdmin.Models
         public decimal? GrossWeightKg { get; set; }
         public string WeightSource { get; set; }
 
+        // Feedback 22 november: prijs per eenheid van de regel (excl. btw, null = nog geen prijs), korting in procenten (null = geen) en
+        // het btw-tarief (voorstel uit het artikel; null bij regels van vóór deze ronde). Bedrag en btw volgen uit OrderLineMath; na
+        // opslaan liggen ze vast (guard-regel 36).
+        public decimal? UnitPrice { get; set; }
+        public decimal? DiscountPercentage { get; set; }
+        public decimal? VatPercentage { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Optimistisch concurrency-token; wordt bij elke reservering "aangeraakt".
