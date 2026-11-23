@@ -18,6 +18,7 @@ import PurchaseOrderDocument, { PurchaseOrderChanges } from './PurchaseOrderDocu
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
+import OrderLineProgress from './OrderLineProgress';
 import { OrderAmountsSummary, PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from './PurchaseLineTable';
 import { unitLabelKey } from '../../lib/units';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
@@ -45,6 +46,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
     const qty = (value: number) => formatQuantity(value, locale);
     const labels = usePurchaseLineLabels();
     // Herkenbare naam van een andere regel van deze order: het onderscheidende kenmerk (herkomst, maat of verpakking).
+    // Splitsen: "regel 2" verwijst naar de plaats van de regel op de order (het artikel kan verschillen).
+    const lineNo = (id: number) => String(order.lines.findIndex((line) => line.id === id) + 1 || `#${id}`);
     const lineName = (id: number) => { const other = order.lines.find((line) => line.id === id); return other ? [other.origin, other.size, other.packaging].filter(Boolean).join(' · ') || `#${id}` : `#${id}`; };
 
     return (
@@ -125,6 +128,13 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                             {(line.replacedByLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_replaced_by', { line: lineName(id) })}</span>)}
                                         </span>
                                     )}
+                                    {(line.splitFromLineId != null || (line.splitIntoLineIds ?? []).length > 0 || (line.cancelledQuantity ?? 0) > 0) && (
+                                        <span className="ml-1 inline-flex flex-wrap gap-1 align-middle" data-tour="po-line-split" data-tour-key={line.id}>
+                                            {line.splitFromLineId != null && <span className={replacementBadge}>{t('po_line_split_from', { line: lineNo(line.splitFromLineId) })}</span>}
+                                            {(line.splitIntoLineIds ?? []).map((id) => <span key={id} className={replacementBadge}>{t('po_line_split_into', { line: lineNo(id) })}</span>)}
+                                            {(line.cancelledQuantity ?? 0) > 0 && <span className={replacementBadge}>{t('po_line_cancelled', { quantity: qty(line.cancelledQuantity ?? 0) })}</span>}
+                                        </span>
+                                    )}
                                     {line.ggn && <span className="block font-mono text-xs text-gray-800" data-testid={`po-line-ggn-${line.id}`}>GGN {line.ggn}</span>}
                                     {(line.invoicedQuantity ?? 0) > 0 && (
                                         <span className="block text-xs text-gray-700" data-testid={`po-line-invoiced-${line.id}`}>
@@ -170,6 +180,12 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                 </table>
                 <OrderAmountsSummary amounts={order.totals?.amounts} currency={order.currency ?? null} rate={order.exchangeRate ?? null} />
             </section>
+
+            {/* Feedback 22 november: per regel besteld, ontvangen, open, partij en status; open bij een deels ontvangen order. */}
+            <details className={section} open={order.status === 'PartiallyReceived'} data-tour="po-line-progress">
+                <summary className={`${h3} cursor-pointer`}>{t('po_line_progress_title')}</summary>
+                <div className="mt-2"><OrderLineProgress lines={order.lines} /></div>
+            </details>
 
             <ReceiptsSection order={order} onChanged={onChanged} />
 

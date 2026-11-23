@@ -42,6 +42,11 @@ namespace AgfAdmin.DTOs
         public decimal? ExpectedNetWeightKg { get; set; }
         public decimal ReceivedQuantity { get; set; }
         public decimal RejectedQuantity { get; set; }
+        // Feedback 22 november, orderoverzicht per regel: hoeveel regels er zijn, hoeveel daarvan helemaal ontvangen, en het aantal
+        // verpakkingen dat nog open staat (per regel besteld min ontvangen, nooit onder nul; een vervallen restant telt niet).
+        public int LineCount { get; set; }
+        public int ReceivedLineCount { get; set; }
+        public decimal OpenQuantity { get; set; }
         public List<PurchaseOrderInvoiceNumberDto> InvoiceNumbers { get; set; } = new();
         // None, Received of CreditNoteExpected (PurchaseOrderRules.InvoiceIndicator).
         public string InvoiceIndicator { get; set; }

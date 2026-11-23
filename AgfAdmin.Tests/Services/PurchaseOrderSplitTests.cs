@@ -79,6 +79,8 @@ public class PurchaseOrderSplitTests : IDisposable
         {
             var list = (await new PurchaseOrderService(db).ListAsync(null, "all", null, 1, 50, null, default)).Value.Items.Single();
             Assert.Equal((100m, 40m, "PartiallyReceived"), (list.ExpectedQuantity, list.ReceivedQuantity, list.Status));
+            // Orderoverzicht per regel: 1 van 2 regels ontvangen, 60 colli open.
+            Assert.Equal((2, 1, 60m), (list.LineCount, list.ReceivedLineCount, list.OpenQuantity));
             var view = (await new ReceiptService(db).GetAsync(order.Id)).Value;
             Assert.Equal(new[] { 0m, 60m }, view.Lines.Select(l => l.OpenQuantity));
         }
