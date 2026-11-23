@@ -11,6 +11,10 @@ namespace AgfAdmin.DTOs
         public string VendorName { get; set; }
         public DateTime? ExpectedAt { get; set; }
         public string PartijNumber { get; set; }
+        // Feedback 22 november: waar ontvangen wordt (null = de eigen loods). Op een locatie van de soort Onderweg heet de knop Afgeleverd.
+        public int? LocationId { get; set; }
+        public string LocationName { get; set; }
+        public string LocationKind { get; set; }
         // Weergavestatus zoals de inkooporderlijst (Ordered, PartiallyReceived, Received, Rejected, Cancelled).
         public string Status { get; set; }
         // Ontvangen kan (eigen magazijn, niet geannuleerd of afgekeurd); anders de reden.

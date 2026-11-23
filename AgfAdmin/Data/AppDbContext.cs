@@ -47,6 +47,7 @@ namespace AgfAdmin.Data
         // Beschikbaarheidsdomein (verwacht, ontvangen, gereserveerd). Legacy Inventory/Shipment blijven ongewijzigd.
         public DbSet<SupplyCommitment> SupplyCommitments { get; set; }
         public DbSet<SupplyCommitmentLine> SupplyCommitmentLines { get; set; }
+        public DbSet<StockLocation> StockLocations => Set<StockLocation>();
         public DbSet<StockReceipt> StockReceipts { get; set; }
         public DbSet<StockMovement> StockMovements { get; set; }
         public DbSet<StockReservation> StockReservations { get; set; }
@@ -306,6 +307,11 @@ namespace AgfAdmin.Data
             foreach (var entry in ChangeTracker.Entries<StockReservation>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(r => r.Version).CurrentValue = entry.Property(r => r.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<StockLocation>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
             }
 
             foreach (var entry in ChangeTracker.Entries<SalesOrderTransport>().Where(e => e.State == EntityState.Modified))
@@ -911,6 +917,28 @@ namespace AgfAdmin.Data
                     .OnDelete(DeleteBehavior.Restrict);
                 b.Property(l => l.CancelledQuantity).HasPrecision(18, 3);
                 b.ToTable(t => t.HasCheckConstraint("CK_SupplyCommitmentLines_CancelledQuantity_Positive", "\"CancelledQuantity\" IS NULL OR \"CancelledQuantity\" > 0"));
+            });
+
+            // Feedback 22 november: voorraadlocaties met een soort; een pallet en een inkooporder wijzen er optioneel naar (null = eigen loods).
+            modelBuilder.Entity<StockLocation>(b =>
+            {
+                b.Property(l => l.Name).IsRequired().HasMaxLength(StockLocationRules.MaxNameLength);
+                b.Property(l => l.Kind).IsRequired().HasMaxLength(32);
+                b.Property(l => l.Address).HasMaxLength(StockLocationRules.MaxAddressLength);
+                b.Property(l => l.CountryCode).HasMaxLength(2);
+                b.Property(l => l.CreatedBy).HasMaxLength(100);
+                b.Property(l => l.UpdatedBy).HasMaxLength(100);
+                b.Property(l => l.Version).IsConcurrencyToken();
+                b.HasIndex(l => l.Name).IsUnique();
+                b.ToTable(t => t.HasCheckConstraint("CK_StockLocations_Kind",
+                    "\"Kind\" IN ('OwnWarehouse', 'Supplier', 'Crossdock', 'ExternalStorage', 'InTransit')"));
+            });
+            modelBuilder.Entity<Pallet>().HasOne(p => p.StockLocation).WithMany().HasForeignKey(p => p.StockLocationId).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<SupplyCommitment>(b =>
+            {
+                b.HasOne(c => c.ReceiveLocation).WithMany().HasForeignKey(c => c.ReceiveLocationId).OnDelete(DeleteBehavior.Restrict);
+                b.Property(c => c.LoadingAddress).HasMaxLength(StockLocationRules.MaxAddressLength);
+                b.Property(c => c.DeliveryAddress).HasMaxLength(StockLocationRules.MaxAddressLength);
             });
 
             modelBuilder.Entity<StockReceipt>(b =>

@@ -134,6 +134,8 @@ namespace AgfAdmin.Data
     //    met een Edit-auditregel en wijst naar een deels ontvangen regel van dezelfde order (onveranderlijk); het vervallen restant staat
     //    nooit op een nieuwe regel, daalt nooit en stijgt alleen met een Edit, met precies de verlaging van het verwachte aantal. Ontvangen
     //    hoeveelheden veranderen nooit: aantal, eenheid, netto kg en gewichtsmethode van een opgeslagen palletregel liggen vast.
+    // 40. voorraadlocaties (zie TraceabilityGuard.StockLocations.cs): een locatie wordt nooit verwijderd; de locatie van een pallet wordt
+    //    alleen bij aanmaken gezet; de soort van een locatie waar een pallet of inkooporder naar wijst, verandert nooit.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -267,6 +269,7 @@ namespace AgfAdmin.Data
             await CheckDeliveryTermsAsync(db, async, cancellationToken);
             await CheckServiceLinesAsync(db, async, cancellationToken);
             await CheckLineSplitsAsync(db, async, cancellationToken);
+            await CheckStockLocationsAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

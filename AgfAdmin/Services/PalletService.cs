@@ -96,6 +96,7 @@ namespace AgfAdmin.Services
                         candidate.LogisticsStatus,
                         candidate.LocationContext,
                         candidate.WarehouseLocation,
+                        candidate.StockLocationId,
                         ReferenceGenerated = !ownReference
                     }),
                     Reason = reason,
@@ -261,6 +262,7 @@ namespace AgfAdmin.Services
                 LogisticsStatus = request.LogisticsStatus,
                 LocationContext = request.LocationContext,
                 WarehouseLocation = warehouseLocation,
+                StockLocationId = request.StockLocationId,
                 CreatedAt = DateTime.UtcNow
             };
         }
@@ -276,7 +278,8 @@ namespace AgfAdmin.Services
                 && existing.DeclaredNetKg == candidate.DeclaredNetKg
                 && string.Equals(existing.LogisticsStatus, candidate.LogisticsStatus, StringComparison.Ordinal)
                 && string.Equals(existing.LocationContext, candidate.LocationContext, StringComparison.Ordinal)
-                && string.Equals(existing.WarehouseLocation, candidate.WarehouseLocation, StringComparison.Ordinal);
+                && string.Equals(existing.WarehouseLocation, candidate.WarehouseLocation, StringComparison.Ordinal)
+                && existing.StockLocationId == candidate.StockLocationId;
 
             return same
                 ? ServiceResult<PalletDto>.Ok(ToDto(existing))

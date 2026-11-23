@@ -32,7 +32,7 @@ namespace AgfAdmin.Services
         public async Task<ServiceResult<ReceiptOrderDto>> GetAsync(int orderId, CancellationToken cancellationToken = default)
         {
             var order = await _db.SupplyCommitments.AsNoTracking()
-                .Include(c => c.Vendor).Include(c => c.Partij)
+                .Include(c => c.Vendor).Include(c => c.Partij).Include(c => c.ReceiveLocation)
                 .Include(c => c.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(c => c.Lines).ThenInclude(l => l.Partij)
                 .AsSplitQuery()
@@ -88,6 +88,9 @@ namespace AgfAdmin.Services
                 VendorName = order.Vendor?.Name,
                 ExpectedAt = order.ExpectedAt == null ? null : DateTime.SpecifyKind(order.ExpectedAt.Value, DateTimeKind.Utc),
                 PartijNumber = order.Partij?.Number,
+                LocationId = order.ReceiveLocationId,
+                LocationName = order.ReceiveLocation?.Name,
+                LocationKind = order.ReceiveLocation?.Kind ?? StockLocationRules.KindOwnWarehouse,
                 Status = PurchaseOrderRules.OrderStatus(order.Status, lines.Select(l => (l.OrderedQuantity, l.ReceivedQuantity))),
                 NotReceivableReason = NotReceivable(order),
                 Lines = lines,
@@ -194,8 +197,11 @@ namespace AgfAdmin.Services
                 {
                     RequestId = Derived(requestId, $"pallet:{i}"),
                     Reference = i < references.Count ? references[i] : null,
+                    // Ontvangen in onze voorraad (ook onderweg: verkocht en geleverd zoals elke andere voorraad); waar de pallet fysiek is, zegt
+                    // de voorraadlocatie van de order (null = de eigen loods).
                     LogisticsStatus = PalletRules.StatusReceived,
                     LocationContext = PalletRules.LocationWarehouse,
+                    StockLocationId = order.ReceiveLocationId,
                 }, cancellationToken);
                 if (pallet.Status is not (ServiceResultStatus.Created or ServiceResultStatus.Ok)) return Relay(pallet.Status, pallet.Message, pallet.Errors, pallet.ConflictBody, $"pallets[{i}]");
 
