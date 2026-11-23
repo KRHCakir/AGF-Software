@@ -151,6 +151,9 @@ namespace AgfAdmin.Services
                         ExpectedNetWeightKg = f.Lines.Any(l => l.ExpectedNetWeightKg != null) ? f.Lines.Sum(l => l.ExpectedNetWeightKg ?? 0m) : null,
                         ReceivedQuantity = f.Lines.Sum(l => l.ReceivedQuantity),
                         RejectedQuantity = f.RejectedQuantity,
+                        LineCount = f.ActiveLines.Count(),
+                        ReceivedLineCount = f.ActiveLines.Count(l => l.ReceivedQuantity >= l.ExpectedQuantity),
+                        OpenQuantity = f.ActiveLines.Sum(l => Math.Max(0m, l.ExpectedQuantity - l.ReceivedQuantity)),
                         InvoiceNumbers = f.Refs.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
                             .Select(r => new PurchaseOrderInvoiceNumberDto { Kind = r.Kind, InvoiceNumber = r.InvoiceNumber }).ToList(),
                         InvoiceIndicator = f.InvoiceIndicator(),
@@ -491,6 +494,8 @@ namespace AgfAdmin.Services
             public decimal RejectedQuantity => Lines.Sum(l => l.RejectedQuantity);
             public decimal RejectedNetWeightKg => Lines.Sum(l => l.RejectedNetWeightKg);
             public decimal RemovedQuantity => Lines.Sum(l => l.RemovedQuantity);
+            // Orderoverzicht per regel: regels die iets verwachten of iets ontvingen (een geheel vervangen regel zonder ontvangst telt niet).
+            public IEnumerable<LineFact> ActiveLines => Lines.Where(l => l.ExpectedQuantity > 0m || l.ReceivedQuantity > 0m);
             // Regels die nog iets verwachten of iets ontvingen; een geheel vervangen regel zonder ontvangst telt niet mee.
             public string LinesOrigin => SupplyRules.LinesOrigin(Lines.Where(l => l.ExpectedQuantity > 0m || l.ReceivedAllUnitsQuantity > 0m).Select(l => l.Origin));
 

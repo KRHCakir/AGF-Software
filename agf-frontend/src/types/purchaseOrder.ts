@@ -14,6 +14,10 @@ export interface PurchaseOrderInvoiceNumber {
 export interface PurchaseOrderListItem {
     id: number;
     orderNumber: string;
+    // Feedback 22 november, orderoverzicht per regel: aantal regels, helemaal ontvangen regels en open verpakkingen (oudere server: weg).
+    lineCount?: number;
+    receivedLineCount?: number;
+    openQuantity?: number;
     // Valuta-ronde: bedrag van de regels met een prijs, in de valuta van de order en in euro (de lijst telt alleen euro's op).
     currency?: string;
     amount?: number | null;

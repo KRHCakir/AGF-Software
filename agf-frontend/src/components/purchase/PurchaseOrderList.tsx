@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, formatDateOnly } from '../../lib/calendarDate';
@@ -14,6 +15,12 @@ import { formatEuro } from '../../lib/documentCurrency';
 import { isEuro } from '../../lib/exchangeRate';
 import type { SortState } from '../../lib/listSort';
 import { SortButton, SortHeader, SortSelect, type SortOption } from '../shared/SortHeader';
+import { partialSummary } from '../../lib/orderLineProgress';
+import { toApiError } from '../../services/apiClient';
+import { getPurchaseOrder } from '../../services/purchaseOrderService';
+import type { PurchaseOrderLine } from '../../types/purchaseOrder';
+import type { LoadState } from '../availability/StateViews';
+import OrderLineProgress from './OrderLineProgress';
 
 // Sorteervelden van de inkooporderlijst (feedback 22 november): de server sorteert (de lijst bladert op de server) en kent precies deze
 // velden (AgfAdmin/Services/ListSortFields.cs). "number" is het hoofdnummer zoals getoond (leveranciersnummer, anders IO-nummer).
@@ -37,6 +44,58 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
     const rejected = (item: PurchaseOrderListItem) => item.rejectedQuantity > 0 && (
         <span className="block text-xs text-red-800">{t('po_rejected_of', { rejected: formatQuantity(item.rejectedQuantity, locale), total: formatQuantity(item.receivedQuantity, locale) })}</span>
     );
+    // Feedback 22 november: per order uitklappen tot een overzicht per regel (besteld, ontvangen, open, partij, status), pas bij openen geladen.
+    const [expanded, setExpanded] = useState<Record<number, LoadState<PurchaseOrderLine[]>>>({});
+    // Het lijstitem kent geen versie van de regels (een wijziging van artikel, herkomst of partij laat de totalen gelijk): daarom worden de
+    // uitgeklapte regels opnieuw geladen zodra de lijst ververst (nieuwe items); de oude regels blijven zichtbaar tot de nieuwe binnen zijn.
+    const requestSeq = useRef<Record<number, number>>({});
+    const load = (id: number) => {
+        const seq = (requestSeq.current[id] ?? 0) + 1;
+        requestSeq.current[id] = seq;
+        const latest = () => requestSeq.current[id] === seq;
+        getPurchaseOrder(id)
+            .then((order) => { if (latest()) setExpanded((current) => (current[id] === undefined ? current : { ...current, [id]: { status: 'ready', data: order.lines } })); })
+            .catch((caught: unknown) => { if (latest()) setExpanded((current) => (current[id] === undefined ? current : { ...current, [id]: { status: 'error', error: toApiError(caught) } })); });
+    };
+    const toggle = (item: PurchaseOrderListItem) => {
+        const id = item.id;
+        if (expanded[id] !== undefined) {
+            requestSeq.current[id] = (requestSeq.current[id] ?? 0) + 1;
+            setExpanded((current) => { const next = { ...current }; delete next[id]; return next; });
+            return;
+        }
+        setExpanded((current) => ({ ...current, [id]: { status: 'loading' } }));
+        load(id);
+    };
+    const previousItems = useRef(items);
+    useEffect(() => {
+        if (previousItems.current === items) return;
+        previousItems.current = items;
+        for (const item of items) if (expanded[item.id] !== undefined) load(item.id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [items]);
+    const partial = (item: PurchaseOrderListItem) => {
+        const summary = partialSummary(item);
+        return summary && (
+            <span className="block text-xs text-amber-900" data-testid="po-list-partial" data-tour="po-list-partial">
+                {t('po_partial_lines', { received: String(summary.received), lines: String(summary.lines), open: formatQuantity(summary.open, locale) })}
+            </span>
+        );
+    };
+    const expandButton = (item: PurchaseOrderListItem, controls: string) => (
+        <button type="button" aria-expanded={expanded[item.id] !== undefined} aria-controls={controls} data-tour="po-list-expand" data-tour-key={item.orderNumber}
+            onClick={(event) => { event.stopPropagation(); toggle(item); }}
+            className="mt-1 inline-block text-xs font-medium text-blue-800 underline underline-offset-2">
+            {expanded[item.id] !== undefined ? t('po_lines_collapse') : t('po_lines_expand')}
+        </button>
+    );
+    const progress = (id: number) => {
+        const state = expanded[id];
+        if (state === undefined) return null;
+        if (state.status === 'loading') return <p className="px-2 py-1 text-xs text-gray-700">{t('loading_dots')}</p>;
+        if (state.status === 'error') return <p role="alert" className="px-2 py-1 text-xs text-red-800">{state.error.message}</p>;
+        return <OrderLineProgress lines={state.data} />;
+    };
     const th = 'px-2 py-2';
     const head = 'px-2 py-2 align-top';
     const sortOptions: SortOption[] = [
@@ -83,7 +142,8 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {items.map((item, index) => (
-                            <tr key={item.id} aria-selected={item.id === selectedId} className={listRowClass(index, { selected: item.id === selectedId, clickable: true })} onClick={rowClick(() => onOpen(item.id))}>
+                            <Fragment key={item.id}>
+                            <tr aria-selected={item.id === selectedId} className={listRowClass(index, { selected: item.id === selectedId, clickable: true })} onClick={rowClick(() => onOpen(item.id))}>
                                 <td className={`${th} whitespace-nowrap`}>
                                     <button type="button" data-tour="po-open" data-tour-key={item.orderNumber} className="text-left font-semibold text-blue-800 hover:underline" aria-label={t('po_open_order', { number: orderNumbers(item).main })} onClick={(event) => { event.stopPropagation(); onOpen(item.id); }}>
                                         <OrderNumberText orderNumber={item.orderNumber} supplierReference={item.supplierReference} stacked truncate />
@@ -96,10 +156,14 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
                                 <td className={th}>
                                     <span className="flex flex-wrap items-center gap-1"><OrderStatusBadge status={item.status} /><DocumentStatusBadge status={item.documentStatus} /><BillingStatusBadge status={item.billingStatus} />{item.hasDeviation && <DeviationBadge />}</span>
                                     {rejected(item)}
-                                    {listEditable(item) && (
-                                        <Link href={`/purchase-orders/edit?id=${item.id}`} onClick={(event) => event.stopPropagation()} data-tour="po-list-edit" data-tour-key={item.orderNumber}
-                                            className="mt-1 inline-block text-xs font-medium text-blue-800 underline underline-offset-2">{t('po_edit')}</Link>
-                                    )}
+                                    {partial(item)}
+                                    <span className="flex flex-wrap gap-x-3">
+                                        {expandButton(item, `po-lines-${item.id}`)}
+                                        {listEditable(item) && (
+                                            <Link href={`/purchase-orders/edit?id=${item.id}`} onClick={(event) => event.stopPropagation()} data-tour="po-list-edit" data-tour-key={item.orderNumber}
+                                                className="mt-1 inline-block text-xs font-medium text-blue-800 underline underline-offset-2">{t('po_edit')}</Link>
+                                        )}
+                                    </span>
                                 </td>
                                 <td className={`${th} text-right font-mono`}>{formatQuantity(item.expectedQuantity, locale)}</td>
                                 <td className={`${th} whitespace-nowrap text-right font-mono`}>{kg(item)}</td>
@@ -109,6 +173,10 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
                                     {item.invoiceIndicator !== 'None' && <span className="ml-1"><InvoiceIndicatorBadge indicator={item.invoiceIndicator} /></span>}
                                 </td>
                             </tr>
+                            {expanded[item.id] !== undefined && (
+                                <tr id={`po-lines-${item.id}`}><td colSpan={10} className="bg-gray-50 px-2 py-2">{progress(item.id)}</td></tr>
+                            )}
+                            </Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -130,14 +198,19 @@ export default function PurchaseOrderList({ items, selectedId, onOpen, sort, onS
                             <span className="block font-mono text-gray-900">{formatQuantity(item.expectedQuantity, locale)} {t('po_packages')} · {kg(item)}</span>
                             {item.amountEur != null && <span className="block font-mono text-gray-900">{amount(item)}</span>}
                             {rejected(item)}
+                            {partial(item)}
                             <span className="mt-1 flex flex-wrap items-center gap-1 break-all">
                                 <span className="text-gray-700">{t('po_col_invoices')}: <span className="font-mono">{invoices(item)}</span></span>
                                 {item.invoiceIndicator !== 'None' && <InvoiceIndicatorBadge indicator={item.invoiceIndicator} />}
                             </span>
                         </button>
-                        {listEditable(item) && (
-                            <Link href={`/purchase-orders/edit?id=${item.id}`} className="mt-1 inline-block px-1 text-xs font-medium text-blue-800 underline underline-offset-2">{t('po_edit')}</Link>
-                        )}
+                        <span className="flex flex-wrap gap-x-3 px-1">
+                            {expandButton(item, `po-lines-card-${item.id}`)}
+                            {listEditable(item) && (
+                                <Link href={`/purchase-orders/edit?id=${item.id}`} className="mt-1 inline-block text-xs font-medium text-blue-800 underline underline-offset-2">{t('po_edit')}</Link>
+                            )}
+                        </span>
+                        {expanded[item.id] !== undefined && <div id={`po-lines-card-${item.id}`} className="mt-1">{progress(item.id)}</div>}
                     </li>
                 ))}
             </ul>
