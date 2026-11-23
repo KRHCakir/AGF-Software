@@ -868,7 +868,7 @@ namespace AgfAdmin.Services
                         PartijNumber = c.PartijNumber,
                         StockLocationName = c.StockLocationName,
                         Size = c.Size,
-                        Origin = c.VariantOrigin ?? c.SupplyOrigin,
+                        Origin = c.SupplyOrigin ?? c.VariantOrigin,
                         VendorName = c.VendorName,
                     };
                 })
