@@ -14,6 +14,31 @@ namespace AgfAdmin.Data
         // Dat nieuwe voorraad altijd een partij heeft, regelt de enige schrijver van ontvangen palletregels (PalletService.ApplyPartijAsync,
         // ook via het ontvangstscherm): een order zonder partij krijgt er bij de eerste ontvangst een. Hier staat het niet, omdat voorraad van
         // vóór de partij (meerdere lotteksten op één orderregel) als gegeven blijft bestaan en regel 23 die regels per orderregel bewaakt.
+        private const int LotNumberLockClass = 41;
+
+        // Genormaliseerde sleutels van nieuwe of gewijzigde partijnummers; gesorteerd zodat gelijktijdige schrijvers de locks in dezelfde volgorde nemen.
+        internal static List<string> LotNumberKeysToLock(AppDbContext db) =>
+            db.ChangeTracker.Entries<Partij>()
+                .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(p => p.NumberKey).IsModified))
+                .Select(e => e.Entity.NumberKey).Where(k => k != null).Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
+
+        // Transactielock per nummer (PostgreSQL): de uniekheid over soorten is anders niet atomair, want de unieke index geldt per soort.
+        // Moet binnen de transactie van de schrijfactie staan; de lock vervalt bij commit of rollback. SQLite (tests) serialiseert schrijvers zelf.
+        internal static async Task LockLotNumbersAsync(AppDbContext db, List<string> keys, bool async, CancellationToken cancellationToken)
+        {
+            foreach (var key in keys)
+            {
+                if (async)
+                {
+                    await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({LotNumberLockClass}, hashtext({key}))", cancellationToken);
+                }
+                else
+                {
+                    db.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock({LotNumberLockClass}, hashtext({key}))");
+                }
+            }
+        }
+
         private static async Task CheckLotNumberingAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             var numbered = db.ChangeTracker.Entries<Partij>()
