@@ -6182,6 +6182,10 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal?>("CancelledQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -6234,6 +6238,9 @@ namespace AgfAdmin.Migrations
                     b.Property<int?>("ReplacesLineId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SplitFromLineId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("SupplyCommitmentId")
                         .HasColumnType("integer");
 
@@ -6261,10 +6268,14 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("ReplacesLineId");
 
+                    b.HasIndex("SplitFromLineId");
+
                     b.HasIndex("SupplyCommitmentId");
 
                     b.ToTable("SupplyCommitmentLines", t =>
                         {
+                            t.HasCheckConstraint("CK_SupplyCommitmentLines_CancelledQuantity_Positive", "\"CancelledQuantity\" IS NULL OR \"CancelledQuantity\" > 0");
+
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_DiscountPercentage_Range", "\"DiscountPercentage\" IS NULL OR CAST(\"DiscountPercentage\" AS NUMERIC) BETWEEN 0 AND 100");
 
                             t.HasCheckConstraint("CK_SupplyCommitmentLines_Ggn_Length", "\"Ggn\" IS NULL OR length(\"Ggn\") = 13");
@@ -7718,6 +7729,11 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("ReplacesLineId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.SupplyCommitmentLine", "SplitFromLine")
+                        .WithMany()
+                        .HasForeignKey("SplitFromLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.SupplyCommitment", "SupplyCommitment")
                         .WithMany("Lines")
                         .HasForeignKey("SupplyCommitmentId")
@@ -7729,6 +7745,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("ProductVariant");
 
                     b.Navigation("ReplacesLine");
+
+                    b.Navigation("SplitFromLine");
 
                     b.Navigation("SupplyCommitment");
                 });

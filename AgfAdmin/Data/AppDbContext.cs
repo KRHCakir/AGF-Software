@@ -903,6 +903,14 @@ namespace AgfAdmin.Data
                     .WithMany()
                     .HasForeignKey(l => l.ReplacesLineId)
                     .OnDelete(DeleteBehavior.Restrict);
+
+                // Feedback 22 november, splitsen: het open deel van een deels ontvangen regel (nooit verwijderd) en het vervallen restant.
+                b.HasOne(l => l.SplitFromLine)
+                    .WithMany()
+                    .HasForeignKey(l => l.SplitFromLineId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                b.Property(l => l.CancelledQuantity).HasPrecision(18, 3);
+                b.ToTable(t => t.HasCheckConstraint("CK_SupplyCommitmentLines_CancelledQuantity_Positive", "\"CancelledQuantity\" IS NULL OR \"CancelledQuantity\" > 0"));
             });
 
             modelBuilder.Entity<StockReceipt>(b =>

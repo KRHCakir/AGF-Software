@@ -96,6 +96,8 @@ namespace AgfAdmin.Services
             var stored = order.Lines.ToDictionary(l => l.Id);
             var next = candidate.Lines.ToList();
             var kept = new HashSet<int>();
+            // Feedback 22 november: per regelpositie de keuze voor het restant van een gesplitste regel (Expected of Cancelled).
+            var splits = new Dictionary<int, string>();
             for (var i = 0; i < next.Count; i++)
             {
                 var key = $"lines[{i}]";
@@ -114,12 +116,35 @@ namespace AgfAdmin.Services
                 {
                     PackagingRules.WholePalletErrors(next[i].PalletCount, next[i].PackagesPerPallet, key, errors, AddError);
                 }
+                var received = facts.Received.GetValueOrDefault(before.Id);
+                // Splitsen: verandert het artikel (product, maat of herkomst) van een deels ontvangen regel, dan blijft het ontvangen deel op
+                // die regel en wordt het open deel een nieuwe regel met het nieuwe artikel. De gebruiker kiest wat er met het restant gebeurt.
+                if (facts.InUse.Contains(before.Id) && received > 0m && next[i].ProductVariantId != before.ProductVariantId)
+                {
+                    var remainder = request.Lines[i].SplitRemainder;
+                    if (remainder == null)
+                    {
+                        AddError(errors, $"{key}.splitRemainder", $"{received.ToString(CultureInfo.InvariantCulture)} has already been received on this line: it is split. Choose whether the rest of the old line is still expected (Expected) or cancelled (Cancelled).");
+                    }
+                    else if (!PurchaseOrderDocumentRules.IsRemainder(remainder))
+                    {
+                        AddError(errors, $"{key}.splitRemainder", "The remainder is Expected or Cancelled.");
+                    }
+                    else
+                    {
+                        splits[i] = remainder;
+                    }
+                    continue;
+                }
+                if (request.Lines[i].SplitRemainder != null)
+                {
+                    AddError(errors, $"{key}.splitRemainder", "Only a partly received line whose article changes is split.");
+                }
                 if (!facts.InUse.Contains(before.Id)) continue;
                 if (next[i].ProductVariantId != before.ProductVariantId || !string.Equals(next[i].ExpectedUnit, before.ExpectedUnit, StringComparison.Ordinal))
                 {
                     AddError(errors, $"{key}.productVariantId", "Goods have been received on this line (or it has history), so its article and unit are fixed.");
                 }
-                var received = facts.Received.GetValueOrDefault(before.Id);
                 if (next[i].ExpectedQuantity < received)
                 {
                     AddError(errors, $"{key}.expectedQuantity", $"{received.ToString(CultureInfo.InvariantCulture)} has already been received on this line; the quantity cannot be lower.");
@@ -190,7 +215,7 @@ namespace AgfAdmin.Services
                     DeliveryTermRules.Describe(DeliveryTermRules.Of(order)), DeliveryTermRules.Describe(DeliveryTermRules.Of(candidate))));
                 DeliveryTermRules.Apply(order, DeliveryTermRules.Of(candidate));
             }
-            await ApplyLinesAsync(order, request, next, stored, kept, fields, cancellationToken);
+            await ApplyLinesAsync(order, request, next, stored, kept, fields, splits, facts.Received, cancellationToken);
             if (fields.Count == 0)
             {
                 return await GetAsync(id, cancellationToken);
@@ -426,7 +451,7 @@ namespace AgfAdmin.Services
         }
 
         private async Task ApplyLinesAsync(SupplyCommitment order, UpdatePurchaseOrderDto request, List<SupplyCommitmentLine> next, Dictionary<int, SupplyCommitmentLine> stored,
-            HashSet<int> kept, List<PurchaseOrderChangeField> fields, CancellationToken cancellationToken)
+            HashSet<int> kept, List<PurchaseOrderChangeField> fields, Dictionary<int, string> splits, Dictionary<int, decimal> receivedByLine, CancellationToken cancellationToken)
         {
             var variantIds = next.Select(l => l.ProductVariantId).Concat(stored.Values.Select(l => l.ProductVariantId)).Distinct().ToList();
             var names = (await _db.ProductVariants.AsNoTracking().Where(v => variantIds.Contains(v.Id)).Select(v => new { v.Id, Product = v.Product.Name, v.Name }).ToListAsync(cancellationToken))
@@ -449,6 +474,11 @@ namespace AgfAdmin.Services
                     continue;
                 }
                 var line = stored[id];
+                if (splits.TryGetValue(i, out var remainder))
+                {
+                    Split(order, line, wanted, remainder, receivedByLine.GetValueOrDefault(id), names, fields, now);
+                    continue;
+                }
                 void Field(string field, string before, string after, Action apply)
                 {
                     if (string.Equals(before, after, StringComparison.Ordinal)) return;
@@ -485,6 +515,35 @@ namespace AgfAdmin.Services
                 // GGN van het product: ook na ontvangst aan te passen zolang de order Open is (wat al ontvangen is, houdt het GGN van de ontvangst).
                 // Een weggelaten ggn (null) laat de opgeslagen waarde staan; een lege tekst wist het GGN bewust.
                 if (request.Lines[i].Ggn != null) Field(PurchaseOrderDocumentRules.FieldGgn, line.Ggn, wanted.Ggn, () => line.Ggn = wanted.Ggn);
+            }
+        }
+
+        // Splitsen: de oude regel houdt haar artikel en wat ontvangen is; het open deel wordt een nieuwe regel (wanted, met het nieuwe artikel en
+        // de partij van de oude regel). Vervalt het restant, dan verwacht de oude regel voortaan precies het ontvangen aantal: kg naar
+        // verhouding, palletinvoer leeg (die past niet meer), en het verschil staat als vervallen restant op de regel (regel 39).
+        private static void Split(SupplyCommitment order, SupplyCommitmentLine line, SupplyCommitmentLine wanted, string remainder, decimal received,
+            IReadOnlyDictionary<int, string> names, List<PurchaseOrderChangeField> fields, DateTime now)
+        {
+            wanted.CreatedAt = now;
+            wanted.SplitFromLineId = line.Id;
+            wanted.PartijId = line.PartijId;
+            order.Lines.Add(wanted);
+            fields.Add(new(PurchaseOrderDocumentRules.FieldSplit, line.Id, PurchaseOrderDocumentRules.ActionAdded, Describe(line, names), Describe(wanted, names)));
+            if (remainder != PurchaseOrderDocumentRules.RemainderCancelled || line.ExpectedQuantity <= received) return;
+
+            var cancelled = line.ExpectedQuantity - received;
+            var before = line.ExpectedQuantity;
+            fields.Add(new(PurchaseOrderDocumentRules.FieldCancelledQuantity, line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(line.CancelledQuantity), Number((line.CancelledQuantity ?? 0m) + cancelled)));
+            fields.Add(new("expectedQuantity", line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(before), Number(received)));
+            line.CancelledQuantity = (line.CancelledQuantity ?? 0m) + cancelled;
+            line.ExpectedQuantity = received;
+            decimal? Scaled(decimal? kg) => kg == null ? null : decimal.Round(kg.Value * received / before, 3, MidpointRounding.AwayFromZero);
+            (line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg) = (Scaled(line.ExpectedNetWeightKg), Scaled(line.ExpectedGrossWeightKg));
+            if (line.ExpectedGrossWeightKg < line.ExpectedNetWeightKg) line.ExpectedGrossWeightKg = line.ExpectedNetWeightKg;
+            if (line.PalletCount != null)
+            {
+                fields.Add(new("pallets", line.Id, PurchaseOrderDocumentRules.ActionChanged, Pallets(line), null));
+                (line.PalletCount, line.PackagesPerPallet, line.LoosePackages) = (null, null, null);
             }
         }
 
