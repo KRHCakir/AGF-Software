@@ -193,10 +193,11 @@ export const RECEIVE_CORE: TourStep[] = [
     receive('register', '/receipts?order={{orderId}}', [
         { kind: 'click', target: 'receive-line-button:{{lineId}}' },
         { kind: 'wait', target: 'receive-line-inspect:{{lineId}}' },
-        { kind: 'lookup', run: lookupReceivedLot },
         { kind: 'highlight', target: 'receive-notice' },
     ]),
+    // Een lookup loopt aan het begin van zijn stap (vóór de klikken): hier, na Ontvangen, leest hij de partij die de ontvangst gaf.
     receive('inspector', '/receipts?order={{orderId}}', [
+        { kind: 'lookup', run: lookupReceivedLot },
         { kind: 'click', target: 'receive-line-inspect:{{lineId}}' },
     ]),
     // Wie beoordeelt: per keuring gekozen (hier de rondleiding zelf); vastgelegd naast de ingelogde gebruiker.
