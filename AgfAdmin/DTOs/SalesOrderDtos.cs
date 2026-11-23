@@ -52,6 +52,11 @@ namespace AgfAdmin.DTOs
         // Stock (uit voorraad) of Expected (uit verwachte aanvoer). Weggelaten: uit voorraad als het past, anders uit verwachte aanvoer.
         // Stock met meer dan er vrij op voorraad is: 409 (splitsen of uit verwachte aanvoer kiezen).
         public string SupplySource { get; set; }
+        // Feedback 22 november: prijs per eenheid van de regel (excl. btw, >= 0, hooguit 2 decimalen; weggelaten = nog geen prijs), korting
+        // in procenten (0 tot en met 100; weggelaten = geen) en het btw-tarief (0, 9 of 21; het scherm stelt dat van het artikel voor).
+        public decimal? UnitPrice { get; set; }
+        public decimal? DiscountPercentage { get; set; }
+        public decimal? VatPercentage { get; set; }
     }
 
     public sealed class SalesOrderFilter
@@ -104,6 +109,9 @@ namespace AgfAdmin.DTOs
         public bool AwaitingStock { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
         public List<SalesOrderPackagingLineDto> PackagingLines { get; set; } = new();
+        // Feedback 22 november: de totalenrij onder de goederenregels (zoals bij inkoop; Amount = de goederenregels) en in Amounts de hele
+        // order (goederen en emballage): totaal excl. btw, btw per tarief en totaal incl. btw, in euro.
+        public PurchaseOrderLineTotalsDto Totals { get; set; }
     }
 
     // Annuleren van een Open order: alle Active reserveringen (ook on hold) worden in dezelfde transactie vrijgegeven.
@@ -145,6 +153,18 @@ namespace AgfAdmin.DTOs
         public string WeightSource { get; set; }
         // Stock (uit voorraad) of Expected (uit verwachte aanvoer, verkocht vóór aankomst).
         public string SupplySource { get; set; }
+        // Feedback 22 november: prijs, korting en btw van de regel en het bedrag (aantal × prijs min korting, op centen; null zonder prijs).
+        public decimal? UnitPrice { get; set; }
+        public decimal? DiscountPercentage { get; set; }
+        public decimal? VatPercentage { get; set; }
+        public decimal? LineTotal { get; set; }
+        // Uit het artikel, als tekst op de regel (zoals bij inkoop): merk, herkomst, maat en inhoud; en de pallets van de regel (colli
+        // per pallet van de eigen palletinvoer, anders van het artikel; op twee decimalen, null = telt niet mee).
+        public string Brand { get; set; }
+        public string Origin { get; set; }
+        public string Size { get; set; }
+        public string Packaging { get; set; }
+        public decimal? Pallets { get; set; }
         // Alleen bij een open order: de stand van deze variant en eenheid ("Voorraad 40 · Verwacht 20 · Vrij 10") en de dekking van het
         // nog niet gereserveerde deel van deze regel. Null bij een geannuleerde order.
         public SalesBalanceDto Balance { get; set; }
