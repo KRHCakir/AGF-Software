@@ -1,7 +1,7 @@
 'use client';
 
 import { focusQuantityAfterPick } from '../../lib/productSearch';
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatKg, formatMoney, formatQuantity } from '../../lib/availability';
 import { formatAmountInput, formatKgInput } from '../../lib/decimal';
@@ -17,7 +17,7 @@ import { normalizeGgn } from '../../lib/ggn';
 import type { GgnProposal } from '../../types/productGgn';
 import { unitLabelKey } from '../../lib/units';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
-import { OrderAmountsSummary, PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
+import { OrderAmountsSummary, PURCHASE_LINE_COLUMNS, PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { secondaryButtonClass } from './SuccessPanel';
@@ -42,7 +42,7 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // Korting, Btw, GGN; onder de tabel de btw per tarief. Dezelfde component voor de verkooporder: zonder GGN-kolom (`withGgn` onwaar) is
 // Btw het laatste veld, `extraAmounts` telt emballage mee in de btw, en `tourPrefix` geeft de rondleiding haar eigen namen.
 export default function PurchaseOrderLines<D extends PurchaseLineDraft = PurchaseLineDraft>({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
-    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS }: {
+    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS, lineExtra = () => null }: {
     lines: D[];
     // De veldnamen van de server in ids en foutsleutels (lines[i].expectedQuantity bij inkoop, lines[i].quantity bij verkoop).
     fields?: LineFieldNames;
@@ -66,6 +66,9 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
     onRemove: (key: string) => void;
     onNewArticle?: (key: string) => void;
     productExtra: (line: D, index: number) => ReactNode;
+    // Extra inhoud onder de regel, over de hele breedte (de verkooporder: stand en bron). Staat in de Tab-volgorde ná de regel, zodat Tab
+    // vanuit het artikel naar Aantal gaat.
+    lineExtra?: (line: D, index: number) => ReactNode;
     limits?: (key: string) => LineLimits;
     ggnProposalOf?: (line: D) => GgnProposal | undefined;
 }) {
@@ -144,8 +147,10 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                         // De keuzelijst staat er bij meer treffers, zolang er geen eigen nummer (buiten de lijst) is ingevuld; dan is zij het laatste veld.
                         const choosing = proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')));
                         const limit = limits(line.key);
+                        const extra = lineExtra(line, index);
                         return (
-                            <tr key={line.key} className={purchaseLineRowClass(index)} data-tour={tourPrefix} data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
+                            <Fragment key={line.key}>
+                            <tr className={purchaseLineRowClass(index)} data-tour={tourPrefix} data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
                                 <td {...lineCell('product', labels.product, 'w-64 max-md:w-auto', true)}>
                                     <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
                                     <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`${tourPrefix}-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
@@ -279,6 +284,12 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
                                 </td>
                             </tr>
+                            {extra !== null && (
+                                <tr className={`${purchaseLineRowClass(index)} max-md:-mt-2 max-md:rounded-t-none max-md:border-t-0`} data-testid={`${prefix}.extra`}>
+                                    <td colSpan={PURCHASE_LINE_COLUMNS.length + (withGgn ? 1 : 0) + (isDirect ? 1 : 0) + 1} className="px-2 pb-2 max-md:block max-md:px-0">{extra}</td>
+                                </tr>
+                            )}
+                            </Fragment>
                         );
                     })}
                 </tbody>

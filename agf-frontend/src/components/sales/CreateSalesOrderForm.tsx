@@ -530,19 +530,21 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             <fieldset className="space-y-2">
                 <legend className="text-sm font-semibold text-gray-900">{t('sales_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
-                {/* Feedback 22 november: dezelfde regelcomponent als de inkooporder; onder het artikel de stand en de bron van de regel. */}
+                {/* Feedback 22 november: dezelfde regelcomponent als de inkooporder; onder elke regel de stand en de bron. */}
                 <PurchaseOrderLines<OrderLineDraft> lines={draft.lines} rows={rows} products={products} variantOf={variantOf} locked={locked} isDirect={false} withGgn={false}
                     tourPrefix="sales-line" testId="sales-lines" errors={e} fields={SALES_LINE_FIELDS} currency="EUR" showAmounts={false}
                     onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={(key) => setNewArticleFor(key)}
-                    productExtra={(line, index) => {
+                    productExtra={(line, index) => !locked && (
+                        <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                            title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                    )}
+                    lineExtra={(line, index) => {
+                        // Stand en bron van de regel onder de regel: in de Tab-volgorde na Btw, zodat Tab vanuit het artikel naar Aantal gaat.
                         const unit = unitOf(index);
                         const unitText = unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(unit)).toLowerCase();
+                        if (stateOf(line, index) === null && e(`lines[${index}].supplySource`) === undefined) return null;
                         return (
                             <>
-                                {!locked && (
-                                    <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
-                                        title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
-                                )}
                                 <LineSourceChoice name={`lines[${index}]`} quantity={rows[index]?.quantity ?? null} unitText={unitText} state={stateOf(line, index)}
                                     source={effectiveSource(line, index)} packagesPerPallet={rows[index]?.perPallet ?? null}
                                     locked={locked} canSplit={draft.lines.length < MAX_ORDER_LINES} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />

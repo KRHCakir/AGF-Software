@@ -66,6 +66,14 @@ describe('buildOrderPayload', () => {
         assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [line('1', '30', '')] }, () => article({ packagingUnit: null }))), { 'lines[0].unit': ['required'] });
     });
 
+    test('feedback 22 november: an empty line after a filled one (Tab on the last field) is not sent and keeps the form index for errors', () => {
+        const draft = { ...validDraft(), lines: [line('1', '30'), { ...emptyOrderLine('blank') }, line('3', 'x')] };
+        assert.deepEqual(codes(buildOrderPayload(draft)), { 'lines[2].quantity': ['invalid'] }, 'the blank line in between is skipped, the error stays on line 2');
+        const fine = buildOrderPayload({ ...validDraft(), lines: [line('1', '30'), { ...emptyOrderLine('blank') }] });
+        assert.equal(fine.ok && fine.value.lines.length, 1);
+        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [{ ...emptyOrderLine('a') }] })), { 'lines[0].productVariantId': ['required'], 'lines[0].quantity': ['required'], 'lines[0].unit': ['required'] }, 'only an empty line: it is checked');
+    });
+
     test('a blank reference becomes null', () => {
         const result = buildOrderPayload({ ...validDraft(), customerReference: '   ' });
         assert.equal(result.ok && result.value.customerReference, null);
