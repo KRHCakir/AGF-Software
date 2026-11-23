@@ -265,7 +265,8 @@ namespace AgfAdmin.Services
                     .Select(i => new { i.InvoiceNumber, i.CustomCustomerName, i.DeliveryDate, i.InvoiceDate }).SingleAsync(cancellationToken);
                 var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.InvoiceId == partij.InvoiceId).OrderBy(l => l.Id)
                     .Select(l => new { l.Description, l.Quantity, l.Unit, l.PartijId, Number = l.Partij.Number, l.OriginCountry,
-                        Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault() })
+                        Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault(),
+                        PurchaseOrigin = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Origin).FirstOrDefault() })
                     .ToListAsync(cancellationToken);
                 return new SalesLotTraceDto
                 {
@@ -274,7 +275,7 @@ namespace AgfAdmin.Services
                     Lines = lines.Select(l => new SalesLotTraceLineDto
                     {
                         Product = l.Description, Quantity = l.Quantity, Unit = l.Unit,
-                        Sources = l.PartijId == null ? new() : new() { new SalesLotTraceSourceDto { PartijId = l.PartijId, Number = l.Number, VendorName = l.Vendor, Origin = l.OriginCountry, Quantity = l.Quantity, Status = "Invoiced" } }
+                        Sources = l.PartijId == null ? new() : new() { new SalesLotTraceSourceDto { PartijId = l.PartijId, Number = l.Number, VendorName = l.Vendor, Origin = string.IsNullOrWhiteSpace(l.OriginCountry) ? l.PurchaseOrigin : l.OriginCountry, Quantity = l.Quantity, Status = "Invoiced" } }
                     }).ToList(),
                 };
             }
@@ -519,7 +520,9 @@ namespace AgfAdmin.Services
                     Vendors = side.Sources.Select(s => s.VendorName).Where(v => v != null).Distinct().OrderBy(v => v).ToList(),
                     // Per orderregel: de kg van de regel, en voor een regel zonder kg de gereserveerde kg van die regel (nooit dubbel).
                     NetKg = side.Lines.Sum(l => l.NetKg ?? side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.NetKg)),
-                    PurchaseValue = Value(side.Sources.Select(s => (s.Quantity, s.UnitPrice, s.Discount, s.Rate)))
+                    // Alleen een volledig gedekte levering heeft een inkoopwaarde: elke regel moet in zijn geheel uit (geprijsde) bronnen komen.
+                    PurchaseValue = side.Lines.All(l => side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.Quantity) >= l.Quantity)
+                        ? Value(side.Sources.Select(s => (s.Quantity, s.UnitPrice, s.Discount, s.Rate))) : null
                 };
             }
             var lines = facts.LinesByPartij[partij.Id].ToList();
