@@ -90,8 +90,19 @@ namespace AgfAdmin.Services
         // Feedback 22 november: liggen alle gereserveerde pallets van de order op dezelfde voorraadlocatie (geen eigen loods), dan is dat de
         // laadplaats: naam en adres van die locatie. Alleen actieve reserveringen (de openstaande levering); al verzonden pallets van een
         // eerdere levering tellen niet mee. Eén pallet in de eigen loods, of pallets op verschillende locaties: null (de loods).
-        public static string PalletLoadingPlace(SalesOrder order) =>
-            PalletLoadingPlace(order.Lines.SelectMany(l => l.Reservations).Where(r => r.Status is "Active").Select(r => r.PalletContentLine?.Pallet).Where(p => p != null));
+        // Zijn er geen actieve reserveringen meer omdat de levering is verzonden (de reserveringen zijn dan verbruikt), dan geldt de laadplaats van
+        // de meest recente verzending (de verbruikte reserveringen van die verzending), zodat een opnieuw opgebouwde opdracht niet terugvalt op de loods.
+        public static string PalletLoadingPlace(SalesOrder order)
+        {
+            var reservations = order.Lines.SelectMany(l => l.Reservations).Where(r => r.PalletContentLine?.Pallet != null).ToList();
+            var active = reservations.Where(r => r.Status is "Active").ToList();
+            if (active.Count == 0)
+            {
+                var latest = reservations.Where(r => r.Status is "Consumed" && r.DispatchLine != null).Select(r => r.DispatchLine.SalesDispatchId).DefaultIfEmpty(0).Max();
+                if (latest != 0) active = reservations.Where(r => r.Status is "Consumed" && r.DispatchLine?.SalesDispatchId == latest).ToList();
+            }
+            return PalletLoadingPlace(active.Select(r => r.PalletContentLine.Pallet));
+        }
 
         public static string PalletLoadingPlace(IEnumerable<Pallet> pallets)
         {

@@ -2427,6 +2427,7 @@
   "po_logistics_vendor_no_address": "De leverancier heeft geen adres; typ het laadadres.",
   "po_logistics_customer_no_address": "Deze klant heeft geen adres; typ het afleveradres.",
   "po_logistics_address_failed": "Het adres kon niet worden opgehaald; typ het zelf.",
+  "po_logistics_locations_failed": "De voorraadlocaties konden niet geladen worden; nu staat alleen Eigen loods in de lijst.",
   "inspection_empty_action": "Naar Ontvangst",
   "sales_empty_action": "Eerste verkooporder aanmaken",
   "purchase_empty_text": "Hier komen de facturen van je leveranciers, met totaal, vervaldatum en status.",

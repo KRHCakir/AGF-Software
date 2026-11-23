@@ -12,7 +12,7 @@ import FieldError, { fieldProps, inputClass } from './FieldError';
 // Feedback 22 november: waar de inkooporder ontvangen wordt (de eigen loods, of een cross-dock, externe opslag, de leverancier of Onderweg /
 // direct naar klant), het laadadres (leeg als de leverancier levert; "Wij halen op" vult het adres van de leverancier) en het afleveradres
 // (leeg = de eigen loods; bij Onderweg het adres van de klant, te kiezen). Alles blijft gewone tekst die de gebruiker kan aanpassen.
-export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors }: {
+export default function OrderLogisticsFields({ value, onChange, locations, vendorId, customers, locked, errors, locationsFailed = false, onRetryLocations }: {
     value: OrderLogisticsDraft;
     onChange: (next: OrderLogisticsDraft) => void;
     locations: readonly StockLocation[];
@@ -20,6 +20,9 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
     customers: readonly CustomerOption[];
     locked: boolean;
     errors: (key: string) => string[] | undefined;
+    // De lijst met locaties kon niet geladen worden: zeg dat, met opnieuw proberen (review), zodat Eigen loods niet stilzwijgend lijkt te kloppen.
+    locationsFailed?: boolean;
+    onRetryLocations?: () => void;
 }) {
     const { t } = useTranslation();
     const [customerId, setCustomerId] = useState('');
@@ -103,13 +106,17 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
         try {
             const proposals = await getAddressProposals(null, customer.id);
             if (request !== customerRequest.current) return;
-            if (proposals.customerAddress === null) setProblem(t('po_logistics_customer_no_address'));
-            else {
+            // Geen adres bij deze klant: het oude afleveradres hoort bij een andere klant, dus het veld wordt leeg (review).
+            if (proposals.customerAddress === null) {
+                onChange({ ...latest.current, deliveryAddress: '' });
+                setProblem(t('po_logistics_customer_no_address'));
+            } else {
                 proposedDelivery.current = proposals.customerAddress;
                 onChange({ ...latest.current, deliveryAddress: proposals.customerAddress });
             }
         } catch {
             if (request !== customerRequest.current) return;
+            onChange({ ...latest.current, deliveryAddress: '' });
             setProblem(t('po_logistics_address_failed'));
         }
     };
@@ -127,6 +134,12 @@ export default function OrderLogisticsFields({ value, onChange, locations, vendo
                     ))}
                 </select>
                 <span className="block text-xs text-gray-500">{t(inTransit ? 'po_logistics_location_in_transit' : 'po_logistics_location_hint')}</span>
+                {locationsFailed && (
+                    <span role="alert" className="block text-xs text-amber-900" data-testid="logistics-locations-failed">
+                        {t('po_logistics_locations_failed')}{' '}
+                        {onRetryLocations && <button type="button" className="underline underline-offset-2" onClick={onRetryLocations}>{t('currency_list_retry')}</button>}
+                    </span>
+                )}
             </div>
             <div>
                 <label htmlFor="logistics.loadingAddress-input" className="text-xs font-medium text-gray-700">{t('po_logistics_loading')}</label>
