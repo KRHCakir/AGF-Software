@@ -256,7 +256,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         if (target === null && draft.lines.length >= MAX_ORDER_LINES) return;
         const fresh = target === null ? emptyLine() : null;
         // Eenheid en btw komen uit het (nieuwe) artikel, zoals bij een keuze op de regel.
-        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), unit: '', vat: '', vatTouched: false });
+        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, unit: '', vat: '', vatTouched: false });
         setDraft((current) => ({ ...current, lines: fresh !== null ? [...current.lines, withVariant(fresh)] : current.lines.map((line) => (line.key === target ? withVariant(line) : line)) }));
         focusQuantityOf.current = fresh?.key ?? target;
         edited();
