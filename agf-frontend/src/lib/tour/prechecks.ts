@@ -190,6 +190,15 @@ async function receiveLookup(signal: AbortSignal, editable: boolean): Promise<To
     };
 }
 
+// Na Ontvangen (prompt 5): een order zonder partij krijgt bij de eerste ontvangst een I-nummer, en de pallet staat onder dat nummer
+// in de keuring. Het lot is dan de partij die de regel nu heeft; anders blijft het lot van vóór de ontvangst staan.
+export async function lookupReceivedLot(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const detail = await getPurchaseOrder(Number(vars.orderId), signal);
+    const line = detail.lines.find((candidate) => String(candidate.id) === vars.lineId);
+    const partijNumber = line?.partijNumber ?? null;
+    return { missing: [], vars: partijNumber ? { lot: partijNumber, partijNumber } : {} };
+}
+
 // Hoofdstukken die een open demo-inkooporder ontvangen: zonder die order maken ze eerst stamgegevens en een order aan.
 async function precheckOpenOrder(signal: AbortSignal, needs: { customer?: boolean }): Promise<TourPrecheck> {
     const [data, open] = await Promise.all([masterData(signal), openTourLine(signal, 2)]);
