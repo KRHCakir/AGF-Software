@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { MAX_ORDER_LINES, validateDeliveredOn, buildOrderPayload, dispatchTotals, expectedAfterRequested, isCorrectedAllocation, isShippableAllocation, isShippedAllocation, lotDeviates, validateShipmentLine, validateShippedOn, fullAllocationRemainder, validateAllocationInput, isDispatchable, normalizeDispatchReference, fullRemainderFits, groupErrors, lineProgress, matchesOrderSearch, normalizeReason, orderProgress, remainingAfter, toLocalMidnightIso, validateReservationInput, salesPartijPayload } from './salesOrderRules.ts';
+import { MAX_ORDER_LINES, emptyOrderLine, validateDeliveredOn, buildOrderPayload, dispatchTotals, expectedAfterRequested, isCorrectedAllocation, isShippableAllocation, isShippedAllocation, lotDeviates, validateShipmentLine, validateShippedOn, fullAllocationRemainder, validateAllocationInput, isDispatchable, normalizeDispatchReference, fullRemainderFits, groupErrors, lineProgress, matchesOrderSearch, normalizeReason, orderProgress, remainingAfter, toLocalMidnightIso, validateReservationInput, salesPartijPayload } from './salesOrderRules.ts';
 import type { BuildResult, OrderDraft } from './salesOrderRules.ts';
 
 // Onafhankelijk uitgeschreven naar de backendregels in SalesOrderService en StockReservationService.
 // Draait met de ingebouwde testrunner van Node (type stripping): `npm test`.
 
+// De verkooporderregel in de indeling van de inkooporder (feedback 22 november); `unit` staat hier als opgeslagen eenheid, anders komt ze uit het artikel.
 const line = (productVariantId: string, quantity: string, unit: 'box' | 'colli' | '' = 'box') =>
-    ({ key: `${productVariantId}-${unit}-${quantity}`, productVariantId, quantity, unit, mode: 'packages' as const, palletCount: '', packagesPerPallet: '' });
+    ({ ...emptyOrderLine(`${productVariantId}-${unit}-${quantity}`), productVariantId, quantity, unit });
+const article = (extra: object = {}) => ({ packagingUnit: 'colli' as const, defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3, defaultPackagesPerPallet: 120, vatPercentage: 9, ...extra });
 
 const validDraft = (): OrderDraft => ({
     customerId: '7',
@@ -38,37 +40,19 @@ describe('buildOrderPayload', () => {
         ]);
     });
 
-    test('kg: calculated from the article default with source Calculated, typed kg is Entered, no kg keeps the old payload shape', () => {
-        const defaults = (variantId: number) => (variantId === 1 ? { defaultNetKgPerPackage: 10, defaultGrossKgPerPackage: 10.3 } : undefined);
-        const calculated = buildOrderPayload({ ...validDraft(), lines: [line('1', '1.560', 'colli'), line('3', '12,5')] }, defaults);
+    test('kg like the purchase line: calculated from the article (Calculated), an adjusted gross is Entered, no kg keeps the old payload shape', () => {
+        const articleOf = (variantId: number) => (variantId === 1 ? article() : undefined);
+        const calculated = buildOrderPayload({ ...validDraft(), lines: [line('1', '1.560', ''), line('3', '12,5')] }, articleOf);
         assert.equal(calculated.ok, true);
         if (!calculated.ok) return;
         assert.deepEqual(calculated.value.lines, [
-            { productVariantId: 1, quantity: 1560, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 15600, grossWeightKg: 16068, weightSource: 'Calculated' },
+            { productVariantId: 1, quantity: 1560, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 15600, grossWeightKg: 16068, weightSource: 'Calculated', vatPercentage: 9 },
             { productVariantId: 3, quantity: 12.5, unit: 'box', palletCount: null, packagesPerPallet: null },
         ]);
-        const entered = buildOrderPayload({ ...validDraft(), lines: [{ ...line('3', '221', 'colli'), netKg: '2.210', netKgEntered: true }] }, defaults);
-        assert.deepEqual(entered.ok && entered.value.lines[0], { productVariantId: 3, quantity: 221, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 2210, weightSource: 'Entered' });
-        const below = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '10', 'colli'), grossKg: '99', grossKgEntered: true }] }, defaults);
+        const adjusted = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '10', ''), grossKg: '105', grossKgEntered: true }] }, articleOf);
+        assert.deepEqual(adjusted.ok && adjusted.value.lines[0], { productVariantId: 1, quantity: 10, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 100, grossWeightKg: 105, weightSource: 'Entered', vatPercentage: 9 });
+        const below = buildOrderPayload({ ...validDraft(), lines: [{ ...line('1', '10', ''), grossKg: '99', grossKgEntered: true }] }, articleOf);
         assert.deepEqual(codes(below), { 'lines[0].grossWeightKg': ['gross_below_net'] });
-    });
-
-    test('a line entered per pallet sends the computed total and keeps the ratio; missing pallet fields are reported', () => {
-        const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '9', packagesPerPallet: '120' };
-        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] });
-        assert.equal(result.ok, true);
-        if (!result.ok) return;
-        assert.deepEqual(result.value.lines, [{ productVariantId: 1, quantity: 1080, unit: 'box', palletCount: 9, packagesPerPallet: 120 }]);
-
-        const missing = buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, packagesPerPallet: '' }] });
-        assert.deepEqual(codes(missing), { 'lines[0].packagesPerPallet': ['empty'] });
-    });
-
-    test('whole pallets + loose packages: loosePackages is sent only when filled in; 3,5 pallets is refused', () => {
-        const pallets = { ...line('1', ''), mode: 'pallets' as const, palletCount: '3', packagesPerPallet: '120', loosePackages: '15' };
-        const result = buildOrderPayload({ ...validDraft(), lines: [pallets] });
-        assert.deepEqual(result.ok && result.value.lines, [{ productVariantId: 1, quantity: 375, unit: 'box', palletCount: 3, packagesPerPallet: 120, loosePackages: 15 }]);
-        assert.deepEqual(codes(buildOrderPayload({ ...validDraft(), lines: [{ ...pallets, palletCount: '3,5' }] })), { 'lines[0].palletCount': ['not_whole'] });
     });
 
     test('a blank reference becomes null', () => {

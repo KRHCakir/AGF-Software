@@ -1,16 +1,15 @@
 'use client';
 
-import { focusQuantityAfterPick } from '../../lib/productSearch';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
-import { formatDecimalInput, formatKgInput } from '../../lib/decimal';
-import { type LineWeightDraft, lineKgRows } from '../../lib/lineWeight';
+import { formatAmountInput, formatDecimalInput, formatKgInput } from '../../lib/decimal';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
-import { MAX_ORDER_LINES, MAX_SALES_PARTIJ_NUMBER_LENGTH, OrderDraft, OrderLineDraft, buildOrderPayload, remapPayloadLineKeys, salesPartijPayload } from '../../lib/salesOrderRules';
+import { MAX_ORDER_LINES, MAX_SALES_PARTIJ_NUMBER_LENGTH, OrderDraft, OrderLineDraft, buildOrderPayload, emptyOrderLine, isBlankOrderLine, remapPayloadLineKeys, salesPartijPayload } from '../../lib/salesOrderRules';
+import { purchaseLineRow } from '../../lib/purchaseOrderLines';
 import { partijNumberKey } from '../../lib/partijRules';
 import { findPartijByNumber, getNextPartijNumber } from '../../services/partijService';
 import { isPartijExistsConflict } from '../../types/partij';
@@ -21,7 +20,7 @@ import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { listPackagingArticles } from '../../services/costArticleService';
-import { effectivePackagesPerPallet, packagingDraftFrom, palletProposal } from '../../lib/packaging';
+import { packagingDraftFrom, palletProposal } from '../../lib/packaging';
 import type { CostArticle } from '../../types/costArticle';
 import { PackagingLinesInput, PackagingLinesView } from './PackagingLines';
 import { SaveResult } from '../../services/supplyService';
@@ -29,19 +28,15 @@ import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/refe
 import { SalesOrder } from '../../types/salesOrder';
 import { UnitBadge } from '../availability/QuantityCell';
 import DateField from '../shared/DateField';
-import KgTotals from '../shared/KgTotals';
-import { LineKgFields } from '../shared/LineKgInput';
 import { lineKgLabel } from '../shared/lineKgLabel';
-import ProductVariantPicker from '../shared/ProductVariantPicker';
 import ArticleAddButton from '../shared/ArticleAddButton';
-import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
+import { isMacPlatform, shortcutLabel } from '../../lib/shortcuts';
 import NewArticlePanel from '../articles/NewArticlePanel';
 import { withArticle } from '../../lib/articleFromEntry';
 import type { Article } from '../../types/article';
-import QuantityInput from '../shared/QuantityInput';
-import UnitSelect from '../shared/UnitSelect';
 import ErrorNotice from '../supply/ErrorNotice';
-import FieldError, { fieldProps, inputClass, lineTableClass } from '../supply/FieldError';
+import FieldError, { fieldProps, inputClass } from '../supply/FieldError';
+import PurchaseOrderLines, { SALES_LINE_FIELDS } from '../supply/PurchaseOrderLines';
 import { FieldErrors, outcomeUnknown } from '../supply/messages';
 import SuccessPanel, { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 import CustomerPicker from './CustomerPicker';
@@ -52,12 +47,10 @@ import { ruleErrorsToFieldErrors } from './ruleMessages';
 import SubmitErrors from '../shared/SubmitErrors';
 import { useFormLeaveGuard } from '../shared/LeaveGuard';
 
-// Een regel is pas leeg als geen enkel inhoudelijk veld is ingevuld (ook pallets, losse stuks, kg en een gekozen bron).
-const isBlankLine = (line: OrderLineDraft): boolean =>
-    line.productVariantId === '' && line.unit === '' && !line.sourceTouched
-    && [line.quantity, line.palletCount, line.packagesPerPallet, line.loosePackages ?? '', line.netKg ?? '', line.grossKg ?? ''].every((value) => value.trim() === '');
+// Een regel is pas leeg als geen enkel inhoudelijk veld is ingevuld (ook prijs, korting, bruto en een gekozen bron).
+const isBlankLine = isBlankOrderLine;
 
-const emptyLine = (): OrderLineDraft => ({ key: newRequestId(), productVariantId: '', quantity: '', unit: '', mode: 'packages', palletCount: '', packagesPerPallet: '' });
+const emptyLine = (): OrderLineDraft => emptyOrderLine(newRequestId());
 const emptyDraft = (): OrderDraft => ({ customerId: '', customerReference: '', internalNote: '', requestedDeliveryDate: '', lines: [emptyLine()], packagingLines: [] });
 // Voorinvulling vanuit "Verkopen" in Beschikbaarheid: één regel met dit artikel, deze eenheid en dit aantal; de rest kiest de gebruiker.
 const prefilledDraft = (prefill: SellPrefill): OrderDraft => ({
@@ -72,22 +65,21 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
     internalNote: command.payload.internalNote ?? '',
     requestedDeliveryDate: isoToDateInput(command.payload.requestedDeliveryDate) ?? '',
     lines: command.payload.lines.map((line): OrderLineDraft => ({
-        key: newRequestId(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
-        mode: line.palletCount !== null ? 'pallets' : 'packages', palletCount: line.palletCount === null ? '' : formatDecimalInput(line.palletCount), packagesPerPallet: line.packagesPerPallet === null ? '' : formatDecimalInput(line.packagesPerPallet),
-        loosePackages: line.loosePackages == null ? '' : formatDecimalInput(line.loosePackages),
+        ...emptyLine(), productVariantId: String(line.productVariantId), quantity: formatDecimalInput(line.quantity), unit: line.unit,
         supplySource: line.supplySource ?? '', sourceTouched: line.supplySource !== undefined,
-        // Ingevulde kg als ingevuld terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
-        ...(line.weightSource === 'Entered' ? {
-            netKg: line.netWeightKg == null ? '' : formatKgInput(line.netWeightKg), netKgEntered: line.netWeightKg != null,
-            grossKg: line.grossWeightKg == null ? '' : formatKgInput(line.grossWeightKg), grossKgEntered: line.grossWeightKg != null,
-        } : {}),
+        unitPrice: line.unitPrice == null ? '' : formatAmountInput(line.unitPrice),
+        discount: line.discountPercentage == null ? '' : formatDecimalInput(line.discountPercentage, 2),
+        vat: line.vatPercentage == null ? '' : String(line.vatPercentage), vatTouched: true,
+        // Een aangepaste bruto als aangepast terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
+        ...(line.weightSource === 'Entered' && line.grossWeightKg != null ? { grossKg: formatKgInput(line.grossWeightKg), grossKgEntered: true } : {}),
     })).concat(command.payload.lines.length === 0 ? [emptyLine()] : []),
     packagingLines: (command.payload.packagingLines ?? []).map((line) => packagingDraftFrom(line, newRequestId())),
 });
 
-// Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en expliciete eenheid per regel;
-// geen prijzen, btw of facturen. De payload en requestId worden bij versturen bevroren en boven dit formulier bewaard:
-// bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
+// Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en de regels in de indeling van de inkooporder (feedback
+// 22 november): artikel, aantal, eenheid en kg uit het artikel, prijs, korting, btw en bedrag, totalen en btw per tarief eronder; per regel
+// daarbij de stand en de bron (uit voorraad of uit verwachte aanvoer). De payload en requestId worden bij versturen bevroren en boven dit
+// formulier bewaard: bij een onbekende uitkomst is alleen exact dezelfde herhaling mogelijk, ook na weg- en terugnavigeren.
 export default function CreateSalesOrderForm({ customers: knownCustomers, products: givenProducts, prefill = null, onSaved, onOpen, onCancel, onCustomerCreated }: {
     prefill?: SellPrefill | null;
     customers: CustomerOption[];
@@ -173,12 +165,9 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         }
     };
 
-    // Standaard verpakkingen per pallet per variant: invoerhulp bij "Pallet"-invoer.
-    const variantDefaults = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.defaultPackagesPerPallet] as const))), [products]);
-    // Netto en bruto kg per verpakking van het artikel: berekende kg in de kg-velden van de regel.
+    // Het artikel per variant: eenheid, kg per verpakking, colli per pallet en btw komen daaruit (zoals bij de inkooporder).
     const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
-    // Verpakkingseenheid uit de artikelstamgegevens: vult alleen een nog lege eenheid voor; een gekozen eenheid blijft staan.
-    const variantUnits = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant.packagingUnit] as const))), [products]);
+    const variantOf = (variantId: number) => variants.get(variantId);
 
     const edited = () => {
         setError(null);
@@ -191,35 +180,34 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         edited();
     };
 
-    const updateLine = (key: string, field: 'productVariantId' | 'quantity' | 'unit' | 'mode' | 'palletCount' | 'packagesPerPallet' | 'loosePackages', value: string) => {
-        if (locked) return;
-        setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, [field]: value } : line)) }));
-        edited();
-    };
-
-    // Kg-velden van een regel (tekst en "ingevuld"-vlag tegelijk).
-    const updateLineWeight = (key: string, patch: LineWeightDraft) => {
+    const updateLine = (key: string, patch: Partial<OrderLineDraft>) => {
         if (locked) return;
         setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, ...patch } : line)) }));
         edited();
     };
 
-    // Per regel het aantal, de berekende kg en de kg die zou worden verstuurd; ook voor het totaal onder de regels.
-    const { rows: lineKg, totals } = lineKgRows(draft.lines, (variantId) => variants.get(variantId));
-    // "Pallet toevoegen": de "= x pallets" van de goederenregels samen, naar boven afgerond (alleen een voorstel).
-    const proposal = palletProposal(draft.lines.map((line, index) => ({ quantity: lineKg[index].quantity, packagesPerPallet: effectivePackagesPerPallet(line, variantDefaults.get(Number(line.productVariantId))) })));
+    // Per regel wat de inkoopregel ook rekent: aantal, eenheid (uit het artikel), kg, pallets, prijs, korting, btw en bedrag.
+    const rows = draft.lines.map((line) => purchaseLineRow(line, /^[1-9]\d*$/.test(line.productVariantId) ? variantOf(Number(line.productVariantId)) : undefined));
+    // "Pallet toevoegen": de pallets van de goederenregels samen, naar boven afgerond (alleen een voorstel).
+    const proposal = palletProposal(rows.map((row) => ({ quantity: row.quantity, packagesPerPallet: row.perPallet })));
 
     // Stand per gekozen variant + eenheid (Voorraad · Verwacht · Vrij) en de bron per regel. Zolang de gebruiker niet zelf kiest, volgt de
     // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan het splitsvoorstel.
-    const balancePairs = useMemo(() => draft.lines.filter((line) => /^[1-9]\d*$/.test(line.productVariantId) && line.unit !== '')
-        .map((line) => ({ productVariantId: Number(line.productVariantId), unit: line.unit as Exclude<OrderLineDraft['unit'], ''> })), [draft.lines]);
+    const unitOf = (index: number) => rows[index]?.unit ?? '';
+    const balancePairs = useMemo(() => draft.lines.map((line) => ({ line, unit: purchaseLineRow(line, variants.get(Number(line.productVariantId))).unit }))
+        .filter(({ line, unit }) => /^[1-9]\d*$/.test(line.productVariantId) && unit !== '')
+        .map(({ line, unit }) => ({ productVariantId: Number(line.productVariantId), unit: unit as Exclude<OrderLineDraft['unit'], ''> })), [draft.lines, variants]);
     const balanceOf = useSalesBalances(balancePairs);
-    const stateOf = (line: OrderLineDraft) => (/^[1-9]\d*$/.test(line.productVariantId) && line.unit !== '' ? balanceOf(Number(line.productVariantId), line.unit) : null);
+    const stateOf = (line: OrderLineDraft, index: number) => {
+        const unit = unitOf(index);
+        return /^[1-9]\d*$/.test(line.productVariantId) && unit !== '' ? balanceOf(Number(line.productVariantId), unit) : null;
+    };
     // null: geen eigen keuze en de stand is (nog) niet bekend, of het past maar deels in de vrije voorraad (dan staat het splitsvoorstel
     // erbij). Er gaat dan geen bron mee en de server kiest: uit voorraad als het past, anders uit verwachte aanvoer (nooit een 409).
-    const effectiveSource = (line: OrderLineDraft, quantity: number | null): SupplySource | null => {
+    const effectiveSource = (line: OrderLineDraft, index: number): SupplySource | null => {
+        const quantity = rows[index]?.quantity ?? null;
         if (line.sourceTouched && line.supplySource) return line.supplySource;
-        const state = stateOf(line);
+        const state = stateOf(line, index);
         if (state?.status !== 'ready' || quantity === null) return null;
         return singleSource(quantity, Math.max(0, state.balance.freeStock));
     };
@@ -230,15 +218,17 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         edited();
     };
 
-    // Splitsen: de kg-velden worden gewist (opnieuw berekend uit het nieuwe aantal; een getypt totaal klopt na het splitsen niet meer).
-    // Deze regel wordt het deel uit voorraad, direct eronder een regel met dezelfde variant en eenheid voor de rest uit verwachte aanvoer.
+    // Splitsen: een aangepaste bruto wordt gewist (opnieuw berekend uit het nieuwe aantal; een getypt totaal klopt na het splitsen niet meer).
+    // Deze regel wordt het deel uit voorraad, direct eronder een regel met hetzelfde artikel, dezelfde eenheid, prijs, korting en btw voor
+    // de rest uit verwachte aanvoer.
     const splitLine = (key: string, stock: number, expected: number) => {
         if (locked || draft.lines.length >= MAX_ORDER_LINES) return;
         setDraft((current) => ({
             ...current,
-            lines: current.lines.flatMap((line) => (line.key !== key ? [line] : [
-                { ...line, mode: 'packages' as const, quantity: formatDecimalInput(stock), palletCount: '', packagesPerPallet: '', loosePackages: '', netKg: '', grossKg: '', netKgEntered: false, grossKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
-                { ...emptyLine(), productVariantId: line.productVariantId, unit: line.unit, quantity: formatDecimalInput(expected), supplySource: 'Expected' as const, sourceTouched: true },
+            lines: current.lines.flatMap((line, index) => (line.key !== key ? [line] : [
+                { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
+                { ...emptyLine(), productVariantId: line.productVariantId, unit: unitOf(index) as OrderLineDraft['unit'], quantity: formatDecimalInput(expected), unitPrice: line.unitPrice,
+                    discount: line.discount, vat: line.vat, vatTouched: line.vatTouched, supplySource: 'Expected' as const, sourceTouched: true },
             ])),
         }));
         edited();
@@ -257,14 +247,14 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     // Review #314: op de limiet kan de lijst nog een lege laatste regel vullen.
     const lastLine = draft.lines[draft.lines.length - 1];
     const lastLineBlank = lastLine !== undefined && isBlankLine(lastLine);
-    const putArticle = (variantId: number, lineKey: string | null, articleUnit: string | null = null) => {
+    const putArticle = (variantId: number, lineKey: string | null) => {
         if (locked) return;
         const last = draft.lines[draft.lines.length - 1];
         const target = lineKey !== null && draft.lines.some((line) => line.key === lineKey) ? lineKey : last !== undefined && isBlankLine(last) ? last.key : null;
         if (target === null && draft.lines.length >= MAX_ORDER_LINES) return;
-        const unit = articleUnit ?? variantUnits.get(variantId) ?? null;
         const fresh = target === null ? emptyLine() : null;
-        const withVariant = <T extends { productVariantId: string; unit: string }>(line: T): T => ({ ...line, productVariantId: String(variantId), ...(line.unit === '' && unit ? { unit } : {}) });
+        // Eenheid en btw komen uit het (nieuwe) artikel, zoals bij een keuze op de regel.
+        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), unit: '', vat: '', vatTouched: false });
         setDraft((current) => ({ ...current, lines: fresh !== null ? [...current.lines, withVariant(fresh)] : current.lines.map((line) => (line.key === target ? withVariant(line) : line)) }));
         focusQuantityOf.current = fresh?.key ?? target;
         edited();
@@ -286,8 +276,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         if (inFlight.current || result !== null) return;
         let command = pending;
         if (command === null) {
-            const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, lineKg[index].quantity) ?? '' })) };
-            const built = buildOrderPayload(withSources, (variantId) => variants.get(variantId));
+            const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, index) ?? '' })) };
+            const built = buildOrderPayload(withSources, variantOf);
             const partij = salesPartijPayload(partijText, partijSuggestion, partijNext?.mode ?? 'Auto');
             if (!built.ok || !partij.ok) {
                 setErrors(ruleErrorsToFieldErrors([...(built.ok ? [] : built.errors), ...(partij.ok ? [] : partij.errors)], t));
@@ -493,70 +483,26 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             <fieldset className="space-y-2">
                 <legend className="text-sm font-semibold text-gray-900">{t('sales_lines')}</legend>
                 <FieldError id="lines" messages={e('lines')} />
-                <div className="overflow-x-auto rounded border border-gray-200">
-                    <table className={lineTableClass}>
-                        <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
-                            <tr>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_variant')} *</th>
-                                <th scope="col" className="px-2 py-1.5">{t('supply_quantity_unit')} *</th>
-                                <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {draft.lines.map((line, index) => {
-                                const prefix = `lines[${index}]`;
-                                const unitText = line.unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(line.unit)).toLowerCase();
-                                return (
-                                    <tr key={line.key} className="align-top" onKeyDown={(event) => {
-                                        // Review #314: Alt+A (zoals op de inkooporder) opent Nieuw artikel voor deze regel, ook met alleen het toetsenbord.
-                                        if (!locked && matchShortcut(event, isMac) === 'newArticle') { event.preventDefault(); setNewArticleFor(line.key); }
-                                    }}>
-                                        <td className="w-96 px-2 py-1.5">
-                                            <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                            <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`sales-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
-                                                value={line.productVariantId} disabled={locked} invalid={(e(`${prefix}.productVariantId`) ?? []).length > 0}
-                                                describedBy={(e(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
-                                                onChange={(variantId) => {
-                                                    updateLine(line.key, 'productVariantId', variantId);
-                                                    const unit = variantUnits.get(Number(variantId));
-                                                    if (line.unit === '' && unit) updateLine(line.key, 'unit', unit);
-                                                    // Feedback 22 november: na de keuze direct naar Aantal.
-                                                    if (variantId !== '') focusQuantityAfterPick(`${prefix}.productVariantId-input`, `${prefix}.quantity-input`);
-                                                }} />
-                                            {!locked && (
-                                                <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
-                                                    title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
-                                            )}
-                                            <FieldError id={`${prefix}.productVariantId`} messages={e(`${prefix}.productVariantId`)} />
-                                            <FieldError id={prefix} messages={e(prefix)} />
-                                        </td>
-                                        <td className="w-96 px-2 py-1.5">
-                                            <QuantityInput prefix={prefix} index={index} line={line} locked={locked} errors={e} dataTour="sales-line-quantity"
-                                                defaultPackagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
-                                                onChange={(field, value) => updateLine(line.key, field, value)}
-                                                unitSelect={<UnitSelect fieldKey={`${prefix}.unit`} index={index} value={line.unit} errors={e(`${prefix}.unit`)} disabled={locked}
-                                                    onChange={(unit) => updateLine(line.key, 'unit', unit)} />} />
-                                            <FieldError id={`${prefix}.unit`} messages={e(`${prefix}.unit`)} />
-                                            <div data-tour="sales-line-kg" data-tour-key={index}>
-                                                <LineKgFields prefix={prefix} index={index} line={line} row={lineKg[index]} netKey="netWeightKg" grossKey="grossWeightKg" unit={unitText}
-                                                    locked={locked} errors={e} onChange={(patch) => updateLineWeight(line.key, patch)} />
-                                            </div>
-                                            <LineSourceChoice name={prefix} quantity={lineKg[index].quantity} unitText={unitText} state={stateOf(line)}
-                                                source={effectiveSource(line, lineKg[index].quantity)} packagesPerPallet={variantDefaults.get(Number(line.productVariantId)) ?? null}
-                                                locked={locked} canSplit={draft.lines.length < MAX_ORDER_LINES} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
-                                            <FieldError id={`${prefix}.supplySource`} messages={e(`${prefix}.supplySource`)} />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                            <button type="button" onClick={() => removeLine(line.key)} disabled={locked || draft.lines.length <= 1}
-                                                className={secondaryButtonClass} aria-label={t('supply_remove_line_n', { n: String(index + 1) })}>✕</button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-                <KgTotals totals={totals} lineCount={draft.lines.length} testId="order-kg-totals" />
+                {/* Feedback 22 november: dezelfde regelcomponent als de inkooporder; onder het artikel de stand en de bron van de regel. */}
+                <PurchaseOrderLines<OrderLineDraft> lines={draft.lines} rows={rows} products={products} variantOf={variantOf} locked={locked} isDirect={false} withGgn={false}
+                    tourPrefix="sales-line" testId="sales-lines" errors={e} fields={SALES_LINE_FIELDS} currency="EUR"
+                    onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={(key) => setNewArticleFor(key)}
+                    productExtra={(line, index) => {
+                        const unit = unitOf(index);
+                        const unitText = unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(unit)).toLowerCase();
+                        return (
+                            <>
+                                {!locked && (
+                                    <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                                        title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                                )}
+                                <LineSourceChoice name={`lines[${index}]`} quantity={rows[index]?.quantity ?? null} unitText={unitText} state={stateOf(line, index)}
+                                    source={effectiveSource(line, index)} packagesPerPallet={rows[index]?.perPallet ?? null}
+                                    locked={locked} canSplit={draft.lines.length < MAX_ORDER_LINES} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
+                                <FieldError id={`lines[${index}].supplySource`} messages={e(`lines[${index}].supplySource`)} />
+                            </>
+                        );
+                    }} />
                 <div className="flex flex-wrap items-start gap-2">
                     <ArticleAddButton products={products} disabled={locked || (draft.lines.length >= MAX_ORDER_LINES && !lastLineBlank)} dataTour="sales-article-add"
                         onPick={(variantId) => putArticle(variantId, null)} onNewArticle={() => setNewArticleFor(null)} />
@@ -567,7 +513,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 {newArticleFor !== undefined && (
                     <NewArticlePanel onClose={() => setNewArticleFor(undefined)} onSaved={(article) => {
                         setAddedArticles((current) => [...current, article]);
-                        putArticle(article.id, newArticleFor, article.packagingUnit);
+                        putArticle(article.id, newArticleFor);
                         setNewArticleFor(undefined);
                     }} />
                 )}
