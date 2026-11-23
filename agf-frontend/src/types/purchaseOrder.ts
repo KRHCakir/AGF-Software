@@ -1,3 +1,4 @@
+import type { OrderLogisticsPayload } from '../lib/orderLogistics';
 import type { OrderAmounts } from '../lib/orderLineMath';
 import type { DeliveryTerm } from '../lib/deliveryTerm';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
@@ -280,6 +281,12 @@ export interface PurchaseOrderDetail {
     changes?: PurchaseOrderChange[];
     // Feedback 22 november (ontbreekt bij een oudere server): de leveringsconditie van deze order; null = geen.
     deliveryTerm?: DeliveryTerm | null;
+    // Feedback 22 november: ontvangstlocatie (null = eigen loods), laadadres en afleveradres.
+    receiveLocationId?: number | null;
+    receiveLocationName?: string | null;
+    receiveLocationKind?: string | null;
+    loadingAddress?: string | null;
+    deliveryAddress?: string | null;
 }
 
 export interface UpdatePurchaseOrderLineRequest {
@@ -324,6 +331,7 @@ export interface UpdatePurchaseOrderRequest {
     confirmedCertificateProductIds?: number[];
     // Feedback 22 november: de leveringsconditie; weggelaten = ongewijzigd.
     deliveryTerm?: DeliveryTerm;
+    logistics?: OrderLogisticsPayload;
 }
 
 export interface FinalizePurchaseOrderRequest {

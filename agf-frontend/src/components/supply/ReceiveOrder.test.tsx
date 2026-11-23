@@ -100,6 +100,15 @@ describe('ReceiveOrder', () => {
         assert.deepEqual([bodies()[1].quantity, bodies()[1].netWeightKg], [50, 201.5]);
     });
 
+    test('feedback 22 november: on a location in transit (direct to a customer) the buttons say Delivered and the location is shown', async () => {
+        setup(order([line(1, 100)], { locationId: 5, locationName: 'Onderweg naar Griekenland', locationKind: 'InTransit' }));
+        await mounted.render(<ReceiveOrder orderId={7} />);
+        await mounted.waitFor(() => mounted.button('receipt_deliver'), 'Delivered button');
+        assert.ok(mounted.button('receipt_deliver_all'));
+        assert.equal(mounted.button('receipt_receive'), null);
+        assert.ok(mounted.container.querySelector('[data-tour="receive-location"]'));
+    });
+
     test('an order that cannot be received says why and offers no button', async () => {
         setup(order([line(1, 100)], { receivable: false, notReceivableReason: 'This purchase order is cancelled.' }));
         await mounted.render(<ReceiveOrder orderId={7} />);
