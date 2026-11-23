@@ -135,7 +135,11 @@ namespace AgfAdmin.Services
                         splits[i] = remainder;
                         // Vervalt het restant van de oude regel, dan neemt de nieuwe regel het open deel over: meer dan dat zou de order boven de bestelde hoeveelheid tillen.
                         var openPart = before.ExpectedQuantity - received;
-                        if (remainder == PurchaseOrderDocumentRules.RemainderCancelled && next[i].ExpectedQuantity > openPart)
+                        if (remainder == PurchaseOrderDocumentRules.RemainderCancelled && !string.Equals(next[i].ExpectedUnit, before.ExpectedUnit, StringComparison.Ordinal))
+                        {
+                            AddError(errors, $"{key}.expectedUnit", $"The rest of the old line is cancelled, so the new line takes over the open part in the same unit: {before.ExpectedUnit}.");
+                        }
+                        else if (remainder == PurchaseOrderDocumentRules.RemainderCancelled && next[i].ExpectedQuantity > openPart)
                         {
                             AddError(errors, $"{key}.expectedQuantity", $"The rest of the old line is cancelled, so the new line takes over the open part: at most {openPart.ToString(CultureInfo.InvariantCulture)}.");
                         }
@@ -544,8 +548,11 @@ namespace AgfAdmin.Services
             line.CancelledQuantity = (line.CancelledQuantity ?? 0m) + cancelled;
             line.ExpectedQuantity = received;
             decimal? Scaled(decimal? kg) => kg == null ? null : decimal.Round(kg.Value * received / before, 3, MidpointRounding.AwayFromZero);
+            var (netBefore, grossBefore) = (line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg);
             (line.ExpectedNetWeightKg, line.ExpectedGrossWeightKg) = (Scaled(line.ExpectedNetWeightKg), Scaled(line.ExpectedGrossWeightKg));
             if (line.ExpectedGrossWeightKg < line.ExpectedNetWeightKg) line.ExpectedGrossWeightKg = line.ExpectedNetWeightKg;
+            if (netBefore != line.ExpectedNetWeightKg) fields.Add(new("expectedNetWeightKg", line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(netBefore), Number(line.ExpectedNetWeightKg)));
+            if (grossBefore != line.ExpectedGrossWeightKg) fields.Add(new("expectedGrossWeightKg", line.Id, PurchaseOrderDocumentRules.ActionChanged, Number(grossBefore), Number(line.ExpectedGrossWeightKg)));
             if (line.PalletCount != null)
             {
                 fields.Add(new("pallets", line.Id, PurchaseOrderDocumentRules.ActionChanged, Pallets(line), null));
