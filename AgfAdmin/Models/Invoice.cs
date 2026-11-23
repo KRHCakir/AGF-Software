@@ -22,7 +22,9 @@ namespace AgfAdmin.Models
 
         // --- Nieuwe AGF Specifieke Velden ---
         public DateTime? DeliveryDate { get; set; }
-        public string? BatchNumber { get; set; } // Partij / Lotnummer
+        public string? BatchNumber { get; set; } // Partij / Lotnummer: sinds feedback 22 november het nummer van de eigen verkoop-partij
+        // De eigen verkoop-partij van deze directe factuur (Partij.InvoiceId); bij aanmaken toegekend, nooit gelijk aan een bestaand nummer.
+        public Partij? SalesPartij { get; set; }
         public string? DeliveryAddress { get; set; }
         public string? ShippingMethod { get; set; }
         public string? ReferenceNumber { get; set; } // Uw bestelnummer / PO

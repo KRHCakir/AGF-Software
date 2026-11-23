@@ -588,8 +588,9 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
                     t.HasCheckConstraint("CK_Partijen_Sequence_Consistent",
                         "(\"Sequence\" IS NULL AND \"SequencePeriod\" IS NULL) OR (\"Sequence\" > 0 AND \"SequencePeriod\" IS NOT NULL)");
+                    // Een verkoop-partij hoort bij precies één verkooporder of één directe factuur (feedback 22 november); een inkoop-partij bij geen van beide.
                     t.HasCheckConstraint("CK_Partijen_Kind_SalesOrder",
-                        "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL) OR (\"Kind\" = 'Sales' AND \"SalesOrderId\" IS NOT NULL)");
+                        "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL AND \"InvoiceId\" IS NULL) OR (\"Kind\" = 'Sales' AND ((\"SalesOrderId\" IS NOT NULL AND \"InvoiceId\" IS NULL) OR (\"SalesOrderId\" IS NULL AND \"InvoiceId\" IS NOT NULL)))");
                 });
                 b.Property(p => p.Number).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
                 b.Property(p => p.NumberKey).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
@@ -599,9 +600,16 @@ namespace AgfAdmin.Data
                 b.Property(p => p.SequencePeriod).HasMaxLength(10);
                 b.HasIndex(p => new { p.Kind, p.SequencePeriod, p.Sequence }).IsUnique();
                 b.HasOne(p => p.SalesOrder).WithOne(o => o.SalesPartij).HasForeignKey<Partij>(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(p => p.Invoice).WithOne(i => i.SalesPartij).HasForeignKey<Partij>(p => p.InvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
                 b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(p => p.RequestId).IsUnique();
+            });
+
+            modelBuilder.Entity<InvoiceLine>(b =>
+            {
+                b.ToTable("InvoiceLine");
+                b.HasOne(l => l.Partij).WithMany().HasForeignKey(l => l.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<PartijAuditEvent>(b =>

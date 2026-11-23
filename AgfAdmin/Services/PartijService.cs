@@ -235,6 +235,11 @@ namespace AgfAdmin.Services
             {
                 return (null, await ExistsConflictAsync<T>(existing, cancellationToken));
             }
+            var otherKind = await OtherKindRefusalAsync<T>(number, kind, field, null, cancellationToken);
+            if (otherKind != null)
+            {
+                return (null, otherKind);
+            }
             return (new Partij { Kind = kind, Number = number, NumberKey = PartijRules.NumberKey(number), CreatedAt = now, CreatedBy = actor }, null);
         }
 
@@ -282,6 +287,11 @@ namespace AgfAdmin.Services
             if (other != null)
             {
                 return await ExistsConflictAsync<PartijSummaryDto>(other, cancellationToken);
+            }
+            var otherKind = await OtherKindRefusalAsync<PartijSummaryDto>(number, partij.Kind, "number", id, cancellationToken);
+            if (otherKind != null)
+            {
+                return otherKind;
             }
 
             _db.PartijAuditEvents.Add(new PartijAuditEvent
@@ -429,7 +439,8 @@ namespace AgfAdmin.Services
             {
                 var number = PartijRules.Format(format, today, sequence, digits);
                 var key = PartijRules.NumberKey(number);
-                var takenQuery = db.Partijen.AsNoTracking().Where(p => p.Kind == kind && p.NumberKey == key);
+                // Bezet: door een partij van welke soort ook (feedback 22 november: inkoop en verkoop delen nooit een nummer).
+                var takenQuery = db.Partijen.AsNoTracking().Where(p => p.NumberKey == key);
                 if (pending.All(p => p.NumberKey != key) && !(async ? await takenQuery.AnyAsync(cancellationToken) : takenQuery.Any()))
                 {
                     return (number, period, sequence);
@@ -461,6 +472,19 @@ namespace AgfAdmin.Services
                 return $"A lot number may contain at most {PartijRules.MaxNumberLength} characters.";
             }
             return PartijRules.NumberKey(number) == null ? "A lot number needs at least one letter or digit." : null;
+        }
+
+        // Een nieuw of gecorrigeerd nummer dat al bestaat als partij van de andere soort: geweigerd met uitleg (validatie op het veld), want
+        // "gebruik de bestaande partij" kan niet over de soorten heen. Null als het nummer vrij is.
+        internal async Task<ServiceResult<T>> OtherKindRefusalAsync<T>(string number, string kind, string field, int? exceptId, CancellationToken cancellationToken)
+        {
+            var key = PartijRules.NumberKey(number);
+            var otherKind = PartijRules.OtherKind(kind);
+            var taken = await _db.Partijen.AsNoTracking().AnyAsync(p => p.Kind == otherKind && p.NumberKey == key && (exceptId == null || p.Id != exceptId), cancellationToken)
+                || _db.ChangeTracker.Entries<Partij>().Any(e => e.State == EntityState.Added && e.Entity.Kind == otherKind && e.Entity.NumberKey == key);
+            return taken
+                ? ServiceResult<T>.Validation(new Dictionary<string, string[]> { [field] = new[] { PartijRules.OtherKindMessage(number.Trim(), otherKind) } })
+                : null;
         }
 
         internal async Task<ServiceResult<T>> ExistsConflictAsync<T>(Partij existing, CancellationToken cancellationToken)

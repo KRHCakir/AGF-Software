@@ -34,7 +34,7 @@ public sealed class SalesPartijGuardTests : IDisposable
 
         await using var db = _s.Factory.CreateContext();
         var partij = await db.Partijen.SingleAsync(p => p.Kind == "Sales");
-        Assert.Equal(("VO-2026-0001", "2611001", order.Id), (order.OrderNumber, partij.Number, partij.SalesOrderId.Value));
+        Assert.Equal(("VO-2026-0001", "V-2611001", order.Id), (order.OrderNumber, partij.Number, partij.SalesOrderId.Value));
         Assert.False(string.IsNullOrWhiteSpace(partij.CreatedBy));
 
         // Regel 24: geen tweede verkoop-partij bij een bestaande order, geen andere soort of order, nooit verwijderen.

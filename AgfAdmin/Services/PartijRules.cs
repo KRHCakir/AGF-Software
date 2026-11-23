@@ -39,9 +39,13 @@ namespace AgfAdmin.Services
         public const string ResetMonthly = "Monthly";
         public static readonly IReadOnlyList<string> Resets = new[] { ResetNever, ResetYearly, ResetMonthly };
 
-        public const string DefaultFormat = "{JJ}{MM}{volgnr}";
-        // Verkoop-partijen: zonder vaste 5 vooraan (261140 = jaar 26, maand 11, nummer 140).
-        public const string DefaultSalesFormat = "{JJ}{MM}{volgnr}";
+        // Feedback 22 november: I- voor inkoop en V- voor verkoop, gevolgd door jaar, maand en volgnummer (I-2611040, V-2611040). Zo is een
+        // voorgesteld inkoopnummer nooit gelijk aan een verkoopnummer. Bestaande nummers (2611001, 52611002) blijven zoals ze zijn.
+        public const string DefaultFormat = "I-{JJ}{MM}{volgnr}";
+        public const string DefaultSalesFormat = "V-{JJ}{MM}{volgnr}";
+        // De standaardformaten van vóór feedback 22 november; de migratie AddLotNumberingIV zet alleen deze om naar I- en V-.
+        public static readonly IReadOnlyList<string> PreviousPurchaseFormats = new[] { "{JJ}{MM}{volgnr}", "5{JJ}{MM}{volgnr}" };
+        public const string PreviousSalesFormat = "{JJ}{MM}{volgnr}";
         public const string SequencePlaceholder = "{volgnr}";
         public static readonly IReadOnlyList<string> Placeholders = new[] { "{JJ}", "{JJJJ}", "{MM}", SequencePlaceholder };
 
@@ -52,6 +56,9 @@ namespace AgfAdmin.Services
         // Alleen bij een verkoop-partij zolang er op haar order niets gereserveerd of geleverd is: nummer aangepast zonder reden
         // (regel 24). Daarna gaat het nummer, net als bij een inkoop-partij, alleen via NumberCorrected met reden.
         public const string EventNumberChanged = "NumberChanged";
+
+        // Een order zonder partij krijgt bij de eerste ontvangst een partij (regel 41): de reden in de historie, of de notitie van een nieuwe partij.
+        public const string LinkedAtReceiptReason = "Automatisch bij ontvangst: de order had nog geen partij.";
 
         // Partijen uit bestaande palletregels (migratie AddPartijen) hebben geen ingelogde aanmaker.
         public const string MigrationActor = "Migratie";
@@ -77,6 +84,13 @@ namespace AgfAdmin.Services
             }
             return key.Length == 0 ? null : key.ToString();
         }
+
+        // Een partijnummer is uniek over inkoop en verkoop samen (feedback 22 november): de melding als een nieuw of gecorrigeerd nummer al
+        // als partij van de andere soort bestaat. Bestaande dubbele nummers van vóór deze regel blijven staan; alleen een nieuw nummer telt.
+        public static string OtherKindMessage(string number, string otherKind) =>
+            $"Lot number {number} already exists as a {(otherKind == KindSales ? "sales" : "purchase")} lot; a purchase lot and a sales lot never share a number. Choose another number.";
+
+        public static string OtherKind(string kind) => kind == KindSales ? KindPurchase : KindSales;
 
         public static bool IsMode(string value) => value != null && Modes.Contains(value, StringComparer.Ordinal);
         public static bool IsKind(string value) => value != null && Kinds.Contains(value, StringComparer.Ordinal);

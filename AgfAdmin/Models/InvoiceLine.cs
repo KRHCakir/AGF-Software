@@ -24,5 +24,9 @@ namespace AgfAdmin.Models
         public string? QualityClass { get; set; }  // Extra, Klasse I, II
         public decimal DiscountPercentage { get; set; }
         public string? Remarks { get; set; }     // Sortering, opmerkingen
+
+        // Feedback 22 november: de inkoop-partij waar deze regel uit komt (herleidbaarheid van de directe factuur); optioneel, vast na aanmaken.
+        public int? PartijId { get; set; }
+        public Partij? Partij { get; set; }
     }
 }

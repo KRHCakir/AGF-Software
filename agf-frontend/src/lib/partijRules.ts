@@ -10,7 +10,9 @@ export type PartijSequenceReset = 'Never' | 'Yearly' | 'Monthly';
 
 export const PARTIJ_MODES: readonly PartijNumberMode[] = ['Auto', 'Own'];
 export const PARTIJ_RESETS: readonly PartijSequenceReset[] = ['Never', 'Yearly', 'Monthly'];
-export const DEFAULT_PARTIJ_FORMAT = '{JJ}{MM}{volgnr}';
+// Feedback 22 november: I- voor inkoop en V- voor verkoop (I-2611040, V-2611040); bestaande nummers blijven zoals ze zijn.
+export const DEFAULT_PARTIJ_FORMAT = 'I-{JJ}{MM}{volgnr}';
+export const DEFAULT_SALES_PARTIJ_FORMAT = 'V-{JJ}{MM}{volgnr}';
 export const DEFAULT_SEQUENCE_DIGITS = 3;
 export const MIN_SEQUENCE_DIGITS = 1;
 export const MAX_SEQUENCE_DIGITS = 9;

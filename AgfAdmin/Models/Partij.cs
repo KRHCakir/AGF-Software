@@ -20,6 +20,10 @@ namespace AgfAdmin.Models
         public string Kind { get; set; } = Services.PartijRules.KindPurchase;
         public int? SalesOrderId { get; set; }
         public SalesOrder SalesOrder { get; set; }
+        // Feedback 22 november: een directe factuur (verkoop zonder verkooporder, bijvoorbeeld contant aan de balie) krijgt een eigen
+        // verkoop-partij. Een verkoop-partij hoort bij precies één verkooporder óf één directe factuur (database-check en regel 24).
+        public int? InvoiceId { get; set; }
+        public Invoice Invoice { get; set; }
 
         // Opgeslagen status: nu altijd Open. Uitverkocht wordt afgeleid (PartijRules.DisplayStatus), Afgesloten komt met het
         // partijrapport (P3) als tweede opgeslagen waarde.

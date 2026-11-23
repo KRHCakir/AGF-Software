@@ -47,9 +47,9 @@ public class PartijOrderTests : IDisposable
         var created = await CreateAsync(request);
 
         Assert.Equal(ServiceResultStatus.Created, created.Status);
-        Assert.Equal("2610001", created.Value.PartijNumber);
+        Assert.Equal("I-2610001", created.Value.PartijNumber);
         Assert.Equal("NP-LOT-88", created.Value.SupplierLotReference);
-        Assert.All(created.Value.Lines, l => { Assert.Equal(created.Value.PartijId, l.PartijId); Assert.Equal("2610001", l.PartijNumber); });
+        Assert.All(created.Value.Lines, l => { Assert.Equal(created.Value.PartijId, l.PartijId); Assert.Equal("I-2610001", l.PartijNumber); });
 
         // Een herhaling van dezelfde aanvraag is dezelfde order met dezelfde partij, geen tweede partij.
         var retry = await CreateAsync(request);
@@ -120,11 +120,11 @@ public class PartijOrderTests : IDisposable
     {
         var concurrent = await RequestAsync(newPartij: true);
         var request = await RequestAsync(newPartij: true);
-        await using var db = _factory.CreateContextBeforeGuard(async () => Assert.Equal("2610001", (await CreateAsync(concurrent)).Value.PartijNumber));
+        await using var db = _factory.CreateContextBeforeGuard(async () => Assert.Equal("I-2610001", (await CreateAsync(concurrent)).Value.PartijNumber));
         var result = await new SupplyCommitmentService(db).CreateAsync(request);
 
         Assert.Equal(ServiceResultStatus.Created, result.Status);
-        Assert.Equal("2610002", result.Value.PartijNumber);
+        Assert.Equal("I-2610002", result.Value.PartijNumber);
     }
 
     [Fact]

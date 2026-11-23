@@ -270,6 +270,7 @@ namespace AgfAdmin.Data
             await CheckServiceLinesAsync(db, async, cancellationToken);
             await CheckLineSplitsAsync(db, async, cancellationToken);
             await CheckStockLocationsAsync(db, async, cancellationToken);
+            await CheckLotNumberingAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

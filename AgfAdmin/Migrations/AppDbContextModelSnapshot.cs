@@ -397,7 +397,7 @@ namespace AgfAdmin.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasDefaultValue("{JJ}{MM}{volgnr}");
+                        .HasDefaultValue("I-{JJ}{MM}{volgnr}");
 
                     b.Property<string>("PartijNumberMode")
                         .IsRequired()
@@ -456,7 +456,7 @@ namespace AgfAdmin.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasDefaultValue("{JJ}{MM}{volgnr}");
+                        .HasDefaultValue("V-{JJ}{MM}{volgnr}");
 
                     b.Property<int>("SalesPartijSequenceDigits")
                         .ValueGeneratedOnAdd()
@@ -3053,6 +3053,9 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("OriginCountry")
                         .HasColumnType("text");
 
+                    b.Property<int?>("PartijId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ProductVariantId")
                         .HasColumnType("integer");
 
@@ -3081,9 +3084,11 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("InvoiceId");
 
+                    b.HasIndex("PartijId");
+
                     b.HasIndex("ProductVariantId");
 
-                    b.ToTable("InvoiceLine");
+                    b.ToTable("InvoiceLine", (string)null);
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.MailDraft", b =>
@@ -3696,6 +3701,9 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("InvoiceId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -3737,6 +3745,9 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("InvoiceId")
+                        .IsUnique();
+
                     b.HasIndex("RequestId")
                         .IsUnique();
 
@@ -3751,7 +3762,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("Partijen", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Partijen_Kind_SalesOrder", "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL) OR (\"Kind\" = 'Sales' AND \"SalesOrderId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_Partijen_Kind_SalesOrder", "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL AND \"InvoiceId\" IS NULL) OR (\"Kind\" = 'Sales' AND ((\"SalesOrderId\" IS NOT NULL AND \"InvoiceId\" IS NULL) OR (\"SalesOrderId\" IS NULL AND \"InvoiceId\" IS NOT NULL)))");
 
                             t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
 
@@ -7090,11 +7101,18 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithMany()
+                        .HasForeignKey("PartijId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductVariantId");
 
                     b.Navigation("Invoice");
+
+                    b.Navigation("Partij");
 
                     b.Navigation("ProductVariant");
                 });
@@ -7241,10 +7259,17 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.Partij", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.Invoice", "Invoice")
+                        .WithOne("SalesPartij")
+                        .HasForeignKey("AgfAdmin.Models.Partij", "InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
                         .WithOne("SalesPartij")
                         .HasForeignKey("AgfAdmin.Models.Partij", "SalesOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Invoice");
 
                     b.Navigation("SalesOrder");
                 });
@@ -8001,6 +8026,8 @@ namespace AgfAdmin.Migrations
             modelBuilder.Entity("AgfAdmin.Models.Invoice", b =>
                 {
                     b.Navigation("InvoiceLines");
+
+                    b.Navigation("SalesPartij");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.Order", b =>
