@@ -170,12 +170,16 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres (alleen eigen-magazijnorders; de lijst met locaties uit Instellingen).
     const [logistics, setLogistics] = useState<OrderLogisticsDraft>(() => (editing ? logisticsOf(editing.order) : emptyLogistics()));
     const [stockLocations, setStockLocations] = useState<StockLocation[]>([]);
+    const [locationsFailed, setLocationsFailed] = useState(false);
+    const [locationsAttempt, setLocationsAttempt] = useState(0);
     useEffect(() => {
         if (route !== 'Warehouse') return;
         const controller = new AbortController();
-        listStockLocations(controller.signal).then(setStockLocations).catch(() => { /* zonder lijst: alleen de eigen loods */ });
+        setLocationsFailed(false);
+        listStockLocations(controller.signal).then(setStockLocations)
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setLocationsFailed(true); });
         return () => controller.abort();
-    }, [route]);
+    }, [route, locationsAttempt]);
     const termTouched = useRef(editing !== null);
     // Valuta-ronde: valuta en koers van de order (euro standaard; bij aanpassen de vastgelegde) en de lijst om uit te kiezen.
     const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
@@ -718,7 +722,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
 
             {!isDirect && (
                 <OrderLogisticsFields value={logistics} onChange={(next) => { if (locked) return; setLogistics(next); edited(); }} locations={stockLocations}
-                    vendorId={header.vendorId === '' ? null : Number(header.vendorId)} customers={reference.customers} locked={locked} errors={e} />
+                    vendorId={header.vendorId === '' ? null : Number(header.vendorId)} customers={reference.customers} locked={locked} errors={e}
+                    locationsFailed={locationsFailed} onRetryLocations={() => setLocationsAttempt((n) => n + 1)} />
             )}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
