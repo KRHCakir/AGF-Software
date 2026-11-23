@@ -20,7 +20,7 @@ export const emptyLogistics = (): OrderLogisticsDraft => ({ receiveLocationId: '
 
 export function logisticsOf(order: { receiveLocationId?: number | null; loadingAddress?: string | null; deliveryAddress?: string | null }): OrderLogisticsDraft {
     const loading = order.loadingAddress ?? '';
-    return { receiveLocationId: order.receiveLocationId == null ? '' : String(order.receiveLocationId), loadingAddress: loading, deliveryAddress: order.deliveryAddress ?? '', pickUp: loading !== '' };
+    return { receiveLocationId: order.receiveLocationId == null ? '' : String(order.receiveLocationId), loadingAddress: loading, deliveryAddress: order.deliveryAddress ?? '', pickUp: loading.trim() !== '' };
 }
 
 export function logisticsPayload(draft: OrderLogisticsDraft): OrderLogisticsPayload {
