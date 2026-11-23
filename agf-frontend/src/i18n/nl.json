@@ -3216,5 +3216,15 @@
   "tour_aicert_review_why": "De AI doet alleen een voorstel en maakt nooit zelf een product aan. Je koppelt via het zoekveld of laat het open.",
   "tour_aicert_approve_title": "Goedkeuren",
   "tour_aicert_approve_what": "We klikken op Goedkeuren. Het certificaat wordt opgeslagen zoals elk certificaat; de PDF wordt een versie van het bestand, met 'AI-voorstel goedgekeurd door' jou.",
-  "tour_aicert_approve_why": "Zonder die klik slaat de AI niets op. Staat hetzelfde nummer er al, dan wordt het een nieuwe versie van dat certificaat in plaats van een tweede."
+  "tour_aicert_approve_why": "Zonder die klik slaat de AI niets op. Staat hetzelfde nummer er al, dan wordt het een nieuwe versie van dat certificaat in plaats van een tweede.",
+  "sort_by": "Sorteren op",
+  "sort_default": "Standaard",
+  "sort_text_asc": "A–Z",
+  "sort_text_desc": "Z–A",
+  "sort_number_asc": "oplopend",
+  "sort_number_desc": "aflopend",
+  "sort_amount_asc": "laag–hoog",
+  "sort_amount_desc": "hoog–laag",
+  "sort_date_asc": "oud–nieuw",
+  "sort_date_desc": "nieuw–oud"
 }
