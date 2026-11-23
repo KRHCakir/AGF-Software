@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setInputLocale } from './decimal.ts';
-import { changeFieldKey, documentStatusOf, isDefinitive, isUntouched, lineLimits, orderEditOf, removedInUse, updateLinePayload } from './purchaseOrderEdit.ts';
+import { changeFieldKey, documentStatusOf, isDefinitive, isSplit, isUntouched, lineLimits, openQuantityOf, orderEditOf, removedInUse, updateLinePayload } from './purchaseOrderEdit.ts';
 import { purchaseLinePayloads, type PurchaseArticle } from './purchaseOrderLines.ts';
 import type { PurchaseOrderDetail, PurchaseOrderLine } from '../types/purchaseOrder';
 
@@ -67,9 +67,21 @@ describe('purchase order edit', () => {
 
     test('after a receipt the article is fixed, the quantity never below received and the line stays; others are free', () => {
         const { edit } = orderEditOf(order([line({ inUse: true, receivedQuantity: 40 }), line({ id: 8 })]));
-        assert.deepEqual(lineLimits(edit.lines.get('line-7')), { articleFixed: true, minimumQuantity: 40, removable: false });
-        assert.deepEqual(lineLimits(edit.lines.get('line-8')), { articleFixed: false, minimumQuantity: null, removable: true });
-        assert.deepEqual(lineLimits(undefined), { articleFixed: false, minimumQuantity: null, removable: true });
+        // Feedback 22 november: een deels ontvangen regel mag een ander artikel krijgen (dan splitst ze); zonder ander artikel nooit onder ontvangen.
+        assert.deepEqual(lineLimits(edit.lines.get('line-7')), { articleFixed: false, minimumQuantity: 40, removable: false, splitReceived: null });
+        assert.deepEqual(lineLimits(edit.lines.get('line-8')), { articleFixed: false, minimumQuantity: null, removable: true, splitReceived: null });
+        assert.deepEqual(lineLimits(undefined), { articleFixed: false, minimumQuantity: null, removable: true, splitReceived: null });
+        const other = { ...edit.lines.get('line-7')!.opened, productVariantId: '99' };
+        assert.deepEqual(lineLimits(edit.lines.get('line-7'), other), { articleFixed: false, minimumQuantity: null, removable: false, splitReceived: 40 });
+        assert.equal(isSplit(other, edit.lines.get('line-7')), true);
+        assert.equal(isSplit(other, edit.lines.get('line-8')), false, 'nothing received: just another article');
+        assert.equal(openQuantityOf(edit.lines.get('line-7')!), edit.lines.get('line-7')!.stored.expectedQuantity - 40);
+        // Iets anders hangt aan de regel (bijvoorbeeld een reservering) en er is niets ontvangen: het artikel ligt vast.
+        assert.deepEqual(lineLimits({ ...edit.lines.get('line-7')!, received: 0 }), { articleFixed: true, minimumQuantity: null, removable: false, splitReceived: null });
+        // Helemaal ontvangen: geen open deel, dus geen splitsing; het artikel ligt vast (zoals de server).
+        const full = { ...edit.lines.get('line-7')!, received: edit.lines.get('line-7')!.stored.expectedQuantity };
+        assert.deepEqual(lineLimits(full, other), { articleFixed: true, minimumQuantity: full.received, removable: false, splitReceived: null });
+        assert.equal(isSplit(other, full), false);
         assert.deepEqual(removedInUse(edit, new Set(['line-8'])).map((l) => l.lineId), [7]);
         assert.deepEqual(removedInUse(edit, new Set(['line-7'])), []);
     });
