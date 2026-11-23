@@ -6,6 +6,7 @@ import { formatCalendarDate } from '../../lib/calendarDate';
 import { unitLabelKey } from '../../lib/units';
 import { PACKAGE_UNITS, type PackageUnit } from '../../types/availability';
 import type { PartijTotals } from '../../types/partij';
+import { LotColorBadge } from './LotColor';
 import PartijStatusBadge from './PartijStatusBadge';
 import { listRowClass, rowClick } from '../../lib/listRows';
 import type { SortState } from '../../lib/listSort';
@@ -56,6 +57,7 @@ export default function PartijList({ items, selectedId, onOpen, sort, onSort, on
                                 <td className={`${th} whitespace-nowrap font-mono`}>
                                     <button type="button" data-tour="partij-open" data-tour-key={item.number} className="font-semibold text-blue-800 hover:underline"
                                         aria-label={t('partij_open', { number: item.number })} onClick={(event) => { event.stopPropagation(); onOpen(item.id); }}>{item.number}</button>
+                                    <LotColorBadge color={item.color} />
                                     {item.supplierLotReferences.length > 0 && <span className="block text-xs font-normal text-gray-600">{item.supplierLotReferences.join(', ')}</span>}
                                 </td>
                                 <td className={th}>{item.vendors.join(', ') || '–'}</td>
@@ -78,7 +80,7 @@ export default function PartijList({ items, selectedId, onOpen, sort, onSort, on
                         <button type="button" data-tour="partij-open" data-tour-key={item.number} onClick={() => onOpen(item.id)} aria-label={t('partij_open', { number: item.number })}
                             className={`w-full rounded-md border bg-white p-3 text-left text-sm ${item.id === selectedId ? 'border-blue-500' : 'border-gray-200'}`}>
                             <span className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="font-mono font-semibold text-blue-800">{item.number}</span>
+                                <span className="font-mono font-semibold text-blue-800">{item.number}<LotColorBadge color={item.color} /></span>
                                 <PartijStatusBadge status={item.status} />
                             </span>
                             <span className="mt-1 block break-words font-medium text-gray-900">{item.products.join(', ') || '–'}</span>

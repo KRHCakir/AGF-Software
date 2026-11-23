@@ -18,6 +18,8 @@ export interface PalletDetailLine {
     productName: string | null;
     productVariantName: string | null;
     lotNumber: string;
+    // Feedback 22 november: de partij van de regel (voor de kleur bij de keuring); ontbreekt bij een oudere server.
+    partijId?: number | null;
     // Historische ontvangst; voorraad = ontvangst - afgeboekt door verzendingen.
     quantity: number;
     unit: PackageUnit;

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState, ErrorState, LoadState, LoadingRows } from '../../../components/availability/StateViews';
 import CreatedNotice, { useCreated } from '../../../components/shared/CreatedNotice';
+import ProductColors from '../../../components/articles/ProductColors';
 import ArticleForm from '../../../components/articles/ArticleForm';
 import ArticleLifecycle from '../../../components/articles/ArticleLifecycle';
 import EmptyProducts from '../../../components/articles/EmptyProducts';
@@ -182,6 +183,8 @@ export default function ArticlesPage() {
                         <ArticleForm key={editing.key} article={editing.article} reference={state.data.reference} countries={state.data.countries} onSaved={onSaved} onClose={() => setEditing(null)} />
                     )}
                     {editing?.article && <ArticleLifecycle article={editing.article} onChanged={(saved) => onSaved(saved, false)} onDeleted={onDeleted} />}
+                    {/* Feedback 22 november: de kleurwaarden van het product (voor de kleur van een partij). */}
+                    {editing?.article && editing.article.productId > 0 && <ProductColors key={editing.article.productId} productId={editing.article.productId} />}
                     <div className="flex flex-wrap items-center gap-2">
                         <label htmlFor="article-search" className="sr-only">{t('articles_search_label')}</label>
                         <input id="article-search" ref={searchInput} type="search" value={query} onChange={(event) => setQuery(event.target.value)}
