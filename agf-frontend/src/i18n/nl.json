@@ -2891,7 +2891,7 @@
   "so_delivery_heading": "Levering {sequence} · {partij}",
   "so_deliveries": "Leveringen",
   "so_delivery_label": "Levering {sequence}",
-  "so_delivery_pallets": "{count} gereserveerde pallet(s)",
+  "so_delivery_pallets": "{count} pallet(s)",
   "so_delivery_rest": "met wat nog niet gereserveerd is",
   "so_partial_delivery": "Deellevering",
   "so_partial_delivery_text": "Een deellevering is een tweede vracht naar dezelfde klant: ze krijgt een eigen verkoop-partij (V-nummer) en een eigen laadbon. Kies welke gereserveerde pallets met de deellevering meegaan. Wat nog niet gereserveerd is, gaat altijd mee met de nieuwste levering; al verzonden pallets blijven bij hun levering.",
