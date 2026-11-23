@@ -31,6 +31,8 @@ namespace AgfAdmin.Controllers
                 {
                     c.Id, c.RelationId, c.Name, c.VATNumber, c.BillingAddress, c.ShippingAddress, c.ContactPerson, c.Email, c.Phone, c.PaymentTermsDays, c.CreatedAt, c.RequestId,
                     SearchCode = c.Relation.SearchCode, IsActive = c.Relation.IsActive,
+                    // Feedback 22 november: de leveringsconditie van de klant, als voorstel op een nieuwe verkooporder.
+                    c.DeliveryTermKind, c.Incoterm, c.IncotermPlace, c.DeliveryTermText,
                     // Plaats van het hoofdadres (zoals in de relatielijst): de klantkeuze in Verkoop zoekt ook op plaats.
                     City = c.Relation.Addresses.Where(a => a.IsActive).OrderByDescending(a => a.Purpose == AddressPurpose.Main).ThenByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).Select(a => a.City).FirstOrDefault()
                 })

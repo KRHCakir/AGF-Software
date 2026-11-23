@@ -223,16 +223,22 @@ namespace AgfAdmin.Models
         public static readonly IReadOnlyList<string> All = new[] { Added, Changed, Confirmed, Deactivated };
     }
 
-    // Rolafspraken die klant- en leveranciersrol delen (betaalwijze, levering, handelsvoorwaarden). Regels in RoleTermsRules.
-    public interface IRoleTerms
+    // Leveringsconditie (soort, Incoterm, plaats, toelichting): bij de klant- en leveranciersrol als standaard, en sinds feedback 22 november
+    // ook per verkoop- en inkooporder (voorgevuld uit de rol, per order aan te passen). Regels in DeliveryTermRules.
+    public interface IDeliveryTerm
     {
-        string PaymentMethod { get; set; }
-        string MandateReference { get; set; }
-        DateOnly? MandateSignedOn { get; set; }
         string DeliveryTermKind { get; set; }
         string Incoterm { get; set; }
         string IncotermPlace { get; set; }
         string DeliveryTermText { get; set; }
+    }
+
+    // Rolafspraken die klant- en leveranciersrol delen (betaalwijze, levering, handelsvoorwaarden). Regels in RoleTermsRules.
+    public interface IRoleTerms : IDeliveryTerm
+    {
+        string PaymentMethod { get; set; }
+        string MandateReference { get; set; }
+        DateOnly? MandateSignedOn { get; set; }
         string TradeConditions { get; set; }
         string TradeConditionsText { get; set; }
     }

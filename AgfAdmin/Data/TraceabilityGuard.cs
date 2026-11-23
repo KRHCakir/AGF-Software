@@ -126,6 +126,8 @@ namespace AgfAdmin.Data
     //    zet of wijzigt hem nooit, ook niet bij een nieuwe order.
     // 36. prijs, korting en btw van een verkooporderregel (zie TraceabilityGuard.SalesLinePrices.cs): veranderen nooit na het opslaan;
     //    de factuur neemt ze later over. Korting en btw van een inkooporderregel vallen onder regel 29 (alleen met een Edit-auditregel).
+    // 37. de leveringsconditie van een order (zie TraceabilityGuard.DeliveryTerms.cs): die van een verkooporder verandert alleen met een
+    //    auditregel DeliveryTermChanged (oud en nieuw), die van een inkooporder alleen met een Edit die het veld deliveryTerm vastlegt.
     // Regels 5 t/m 7 en 10 t/m 12 gelden niet voor legacy-reserveringen met OrderLineId; vrijgeven wordt nooit geblokkeerd.
     // 9. een verzendcorrectie is in beide richtingen consistent: een reservering gaat alleen Consumed -> Corrected samen met precies één
     //    correctieregel (exacte kopie van de verzendregel), één nieuwe inhoudsregel in quarantaine op dezelfde pallet met dezelfde partij en
@@ -256,6 +258,7 @@ namespace AgfAdmin.Data
             await CheckProductGgnAsync(db, async, cancellationToken);
             await CheckOriginLegacyTextAsync(db, async, cancellationToken);
             await CheckSalesLinePricesAsync(db, async, cancellationToken);
+            await CheckDeliveryTermsAsync(db, async, cancellationToken);
         }
 
         // ---- Regel 17: afkeuringen van ontvangen inkoop (zie PurchaseOrderService.RejectAsync) ----

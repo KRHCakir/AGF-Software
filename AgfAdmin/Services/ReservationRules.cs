@@ -45,6 +45,8 @@ namespace AgfAdmin.Services
         public const int MaxLotNumberLength = 100;
         public const string ReservationReleasedEvent = "ReservationReleased";
         public const string OrderCancelledEvent = "SalesOrderCancelled";
+        // Feedback 22 november: de leveringsconditie van een open order aangepast (oud en nieuw als tekst, zie DeliveryTermRules.Describe).
+        public const string DeliveryTermChangedEvent = "DeliveryTermChanged";
         public const string OrderDispatchedEvent = "SalesOrderDispatched";
         public const string ReservationConsumedEvent = "ReservationConsumed";
 

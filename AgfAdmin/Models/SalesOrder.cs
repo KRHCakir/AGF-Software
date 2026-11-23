@@ -1,8 +1,8 @@
 namespace AgfAdmin.Models
 {
     // Schone verkooporder voor het nieuwe beschikbaarheidsdomein. Bewust los van de legacy Order/OrderLine
-    // (int zonder eenheid, harde delete, legacy Inventory). Geen prijzen, btw of facturen in deze fase.
-    public sealed class SalesOrder
+    // (int zonder eenheid, harde delete, legacy Inventory). Prijs, korting en btw staan per regel (feedback 22 november); facturen volgen later.
+    public sealed class SalesOrder : IDeliveryTerm
     {
         public int Id { get; set; }
 
@@ -31,6 +31,13 @@ namespace AgfAdmin.Models
         public string InternalNote { get; set; }
         public DateTime RequestedDeliveryDate { get; set; } // UTC, afgekapt op microseconden
         public string ActorReference { get; set; }
+
+        // Feedback 22 november: de leveringsconditie van deze order, bij aanmaken voorgevuld uit de klant (of zoals meegestuurd) en daarna
+        // alleen met een auditregel aan te passen (guard-regel 37). De klant verandert er niet door. Leeg = geen conditie.
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
 
         // Annulering: alleen gevuld bij Status Cancelled (database-check). De reden is genormaliseerd (getrimd, max 500).
         public DateTime? CancelledAt { get; set; }
