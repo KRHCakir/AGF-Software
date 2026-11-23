@@ -174,11 +174,47 @@ public class ReceiptServiceTests : IDisposable
         var warning = Assert.Single(view.CertificateWarnings);
         Assert.Equal("Avocado", warning.ProductName);
 
-        var result = await ReceiveAsync(order.Id, order.Lines.Single().Id, new ReceiveLineDto { RequestId = Guid.NewGuid(), Quantity = 5m });
+        // Zonder het kenmerk van de getoonde melding: 409, niets ontvangen en niets als gezien vastgelegd.
+        var unseen = await ReceiveAsync(order.Id, order.Lines.Single().Id, new ReceiveLineDto { RequestId = Guid.NewGuid(), Quantity = 5m });
+        Assert.Equal(ServiceResultStatus.Conflict, unseen.Status);
+        Assert.NotNull(view.CertificateWarningToken);
+        await using (var none = _factory.CreateContext())
+        {
+            Assert.False(await none.CertificateConfirmations.AnyAsync());
+            Assert.False(await none.PalletContentLines.AnyAsync());
+        }
+
+        var result = await ReceiveAsync(order.Id, order.Lines.Single().Id, new ReceiveLineDto { RequestId = Guid.NewGuid(), Quantity = 5m, CertificateWarningToken = view.CertificateWarningToken });
         Assert.Equal(ServiceResultStatus.Created, result.Status);
         await using var check = _factory.CreateContext();
         var confirmation = await check.CertificateConfirmations.SingleAsync();
         Assert.Equal((CertificateCheck.ContextReceipt, PurchaseOrderEditHarness.Actor), (confirmation.Context, confirmation.ConfirmedBy));
+    }
+
+    [Fact]
+    public async Task A_Failure_On_A_Later_Pallet_Saves_Nothing_So_A_Corrected_Retry_Does_Not_Receive_Twice()
+    {
+        var (_, order) = await OrderAsync();
+        var line = order.Lines.Single();
+        await using (var db = _factory.CreateContext())
+        {
+            var taken = await new PalletService(db).CreateAsync(new CreatePalletDto
+            {
+                RequestId = Guid.NewGuid(), Reference = "TAKEN", PalletType = "EUR", LogisticsStatus = PalletRules.StatusReceived, LocationContext = PalletRules.LocationWarehouse,
+            });
+            Assert.Equal(ServiceResultStatus.Created, taken.Status);
+        }
+
+        // Pallet 1 is nieuw, pallet 2 heeft een nummer dat al een andere (afwijkende) pallet heeft: de hele ontvangst faalt, ook pallet 1 blijft weg.
+        var failed = await ReceiveAsync(order.Id, line.Id, new ReceiveLineDto
+        {
+            RequestId = Guid.NewGuid(), Quantity = 100m, PalletCount = 2, PalletReferences = new List<string> { "NEW-1", "TAKEN" },
+        });
+        Assert.NotEqual(ServiceResultStatus.Created, failed.Status);
+        await using var check = _factory.CreateContext();
+        Assert.Equal(1, await check.Pallets.CountAsync());
+        Assert.False(await check.PalletContentLines.AnyAsync());
+        Assert.Equal(0m, (await ViewAsync(order.Id)).Value.Lines.Single().ReceivedQuantity);
     }
 
     [Theory]

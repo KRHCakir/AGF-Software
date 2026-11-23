@@ -97,6 +97,7 @@ namespace AgfAdmin.Services
             {
                 var productIds = lines.Select(l => l.ProductId).Distinct().ToList();
                 dto.CertificateWarnings = await CertificateCheck.CheckAsync(_db, order.VendorId, productIds, _db.BusinessCalendar.Today(), cancellationToken);
+                dto.CertificateWarningToken = WarningToken(dto.CertificateWarnings);
             }
             return ServiceResult<ReceiptOrderDto>.Ok(dto);
         }
@@ -186,6 +187,27 @@ namespace AgfAdmin.Services
             var lot = line.PartijId != null ? null : FirstText(line.LotNumber, order.SupplierLotReference, order.OrderNumber);
             var ggn = line.Ggn ?? await ProposedGgnAsync(order.VendorId, cancellationToken);
             var requestId = request.RequestId!.Value;
+
+            // De GGN-melding moet de ontvanger echt gezien hebben: het kenmerk uit het scherm moet bij de actuele meldingen passen. Zonder
+            // (of met een verouderd) kenmerk komt eerst de actuele melding (409), en wordt er niets vastgelegd.
+            var orderWarnings = await CertificateCheck.CheckAsync(_db, order.VendorId, order.Lines.Select(l => l.ProductVariant.ProductId).Distinct().ToList(), _db.BusinessCalendar.Today(), cancellationToken);
+            var lineWarnings = orderWarnings.Where(w => w.ProductId == line.ProductVariant.ProductId).ToList();
+            if (lineWarnings.Count > 0 && !string.Equals(request.CertificateWarningToken, WarningToken(orderWarnings), StringComparison.Ordinal))
+            {
+                return ServiceResult<ReceiveLineResultDto>.Conflict(CertificateCheck.ConflictMessage(lineWarnings), CertificateCheck.ConflictBody(lineWarnings));
+            }
+
+            // Het RequestId hoort bij de hele aanvraag: een eerdere ontvangst is atomair vastgelegd, dus bestaan er pallets onder dit RequestId,
+            // dan moet de herhaling precies evenveel pallets vragen. Anders (andere verdeling of aantal) wordt niets bijgemaakt.
+            var derivedKeys = Enumerable.Range(0, MaxPallets).Select(i => (Guid?)Derived(requestId, $"pallet:{i}")).ToList();
+            var existingPallets = await _db.Pallets.AsNoTracking().CountAsync(p => derivedKeys.Contains(p.RequestId), cancellationToken);
+            if (existingPallets > 0 && existingPallets != shares.Count)
+            {
+                return ServiceResult<ReceiveLineResultDto>.Conflict($"RequestId {requestId} was already used for a receipt with {existingPallets} pallet(s); use a new requestId for different input.");
+            }
+
+            // Alles of niets: alle pallets en regels in één transactie; bij een fout wordt niets opgeslagen, zodat een herhaling niets dubbel ontvangt.
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             var pallets = new PalletService(_db, _user);
             var created = new List<ReceiptPalletDto>();
             for (var i = 0; i < shares.Count; i++)
@@ -210,8 +232,8 @@ namespace AgfAdmin.Services
                     NetKgPerPackage = weights.Value.Method == WeightRules.Calculated ? kgPerPackage : null,
                     NetWeightKg = weights.Value.Kg[i],
                     Ggn = ggn,
-                    // De GGN-melding stond op het scherm: ontvangen legt vast wie hem zag (CurrentUser), in dezelfde save.
-                    ConfirmCertificate = true,
+                    // Alleen met het kenmerk van de getoonde melding (hierboven gecontroleerd) legt ontvangen vast wie hem zag (CurrentUser).
+                    ConfirmCertificate = lineWarnings.Count > 0 ? true : null,
                 }, cancellationToken);
                 if (content.Status is not (ServiceResultStatus.Created or ServiceResultStatus.Ok)) return Relay(content.Status, content.Message, content.Errors, content.ConflictBody, $"pallets[{i}]");
                 created.Add(new ReceiptPalletDto
@@ -220,6 +242,7 @@ namespace AgfAdmin.Services
                     NetWeightKg = content.Value.NetWeightKg, QualityStatus = content.Value.QualityStatus,
                 });
             }
+            await transaction.CommitAsync(cancellationToken);
 
             _db.ChangeTracker.Clear();
             var view = await GetAsync(orderId, cancellationToken);
@@ -280,6 +303,15 @@ namespace AgfAdmin.Services
             bytes[7] = (byte)((bytes[7] & 0x0F) | 0x50);
             bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
             return new Guid(bytes);
+        }
+
+        // Een vast kenmerk van de meldingen (product, soort, certificaten, tekst): verandert er iets aan de melding, dan klopt het kenmerk niet meer.
+        public static string WarningToken(IReadOnlyCollection<CertificateCheckDto> warnings)
+        {
+            if (warnings == null || warnings.Count == 0) return null;
+            var text = string.Join("|", warnings.OrderBy(w => w.ProductId).Select(w =>
+                $"{w.ProductId}:{string.Join(",", w.Kinds)}:{string.Join(",", w.Certificates.Select(c => c.CertificateId))}:{w.Message}"));
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..32];
         }
 
         private static string NotReceivable(SupplyCommitment order)
