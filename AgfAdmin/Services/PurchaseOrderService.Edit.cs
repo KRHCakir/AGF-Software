@@ -85,7 +85,9 @@ namespace AgfAdmin.Services
                     ProductVariantId = l.ProductVariantId, ExpectedQuantity = l.ExpectedQuantity, ExpectedUnit = l.ExpectedUnit, ExpectedNetWeightKg = l.ExpectedNetWeightKg,
                     ExpectedGrossWeightKg = l.ExpectedGrossWeightKg, WeightSource = l.WeightSource, LotNumber = l.LotNumber, PalletCount = l.PalletCount,
                     PackagesPerPallet = l.PackagesPerPallet, LoosePackages = l.LoosePackages, UnitPrice = l.UnitPrice, Ggn = l.Ggn,
-                    DiscountPercentage = l.DiscountPercentage, VatPercentage = l.VatPercentage,
+                    // Weggelaten korting/btw bij een bestaande regel = opgeslagen waarde behouden; een expliciete null wist.
+                    DiscountPercentage = !l.DiscountPercentageSpecified && l.Id is { } did && order.Lines.FirstOrDefault(s => s.Id == did) is { } ds ? ds.DiscountPercentage : l.DiscountPercentage,
+                    VatPercentage = !l.VatPercentageSpecified && l.Id is { } vid && order.Lines.FirstOrDefault(s => s.Id == vid) is { } vs ? vs.VatPercentage : l.VatPercentage,
                 }).ToList(),
             }, _db.BusinessCalendar.Today(), errors);
             if (errors.Count > 0) return Validation<PurchaseOrderDetailDto>(errors);

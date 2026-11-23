@@ -76,7 +76,9 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         unitPrice: line.unitPrice == null ? '' : formatAmountInput(line.unitPrice),
         discount: line.discountPercentage == null ? '' : formatDecimalInput(line.discountPercentage, 2),
         vat: line.vatPercentage == null ? '' : String(line.vatPercentage), vatTouched: true,
-        // Een aangepaste bruto als aangepast terugzetten; berekende kg rekent het (vergrendelde) concept zelf opnieuw uit.
+        // Ingevulde netto en aangepaste bruto als ingevuld terugzetten (ook bij opdrachten van vóór de nieuwe regel); berekende kg rekent het
+        // (vergrendelde) concept zelf opnieuw uit.
+        ...(line.weightSource === 'Entered' && line.netWeightKg != null ? { netKg: formatKgInput(line.netWeightKg), netKgEntered: true } : {}),
         ...(line.weightSource === 'Entered' && line.grossWeightKg != null ? { grossKg: formatKgInput(line.grossWeightKg), grossKgEntered: true } : {}),
     })).concat(command.payload.lines.length === 0 ? [emptyLine()] : []),
     packagingLines: (command.payload.packagingLines ?? []).map((line) => packagingDraftFrom(line, newRequestId())),
@@ -154,11 +156,15 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     // Feedback 22 november: Dienst-artikelen (soort Cost) voor de dienstregels, ook inactieve (een bevroren regel toont haar artikel).
     const [serviceArticles, setServiceArticles] = useState<CostArticle[]>([]);
+    const [serviceFailed, setServiceFailed] = useState(false);
+    const [serviceToken, setServiceToken] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
-        listCostArticles(true, controller.signal).then((articles) => setServiceArticles(articles.filter((article) => (article.kind ?? 'Cost') === 'Cost'))).catch(() => undefined);
+        setServiceFailed(false);
+        listCostArticles(true, controller.signal).then((articles) => setServiceArticles(articles.filter((article) => (article.kind ?? 'Cost') === 'Cost')))
+            .catch(() => { if (!controller.signal.aborted) setServiceFailed(true); });
         return () => controller.abort();
-    }, []);
+    }, [serviceToken]);
     const serviceVatOf = (costArticleId: string) => serviceArticles.find((article) => String(article.id) === costArticleId)?.vatPercentage;
 
     useEffect(() => {
@@ -263,7 +269,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         setDraft((current) => ({
             ...current,
             lines: current.lines.flatMap((line, index) => (line.key !== key ? [line] : [
-                { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
+                { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
                 { ...emptyLine(), productVariantId: line.productVariantId, unit: unitOf(index) as OrderLineDraft['unit'], quantity: formatDecimalInput(expected), unitPrice: line.unitPrice,
                     discount: line.discount, vat: line.vat, vatTouched: line.vatTouched, supplySource: 'Expected' as const, sourceTouched: true },
             ])),
@@ -291,7 +297,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         if (target === null && draft.lines.length >= MAX_ORDER_LINES) return;
         const fresh = target === null ? emptyLine() : null;
         // Eenheid en btw komen uit het (nieuwe) artikel, zoals bij een keuze op de regel.
-        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), unit: '', vat: '', vatTouched: false });
+        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, unit: '', vat: '', vatTouched: false });
         setDraft((current) => ({ ...current, lines: fresh !== null ? [...current.lines, withVariant(fresh)] : current.lines.map((line) => (line.key === target ? withVariant(line) : line)) }));
         focusQuantityOf.current = fresh?.key ?? target;
         edited();
@@ -534,10 +540,27 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 <PurchaseOrderLines<OrderLineDraft> lines={draft.lines} rows={rows} products={products} variantOf={variantOf} locked={locked} isDirect={false} withGgn={false}
                     tourPrefix="sales-line" testId="sales-lines" errors={e} fields={SALES_LINE_FIELDS} currency="EUR" showAmounts={false}
                     onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={(key) => setNewArticleFor(key)}
-                    productExtra={(line, index) => !locked && (
-                        <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
-                            title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
-                    )}
+                    productExtra={(line, index) => {
+                        // Een bevroren opdracht van vóór de nieuwe regel kan palletinvoer hebben; die staat dan zoals verstuurd bij de regel.
+                        const frozen = pending?.payload.lines[index];
+                        const frozenPallets = frozen?.palletCount != null && frozen.packagesPerPallet != null ? frozen : null;
+                        return (
+                            <>
+                                {frozenPallets !== null && (
+                                    <span className="mt-1 block text-xs text-gray-700" data-testid={`lines[${index}].frozen-pallets`}>
+                                        {t('sales_line_frozen_pallets', {
+                                            pallets: formatDecimalInput(frozenPallets.palletCount ?? 0), perPallet: formatDecimalInput(frozenPallets.packagesPerPallet ?? 0),
+                                            loose: frozenPallets.loosePackages ? t('sales_line_frozen_loose', { loose: formatDecimalInput(frozenPallets.loosePackages) }) : '',
+                                        })}
+                                    </span>
+                                )}
+                                {!locked && (
+                                    <button type="button" tabIndex={-1} className="mt-1 text-xs font-medium text-blue-800 underline underline-offset-2" onClick={() => setNewArticleFor(line.key)}
+                                        title={`${t('supply_new_article_open')} (${shortcutLabel('newArticle', isMac)})`} data-tour="sales-line-new-article" data-tour-key={index}>+ {t('supply_new_article_open')}</button>
+                                )}
+                            </>
+                        );
+                    }}
                     lineExtra={(line, index) => {
                         // Stand en bron van de regel onder de regel: in de Tab-volgorde na Btw, zodat Tab vanuit het artikel naar Aantal gaat.
                         const unit = unitOf(index);
@@ -576,6 +599,12 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             )}
             <PackagingLinesInput lines={draft.packagingLines ?? []} articles={packagingArticles} proposal={proposal} locked={locked} errors={e}
                 onChange={(packagingLines) => { if (locked) return; setDraft((current) => ({ ...current, packagingLines })); edited(); }} />
+            {serviceFailed && (
+                <div role="alert" className="flex items-center gap-3 text-sm text-red-700">
+                    <span>{t('service_load_failed')}</span>
+                    <button type="button" onClick={() => setServiceToken((token) => token + 1)} className={secondaryButtonClass}>{t('packaging_reload')}</button>
+                </div>
+            )}
             <ServiceLinesInput lines={draft.serviceLines ?? []} articles={serviceArticles} locked={locked} errors={e}
                 onChange={(serviceLines) => { if (locked) return; setDraft((current) => ({ ...current, serviceLines })); edited(); }} />
             {/* Totaal excl. btw, btw per tarief en totaal incl. btw over goederen en emballage samen. */}

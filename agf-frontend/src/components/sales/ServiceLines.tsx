@@ -93,7 +93,7 @@ export function ServiceLinesInput({ lines, articles, locked, errors, onChange }:
                                             <span className="block text-right font-mono" data-testid={`${prefix}.amount`}>{row.amount === null ? '–' : formatMoney(row.amount, 'EUR', locale)}</span>
                                         </td>
                                         <td className="px-2 py-1.5">
-                                            <button type="button" tabIndex={-1} onClick={() => onChange(lines.filter((candidate) => candidate.key !== line.key))} disabled={locked}
+                                            <button type="button" onClick={() => onChange(lines.filter((candidate) => candidate.key !== line.key))} disabled={locked}
                                                 className={secondaryButtonClass} aria-label={t('service_remove_n', { n: String(index + 1) })}>✕</button>
                                         </td>
                                     </tr>
