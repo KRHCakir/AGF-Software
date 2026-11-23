@@ -139,13 +139,13 @@ export interface CertificateCheck {
     message: string;
 }
 
-const isCheck = (value: unknown): value is CertificateCheck => isObject(value) && isNumber(value.productId) && isString(value.productName) && isString(value.supplierName)
+export const isCertificateCheck = (value: unknown): value is CertificateCheck => isObject(value) && isNumber(value.productId) && isString(value.productName) && isString(value.supplierName)
     && isArrayOf(value.kinds, (k): k is CertificateCheckKind => k === 'NotCovered' || k === 'Expired' || k === 'ExpiresBeforeDelivery') && isString(value.deliveryDate)
     && isArrayOf(value.certificates, (c): c is CertificateCheckGgn => isObject(c) && isNumber(c.certificateId) && isString(c.number) && isNullableString(c.validUntil) && isArrayOf(c.productNames, isString))
     && isString(value.message);
 
 // De vragen uit een 409, of null als het een andere weigering is.
 export function certificateChecksOf(body: unknown): CertificateCheck[] | null {
-    if (!isObject(body) || body.code !== CERTIFICATE_CHECK_CODE || !isArrayOf(body.checks, isCheck) || body.checks.length === 0) return null;
+    if (!isObject(body) || body.code !== CERTIFICATE_CHECK_CODE || !isArrayOf(body.checks, isCertificateCheck) || body.checks.length === 0) return null;
     return body.checks;
 }
