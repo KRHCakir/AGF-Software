@@ -69,6 +69,18 @@ public sealed class SalesLinePricingTests : IDisposable
     }
 
     [Fact]
+    public void The_total_quantity_is_never_summed_over_different_units()
+    {
+        var lines = new[] { new PurchaseLineMath.Line(30m, null, null, null, null), new PurchaseLineMath.Line(20m, null, null, null, null), new PurchaseLineMath.Line(5m, null, null, null, null) };
+        var mixed = PurchaseOrderLineTotalsDto.From(lines, Array.Empty<OrderLineMath.Line>(), 1m, new[] { ("Box", 30m), ("Colli", 20m), ("Box", 5m) });
+        Assert.Null(mixed.Quantity);
+        Assert.Equal(new[] { ("Box", 35m), ("Colli", 20m) }, mixed.QuantitiesByUnit.Select(u => (u.Unit, u.Quantity)));
+
+        var single = PurchaseOrderLineTotalsDto.From(lines, Array.Empty<OrderLineMath.Line>(), 1m, new[] { ("Box", 30m), ("Box", 20m), ("Box", 5m) });
+        Assert.Equal(55m, single.Quantity);
+    }
+
+    [Fact]
     public async Task From_order_to_invoice_the_amounts_and_vat_per_rate_are_the_same_to_the_cent()
     {
         await _s.ArrangeAsync();
