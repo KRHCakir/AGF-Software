@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { WarehouseRow, formatQuantity } from '../../lib/availability';
 import { freeState, sellHref, sellQuantity } from '../../lib/salesSupply';
@@ -11,6 +11,10 @@ import { UnitBadge } from './QuantityCell';
 import SalesBreakdown from './SalesBreakdown';
 import WarningBadges from './WarningBadges';
 import { listRowClass } from '../../lib/listRows';
+import { sortRows } from '../../lib/listSort';
+import { SALES_VIEW_KEYS, WAREHOUSE_COLUMNS } from '../../lib/availabilitySort';
+import { SortHeader, SortSelect } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
 const td = 'px-3 py-2 align-top';
@@ -35,13 +39,16 @@ function useNarrow(): boolean {
 // Verkoopweergave (standaard): per variant + eenheid Voorraad, Verwacht, Verkocht en Vrij te verkopen. Vrij mag negatief zijn: dan rood met
 // het woord "Tekort" (een waarschuwing, geen blokkade). Per rij "Verkopen" (nieuwe verkooporder met dit artikel en het vrije aantal, minimaal 1)
 // en uitklappen per partij, inkooporder en verkooporder. Op een smal scherm staan de rijen als kaarten onder elkaar; niets wordt afgekapt.
-export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
+export default function SalesSupplyTable({ rows: unsorted, onOpen, focus = null }: {
     rows: WarehouseRow[];
     onOpen: (row: WarehouseRow) => void;
     focus?: AvailabilityFocus | null;
 }) {
     const { t, locale } = useTranslation();
     const narrow = useNarrow();
+    // Sorteren op de kolomkoppen (feedback 22 november); op een smal scherm de keuzelijst. Standaard de volgorde van de server.
+    const { sort, toggle: toggleSort, setSort } = useListSort('availability-sales', SALES_VIEW_KEYS);
+    const rows = useMemo(() => sortRows(unsorted, WAREHOUSE_COLUMNS, sort), [unsorted, sort]);
     const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
     const toggle = (key: string) => setOpen((current) => {
         const next = new Set(current);
@@ -113,14 +120,14 @@ export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
                     <caption className="sr-only">{t('availability_warehouse_title')}</caption>
                     <thead className="bg-gray-50">
                         <tr>
-                            <th scope="col" className={th}>{t('availability_col_product')}</th>
-                            <th scope="col" className={th}>{t('availability_col_unit')}</th>
+                            <SortHeader className={th} label={t('availability_col_product')} sortKey="product" sort={sort} onSort={toggleSort} />
+                            <SortHeader className={th} label={t('availability_col_unit')} sortKey="unit" sort={sort} onSort={toggleSort} />
                             {/* Fixes 5b: Besteld, Voorraad, Verkocht, Vrij te verkopen. */}
-                            <th scope="col" className={`${th} ${marked('expected')} ${marked('quarantine')}`}>{t('sales_col_expected')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_expected_hint')}</span></th>
-                            <th scope="col" className={th}>{t('sales_col_stock')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_stock_hint')}</span></th>
-                            <th scope="col" className={th}>{t('sales_col_sold')}<span className="block font-normal normal-case text-gray-500">{t('sales_col_sold_hint')}</span></th>
-                            <th scope="col" className={`${th} bg-emerald-50 text-emerald-900`}>{t('sales_col_free')}<span className="block font-normal normal-case text-emerald-800">{t('sales_col_free_hint')}</span></th>
-                            <th scope="col" className={th}>{t('availability_col_signals')}</th>
+                            <SortHeader className={`${th} ${marked('expected')} ${marked('quarantine')}`} label={t('sales_col_expected')} sortKey="expected" sort={sort} onSort={toggleSort}><span className="block font-normal normal-case text-gray-500">{t('sales_col_expected_hint')}</span></SortHeader>
+                            <SortHeader className={th} label={t('sales_col_stock')} sortKey="stock" sort={sort} onSort={toggleSort}><span className="block font-normal normal-case text-gray-500">{t('sales_col_stock_hint')}</span></SortHeader>
+                            <SortHeader className={th} label={t('sales_col_sold')} sortKey="sold" sort={sort} onSort={toggleSort}><span className="block font-normal normal-case text-gray-500">{t('sales_col_sold_hint')}</span></SortHeader>
+                            <SortHeader className={`${th} bg-emerald-50 text-emerald-900`} label={t('sales_col_free')} sortKey="free" sort={sort} onSort={toggleSort}><span className="block font-normal normal-case text-emerald-800">{t('sales_col_free_hint')}</span></SortHeader>
+                            <SortHeader className={th} label={t('availability_col_signals')} sortKey="signals" sort={sort} onSort={toggleSort} />
                             <th scope="col" className={th}><span className="sr-only">{t('sales_col_actions')}</span></th>
                         </tr>
                     </thead>
@@ -151,6 +158,15 @@ export default function SalesSupplyTable({ rows, onOpen, focus = null }: {
                 </table>
             </div>}
 
+            {narrow && <SortSelect id="availability-sales-sort" className="mb-2" sort={sort} onChange={setSort} options={[
+                { key: 'product', label: t('availability_col_product'), kind: 'text' },
+                { key: 'unit', label: t('availability_col_unit'), kind: 'text' },
+                { key: 'expected', label: t('sales_col_expected'), kind: 'number' },
+                { key: 'stock', label: t('sales_col_stock'), kind: 'number' },
+                { key: 'sold', label: t('sales_col_sold'), kind: 'number' },
+                { key: 'free', label: t('sales_col_free'), kind: 'number' },
+                { key: 'signals', label: t('availability_col_signals'), kind: 'number' },
+            ]} />}
             {narrow && <ul className="space-y-2" aria-label={t('availability_warehouse_title')}>
                 {rows.map((row) => {
                     const balance = balanceOf(row);

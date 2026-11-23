@@ -6,6 +6,11 @@ import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import { ExpectedCell, QuantityCell, UnitBadge } from './QuantityCell';
 import WarningBadges from './WarningBadges';
 import { ROW_PLAIN, ROW_STRIPE } from '../../lib/listRows';
+import { useMemo } from 'react';
+import { sortRows } from '../../lib/listSort';
+import { DIRECT_TRADE_COLUMNS, DIRECT_TRADE_KEYS } from '../../lib/availabilitySort';
+import { SortHeader } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-violet-900';
 const td = 'px-3 py-2 align-top';
@@ -13,24 +18,28 @@ const td = 'px-3 py-2 align-top';
 const focusClass = 'bg-amber-50 ring-2 ring-inset ring-amber-400';
 
 // Klantgebonden aanvoer. Bewust geen kolom "beschikbaar": dit is nooit algemeen magazijnaanbod.
-export default function DirectTradeSupplyTable({ rows, onOpen, focus = null }: { rows: DirectTradeRow[]; onOpen: (row: DirectTradeRow) => void; focus?: AvailabilityFocus | null }) {
+export default function DirectTradeSupplyTable({ rows: unsorted, onOpen, focus = null }: { rows: DirectTradeRow[]; onOpen: (row: DirectTradeRow) => void; focus?: AvailabilityFocus | null }) {
     const { t } = useTranslation();
     const marked = (column: AvailabilityFocus) => (focus === column ? focusClass : '');
     const markLabel = (column: AvailabilityFocus) => focus === column && <span className="block font-normal normal-case text-amber-900">{t('availability_focus_marked')}</span>;
+    // Sorteren op de kolomkoppen (feedback 22 november).
+    const { sort, toggle: onSort } = useListSort('availability-direct-trade', DIRECT_TRADE_KEYS);
+    const rows = useMemo(() => sortRows(unsorted, DIRECT_TRADE_COLUMNS, sort), [unsorted, sort]);
+    const sortable = { sort, onSort };
     return (
         <div className="overflow-x-auto rounded-md border-2 border-violet-300 bg-white">
             <table className="min-w-full divide-y divide-violet-100 text-sm">
                 <caption className="sr-only">{t('availability_direct_title')}</caption>
                 <thead className="bg-violet-50">
                     <tr>
-                        <th scope="col" className={th}>{t('availability_col_customer')}</th>
-                        <th scope="col" className={th}>{t('availability_col_product')}</th>
-                        <th scope="col" className={th}>{t('availability_col_unit')}</th>
-                        <th scope="col" className={th}>{t('availability_col_outside_warehouse')}</th>
-                        <th scope="col" className={th}>{t('availability_col_expected_on_pallets')}</th>
-                        <th scope="col" className={`${th} ${marked('inTransit')}`}>{t('availability_col_in_transit')}{markLabel('inTransit')}</th>
-                        <th scope="col" className={`${th} ${marked('expected')}`}>{t('availability_col_expected_unregistered')}{markLabel('expected')}</th>
-                        <th scope="col" className={th}>{t('availability_col_signals')}</th>
+                        <SortHeader className={th} label={t('availability_col_customer')} sortKey="customer" {...sortable} />
+                        <SortHeader className={th} label={t('availability_col_product')} sortKey="product" {...sortable} />
+                        <SortHeader className={th} label={t('availability_col_unit')} sortKey="unit" {...sortable} />
+                        <SortHeader className={th} label={t('availability_col_outside_warehouse')} sortKey="outside" {...sortable} />
+                        <SortHeader className={th} label={t('availability_col_expected_on_pallets')} sortKey="expectedOnPallets" {...sortable} />
+                        <SortHeader className={`${th} ${marked('inTransit')}`} label={t('availability_col_in_transit')} sortKey="inTransit" {...sortable}>{markLabel('inTransit')}</SortHeader>
+                        <SortHeader className={`${th} ${marked('expected')}`} label={t('availability_col_expected_unregistered')} sortKey="expectedUnregistered" {...sortable}>{markLabel('expected')}</SortHeader>
+                        <SortHeader className={th} label={t('availability_col_signals')} sortKey="signals" {...sortable} />
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-violet-50">

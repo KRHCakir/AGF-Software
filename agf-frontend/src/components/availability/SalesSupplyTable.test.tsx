@@ -30,6 +30,7 @@ let gets: string[];
 describe('SalesSupplyTable', () => {
     beforeEach(() => {
         gets = [];
+        window.localStorage.clear();
         stubFetch({
             onGet: (url) => {
                 gets.push(url);
@@ -80,7 +81,7 @@ describe('SalesSupplyTable', () => {
 
     test('fixes 5b: the columns and the blocks are Besteld, Voorraad, Verkocht, Vrij te verkopen', async () => {
         await mounted.render(<SalesSupplyTable rows={[row(balance(40, 20, 0))]} onOpen={() => {}} />);
-        const head = Array.from(mounted.container.querySelectorAll('thead th')).map((th) => th.firstChild?.textContent ?? '');
+        const head = Array.from(mounted.container.querySelectorAll('thead th')).map((th) => th.querySelector('button > span')?.textContent ?? th.firstChild?.textContent ?? ''); // de kop is een sorteerknop met een pijltje (feedback 22 november)
         assert.deepEqual(head.slice(2, 6), ['sales_col_expected', 'sales_col_stock', 'sales_col_sold', 'sales_col_free']);
         assert.deepEqual(Array.from(mounted.container.querySelectorAll('tbody td[data-col]')).map((td) => td.getAttribute('data-col')), ['expected', 'stock', 'sold', 'free']);
     });
@@ -120,5 +121,27 @@ describe('SalesSupplyTable', () => {
         const sold = Array.from(mounted.container.querySelectorAll('[data-testid="sale-locations"]')).map((list) => list.textContent ?? '');
         assert.ok(sold[0].includes('availability_location_warehouse · Cel 3') && sold[0].includes('sales_location_unassigned'), sold[0]);
         assert.ok(sold[1].includes('sales_location_unassigned_expected'), sold[1]);
+    });
+
+    // Feedback 22 november: sorteren op de kolomkoppen, als getal (een tekort is negatief), per weergave onthouden.
+    test('sorting on Vrij te verkopen orders by the number, shortage first ascending; product sorts by name', async () => {
+        const named = (key: string, name: string, sales: ReturnType<typeof balance>) => {
+            const base = row(sales);
+            return { ...base, key, variant: { ...base.variant, productName: name } } as WarehouseRow;
+        };
+        const rows = [named('a', 'Tomaat', balance(40, 20, 0)), named('b', 'appel', balance(0, 0, 10)), named('c', 'Banaan', balance(5, 0, 0))];
+        await mounted.render(<SalesSupplyTable rows={rows} onOpen={() => {}} />);
+        const order = () => Array.from(mounted.container.querySelectorAll('tr[data-row-key]')).map((tr) => tr.getAttribute('data-row-key'));
+        const header = (key: string) => mounted.container.querySelector<HTMLButtonElement>(`[data-sort-key="${key}"]`)!;
+        assert.deepEqual(order(), ['a', 'b', 'c']);
+        await click(header('free'));
+        assert.deepEqual(order(), ['b', 'c', 'a']);
+        await click(header('free'));
+        assert.deepEqual(order(), ['a', 'c', 'b']);
+        await click(header('product'));
+        assert.deepEqual(order(), ['b', 'c', 'a']);
+        assert.equal(window.localStorage.getItem('agf_sort_availability-sales'), 'product:asc');
+        assert.equal(header('product').closest('th')!.getAttribute('aria-sort'), 'ascending');
+        assert.equal(header('free').closest('th')!.getAttribute('aria-sort'), null);
     });
 });
