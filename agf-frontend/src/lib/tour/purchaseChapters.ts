@@ -4,7 +4,7 @@
 
 import { prerequisite, step } from './compose';
 import { ARTICLE_STEPS, VENDOR_STEPS } from './masterdataChapter';
-import { lookupOrderEdit, lookupOtherArticle, lookupPurchase, lookupReceive, lookupSplit, precheckOrderEdit, precheckPurchase, precheckReceive, precheckSplit } from './prechecks';
+import { lookupOrderEdit, lookupOtherArticle, lookupPurchase, lookupReceive, lookupReceivedLot, lookupSplit, precheckOrderEdit, precheckPurchase, precheckReceive, precheckSplit } from './prechecks';
 import type { TourAction, TourChapter, TourStep } from './types';
 
 const order = (id: string, route: string, actions: readonly TourAction[]) => step('order', id, route, actions);
@@ -193,6 +193,7 @@ export const RECEIVE_CORE: TourStep[] = [
     receive('register', '/receipts?order={{orderId}}', [
         { kind: 'click', target: 'receive-line-button:{{lineId}}' },
         { kind: 'wait', target: 'receive-line-inspect:{{lineId}}' },
+        { kind: 'lookup', run: lookupReceivedLot },
         { kind: 'highlight', target: 'receive-notice' },
     ]),
     receive('inspector', '/receipts?order={{orderId}}', [
