@@ -460,18 +460,23 @@ namespace AgfAdmin.Services
                 .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, l.ProductVariantId, Number = l.Partij.Number,
                     Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault() })
                 .ToListAsync(cancellationToken);
-            // Inkoopprijs van de inkoop-partij: alleen de inkoopregel van hetzelfde product; zonder passende regel blijft de prijs onbekend.
+            // Inkoopprijs van de inkoop-partij: alleen de inkoopregel van hetzelfde product én dezelfde eenheid (de prijs geldt per verpakking van de
+            // regel, review); zonder passende regel blijft de prijs, en daarmee de inkoopwaarde, onbekend. Nooit omrekenen tussen eenheden.
             var purchasePartijIds = lines.Where(l => l.PartijId != null).Select(l => l.PartijId.Value).Distinct().ToList();
             var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.UnitPrice != null)
                 .OrderBy(c => c.Id)
-                .Select(c => new { PartijId = c.PartijId.Value, c.ProductVariantId, c.UnitPrice, c.DiscountPercentage, c.SupplyCommitment.ExchangeRate }).ToListAsync(cancellationToken);
+                .Select(c => new { PartijId = c.PartijId.Value, c.ProductVariantId, c.ExpectedUnit, c.UnitPrice, c.DiscountPercentage, c.SupplyCommitment.ExchangeRate }).ToListAsync(cancellationToken);
             return invoices.ToDictionary(i => invoiceIds[i.Id], i => new SalesSide(invoiceIds[i.Id], 0, i.InvoiceNumber, "Invoiced", i.CustomCustomerName,
                 lines.Where(l => l.InvoiceId == i.Id).OrderBy(l => l.Id).Select(l => (l.Id, l.Description, l.Quantity, l.Unit, (decimal?)(l.NetWeight > 0m ? l.NetWeight : null))).ToList(),
                 lines.Where(l => l.InvoiceId == i.Id && l.PartijId != null)
                     .Select(l =>
                     {
                         var mine = costs.Where(c => c.PartijId == l.PartijId).ToList();
-                        var cost = mine.FirstOrDefault(c => c.ProductVariantId == l.ProductVariantId);
+                        // Een directe factuurregel kent meestal geen artikel: dan de enige geprijsde regel van de partij in die eenheid; meer
+                        // kandidaten (of geen) is twijfel, en dan blijft de waarde onbekend.
+                        var sameUnit = mine.Where(c => c.ExpectedUnit != null && string.Equals(c.ExpectedUnit, l.Unit, StringComparison.OrdinalIgnoreCase)
+                            && (l.ProductVariantId == null || c.ProductVariantId == l.ProductVariantId)).ToList();
+                        var cost = sameUnit.Count == 1 ? sameUnit[0] : null;
                         return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight,
                             null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m);
                     }).ToList()));
