@@ -89,6 +89,13 @@ public sealed class LotColorTests : IDisposable
         if (async) await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
         else Assert.Throws<TraceabilityViolationException>(() => db.SaveChanges());
         db.ChangeTracker.Clear();
+        // Een vervalste oude waarde (OriginalValue gelijk aan de nieuwe kleur) helpt niet: de regel vergelijkt met de database.
+        var forged = await db.Partijen.SingleAsync(p => p.Id == _lot);
+        forged.Color = "Groen";
+        db.Entry(forged).Property(p => p.Color).OriginalValue = "Groen";
+        db.Entry(forged).Property(p => p.Color).IsModified = true;
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        db.ChangeTracker.Clear();
         db.Partijen.Add(new Partij { Kind = PartijRules.KindPurchase, Number = "I-KLEUR", NumberKey = "IKLEUR", CreatedBy = "test", Color = "Geel" });
         await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
     }
