@@ -110,7 +110,9 @@ namespace AgfAdmin.Services
                     Id = v.Id, Name = v.Name, VatNumber = v.VATNumber, PaymentTermsDays = v.PaymentTermsDays, DefaultCurrency = v.DefaultCurrency, SearchCode = v.Relation.SearchCode, IsActive = v.Relation.IsActive,
                     PaymentConditionId = v.PaymentConditionId, PaymentConditionCode = v.PaymentCondition.Code, PaymentConditionBasis = v.PaymentCondition.Basis,
                     HasDefaultBankAccount = v.Relation.BankAccounts.Any(a => a.IsDefault && a.IsActive),
-                    DefaultBankAccountUnconfirmed = v.Relation.BankAccounts.Any(a => a.IsDefault && a.IsActive && a.ConfirmationStatus != BankAccountConfirmation.Confirmed)
+                    DefaultBankAccountUnconfirmed = v.Relation.BankAccounts.Any(a => a.IsDefault && a.IsActive && a.ConfirmationStatus != BankAccountConfirmation.Confirmed),
+                    // Feedback 22 november: de leveringsconditie van de leverancier, als voorstel op een nieuwe inkooporder.
+                    DeliveryTermKind = v.DeliveryTermKind, Incoterm = v.Incoterm, IncotermPlace = v.IncotermPlace, DeliveryTermText = v.DeliveryTermText,
                 })
                 .ToListAsync(cancellationToken);
 

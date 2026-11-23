@@ -76,6 +76,7 @@ namespace AgfAdmin.Services
                 ExpectedAt = request.ExpectedAt,
                 SupplierReference = request.SupplierReference, OrderedOn = request.OrderedOn ?? order.OrderedOn, OrderChannel = request.OrderChannel, Note = request.Note,
                 PartijId = request.PartijId, NewPartij = request.NewPartij, SupplierLotReference = request.SupplierLotReference,
+                DeliveryTerm = request.DeliveryTerm,
                 Currency = request.Currency ?? order.Currency,
                 ExchangeRate = request.Currency == null ? order.ExchangeRate : request.ExchangeRate,
                 ExchangeRateSource = request.Currency == null ? order.ExchangeRateSource : request.ExchangeRateSource,
@@ -182,6 +183,13 @@ namespace AgfAdmin.Services
             var fields = new List<PurchaseOrderChangeField>();
             ApplyCurrency(order, money, fields);
             await ApplyHeaderAsync(order, candidate, partijChange, request.PartijId, newPartij, clearsLegacyOrigin, fields, cancellationToken);
+            // Feedback 22 november: de leveringsconditie (weggelaten = ongewijzigd); oud en nieuw als tekst in de auditregel.
+            if (request.DeliveryTerm != null && DeliveryTermRules.Of(order) != DeliveryTermRules.Of(candidate))
+            {
+                fields.Add(new(PurchaseOrderDocumentRules.FieldDeliveryTerm, null, PurchaseOrderDocumentRules.ActionChanged,
+                    DeliveryTermRules.Describe(DeliveryTermRules.Of(order)), DeliveryTermRules.Describe(DeliveryTermRules.Of(candidate))));
+                DeliveryTermRules.Apply(order, DeliveryTermRules.Of(candidate));
+            }
             await ApplyLinesAsync(order, request, next, stored, kept, fields, cancellationToken);
             if (fields.Count == 0)
             {

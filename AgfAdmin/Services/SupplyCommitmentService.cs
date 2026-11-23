@@ -79,6 +79,13 @@ namespace AgfAdmin.Services
             {
                 return (ServiceResult<SupplyCommitmentDto>.NotFound(notFound), false);
             }
+            // Geen leveringsconditie meegestuurd: die van de leverancier (de waarde van nu ligt vast bij de order; de leverancier verandert niet).
+            if (request.DeliveryTerm == null)
+            {
+                var vendorTerm = await _db.Vendors.AsNoTracking().Where(v => v.Id == candidate.VendorId)
+                    .Select(v => new DeliveryTermRules.DeliveryTerm(v.DeliveryTermKind, v.Incoterm, v.IncotermPlace, v.DeliveryTermText)).SingleAsync(cancellationToken);
+                DeliveryTermRules.Apply(candidate, vendorTerm);
+            }
 
             // Valuta-ronde: de ECB-koers van de besteldatum vastleggen (na de replaycontrole: een herhaling houdt de koers van toen).
             var rateProblem = await FixRateAsync(candidate, cancellationToken);
@@ -343,12 +350,14 @@ namespace AgfAdmin.Services
             }
 
             var money = DocumentCurrency.FromRequest(request.Currency, request.ExchangeRate, request.ExchangeRateSource, (key, message) => AddError(errors, key, message));
+            // Leveringsconditie (feedback 22 november): meegestuurd = zoals gevraagd; weggelaten = die van de leverancier (bij aanmaken).
+            var deliveryTerm = request.DeliveryTerm == null ? null : DeliveryTermRules.Normalize(DeliveryTermRules.Of(request.DeliveryTerm), "deliveryTerm", errors);
             if (errors.Count > 0)
             {
                 return null;
             }
 
-            return new SupplyCommitment
+            var commitment = new SupplyCommitment
             {
                 Currency = money.Currency,
                 ExchangeRate = money.ExchangeRate,
@@ -375,6 +384,8 @@ namespace AgfAdmin.Services
                 UpdatedAt = now,
                 Lines = lines
             };
+            if (deliveryTerm != null) DeliveryTermRules.Apply(commitment, deliveryTerm);
+            return commitment;
         }
 
         private static SupplyCommitmentLine BuildLine(CreateSupplyCommitmentLineDto line, string key, Dictionary<string, List<string>> errors)
@@ -526,6 +537,8 @@ namespace AgfAdmin.Services
 
         private async Task<ServiceResult<SupplyCommitmentDto>> ResultForRetryAsync(SupplyCommitment existing, CreateSupplyCommitmentDto request, SupplyCommitment candidate, CancellationToken cancellationToken) =>
             HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null) && HasSamePartij(existing, candidate, request)
+            // Leveringsconditie: alleen als de aanvraag er een meestuurde (anders nam de order die van de leverancier over).
+            && (request.DeliveryTerm == null || DeliveryTermRules.Of(existing) == DeliveryTermRules.Of(candidate))
                 ? ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(existing, cancellationToken))
                 : ServiceResult<SupplyCommitmentDto>.Conflict(
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");
