@@ -4,6 +4,7 @@
 // los te starten, ook op een lege database. Na het aanmaken lezen de stappen opnieuw (lookup*), met dezelfde zoekregels als de schermen.
 
 import { formatDateInput, todayInAmsterdam } from '../calendarDate';
+import { formatDecimalInput } from '../decimal';
 import { articleVariants, isCompleteVariant } from '../receiptBlindEntry';
 import { normalizeTradeClass } from '../tradeClass';
 import { searchCustomers } from '../customerSearch';
@@ -152,8 +153,12 @@ async function openTourLine(signal: AbortSignal, minimum: number, editable = fal
     const detail = await getPurchaseOrder(order.id, signal);
     // Het openstaande aantal (besteld min al ontvangen) telt, niet het bestelde aantal; de index is die van de regel in de order.
     const openOf = (candidate: (typeof detail.lines)[number]) => candidate.expectedQuantity - (candidate.receivedQuantity ?? 0);
-    const lineIndex = detail.lines.findIndex((candidate) => candidate.unit !== null && Number.isInteger(candidate.expectedQuantity) && Number.isInteger(openOf(candidate)) && openOf(candidate) >= minimum);
-    return lineIndex < 0 ? null : { order, line: detail.lines[lineIndex], lineIndex, openQuantity: openOf(detail.lines[lineIndex]) };
+    // Alleen een regel met bekend gewicht: dan vraagt de ontvangst geen netto kg (review: oudere demo-orders zonder kg zouden vastlopen).
+    const lineIndex = detail.lines.findIndex((candidate) => candidate.unit !== null && candidate.expectedNetWeightKg != null && Number.isInteger(candidate.expectedQuantity)
+        && Number.isInteger(openOf(candidate)) && openOf(candidate) >= minimum);
+    // Aanpassen (splitsen): het artikelveld van de eerste regel; een order waarvan alleen een latere regel past, slaat het hoofdstuk over.
+    if (lineIndex < 0 || (editable && lineIndex !== 0)) return null;
+    return { order, line: detail.lines[lineIndex], lineIndex, openQuantity: openOf(detail.lines[lineIndex]) };
 }
 
 const missingOpenOrder: TourMissing = { key: 'tour_missing_open_order' };
@@ -221,7 +226,18 @@ export async function lookupOtherArticle(vars: Readonly<Record<string, string>>,
     if (receive.missing.length > 0 || !receive.vars) return receive;
     const found = await otherOriginOf(Number(receive.vars.variantId), signal);
     if (found === null) return { missing: [missingOpenOrder] };
-    return { missing: [], vars: { otherCode: found.otherCode, otherOrigin: found.otherName, orderedBrand: found.ordered.brand ?? '', otherShortcut: `${found.ordered.shortcutCode ?? vars.tourRef}-${found.otherCode}` } };
+    // Alle kenmerken van het bestelde artikel, behalve het land (review: anders vindt de splitsing het nieuwe artikel niet terug).
+    const ordered = found.ordered;
+    const number = (value: number | null | undefined) => (value === null || value === undefined ? '' : formatDecimalInput(value));
+    return {
+        missing: [],
+        vars: {
+            otherCode: found.otherCode, otherOrigin: found.otherName, orderedBrand: ordered.brand ?? '', otherShortcut: `${ordered.shortcutCode ?? vars.tourRef}-${found.otherCode}`,
+            orderedSize: ordered.sizeCategory ?? '', orderedClass: normalizeTradeClass(ordered.tradeClass) ?? '', orderedPackaging: ordered.packaging ?? '',
+            orderedUnit: ordered.packagingUnit ?? 'colli', orderedMethod: ordered.weightMethod ?? 'Calculated', orderedNetKg: number(ordered.defaultNetKgPerPackage),
+            orderedPerPallet: number(ordered.defaultPackagesPerPallet),
+        },
+    };
 }
 
 export async function lookupSplit(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {

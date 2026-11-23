@@ -245,6 +245,14 @@ const OTHER_ARTICLE_STEPS: TourStep[] = ARTICLE_STEPS.map((original, index) => (
             if (action.kind === 'type' && action.target === 'article-shortcut-code') return { ...action, text: '{{otherShortcut}}' };
             if (action.kind === 'type' && action.target === 'article-brand') return { ...action, text: '{{orderedBrand}}' };
             if (action.kind === 'pick' && action.target === 'article-origin') return { ...action, text: '{{otherCode}}', expect: '{{otherOrigin}}' };
+            // De overige kenmerken zoals het bestelde artikel (maat, klasse, verpakking, eenheid, gewicht en colli per pallet).
+            if (action.kind === 'type' && action.target === 'article-size-category') return { ...action, text: '{{orderedSize}}' };
+            if (action.kind === 'pick' && action.target === 'article-class') return { ...action, text: '{{orderedClass}}', when: '{{orderedClass}}' };
+            if (action.kind === 'type' && action.target === 'article-packaging') return { ...action, text: '{{orderedPackaging}}' };
+            if (action.kind === 'select' && action.target === 'article-packaging-unit') return { ...action, value: '{{orderedUnit}}' };
+            if (action.kind === 'select' && action.target === 'article-weight-method') return { ...action, value: '{{orderedMethod}}' };
+            if (action.kind === 'type' && action.target === 'article-net-kg') return { ...action, text: '{{orderedNetKg}}', when: '{{orderedNetKg}}' };
+            if (action.kind === 'type' && action.target === 'article-cpp') return { ...action, text: '{{orderedPerPallet}}', when: '{{orderedPerPallet}}' };
             return action;
         }),
     ],
@@ -273,8 +281,9 @@ export const SPLIT_CHAPTER: TourChapter = {
             { kind: 'highlight', target: 'receive-line-received:{{lineId}}' },
         ]),
         split('article', '/purchase-orders/edit?id={{orderId}}', [
-            { kind: 'click', target: 'supply-line-product-{{lineIndex}}-clear' },
-            { kind: 'pick', target: 'supply-line-product-{{lineIndex}}', text: '{{otherSearch}}', expect: '{{otherOrigin}}' },
+            // Het artikelveld heeft de regelplaats in zijn naam: de demo-order van de rondleiding heeft één regel (zie openTourLine).
+            { kind: 'click', target: 'supply-line-product-0-clear' },
+            { kind: 'pick', target: 'supply-line-product-0', text: '{{otherSearch}}', expect: '{{otherOrigin}}' },
             { kind: 'highlight', target: 'supply-line-split:{{lineIndex}}' },
         ]),
         split('ask', '/purchase-orders/edit?id={{orderId}}', [
