@@ -4,7 +4,7 @@
 // los te starten, ook op een lege database. Na het aanmaken lezen de stappen opnieuw (lookup*), met dezelfde zoekregels als de schermen.
 
 import { formatDateInput, todayInAmsterdam } from '../calendarDate';
-import { formatDecimalInput, parseLocaleDecimal } from '../decimal';
+import { formatDecimalInput } from '../decimal';
 import { articleVariants, isCompleteVariant } from '../receiptBlindEntry';
 import { normalizeTradeClass } from '../tradeClass';
 import { searchCustomers } from '../customerSearch';
@@ -28,12 +28,10 @@ import type { TourMissing, TourPrecheck } from './types';
 export const TOUR_PRODUCT = 'Avocado';
 export const TOUR_VARIANT = 'Hass';
 export const TOUR_ORIGIN = 'PE';
-// De afwijking bij ontvangst: een ander land van herkomst dan besteld.
+// Iets anders ontvangen: een ander land van herkomst dan besteld.
 export const TOUR_OTHER_ORIGIN = 'ZA';
 export const TOUR_ORDER_QUANTITY = 20;
 export const TOUR_SALES_QUANTITY = 4;
-// Afwijkend gewicht: 5% meer kg per colli dan besteld (de grens van "Klopt dit?" is 2%).
-export const TOUR_WEIGHT_FACTOR = 1.05;
 
 const isTour = (value: string | null | undefined) => (value ?? '').startsWith(TOUR_REF_PREFIX);
 const newestFirst = <T extends { id: number }>(items: readonly T[]) => [...items].sort((a, b) => b.id - a.id);
@@ -112,7 +110,6 @@ export function shortDate(date: string): string {
 
 // Inkooporder aanmaken: leverancier en artikel van de rondleiding, en of de partijnummering een voorstel geeft.
 // Een eerder ingevuld getal van de rondleiding teruglezen, met de gedeelde parser (nooit een eigen komma-puntvertaling).
-const readKg = (text: string): number => { const parsed = parseLocaleDecimal(text); return parsed.ok ? parsed.value : NaN; };
 
 export async function lookupPurchase(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
     const [data, numbering] = await Promise.all([masterData(signal), getNextPartijNumber(undefined, signal)]);
@@ -140,23 +137,6 @@ export async function precheckPurchase(signal: AbortSignal): Promise<TourPrechec
     return { missing: [], vars: flags };
 }
 
-// Blinde invoer: wat de rondleiding bij ontvangst invult voor deze variant (alleen de kenmerken die het scherm vraagt; een lege waarde
-// slaat de actie over via `when`) en het juiste kg-veld met het kg per verpakking.
-export function receiptVars(variant: VariantOption, quantity: number, kgPerPackage: number): Record<string, string> {
-    const calculated = variant.weightMethod === 'Calculated';
-    return {
-        originText: variant.originCountryCode ?? variant.origin ?? '',
-        originName: variant.origin ?? '',
-        size: variant.sizeCategory ?? '',
-        packaging: variant.packaging ?? '',
-        tradeClass: normalizeTradeClass(variant.tradeClass) ?? variant.tradeClass ?? '',
-        brand: variant.brand ?? '',
-        // Berekend: kg per verpakking (etiket); gewogen: het totaal. Het andere veld blijft leeg en de actie wordt overgeslagen.
-        kgPerPackage: calculated ? formatDecimalInput(kgPerPackage) : '',
-        netKg: calculated ? '' : formatDecimalInput(Math.round(quantity * kgPerPackage * 1000) / 1000),
-    };
-}
-
 const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase();
 
 // De variant die bij een afwijkende herkomst hoort: zelfde artikel, maat, verpakking, klasse en merk, alleen een ander land.
@@ -165,47 +145,47 @@ export function findOriginVariant(ordered: VariantOption, variants: readonly Var
         && same(variant.packaging, ordered.packaging) && same(normalizeTradeClass(variant.tradeClass), normalizeTradeClass(ordered.tradeClass)) && same(variant.brand, ordered.brand)) ?? null;
 }
 
-async function openTourLine(signal: AbortSignal, minimum: number) {
-    const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'open', vendorId: null, page: 1, pageSize: 50 }, signal);
+// editable: alleen een order die nog Open is (documentstatus), voor hoofdstukken die de order daarna aanpassen.
+async function openTourLine(signal: AbortSignal, minimum: number, editable = false) {
+    const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'open', vendorId: null, page: 1, pageSize: 50, ...(editable ? { document: 'Open' } : {}) }, signal);
     const order = findOpenTourOrder(list.items);
     if (!order) return null;
     const detail = await getPurchaseOrder(order.id, signal);
-    const line = detail.lines.find((candidate) => candidate.unit !== null && Number.isInteger(candidate.expectedQuantity) && candidate.expectedQuantity >= minimum);
-    return line ? { order, line } : null;
+    // Het openstaande aantal (besteld min al ontvangen) telt, niet het bestelde aantal; de index is die van de regel in de order.
+    const openOf = (candidate: (typeof detail.lines)[number]) => candidate.expectedQuantity - (candidate.receivedQuantity ?? 0);
+    // Alleen een regel met bekend gewicht: dan vraagt de ontvangst geen netto kg (review: oudere demo-orders zonder kg zouden vastlopen).
+    const lineIndex = detail.lines.findIndex((candidate) => candidate.unit !== null && candidate.expectedNetWeightKg != null && Number.isInteger(candidate.expectedQuantity)
+        && Number.isInteger(openOf(candidate)) && openOf(candidate) >= minimum);
+    // Aanpassen (splitsen): het artikelveld van de eerste regel; een order waarvan alleen een latere regel past, slaat het hoofdstuk over.
+    if (lineIndex < 0 || (editable && lineIndex !== 0)) return null;
+    return { order, line: detail.lines[lineIndex], lineIndex, openQuantity: openOf(detail.lines[lineIndex]) };
 }
-
-// Partij van de ontvangst: heeft de orderregel een partij, dan neemt de ontvangst die over (niets te typen) en heten de regels in de
-// keuring zo; anders typt de rondleiding haar eigen kenmerk (de runner vult lot dan met tourRef).
-export function lotVars(line: { partijNumber?: string | null }): Record<string, string> {
-    return line.partijNumber ? { lot: line.partijNumber, typeLot: '', partijNumber: line.partijNumber } : { typeLot: 'yes', partijNumber: '' };
-}
-
-const kgPerPackageOf = (line: { expectedNetWeightKg: number | null; expectedQuantity: number }, variant: VariantOption) =>
-    line.expectedNetWeightKg !== null && line.expectedQuantity > 0 ? line.expectedNetWeightKg / line.expectedQuantity : variant.defaultNetKgPerPackage ?? null;
 
 const missingOpenOrder: TourMissing = { key: 'tour_missing_open_order' };
 
-// Ontvangen: de open demo-inkooporder (die het hoofdstuk zo nodig net zelf heeft aangemaakt) en wat de rondleiding blind invult.
-export async function lookupReceive(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
-    const [open, products] = await Promise.all([openTourLine(signal, 2), getProductsWithVariants(signal)]);
+// Ontvangen (feedback 22 november: één scherm, één klik per regel): de open demo-inkooporder (die het hoofdstuk zo nodig net zelf heeft
+// aangemaakt), de regel en het aantal; het lot is dat van de ontvangst: de partij van de regel, anders het lot van de regel, van de
+// leverancier of het ordernummer (zoals ReceiptService).
+export const lookupReceive = (vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> => receiveLookup(signal, false);
+
+async function receiveLookup(signal: AbortSignal, editable: boolean): Promise<TourPrecheck> {
+    const open = await openTourLine(signal, 2, editable);
     if (!open) return { missing: [missingOpenOrder] };
-    const { order, line } = open;
-    const variant = articleVariants(products, line.productVariantId).find((candidate) => candidate.id === line.productVariantId);
-    const kg = variant ? kgPerPackageOf(line, variant) : null;
-    if (!variant || kg === null) return { missing: [missingOpenOrder] };
-    // Bij ontvangst zijn maat en klasse verplicht: een ouder artikel zonder die gegevens eerst aanvullen (Artikelen, Opschonen).
-    if (!isCompleteVariant(variant)) return { missing: [{ key: 'tour_missing_complete_article', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
+    const { order, line, lineIndex, openQuantity } = open;
+    const detail = await getPurchaseOrder(order.id, signal);
+    const lot = line.partijNumber ?? line.lotNumber ?? detail.supplierLotReference ?? order.orderNumber;
     return {
         missing: [],
         vars: {
             orderId: String(order.id),
             orderNumber: order.orderNumber,
             lineId: String(line.id),
+            lineIndex: String(lineIndex),
             variantId: String(line.productVariantId),
-            quantity: String(line.expectedQuantity),
-            rejectQuantity: String(Math.max(1, Math.floor(line.expectedQuantity / 4))),
-            ...receiptVars(variant, line.expectedQuantity, kg),
-            ...lotVars(line),
+            quantity: String(openQuantity),
+            rejectQuantity: String(Math.max(1, Math.floor(openQuantity / 4))),
+            lot,
+            partijNumber: line.partijNumber ?? '',
         },
     };
 }
@@ -219,33 +199,65 @@ async function precheckOpenOrder(signal: AbortSignal, needs: { customer?: boolea
 
 export const precheckReceive = (signal: AbortSignal) => precheckOpenOrder(signal, {});
 
-// Afwijking bij ontvangst: de helft van de open demo-order komt binnen uit een ander land en met 5% meer kg per colli. Bestaat die
-// variant nog niet, dan maakt de ontvangst hem aan ("Artikel aanmaken en doorgaan"); daarna vraagt het systeem "Klopt dit?".
-export async function lookupDeviation(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
-    const [receive, products, countries] = await Promise.all([lookupReceive(vars, signal), getProductsWithVariants(signal), getCountries(signal)]);
-    if (receive.missing.length > 0 || !receive.vars) return receive;
-    const variantId = Number(receive.vars.variantId);
+// Iets anders ontvangen (feedback 22 november): de helft van de open demo-order komt binnen, daarna blijkt de rest uit een ander land te
+// komen. De gebruiker past de orderregel aan; omdat er al iets ontvangen is, splitst de regel. Het artikel uit het andere land maakt het
+// hoofdstuk zo nodig eerst aan (zelfde artikel, maat, verpakking, klasse en merk; alleen het land verschilt).
+async function otherOriginOf(variantId: number, signal: AbortSignal) {
+    const [products, countries] = await Promise.all([getProductsWithVariants(signal), getCountries(signal)]);
     const variants = articleVariants(products, variantId);
-    const ordered = variants.find((candidate) => candidate.id === variantId)!;
+    const ordered = variants.find((candidate) => candidate.id === variantId) ?? null;
+    if (ordered === null) return null;
     const otherCode = same(ordered.originCountryCode, TOUR_OTHER_ORIGIN) ? TOUR_ORIGIN : TOUR_OTHER_ORIGIN;
     const otherName = countries.countries.find((country) => country.code === otherCode)?.nameNl ?? otherCode;
-    const existing = findOriginVariant(ordered, variants, otherCode);
-    const quantity = Math.max(1, Math.floor(Number(receive.vars.quantity) / 2));
-    const expectedKg = (ordered.defaultNetKgPerPackage ?? 0) > 0 ? ordered.defaultNetKgPerPackage! : readKg(receive.vars.kgPerPackage);
-    const heavier = Math.round(expectedKg * TOUR_WEIGHT_FACTOR * 10) / 10;
+    return { ordered, otherCode, otherName, other: findOriginVariant(ordered, variants, otherCode) };
+}
+
+export async function precheckSplit(signal: AbortSignal): Promise<TourPrecheck> {
+    const [data, open] = await Promise.all([masterData(signal), openTourLine(signal, 2, true)]);
+    // Het artikel van de open order, anders het rondleidingsartikel waarmee het hoofdstuk de order aanmaakt.
+    const variantId = open?.line.productVariantId ?? data.article?.variantId ?? null;
+    const other = variantId === null ? null : await otherOriginOf(variantId, signal);
+    return { missing: [], vars: { ...masterFlags(data, {}), needOrder: flag(open === null), needOtherArticle: flag(other?.other == null) } };
+}
+
+// Voor het aanmaken van het artikel uit het andere land: de kenmerken van het bestelde artikel (merk, snelcode) en het andere land.
+export async function lookupOtherArticle(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const receive = await receiveLookup(signal, true);
+    if (receive.missing.length > 0 || !receive.vars) return receive;
+    const found = await otherOriginOf(Number(receive.vars.variantId), signal);
+    if (found === null) return { missing: [missingOpenOrder] };
+    // Alle kenmerken van het bestelde artikel, behalve het land (review: anders vindt de splitsing het nieuwe artikel niet terug).
+    const ordered = found.ordered;
+    const number = (value: number | null | undefined) => (value === null || value === undefined ? '' : formatDecimalInput(value));
     return {
         missing: [],
         vars: {
-            ...receive.vars,
-            quantity: String(quantity),
-            expectedOrigin: ordered.origin ?? '',
-            ...receiptVars({ ...ordered, originCountryCode: otherCode, origin: otherName }, quantity, heavier),
-            createVariant: flag(existing === null),
+            otherCode: found.otherCode, otherOrigin: found.otherName, orderedBrand: ordered.brand ?? '', otherShortcut: `${ordered.shortcutCode ?? vars.tourRef}-${found.otherCode}`,
+            orderedSize: ordered.sizeCategory ?? '', orderedClass: normalizeTradeClass(ordered.tradeClass) ?? '', orderedPackaging: ordered.packaging ?? '',
+            orderedUnit: ordered.packagingUnit ?? 'colli', orderedMethod: ordered.weightMethod ?? 'Calculated', orderedNetKg: number(ordered.defaultNetKgPerPackage),
+            orderedPerPallet: number(ordered.defaultPackagesPerPallet),
         },
     };
 }
 
-export const precheckDeviation = (signal: AbortSignal) => precheckOpenOrder(signal, {});
+export async function lookupSplit(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const receive = await receiveLookup(signal, true);
+    if (receive.missing.length > 0 || !receive.vars) return receive;
+    const found = await otherOriginOf(Number(receive.vars.variantId), signal);
+    if (found?.other == null) return { missing: [{ key: 'tour_missing_deviation_variant', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
+    const half = Math.max(1, Math.floor(Number(receive.vars.quantity) / 2));
+    return {
+        missing: [],
+        vars: {
+            ...receive.vars,
+            half: String(half),
+            rest: String(Number(receive.vars.quantity) - half),
+            otherVariantId: String(found.other.id),
+            otherSearch: found.other.shortcutCode ?? `${TOUR_PRODUCT} ${TOUR_VARIANT} ${found.otherName}`,
+            otherOrigin: found.otherName,
+        },
+    };
+}
 
 // Order aanpassen en definitief maken (stap 4a): de nieuwste demo-inkooporder (DEMO-TOUR-…) die nog Open is, voor het eigen magazijn en
 // niet geannuleerd; zonder zo'n order maakt het hoofdstuk er eerst een aan (stamgegevens en Inkooporder aanmaken).
@@ -265,15 +277,6 @@ export async function lookupOrderEdit(_vars: Readonly<Record<string, string>>, s
     const detail = await getPurchaseOrder(order.id, signal);
     if (detail.lines.length === 0) return { missing: [missingOpenOrder] };
     return { missing: [], vars: { orderId: String(order.id), orderNumber: order.orderNumber, orderRef: order.supplierReference ?? order.orderNumber, lineId: String(detail.lines[0].id) } };
-}
-
-// Na de afwijkende ontvangst: de variant waar de voorraad nu op staat (de exacte variant, niet de bestelde).
-export async function lookupDeviationStock(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
-    const products = await getProductsWithVariants(signal);
-    const variants = articleVariants(products, Number(vars.variantId));
-    const ordered = variants.find((candidate) => candidate.id === Number(vars.variantId));
-    const actual = ordered ? findOriginVariant(ordered, variants, vars.originText) : null;
-    return actual ? { missing: [], vars: { actualVariantId: String(actual.id) } } : { missing: [{ key: 'tour_missing_deviation_variant', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
 }
 
 // Reserveren kan alleen op goedgekeurde magazijnvoorraad in dezelfde eenheid, na bestaande reserveringen. Met de verkoopstand ook na de

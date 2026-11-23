@@ -168,7 +168,7 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         <span className="mt-1 block text-xs text-gray-700" data-testid={`${prefix}.article-fixed`}>{t('po_edit_article_fixed')} {t('po_edit_not_removable')}</span>
                                     )}
                                     {limit.splitReceived != null && (
-                                        <span className="mt-1 block rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-900" data-testid={`${prefix}.split`}>
+                                        <span className="mt-1 block rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-900" data-testid={`${prefix}.split`} data-tour={`${tourPrefix}-split`} data-tour-key={index}>
                                             {t('po_split_hint', { received: formatQuantity(limit.splitReceived, locale) })}
                                         </span>
                                     )}

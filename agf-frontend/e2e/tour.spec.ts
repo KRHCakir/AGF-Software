@@ -103,7 +103,8 @@ test('hoofdstuk Kennismaken: langs de vier menugroepen, geen enkele schrijfactie
     page.on('request', (request) => { if (request.url().startsWith(API) && request.method() !== 'GET') writes.push(`${request.method()} ${request.url()}`); });
     const result = await play(page, 'screens');
     expectAllSteps(result);
-    expect(result.total).toBe(10);
+    // Feedback 22 november: Direct trade is geen eigen scherm meer in het menu (negen schermen).
+    expect(result.total).toBe(9);
     expect(writes).toEqual([]);
     await page.close();
 });
@@ -185,7 +186,7 @@ test('hoofdstuk Order aanpassen en definitief maken: aangepast met auditregel, d
     await page.close();
 });
 
-test('hoofdstuk Ontvangst en keuring: blind ontvangen, goedgekeurd met Wie beoordeelt, deel teruggestuurd, creditnota verwacht', async ({ request }) => {
+test('hoofdstuk Ontvangst en keuring: met één klik ontvangen, goedgekeurd met Wie beoordeelt, deel teruggestuurd, creditnota verwacht', async ({ request }) => {
     const page = await context.newPage();
     const result = await play(page, 'receive');
     expectAllSteps(result);
@@ -207,22 +208,28 @@ test('hoofdstuk Ontvangst en keuring: blind ontvangen, goedgekeurd met Wie beoor
     await page.close();
 });
 
-test('hoofdstuk Afwijking bij ontvangst: andere herkomst en zwaarder, "Klopt dit?", afwijking op de order, voorraad op de exacte variant', async ({ request }) => {
+test('hoofdstuk Iets anders ontvangen: de helft ontvangen, de orderregel aangepast, de regel gesplitst en het restant vervallen', async ({ request }) => {
     const page = await context.newPage();
-    const result = await play(page, 'deviation');
+    const result = await play(page, 'split');
     expectAllSteps(result);
     const number = /Order (IO-\d{4}-\d+)/.exec(result.done)?.[1];
-    const list = await json<{ items: { id: number; orderNumber: string; hasDeviation: boolean }[] }>(request, `/purchase-orders?status=all&query=${number}`);
+    const list = await json<{ items: { id: number; orderNumber: string; expectedQuantity: number; lineCount: number; receivedLineCount: number; openQuantity: number }[] }>(
+        request, `/purchase-orders?status=all&query=${number}`);
     const order = list.items.find((item) => item.orderNumber === number)!;
-    expect(order.hasDeviation).toBe(true);
-    const detail = await json<{ deviations: { kinds: string[]; actorReference: string; reason: string }[] }>(request, `/purchase-orders/${order.id}`);
-    expect(detail.deviations.map((deviation) => [deviation.actorReference, deviation.reason])).toEqual([[await signedIn(request), 'SupplierDeliveredDifferently']]);
-    expect(detail.deviations[0].kinds).toEqual(expect.arrayContaining(['Origin', 'Weight']));
-    // Het scherm eindigt op Beschikbaarheid van de variant uit het andere land: een andere variant dan besteld, die nu als regel op de order staat.
-    const lines = (await json<{ lines: { id: number; productVariantId: number }[] }>(request, `/purchase-orders/${order.id}`)).lines.sort((a, b) => a.id - b.id);
-    const shown = await page.locator('[data-tour="availability-free"]').getAttribute('data-tour-key');
-    expect(shown).not.toBe(String(lines[0].productVariantId));
-    expect(lines.map((line) => String(line.productVariantId))).toContain(shown);
+    // Niets telt dubbel: de order verwacht nog evenveel als besteld, 1 van 2 regels is ontvangen, de rest staat open op de nieuwe regel.
+    expect([order.lineCount, order.receivedLineCount]).toEqual([2, 1]);
+    const detail = await json<{ lines: { id: number; productVariantId: number; expectedQuantity: number; receivedQuantity: number; cancelledQuantity: number | null; splitFromLineId: number | null }[]; changes: { kind: string; actorReference: string; fields: { field: string }[] }[] }>(
+        request, `/purchase-orders/${order.id}`);
+    const [old, split] = detail.lines.sort((a, b) => a.id - b.id);
+    // Het ontvangen deel blijft op de oude regel, het open deel staat op de nieuwe regel en is als restant van de oude regel vervallen.
+    expect([old.receivedQuantity, old.cancelledQuantity]).toEqual([old.expectedQuantity, split.expectedQuantity]);
+    expect([split.receivedQuantity, split.splitFromLineId]).toEqual([0, old.id]);
+    expect(order.expectedQuantity).toBe(old.expectedQuantity + split.expectedQuantity);
+    expect(order.openQuantity).toBe(split.expectedQuantity);
+    expect(split.productVariantId).not.toBe(old.productVariantId);
+    const edit = detail.changes[detail.changes.length - 1];
+    expect([edit.kind, edit.actorReference]).toEqual(['Edit', await signedIn(request)]);
+    expect(edit.fields.map((field) => field.field)).toEqual(expect.arrayContaining(['split', 'cancelledQuantity']));
     await expectActorBack(page);
     await page.close();
 });

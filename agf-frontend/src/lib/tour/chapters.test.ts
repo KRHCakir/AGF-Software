@@ -42,7 +42,7 @@ describe('tour chapters', () => {
             const own = chapter.steps.findIndex((step) => step.when === undefined);
             for (const [index, step] of chapter.steps.entries()) {
                 if (step.when === undefined) continue;
-                assert.match(step.when, /^\{\{need(Vendor|Customer|Article|Order|Stock|Sale)\}\}$/, `${chapter.id}/${step.id}`);
+                assert.match(step.when, /^\{\{need(Vendor|Customer|Article|OtherArticle|Order|Stock|Sale)\}\}$/, `${chapter.id}/${step.id}`);
                 assert.ok(own === -1 || index < own, `${chapter.id}/${step.id} after the chapter's own steps`);
             }
         }

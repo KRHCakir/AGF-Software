@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { findOpenTourOrder, findOriginVariant, findTourArticle, findTourCustomer, findTourVendor, lotVars, receiptVars, shortDate } from './prechecks.ts';
+import { findOpenTourOrder, findOriginVariant, findTourArticle, findTourCustomer, findTourVendor, shortDate } from './prechecks.ts';
 import type { PurchaseOrderListItem } from '../../types/purchaseOrder.ts';
 import type { CustomerOption, ProductOption, VendorOption } from '../../types/referenceData.ts';
 
@@ -19,15 +19,6 @@ const tourHass = (id: number, ref: string, extra: Partial<ProductOption['variant
 });
 
 describe('tour prechecks', () => {
-    test('blind entry: the tour fills in every attribute of this variant (empty ones are skipped) and the right kg field', () => {
-        const pe = variant(10, 'Hass', { originCountryCode: 'PE', sizeCategory: '18', packaging: '4 kg doos', tradeClass: 'I', brand: 'Verita', weightMethod: 'Calculated' });
-        assert.deepEqual(receiptVars(pe, 10, 4), {
-            originText: 'PE', originName: 'Peru', size: '18', packaging: '4 kg doos', tradeClass: 'I', brand: 'Verita', kgPerPackage: '4', netKg: '',
-        });
-        assert.equal(receiptVars({ ...pe, brand: null }, 10, 4).brand, '');
-        assert.deepEqual([receiptVars({ ...pe, weightMethod: 'Weighed' }, 10, 4).kgPerPackage, receiptVars({ ...pe, weightMethod: 'Weighed' }, 10, 4).netKg], ['', '40']);
-    });
-
     test('the tour supplier is the newest active DEMO-TOUR supplier whose search code finds only her', () => {
         const vendors = [vendor(1, "Nature's Pride", 'NATURE'), vendor(4, 'DEMO-TOUR-101 Kwekerij', 'DEMO-TOUR-101-LEV'), vendor(7, 'DEMO-TOUR-102 Kwekerij', 'DEMO-TOUR-102-LEV'),
             vendor(9, 'DEMO-TOUR-103 Kwekerij', 'DEMO-TOUR-103-LEV', false)];
@@ -68,10 +59,5 @@ describe('tour prechecks', () => {
         const items = [item(40, 'Ordered', 'DEMO-TOUR-001'), item(45, 'PartiallyReceived', 'DEMO-TOUR-002'), item(44, 'Ordered', 'DEMO-TOUR-003'), item(50, 'Ordered', 'NP-1')];
         assert.equal(findOpenTourOrder(items)?.id, 44);
         assert.equal(findOpenTourOrder([item(50, 'Ordered', null)]), null);
-    });
-
-    test('a receipt on an order with a lot types nothing and uses the lot number; without a lot the tour types its own reference', () => {
-        assert.deepEqual(lotVars({ partijNumber: '2611001' }), { lot: '2611001', typeLot: '', partijNumber: '2611001' });
-        assert.deepEqual(lotVars({ partijNumber: null }), { typeLot: 'yes', partijNumber: '' });
     });
 });
