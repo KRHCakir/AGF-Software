@@ -144,8 +144,9 @@ export function findOriginVariant(ordered: VariantOption, variants: readonly Var
         && same(variant.packaging, ordered.packaging) && same(normalizeTradeClass(variant.tradeClass), normalizeTradeClass(ordered.tradeClass)) && same(variant.brand, ordered.brand)) ?? null;
 }
 
-async function openTourLine(signal: AbortSignal, minimum: number) {
-    const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'open', vendorId: null, page: 1, pageSize: 50 }, signal);
+// editable: alleen een order die nog Open is (documentstatus), voor hoofdstukken die de order daarna aanpassen.
+async function openTourLine(signal: AbortSignal, minimum: number, editable = false) {
+    const list = await listPurchaseOrders({ query: TOUR_REF_PREFIX, status: 'open', vendorId: null, page: 1, pageSize: 50, ...(editable ? { document: 'Open' } : {}) }, signal);
     const order = findOpenTourOrder(list.items);
     if (!order) return null;
     const detail = await getPurchaseOrder(order.id, signal);
@@ -158,8 +159,10 @@ const missingOpenOrder: TourMissing = { key: 'tour_missing_open_order' };
 // Ontvangen (feedback 22 november: één scherm, één klik per regel): de open demo-inkooporder (die het hoofdstuk zo nodig net zelf heeft
 // aangemaakt), de regel en het aantal; het lot is dat van de ontvangst: de partij van de regel, anders het lot van de regel, van de
 // leverancier of het ordernummer (zoals ReceiptService).
-export async function lookupReceive(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
-    const open = await openTourLine(signal, 2);
+export const lookupReceive = (vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> => receiveLookup(signal, false);
+
+async function receiveLookup(signal: AbortSignal, editable: boolean): Promise<TourPrecheck> {
+    const open = await openTourLine(signal, 2, editable);
     if (!open) return { missing: [missingOpenOrder] };
     const { order, line } = open;
     const detail = await getPurchaseOrder(order.id, signal);
@@ -202,7 +205,7 @@ async function otherOriginOf(variantId: number, signal: AbortSignal) {
 }
 
 export async function precheckSplit(signal: AbortSignal): Promise<TourPrecheck> {
-    const [data, open] = await Promise.all([masterData(signal), openTourLine(signal, 2)]);
+    const [data, open] = await Promise.all([masterData(signal), openTourLine(signal, 2, true)]);
     // Het artikel van de open order, anders het rondleidingsartikel waarmee het hoofdstuk de order aanmaakt.
     const variantId = open?.line.productVariantId ?? data.article?.variantId ?? null;
     const other = variantId === null ? null : await otherOriginOf(variantId, signal);
@@ -211,15 +214,15 @@ export async function precheckSplit(signal: AbortSignal): Promise<TourPrecheck> 
 
 // Voor het aanmaken van het artikel uit het andere land: de kenmerken van het bestelde artikel (merk, snelcode) en het andere land.
 export async function lookupOtherArticle(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
-    const receive = await lookupReceive(vars, signal);
+    const receive = await receiveLookup(signal, true);
     if (receive.missing.length > 0 || !receive.vars) return receive;
     const found = await otherOriginOf(Number(receive.vars.variantId), signal);
     if (found === null) return { missing: [missingOpenOrder] };
     return { missing: [], vars: { otherCode: found.otherCode, otherOrigin: found.otherName, orderedBrand: found.ordered.brand ?? '', otherShortcut: `${found.ordered.shortcutCode ?? vars.tourRef}-${found.otherCode}` } };
 }
 
-export async function lookupSplit(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
-    const receive = await lookupReceive(vars, signal);
+export async function lookupSplit(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const receive = await receiveLookup(signal, true);
     if (receive.missing.length > 0 || !receive.vars) return receive;
     const found = await otherOriginOf(Number(receive.vars.variantId), signal);
     if (found?.other == null) return { missing: [{ key: 'tour_missing_deviation_variant', params: { article: `${TOUR_PRODUCT} ${TOUR_VARIANT}` } }] };
