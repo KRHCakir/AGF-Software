@@ -5,7 +5,7 @@ namespace AgfAdmin.Data
 {
     internal static partial class TraceabilityGuard
     {
-        private static async Task CheckLotColorsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        private static Task CheckLotColorsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             var changed = db.ChangeTracker.Entries<Partij>().Where(e => e.State == EntityState.Modified && e.Property(p => p.Color).IsModified).ToList();
             var added = db.ChangeTracker.Entries<Partij>().Where(e => e.State == EntityState.Added && e.Entity.Color != null).ToList();
@@ -15,19 +15,21 @@ namespace AgfAdmin.Data
             }
             if (changed.Count == 0)
             {
-                return;
+                return Task.CompletedTask;
             }
-            var ids = changed.Select(e => e.Entity.Id).ToList();
-            var stored = (await ToListAsync(db.Partijen.AsNoTracking().Where(p => ids.Contains(p.Id)).Select(p => new { p.Id, p.Color }), async, cancellationToken)).ToDictionary(p => p.Id, p => p.Color);
             var events = db.ChangeTracker.Entries<PartijAuditEvent>().Where(e => e.State == EntityState.Added && e.Entity.EventType == Services.PartijRules.EventColorChanged).Select(e => e.Entity).ToList();
             foreach (var entry in changed)
             {
-                if (!stored.TryGetValue(entry.Entity.Id, out var before) || before == entry.Entity.Color) continue;
+                // OriginalValue = de kleur zoals de aanvrager hem laadde; een gelijktijdige wijziging komt zo als
+                // DbUpdateConcurrencyException (conflict) uit SaveChanges, niet als traceability-schending.
+                var before = entry.Property(p => p.Color).OriginalValue;
+                if (before == entry.Entity.Color) continue;
                 if (!events.Any(e => e.PartijId == entry.Entity.Id && e.OldValue == before && e.NewValue == entry.Entity.Color))
                 {
                     throw new TraceabilityViolationException($"The color of lot {entry.Entity.Number} only changes with a history line (old and new color).");
                 }
             }
+            return Task.CompletedTask;
         }
 
         // ---- Regel 43: partij op de verkooporderregel (feedback 22 november, zie SalesOrderService en StockReservationService.ChangeLotAsync) ----
