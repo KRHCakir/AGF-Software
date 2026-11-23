@@ -19,6 +19,10 @@ export default function SalesOrderLineTable({ order }: { order: SalesOrder }) {
     const money = (value: number | null | undefined) => (value == null ? '–' : formatMoney(value, 'EUR', locale));
     const percent = (value: number | null | undefined) => (value == null ? '–' : `${formatPercent(value, locale)}%`);
     const totals = order.totals;
+    // Gemengde eenheden (box en colli): het aantal per eenheid, nooit één opgeteld getal.
+    const byUnit = totals && totals.quantity === null && (totals.quantitiesByUnit ?? []).length > 0
+        ? (totals.quantitiesByUnit ?? []).map((u) => `${formatQuantity(u.quantity, locale)} ${t(unitLabelKey(u.unit as SalesOrder['lines'][number]['unit'])).toLowerCase()}`).join(' · ')
+        : null;
     return (
         <section className="rounded-md border border-gray-300 bg-white p-3" aria-labelledby="sales-lines-table" data-tour="sales-lines-table">
             <h3 id="sales-lines-table" className="mb-2 text-sm font-semibold text-gray-900">{t('sales_lines')}</h3>
@@ -55,7 +59,7 @@ export default function SalesOrderLineTable({ order }: { order: SalesOrder }) {
                         </tr>
                     ))}
                 </tbody>
-                {totals && <PurchaseLineTotalsRow totals={{ ...totals, netKg: totals.netWeightKg, grossKg: totals.grossWeightKg,
+                {totals && <PurchaseLineTotalsRow quantityText={byUnit} totals={{ ...totals, quantity: totals.quantity ?? 0, netKg: totals.netWeightKg, grossKg: totals.grossWeightKg,
                     shownNetKg: totals.netWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.netWeightKg ?? null)),
                     shownGrossKg: totals.grossWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.grossWeightKg ?? null)) }} currency="EUR" />}
             </table>

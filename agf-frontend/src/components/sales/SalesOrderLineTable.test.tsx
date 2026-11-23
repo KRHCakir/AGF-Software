@@ -38,6 +38,12 @@ describe('SalesOrderLineTable', () => {
         assert.equal(mounted.container.querySelector('[data-testid="order-amounts-gross"]')!.textContent, '441.98 EUR', 'packaging included in the order total');
     });
 
+    test('review PR 2: with mixed units the totals row shows the quantity per unit, never one sum', async () => {
+        await mounted.render(<SalesOrderLineTable order={order([line({}), line({ id: 12, quantity: 5, unit: 'box' })], { quantity: null, quantitiesByUnit: [{ unit: 'box', quantity: 5 }, { unit: 'colli', quantity: 30 }],
+            netWeightKg: 300, grossWeightKg: 309, amount: 390.49, pallets: 0.25, linesWithoutNet: 0, linesWithoutGross: 0, linesWithoutPrice: 0, linesWithoutPallets: 0 })} />);
+        assert.equal(mounted.container.querySelector('[data-testid="line-totals-quantity"]')!.textContent, '5 unit_box · 30 unit_colli');
+    });
+
     test('an older line without price, discount or VAT stays readable; an order without goods lines shows no table', async () => {
         await mounted.render(<SalesOrderLineTable order={order([line({ unitPrice: null, discountPercentage: null, vatPercentage: null, lineTotal: null })])} />);
         assert.deepEqual(['price', 'discount', 'vat', 'total'].map((column) => cell(0, column)), ['–', '–', '–', '–']);
