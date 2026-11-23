@@ -371,6 +371,7 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
                                                 )}
                                                 {changingLotId === reservation.id && reservation.status === 'Active' && (
                                                     <ChangeLotForm line={line} reservation={reservation} onCancel={() => setChangingLotId(null)}
+                                                        onReload={() => { setChangingLotId(null); void reload(); }}
                                                         onChanged={async () => { setChangingLotId(null); await afterWrite('reserved', false); }} />
                                                 )}
                                                 {releaseOpen && (

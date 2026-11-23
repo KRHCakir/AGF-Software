@@ -13,10 +13,13 @@ import LotPicker, { type ChosenLot } from './LotPicker';
 // Feedback 22 november: bij het picken de partij van een reservering wijzigen. De server geeft de reservering vrij en reserveert dezelfde
 // hoeveelheid uit de gekozen partij (oudste pallet eerst), in één opslag met auditregel. Eén sleutel per keuze: een herhaling na een
 // netwerkfout doet niets dubbel; een andere partij is een nieuwe opdracht.
-export default function ChangeLotForm({ line, reservation, onChanged, onCancel }: {
+// Een conflict (de reservering is intussen gewijzigd of weg) is definitief voor deze versie: dan de order opnieuw laden en opnieuw kiezen
+// (review), zoals bij Vrijgeven.
+export default function ChangeLotForm({ line, reservation, onChanged, onReload, onCancel }: {
     line: SalesOrderLine;
     reservation: StockReservation;
     onChanged: () => Promise<unknown> | void;
+    onReload: () => void;
     onCancel: () => void;
 }) {
     const { t } = useTranslation();
@@ -24,6 +27,7 @@ export default function ChangeLotForm({ line, reservation, onChanged, onCancel }
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const requestId = useRef<string>(newRequestId());
+    const conflict = error !== null && error.kind === 'http' && (error.status === 409 || error.status === 404);
 
     const choose = (next: ChosenLot | null) => {
         if (next?.partijId !== lot?.partijId) requestId.current = newRequestId();
@@ -51,6 +55,9 @@ export default function ChangeLotForm({ line, reservation, onChanged, onCancel }
             <LotPicker id={`change-lot-${reservation.id}`} productVariantId={line.productVariantId} unit={line.unit} value={lot} onChange={choose} disabled={busy}
                 exclude={reservation.partijId ?? null} label={t('sales_change_lot_to')} dataTour="sales-change-lot-picker" />
             {error && <ErrorNotice error={error} />}
+            {conflict && (
+                <button type="button" className={secondaryButtonClass} onClick={onReload} data-testid="change-lot-reload">{t('sales_reload_and_decide')}</button>
+            )}
             <div className="flex flex-wrap gap-2">
                 <button type="submit" className={primaryButtonClass} disabled={busy || lot === null} data-tour="sales-change-lot-save">{busy ? t('supply_saving') : t('sales_change_lot_save')}</button>
                 <button type="button" className={secondaryButtonClass} disabled={busy} onClick={onCancel}>{t('cancel')}</button>
