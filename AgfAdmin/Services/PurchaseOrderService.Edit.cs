@@ -121,7 +121,7 @@ namespace AgfAdmin.Services
                 var received = facts.Received.GetValueOrDefault(before.Id);
                 // Splitsen: verandert het artikel (product, maat of herkomst) van een deels ontvangen regel, dan blijft het ontvangen deel op
                 // die regel en wordt het open deel een nieuwe regel met het nieuwe artikel. De gebruiker kiest wat er met het restant gebeurt.
-                if (facts.InUse.Contains(before.Id) && received > 0m && next[i].ProductVariantId != before.ProductVariantId)
+                if (facts.InUse.Contains(before.Id) && received > 0m && received < before.ExpectedQuantity && next[i].ProductVariantId != before.ProductVariantId)
                 {
                     var remainder = request.Lines[i].SplitRemainder;
                     if (remainder == null)

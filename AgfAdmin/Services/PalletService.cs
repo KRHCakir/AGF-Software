@@ -39,7 +39,11 @@ namespace AgfAdmin.Services
 
         // ---- Pallet aanmaken ----
 
-        public async Task<ServiceResult<PalletDto>> CreateAsync(CreatePalletDto request, CancellationToken cancellationToken = default)
+        // requireActiveLocation = false voor ontvangst op een bestaande order: de locatie staat al op de order en mag daarna inactief zijn gezet.
+        public Task<ServiceResult<PalletDto>> CreateAsync(CreatePalletDto request, CancellationToken cancellationToken = default) =>
+            CreateAsync(request, requireActiveLocation: true, cancellationToken);
+
+        public async Task<ServiceResult<PalletDto>> CreateAsync(CreatePalletDto request, bool requireActiveLocation, CancellationToken cancellationToken)
         {
             var errors = new Dictionary<string, List<string>>();
             var candidate = BuildPallet(request, errors, out var actor, out var reason);
@@ -49,6 +53,18 @@ namespace AgfAdmin.Services
             }
 
             var ownReference = candidate.Reference != null;
+
+            // Een opgegeven voorraadlocatie moet bestaan en actief zijn (geen foreign-keyfout bij het opslaan).
+            if (candidate.StockLocationId != null)
+            {
+                var locationId = candidate.StockLocationId.Value;
+                var isActive = await _db.StockLocations.AsNoTracking().Where(l => l.Id == locationId).Select(l => (bool?)l.IsActive).SingleOrDefaultAsync(cancellationToken);
+                if (isActive == null || (isActive == false && requireActiveLocation))
+                {
+                    AddError(errors, "stockLocationId", isActive == null ? $"Stock location {locationId} does not exist." : $"Stock location {locationId} is inactive.");
+                    return Validation<PalletDto>(errors);
+                }
+            }
 
             // Idempotentie: eerst op RequestId (werkt ook zonder eigen nummer), anders op de unieke, scanbare referentie.
             var existing = await FindExistingAsync(candidate, ownReference, cancellationToken);
@@ -69,7 +85,8 @@ namespace AgfAdmin.Services
                 candidate.Reference = $"P-tmp-{Guid.NewGuid():N}";
             }
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            // Binnen een transactie van de aanroeper (ontvangst: alle pallets of niets) committen of terugdraaien we niet zelf.
+            await using var transaction = _db.Database.CurrentTransaction == null ? await _db.Database.BeginTransactionAsync(cancellationToken) : null;
             try
             {
                 _db.Pallets.Add(candidate);
@@ -106,12 +123,12 @@ namespace AgfAdmin.Services
                 });
 
                 await _db.SaveChangesAsync(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
+                if (transaction != null) await transaction.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException)
             {
                 // Gelijktijdige retry of race op RequestId/referentie/SSCC: de unieke indexen hebben dit verzoek geweigerd.
-                await transaction.RollbackAsync(cancellationToken);
+                if (transaction != null) await transaction.RollbackAsync(cancellationToken);
                 _db.ChangeTracker.Clear();
                 var concurrent = await FindExistingAsync(candidate, ownReference, cancellationToken);
                 if (concurrent != null)
@@ -1201,6 +1218,7 @@ namespace AgfAdmin.Services
         private IQueryable<Pallet> PalletQuery() =>
             _db.Pallets
                 .AsNoTracking()
+                .Include(p => p.StockLocation)
                 .Include(p => p.ContentLines)
                     .ThenInclude(c => c.SupplyCommitmentLine)
                         .ThenInclude(l => l.SupplyCommitment)
@@ -1235,6 +1253,9 @@ namespace AgfAdmin.Services
             LogisticsStatus = pallet.LogisticsStatus,
             LocationContext = pallet.LocationContext,
             WarehouseLocation = pallet.WarehouseLocation,
+            StockLocationId = pallet.StockLocationId,
+            StockLocationName = pallet.StockLocation?.Name,
+            StockLocationKind = pallet.StockLocation?.Kind ?? StockLocationRules.KindOwnWarehouse,
             CreatedAt = DateTime.SpecifyKind(pallet.CreatedAt, DateTimeKind.Utc),
             Version = pallet.Version,
             ContentLines = pallet.ContentLines.OrderBy(c => c.Id).Select(c => ToDto(c, pallet.Version)).ToList()
