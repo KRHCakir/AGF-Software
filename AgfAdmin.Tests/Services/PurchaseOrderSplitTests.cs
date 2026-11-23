@@ -95,6 +95,14 @@ public class PurchaseOrderSplitTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Cancelled_Rest_Cannot_Give_The_New_Line_More_Than_The_Open_Part()
+    {
+        var (order, _, peruId) = await MangoAsync();
+        var refused = await _h.RunAsync(s => s.UpdateAsync(order.Id, SplitTo(order, peruId, 100m, PurchaseOrderDocumentRules.RemainderCancelled)));
+        Assert.Contains("lines[0].expectedQuantity", refused.Errors.Keys);
+    }
+
+    [Fact]
     public async Task When_The_Rest_Is_Still_Expected_The_Old_Line_Stays_Open_Next_To_The_New_Line()
     {
         var (order, _, peruId) = await MangoAsync();
