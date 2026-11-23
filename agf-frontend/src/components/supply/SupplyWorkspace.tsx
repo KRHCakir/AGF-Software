@@ -1,16 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { toApiError } from '../../services/apiClient';
 import { getCustomers, getProductsWithVariants, getVendors } from '../../services/referenceDataService';
-import { getSupplyCommitment } from '../../services/supplyService';
 import { SupplyRoute } from '../../types/availability';
 import { SupplyCommitment } from '../../types/supply';
 import PlanSupplyForm, { ReferenceData } from './PlanSupplyForm';
-import ReceivePalletForm from './ReceivePalletForm';
+import ReceiveOrder from './ReceiveOrder';
+import ReceiveOrderPicker from './ReceiveOrderPicker';
 import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 import { SignedInAs } from '../shared/CurrentUserContext';
 
@@ -24,16 +24,13 @@ const TASKS: Record<SupplyTask, { titleKey: string; introKey: string; route: Sup
 
 // Eén scherm per taak, op dezelfde formulieren als de vroegere werkplek "Aanvoer": Inkooporder aanmaken (eigen magazijn), Ontvangst
 // (pallets registreren tegen een inkooporder) en Klantgebonden aanvoer (DirectTrade: rechtstreeks naar de klant, nooit voorraad).
-// Ontvangst kan met ?order=<id> een inkooporder alvast kiezen (vanaf de inkooporder of na het aanmaken).
+// Ontvangst met ?order=<id> toont "Dit wordt verwacht" van die order (vanaf de inkooporder of na het aanmaken), anders de open orders.
 export default function SupplyWorkspace({ task, orderId = null }: { task: SupplyTask; orderId?: number | null }) {
     const { t } = useTranslation();
     const router = useRouter();
     const config = TASKS[task];
     const [reference, setReference] = useState<LoadState<ReferenceData>>({ status: 'loading' });
     const [referenceToken, setReferenceToken] = useState(0);
-    const [preselected, setPreselected] = useState<SupplyCommitment | null>(null);
-    const [orderError, setOrderError] = useState<string | null>(null);
-    const [orderLoading, setOrderLoading] = useState(false);
 
     useEffect(() => {
         if (task === 'receipt') return;
@@ -48,26 +45,8 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
         return () => controller.abort();
     }, [task, referenceToken]);
 
-    useEffect(() => {
-        // Een andere order in de link: nooit de vorige order laten staan, ook niet als het laden van de nieuwe mislukt.
-        setPreselected(null);
-        setOrderError(null);
-        if (task !== 'receipt' || orderId === null) { setOrderLoading(false); return; }
-        const controller = new AbortController();
-        setOrderLoading(true);
-        getSupplyCommitment(orderId, controller.signal)
-            .then((commitment) => { setPreselected(commitment); setOrderLoading(false); })
-            .catch((caught: unknown) => {
-                if (toApiError(caught).kind === 'aborted') return;
-                setOrderError(toApiError(caught).message);
-                setOrderLoading(false);
-            });
-        return () => controller.abort();
-    }, [task, orderId]);
-
     // Na "Inkooporder aanmaken" meteen ontvangen: naar Ontvangst met deze order gekozen.
     const receiveFor = (commitment: SupplyCommitment) => router.push(`/receipts?order=${commitment.id}`);
-    const consumePreselected = useCallback(() => setPreselected(null), []);
 
     return (
         <div className="mx-auto max-w-[96rem] space-y-4 p-2">
@@ -90,11 +69,8 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
             {task === 'receipt' && (
                 <>
                     {orderId !== null && <PurchaseOrderChain orderIds={[orderId]} current="receipt" />}
-                    {orderError && <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">{orderError}</p>}
-                    {orderLoading
-                        ? <LoadingRows rows={3} label={t('supply_loading_sources')} />
-                        // Per order een vers formulier: een keuze voor de vorige order blijft nooit hangen.
-                        : <ReceivePalletForm key={orderId ?? 'none'} preselected={preselected} onPreselectedConsumed={consumePreselected} />}
+                    {/* Feedback 22 november: ontvangen in één scherm. Met een order "Dit wordt verwacht", anders eerst een open order kiezen. */}
+                    {orderId !== null ? <ReceiveOrder key={orderId} orderId={orderId} /> : <ReceiveOrderPicker />}
                 </>
             )}
         </div>
