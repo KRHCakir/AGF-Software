@@ -2,7 +2,7 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, json, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { Mounted, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
 import { PURCHASE_LINE_COLUMNS } from '../purchase/PurchaseLineTable';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
@@ -14,12 +14,15 @@ const reference: ReferenceData = {
     vendors: [{ id: 3, name: 'Supplier B', searchCode: 'SUPB', vatNumber: null, isActive: true }],
     customers: [],
     products: [{ id: 1, name: 'Avocado', variants: [
-        variant(1, 'Hass', { brand: 'Westfalia', shortcutCode: 'avohassper18' }),
+        variant(1, 'Hass', { brand: 'Westfalia', shortcutCode: 'avohassper18', vatPercentage: 9 }),
         variant(2, 'Kent', { origin: 'Brazilië', defaultPackagesPerPallet: 264, shortcutCode: '2' }),
         variant(3, 'Lime', { defaultPackagesPerPallet: null, defaultGrossKgPerPackage: null, shortcutCode: '3' }),
         variant(4, 'Oud', { packagingUnit: null, shortcutCode: '4' }),
     ] }],
 };
+
+// De enige keuzelijst op de regel is het btw-tarief; een eenheid kiezen kan niet (fixes 5b).
+const UNIT_SELECT = 'tbody select:not([id$="vatPercentage-input"])';
 
 let mounted: Mounted;
 let posted: { url: string; body: string }[];
@@ -37,19 +40,40 @@ describe('purchase order lines: the new layout', () => {
     });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('columns left to right, only product, quantity, price and GGN are inputs; the shortcut finds the article; the rest comes from it', async () => {
+    test('columns left to right, only product, quantity, price, discount, VAT and GGN are fields; the shortcut finds the article; the rest comes from it', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         const head = Array.from(mounted.container.querySelectorAll('thead th')).map((th) => th.textContent);
-        assert.deepEqual(head.slice(0, 10), PURCHASE_LINE_COLUMNS.map((column) => `po_line_col_${column}`));
+        assert.deepEqual(head.slice(0, 12), PURCHASE_LINE_COLUMNS.map((column) => `po_line_col_${column}`));
         await pick(0, 'AVOHASSPER18');
         assert.ok(field('lines[0].productVariantId-input').value.includes('Hass'), 'exact shortcut, case-insensitive');
         await type('lines[0].expectedQuantity-input', '100');
         assert.deepEqual(['brand', 'country', 'size', 'packaging'].map((column) => cell(0, column).textContent), ['Westfalia', 'Peru', '18', '4 kg box']);
-        const inputs = Array.from(mounted.container.querySelectorAll<HTMLInputElement>('tbody tr input')).filter((input) => input.tabIndex >= 0).map((input) => input.id);
-        assert.deepEqual(inputs, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input', 'lines[0].ggn-input']);
-        assert.equal(mounted.container.querySelector('tbody select'), null, 'unit comes from the article');
+        const inputs = Array.from(mounted.container.querySelectorAll<HTMLElement>('tbody tr input, tbody tr select')).filter((input) => input.tabIndex >= 0).map((input) => input.id);
+        assert.deepEqual(inputs, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input', 'lines[0].discountPercentage-input', 'lines[0].vatPercentage-input', 'lines[0].ggn-input']);
+        assert.equal(mounted.container.querySelector(UNIT_SELECT), null, 'unit comes from the article');
         assert.ok(Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('tbody button')).every((button) => button.tabIndex === -1), 'buttons are outside the Tab order');
         assert.equal(cell(0, 'quantity').querySelector('[data-testid="lines[0].pallets"]')!.textContent, 'po_line_pallets');
+    });
+
+    test('feedback 22 november: discount lowers the amount, VAT is proposed from the article and can be changed, VAT per rate under the table', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await pick(0, 'AVOHASSPER18');
+        await type('lines[0].expectedQuantity-input', '30');
+        await type('lines[0].unitPrice-input', '13,35');
+        await type('lines[0].discountPercentage-input', '2,5');
+        const vat = mounted.container.querySelector<HTMLSelectElement>('[id="lines[0].vatPercentage-input"]')!;
+        assert.equal(vat.value, '9', 'proposal from the article');
+        assert.equal(cell(0, 'total').textContent, '390.49 EUR');
+        const amounts = () => mounted.container.querySelector('[data-testid="order-amounts"]')!;
+        assert.equal(amounts().querySelector('[data-testid="order-amounts-net"]')!.textContent, '390.49 EUR');
+        assert.ok(amounts().querySelector('[data-testid="order-amounts-vat-9"]'), 'VAT 9% line');
+        assert.equal(amounts().querySelector('[data-testid="order-amounts-gross"]')!.textContent, '425.63 EUR');
+        await act(async () => { setSelectValue(vat, '21'); });
+        assert.ok(amounts().querySelector('[data-testid="order-amounts-vat-21"]'));
+        assert.equal(amounts().querySelector('[data-testid="order-amounts-gross"]')!.textContent, '472.49 EUR');
+        await type('lines[0].discountPercentage-input', '120');
+        await submit();
+        assert.ok((mounted.container.textContent ?? '').includes('order_line_discount_range'));
     });
 
     test('fixes 5b: the unit is text from the article ("200 box"), never a choice', async () => {
@@ -57,14 +81,14 @@ describe('purchase order lines: the new layout', () => {
         await pick(0, 'AVOHASSPER18');
         await type('lines[0].expectedQuantity-input', '200');
         assert.equal(mounted.container.querySelector('[data-testid="lines[0].unit"]')!.textContent, 'unit_box');
-        assert.equal(mounted.container.querySelector('tbody select'), null);
+        assert.equal(mounted.container.querySelector(UNIT_SELECT), null);
     });
 
     test('fixes 5b: an article without unit gives no choice on the line but a pointer to the article, and saving is blocked', async () => {
         await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
         await pick(0, '4');
         await type('lines[0].expectedQuantity-input', '200');
-        assert.equal(mounted.container.querySelector('tbody select'), null, 'no unit select, also without a unit on the article');
+        assert.equal(mounted.container.querySelector(UNIT_SELECT), null, 'no unit select, also without a unit on the article');
         assert.equal(mounted.container.querySelector('[data-testid="lines[0].unit"]'), null);
         await submit();
         assert.ok((mounted.container.textContent ?? '').includes('po_line_unit_missing'));

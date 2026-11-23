@@ -7,14 +7,16 @@ import { ROW_PLAIN, ROW_STRIPE } from '../../lib/listRows';
 import { formatPallets, type PurchaseLineTotals } from '../../lib/purchaseLine';
 import { formatEuro } from '../../lib/documentCurrency';
 import { isEuro, toEuro } from '../../lib/exchangeRate';
+import { type OrderAmounts, formatPercent } from '../../lib/orderLineMath';
 
 // De indeling van de inkooporderregel (feedback 11 november), gedeeld door Inkooporder aanmaken en het orderdetail: van links naar
-// rechts Product · Merk · Land · Maat · Bruto kg · Netto kg · Aantal · Inhoud · Prijs · Totaal, rijen om en om gekleurd (ook
-// afgedrukt), en de totalen onder dezelfde kolommen. Op een telefoon (smaller dan 768 px) is elke regel een blokje met de veldnamen
-// ervoor (data-label), zodat niets wegvalt; de totalen staan dan als samenvatting onderaan.
-export const PURCHASE_LINE_COLUMNS = ['product', 'brand', 'country', 'size', 'gross', 'net', 'quantity', 'packaging', 'price', 'total'] as const;
+// rechts Product · Merk · Land · Maat · Bruto kg · Netto kg · Aantal · Inhoud · Prijs · Korting · Btw · Bedrag, rijen om en om gekleurd
+// (ook afgedrukt), en de totalen onder dezelfde kolommen. Op een telefoon (smaller dan 768 px) is elke regel een blokje met de veldnamen
+// ervoor (data-label), zodat niets wegvalt; de totalen staan dan als samenvatting onderaan. Feedback 22 november: dezelfde indeling voor
+// de verkooporder, met korting en btw per regel en onder de tabel de btw per tarief (OrderAmountsSummary).
+export const PURCHASE_LINE_COLUMNS = ['product', 'brand', 'country', 'size', 'gross', 'net', 'quantity', 'packaging', 'price', 'discount', 'vat', 'total'] as const;
 export type PurchaseLineColumn = (typeof PURCHASE_LINE_COLUMNS)[number];
-const NUMERIC: ReadonlySet<PurchaseLineColumn> = new Set(['gross', 'net', 'quantity', 'price', 'total']);
+const NUMERIC: ReadonlySet<PurchaseLineColumn> = new Set(['gross', 'net', 'quantity', 'price', 'discount', 'vat', 'total']);
 
 export const purchaseLineTableClass = 'w-full border-collapse text-sm [print-color-adjust:exact] max-md:block';
 export const purchaseLineBodyClass = 'max-md:block max-md:space-y-2';
@@ -71,7 +73,7 @@ export function PurchaseLineTotalsRow({ totals, trailingCells = 0, currency = nu
                 <td {...lineCell('gross', labels.gross)} data-testid="line-totals-gross">{kg(totals.shownGrossKg === undefined ? totals.grossKg : totals.shownGrossKg)}{missing(totals.linesWithoutGross, 'po_line_lines_without_kg')}</td>
                 <td {...lineCell('net', labels.net)} data-testid="line-totals-net">{kg(totals.shownNetKg === undefined ? totals.netKg : totals.shownNetKg)}{missing(totals.linesWithoutNet, 'po_line_lines_without_kg')}</td>
                 <td {...lineCell('quantity', labels.quantity)} data-testid="line-totals-quantity">{formatQuantity(totals.quantity, locale)}</td>
-                <td className="max-md:hidden" colSpan={2} />
+                <td className="max-md:hidden" colSpan={4} />
                 <td {...lineCell('total', labels.total)} data-testid="line-totals-amount">
                     {totals.amount === null ? '–' : formatMoney(totals.amount, currency, locale)}
                     {totals.amount !== null && currency !== null && !isEuro(currency) && rate !== null && (
@@ -82,5 +84,38 @@ export function PurchaseLineTotalsRow({ totals, trailingCells = 0, currency = nu
                 {trailingCells > 0 && <td className="max-md:hidden" colSpan={trailingCells} />}
             </tr>
         </tfoot>
+    );
+}
+
+// Onder de regels (feedback 22 november): totaal excl. btw, de btw per tarief (over welk bedrag) en totaal incl. btw. Regels zonder prijs
+// of zonder btw-tarief staan erbij, zodat een totaal nooit stilzwijgend onvolledig is. Valuta zoals de order; bij een andere valuta dan
+// euro het totaal in euro eronder.
+export function OrderAmountsSummary({ amounts, currency = null, rate = null }: { amounts: OrderAmounts | undefined; currency?: string | null; rate?: number | null }) {
+    const { t, locale } = useTranslation();
+    if (amounts === undefined || amounts.net === null) return null;
+    const money = (value: number | null) => (value === null ? '–' : formatMoney(value, currency, locale));
+    const percent = (value: number) => formatPercent(value, locale);
+    const row = 'flex items-baseline justify-between gap-6';
+    return (
+        <dl className="ml-auto mt-2 w-full max-w-sm space-y-1 rounded border border-gray-300 bg-gray-50 p-3 text-sm tabular-nums" data-testid="order-amounts" data-tour="order-amounts">
+            <div className={row}><dt>{t('order_amounts_net')}</dt><dd data-testid="order-amounts-net">{money(amounts.net)}</dd></div>
+            {amounts.vatRates.map((vat) => (
+                <div key={vat.percentage} className={`${row} text-gray-700`} data-testid={`order-amounts-vat-${vat.percentage}`}>
+                    <dt>{t('order_amounts_vat_rate', { rate: percent(vat.percentage), net: money(vat.net) })}</dt>
+                    <dd>{money(vat.vat)}</dd>
+                </div>
+            ))}
+            <div className={`${row} border-t border-gray-300 pt-1 font-semibold`}>
+                <dt>{t('order_amounts_gross')}</dt>
+                <dd data-testid="order-amounts-gross">
+                    {money(amounts.gross)}
+                    {currency !== null && !isEuro(currency) && rate !== null && amounts.gross !== null && (
+                        <span className="block text-xs font-normal text-gray-700">{t('currency_euro_hint', { amount: formatEuro(toEuro(amounts.gross, rate), locale) })}</span>
+                    )}
+                </dd>
+            </div>
+            {amounts.linesWithoutPrice > 0 && <p className="text-xs text-gray-600" data-testid="order-amounts-without-price">{t('po_line_lines_without_price', { count: String(amounts.linesWithoutPrice) })}</p>}
+            {amounts.linesWithoutVat > 0 && <p className="text-xs text-amber-900" data-testid="order-amounts-without-vat">{t('order_amounts_lines_without_vat', { count: String(amounts.linesWithoutVat) })}</p>}
+        </dl>
     );
 }

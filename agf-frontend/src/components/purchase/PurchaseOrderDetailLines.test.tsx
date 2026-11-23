@@ -40,6 +40,20 @@ describe('PurchaseOrderDetail lines', () => {
         assert.deepEqual([total('quantity'), total('gross'), total('net'), total('amount'), total('pallets')], ['150', '670 kg', '600 kg', '1,737.50', 'po_line_pallets_total']);
     });
 
+    test('feedback 22 november: discount and VAT per line, and under the table the VAT per rate of the server; a line without VAT is named', async () => {
+        const amounts = { net: 1612.5, vatRates: [{ percentage: 9, net: 1125, vat: 101.25 }], vat: 101.25, gross: 1713.75, linesWithoutPrice: 0, linesWithoutVat: 1 };
+        const lines = [line({ discountPercentage: 10, vatPercentage: 9, lineTotal: 1125 }), line({ id: 32, discountPercentage: null, vatPercentage: null, lineTotal: 487.5 })];
+        await mounted.render(<PurchaseOrderDetail order={order(lines, { quantity: 200, netWeightKg: 800, grossWeightKg: 880, amount: 1612.5, pallets: 0.8, linesWithoutNet: 0, linesWithoutGross: 0,
+            linesWithoutPrice: 0, linesWithoutPallets: 0, amounts })} onChanged={() => {}} />);
+        assert.deepEqual(['discount', 'vat', 'total'].map((column) => cell(0, column)), ['10%', '9%', '1,125.00']);
+        assert.deepEqual(['discount', 'vat'].map((column) => cell(1, column)), ['–', '–']);
+        const summary = mounted.container.querySelector('[data-testid="order-amounts"]')!;
+        assert.equal(summary.querySelector('[data-testid="order-amounts-net"]')!.textContent, '1,612.50');
+        assert.ok(summary.querySelector('[data-testid="order-amounts-vat-9"]')!.textContent!.includes('101.25'));
+        assert.equal(summary.querySelector('[data-testid="order-amounts-gross"]')!.textContent, '1,713.75');
+        assert.ok(summary.querySelector('[data-testid="order-amounts-without-vat"]'));
+    });
+
     test('an older order without price, gross or totals stays readable', async () => {
         await mounted.render(<PurchaseOrderDetail order={order([line({ brand: null, expectedGrossWeightKg: null, weightSource: 'Entered', unitPrice: null, lineTotal: null, pallets: null })])} onChanged={() => {}} />);
         assert.deepEqual(['brand', 'gross', 'price', 'total'].map((column) => cell(0, column)), ['–', '–', '–', '–']);
