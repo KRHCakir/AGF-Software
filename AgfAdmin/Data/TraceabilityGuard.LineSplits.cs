@@ -14,8 +14,9 @@ namespace AgfAdmin.Data
         // 2. het vervallen restant (CancelledQuantity) staat nooit op een nieuwe regel, verandert alleen samen met een Edit-auditregel, daalt
         //    nooit en stijgt alleen met precies de verlaging van het verwachte aantal (besteld = verwacht + vervallen blijft gelijk), en het
         //    verwachte aantal komt daarbij nooit onder wat ontvangen is (dat bewaakt regel 29);
-        // 3. ontvangen hoeveelheden veranderen nooit: aantal, eenheid, netto kg en gewichtsmethode van een opgeslagen palletregel liggen vast en
-        //    een palletregel wordt nooit verwijderd (een correctie, afsplitsing of afkeuring maakt altijd nieuwe regels).
+        // 3. ontvangen hoeveelheden veranderen nooit: aantal, eenheid, netto kg en gewichtsmethode van een opgeslagen palletregel liggen vast (een
+        //    correctie, afsplitsing of afkeuring maakt altijd nieuwe regels). Verwijderen weigert de database al: elke palletregel heeft een
+        //    auditregel (ContentLineAdded) met een restrictieve koppeling.
         private static async Task CheckLineSplitsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             await CheckReceivedQuantitiesAsync(db, async, cancellationToken);
@@ -85,10 +86,6 @@ namespace AgfAdmin.Data
 
         private static async Task CheckReceivedQuantitiesAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
-            if (db.ChangeTracker.Entries<PalletContentLine>().Any(e => e.State == EntityState.Deleted))
-            {
-                throw new TraceabilityViolationException("Received quantities never change: a pallet content line is never deleted.");
-            }
             var contents = db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Modified).Select(e => e.Entity).ToList();
             if (contents.Count == 0) return;
             var ids = contents.Select(c => c.Id).ToList();
