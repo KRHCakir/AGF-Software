@@ -2607,6 +2607,7 @@
   "service_lines_hint": "Handling of transport die je aan de klant doorberekent, met een Dienst-artikel en het btw-tarief van dat artikel. Telt niet mee in voorraad, pallets of kg en komt niet op de laadbon of de transportopdracht. Handling die je zelf betaalt, hoort als kost bij de partij.",
   "service_article": "Dienst",
   "service_choose": "Kies een dienst",
+  "service_load_failed": "De dienstartikelen konden niet worden geladen.",
   "service_add": "Dienst toevoegen",
   "service_remove_n": "Dienst {n} verwijderen",
   "service_discount": "{discount}% korting",

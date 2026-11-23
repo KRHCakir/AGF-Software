@@ -154,11 +154,15 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     // Feedback 22 november: Dienst-artikelen (soort Cost) voor de dienstregels, ook inactieve (een bevroren regel toont haar artikel).
     const [serviceArticles, setServiceArticles] = useState<CostArticle[]>([]);
+    const [serviceFailed, setServiceFailed] = useState(false);
+    const [serviceToken, setServiceToken] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
-        listCostArticles(true, controller.signal).then((articles) => setServiceArticles(articles.filter((article) => (article.kind ?? 'Cost') === 'Cost'))).catch(() => undefined);
+        setServiceFailed(false);
+        listCostArticles(true, controller.signal).then((articles) => setServiceArticles(articles.filter((article) => (article.kind ?? 'Cost') === 'Cost')))
+            .catch(() => { if (!controller.signal.aborted) setServiceFailed(true); });
         return () => controller.abort();
-    }, []);
+    }, [serviceToken]);
     const serviceVatOf = (costArticleId: string) => serviceArticles.find((article) => String(article.id) === costArticleId)?.vatPercentage;
 
     useEffect(() => {
@@ -574,6 +578,12 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             )}
             <PackagingLinesInput lines={draft.packagingLines ?? []} articles={packagingArticles} proposal={proposal} locked={locked} errors={e}
                 onChange={(packagingLines) => { if (locked) return; setDraft((current) => ({ ...current, packagingLines })); edited(); }} />
+            {serviceFailed && (
+                <div role="alert" className="flex items-center gap-3 text-sm text-red-700">
+                    <span>{t('service_load_failed')}</span>
+                    <button type="button" onClick={() => setServiceToken((token) => token + 1)} className={secondaryButtonClass}>{t('packaging_reload')}</button>
+                </div>
+            )}
             <ServiceLinesInput lines={draft.serviceLines ?? []} articles={serviceArticles} locked={locked} errors={e}
                 onChange={(serviceLines) => { if (locked) return; setDraft((current) => ({ ...current, serviceLines })); edited(); }} />
             {/* Totaal excl. btw, btw per tarief en totaal incl. btw over goederen en emballage samen. */}

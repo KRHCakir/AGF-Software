@@ -2607,6 +2607,7 @@
   "service_lines_hint": "Handling or transport you charge to the customer, with a service article and its VAT rate. Not counted in stock, pallets or kg and not on the loading slip or transport order. Handling you pay yourself belongs to the lot as a cost.",
   "service_article": "Service",
   "service_choose": "Choose a service",
+  "service_load_failed": "The service articles could not be loaded.",
   "service_add": "Add service",
   "service_remove_n": "Remove service {n}",
   "service_discount": "{discount}% discount",
