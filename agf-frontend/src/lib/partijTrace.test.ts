@@ -45,9 +45,10 @@ describe('traceability export', () => {
             lines: [{ product: 'Tomaat Ronde', quantity: 25, unit: 'colli', sources: [
                 { partijId: 1, number: 'I-2611010', vendorName: 'Kweker K', origin: 'Spanje', quantity: 12, status: 'Consumed' },
                 { partijId: 2, number: 'I-2611011', vendorName: 'Kweker K', origin: 'Marokko', quantity: 13, status: 'Active' }] }],
-        }, { lot: 'Partij', customer: 'Klant', reference: 'Order', date: 'Leverdatum', product: 'Product', quantity: 'Colli', purchaseLot: 'Inkoop-partij', supplier: 'Leverancier', origin: 'Herkomst' }, { number, date });
+        }, { lot: 'Partij', customer: 'Klant', reference: 'Order', date: 'Leverdatum', product: 'Product', quantity: 'Colli', purchaseLot: 'Inkoop-partij', supplier: 'Leverancier', origin: 'Herkomst', status: 'Status', delivered: 'Geleverd', planned: 'Gepland' }, { number, date });
         const lines = csv.trimEnd().split('\r\n');
         assert.equal(lines[3], 'Leverdatum;2026-11-23');
-        assert.deepEqual(lines.slice(6), ['Tomaat Ronde;12;I-2611010;Kweker K;Spanje', 'Tomaat Ronde;13;I-2611011;Kweker K;Marokko']);
+        assert.equal(lines[4], 'Status;Geleverd');
+        assert.deepEqual(lines.slice(7), ['Tomaat Ronde;12;I-2611010;Kweker K;Spanje', 'Tomaat Ronde;13;I-2611011;Kweker K;Marokko']);
     });
 });
