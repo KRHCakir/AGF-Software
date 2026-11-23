@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { getPartij, setPartijColor } from '../../services/partijService';
@@ -44,6 +44,7 @@ function LotColorFieldInner({ partijId, partijNumber, onSaved, compact = false, 
     const [saved, setSaved] = useState<string | null>(initial?.color ?? null);
     const [value, setValue] = useState(initial?.color ?? '');
     const [busy, setBusy] = useState(false);
+    const id = useId();
     const [error, setError] = useState<ApiError | null>(null);
 
     const known = initial !== undefined;
@@ -84,14 +85,13 @@ function LotColorFieldInner({ partijId, partijNumber, onSaved, compact = false, 
     };
 
     if (allowed === null) return error ? <ErrorNotice error={error} /> : null;
-    const id = `lot-color-${partijId}`;
     return (
         <div className={compact ? 'mt-1' : 'space-y-1'} data-testid="lot-color-field">
             <label htmlFor={id} className="text-xs font-medium text-gray-700">
                 {partijNumber ? t('lot_color_of', { lot: partijNumber }) : t('lot_color_label')}
             </label>
-            {allowed.length === 0
-                ? <p className="text-xs text-gray-600">{saved ? t('lot_color_badge', { color: saved }) + ' · ' : ''}{t('lot_color_no_list')}</p>
+            {allowed.length === 0 && !saved
+                ? <p className="text-xs text-gray-600">{t('lot_color_no_list')}</p>
                 : (
                     <div className="flex flex-wrap items-center gap-2">
                         <select id={id} value={value} disabled={busy} onChange={(event) => setValue(event.target.value)} className={`${inputClass} w-auto`} data-tour="lot-color">
@@ -104,6 +104,7 @@ function LotColorFieldInner({ partijId, partijNumber, onSaved, compact = false, 
                         </button>
                     </div>
                 )}
+            {allowed.length === 0 && saved && <p className="text-xs text-gray-600">{t('lot_color_no_list')}</p>}
             <span className="block text-xs text-gray-500">{t('lot_color_hint')}</span>
             {error && <ErrorNotice error={error} />}
         </div>
