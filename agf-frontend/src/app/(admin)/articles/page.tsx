@@ -25,6 +25,22 @@ import OrderOriginCheck from '../../../components/articles/OrderOriginCheck';
 import VatCheck from '../../../components/articles/VatCheck';
 import PackagingArticles from '../../../components/articles/PackagingArticles';
 import { listRowClass, rowClick } from '../../../lib/listRows';
+import { type SortColumns, sortRows } from '../../../lib/listSort';
+import { SortHeader } from '../../../components/shared/SortHeader';
+import { useListSort } from '../../../components/shared/useListSort';
+
+// Sorteren op de kolomkoppen (feedback 22 november). Standaard blijft de volgorde van de lijst (bij zoeken de beste treffer eerst); een net
+// aangemaakt artikel staat zolang de melding staat altijd bovenaan.
+const ARTICLE_COLUMNS: SortColumns<Article> = {
+    code: { kind: 'natural', value: (article) => article.shortcutCode },
+    description: { kind: 'text', value: (article) => article.description },
+    unit: { kind: 'text', value: (article) => article.packagingUnit },
+    netKg: { kind: 'number', value: (article) => article.defaultNetKgPerPackage },
+    cpp: { kind: 'number', value: (article) => article.defaultPackagesPerPallet },
+    tradeClass: { kind: 'text', value: (article) => article.tradeClass },
+    goodsCode: { kind: 'natural', value: (article) => article.goodsCode },
+};
+const ARTICLE_SORT_KEYS = Object.keys(ARTICLE_COLUMNS);
 
 interface Loaded { articles: Article[]; reference: ArticleReference; countries: CountryReference }
 
@@ -66,7 +82,8 @@ export default function ArticlesPage() {
     }, [state]);
 
     // Gearchiveerde artikelen staan standaard niet in de lijst; "Toon gearchiveerde" laat ze zien (met label).
-    const shown = useMemo(() => (state.status === 'ready' ? searchArticles(visibleArticles(state.data.articles, showArchived), query) : []), [state, query, showArchived]);
+    const { sort, toggle: toggleSort } = useListSort('articles', ARTICLE_SORT_KEYS);
+    const shown = useMemo(() => (state.status === 'ready' ? sortRows(searchArticles(visibleArticles(state.data.articles, showArchived), query), ARTICLE_COLUMNS, sort) : []), [state, query, showArchived, sort]);
     const archivedCount = state.status === 'ready' ? state.data.articles.filter((article) => article.isArchived).length : 0;
 
     const created = useCreated();
@@ -182,13 +199,13 @@ export default function ArticlesPage() {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                                 <tr>
-                                    <th scope="col" className="px-3 py-2">{t('articles_col_code')}</th>
-                                    <th scope="col" className="px-3 py-2">{t('articles_col_description')}</th>
-                                    <th scope="col" className="px-3 py-2">{t('articles_col_unit')}</th>
-                                    <th scope="col" className="px-3 py-2 text-right">{t('articles_col_net_kg')}</th>
-                                    <th scope="col" className="px-3 py-2 text-right">{t('articles_col_cpp')}</th>
-                                    <th scope="col" className="px-3 py-2">{t('articles_col_trade_class')}</th>
-                                    <th scope="col" className="px-3 py-2">{t('articles_col_goods_code')}</th>
+                                    <SortHeader className="px-3 py-2" label={t('articles_col_code')} sortKey="code" sort={sort} onSort={toggleSort} />
+                                    <SortHeader className="px-3 py-2" label={t('articles_col_description')} sortKey="description" sort={sort} onSort={toggleSort} />
+                                    <SortHeader className="px-3 py-2" label={t('articles_col_unit')} sortKey="unit" sort={sort} onSort={toggleSort} />
+                                    <SortHeader className="px-3 py-2 text-right" label={t('articles_col_net_kg')} sortKey="netKg" sort={sort} onSort={toggleSort} />
+                                    <SortHeader className="px-3 py-2 text-right" label={t('articles_col_cpp')} sortKey="cpp" sort={sort} onSort={toggleSort} />
+                                    <SortHeader className="px-3 py-2" label={t('articles_col_trade_class')} sortKey="tradeClass" sort={sort} onSort={toggleSort} />
+                                    <SortHeader className="px-3 py-2" label={t('articles_col_goods_code')} sortKey="goodsCode" sort={sort} onSort={toggleSort} />
                                     <th scope="col" className="px-3 py-2"><span className="sr-only">{t('articles_edit_action')}</span></th>
                                 </tr>
                             </thead>

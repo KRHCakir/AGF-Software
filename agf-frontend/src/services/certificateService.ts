@@ -42,7 +42,8 @@ export function getCertificateFile(certificateId: number, fileId: number, signal
     return getBlob(`/certificates/${certificateId}/files/${fileId}`, signal);
 }
 
-export async function getCertificateOverview(options: { query?: string; type?: string; status?: string; includeArchived?: boolean; page?: number; pageSize?: number }, signal?: AbortSignal): Promise<CertificateOverview> {
+// sort (feedback 22 november): een veld uit CERTIFICATE_SORT_KEYS (de server kent precies die velden), met asc of desc.
+export async function getCertificateOverview(options: { query?: string; type?: string; status?: string; includeArchived?: boolean; page?: number; pageSize?: number; sort?: string; direction?: 'asc' | 'desc' }, signal?: AbortSignal): Promise<CertificateOverview> {
     const params = new URLSearchParams();
     if (options.page) params.set('page', String(options.page));
     if (options.pageSize) params.set('pageSize', String(options.pageSize));
@@ -50,6 +51,7 @@ export async function getCertificateOverview(options: { query?: string; type?: s
     if (options.type) params.set('type', options.type);
     if (options.status) params.set('status', options.status);
     if (options.includeArchived) params.set('includeArchived', 'true');
+    if (options.sort) { params.set('sort', options.sort); params.set('direction', options.direction ?? 'asc'); }
     const json = await getJson(`/certificates?${params.toString()}`, signal);
     if (!isCertificateOverview(json)) throw new ApiError('shape', 'Onverwacht antwoord bij het overzicht van certificaten.');
     return json;

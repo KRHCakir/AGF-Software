@@ -3236,5 +3236,9 @@
   "mail_drafts_sort_to": "Aan",
   "mail_drafts_sort_status": "Status",
   "mail_drafts_sort_created": "Aangemaakt",
-  "sales_awaiting_sort_reservable": "Nu te reserveren"
+  "sales_awaiting_sort_reservable": "Nu te reserveren",
+  "worklist_sort_article": "Artikel",
+  "worklist_sort_where": "Waar invullen",
+  "worklist_sort_origin_text": "Oude herkomsttekst",
+  "worklist_sort_size": "Maat"
 }

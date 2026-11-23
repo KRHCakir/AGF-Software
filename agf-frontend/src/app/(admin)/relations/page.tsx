@@ -13,6 +13,13 @@ import { toApiError } from '../../../services/apiClient';
 import { getRelation, getRelationReference, listRelations } from '../../../services/relationService';
 import type { Relation, RelationList, RelationListItem, RelationReference, RelationRoleFilter } from '../../../types/relation';
 import { listRowClass, rowClick } from '../../../lib/listRows';
+import { sortParams } from '../../../lib/listSort';
+import { SortHeader } from '../../../components/shared/SortHeader';
+import { useListSort } from '../../../components/shared/useListSort';
+
+// Sorteren op de kolomkoppen (feedback 22 november): op de server, over alle relaties (de lijst bladert). Certificaten sorteren niet
+// (meerdere per relatie); de standaard blijft een exacte zoekcode eerst, daarna op naam.
+const RELATION_SORT_KEYS = ['code', 'name', 'role', 'status', 'place', 'contact'] as const;
 import { relationAttention, shortTypeName } from '../../../lib/certificateDisplay';
 
 const PAGE_SIZE = 50;
@@ -53,7 +60,8 @@ export default function RelationsPage() {
         const handle = setTimeout(() => setDebounced(query.trim()), 200);
         return () => clearTimeout(handle);
     }, [query]);
-    useEffect(() => { setPage(1); }, [role, includeInactive, debounced, certificate]);
+    const { sort, ready: sortReady, toggle: toggleSort } = useListSort('relations', RELATION_SORT_KEYS);
+    useEffect(() => { setPage(1); }, [role, includeInactive, debounced, certificate, sort]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -64,13 +72,14 @@ export default function RelationsPage() {
     }, [reloadToken]);
 
     useEffect(() => {
+        if (!sortReady) return;
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        listRelations({ role, query: debounced, includeInactive, page, pageSize: PAGE_SIZE, certificate }, controller.signal)
+        listRelations({ role, query: debounced, includeInactive, page, pageSize: PAGE_SIZE, certificate, ...sortParams(sort) }, controller.signal)
             .then((data) => { setList({ status: 'ready', data }); setHighlight(0); })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [role, debounced, includeInactive, page, reloadToken, certificate]);
+    }, [role, debounced, includeInactive, page, reloadToken, certificate, sort, sortReady]);
 
     // De server bepaalt de definitieve resultaten en volgorde (ook tweede contactpersonen, telefoons en e-mails van alle contacten);
     // de werkplek filtert niet opnieuw, zodat zij nooit een treffer van de server weer weghaalt.
@@ -217,13 +226,13 @@ export default function RelationsPage() {
                     <table id="relation-list" role="listbox" aria-label={t('relations_title')} className="min-w-full text-sm">
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
-                                <th scope="col" className="px-3 py-2">{t('relations_col_code')}</th>
-                                <th scope="col" className="px-3 py-2">{t('relations_col_name')}</th>
-                                <th scope="col" className="px-3 py-2">{t('relations_col_role')}</th>
-                                <th scope="col" className="px-3 py-2">{t('relations_col_status')}</th>
+                                <SortHeader className="px-3 py-2" label={t('relations_col_code')} sortKey="code" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('relations_col_name')} sortKey="name" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('relations_col_role')} sortKey="role" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('relations_col_status')} sortKey="status" sort={sort} onSort={toggleSort} />
                                 <th scope="col" className="px-3 py-2">{t('cert_section_title')}</th>
-                                <th scope="col" className="px-3 py-2">{t('relations_col_place')}</th>
-                                <th scope="col" className="px-3 py-2">{t('relations_col_contact')}</th>
+                                <SortHeader className="px-3 py-2" label={t('relations_col_place')} sortKey="place" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('relations_col_contact')} sortKey="contact" sort={sort} onSort={toggleSort} />
                                 <th scope="col" className="px-3 py-2"><span className="sr-only">{t('relations_edit_action')}</span></th>
                             </tr>
                         </thead>

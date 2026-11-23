@@ -10,10 +10,12 @@ export type SaveRelationOutcome =
     | { outcome: 'created' | 'replayed' | 'updated'; relation: Relation }
     | { outcome: 'similar-names'; similar: SimilarRelation[] };
 
-export async function listRelations(options: { role: RelationRoleFilter; query: string; includeInactive: boolean; page: number; pageSize: number; certificate?: string }, signal?: AbortSignal): Promise<RelationList> {
+// sort (feedback 22 november): een veld uit RELATION_SORT_KEYS (de server kent precies die velden), met asc of desc.
+export async function listRelations(options: { role: RelationRoleFilter; query: string; includeInactive: boolean; page: number; pageSize: number; certificate?: string; sort?: string; direction?: 'asc' | 'desc' }, signal?: AbortSignal): Promise<RelationList> {
     const params = new URLSearchParams({ role: options.role, query: options.query, includeInactive: String(options.includeInactive), page: String(options.page), pageSize: String(options.pageSize) });
     // Certificaten deel 1: attention, Expired, ExpiringSoon, productsPending, none of een soort.
     if (options.certificate) params.set('certificate', options.certificate);
+    if (options.sort) { params.set('sort', options.sort); params.set('direction', options.direction ?? 'asc'); }
     const json = await getJson(`/relations?${params.toString()}`, signal);
     if (!isRelationList(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de relaties.');
     return json;

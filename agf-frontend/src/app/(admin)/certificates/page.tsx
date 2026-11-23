@@ -10,6 +10,12 @@ import { useTranslation } from '../../../i18n/LanguageContext';
 import { formatDateOnly } from '../../../lib/calendarDate';
 import { certificateLink, shortTypeName } from '../../../lib/certificateDisplay';
 import { listRowClass } from '../../../lib/listRows';
+import { sortParams } from '../../../lib/listSort';
+import { SortHeader } from '../../../components/shared/SortHeader';
+import { useListSort } from '../../../components/shared/useListSort';
+
+// Sorteren op de kolomkoppen (feedback 22 november): op de server, over alle certificaten; standaard de vroegste einddatum eerst.
+const CERTIFICATE_SORT_KEYS = ['relation', 'type', 'number', 'products', 'validUntil', 'status'] as const;
 import { toApiError } from '../../../services/apiClient';
 import { getCertificateOverview, getCertificateReference } from '../../../services/certificateService';
 import type { CertificateOverview, CertificateReference } from '../../../types/certificate';
@@ -31,7 +37,8 @@ export default function CertificatesPage() {
     const [reference, setReference] = useState<CertificateReference | null>(null);
     const [reload, setReload] = useState(0);
     const [page, setPage] = useState(1);
-    useEffect(() => { setPage(1); }, [debounced, type, status, includeArchived]);
+    const { sort, ready: sortReady, toggle: toggleSort } = useListSort('certificates', CERTIFICATE_SORT_KEYS);
+    useEffect(() => { setPage(1); }, [debounced, type, status, includeArchived, sort]);
 
     useEffect(() => {
         const handle = setTimeout(() => setDebounced(query.trim()), 200);
@@ -43,13 +50,14 @@ export default function CertificatesPage() {
         return () => controller.abort();
     }, []);
     useEffect(() => {
+        if (!sortReady) return;
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
-        getCertificateOverview({ query: debounced, type, status, includeArchived, page, pageSize: PAGE_SIZE }, controller.signal)
+        getCertificateOverview({ query: debounced, type, status, includeArchived, page, pageSize: PAGE_SIZE, ...sortParams(sort) }, controller.signal)
             .then((data) => setList({ status: 'ready', data }))
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
-    }, [debounced, type, status, includeArchived, reload, page]);
+    }, [debounced, type, status, includeArchived, reload, page, sort, sortReady]);
     const pages = list.status === 'ready' ? Math.max(1, Math.ceil(list.data.total / PAGE_SIZE)) : 1;
 
     const role = (item: { relationId: number | null; isCustomer: boolean; isVendor: boolean; isCarrier: boolean }) => (item.relationId === null ? t('cert_own_company')
@@ -92,12 +100,12 @@ export default function CertificatesPage() {
                     <table className="min-w-full text-sm" data-testid="certificate-table">
                         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                             <tr>
-                                <th scope="col" className="px-3 py-2">{t('cert_col_relation')}</th>
-                                <th scope="col" className="px-3 py-2">{t('cert_type')}</th>
-                                <th scope="col" className="px-3 py-2">{t('cert_number')}</th>
-                                <th scope="col" className="px-3 py-2">{t('cert_products')}</th>
-                                <th scope="col" className="px-3 py-2">{t('cert_valid_until')}</th>
-                                <th scope="col" className="px-3 py-2">{t('cert_page_status')}</th>
+                                <SortHeader className="px-3 py-2" label={t('cert_col_relation')} sortKey="relation" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('cert_type')} sortKey="type" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('cert_number')} sortKey="number" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('cert_products')} sortKey="products" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('cert_valid_until')} sortKey="validUntil" sort={sort} onSort={toggleSort} />
+                                <SortHeader className="px-3 py-2" label={t('cert_page_status')} sortKey="status" sort={sort} onSort={toggleSort} />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">

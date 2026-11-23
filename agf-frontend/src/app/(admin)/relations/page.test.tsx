@@ -2,7 +2,7 @@ import '../../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, json, setSelectValue, setValue } from '../../../test/reactHarness.ts';
+import { Mounted, click, json, setSelectValue, setValue } from '../../../test/reactHarness.ts';
 import RelationsPage from './page';
 
 // Werkplek Relaties door de hele pagina: de server bepaalt de zoekresultaten. Een relatie die alleen via een tweede contactpersoon of
@@ -26,6 +26,7 @@ let urls: string[];
 describe('RelationsPage search', () => {
     beforeEach(() => {
         urls = [];
+        window.localStorage.clear();
         globalThis.fetch = (async (input: RequestInfo | URL) => {
             const url = String(input);
             urls.push(url);
@@ -54,6 +55,39 @@ describe('RelationsPage search', () => {
             await mounted.waitFor(() => mounted.container.querySelector<HTMLInputElement>('[id="searchCode-input"]')?.value === 'OOST', 'card opened');
         });
     }
+});
+
+// Feedback 22 november: de relatielijst bladert op de server, dus de kolomkop vraagt de server om te sorteren (over alle pagina's).
+describe('RelationsPage sorting', () => {
+    beforeEach(() => {
+        urls = [];
+        window.localStorage.clear();
+        globalThis.fetch = (async (input: RequestInfo | URL) => {
+            const url = String(input);
+            urls.push(url);
+            if (url.includes('/relations/reference')) return json(200, reference);
+            const sorted = new URL(url, 'http://x').searchParams.get('direction') === 'desc' ? [other, oost] : [oost, other];
+            return json(200, { items: sorted, total: 2, page: 1, pageSize: 50 });
+        }) as typeof fetch;
+        mounted = new Mounted();
+    });
+    afterEach(async () => { await mounted.unmount(); });
+
+    test('the Naam header asks the server for sort=name, then descending; the certificate column does not sort', async () => {
+        await mounted.render(<RelationsPage />);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="relation-row-5"]'), 'initial list');
+        const listCalls = () => urls.filter((url) => /\/relations\?/.test(url));
+        assert.ok(!listCalls()[0].includes('sort='));
+        const name = () => mounted.container.querySelector<HTMLButtonElement>('[data-sort-key="name"]')!;
+        await click(name());
+        await mounted.waitFor(() => listCalls().some((url) => url.includes('sort=name') && url.includes('direction=asc')), 'ascending');
+        await click(name());
+        await mounted.waitFor(() => listCalls().some((url) => url.includes('sort=name') && url.includes('direction=desc')), 'descending');
+        await mounted.waitFor(() => mounted.container.querySelector('tbody tr')?.getAttribute('data-testid') === 'relation-row-5', 'server order shown');
+        assert.equal(name().closest('th')!.getAttribute('aria-sort'), 'descending');
+        const headers = Array.from(mounted.container.querySelectorAll('thead th'));
+        assert.equal(headers[4].querySelector('button'), null, 'certificates: several per relation, not sortable');
+    });
 });
 
 // Fixes 5b: na opslaan van een nieuwe relatie verdwijnt het oude formulier; de lijst ververst en toont de nieuwe relatie kort

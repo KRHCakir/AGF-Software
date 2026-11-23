@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { countryLabel } from '../../lib/countries';
 import { ApiError, toApiError } from '../../services/apiClient';
@@ -9,6 +9,18 @@ import { getPurchaseOrderOriginCheck } from '../../services/purchaseOrderService
 import type { CountryReference } from '../../types/country';
 import type { PurchaseOrderOriginCheck } from '../../types/purchaseOrder';
 import ErrorNotice from '../supply/ErrorNotice';
+import { type SortColumns, sortRows } from '../../lib/listSort';
+import { SortSelect } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
+
+// Sorteren (feedback 22 november): een keuzelijst "Sorteren op" (de werklijst heeft geen kolomkoppen).
+const ORIGIN_CHECK_COLUMNS: SortColumns<PurchaseOrderOriginCheck> = {
+    order: { kind: 'natural', value: (item) => item.orderNumber },
+    vendor: { kind: 'text', value: (item) => item.vendorName },
+    origin: { kind: 'text', value: (item) => item.origin },
+    status: { kind: 'number', value: (item) => (item.definitive ? 1 : 0) },
+};
+const ORIGIN_CHECK_SORT_KEYS = Object.keys(ORIGIN_CHECK_COLUMNS);
 
 // "Herkomst controleren" (feedback 22 november): inkooporders met een oude herkomsttekst die geen land uit de lijst is ("Peru (DEMO)").
 // De migratie zette alleen eenduidige teksten om; de oude tekst is bewaard. Een open order krijg je via Aanpassen een land; bij een
@@ -17,6 +29,8 @@ export default function OrderOriginCheck({ countries, reloadToken }: { countries
     const { t, locale } = useTranslation();
     const [items, setItems] = useState<PurchaseOrderOriginCheck[] | null>(null);
     const [error, setError] = useState<ApiError | null>(null);
+    const { sort, setSort } = useListSort('order-origin-check', ORIGIN_CHECK_SORT_KEYS);
+    const sorted = useMemo(() => sortRows(items ?? [], ORIGIN_CHECK_COLUMNS, sort), [items, sort]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -32,8 +46,16 @@ export default function OrderOriginCheck({ countries, reloadToken }: { countries
             <h2 id="order-origin-check" className="text-sm font-semibold text-gray-900">{t('order_origin_check_title')}</h2>
             <p className="text-xs text-gray-700">{t('order_origin_check_hint')}</p>
             {error && <div className="mt-2"><ErrorNotice error={error} /></div>}
+            {sorted.length > 1 && (
+                <SortSelect id="order-origin-check-sort" className="mt-2 max-w-md" sort={sort} onChange={setSort} options={[
+                    { key: 'order', label: t('mail_drafts_sort_order'), kind: 'natural' },
+                    { key: 'vendor', label: t('po_col_vendor'), kind: 'text' },
+                    { key: 'origin', label: t('worklist_sort_origin_text'), kind: 'text' },
+                    { key: 'status', label: t('po_col_status'), kind: 'natural' },
+                ]} />
+            )}
             <ul className="mt-2 divide-y divide-amber-200 text-sm">
-                {(items ?? []).map((item) => (
+                {sorted.map((item) => (
                     <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5" data-testid={`order-origin-check-${item.id}`}>
                         <span className="min-w-0 break-words">
                             <Link href={`/purchase-orders?id=${item.id}`} className="font-semibold text-blue-800 underline underline-offset-2">{item.orderNumber}</Link>
