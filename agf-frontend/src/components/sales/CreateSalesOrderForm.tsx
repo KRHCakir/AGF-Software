@@ -48,6 +48,8 @@ import { usePendingCommand, usePendingCommands } from './PendingCommandsContext'
 import { ruleErrorsToFieldErrors } from './ruleMessages';
 import SubmitErrors from '../shared/SubmitErrors';
 import { useFormLeaveGuard } from '../shared/LeaveGuard';
+import DeliveryTermField from '../shared/DeliveryTermField';
+import { type DeliveryTermDraft, deliveryTermDraftOf, deliveryTermPayload, describeDeliveryTerm, emptyDeliveryTerm } from '../../lib/deliveryTerm';
 
 // Een regel is pas leeg als geen enkel inhoudelijk veld is ingevuld (ook prijs, korting, bruto en een gekozen bron).
 const isBlankLine = isBlankOrderLine;
@@ -114,6 +116,9 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         const extra = createdCustomers.filter((created) => !knownCustomers.some((known) => known.id === created.id));
         return extra.length === 0 ? knownCustomers : [...knownCustomers, ...extra].sort((a, b) => a.name.localeCompare(b.name));
     }, [knownCustomers, createdCustomers]);
+    // Feedback 22 november: de leveringsconditie van deze order. Zolang de gebruiker haar niet zelf aanpast, volgt ze de gekozen klant.
+    const [deliveryTerm, setDeliveryTerm] = useState<DeliveryTermDraft>(() => (pending !== null ? deliveryTermDraftOf(pending.payload.deliveryTerm) : emptyDeliveryTerm()));
+    const termTouched = useRef(pending !== null);
     const [draft, setDraft] = useState<OrderDraft>(() => (pending !== null ? draftFromCommand(pending) : prefill !== null ? prefilledDraft(prefill) : emptyDraft()));
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
@@ -183,6 +188,17 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         setDraft((current) => ({ ...current, [field]: value }));
         edited();
     };
+    const chosenCustomer = customers.find((customer) => String(customer.id) === draft.customerId) ?? null;
+    useEffect(() => {
+        if (!termTouched.current) setDeliveryTerm(deliveryTermDraftOf(chosenCustomer?.deliveryTerm));
+    }, [chosenCustomer]);
+    const changeDeliveryTerm = (next: DeliveryTermDraft) => {
+        if (locked) return;
+        termTouched.current = true;
+        setDeliveryTerm(next);
+        edited();
+    };
+    const customerTerm = describeDeliveryTerm(chosenCustomer?.deliveryTerm, t);
 
     const updateLine = (key: string, patch: Partial<OrderLineDraft>) => {
         if (locked) return;
@@ -306,8 +322,11 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, index) ?? '' })) };
             const built = buildOrderPayload(withSources, variantOf);
             const partij = salesPartijPayload(partijText, partijSuggestion, partijNext?.mode ?? 'Auto');
-            if (!built.ok || !partij.ok) {
-                setErrors(ruleErrorsToFieldErrors([...(built.ok ? [] : built.errors), ...(partij.ok ? [] : partij.errors)], t));
+            const term = deliveryTermPayload(deliveryTerm);
+            if (!built.ok || !partij.ok || !term.ok) {
+                const found = ruleErrorsToFieldErrors([...(built.ok ? [] : built.errors), ...(partij.ok ? [] : partij.errors)], t);
+                for (const error of term.ok ? [] : term.errors) found[error.field] = [...(found[error.field] ?? []), t(`relations_error_${error.code}`)];
+                setErrors(found);
                 return;
             }
             if (partijExists !== null) return;
@@ -317,7 +336,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 kind: 'create-order',
                 key: CREATE_ORDER_KEY,
                 requestId,
-                payload: { requestId, ...built.value, ...(partij.value === null ? {} : { salesPartijNumber: partij.value }) },
+                payload: { requestId, ...built.value, ...(partij.value === null ? {} : { salesPartijNumber: partij.value }), deliveryTerm: term.value },
                 display: { customerName: customers.find((customer) => customer.id === built.value.customerId)?.name ?? String(built.value.customerId) },
                 attempts: 0,
                 lastError: null,
@@ -376,6 +395,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     const startOver = () => {
         setDraft(emptyDraft());
+        termTouched.current = false;
+        setDeliveryTerm(emptyDeliveryTerm());
         partijCheckSeq.current++;
         setPartijText(null);
         setPartijExists(null);
@@ -497,6 +518,10 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                         onBlur={() => { void checkPartij(); }} className={`${inputClass} font-mono`} />
                     <span id="salesPartijNumber-hint" className="block text-xs text-gray-500">{t(partijNext?.mode === 'Own' ? 'sales_partij_hint_own' : 'sales_partij_hint')}</span>
                     <FieldError id="salesPartijNumber" messages={partijExists !== null ? [t('sales_partij_exists', { number: partijExists })] : e('salesPartijNumber')} />
+                </div>
+                <div className="col-span-2 md:col-span-4">
+                    <DeliveryTermField value={deliveryTerm} onChange={changeDeliveryTerm} errors={e} locked={locked} dataTour="sales-delivery-term"
+                        hint={chosenCustomer === null ? null : customerTerm === null ? t('delivery_term_customer_none') : t('delivery_term_from_customer', { term: customerTerm })} />
                 </div>
                 <div className="col-span-2 md:col-span-4">
                     <label htmlFor="internalNote-input" className="text-xs font-medium text-gray-700">{t('internal_note_label')}</label>

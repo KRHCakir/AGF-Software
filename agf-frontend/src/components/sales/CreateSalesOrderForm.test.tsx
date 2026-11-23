@@ -12,7 +12,8 @@ import { HydratedGate, PendingCommandsProvider } from './PendingCommandsContext'
 // kg, eenheid en btw-voorstel uit het artikel, prijs, korting en bedrag, totalen en btw per tarief; de klant kiezen met "Lo" + Tab; geen
 // treffer opent "Nieuwe klant" met de getypte naam.
 
-const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls', searchCode: 'LMS', isActive: true, city: 'Rotterdam' }, { id: 2, name: 'DEMO Klant B', searchCode: null, isActive: true }];
+const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls', searchCode: 'LMS', isActive: true, city: 'Rotterdam',
+    deliveryTerm: { deliveryTermKind: 'Incoterm', incoterm: 'DAP', incotermPlace: 'Rotterdam', deliveryTermText: null } }, { id: 2, name: 'DEMO Klant B', searchCode: null, isActive: true }];
 const variant = (id: number, name: string, net: number | null, gross: number | null) =>
     ({ id, name, origin: 'Peru', packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: 'colli' as const, defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross, vatPercentage: 9 });
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [variant(1, 'Hass', 10, 10.3), variant(2, 'Green', null, null)] }];
@@ -103,6 +104,26 @@ describe('CreateSalesOrderForm: kg on the order line and customer search', () =>
                 unitPrice: 2.5, discountPercentage: 2.5, vatPercentage: 9 },
             { productVariantId: 2, quantity: 221, unit: 'colli', palletCount: null, packagesPerPallet: null, vatPercentage: 21 },
         ]);
+    });
+
+    test('the delivery term is filled in from the customer, can be changed for this order only and goes along with the order', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await type('customerId-input', 'Lo');
+        await key('customerId-input', 'Tab');
+        const kind = mounted.container.querySelector<HTMLSelectElement>('[id="deliveryTerm.deliveryTermKind-input"]')!;
+        assert.equal(kind.value, 'Incoterm');
+        assert.equal(field('deliveryTerm.incotermPlace-input').value, 'Rotterdam');
+        assert.ok(text('delivery-term-hint')!.includes('delivery_term_from_customer'));
+        await type('deliveryTerm.incotermPlace-input', 'Venlo');
+        await type('requestedDeliveryDate-input', '2026-10-30');
+        await chooseVariant(0, 'hass');
+        await type('lines[0].quantity-input', '10');
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        assert.deepEqual(JSON.parse(posted[0].body).deliveryTerm, { deliveryTermKind: 'Incoterm', incoterm: 'DAP', incotermPlace: 'Venlo', deliveryTermText: null });
+        // De aanpassing hoort bij deze order; de klantgegevens in het formulier blijven zoals ze waren.
+        assert.equal(customers[0].deliveryTerm!.incotermPlace, 'Rotterdam', 'the customer itself never changes');
     });
 
     test('at 390 px every line is a block with the field names in front; nothing falls away', async () => {

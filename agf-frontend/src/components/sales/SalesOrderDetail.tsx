@@ -30,6 +30,7 @@ import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './Reserv
 import ChainStrip from '../shared/ChainStrip';
 import SalesOrderDocuments from './SalesOrderDocuments';
 import SalesOrderTransport from './SalesOrderTransport';
+import SalesOrderDeliveryTerm from './SalesOrderDeliveryTerm';
 import MailDraftsPanel from './MailDraftsPanel';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import SalesStepBar from './SalesStepBar';
@@ -355,6 +356,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                         <dt className="text-xs text-gray-600">{t('sales_customer_reference')}</dt>
                         <dd className="font-medium text-gray-900" data-tour="sales-detail" data-tour-key={order.customerReference ?? ''}>{order.customerReference ?? t('sales_no_reference')}</dd>
                     </div>
+                    <SalesOrderDeliveryTerm order={order} onChanged={() => void onOrderChanged()} />
                     {order.internalNote && (
                         <div className="col-span-full" data-testid="internal-note">
                             <dt className="text-xs text-gray-600">{t('internal_note_label')} <span className="rounded bg-amber-100 px-1 text-xs font-semibold uppercase text-amber-900">{t('internal_note_badge')}</span></dt>
