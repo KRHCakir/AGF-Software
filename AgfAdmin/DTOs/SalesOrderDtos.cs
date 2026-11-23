@@ -15,6 +15,30 @@ namespace AgfAdmin.DTOs
         public List<CreateSalesOrderPackagingLineDto> PackagingLines { get; set; }
         // Feedback 22 november: de leveringsconditie van deze order. Weggelaten = die van de klant; met een lege soort = geen.
         public DeliveryTermDto DeliveryTerm { get; set; }
+        // Feedback 22 november: doorberekende diensten (handling, transport) met een Dienst-artikel; geen voorraad.
+        public List<CreateSalesOrderServiceLineDto> ServiceLines { get; set; }
+    }
+
+    public sealed class CreateSalesOrderServiceLineDto
+    {
+        public int? CostArticleId { get; set; }
+        public decimal? Quantity { get; set; }           // > 0, hooguit 3 decimalen
+        public decimal? UnitPrice { get; set; }          // excl. btw; leeg = nog geen prijs
+        public decimal? DiscountPercentage { get; set; } // 0 tot en met 100; leeg = geen korting
+        public decimal? VatPercentage { get; set; }      // 0, 9 of 21; weggelaten = het tarief van het artikel (standaard 21)
+    }
+
+    public sealed class SalesOrderServiceLineDto
+    {
+        public int Id { get; set; }
+        public int CostArticleId { get; set; }
+        public string Name { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public decimal? DiscountPercentage { get; set; }
+        public decimal VatPercentage { get; set; }
+        // Aantal × prijs min korting, op centen; null zonder prijs.
+        public decimal? LineTotal { get; set; }
     }
 
     // De leveringsconditie van een open order aanpassen (feedback 22 november): met de verwachte orderversie, vastgelegd als auditregel.
@@ -119,6 +143,7 @@ namespace AgfAdmin.DTOs
         public bool AwaitingStock { get; set; }
         public List<SalesOrderLineDto> Lines { get; set; } = new();
         public List<SalesOrderPackagingLineDto> PackagingLines { get; set; } = new();
+        public List<SalesOrderServiceLineDto> ServiceLines { get; set; } = new();
         // Feedback 22 november: de totalenrij onder de goederenregels (zoals bij inkoop; Amount = de goederenregels) en in Amounts de hele
         // order (goederen en emballage): totaal excl. btw, btw per tarief en totaal incl. btw, in euro.
         public PurchaseOrderLineTotalsDto Totals { get; set; }

@@ -61,6 +61,8 @@ namespace AgfAdmin.Models
         public ICollection<SalesOrderLine> Lines { get; set; } = new List<SalesOrderLine>();
         // Emballage (pallets, kratten) naast de goederen; doet niets met de voorraad (zie SalesOrderPackagingLine).
         public ICollection<SalesOrderPackagingLine> PackagingLines { get; set; } = new List<SalesOrderPackagingLine>();
+        // Feedback 22 november: doorberekende diensten (handling, transport); geen voorraad, niet op laadbon of transportopdracht.
+        public ICollection<SalesOrderServiceLine> ServiceLines { get; set; } = new List<SalesOrderServiceLine>();
         // Documenten bij deze order (laadbon, later transportopdracht), elke versie apart en nooit gewijzigd.
         public ICollection<SalesOrderDocument> Documents { get; set; } = new List<SalesOrderDocument>();
         // Transport (documenten deel 2): leeg = geen transport ingevuld, dan geen transportopdracht.
