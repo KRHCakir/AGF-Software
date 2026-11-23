@@ -133,6 +133,12 @@ namespace AgfAdmin.Services
                     else
                     {
                         splits[i] = remainder;
+                        // Vervalt het restant van de oude regel, dan neemt de nieuwe regel het open deel over: meer dan dat zou de order boven de bestelde hoeveelheid tillen.
+                        var openPart = before.ExpectedQuantity - received;
+                        if (remainder == PurchaseOrderDocumentRules.RemainderCancelled && next[i].ExpectedQuantity > openPart)
+                        {
+                            AddError(errors, $"{key}.expectedQuantity", $"The rest of the old line is cancelled, so the new line takes over the open part: at most {openPart.ToString(CultureInfo.InvariantCulture)}.");
+                        }
                     }
                     continue;
                 }
