@@ -25,6 +25,7 @@ import OrderHistory from './OrderHistory';
 import OrderLinePanel from './OrderLinePanel';
 import SalesOrderLineTable from './SalesOrderLineTable';
 import { PackagingLinesView } from './PackagingLines';
+import { ServiceLinesView } from './ServiceLines';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
@@ -521,6 +522,7 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
             ))}
             {/* Emballage staat los van reserveren en verzenden: geen regelpaneel, geen "niet gereserveerd". */}
             <PackagingLinesView lines={order.packagingLines ?? []} />
+            <ServiceLinesView lines={order.serviceLines ?? []} />
         </div>
     );
 }
