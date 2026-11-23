@@ -26,6 +26,8 @@ describe('DirectTradeArchive', () => {
         await mounted.waitFor(() => mounted.container.querySelector('[data-testid="direct-trade-archive-9"]'), 'archive row');
         assert.ok(gets[0].includes('/supply-commitments?route=DirectTrade'));
         assert.ok(mounted.hasText('Fictieve Klant AE'));
+        assert.ok(mounted.hasText('240 box'), 'quantity with its unit');
+        assert.ok(mounted.container.querySelector('[data-testid="direct-trade-archive-status-9"]'), 'status shown');
         assert.equal(mounted.container.querySelectorAll('button').length, 0, 'read only: nothing to change here');
         assert.ok(mounted.container.querySelector('a[href="/purchase-orders/new"]'));
         assert.equal(posted.length, 0);

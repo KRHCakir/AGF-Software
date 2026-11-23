@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
-import { formatDateTime, formatQuantity } from '../../lib/availability';
+import { commitmentStatusKey, formatDateTime, formatQuantity } from '../../lib/availability';
 import { toApiError } from '../../services/apiClient';
 import { getJson } from '../../services/apiClient';
 import { isSupplyCommitmentList, type SupplyCommitment } from '../../types/supply';
@@ -52,9 +52,13 @@ export default function DirectTradeArchive() {
                                 <span className="text-gray-700">· {commitment.vendorName ?? '–'} → {commitment.customerName ?? '–'}</span>
                                 {commitment.destination && <span className="text-gray-700">· {commitment.destination}</span>}
                                 {commitment.expectedAt && <span className="text-gray-700">· {formatDateTime(commitment.expectedAt, locale)}</span>}
+                                {/* Review: de status, zodat verwachte en afgesloten aanvoer te onderscheiden zijn. */}
+                                <span className="rounded border border-gray-300 px-1.5 text-xs text-gray-800" data-testid={`direct-trade-archive-status-${commitment.id}`}>
+                                    {commitmentStatusKey(commitment.status) ? t(commitmentStatusKey(commitment.status)!) : commitment.status}
+                                </span>
                             </span>
                             <span className="block text-xs text-gray-600">
-                                {commitment.lines.map((line) => `${line.productName ?? ''} ${line.productVariantName ?? ''} · ${formatQuantity(line.expectedQuantity, locale)}`).join(' — ')}
+                                {commitment.lines.map((line) => `${line.productName ?? ''} ${line.productVariantName ?? ''} · ${formatQuantity(line.expectedQuantity, locale)}${line.expectedUnit ? ` ${line.expectedUnit}` : ''}`).join(' — ')}
                             </span>
                         </li>
                     ))}
