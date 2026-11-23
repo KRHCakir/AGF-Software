@@ -2,6 +2,7 @@ import type { CreateSalesOrderRequest } from '../types/salesOrder';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { buildPackagingLines, type PackagingLineDraft } from './packaging.ts';
+import { buildServiceLines, type ServiceLineDraft } from './serviceLines.ts';
 import { type PurchaseArticle, isBlankPurchaseLine } from './purchaseOrderLines.ts';
 import { type SalesLineDraft, emptySalesLine, salesLinePayload } from './salesLine.ts';
 import { shownKgTotal } from './weightDisplay.ts';
@@ -54,6 +55,8 @@ export interface OrderDraft {
     lines: OrderLineDraft[];
     // Emballage (pallets, kratten) naast de goederen; doet niets met de voorraad.
     packagingLines?: PackagingLineDraft[];
+    // Feedback 22 november: doorberekende diensten (handling, transport); doet niets met de voorraad.
+    serviceLines?: ServiceLineDraft[];
 }
 
 // Een goederenregel waar niets in staat (geen enkel veld): telt niet mee als de order emballage heeft. Half ingevuld wordt gecontroleerd.
@@ -78,7 +81,7 @@ export function salesPartijPayload(text: string | null, suggestion: string | nul
 // Backendsleutels lines[i] verwijzen naar de meegestuurde regels; lege goederenregels blijven in het formulier staan maar gaan niet mee.
 // Vertaalt die sleutels terug naar de formulierindex, zodat de fout bij de juiste regel verschijnt.
 export function remapPayloadLineKeys<T>(fieldErrors: Record<string, T>, draft: OrderDraft): Record<string, T> {
-    const hasPackaging = (draft.packagingLines ?? []).length > 0;
+    const hasPackaging = (draft.packagingLines ?? []).length > 0 || (draft.serviceLines ?? []).length > 0;
     const formIndexes = draft.lines.flatMap((line, index) => (hasPackaging && isBlankOrderLine(line) ? [] : [index]));
     const result: Record<string, T> = {};
     for (const [key, value] of Object.entries(fieldErrors)) {
@@ -107,7 +110,8 @@ export function normalizeReason(text: string, required: boolean): BuildResult<st
 // Volledige validatie van een nieuwe order; alle fouten tegelijk, met dezelfde veldsleutels als de backend.
 // `articleOf` geeft het artikel van een variant (eenheid, kg per verpakking, colli per pallet, btw); de regel rekent zoals de inkoopregel.
 // Wie de order maakt, stuurt de client niet mee: dat is de ingelogde gebruiker aan de serverkant.
-export function buildOrderPayload(draft: OrderDraft, articleOf: (variantId: number) => PurchaseArticle | undefined = () => undefined): BuildResult<OrderPayload> {
+export function buildOrderPayload(draft: OrderDraft, articleOf: (variantId: number) => PurchaseArticle | undefined = () => undefined,
+    serviceVatOf: (costArticleId: string) => number | null | undefined = () => null): BuildResult<OrderPayload> {
     const errors: RuleError[] = [];
 
     const customerId = Number(draft.customerId);
@@ -124,12 +128,15 @@ export function buildOrderPayload(draft: OrderDraft, articleOf: (variantId: numb
     }
 
     const packagingDrafts = draft.packagingLines ?? [];
-    const skip = (line: OrderLineDraft) => packagingDrafts.length > 0 && isBlankOrderLine(line);
+    const serviceDrafts = draft.serviceLines ?? [];
+    const skip = (line: OrderLineDraft) => (packagingDrafts.length > 0 || serviceDrafts.length > 0) && isBlankOrderLine(line);
     const goodsCount = draft.lines.filter((line) => !skip(line)).length;
-    if (goodsCount === 0 && packagingDrafts.length === 0) errors.push({ field: 'lines', code: 'required' });
+    if (goodsCount === 0 && packagingDrafts.length === 0 && serviceDrafts.length === 0) errors.push({ field: 'lines', code: 'required' });
     else if (goodsCount > MAX_ORDER_LINES) errors.push({ field: 'lines', code: 'too_many_lines' });
     const packaging = buildPackagingLines(packagingDrafts);
     if (!packaging.ok) errors.push(...packaging.errors);
+    const services = buildServiceLines(serviceDrafts, serviceVatOf);
+    if (!services.ok) errors.push(...services.errors.map((error) => ({ field: error.field, code: error.code as RuleCode })));
 
     const seen = new Set<string>();
     const lines = draft.lines.flatMap((line, index) => {
@@ -162,6 +169,8 @@ export function buildOrderPayload(draft: OrderDraft, articleOf: (variantId: numb
             lines,
             // Alleen met emballage: een order zonder blijft dezelfde opdracht als vóór dit veld.
             ...(packaging.ok && packaging.value.length > 0 ? { packagingLines: packaging.value } : {}),
+            // Alleen met diensten: een order zonder blijft dezelfde opdracht als vóór dit veld.
+            ...(services.ok && services.value.length > 0 ? { serviceLines: services.value } : {}),
         },
     };
 }

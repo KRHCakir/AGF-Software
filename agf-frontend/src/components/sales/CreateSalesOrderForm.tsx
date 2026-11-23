@@ -21,10 +21,12 @@ import LineSourceChoice from './LineSourceChoice';
 import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
-import { listPackagingArticles } from '../../services/costArticleService';
+import { listCostArticles, listPackagingArticles } from '../../services/costArticleService';
 import { packagingDraftFrom, palletProposal, parsePackagingQuantity, parseUnitPrice } from '../../lib/packaging';
 import type { CostArticle } from '../../types/costArticle';
 import { PackagingLinesInput, PackagingLinesView } from './PackagingLines';
+import { ServiceLinesInput, ServiceLinesView } from './ServiceLines';
+import { serviceAmounts } from '../../lib/serviceLines';
 import { SaveResult } from '../../services/supplyService';
 import { CreatedCustomer, CustomerOption, ProductOption } from '../../types/referenceData';
 import { SalesOrder } from '../../types/salesOrder';
@@ -80,6 +82,8 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         ...(line.weightSource === 'Entered' && line.grossWeightKg != null ? { grossKg: formatKgInput(line.grossWeightKg), grossKgEntered: true } : {}),
     })).concat(command.payload.lines.length === 0 ? [emptyLine()] : []),
     packagingLines: (command.payload.packagingLines ?? []).map((line) => packagingDraftFrom(line, newRequestId())),
+    serviceLines: (command.payload.serviceLines ?? []).map((line) => ({ key: newRequestId(), costArticleId: String(line.costArticleId), quantity: formatDecimalInput(line.quantity),
+        unitPrice: line.unitPrice == null ? '' : formatAmountInput(line.unitPrice), discount: line.discountPercentage == null ? '' : formatDecimalInput(line.discountPercentage, 2), vat: String(line.vatPercentage) })),
 });
 
 // Nieuwe verkooporder via POST /api/sales-orders. Bestaande klant, leverdatum en de regels in de indeling van de inkooporder (feedback
@@ -149,6 +153,19 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         listPackagingArticles(true, controller.signal).then(setPackagingArticles).catch(() => { if (!controller.signal.aborted) setPackagingFailed(true); });
         return () => controller.abort();
     }, [packagingToken]);
+
+    // Feedback 22 november: Dienst-artikelen (soort Cost) voor de dienstregels, ook inactieve (een bevroren regel toont haar artikel).
+    const [serviceArticles, setServiceArticles] = useState<CostArticle[]>([]);
+    const [serviceFailed, setServiceFailed] = useState(false);
+    const [serviceToken, setServiceToken] = useState(0);
+    useEffect(() => {
+        const controller = new AbortController();
+        setServiceFailed(false);
+        listCostArticles(true, controller.signal).then((articles) => setServiceArticles(articles.filter((article) => (article.kind ?? 'Cost') === 'Cost')))
+            .catch(() => { if (!controller.signal.aborted) setServiceFailed(true); });
+        return () => controller.abort();
+    }, [serviceToken]);
+    const serviceVatOf = (costArticleId: string) => serviceArticles.find((article) => String(article.id) === costArticleId)?.vatPercentage;
 
     useEffect(() => {
         const controller = new AbortController();
@@ -320,7 +337,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         let command = pending;
         if (command === null) {
             const withSources: OrderDraft = { ...draft, lines: draft.lines.map((line, index): OrderLineDraft => ({ ...line, supplySource: effectiveSource(line, index) ?? '' })) };
-            const built = buildOrderPayload(withSources, variantOf);
+            const built = buildOrderPayload(withSources, variantOf, serviceVatOf);
             const partij = salesPartijPayload(partijText, partijSuggestion, partijNext?.mode ?? 'Auto');
             const term = deliveryTermPayload(deliveryTerm);
             if (!built.ok || !partij.ok || !term.ok) {
@@ -452,6 +469,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                     ))}
                 </ul>
                 <PackagingLinesView lines={order.packagingLines ?? []} />
+                <ServiceLinesView lines={order.serviceLines ?? []} />
             </SuccessPanel>
         );
     }
@@ -590,8 +608,16 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             )}
             <PackagingLinesInput lines={draft.packagingLines ?? []} articles={packagingArticles} proposal={proposal} locked={locked} errors={e}
                 onChange={(packagingLines) => { if (locked) return; setDraft((current) => ({ ...current, packagingLines })); edited(); }} />
+            {serviceFailed && (
+                <div role="alert" className="flex items-center gap-3 text-sm text-red-700">
+                    <span>{t('service_load_failed')}</span>
+                    <button type="button" onClick={() => setServiceToken((token) => token + 1)} className={secondaryButtonClass}>{t('packaging_reload')}</button>
+                </div>
+            )}
+            <ServiceLinesInput lines={draft.serviceLines ?? []} articles={serviceArticles} locked={locked} errors={e}
+                onChange={(serviceLines) => { if (locked) return; setDraft((current) => ({ ...current, serviceLines })); edited(); }} />
             {/* Totaal excl. btw, btw per tarief en totaal incl. btw over goederen en emballage samen. */}
-            <OrderAmountsSummary amounts={purchaseLineTotals(rows.filter((_, index) => !isBlankLine(draft.lines[index])), packagingAmounts).amounts} currency="EUR" />
+            <OrderAmountsSummary amounts={purchaseLineTotals(rows.filter((_, index) => !isBlankLine(draft.lines[index])), [...packagingAmounts, ...serviceAmounts(draft.serviceLines ?? [], serviceVatOf)]).amounts} currency="EUR" />
 
             {pending === null && (
                 <div className="flex items-center gap-3 border-t border-gray-200 pt-3">

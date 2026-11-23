@@ -42,7 +42,8 @@ const chooseVariant = async (index: number, text: string) => {
 describe('CreateSalesOrderForm: kg on the order line and customer search', () => {
     beforeEach(() => {
         window.sessionStorage.clear();
-        posted = stubFetch({ onGet: () => json(404, { message: 'unexpected GET' }), nextPost: async () => json(500, { message: 'stop' }) });
+        posted = stubFetch({ onGet: (url) => (url.includes('/cost-articles') ? json(200, [{ id: 31, name: 'Handling', kind: 'Cost', vatPercentage: 21, isStandard: true, isActive: true, sortOrder: 10, lineCount: 0 }])
+            : json(404, { message: 'unexpected GET' })), nextPost: async () => json(500, { message: 'stop' }) });
         mounted = new Mounted();
     });
     afterEach(async () => { await mounted.unmount(); });
@@ -124,6 +125,28 @@ describe('CreateSalesOrderForm: kg on the order line and customer search', () =>
         assert.deepEqual(JSON.parse(posted[0].body).deliveryTerm, { deliveryTermKind: 'Incoterm', incoterm: 'DAP', incotermPlace: 'Venlo', deliveryTermText: null });
         // De aanpassing hoort bij deze order; de klantgegevens in het formulier blijven zoals ze waren.
         assert.equal(customers[0].deliveryTerm!.incotermPlace, 'Rotterdam', 'the customer itself never changes');
+    });
+
+    test('a service line (handling) with its own VAT goes along, counts in the VAT per rate and not in the goods totals', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await type('customerId-input', 'Lo');
+        await key('customerId-input', 'Tab');
+        await type('requestedDeliveryDate-input', '2026-10-30');
+        await chooseVariant(0, 'hass');
+        await type('lines[0].quantity-input', '10');
+        await type('lines[0].unitPrice-input', '2');
+        await click(mounted.button('+ service_add')!);
+        await mounted.waitFor(() => mounted.container.querySelector('[id="serviceLines[0].costArticleId-input"] option[value="31"]'), 'service articles');
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="serviceLines[0].costArticleId-input"]')!, '31'); });
+        await type('serviceLines[0].unitPrice-input', '25');
+        assert.equal(mounted.container.querySelector<HTMLSelectElement>('[id="serviceLines[0].vatPercentage-input"]')!.value, '21', 'VAT of the service article');
+        assert.equal(mounted.container.querySelector('[data-testid="line-totals-quantity"]')!.textContent, '10', 'the service is no goods quantity');
+        assert.ok(mounted.container.querySelector('[data-testid="order-amounts-vat-21"]'), 'VAT 21% from the service');
+        assert.ok(mounted.container.querySelector('[data-testid="order-amounts-vat-9"]'), 'VAT 9% from the goods');
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        assert.deepEqual(JSON.parse(posted[0].body).serviceLines, [{ costArticleId: 31, quantity: 1, unitPrice: 25, vatPercentage: 21 }]);
     });
 
     test('at 390 px every line is a block with the field names in front; nothing falls away', async () => {

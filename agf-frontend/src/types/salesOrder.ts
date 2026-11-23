@@ -60,6 +60,28 @@ export interface CreateSalesOrderRequest {
     packagingLines?: CreateSalesOrderPackagingLineRequest[];
     // Feedback 22 november: de leveringsconditie van deze order (voorgevuld uit de klant); weggelaten = die van de klant.
     deliveryTerm?: DeliveryTerm;
+    // Feedback 22 november: doorberekende diensten (handling, transport); alleen meegestuurd als er zijn.
+    serviceLines?: CreateSalesOrderServiceLineRequest[];
+}
+
+// Feedback 22 november: een dienstregel (Dienst-artikel, aantal, prijs, korting, btw); geen voorraad, niet op laadbon of transportopdracht.
+export interface CreateSalesOrderServiceLineRequest {
+    costArticleId: number;
+    quantity: number;
+    unitPrice?: number;
+    discountPercentage?: number;
+    vatPercentage: number;
+}
+
+export interface SalesOrderServiceLine {
+    id: number;
+    costArticleId: number;
+    name: string | null;
+    quantity: number;
+    unitPrice: number | null;
+    discountPercentage: number | null;
+    vatPercentage: number;
+    lineTotal: number | null;
 }
 
 export interface CreateSalesOrderPackagingLineRequest {
@@ -370,6 +392,8 @@ export interface SalesOrder {
     lines: SalesOrderLine[];
     // Emballage naast de goederen; ontbreekt in oudere antwoorden.
     packagingLines?: SalesOrderPackagingLine[];
+    // Feedback 22 november: doorberekende diensten; ontbreken in oudere antwoorden.
+    serviceLines?: SalesOrderServiceLine[];
     // Alleen in het antwoord op aanmaken (201 en herhaling): kredietlimiet overschreden. Blokkeert nooit; ontbreekt bij GET/lijst.
     creditWarning?: SalesOrderCreditWarning | null;
     // Alleen in het antwoord op aanmaken: meer verkocht dan voorraad en verwachte aanvoer (per variant en eenheid). Nooit blokkerend.
