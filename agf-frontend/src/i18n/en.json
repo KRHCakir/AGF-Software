@@ -2563,6 +2563,8 @@
   "partij_show_sales": "Show sales lots",
   "partij_show_purchase": "Show purchase lots",
   "partij_missing_title": "Lot missing ({count})",
+  "partij_missing_load_failed": "The Lot missing worklist could not be loaded.",
+  "partij_missing_retry": "Try again",
   "partij_missing_text": "This stock has no lot (from before lot numbering). Nothing is made up: open the purchase order and link the right lot via Lot › Link purchase order, with a reason. New receipts always get a lot.",
   "partij_missing_lot": "lot on the pallet: {lot}",
   "partij_missing_received": "received {date}",
