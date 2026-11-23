@@ -678,7 +678,8 @@ namespace AgfAdmin.Data
                 b.HasOne(p => p.SalesOrder).WithMany().HasForeignKey(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(p => p.Invoice).WithOne(i => i.SalesPartij).HasForeignKey<Partij>(p => p.InvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
-                b.Property(p => p.Color).HasMaxLength(LotColorRules.MaxColorLength);
+                // Concurrency-token: een gelijktijdige kleurwijziging zou anders een onjuiste oude waarde in de historie zetten.
+                b.Property(p => p.Color).HasMaxLength(LotColorRules.MaxColorLength).IsConcurrencyToken();
                 b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(p => p.RequestId).IsUnique();
             });
