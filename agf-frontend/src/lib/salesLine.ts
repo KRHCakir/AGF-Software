@@ -10,6 +10,9 @@ import { weightPayload } from './lineWeight.ts';
 import { type PurchaseArticle, type PurchaseLineDraft, type PurchaseLineError, emptyPurchaseLine, purchaseLineRow } from './purchaseOrderLines.ts';
 
 export type SalesLineDraft = PurchaseLineDraft & {
+    // Feedback 22 november: de gevraagde inkoop-partij (optioneel; leeg = de oudste partij eerst bij het reserveren).
+    partijId?: number | null;
+    partijNumber?: string | null;
     // Uit voorraad of uit verwachte aanvoer; leeg = de server kiest (uit voorraad als het past). sourceTouched: door de gebruiker gekozen.
     supplySource?: SupplySource | '';
     sourceTouched?: boolean;
@@ -48,6 +51,7 @@ export function salesLinePayload(line: SalesLineDraft, prefix: string, article: 
             ...(row.price !== null ? { unitPrice: row.price } : {}),
             ...(row.discount !== null ? { discountPercentage: row.discount } : {}),
             ...(row.vat !== null ? { vatPercentage: row.vat } : {}),
+            ...(line.partijId ? { partijId: line.partijId } : {}),
         },
     };
 }
