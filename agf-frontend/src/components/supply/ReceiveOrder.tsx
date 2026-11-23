@@ -77,6 +77,7 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
         try {
             const result = await receiveLine(orderId, line.id, { ...built.request, requestId: request.requestId });
             requests.current.delete(line.id);
+            setErrors((current) => { const next = { ...current }; delete next[line.id]; return next; });
             setState({ status: 'ready', data: result.order });
             const updated = result.order.lines.find((candidate) => candidate.id === line.id);
             setDrafts((current) => ({ ...current, [line.id]: updated ? draftFor(updated) : current[line.id] }));
@@ -254,11 +255,11 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
                                 {t('receipt_pallet_numbers')}
                             </button>
                         )}
-                        {toInspect.length > 0 && (
-                            <Link href={`/inspection?palletId=${toInspect[0].palletId}`} className={secondaryButtonClass} data-tour="receive-line-inspect" data-tour-key={line.id}>
-                                {t('receipt_inspect')}
+                        {toInspect.map((pallet) => (
+                            <Link key={pallet.palletId} href={`/inspection?palletId=${pallet.palletId}`} className={secondaryButtonClass} data-tour="receive-line-inspect" data-tour-key={line.id}>
+                                {toInspect.length > 1 ? `${t('receipt_inspect')} ${pallet.reference}` : t('receipt_inspect')}
                             </Link>
-                        )}
+                        ))}
                     </div>
                 </td>
             </tr>
