@@ -613,15 +613,11 @@ namespace AgfAdmin.Services
         {
             var order = await _db.SupplyCommitments.Include(c => c.Lines).Include(c => c.Partij).SingleAsync(c => c.Id == source.SupplyCommitmentId, cancellationToken);
             var partij = order.Partij;
-            // Bestaande voorraad zonder partij op deze order wordt niet stilzwijgend gekoppeld: eerst via Partij › Inkooporder koppelen (met reden).
-            // Zelfde definitie als de werklijst Partij ontbreekt (nog op voorraad, pallet niet geannuleerd), zodat elke blokkade daar zichtbaar is.
-            var hasUnlinkedStock = await _db.PalletContentLines.AnyAsync(c => c.PartijId == null && c.SupplyCommitmentLine.SupplyCommitmentId == order.Id
-                && c.Pallet.LogisticsStatus != PalletRules.StatusCancelled && c.Quantity - c.DispatchedQuantity - c.SplitOffQuantity > 0m, cancellationToken);
-            if (hasUnlinkedStock)
-            {
-                return ServiceResult<PalletContentLineDto>.Conflict($"Purchase order {order.Id} has stock without a lot; link a lot to the order first (Lot › Link purchase order, with a reason) before receiving more.");
-            }
-            if (partij != null && candidate.LotNumber != null && PartijRules.NumberKey(candidate.LotNumber) != PartijRules.NumberKey(partij.Number))
+            // Oudere voorraad zonder partij op deze order blijft staan zoals ze is en staat in de werklijst Partij ontbreekt; daar koppel je
+            // haar met reden. Een nieuwe ontvangst blokkeert ze niet (feedback 22 november: niets verzinnen, wel tonen).
+            // Een opgegeven lotnummer dat niet de partij van de order is, wordt geweigerd; leeg telt als niet opgegeven.
+            var givenKey = PartijRules.NumberKey(candidate.LotNumber);
+            if (partij != null && givenKey != null && givenKey != PartijRules.NumberKey(partij.Number))
             {
                 return ServiceResult<PalletContentLineDto>.Conflict($"This purchase order belongs to lot {partij.Number}, not {candidate.LotNumber}; lots are never mixed.");
             }
