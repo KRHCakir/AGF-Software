@@ -56,7 +56,9 @@ export function PurchaseLineHead({ trailing }: { trailing?: ReactNode }) {
 // Totaalrij onder dezelfde kolommen: aantal, bruto, netto en bedrag, met het totaal aantal pallets onder Product. Regels zonder kg,
 // prijs of colli per pallet tellen niet mee; dat staat er dan bij, zodat een totaal nooit stilzwijgend onvolledig is.
 // Valuta-ronde: het bedrag met de valuta van het document, en bij een andere valuta dan euro het bedrag in euro eronder (≈ € …).
-export function PurchaseLineTotalsRow({ totals, trailingCells = 0, currency = null, rate = null }: { totals: PurchaseLineTotals; trailingCells?: number; currency?: string | null; rate?: number | null }) {
+export function PurchaseLineTotalsRow({ totals, trailingCells = 0, currency = null, rate = null, quantityText = null }: { totals: PurchaseLineTotals; trailingCells?: number; currency?: string | null; rate?: number | null;
+    // Review PR 2: bij gemengde eenheden het aantal per eenheid ("30 colli · 5 box") in plaats van één opgeteld getal.
+    quantityText?: string | null }) {
     const { t, locale } = useTranslation();
     const labels = usePurchaseLineLabels();
     const missing = (count: number, key: string) => (count > 0 ? <span className="block text-xs font-normal text-gray-600">{t(key, { count: String(count) })}</span> : null);
@@ -72,7 +74,7 @@ export function PurchaseLineTotalsRow({ totals, trailingCells = 0, currency = nu
                 <td className="max-md:hidden" colSpan={3} />
                 <td {...lineCell('gross', labels.gross)} data-testid="line-totals-gross">{kg(totals.shownGrossKg === undefined ? totals.grossKg : totals.shownGrossKg)}{missing(totals.linesWithoutGross, 'po_line_lines_without_kg')}</td>
                 <td {...lineCell('net', labels.net)} data-testid="line-totals-net">{kg(totals.shownNetKg === undefined ? totals.netKg : totals.shownNetKg)}{missing(totals.linesWithoutNet, 'po_line_lines_without_kg')}</td>
-                <td {...lineCell('quantity', labels.quantity)} data-testid="line-totals-quantity">{formatQuantity(totals.quantity, locale)}</td>
+                <td {...lineCell('quantity', labels.quantity)} data-testid="line-totals-quantity">{quantityText ?? formatQuantity(totals.quantity, locale)}</td>
                 <td className="max-md:hidden" colSpan={4} />
                 <td {...lineCell('total', labels.total)} data-testid="line-totals-amount">
                     {totals.amount === null ? '–' : formatMoney(totals.amount, currency, locale)}

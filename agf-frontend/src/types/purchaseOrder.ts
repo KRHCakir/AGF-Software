@@ -334,7 +334,9 @@ export interface CorrectPurchaseOrderRequest {
 }
 
 export interface PurchaseLineTotalsDto {
-    quantity: number;
+    // Review PR 2: null bij een verkooporder met gemengde eenheden (box en colli worden nooit opgeteld); dan per eenheid in quantitiesByUnit.
+    quantity: number | null;
+    quantitiesByUnit?: { unit: string; quantity: number }[] | null;
     netWeightKg: number | null;
     grossWeightKg: number | null;
     amount: number | null;
