@@ -5418,6 +5418,9 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)");
 
+                    b.Property<bool>("VatSpecified")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CostArticleId");

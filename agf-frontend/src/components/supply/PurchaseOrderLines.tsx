@@ -157,7 +157,8 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         value={line.productVariantId} disabled={locked || limit.articleFixed} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
                                         describedBy={(errors(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
                                         onChange={(variantId) => {
-                                            onChange(line.key, { productVariantId: variantId, unit: '', ...(line.vatTouched && !limit.articleFixed ? {} : { vat: '', vatTouched: false }) } as Partial<D>);
+                                            // Een ander artikel: ook het btw-tarief van dat artikel (review: een eerder gekozen tarief hoort bij het vorige artikel).
+                                            onChange(line.key, { productVariantId: variantId, unit: '', vat: '', vatTouched: false } as Partial<D>);
                                             // Feedback 22 november: een gekozen artikel staat direct op de regel en de cursor springt naar Aantal.
                                             if (variantId !== '') focusQuantityAfterPick(`${prefix}.productVariantId-input`, `${prefix}.${fields.quantity}-input`);
                                         }} />
