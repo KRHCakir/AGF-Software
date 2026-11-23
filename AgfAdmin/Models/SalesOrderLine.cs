@@ -12,6 +12,11 @@ namespace AgfAdmin.Models
         public ProductVariant ProductVariant { get; set; }
 
         public decimal Quantity { get; set; } // > 0, decimal(18,3)
+        // Feedback 22 november: de gevraagde inkoop-partij (optioneel). Leeg = bij het reserveren de oudste partij eerst (FIFO), zoals altijd;
+        // ingevuld = reserveren (FIFO) alleen uit deze partij. Een regel kan daarnaast via "Partij kiezen" uit meer partijen gereserveerd
+        // worden. Alleen een inkoop-partij; vast na aanmaken (regel 43).
+        public int? PartijId { get; set; }
+        public Partij Partij { get; set; }
         public string Unit { get; set; }      // box, colli, tray, piece of dozen; nooit omgerekend
         // Bron: Stock (uit voorraad) of Expected (uit verwachte aanvoer, verkocht vóór aankomst); zie SalesSupplyRules. Oudere regels: Stock.
         // Per order één regel per variant + eenheid + bron, zodat een regel gesplitst kan worden (deel uit voorraad, rest verwacht).

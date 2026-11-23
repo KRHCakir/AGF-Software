@@ -95,7 +95,8 @@ namespace AgfAdmin.Data
             await CheckPurchaseOnlyLinksAsync(db, async, cancellationToken);
         }
 
-        // Inkooporders, inkoopregels, palletregels en de regels van een directe factuur krijgen alleen een inkoop-partij.
+        // Inkooporders, inkoopregels, palletregels, de regels van een directe factuur en de gevraagde partij van een verkooporderregel krijgen
+        // alleen een inkoop-partij.
         private static async Task CheckPurchaseOnlyLinksAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             var linked = db.ChangeTracker.Entries<SupplyCommitment>()
@@ -107,6 +108,9 @@ namespace AgfAdmin.Data
                 .Concat(db.ChangeTracker.Entries<PalletContentLine>()
                     .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(c => c.PartijId).IsModified))
                     .Select(e => (Partij: e.Entity.Partij, Id: e.Property(c => c.PartijId).CurrentValue)))
+                .Concat(db.ChangeTracker.Entries<SalesOrderLine>()
+                    .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(l => l.PartijId).IsModified))
+                    .Select(e => (Partij: e.Entity.Partij, Id: e.Property(l => l.PartijId).CurrentValue)))
                 .Concat(db.ChangeTracker.Entries<InvoiceLine>()
                     .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(l => l.PartijId).IsModified))
                     .Select(e => (Partij: e.Entity.Partij, Id: e.Property(l => l.PartijId).CurrentValue)))
