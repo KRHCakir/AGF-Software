@@ -376,6 +376,16 @@ namespace AgfAdmin.Services
         {
             var existingLines = existing.Lines.OrderBy(l => l.Id).ToList();
             var candidateLines = candidate.Lines.ToList();
+            // Leveringsconditie: de oorspronkelijke (bij aanmaken vastgelegde) waarde, niet de huidige: die kan intussen aangepast zijn.
+            // Is ze aangepast, dan is de oude waarde van de eerste DeliveryTermChanged-regel de oorspronkelijke.
+            string originalTerm = DeliveryTermRules.Describe(DeliveryTermRules.Of(existing));
+            if (deliveryTermAsked)
+            {
+                var firstChange = await _db.SalesOrderAuditEvents.AsNoTracking()
+                    .Where(e => e.SalesOrderId == existing.Id && e.EventType == ReservationRules.DeliveryTermChangedEvent)
+                    .OrderBy(e => e.Id).Select(e => new { e.OldValue }).FirstOrDefaultAsync(cancellationToken);
+                if (firstChange != null) originalTerm = firstChange.OldValue;
+            }
             // Partij: vergeleken met de oorspronkelijke aanvraag (RequestPartijKey), niet met het huidige nummer (dat kan intussen aangepast
             // of gecorrigeerd zijn). Een order van vóór de verkoop-partij is gelijk aan een aanvraag zonder eigen nummer.
             var samePartij = existing.RequestPartijKey == null ? candidate.RequestPartijKey == "auto"
@@ -388,7 +398,7 @@ namespace AgfAdmin.Services
                 && SamePackaging(existing, candidate)
                 && SameServices(existing, candidate)
                 // Leveringsconditie: alleen als de aanvraag er een meestuurde (anders nam de order die van de klant over).
-                && (!deliveryTermAsked || DeliveryTermRules.Of(existing) == DeliveryTermRules.Of(candidate))
+                && (!deliveryTermAsked || originalTerm == DeliveryTermRules.Describe(DeliveryTermRules.Of(candidate)))
                 && existingLines.Count == candidateLines.Count
                 && existingLines.Zip(candidateLines).All(pair =>
                     pair.First.ProductVariantId == pair.Second.ProductVariantId
@@ -978,7 +988,7 @@ namespace AgfAdmin.Services
             var services = order.ServiceLines.OrderBy(l => l.Id).Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), l.VatPercentage));
             return PurchaseOrderLineTotalsDto.From(
                 lines.Select(l => new PurchaseLineMath.Line(l.Quantity, l.NetWeightKg, l.GrossWeightKg, OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), ExactPallets(l))).ToList(),
-                goods.Concat(packaging).Concat(services), 1m);
+                goods.Concat(packaging).Concat(services), 1m, lines.Select(l => (l.Unit, l.Quantity)).ToList());
         }
 
         // Bevestigd afgeleverd op een regel: uitsluitend Consumed reserveringen waarvan de bijbehorende verzending een bevestiging heeft.

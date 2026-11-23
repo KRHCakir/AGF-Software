@@ -20,6 +20,9 @@ export interface PurchaseLineDraft {
     // Bruto aangepast op deze regel ("Bruto aanpassen"); zonder: aantal × bruto per colli van het artikel.
     grossKg?: string;
     grossKgEntered?: boolean;
+    // Netto zelf ingevuld (alleen de verkooporder, bij een artikel zonder standaard netto); de inkoopregel laat dit leeg.
+    netKg?: string;
+    netKgEntered?: boolean;
     // Eenheid van een opgeslagen regel (bij bewerken): die blijft zoals ze is opgeslagen. Een nieuwe regel heeft hier niets en neemt de
     // eenheid van het artikel; op de regel kiezen kan niet meer (fixes 5b). Een ander artikel kiezen maakt dit veld leeg.
     unit: PackageUnit | '';
@@ -47,11 +50,11 @@ export const emptyPurchaseLine = (key: string): PurchaseLineDraft => ({ key, pro
 
 // Een lege regel (bijvoorbeeld de nieuwe regel na Tab op het laatste veld) telt niet mee bij opslaan, zolang er een gevulde regel is.
 export function isBlankPurchaseLine(line: PurchaseLineDraft): boolean {
-    return line.productVariantId === '' && line.quantity.trim() === '' && line.unitPrice.trim() === '' && !line.grossKgEntered && line.lotNumber.trim() === ''
+    return line.productVariantId === '' && line.quantity.trim() === '' && line.unitPrice.trim() === '' && !line.grossKgEntered && !line.netKgEntered && line.lotNumber.trim() === ''
         && (line.ggn ?? '').trim() === '' && (line.discount ?? '').trim() === '' && !line.vatTouched;
 }
 
-export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity' | 'expectedUnit' | 'expectedGrossWeightKg' | 'unitPrice' | 'ggn' | 'discountPercentage' | 'vatPercentage';
+export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity' | 'expectedUnit' | 'expectedGrossWeightKg' | 'expectedNetWeightKg' | 'unitPrice' | 'ggn' | 'discountPercentage' | 'vatPercentage';
     code: DecimalError | DiscountError | 'required' | 'gross_below_net' | 'ggn_13_digits' };
 
 export interface PurchaseLineRow {
@@ -78,9 +81,9 @@ export function purchaseLineRow(line: PurchaseLineDraft, article: PurchaseArticl
     // ("leg de eenheid vast bij het artikel"); kiezen op de regel kan niet.
     const unit = line.unit !== '' ? line.unit : article?.packagingUnit ?? '';
     if (unit === '') errors.push({ field: 'expectedUnit', code: 'required' });
-    // Netto altijd uit het artikel (geen invoer meer); bruto uit het artikel, tenzij op deze regel aangepast.
-    const resolved = resolveLineWeight({ grossKg: line.grossKg, grossKgEntered: line.grossKgEntered }, quantity, article ?? undefined);
-    if (!resolved.ok) for (const error of resolved.errors) errors.push({ field: 'expectedGrossWeightKg', code: error.code });
+    // Netto uit het artikel, tenzij op deze regel ingevuld (verkooporder, artikel zonder standaard netto); bruto uit het artikel, tenzij aangepast.
+    const resolved = resolveLineWeight({ grossKg: line.grossKg, grossKgEntered: line.grossKgEntered, netKg: line.netKg, netKgEntered: line.netKgEntered }, quantity, article ?? undefined);
+    if (!resolved.ok) for (const error of resolved.errors) errors.push({ field: error.field === 'net' ? 'expectedNetWeightKg' : 'expectedGrossWeightKg', code: error.code });
     const price = parseUnitPrice(line.unitPrice);
     if (!price.ok) errors.push({ field: 'unitPrice', code: price.error });
     if (ggnProblem(line.ggn ?? '') === 'ggn_13_digits') errors.push({ field: 'ggn', code: 'ggn_13_digits' });
