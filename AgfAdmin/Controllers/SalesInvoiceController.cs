@@ -62,7 +62,15 @@ namespace AgfAdmin.Controllers
             {
                 return this.ToActionResult(ServiceResult<object>.Validation(lotErrors));
             }
-            var customer = await _context.Customers.FindAsync(new object[] { dto.CustomerId }, cancellationToken);
+            Customer? customer = null;
+            if (dto.CustomerId is int customerId)
+            {
+                customer = await _context.Customers.FindAsync(new object[] { customerId }, cancellationToken);
+                if (customer == null)
+                {
+                    return this.ToActionResult(ServiceResult<object>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {customerId} does not exist." } }));
+                }
+            }
 
             for (var attempt = 1; ; attempt++)
             {
