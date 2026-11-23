@@ -70,7 +70,12 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
         if (event.key === 'ArrowDown') { event.preventDefault(); setOpen(true); setActive((n) => Math.min(n + (open ? 1 : 0), Math.max(0, shown.length - 1))); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); setActive((n) => Math.max(0, n - 1)); }
         else if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); }
-        else if (event.key === 'Enter' && open && shown[active]) { event.preventDefault(); choose(shown[active]); }
+        else if (event.key === 'Enter') {
+            // Enter mag in een partijkeuze nooit het formulier verzenden.
+            event.preventDefault();
+            if (open && shown[active]) choose(shown[active]);
+            else setOpen(false);
+        }
     };
     // Verlaten: precies een bestaand nummer kiest die partij, leeg haalt de keuze weg; iets anders blijft staan met een melding.
     const onBlur = () => {

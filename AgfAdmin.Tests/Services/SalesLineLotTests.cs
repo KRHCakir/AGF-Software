@@ -118,7 +118,7 @@ public sealed class SalesLineLotTests : IDisposable
         Assert.Equal((35m, 2), (lots[1].AvailableQuantity, lots[1].PalletCount));
         Assert.Equal(new[] { null, "Koelhuis Noord" }, lots[1].Locations);
         Assert.Equal(new[] { "B-01", "B-02" }, lots[1].Bins);
-        Assert.Equal(("NL", "Kweker K"), (lots[1].Origin, lots[1].VendorName));
+        Assert.Equal(("Spanje", "Kweker K"), (lots[1].Origin, lots[1].VendorName));
         Assert.Contains(options, o => o.PartijId == null && o.Number == "LOT-A");
         Assert.Equal(ServiceResultStatus.Validation, (await new SalesOrderService(db).GetLotOptionsAsync(_s.TomatoId, "kg")).Status);
     }

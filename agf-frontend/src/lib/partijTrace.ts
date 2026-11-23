@@ -38,12 +38,13 @@ export function recallCsv(number: string, recall: PartijRecall, labels: RecallLa
     return csvRows(rows, format.number);
 }
 
-export interface DeliveryLabels { lot: string; customer: string; reference: string; date: string; product: string; quantity: string; purchaseLot: string; supplier: string; origin: string }
+export interface DeliveryLabels { lot: string; customer: string; reference: string; date: string; product: string; quantity: string; purchaseLot: string; supplier: string; origin: string; status: string; delivered: string; planned: string }
 
-// Verkoop-partij: klant, order en leverdatum, dan per regel en inkoop-partij een regel (product, colli, inkoop-partij, leverancier, herkomst).
+// Verkoop-partij: klant, order, leverdatum en leverstatus (gepland of geleverd), dan per regel en inkoop-partij een regel (product, colli, inkoop-partij, leverancier, herkomst).
 export function deliveryCsv(number: string, trace: SalesLotTrace, labels: DeliveryLabels, format: { number: (value: number) => string; date: (iso: string) => string }): string {
     const rows: Cell[][] = [
         [labels.lot, number], [labels.customer, trace.customerName], [labels.reference, trace.reference], [labels.date, trace.deliveryDate === null ? null : format.date(trace.deliveryDate)],
+        [labels.status, trace.shipped ? labels.delivered : labels.planned],
         [],
         [labels.product, labels.quantity, labels.purchaseLot, labels.supplier, labels.origin],
         ...trace.lines.flatMap((line) => (line.sources.length === 0

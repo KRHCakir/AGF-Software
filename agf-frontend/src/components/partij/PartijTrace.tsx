@@ -128,7 +128,7 @@ export default function PartijTrace({ partij }: { partij: PartijDetail }) {
         const csv = () => download(deliveryCsv(partij.number, trace, {
             lot: t('partij_trace_lot'), customer: t('partij_trace_customer'), reference: t('partij_trace_reference'), date: t('partij_trace_delivery_date'),
             product: t('partij_trace_product'), quantity: t('partij_trace_quantity'), purchaseLot: t('partij_trace_purchase_lot'), supplier: t('partij_trace_supplier'),
-            origin: t('partij_trace_origin'),
+            origin: t('partij_trace_origin'), status: t('partij_trace_status'), delivered: t('partij_trace_delivered'), planned: t('partij_trace_planned'),
         }, format), `Levering ${partij.number}.csv`);
         return (
             <section ref={section} className="space-y-2 rounded-md border border-gray-200 bg-white p-3" data-testid="partij-delivery" data-tour="partij-delivery">
