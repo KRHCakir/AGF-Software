@@ -32,6 +32,8 @@ export const SALES_CORE: TourStep[] = [
     ]),
     // De verkoop-partij: voorgesteld bij een nieuwe order, naast het VO-nummer; de rondleiding laat het voorstel staan.
     sales('partij', [{ kind: 'highlight', target: 'sales-partij' }]),
+    // Feedback 22 november: de leveringsconditie van deze order, voorgevuld uit de klant; aanpassen geldt alleen voor deze order.
+    sales('delivery', [{ kind: 'highlight', target: 'sales-delivery-term' }]),
     sales('line', [
         { kind: 'pick', target: 'sales-line-product-0', text: '{{productCode}}' },
         { kind: 'type', target: 'sales-line-quantity:0', text: '{{salesQuantity}}' },
