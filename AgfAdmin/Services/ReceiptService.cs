@@ -202,7 +202,7 @@ namespace AgfAdmin.Services
                     LogisticsStatus = PalletRules.StatusReceived,
                     LocationContext = PalletRules.LocationWarehouse,
                     StockLocationId = order.ReceiveLocationId,
-                }, cancellationToken);
+                }, requireActiveLocation: false, cancellationToken);
                 if (pallet.Status is not (ServiceResultStatus.Created or ServiceResultStatus.Ok)) return Relay(pallet.Status, pallet.Message, pallet.Errors, pallet.ConflictBody, $"pallets[{i}]");
 
                 var content = await pallets.AddContentLineAsync(pallet.Value.Id, new AddPalletContentLineDto

@@ -39,7 +39,11 @@ namespace AgfAdmin.Services
 
         // ---- Pallet aanmaken ----
 
-        public async Task<ServiceResult<PalletDto>> CreateAsync(CreatePalletDto request, CancellationToken cancellationToken = default)
+        // requireActiveLocation = false voor ontvangst op een bestaande order: de locatie staat al op de order en mag daarna inactief zijn gezet.
+        public Task<ServiceResult<PalletDto>> CreateAsync(CreatePalletDto request, CancellationToken cancellationToken = default) =>
+            CreateAsync(request, requireActiveLocation: true, cancellationToken);
+
+        public async Task<ServiceResult<PalletDto>> CreateAsync(CreatePalletDto request, bool requireActiveLocation, CancellationToken cancellationToken)
         {
             var errors = new Dictionary<string, List<string>>();
             var candidate = BuildPallet(request, errors, out var actor, out var reason);
@@ -55,7 +59,7 @@ namespace AgfAdmin.Services
             {
                 var locationId = candidate.StockLocationId.Value;
                 var isActive = await _db.StockLocations.AsNoTracking().Where(l => l.Id == locationId).Select(l => (bool?)l.IsActive).SingleOrDefaultAsync(cancellationToken);
-                if (isActive == null || isActive == false)
+                if (isActive == null || (isActive == false && requireActiveLocation))
                 {
                     AddError(errors, "stockLocationId", isActive == null ? $"Stock location {locationId} does not exist." : $"Stock location {locationId} is inactive.");
                     return Validation<PalletDto>(errors);
