@@ -19,7 +19,7 @@ import { decimalErrorKey, outcomeUnknown } from '../supply/messages';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
 
 const MAX_REASON_LENGTH = 500;
-const NUMBER_FIELDS: ReadonlySet<string> = new Set(['unitPrice', 'expectedQuantity', 'expectedNetWeightKg', 'expectedGrossWeightKg']);
+const NUMBER_FIELDS: ReadonlySet<string> = new Set(['unitPrice', 'expectedQuantity', 'expectedNetWeightKg', 'expectedGrossWeightKg', 'discountPercentage', 'vatPercentage']);
 const DATE_FIELDS: ReadonlySet<string> = new Set(['orderedOn', 'expectedAt']);
 const CONFLICT_KEYS: Readonly<Record<string, string>> = { stale: 'po_edit_stale', definitive: 'po_edit_definitive_now', open: 'po_edit_stale', notEditable: 'po_edit_not_editable' };
 const conflictKey = (error: ApiError) => {

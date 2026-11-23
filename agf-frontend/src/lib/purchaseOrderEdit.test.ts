@@ -27,7 +27,10 @@ describe('purchase order edit', () => {
     test('the form opens with the stored values in nl notation, the version and the expected date in Amsterdam', () => {
         const { header, lines, edit } = orderEditOf(order([line({ unitPrice: 12.5, weightSource: 'Entered', expectedGrossWeightKg: 990 })]));
         assert.deepEqual(header, { vendorId: '3', originCountryCode: null, legacyOrigin: null, expectedDate: '2026-11-14', supplierReference: '45-21', orderedOn: '2026-11-10', supplierLotReference: '', note: 'Bel bij aankomst' });
-        assert.deepEqual(lines[0], { key: 'line-7', productVariantId: '1', quantity: '221', unitPrice: '12,50', grossKg: '990,00', grossKgEntered: true, unit: 'colli', lotNumber: '', ggn: '', ggnTouched: true });
+        assert.deepEqual(lines[0], { key: 'line-7', productVariantId: '1', quantity: '221', unitPrice: '12,50', grossKg: '990,00', grossKgEntered: true, unit: 'colli', lotNumber: '', ggn: '', ggnTouched: true,
+            discount: '', vat: '', vatTouched: true });
+        // Korting en btw openen zoals opgeslagen; een regel zonder tarief houdt geen tarief (geen voorstel uit het artikel eroverheen).
+        assert.deepEqual(['discount', 'vat'].map((field) => orderEditOf(order([line({ discountPercentage: 2.5, vatPercentage: 9 })])).lines[0][field as 'discount' | 'vat']), ['2,5', '9']);
         // Een opgeslagen GGN opent zoals het is en telt als keuze: het voorstel komt er niet overheen.
         assert.deepEqual([orderEditOf(order([line({ ggn: '4049928415684' })])).lines[0].ggn], ['4049928415684']);
         assert.equal(edit.version, 2);
@@ -46,7 +49,7 @@ describe('purchase order edit', () => {
         assert.equal(isUntouched(priced, edit.lines.get('line-7')!), true);
         assert.deepEqual(updateLinePayload(priced, built, edit.lines.get('line-7')), {
             id: 7, productVariantId: 1, expectedQuantity: 221, expectedUnit: 'colli', expectedNetWeightKg: 884, expectedGrossWeightKg: 972.4, weightSource: 'Calculated',
-            lotNumber: null, ggn: '', palletCount: 1, packagesPerPallet: 221, loosePackages: null, unitPrice: 13,
+            lotNumber: null, ggn: '', palletCount: 1, packagesPerPallet: 221, loosePackages: null, unitPrice: 13, discountPercentage: null, vatPercentage: null,
         });
         // Alleen het GGN aangepast: de regel blijft "niet aangeraakt" en het nieuwe GGN gaat mee.
         const ggn = { ...lines[0], ggn: '4049928415684' };
