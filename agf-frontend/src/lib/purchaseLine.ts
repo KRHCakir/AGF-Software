@@ -4,10 +4,12 @@
 // Pure module zonder React (node:test); imports met .ts-extensie.
 
 import { round2 } from './invoiceMath.ts';
+import { lineAmount, type OrderAmounts } from './orderLineMath.ts';
 import { shownKgTotal } from './weightDisplay.ts';
 
-export function lineTotal(quantity: number | null, unitPrice: number | null): number | null {
-    return quantity === null || unitPrice === null ? null : round2(quantity * unitPrice);
+// Feedback 22 november: min de korting (lineAmount); zonder korting precies aantal × prijs op centen, zoals voorheen.
+export function lineTotal(quantity: number | null, unitPrice: number | null, discountPercentage: number | null = null): number | null {
+    return lineAmount(quantity, unitPrice, discountPercentage);
 }
 
 export function packagesPerPallet(lineValue: number | null | undefined, articleDefault: number | null | undefined): number | null {
@@ -53,6 +55,8 @@ export interface PurchaseLineTotals {
     linesWithoutGross: number;
     linesWithoutPrice: number;
     linesWithoutPallets: number;
+    // Feedback 22 november: totaal excl. btw, btw per tarief en incl. btw (ontbreekt bij een oudere server).
+    amounts?: OrderAmounts;
 }
 
 // Totalen onder de regels; kg, bedrag en pallets alleen van de regels die ze hebben (de rest wordt apart geteld).

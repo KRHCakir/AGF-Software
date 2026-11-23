@@ -1,3 +1,4 @@
+import type { OrderAmounts } from '../lib/orderLineMath';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
 import { PurchaseOrderDeviation, isPurchaseOrderDeviation } from './receiptDeviation';
 
@@ -91,6 +92,9 @@ export interface PurchaseOrderLine {
     // Calculated = kg uit het artikel; Entered = (bruto) op de regel aangepast.
     weightSource?: string | null;
     unitPrice?: number | null;
+    // Feedback 22 november (ontbreken bij een oudere server): korting in procenten en het btw-tarief van de regel.
+    discountPercentage?: number | null;
+    vatPercentage?: number | null;
     lineTotal?: number | null;
     packagesPerPallet?: number | null;
     pallets?: number | null;
@@ -281,6 +285,8 @@ export interface UpdatePurchaseOrderLineRequest {
     packagesPerPallet: number | null;
     loosePackages?: number | null;
     unitPrice?: number | null;
+    discountPercentage?: number | null;
+    vatPercentage?: number | null;
 }
 
 // PUT /api/purchase-orders/{id}: hetzelfde als aanmaken, plus de verwachte versie en per bestaande regel haar id.
@@ -334,6 +340,8 @@ export interface PurchaseLineTotalsDto {
     linesWithoutGross: number;
     linesWithoutPrice: number;
     linesWithoutPallets: number;
+    // Feedback 22 november (ontbreekt bij een oudere server): totaal excl. btw, btw per tarief en incl. btw.
+    amounts?: OrderAmounts;
 }
 
 export interface PurchaseOrderSalesLink {

@@ -8,6 +8,7 @@ import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
 import { resolveLineWeight, weightPayload, type LineWeight } from './lineWeight.ts';
 import { parseUnitPrice } from './packaging.ts';
 import { lineTotal, packagesPerPallet, pallets, sumLines, type PurchaseLineTotals } from './purchaseLine.ts';
+import { type DiscountError, isVatRate, parseDiscount, summarize } from './orderLineMath.ts';
 import { normalizeGgn } from './ggn.ts';
 import { ggnProblem } from './productGgn.ts';
 
@@ -26,6 +27,11 @@ export interface PurchaseLineDraft {
     // Certificaten deel 2: GGN van het product (zie productGgn.ts); ggnTouched = door de gebruiker gezet of opgeslagen.
     ggn: string;
     ggnTouched?: boolean;
+    // Feedback 22 november: korting in procenten (leeg = geen) en het btw-tarief van de regel. Zolang vatTouched onwaar is, geldt het
+    // tarief van het artikel (voorstel); een opgeslagen regel is altijd "aangeraakt", ook zonder tarief (leeg blijft dan leeg).
+    discount?: string;
+    vat?: string;
+    vatTouched?: boolean;
 }
 
 // Wat de regel van het artikel nodig heeft (een VariantOption voldoet).
@@ -34,6 +40,7 @@ export interface PurchaseArticle {
     defaultNetKgPerPackage?: number | null;
     defaultGrossKgPerPackage?: number | null;
     defaultPackagesPerPallet: number | null;
+    vatPercentage?: number | null;
 }
 
 export const emptyPurchaseLine = (key: string): PurchaseLineDraft => ({ key, productVariantId: '', quantity: '', unitPrice: '', unit: '', lotNumber: '', ggn: '' });
@@ -41,16 +48,20 @@ export const emptyPurchaseLine = (key: string): PurchaseLineDraft => ({ key, pro
 // Een lege regel (bijvoorbeeld de nieuwe regel na Tab op het laatste veld) telt niet mee bij opslaan, zolang er een gevulde regel is.
 export function isBlankPurchaseLine(line: PurchaseLineDraft): boolean {
     return line.productVariantId === '' && line.quantity.trim() === '' && line.unitPrice.trim() === '' && !line.grossKgEntered && line.lotNumber.trim() === ''
-        && (line.ggn ?? '').trim() === '';
+        && (line.ggn ?? '').trim() === '' && (line.discount ?? '').trim() === '' && !line.vatTouched;
 }
 
-export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity' | 'expectedUnit' | 'expectedGrossWeightKg' | 'unitPrice' | 'ggn'; code: DecimalError | 'required' | 'gross_below_net' | 'ggn_13_digits' };
+export type PurchaseLineError = { field: 'productVariantId' | 'expectedQuantity' | 'expectedUnit' | 'expectedGrossWeightKg' | 'unitPrice' | 'ggn' | 'discountPercentage' | 'vatPercentage';
+    code: DecimalError | DiscountError | 'required' | 'gross_below_net' | 'ggn_13_digits' };
 
 export interface PurchaseLineRow {
     quantity: number | null;
     unit: PackageUnit | '';
     weight: LineWeight | null;
     price: number | null;
+    discount: number | null;
+    // Het btw-tarief van de regel: het gekozen tarief, anders dat van het artikel; null = geen (een oudere regel zonder tarief).
+    vat: number | null;
     total: number | null;
     perPallet: number | null;
     pallets: number | null;
@@ -73,16 +84,33 @@ export function purchaseLineRow(line: PurchaseLineDraft, article: PurchaseArticl
     const price = parseUnitPrice(line.unitPrice);
     if (!price.ok) errors.push({ field: 'unitPrice', code: price.error });
     if (ggnProblem(line.ggn ?? '') === 'ggn_13_digits') errors.push({ field: 'ggn', code: 'ggn_13_digits' });
+    const discount = parseDiscount(line.discount ?? '');
+    if (!discount.ok) errors.push({ field: 'discountPercentage', code: discount.error });
+    const vat = lineVatOf(line, article);
     const perPallet = packagesPerPallet(null, article?.defaultPackagesPerPallet);
     return {
-        quantity, unit, weight: resolved.ok ? resolved.value : null, price: price.ok ? price.value : null,
-        total: lineTotal(quantity, price.ok ? price.value : null), perPallet, pallets: pallets(quantity, perPallet), errors,
+        quantity, unit, weight: resolved.ok ? resolved.value : null, price: price.ok ? price.value : null, discount: discount.ok ? discount.value : null, vat,
+        total: lineTotal(quantity, price.ok ? price.value : null, discount.ok ? discount.value : null), perPallet, pallets: pallets(quantity, perPallet), errors,
     };
 }
 
-export function purchaseLineTotals(rows: readonly PurchaseLineRow[]): PurchaseLineTotals {
-    return sumLines(rows.map((row) => ({ quantity: row.quantity, netKg: row.weight?.netWeightKg ?? null, grossKg: row.weight?.grossWeightKg ?? null, total: row.total, pallets: row.pallets,
-        grossEntered: row.weight?.weightSource === 'Entered' })));
+// Het btw-tarief van een regel: gekozen (of opgeslagen) als vatTouched, anders het voorstel uit het artikel.
+export function lineVatOf(line: Pick<PurchaseLineDraft, 'vat' | 'vatTouched'>, article: { vatPercentage?: number | null } | undefined): number | null {
+    if (line.vatTouched) {
+        const chosen = Number(line.vat ?? '');
+        return (line.vat ?? '') !== '' && isVatRate(chosen) ? chosen : null;
+    }
+    const proposal = article?.vatPercentage;
+    return proposal != null && isVatRate(proposal) ? proposal : null;
+}
+
+// Totalen onder de regels; extra = bedragen van andere regels op dezelfde order (emballage, diensten) voor de btw-samenvatting.
+export function purchaseLineTotals(rows: readonly PurchaseLineRow[], extra: readonly { amount: number | null; vatPercentage: number | null }[] = []): PurchaseLineTotals {
+    return {
+        ...sumLines(rows.map((row) => ({ quantity: row.quantity, netKg: row.weight?.netWeightKg ?? null, grossKg: row.weight?.grossWeightKg ?? null, total: row.total, pallets: row.pallets,
+            grossEntered: row.weight?.weightSource === 'Entered' }))),
+        amounts: summarize([...rows.map((row) => ({ amount: row.total, vatPercentage: row.vat })), ...extra]),
+    };
 }
 
 // De regels die worden opgeslagen (met hun plek in het formulier, voor de foutsleutels lines[i].veld) en hun payload.
@@ -109,6 +137,8 @@ export function purchaseLinePayloads(lines: readonly PurchaseLineDraft[], articl
             packagesPerPallet: null,
             ...(row.weight !== null ? weightPayload(row.weight, 'expectedNetWeightKg', 'expectedGrossWeightKg') : {}),
             ...(row.price !== null ? { unitPrice: row.price } : {}),
+            discountPercentage: row.discount,
+            vatPercentage: row.vat,
         };
         return { index, payload };
     });

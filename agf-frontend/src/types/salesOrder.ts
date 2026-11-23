@@ -1,3 +1,4 @@
+import type { PurchaseLineTotalsDto } from './purchaseOrder';
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, QualityStatus } from './availability';
 import { hasConsistentDeliveryState } from '../lib/deliveryState';
@@ -38,6 +39,10 @@ export interface CreateSalesOrderLineRequest {
     weightSource?: WeightSource;
     // Uit voorraad of uit verwachte aanvoer; weggelaten = uit voorraad als het past, anders uit verwachte aanvoer (server).
     supplySource?: SupplySource;
+    // Feedback 22 november: prijs per eenheid (excl. btw), korting in procenten en het btw-tarief; alleen meegestuurd als ze er zijn.
+    unitPrice?: number;
+    discountPercentage?: number;
+    vatPercentage?: number;
 }
 
 export interface CreateSalesOrderRequest {
@@ -315,6 +320,17 @@ export interface SalesOrderLine {
     balance?: SalesBalance | null;
     coverage?: SalesLineCoverage | null;
     awaitingStock?: boolean;
+    // Feedback 22 november (ontbreken bij een oudere server): prijs, korting, btw en bedrag van de regel, en uit het artikel merk,
+    // herkomst, maat, inhoud en de pallets van de regel.
+    unitPrice?: number | null;
+    discountPercentage?: number | null;
+    vatPercentage?: number | null;
+    lineTotal?: number | null;
+    brand?: string | null;
+    origin?: string | null;
+    size?: string | null;
+    packaging?: string | null;
+    pallets?: number | null;
 }
 
 export interface SalesOrder {
@@ -358,6 +374,8 @@ export interface SalesOrder {
     // Afgeleid bij een open order: Tekort (een regel is niet gedekt) en Wacht op voorraad (verkocht vóór aankomst, nog niet gereserveerd).
     shortage?: boolean;
     awaitingStock?: boolean;
+    // Feedback 22 november (ontbreekt bij een oudere server): de totalenrij onder de goederenregels en in amounts de hele order (met emballage).
+    totals?: PurchaseLineTotalsDto;
 }
 
 export interface SalesOrderCreditWarning {

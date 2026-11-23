@@ -68,6 +68,10 @@ export function lineDraftOf(line: PurchaseOrderLine): PurchaseLineDraft {
         // Een opgeslagen GGN (ook leeg) is een keuze: het voorstel overschrijft het niet.
         ggn: line.ggn ?? '',
         ggnTouched: true,
+        // Feedback 22 november: korting en btw zoals opgeslagen; een regel zonder tarief houdt geen tarief (geen voorstel uit het artikel).
+        discount: line.discountPercentage === null || line.discountPercentage === undefined ? '' : formatDecimalInput(line.discountPercentage, 2),
+        vat: line.vatPercentage === null || line.vatPercentage === undefined ? '' : String(line.vatPercentage),
+        vatTouched: true,
     };
 }
 
@@ -119,6 +123,7 @@ export function updateLinePayload(draft: PurchaseLineDraft, payload: CreateSuppl
         expectedNetWeightKg: stored.expectedNetWeightKg, expectedGrossWeightKg: stored.expectedGrossWeightKg ?? null, weightSource: stored.weightSource ?? null,
         lotNumber: payload.lotNumber, ggn: payload.ggn ?? '', palletCount: stored.palletInputCount ?? null, packagesPerPallet: stored.palletInputPackagesPerPallet ?? null,
         loosePackages: stored.palletInputLoose ?? null, unitPrice: price,
+        discountPercentage: payload.discountPercentage ?? null, vatPercentage: payload.vatPercentage ?? null,
     };
 }
 
@@ -143,7 +148,7 @@ export function removedInUse(edit: OrderEdit, keys: ReadonlySet<string>): EditLi
 const FIELD_KEYS: Readonly<Record<string, string>> = {
     vendor: 'po_change_vendor', supplierReference: 'po_supplier_reference', orderedOn: 'po_ordered_on', expectedAt: 'supply_expected_date', origin: 'supply_origin',
     note: 'po_note', supplierLotReference: 'partij_supplier_lot', orderChannel: 'po_change_channel', partij: 'partij_field', line: 'po_change_line',
-    article: 'po_change_article', expectedQuantity: 'po_change_quantity', expectedUnit: 'po_change_unit', unitPrice: 'po_change_price',
+    article: 'po_change_article', expectedQuantity: 'po_change_quantity', expectedUnit: 'po_change_unit', unitPrice: 'po_change_price', discountPercentage: 'po_change_discount', vatPercentage: 'po_change_vat',
     expectedNetWeightKg: 'po_change_net', expectedGrossWeightKg: 'po_change_gross', weightSource: 'po_change_weight_source', pallets: 'po_change_pallets',
     lotNumber: 'supply_lot', ggn: 'po_line_col_ggn', documentStatus: 'po_document_status', currency: 'po_change_currency', exchangeRate: 'po_change_exchange_rate',
 };

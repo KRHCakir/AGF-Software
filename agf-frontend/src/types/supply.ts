@@ -22,6 +22,9 @@ export interface CreateSupplyCommitmentLineRequest {
     weightSource?: WeightSource;
     // Prijs per verpakking excl. btw (optioneel; alleen meegestuurd als er een prijs is).
     unitPrice?: number;
+    // Feedback 22 november: korting in procenten (null = geen) en het btw-tarief van de regel (null = niet vastgelegd).
+    discountPercentage?: number | null;
+    vatPercentage?: number | null;
 }
 
 export interface CreateSupplyCommitmentRequest {
