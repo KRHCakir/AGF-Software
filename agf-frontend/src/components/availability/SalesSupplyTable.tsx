@@ -9,6 +9,7 @@ import { AvailabilityFocus } from '../../lib/availabilityLinks';
 import { SalesBalance } from '../../types/salesSupply';
 import { UnitBadge } from './QuantityCell';
 import SalesBreakdown from './SalesBreakdown';
+import StockLocationBadges from './StockLocationBadges';
 import WarningBadges from './WarningBadges';
 import { listRowClass } from '../../lib/listRows';
 import { sortRows } from '../../lib/listSort';
@@ -137,7 +138,7 @@ export default function SalesSupplyTable({ rows: unsorted, onOpen, focus = null 
                             return (
                                 <Fragment key={row.key}>
                                     <tr className={listRowClass(index)} data-row-key={row.key}>
-                                        <th scope="row" className={`${td} text-left font-normal`}>{name(row)}</th>
+                                        <th scope="row" className={`${td} text-left font-normal`}>{name(row)}<StockLocationBadges locations={row.supply.stockLocations} /></th>
                                         <td className={td}><UnitBadge unit={row.supply.unit} /></td>
                                         <td className={`${td} ${marked('expected')} ${marked('quarantine')}`} data-col="expected">{expected(balance)}</td>
                                         <td className={td} data-tour="availability-available" data-tour-key={row.variant.productVariantId} data-col="stock">{stock(row)}</td>
@@ -173,7 +174,7 @@ export default function SalesSupplyTable({ rows: unsorted, onOpen, focus = null 
                     return (
                         <li key={row.key} className="rounded-md border border-gray-300 bg-white p-3" data-card-key={row.key}>
                             <div className="flex items-start justify-between gap-2">
-                                {name(row)}
+                                {name(row)}<StockLocationBadges locations={row.supply.stockLocations} />
                                 <UnitBadge unit={row.supply.unit} />
                             </div>
                             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
