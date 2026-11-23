@@ -150,8 +150,10 @@ async function openTourLine(signal: AbortSignal, minimum: number, editable = fal
     const order = findOpenTourOrder(list.items);
     if (!order) return null;
     const detail = await getPurchaseOrder(order.id, signal);
-    const line = detail.lines.find((candidate) => candidate.unit !== null && Number.isInteger(candidate.expectedQuantity) && candidate.expectedQuantity >= minimum);
-    return line ? { order, line } : null;
+    // Het openstaande aantal (besteld min al ontvangen) telt, niet het bestelde aantal; de index is die van de regel in de order.
+    const openOf = (candidate: (typeof detail.lines)[number]) => candidate.expectedQuantity - (candidate.receivedQuantity ?? 0);
+    const lineIndex = detail.lines.findIndex((candidate) => candidate.unit !== null && Number.isInteger(candidate.expectedQuantity) && Number.isInteger(openOf(candidate)) && openOf(candidate) >= minimum);
+    return lineIndex < 0 ? null : { order, line: detail.lines[lineIndex], lineIndex, openQuantity: openOf(detail.lines[lineIndex]) };
 }
 
 const missingOpenOrder: TourMissing = { key: 'tour_missing_open_order' };
@@ -164,7 +166,7 @@ export const lookupReceive = (vars: Readonly<Record<string, string>>, signal: Ab
 async function receiveLookup(signal: AbortSignal, editable: boolean): Promise<TourPrecheck> {
     const open = await openTourLine(signal, 2, editable);
     if (!open) return { missing: [missingOpenOrder] };
-    const { order, line } = open;
+    const { order, line, lineIndex, openQuantity } = open;
     const detail = await getPurchaseOrder(order.id, signal);
     const lot = line.partijNumber ?? line.lotNumber ?? detail.supplierLotReference ?? order.orderNumber;
     return {
@@ -173,9 +175,10 @@ async function receiveLookup(signal: AbortSignal, editable: boolean): Promise<To
             orderId: String(order.id),
             orderNumber: order.orderNumber,
             lineId: String(line.id),
+            lineIndex: String(lineIndex),
             variantId: String(line.productVariantId),
-            quantity: String(line.expectedQuantity),
-            rejectQuantity: String(Math.max(1, Math.floor(line.expectedQuantity / 4))),
+            quantity: String(openQuantity),
+            rejectQuantity: String(Math.max(1, Math.floor(openQuantity / 4))),
             lot,
             partijNumber: line.partijNumber ?? '',
         },

@@ -273,9 +273,9 @@ export const SPLIT_CHAPTER: TourChapter = {
             { kind: 'highlight', target: 'receive-line-received:{{lineId}}' },
         ]),
         split('article', '/purchase-orders/edit?id={{orderId}}', [
-            { kind: 'click', target: 'supply-line-product-0-clear' },
-            { kind: 'pick', target: 'supply-line-product-0', text: '{{otherSearch}}', expect: '{{otherOrigin}}' },
-            { kind: 'highlight', target: 'supply-line-split:0' },
+            { kind: 'click', target: 'supply-line-product-{{lineIndex}}-clear' },
+            { kind: 'pick', target: 'supply-line-product-{{lineIndex}}', text: '{{otherSearch}}', expect: '{{otherOrigin}}' },
+            { kind: 'highlight', target: 'supply-line-split:{{lineIndex}}' },
         ]),
         split('ask', '/purchase-orders/edit?id={{orderId}}', [
             { kind: 'click', target: 'supply-save' },
@@ -283,7 +283,7 @@ export const SPLIT_CHAPTER: TourChapter = {
             { kind: 'highlight', target: 'split-dialog' },
         ]),
         split('save', '/purchase-orders/edit?id={{orderId}}', [
-            { kind: 'click', target: 'split-remainder:0-Cancelled' },
+            { kind: 'click', target: 'split-remainder:{{lineIndex}}-Cancelled' },
             { kind: 'click', target: 'split-confirm' },
             { kind: 'wait', target: 'po-line-split' },
         ]),
