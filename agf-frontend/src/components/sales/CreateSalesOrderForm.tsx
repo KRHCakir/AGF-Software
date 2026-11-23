@@ -128,6 +128,14 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const termTouched = useRef(pending !== null);
     const [draft, setDraft] = useState<OrderDraft>(() => (pending !== null ? draftFromCommand(pending) : prefill !== null ? prefilledDraft(prefill) : emptyDraft()));
     const [submitting, setSubmitting] = useState(false);
+    // Regels waarvan de partijtekst niet is vastgelegd: opslaan wacht tot die tekst een bestaande partij is of leeg.
+    const [lotPending, setLotPending] = useState<ReadonlySet<string>>(new Set());
+    const setLotPendingOf = (key: string, on: boolean) => setLotPending((current) => {
+        if (current.has(key) === on) return current;
+        const next = new Set(current);
+        if (on) next.add(key); else next.delete(key);
+        return next;
+    });
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
     // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
@@ -596,6 +604,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                                 <LotPicker id={`lines[${index}].partijId-input`} productVariantId={variantId} unit={unit} disabled={locked} dataTour="sales-line-lot"
                                     label={t('sales_line_lot')} hint={t('sales_line_lot_hint')}
                                     value={line.partijId ? { partijId: line.partijId, number: line.partijNumber ?? `#${line.partijId}` } : null}
+                                    onPendingChange={(on) => setLotPendingOf(line.key, on)}
                                     onChange={(lot) => updateLine(line.key, { partijId: lot?.partijId ?? null, partijNumber: lot?.number ?? null })} />
                                 <FieldError id={`lines[${index}].partijId`} messages={e(`lines[${index}].partijId`)} />
                             </div>
@@ -648,7 +657,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
             {pending === null && (
                 <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                    <button type="submit" data-tour="sales-save" className={primaryButtonClass} disabled={locked}>
+                    <button type="submit" data-tour="sales-save" className={primaryButtonClass} disabled={locked || lotPending.size > 0}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
                     <SubmitErrors errors={errors} />

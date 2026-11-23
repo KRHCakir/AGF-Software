@@ -47,6 +47,19 @@ public class PartijReceiptTests : IDisposable
         Assert.Equal("2610251", result.Value.LotNumber);
     }
 
+    // Review: een leeg lotnummer (leeg of alleen spaties) telt als niet opgegeven en volgt de partij van de order.
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task A_Blank_Lot_Number_Inherits_The_Lot_Of_The_Order(string lot)
+    {
+        var a = await ArrangeAsync();
+        var result = await ReceiveAsync(a.PalletId, a.LineId, lot);
+
+        Assert.Equal(ServiceResultStatus.Created, result.Status);
+        Assert.Equal(a.PartijId, result.Value.PartijId);
+    }
+
     [Fact]
     public async Task Same_Lot_In_Another_Spelling_Is_Stored_As_The_Lot_Number_And_A_Retry_Is_The_Same_Request()
     {

@@ -15,7 +15,7 @@ export interface ChosenLot { partijId: number; number: string }
 // Feedback 22 november: de partijkeuze. Typen (ook zonder I-, streepjes of spaties) of de lijst openen (pijltje omlaag); per partij het vrije
 // aantal, maat, kleur, herkomst, locatie en ontvangstdatum, de oudste eerst. Pijltjes kiezen, Enter neemt de partij, Escape sluit. Leeg
 // laten = de oudste partij eerst (FIFO). Een houdbaarheidsdatum bestaat nog niet. Op een smal scherm staan de kenmerken onder het nummer.
-export default function LotPicker({ productVariantId, unit, value, onChange, disabled = false, id, label, hint, dataTour, exclude = null }: {
+export default function LotPicker({ productVariantId, unit, value, onChange, disabled = false, id, label, hint, dataTour, exclude = null, onPendingChange }: {
     productVariantId: number | null;
     unit: string;
     value: ChosenLot | null;
@@ -27,6 +27,8 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     dataTour?: string;
     // Een partij die niet gekozen kan worden (bijvoorbeeld de huidige partij bij "Partij wijzigen").
     exclude?: number | null;
+    // Meldt of er tekst staat die (nog) niet als partij is vastgelegd, zodat het formulier opslaan kan blokkeren.
+    onPendingChange?: (pending: boolean) => void;
 }) {
     const { t, locale } = useTranslation();
     const [text, setText] = useState(value?.number ?? '');
@@ -39,7 +41,12 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
 
     // Het nummer zoals de partijkeuze het kent (een bevroren opdracht weet alleen het id).
     const known = value === null ? null : options?.find((option) => option.partijId === value.partijId)?.number ?? value.number;
-    useEffect(() => { setText(known ?? ''); }, [value?.partijId, known]);
+    // Wissen we de keuze zelf omdat de tekst afwijkt, dan blijft de getypte tekst staan.
+    const keepText = useRef(false);
+    useEffect(() => {
+        if (keepText.current) { keepText.current = false; return; }
+        setText(known ?? '');
+    }, [value?.partijId, known]);
 
     // De opties van dit artikel in deze eenheid, één keer per artikel; een ander artikel of andere eenheid haalt ze opnieuw op.
     useEffect(() => {
@@ -73,6 +80,11 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
         if (exact !== null && exact.partijId !== exclude && exact.partijId !== value?.partijId) choose(exact);
     };
     const unknown = options !== null && text.trim() !== '' && (value === null || text !== known) && exactLot(options, text) === null;
+    const pending = text.trim() !== '' && (value === null || text !== known);
+    const report = useRef(onPendingChange);
+    report.current = onPendingChange;
+    useEffect(() => { report.current?.(pending); }, [pending]);
+    useEffect(() => () => report.current?.(false), []);
     const location = (option: LotOption) => option.locations.map((name) => name ?? t('lot_picker_own_warehouse')).join(', ')
         + (option.bins.length > 0 ? ` (${option.bins.join(', ')})` : '');
 
@@ -81,7 +93,7 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
             <label htmlFor={id} className="text-xs font-medium text-gray-700">{label}</label>
             <input ref={input} id={id} value={text} data-tour={dataTour ? `${dataTour}-input` : undefined} disabled={disabled || productVariantId === null} autoComplete="off" role="combobox" aria-expanded={open} aria-controls={listId}
                 aria-autocomplete="list" aria-activedescendant={open && shown[active] ? `${listId}-${active}` : undefined}
-                onChange={(event) => { setText(event.target.value); setOpen(true); setActive(0); if (event.target.value.trim() === '' && value !== null) onChange(null); }}
+                onChange={(event) => { setText(event.target.value); setOpen(true); setActive(0); if (value !== null && event.target.value !== known) { keepText.current = true; onChange(null); } }}
                 onFocus={() => setActive(0)} onKeyDown={onKeyDown} onBlur={onBlur} placeholder={t('lot_picker_placeholder')} className={`${inputClass} font-mono`} />
             {hint && <span className="block text-xs text-gray-500">{hint}</span>}
             {failed && <span className="block text-xs text-red-700">{t('lot_picker_failed')}</span>}
