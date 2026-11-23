@@ -3694,7 +3694,6 @@ namespace AgfAdmin.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Color")
-                        .IsConcurrencyToken()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
