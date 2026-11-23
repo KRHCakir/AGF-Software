@@ -983,7 +983,7 @@ namespace AgfAdmin.Services
             var packaging = order.PackagingLines.OrderBy(l => l.Id).Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, null), l.VatPercentage));
             return PurchaseOrderLineTotalsDto.From(
                 lines.Select(l => new PurchaseLineMath.Line(l.Quantity, l.NetWeightKg, l.GrossWeightKg, OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), ExactPallets(l))).ToList(),
-                goods.Concat(packaging), 1m);
+                goods.Concat(packaging), 1m, lines.Select(l => (l.Unit, l.Quantity)).ToList());
         }
 
         // Bevestigd afgeleverd op een regel: uitsluitend Consumed reserveringen waarvan de bijbehorende verzending een bevestiging heeft.
