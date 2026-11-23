@@ -62,6 +62,9 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         setLocked(uncertain.current !== null);
     }, [order.id]);
 
+    // Per levering tellen ook de al verzonden pallets mee (review); vrijgegeven of teruggeboekte reserveringen niet. Kiezen voor een
+    // deellevering kan alleen uit actieve reserveringen.
+    const counted = order.lines.flatMap((line) => line.reservations).filter((reservation) => reservation.status === 'Active' || reservation.status === 'Consumed');
     const reservations = order.lines.flatMap((line) => line.reservations.map((reservation) => ({ line, reservation })))
         .filter(({ reservation }) => reservation.status === 'Active');
     const productOf = (lineId: number) => {
@@ -143,7 +146,9 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                                 <PartijNumberLink partijId={delivery.partijId} partijNumber={delivery.partijNumber} lotNumber={delivery.partijNumber} />
                             </span>
                         )}
-                        <span className="text-gray-700">{t('so_delivery_pallets', { count: String(reservations.filter(({ reservation }) => delivery.reservationIds.includes(reservation.id)).length) })}</span>
+                        <span className="text-gray-700" data-testid="so-delivery-pallets" data-count={counted.filter((reservation) => delivery.reservationIds.includes(reservation.id)).length}>
+                            {t('so_delivery_pallets', { count: String(counted.filter((reservation) => delivery.reservationIds.includes(reservation.id)).length) })}
+                        </span>
                         {delivery.last && deliveries.length > 1 && <span className="text-xs text-gray-600">{t('so_delivery_rest')}</span>}
                     </li>
                 ))}
