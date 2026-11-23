@@ -100,7 +100,7 @@ describe('sales deliveries (partial delivery)', () => {
         assert.deepEqual(second.reservationIds, [202]);
     });
 
-    test('after an uncertain error the choice is locked until the same command is retried or the order is checked', async () => {
+    test('after an uncertain error the choice is locked until the same command gets an answer', async () => {
         let changed = 0;
         await mounted.render(<SalesDeliveries order={order()} readOnly={false} onChanged={() => { changed++; }} />);
         await act(async () => { one('[data-tour="so-partial-delivery"]')!.click(); });
@@ -110,14 +110,16 @@ describe('sales deliveries (partial delivery)', () => {
         await mounted.waitFor(() => one('[data-testid="so-partial-delivery-uncertain"]'), 'uncertain notice');
         const boxes = all('[data-tour="so-partial-delivery-reservation"]') as HTMLInputElement[];
         assert.ok(boxes.every((box) => box.closest('fieldset')!.disabled), 'the choice cannot change while the outcome is unknown');
+        assert.equal(one('[data-testid="so-partial-delivery-check"]'), null, 'reading the order alone never unlocks the choice');
 
-        await act(async () => { (one('[data-testid="so-partial-delivery-check"]') as HTMLButtonElement).click(); });
-        await mounted.waitFor(() => (changed === 1 ? true : null), 'order checked');
-        assert.equal(one('[data-testid="so-partial-delivery-form"]'), null);
+        answer = () => json(200, saved());
+        await act(async () => { one('[data-tour="so-partial-delivery-create"]')!.click(); });
+        await mounted.waitFor(() => (changed === 1 ? true : null), 'answered and reloaded');
+        const [first, second] = calls.filter((call) => call.method === 'POST').map((post) => JSON.parse(post.body!) as { requestId: string });
+        assert.equal(first.requestId, second.requestId, 'the same command');
         await act(async () => { one('[data-tour="so-partial-delivery"]')!.click(); });
-        assert.equal(one('[data-testid="so-partial-delivery-uncertain"]'), null, 'after checking, a new choice is free');
+        assert.equal(one('[data-testid="so-partial-delivery-uncertain"]'), null, 'after the answer a new choice is free');
         assert.ok(!(all('[data-tour="so-partial-delivery-reservation"]')[0] as HTMLInputElement).closest('fieldset')!.disabled);
-        assert.equal(calls.filter((call) => call.method === 'POST').length, 1);
     });
 
     test('two deliveries are listed with their V-numbers; a closed order offers no partial delivery', async () => {
