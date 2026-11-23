@@ -77,6 +77,29 @@ describe('sales deliveries (partial delivery)', () => {
         assert.equal(one('[data-testid="so-partial-delivery-form"]'), null);
     });
 
+    test('after an uncertain error, Cancel and reopening keeps the same key and choice', async () => {
+        let changed = 0;
+        await mounted.render(<SalesDeliveries order={order()} readOnly={false} onChanged={() => { changed++; }} />);
+        await act(async () => { one('[data-tour="so-partial-delivery"]')!.click(); });
+        await act(async () => { (all('[data-tour="so-partial-delivery-reservation"]')[1] as HTMLInputElement).click(); });
+        answer = () => json(503, { message: 'down' });
+        await act(async () => { one('[data-tour="so-partial-delivery-create"]')!.click(); });
+        await mounted.waitFor(() => {
+            const button = one('[data-tour="so-partial-delivery-create"]') as HTMLButtonElement | null;
+            return calls.filter((call) => call.method === 'POST').length >= 1 && button !== null && !button.disabled ? true : null;
+        }, 'error kept the form');
+        await act(async () => { (mounted.container.querySelector('[data-testid="so-partial-delivery-form"] button[type="button"]') as HTMLElement).click(); });
+        assert.equal(one('[data-testid="so-partial-delivery-form"]'), null);
+
+        answer = () => json(201, saved());
+        await act(async () => { one('[data-tour="so-partial-delivery"]')!.click(); });
+        await act(async () => { one('[data-tour="so-partial-delivery-create"]')!.click(); });
+        await mounted.waitFor(() => (changed === 1 ? true : null), 'order reloaded');
+        const [first, second] = calls.filter((call) => call.method === 'POST').map((post) => JSON.parse(post.body!) as { requestId: string; reservationIds: number[] });
+        assert.equal(first.requestId, second.requestId);
+        assert.deepEqual(second.reservationIds, [202]);
+    });
+
     test('two deliveries are listed with their V-numbers; a closed order offers no partial delivery', async () => {
         const split = order({ status: 'Cancelled', deliveries: [delivery(1, 1, 'V-2611001', [201], false), delivery(2, 2, 'V-2611002', [202], true)] });
         await mounted.render(<SalesDeliveries order={split} readOnly onChanged={() => undefined} />);

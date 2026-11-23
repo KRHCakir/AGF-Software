@@ -39,6 +39,13 @@ namespace AgfAdmin.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Bestaande ColorChanged-historie past niet in de oude constraint; die historie wordt niet stilzwijgend verwijderd.
+            migrationBuilder.Sql(@"DO $$ BEGIN
+IF EXISTS (SELECT 1 FROM ""PartijAuditEvents"" WHERE ""EventType"" = 'ColorChanged') THEN
+RAISE EXCEPTION 'Cannot revert AddLotColor: PartijAuditEvents contains ColorChanged events. Remove or archive them deliberately first.';
+END IF;
+END $$;");
+
             migrationBuilder.DropCheckConstraint(
                 name: "CK_PartijAuditEvents_EventType_Allowed",
                 table: "PartijAuditEvents");

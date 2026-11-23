@@ -23,8 +23,10 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<ApiError | null>(null);
     const requestId = useRef<string | null>(null);
+    // Opdracht met onzekere uitkomst (netwerk-/vormfout): blijft ook na Annuleren bewaard, zodat heropenen dezelfde sleutel en keuze gebruikt.
+    const uncertain = useRef<{ requestId: string; chosen: number[] } | null>(null);
 
-    useEffect(() => { setOpen(false); setChosen([]); setError(null); requestId.current = null; }, [order.id]);
+    useEffect(() => { setOpen(false); setChosen([]); setError(null); requestId.current = null; uncertain.current = null; }, [order.id]);
 
     const reservations = order.lines.flatMap((line) => line.reservations.map((reservation) => ({ line, reservation })))
         .filter(({ reservation }) => reservation.status === 'Active');
@@ -38,29 +40,35 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
     if (deliveries.length <= 1 && !canSplit) return null;
 
     const start = () => {
-        requestId.current = newRequestId();
-        setChosen([]);
+        const pending = uncertain.current;
+        requestId.current = pending?.requestId ?? newRequestId();
+        setChosen(pending?.chosen ?? []);
         setError(null);
         setOpen(true);
     };
     const toggle = (id: number) => {
         // Een andere keuze is een andere opdracht: dan ook een nieuwe sleutel (anders weigert de server de herhaling).
         requestId.current = newRequestId();
+        uncertain.current = null;
         setChosen((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
     };
     const submit = async (event: FormEvent) => {
         event.preventDefault();
-        if (busy || requestId.current === null) return;
+        const key = requestId.current;
+        if (busy || key === null) return;
         setBusy(true);
         setError(null);
         try {
-            await createSalesDelivery(order.id, { requestId: requestId.current, reservationIds: chosen });
+            await createSalesDelivery(order.id, { requestId: key, reservationIds: chosen });
             setOpen(false);
             requestId.current = null;
+            uncertain.current = null;
             await onChanged();
         } catch (caught) {
             // Dezelfde sleutel blijft staan: opnieuw proberen is dezelfde opdracht.
-            setError(toApiError(caught));
+            const apiError = toApiError(caught);
+            uncertain.current = apiError.isDefinitiveRejection ? null : { requestId: key, chosen };
+            setError(apiError);
         } finally {
             setBusy(false);
         }

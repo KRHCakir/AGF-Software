@@ -19,14 +19,26 @@ export function LotColorBadge({ color }: { color: string | null | undefined }) {
 
 // De kleur van een inkoop-partij kiezen uit de lijst van haar product(en); geldt voor de hele partij. Bij de keuring en op het partijdetail.
 // Zonder kleurenlijst zegt het veld waar die in te stellen is. Opslaan na een keuze (Enter of de knop), met historie op de server.
-export function LotColorField({ partijId, partijNumber, onSaved, compact = false, initial }: {
+// Velden van dezelfde partij (meerdere keuringsregels) houden elkaar bij: een opgeslagen kleur wordt aan de andere velden doorgegeven.
+const savedListeners = new Set<(partijId: number, color: string | null) => void>();
+
+type LotColorFieldProps = {
     partijId: number;
     partijNumber?: string | null;
     onSaved?: (color: string | null) => void;
     compact?: boolean;
     // Al bekend (het partijdetail): dan niets ophalen.
     initial?: { color: string | null; allowedColors: string[] };
-}) {
+};
+
+// De toestand hoort bij één partij: wisselt de partij (of de bekende gegevens), dan begint het veld opnieuw.
+export function LotColorField(props: LotColorFieldProps) {
+    const { partijId, initial } = props;
+    const key = `${partijId}:${initial ? `${initial.color ?? ''}|${initial.allowedColors.join(',')}` : ''}`;
+    return <LotColorFieldInner key={key} {...props} />;
+}
+
+function LotColorFieldInner({ partijId, partijNumber, onSaved, compact = false, initial }: LotColorFieldProps) {
     const { t } = useTranslation();
     const [allowed, setAllowed] = useState<string[] | null>(initial?.allowedColors ?? null);
     const [saved, setSaved] = useState<string | null>(initial?.color ?? null);
@@ -44,6 +56,16 @@ export function LotColorField({ partijId, partijNumber, onSaved, compact = false
         return () => controller.abort();
     }, [partijId, known]);
 
+    useEffect(() => {
+        const listener = (changedId: number, color: string | null) => {
+            if (changedId !== partijId) return;
+            setSaved(color);
+            setValue(color ?? '');
+        };
+        savedListeners.add(listener);
+        return () => { savedListeners.delete(listener); };
+    }, [partijId]);
+
     const save = async () => {
         if (busy) return;
         setBusy(true);
@@ -51,6 +73,8 @@ export function LotColorField({ partijId, partijNumber, onSaved, compact = false
         try {
             const result = await setPartijColor(partijId, value === '' ? null : value);
             setSaved(result.color ?? null);
+            setValue(result.color ?? '');
+            savedListeners.forEach((listener) => listener(partijId, result.color ?? null));
             onSaved?.(result.color ?? null);
         } catch (caught) {
             setError(toApiError(caught));

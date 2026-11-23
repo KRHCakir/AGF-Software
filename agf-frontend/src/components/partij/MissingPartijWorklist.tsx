@@ -17,16 +17,26 @@ import type { MissingPartijLine } from '../../types/partij';
 export default function MissingPartijWorklist({ reloadToken }: { reloadToken: number }) {
     const { t, locale } = useTranslation();
     const [lines, setLines] = useState<MissingPartijLine[]>([]);
+    const [failed, setFailed] = useState(false);
+    const [retry, setRetry] = useState(0);
 
     useEffect(() => {
         const controller = new AbortController();
         getMissingPartijen(controller.signal)
-            .then(setLines)
-            // Een werklijst naast de lijst: bij een fout tonen we niets in plaats van de partijen te blokkeren.
-            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setLines([]); });
+            .then((result) => { setLines(result); setFailed(false); })
+            // Een werklijst naast de lijst: een fout wordt apart getoond, zonder de partijen te blokkeren.
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') { setLines([]); setFailed(true); } });
         return () => controller.abort();
-    }, [reloadToken]);
+    }, [reloadToken, retry]);
 
+    if (failed) {
+        return (
+            <section data-tour="partij-missing" role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+                <span>{t('partij_missing_load_failed')}</span>{' '}
+                <button type="button" className="underline" onClick={() => setRetry((n) => n + 1)}>{t('partij_missing_retry')}</button>
+            </section>
+        );
+    }
     if (lines.length === 0) return null;
     const unit = (value: string) => ((PACKAGE_UNITS as readonly string[]).includes(value) ? t(unitLabelKey(value as PackageUnit)) : value);
     const link = 'text-blue-700 underline hover:text-blue-900';

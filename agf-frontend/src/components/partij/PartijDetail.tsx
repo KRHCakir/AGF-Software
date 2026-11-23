@@ -57,7 +57,7 @@ export default function PartijDetail({ partij, onChanged, onDeleted }: { partij:
                 </p>
                 <p className="text-sm text-gray-700">{t('partij_created_by', { date: formatCalendarDate(partij.createdAt, locale), name: partij.createdBy })}</p>
                 {partij.note && <p className="mt-1 text-sm text-gray-700">{partij.note}</p>}
-                {partij.kind === 'Purchase' && <div className="mt-2 max-w-md"><LotColorField partijId={partij.id} initial={{ color: partij.color ?? null, allowedColors: partij.allowedColors ?? [] }} /></div>}
+                {partij.kind === 'Purchase' && <div className="mt-2 max-w-md"><LotColorField partijId={partij.id} initial={{ color: partij.color ?? null, allowedColors: partij.allowedColors ?? [] }} onSaved={() => onChanged()} /></div>}
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6" data-tour="partij-totals">
                     {([
                         ['partij_col_purchased', partij.purchasedQuantity],

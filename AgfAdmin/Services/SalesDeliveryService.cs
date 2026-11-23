@@ -30,6 +30,7 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<SalesOrderDto>.Validation(errors);
             }
+            var requestedPartij = string.IsNullOrWhiteSpace(request.PartijNumber) ? null : request.PartijNumber.Trim();
 
             for (var attempt = 1; ; attempt++)
             {
@@ -37,7 +38,7 @@ namespace AgfAdmin.Services
                 var replay = await db.SalesDeliveries.AsNoTracking().SingleOrDefaultAsync(d => d.RequestId == request.RequestId, cancellationToken);
                 if (replay != null)
                 {
-                    return replay.SalesOrderId == orderId && await SameRequestAsync(replay, reservationIds, cancellationToken)
+                    return replay.SalesOrderId == orderId && await SameRequestAsync(replay, reservationIds, requestedPartij, cancellationToken)
                         ? await OrderAsync(orderId, ServiceResultStatus.Ok, cancellationToken)
                         : ServiceResult<SalesOrderDto>.Conflict($"RequestId {request.RequestId} was already used for another delivery.");
                 }
@@ -88,7 +89,7 @@ namespace AgfAdmin.Services
                 db.SalesOrderAuditEvents.Add(new SalesOrderAuditEvent
                 {
                     SalesOrder = order, EventType = SalesDeliveryRules.DeliveryCreatedEvent, RequestId = request.RequestId, ActorReference = actor, OccurredAt = now,
-                    NewValue = JsonSerializer.Serialize(new { delivery.Sequence, Partij = partij.Number, ReservationIds = reservationIds }),
+                    NewValue = JsonSerializer.Serialize(new { delivery.Sequence, Partij = partij.Number, ReservationIds = reservationIds, RequestedPartij = requestedPartij }),
                 });
                 try
                 {
@@ -107,14 +108,18 @@ namespace AgfAdmin.Services
             }
         }
 
-        // Dezelfde aanvraag: dezelfde reserveringen (uit de auditregel van die levering).
-        private async Task<bool> SameRequestAsync(SalesDelivery delivery, List<int> reservationIds, CancellationToken cancellationToken)
+        // Dezelfde aanvraag: dezelfde reserveringen en hetzelfde aangevraagde V-nummer (leeg = automatisch), uit de auditregel van die levering.
+        private async Task<bool> SameRequestAsync(SalesDelivery delivery, List<int> reservationIds, string requestedPartij, CancellationToken cancellationToken)
         {
             var audit = await db.SalesOrderAuditEvents.AsNoTracking().SingleOrDefaultAsync(e => e.RequestId == delivery.RequestId, cancellationToken);
             if (audit?.NewValue == null) return false;
             using var json = JsonDocument.Parse(audit.NewValue);
             var stored = json.RootElement.TryGetProperty("ReservationIds", out var ids) ? ids.EnumerateArray().Select(i => i.GetInt32()).OrderBy(i => i).ToList() : new List<int>();
-            return stored.SequenceEqual(reservationIds);
+            var storedPartij = json.RootElement.TryGetProperty("RequestedPartij", out var number) && number.ValueKind == JsonValueKind.String ? number.GetString() : null;
+            var samePartij = storedPartij == null || requestedPartij == null
+                ? storedPartij == requestedPartij
+                : PartijRules.NumberKey(storedPartij) == PartijRules.NumberKey(requestedPartij);
+            return samePartij && stored.SequenceEqual(reservationIds);
         }
 
         private async Task<ServiceResult<SalesOrderDto>> OrderAsync(int orderId, ServiceResultStatus status, CancellationToken cancellationToken)
