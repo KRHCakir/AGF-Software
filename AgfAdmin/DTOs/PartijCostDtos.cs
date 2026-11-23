@@ -63,6 +63,8 @@ namespace AgfAdmin.DTOs
         public decimal Quantity { get; set; }
         public string Unit { get; set; }
         public decimal NetKg { get; set; }
+        // Feedback 22 november: de inkoopwaarde in euro, de basis voor "Verdeel naar waarde" (null = geen prijzen).
+        public decimal? Value { get; set; }
     }
 
     public sealed class AllocationHistoryDto
