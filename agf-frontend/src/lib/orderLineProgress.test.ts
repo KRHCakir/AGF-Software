@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { lineProgress, partialSummary } from './orderLineProgress.ts';
+import { activeLines, lineProgress, partialSummary } from './orderLineProgress.ts';
 import type { PurchaseOrderLine } from '../types/purchaseOrder';
 
 const line = (over: Partial<PurchaseOrderLine>): PurchaseOrderLine => ({
@@ -9,6 +9,11 @@ const line = (over: Partial<PurchaseOrderLine>): PurchaseOrderLine => ({
 } as PurchaseOrderLine);
 
 describe('order line progress', () => {
+    test('a fully replaced line without receipt is not shown (as the server counts active lines)', () => {
+        const lines = [line({ id: 1, expectedQuantity: 0, receivedQuantity: 0, cancelledQuantity: 100 }), line({ id: 2, expectedQuantity: 0, receivedQuantity: 5 }), line({ id: 3 })];
+        assert.deepEqual(activeLines(lines).map((l) => l.id), [2, 3]);
+    });
+
     test('ordered, received, open and status per line; a cancelled rest makes the line done and counts as ordered', () => {
         assert.deepEqual(lineProgress(line({})), { id: 1, ordered: 100, received: 0, open: 100, cancelled: 0, status: 'Ordered' });
         assert.equal(lineProgress(line({ receivedQuantity: 40 })).status, 'Partial');
