@@ -81,6 +81,8 @@ namespace AgfAdmin.DTOs
         public int VendorId { get; set; }
         public string VendorName { get; set; }
         public string SupplierReference { get; set; }
+        // Feedback 22 november: de leveringsconditie van deze order (null = geen).
+        public DeliveryTermDto DeliveryTerm { get; set; }
         public DateOnly OrderedOn { get; set; }
         public string OrderChannel { get; set; }
         public string Note { get; set; }
@@ -168,6 +170,8 @@ namespace AgfAdmin.DTOs
         public decimal? ExchangeRate { get; set; }
         public string ExchangeRateSource { get; set; }
         public List<UpdatePurchaseOrderLineDto> Lines { get; set; }
+        // Feedback 22 november: de leveringsconditie; weggelaten = ongewijzigd, met een lege soort = geen. Alleen bij een Open order (Edit).
+        public DeliveryTermDto DeliveryTerm { get; set; }
         // Certificaten deel 1: zoals bij aanmaken; gevraagd wordt alleen naar producten die nieuw op de order komen (of alle bij een andere leverancier).
         public List<int> ConfirmedCertificateProductIds { get; set; }
     }

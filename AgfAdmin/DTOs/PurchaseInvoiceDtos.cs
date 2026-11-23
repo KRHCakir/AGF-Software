@@ -165,6 +165,11 @@ namespace AgfAdmin.DTOs
         // Bankgegevens: de actieve standaardrekening is nog niet bevestigd (waarschuwen vóór betalen); geen standaardrekening = false.
         public bool HasDefaultBankAccount { get; set; }
         public bool DefaultBankAccountUnconfirmed { get; set; }
+        // Feedback 22 november: de leveringsconditie van de leverancier (voorstel op een nieuwe inkooporder).
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
     }
 
     // Bedrijfsinstellingen voor de invoer: welke optionele velden in gebruik zijn en welke voorstellen gelden.

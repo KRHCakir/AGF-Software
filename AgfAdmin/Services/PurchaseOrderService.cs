@@ -388,6 +388,7 @@ namespace AgfAdmin.Services
                 OrderNumber = commitment.OrderNumber,
                 VendorId = commitment.VendorId,
                 VendorName = commitment.Vendor?.Name,
+                DeliveryTerm = commitment.DeliveryTermKind == null ? null : DeliveryTermDto.From(commitment),
                 SupplierReference = commitment.SupplierReference,
                 PartijId = commitment.PartijId,
                 PartijNumber = commitment.Partij?.Number,
