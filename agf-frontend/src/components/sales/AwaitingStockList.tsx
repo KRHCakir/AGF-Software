@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
@@ -10,6 +10,20 @@ import { getAwaitingStock } from '../../services/salesOrderService';
 import { AwaitingStockLine } from '../../types/salesSupply';
 import { ErrorState, LoadState } from '../availability/StateViews';
 import { primaryButtonClass } from '../supply/SuccessPanel';
+import { type SortColumns, sortRows } from '../../lib/listSort';
+import { SortSelect } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
+
+// Sorteren (feedback 22 november): een keuzelijst "Sorteren op"; standaard de vroegste leverdatum bovenaan.
+const AWAITING_COLUMNS: SortColumns<AwaitingStockLine> = {
+    delivery: { kind: 'date', value: (line) => line.requestedDeliveryDate },
+    order: { kind: 'natural', value: (line) => line.orderNumber },
+    customer: { kind: 'text', value: (line) => line.customerName },
+    // Review #320: een artikel zonder variant (gember) sorteert op de productnaam, nooit op de tekst "null".
+    product: { kind: 'text', value: (line) => [line.productName, line.variantName].filter((part) => part !== null && part !== undefined && part !== '').join(' ') },
+    reservable: { kind: 'number', value: (line) => line.reservableNow },
+};
+const AWAITING_SORT_KEYS = Object.keys(AWAITING_COLUMNS);
 
 // Werklijst "Verkocht, wacht op voorraad": regels die vóór aankomst verkocht zijn (uit verwachte aanvoer) en waarvoor nu goedgekeurde
 // voorraad vrij is, vroegste leverdatum bovenaan. Het systeem reserveert nooit zelf: "Reserveren (oudste partij eerst)" opent de regel met
@@ -19,6 +33,8 @@ export default function AwaitingStockList({ token, onReserve }: { token: number;
     const [state, setState] = useState<LoadState<AwaitingStockLine[]>>({ status: 'loading' });
     const [retry, setRetry] = useState(0);
     const [open, setOpen] = useState(true);
+    const { sort, setSort } = useListSort('sales-awaiting-stock', AWAITING_SORT_KEYS);
+    const sorted = useMemo(() => (state.status === 'ready' ? sortRows(state.data, AWAITING_COLUMNS, sort) : []), [state, sort]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -34,7 +50,7 @@ export default function AwaitingStockList({ token, onReserve }: { token: number;
 
     if (state.status === 'loading') return null;
     if (state.status === 'error') return <ErrorState error={state.error} onRetry={() => setRetry((n) => n + 1)} />;
-    const lines = state.data;
+    const lines = sorted;
     const q = (value: number) => formatQuantity(value, locale);
 
     return (
@@ -48,6 +64,15 @@ export default function AwaitingStockList({ token, onReserve }: { token: number;
                 )}
             </h2>
             {lines.length === 0 && <p className="px-3 pb-2 text-xs text-gray-600">{t('sales_awaiting_empty')}</p>}
+            {lines.length > 1 && open && (
+                <SortSelect id="awaiting-stock-sort" className="max-w-md border-t border-amber-200 px-3 py-2" sort={sort} onChange={setSort} options={[
+                    { key: 'delivery', label: t('sales_col_delivery'), kind: 'date' },
+                    { key: 'order', label: t('mail_drafts_sort_order'), kind: 'natural' },
+                    { key: 'customer', label: t('availability_col_customer'), kind: 'text' },
+                    { key: 'product', label: t('inspection_sort_product'), kind: 'text' },
+                    { key: 'reservable', label: t('sales_awaiting_sort_reservable'), kind: 'number' },
+                ]} />
+            )}
             {lines.length > 0 && open && (
                 <ul id="awaiting-stock-list" className="divide-y divide-amber-200 border-t border-amber-200">
                     {lines.map((line) => (

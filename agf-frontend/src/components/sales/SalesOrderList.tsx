@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate } from '../../lib/calendarDate';
@@ -13,6 +13,20 @@ import { UnitBadge } from '../availability/QuantityCell';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import { OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import { listRowClass, rowClick } from '../../lib/listRows';
+import { type SortColumns, sortRows } from '../../lib/listSort';
+import { SortButton, SortHeader } from '../shared/SortHeader';
+import { useListSort } from '../shared/useListSort';
+
+// Sorteren op de kolomkoppen (feedback 22 november): ordernummer (natuurlijk), klant, partij, leverdatum en voortgang (aandeel volledig
+// gereserveerde regels; uitgeleverd achteraan oplopend). Standaard blijft de volgorde van de server.
+const ORDER_COLUMNS: SortColumns<SalesOrder> = {
+    order: { kind: 'natural', value: (order) => orderLabel(order) },
+    customer: { kind: 'text', value: (order) => order.customerName },
+    partij: { kind: 'natural', value: (order) => order.salesPartijNumber },
+    delivery: { kind: 'date', value: (order) => order.requestedDeliveryDate },
+    progress: { kind: 'number', value: (order) => { const progress = orderProgress(order); return progress.fulfilled ? 2 : progress.linesTotal === 0 ? null : progress.linesComplete / progress.linesTotal; } },
+};
+const ORDER_SORT_KEYS = Object.keys(ORDER_COLUMNS);
 
 // Kopcellen blijven bovenaan staan binnen het eigen scrollgebied van de lijst (sticky per cel; werkt ook in tabellen).
 const th = 'sticky top-0 z-10 bg-gray-50 px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 shadow-[inset_0_-1px_0_rgb(229,231,235)]';
@@ -21,7 +35,7 @@ const th = 'sticky top-0 z-10 bg-gray-50 px-2 py-1.5 text-left text-xs font-semi
 // De lijst is haar eigen scrollgebied (hoogte bepaald door de pagina via className); de gekozen order wordt in beeld gehouden
 // als die buiten het zichtbare deel valt, bijvoorbeeld na openen via een URL-link of een onafgerond commando. Alleen de lijst
 // scrolt daarbij, nooit de pagina.
-export default function SalesOrderList({ orders, selectedId, onSelect, className = '' }: {
+export default function SalesOrderList({ orders: unsorted, selectedId, onSelect, className = '' }: {
     orders: SalesOrder[];
     selectedId: number | null;
     onSelect: (id: number) => void;
@@ -29,6 +43,8 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
 }) {
     const { t, locale } = useTranslation();
     const scrollRef = useRef<HTMLDivElement>(null);
+    const { sort, toggle: onSort } = useListSort('sales-orders', ORDER_SORT_KEYS);
+    const orders = useMemo(() => sortRows(unsorted, ORDER_COLUMNS, sort), [unsorted, sort]);
 
     useEffect(() => {
         const container = scrollRef.current;
@@ -52,9 +68,14 @@ export default function SalesOrderList({ orders, selectedId, onSelect, className
                 <caption className="sr-only">{t('sales_orders_title')}</caption>
                 <thead>
                     <tr>
-                        <th scope="col" className={th}>{t('sales_col_order')}</th>
-                        <th scope="col" className={th}>{t('sales_col_delivery')}</th>
-                        <th scope="col" className={th}>{t('sales_col_progress')}</th>
+                        <SortHeader className={th} label={t('sales_col_order')} sortKey="order" sort={sort} onSort={onSort} alsoKeys={['customer', 'partij']}>
+                            <span className="flex flex-wrap gap-x-3">
+                                <SortButton small label={t('availability_col_customer')} sortKey="customer" sort={sort} onSort={onSort} />
+                                <SortButton small label={t('sales_partij_short')} sortKey="partij" sort={sort} onSort={onSort} />
+                            </span>
+                        </SortHeader>
+                        <SortHeader className={th} label={t('sales_col_delivery')} sortKey="delivery" sort={sort} onSort={onSort} />
+                        <SortHeader className={th} label={t('sales_col_progress')} sortKey="progress" sort={sort} onSort={onSort} />
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

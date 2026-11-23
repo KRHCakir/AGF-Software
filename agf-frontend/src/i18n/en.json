@@ -3230,5 +3230,11 @@
   "inspection_sort_pallet": "Pallet",
   "inspection_sort_received": "Received",
   "inspection_sort_location": "Location",
-  "inspection_sort_product": "Product"
+  "inspection_sort_product": "Product",
+  "mail_drafts_sort_order": "Order number",
+  "mail_drafts_sort_document": "Document",
+  "mail_drafts_sort_to": "To",
+  "mail_drafts_sort_status": "Status",
+  "mail_drafts_sort_created": "Created",
+  "sales_awaiting_sort_reservable": "Reservable now"
 }
