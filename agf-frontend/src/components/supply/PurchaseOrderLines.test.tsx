@@ -11,7 +11,8 @@ import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
 const variant = (id: number, name: string, extra: object) => ({ id, name, origin: 'Peru', packaging: '4 kg box', sizeCategory: '18', shortcutCode: null, packagingUnit: 'box' as const, defaultNetKgPerPackage: 4, defaultGrossKgPerPackage: 4.4, defaultPackagesPerPallet: 252, ...extra });
 const reference: ReferenceData = {
-    vendors: [{ id: 3, name: 'Supplier B', searchCode: 'SUPB', vatNumber: null, isActive: true }],
+    vendors: [{ id: 3, name: 'Supplier B', searchCode: 'SUPB', vatNumber: null, isActive: true,
+        deliveryTerm: { deliveryTermKind: 'Incoterm', incoterm: 'FCA', incotermPlace: 'Lima', deliveryTermText: null } }],
     customers: [],
     products: [{ id: 1, name: 'Avocado', variants: [
         variant(1, 'Hass', { brand: 'Westfalia', shortcutCode: 'avohassper18', vatPercentage: 9 }),
@@ -124,6 +125,21 @@ describe('purchase order lines: the new layout', () => {
         const lines = JSON.parse(posted[0].body).lines;
         assert.equal(lines.length, 1);
         assert.deepEqual([lines[0].expectedQuantity, lines[0].expectedUnit, lines[0].unitPrice, lines[0].expectedNetWeightKg, lines[0].expectedGrossWeightKg, lines[0].weightSource], [100, 'box', 12, 400, 440, 'Calculated']);
+    });
+
+    test('feedback 22 november: the delivery term follows the supplier until changed and goes along with the new order', async () => {
+        await mounted.render(<PlanSupplyForm route="Warehouse" reference={reference} onReceive={() => {}} />);
+        await type('vendorId-input', 'supb');
+        await key('vendorId-input', 'Enter');
+        assert.equal(field('deliveryTerm.incotermPlace-input').value, 'Lima');
+        assert.ok(mounted.container.querySelector('[data-testid="delivery-term-hint"]')!.textContent!.includes('delivery_term_from_vendor'));
+        await type('deliveryTerm.incotermPlace-input', 'Callao');
+        await type('expectedAt-input', '30-10-2026');
+        await pick(0, 'avohassper18');
+        await type('lines[0].expectedQuantity-input', '100');
+        await submit();
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        assert.deepEqual(JSON.parse(posted[0].body).deliveryTerm, { deliveryTermKind: 'Incoterm', incoterm: 'FCA', incotermPlace: 'Callao', deliveryTermText: null });
     });
 
     test('totals sit under the same columns; pallets are summed on two decimals; a line without packages per pallet says so', async () => {

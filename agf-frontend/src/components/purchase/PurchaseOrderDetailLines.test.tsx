@@ -54,6 +54,13 @@ describe('PurchaseOrderDetail lines', () => {
         assert.ok(summary.querySelector('[data-testid="order-amounts-without-vat"]'));
     });
 
+    test('feedback 22 november: the delivery term of the order is in the header; none says so', async () => {
+        await mounted.render(<PurchaseOrderDetail order={{ ...order([line({})]), deliveryTerm: { deliveryTermKind: 'Incoterm', incoterm: 'CIF', incotermPlace: 'Rotterdam', deliveryTermText: null } }} onChanged={() => {}} />);
+        assert.ok(mounted.container.querySelector('[data-testid="po-delivery-term"]')!.textContent!.includes('CIF Rotterdam'));
+        await mounted.render(<PurchaseOrderDetail order={order([line({})])} onChanged={() => {}} />);
+        assert.ok(mounted.container.querySelector('[data-testid="po-delivery-term"]')!.textContent!.includes('delivery_term_none'));
+    });
+
     test('an older order without price, gross or totals stays readable', async () => {
         await mounted.render(<PurchaseOrderDetail order={order([line({ brand: null, expectedGrossWeightKg: null, weightSource: 'Entered', unitPrice: null, lineTotal: null, pallets: null })])} onChanged={() => {}} />);
         assert.deepEqual(['brand', 'gross', 'price', 'total'].map((column) => cell(0, column)), ['–', '–', '–', '–']);

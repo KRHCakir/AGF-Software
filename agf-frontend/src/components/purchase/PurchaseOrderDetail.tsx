@@ -22,6 +22,7 @@ import { OrderAmountsSummary, PurchaseLineHead, PurchaseLineTotalsRow, lineCell,
 import { unitLabelKey } from '../../lib/units';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import { formatPercent } from '../../lib/orderLineMath';
+import { describeDeliveryTerm } from '../../lib/deliveryTerm';
 import type { PackageUnit } from '../../types/availability';
 import { rateLine } from '../../lib/documentCurrency';
 import { isEuro } from '../../lib/exchangeRate';
@@ -93,6 +94,10 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                     <p className="mt-1 text-sm font-medium text-red-800">{t('po_rejected_of', { rejected: qty(order.rejectedQuantity), total: qty(order.receivedQuantity) })} · {formatKg(order.rejectedNetWeightKg, locale)}</p>
                 )}
                 {order.note && <p className="mt-1 text-sm text-gray-700">{order.note}</p>}
+                {/* Feedback 22 november: de leveringsconditie van deze order (aan te passen met Aanpassen, niet bij de leverancier). */}
+                <p className="mt-1 text-sm text-gray-900" data-testid="po-delivery-term" data-tour="po-delivery-term">
+                    {t('relations_terms_delivery')}: <span className="font-medium">{describeDeliveryTerm(order.deliveryTerm, t) ?? t('delivery_term_none')}</span>
+                </p>
                 {/* Valuta-ronde: valuta en de vastgelegde koers (eenheden valuta per 1 euro), met bron en datum. */}
                 {order.currency && !isEuro(order.currency) && order.exchangeRate ? (
                     <p className="mt-1 text-sm text-gray-900" data-testid="po-currency" data-tour="po-currency">
