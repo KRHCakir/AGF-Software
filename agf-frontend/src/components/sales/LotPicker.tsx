@@ -46,7 +46,7 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     useEffect(() => {
         if (keepText.current) { keepText.current = false; return; }
         setText(known ?? '');
-    }, [value?.partijId, known]);
+    }, [value?.partijId, known, productVariantId]); // een ander artikel wist ook niet-vastgelegde tekst
 
     // De opties van dit artikel in deze eenheid, één keer per artikel; een ander artikel of andere eenheid haalt ze opnieuw op.
     useEffect(() => {
