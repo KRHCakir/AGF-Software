@@ -17,6 +17,31 @@ namespace AgfAdmin.Data
         //
         // Directe factuur: de inkoop-partij van een factuurregel wordt alleen bij aanmaken gezet en verandert daarna nooit (de herkomst van
         // wat er verkocht is, blijft staan). Dat het een inkoop-partij is, bewaakt regel 24 (CheckPurchaseOnlyLinksAsync).
+        private const int LotNumberLockClass = 41;
+
+        // Genormaliseerde sleutels van nieuwe of gewijzigde partijnummers; gesorteerd zodat gelijktijdige schrijvers de locks in dezelfde volgorde nemen.
+        internal static List<string> LotNumberKeysToLock(AppDbContext db) =>
+            db.ChangeTracker.Entries<Partij>()
+                .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(p => p.NumberKey).IsModified))
+                .Select(e => e.Entity.NumberKey).Where(k => k != null).Distinct().OrderBy(k => k, StringComparer.Ordinal).ToList();
+
+        // Transactielock per nummer (PostgreSQL): de uniekheid over soorten is anders niet atomair, want de unieke index geldt per soort.
+        // Moet binnen de transactie van de schrijfactie staan; de lock vervalt bij commit of rollback. SQLite (tests) serialiseert schrijvers zelf.
+        internal static async Task LockLotNumbersAsync(AppDbContext db, List<string> keys, bool async, CancellationToken cancellationToken)
+        {
+            foreach (var key in keys)
+            {
+                if (async)
+                {
+                    await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({LotNumberLockClass}, hashtext({key}))", cancellationToken);
+                }
+                else
+                {
+                    db.Database.ExecuteSqlInterpolated($"SELECT pg_advisory_xact_lock({LotNumberLockClass}, hashtext({key}))");
+                }
+            }
+        }
+
         private static async Task CheckLotNumberingAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             // Vergeleken met de opgeslagen waarde in de database, niet met OriginalValues (die kunnen buiten de service om gezet zijn).
