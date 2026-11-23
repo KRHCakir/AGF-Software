@@ -10,7 +10,7 @@ namespace AgfAdmin.Data
         private sealed record StoredOrderDocument(int Id, string Route, int VendorId, string SupplierReference, DateOnly OrderedOn, DateTime? ExpectedAt, string Origin,
             string Note, string SupplierLotReference, string OrderChannel, string Status, string DocumentStatus, DateTime? FinalizedAt, string FinalizedBy, string FinalizedVia,
             string Currency, decimal ExchangeRate, DateOnly? ExchangeRateDate, string ExchangeRateSource, string OriginCountryCode,
-            string DeliveryTermKind, string Incoterm, string IncotermPlace, string DeliveryTermText);
+            string DeliveryTermKind, string Incoterm, string IncotermPlace, string DeliveryTermText, int? ReceiveLocationId, string LoadingAddress, string DeliveryAddress);
 
         private sealed record StoredOrderLine(int Id, int SupplyCommitmentId, int ProductVariantId, string ExpectedUnit, decimal ExpectedQuantity, decimal? ExpectedNetWeightKg,
             decimal? ExpectedGrossWeightKg, string WeightSource, decimal? PalletCount, decimal? PackagesPerPallet, decimal? LoosePackages, decimal? UnitPrice, decimal? DiscountPercentage, decimal? VatPercentage, int? ReplacesLineId);
@@ -116,7 +116,7 @@ namespace AgfAdmin.Data
             var stored = (await ToListAsync(db.SupplyCommitments.AsNoTracking().Where(c => orderIds.Contains(c.Id))
                 .Select(c => new StoredOrderDocument(c.Id, c.Route, c.VendorId, c.SupplierReference, c.OrderedOn, c.ExpectedAt, c.Origin, c.Note, c.SupplierLotReference, c.OrderChannel,
                     c.Status, c.DocumentStatus, c.FinalizedAt, c.FinalizedBy, c.FinalizedVia, c.Currency, c.ExchangeRate, c.ExchangeRateDate, c.ExchangeRateSource,
-                    c.OriginCountryCode, c.DeliveryTermKind, c.Incoterm, c.IncotermPlace, c.DeliveryTermText)), async, cancellationToken)).ToDictionary(c => c.Id);
+                    c.OriginCountryCode, c.DeliveryTermKind, c.Incoterm, c.IncotermPlace, c.DeliveryTermText, c.ReceiveLocationId, c.LoadingAddress, c.DeliveryAddress)), async, cancellationToken)).ToDictionary(c => c.Id);
             var trackedOrders = modifiedOrders.ToDictionary(e => e.Entity.Id, e => e.Entity);
 
             foreach (var orderId in orderIds)
@@ -278,6 +278,9 @@ namespace AgfAdmin.Data
             Check(!string.Equals(order.DeliveryTermKind, before.DeliveryTermKind, StringComparison.Ordinal) || !string.Equals(order.Incoterm, before.Incoterm, StringComparison.Ordinal)
                 || !string.Equals(order.IncotermPlace, before.IncotermPlace, StringComparison.Ordinal) || !string.Equals(order.DeliveryTermText, before.DeliveryTermText, StringComparison.Ordinal),
                 nameof(SupplyCommitment.DeliveryTermKind));
+            // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres horen bij de kop; een definitieve order houdt ze.
+            Check(order.ReceiveLocationId != before.ReceiveLocationId || !string.Equals(order.LoadingAddress, before.LoadingAddress, StringComparison.Ordinal)
+                || !string.Equals(order.DeliveryAddress, before.DeliveryAddress, StringComparison.Ordinal), nameof(SupplyCommitment.ReceiveLocationId));
             // Valuta-ronde: valuta en koers horen bij de kop; een definitieve order houdt ze (ook een correctie verandert ze niet).
             Check(!string.Equals(order.Currency, before.Currency, StringComparison.Ordinal), nameof(SupplyCommitment.Currency));
             Check(order.ExchangeRate != before.ExchangeRate || order.ExchangeRateDate != before.ExchangeRateDate

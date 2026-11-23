@@ -96,6 +96,9 @@ namespace AgfAdmin.DTOs
         public List<AvailabilityWarningDto> Warnings { get; set; } = new();
         // Herkomst van de kg op pallets in deze rij: "weighed", "calculated" of "mixed"; null zonder inhoud op pallets.
         public string WeightBasis { get; set; }
+        // Feedback 22 november: voorraad op een andere locatie dan de eigen loods (bijvoorbeeld "Onderweg naar Griekenland"), in de eenheid
+        // van de rij. Telt mee in de voorraad hierboven; dit zegt alleen waar hij is.
+        public List<AvailabilityStockLocationDto> StockLocations { get; set; } = new();
         // Verkoopstand van deze variant en eenheid: Voorraad, Verwacht, Verkocht, Vrij te verkopen (mag negatief zijn: tekort).
         // Een variant die alleen verkocht is (nog niets op voorraad of verwacht) heeft een rij met alleen deze stand.
         public SalesBalanceDto Sales { get; set; }
@@ -149,6 +152,14 @@ namespace AgfAdmin.DTOs
         // Fixes 5b: waar de verkochte handel nu ligt, per actieve reservering op een pallet (pallet, locatie en plek uit Pallet). Het deel
         // zonder reservering (verkocht uit verwachte aanvoer, of nog niet toegewezen) staat hier niet in: OpenQuantity min de som.
         public List<AvailabilityLocationDto> Locations { get; set; } = new();
+    }
+
+    public sealed class AvailabilityStockLocationDto
+    {
+        public string Name { get; set; }
+        public string Kind { get; set; }
+        public string CountryCode { get; set; }
+        public decimal Quantity { get; set; }
     }
 
     public sealed class AvailabilityLocationDto
@@ -207,6 +218,10 @@ namespace AgfAdmin.DTOs
         public string LogisticsStatus { get; set; }
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
+        // Feedback 22 november: voorraadlocatie van de pallet (null = de eigen loods).
+        public string StockLocationName { get; set; }
+        public string StockLocationKind { get; set; }
+        public string StockLocationCountry { get; set; }
         public string Route { get; set; }
         public int? CustomerId { get; set; }
         public string CustomerName { get; set; }

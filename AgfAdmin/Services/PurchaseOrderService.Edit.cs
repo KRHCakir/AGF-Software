@@ -77,6 +77,8 @@ namespace AgfAdmin.Services
                 SupplierReference = request.SupplierReference, OrderedOn = request.OrderedOn ?? order.OrderedOn, OrderChannel = request.OrderChannel, Note = request.Note,
                 PartijId = request.PartijId, NewPartij = request.NewPartij, SupplierLotReference = request.SupplierLotReference,
                 DeliveryTerm = request.DeliveryTerm,
+                // Feedback 22 november: weggelaten = de opgeslagen ontvangstlocatie en adressen blijven.
+                Logistics = request.Logistics ?? new OrderLogisticsDto { ReceiveLocationId = order.ReceiveLocationId, LoadingAddress = order.LoadingAddress, DeliveryAddress = order.DeliveryAddress },
                 Currency = request.Currency ?? order.Currency,
                 ExchangeRate = request.Currency == null ? order.ExchangeRate : request.ExchangeRate,
                 ExchangeRateSource = request.Currency == null ? order.ExchangeRateSource : request.ExchangeRateSource,
@@ -215,6 +217,7 @@ namespace AgfAdmin.Services
                     DeliveryTermRules.Describe(DeliveryTermRules.Of(order)), DeliveryTermRules.Describe(DeliveryTermRules.Of(candidate))));
                 DeliveryTermRules.Apply(order, DeliveryTermRules.Of(candidate));
             }
+            await ApplyLogisticsAsync(order, candidate, fields, cancellationToken);
             await ApplyLinesAsync(order, request, next, stored, kept, fields, splits, facts.Received, cancellationToken);
             if (fields.Count == 0)
             {
@@ -352,6 +355,12 @@ namespace AgfAdmin.Services
                 var active = await _db.Vendors.AsNoTracking().Where(v => v.Id == candidate.VendorId).Select(v => (bool?)v.Relation.IsActive).SingleOrDefaultAsync(cancellationToken);
                 if (active == null) return $"Vendor {candidate.VendorId} does not exist.";
                 if (active == false) return $"Vendor {candidate.VendorId} belongs to an inactive relation; reactivate the relation first or choose another vendor.";
+            }
+            // Feedback 22 november: een nieuw gekozen ontvangstlocatie bestaat en is actief (een opgeslagen, intussen inactieve locatie mag blijven).
+            if (candidate.ReceiveLocationId != null && candidate.ReceiveLocationId != order.ReceiveLocationId
+                && !await _db.StockLocations.AsNoTracking().AnyAsync(l => l.Id == candidate.ReceiveLocationId && l.IsActive, cancellationToken))
+            {
+                return $"Stock location {candidate.ReceiveLocationId} does not exist or is inactive.";
             }
             if (request.PartijId != null && request.PartijId != order.PartijId)
             {
@@ -515,6 +524,29 @@ namespace AgfAdmin.Services
                 // GGN van het product: ook na ontvangst aan te passen zolang de order Open is (wat al ontvangen is, houdt het GGN van de ontvangst).
                 // Een weggelaten ggn (null) laat de opgeslagen waarde staan; een lege tekst wist het GGN bewust.
                 if (request.Lines[i].Ggn != null) Field(PurchaseOrderDocumentRules.FieldGgn, line.Ggn, wanted.Ggn, () => line.Ggn = wanted.Ggn);
+            }
+        }
+
+        // Feedback 22 november: ontvangstlocatie (op naam in de audit), laadadres en afleveradres.
+        private async Task ApplyLogisticsAsync(SupplyCommitment order, SupplyCommitment candidate, List<PurchaseOrderChangeField> fields, CancellationToken cancellationToken)
+        {
+            if (order.ReceiveLocationId != candidate.ReceiveLocationId)
+            {
+                var ids = new[] { order.ReceiveLocationId, candidate.ReceiveLocationId }.Where(id => id != null).Select(id => id!.Value).ToList();
+                var names = await _db.StockLocations.AsNoTracking().Where(l => ids.Contains(l.Id)).ToDictionaryAsync(l => l.Id, l => l.Name, cancellationToken);
+                string Name(int? id) => id == null ? null : names.GetValueOrDefault(id.Value);
+                fields.Add(new(PurchaseOrderDocumentRules.FieldReceiveLocation, null, PurchaseOrderDocumentRules.ActionChanged, Name(order.ReceiveLocationId), Name(candidate.ReceiveLocationId)));
+                order.ReceiveLocationId = candidate.ReceiveLocationId;
+            }
+            if (!string.Equals(order.LoadingAddress, candidate.LoadingAddress, StringComparison.Ordinal))
+            {
+                fields.Add(new(PurchaseOrderDocumentRules.FieldLoadingAddress, null, PurchaseOrderDocumentRules.ActionChanged, order.LoadingAddress, candidate.LoadingAddress));
+                order.LoadingAddress = candidate.LoadingAddress;
+            }
+            if (!string.Equals(order.DeliveryAddress, candidate.DeliveryAddress, StringComparison.Ordinal))
+            {
+                fields.Add(new(PurchaseOrderDocumentRules.FieldDeliveryAddress, null, PurchaseOrderDocumentRules.ActionChanged, order.DeliveryAddress, candidate.DeliveryAddress));
+                order.DeliveryAddress = candidate.DeliveryAddress;
             }
         }
 

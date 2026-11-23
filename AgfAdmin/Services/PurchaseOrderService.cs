@@ -216,6 +216,7 @@ namespace AgfAdmin.Services
                 .Include(c => c.Vendor)
                 .Include(c => c.Customer)
                 .Include(c => c.Partij)
+                .Include(c => c.ReceiveLocation)
                 .Include(c => c.Lines).ThenInclude(l => l.Partij)
                 .Include(c => c.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .AsSplitQuery()
@@ -395,6 +396,11 @@ namespace AgfAdmin.Services
                 VendorId = commitment.VendorId,
                 VendorName = commitment.Vendor?.Name,
                 DeliveryTerm = commitment.DeliveryTermKind == null ? null : DeliveryTermDto.From(commitment),
+                ReceiveLocationId = commitment.ReceiveLocationId,
+                ReceiveLocationName = commitment.ReceiveLocation?.Name,
+                ReceiveLocationKind = commitment.ReceiveLocation?.Kind ?? StockLocationRules.KindOwnWarehouse,
+                LoadingAddress = commitment.LoadingAddress,
+                DeliveryAddress = commitment.DeliveryAddress,
                 SupplierReference = commitment.SupplierReference,
                 PartijId = commitment.PartijId,
                 PartijNumber = commitment.Partij?.Number,

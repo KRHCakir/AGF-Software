@@ -298,6 +298,8 @@ namespace AgfAdmin.Services
             // Inkoopordergegevens: alle optioneel; leeg telt als niet opgegeven.
             var supplierReference = OptionalText(request.SupplierReference, PurchaseOrderRules.MaxSupplierReferenceLength, "supplierReference", errors);
             var note = OptionalText(request.Note, PurchaseOrderRules.MaxNoteLength, "note", errors);
+            var loadingAddress = OptionalText(request.Logistics?.LoadingAddress, StockLocationRules.MaxAddressLength, "logistics.loadingAddress", errors);
+            var deliveryAddress = OptionalText(request.Logistics?.DeliveryAddress, StockLocationRules.MaxAddressLength, "logistics.deliveryAddress", errors);
             var supplierLotReference = OptionalText(request.SupplierLotReference, PartijRules.MaxSupplierLotReferenceLength, "supplierLotReference", errors);
             if (request.PartijId != null && request.NewPartij != null)
             {
@@ -376,6 +378,9 @@ namespace AgfAdmin.Services
                 OrderedOn = request.OrderedOn ?? today,
                 OrderChannel = orderChannel,
                 Note = note,
+                ReceiveLocationId = request.Logistics?.ReceiveLocationId,
+                LoadingAddress = loadingAddress,
+                DeliveryAddress = deliveryAddress,
                 SupplierLotReference = supplierLotReference,
                 RequestPartijKey = request.PartijId != null ? $"id:{request.PartijId}"
                     : request.NewPartij == null ? "none"
@@ -508,6 +513,13 @@ namespace AgfAdmin.Services
                 return $"Vendor {candidate.VendorId} belongs to an inactive relation; reactivate the relation first or choose another vendor.";
             }
 
+            // Feedback 22 november: een gekozen ontvangstlocatie bestaat en is actief.
+            if (candidate.ReceiveLocationId != null
+                && !await _db.StockLocations.AsNoTracking().AnyAsync(l => l.Id == candidate.ReceiveLocationId && l.IsActive, cancellationToken))
+            {
+                return $"Stock location {candidate.ReceiveLocationId} does not exist or is inactive.";
+            }
+
             if (candidate.CustomerId != null)
             {
                 var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
@@ -539,6 +551,9 @@ namespace AgfAdmin.Services
             HasSameContent(existing, candidate, orderedOnGiven: request.OrderedOn != null) && HasSamePartij(existing, candidate, request)
             // Leveringsconditie: alleen als de aanvraag er een meestuurde (anders nam de order die van de leverancier over).
             && (request.DeliveryTerm == null || DeliveryTermRules.Of(existing) == DeliveryTermRules.Of(candidate))
+            // Ontvangstlocatie en adressen (feedback 22 november), zoals de andere optionele velden.
+            && existing.ReceiveLocationId == candidate.ReceiveLocationId && string.Equals(existing.LoadingAddress, candidate.LoadingAddress, StringComparison.Ordinal)
+            && string.Equals(existing.DeliveryAddress, candidate.DeliveryAddress, StringComparison.Ordinal)
                 ? ServiceResult<SupplyCommitmentDto>.Ok(await ToDtoAsync(existing, cancellationToken))
                 : ServiceResult<SupplyCommitmentDto>.Conflict(
                     $"RequestId {candidate.RequestId} was already used for a supply commitment with different content.");

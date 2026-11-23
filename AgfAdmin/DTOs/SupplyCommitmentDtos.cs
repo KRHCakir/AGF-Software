@@ -31,6 +31,8 @@ namespace AgfAdmin.DTOs
         public List<CreateSupplyCommitmentLineDto> Lines { get; set; }
         // Feedback 22 november: de leveringsconditie van deze order. Weggelaten = die van de leverancier; met een lege soort = geen.
         public DeliveryTermDto DeliveryTerm { get; set; }
+        // Feedback 22 november: ontvangstlocatie, laadadres en afleveradres; weggelaten = eigen loods en geen adressen.
+        public OrderLogisticsDto Logistics { get; set; }
         // Certificaten deel 1: de producten waarvoor de gebruiker "Ja, klopt" koos na de vraag over het GGN-certificaat van de leverancier
         // (409 CERTIFICATE_CONFIRMATION_REQUIRED). Telt niet mee in de replayvergelijking.
         public List<int> ConfirmedCertificateProductIds { get; set; }
@@ -160,5 +162,14 @@ namespace AgfAdmin.DTOs
         public decimal? DiscountPercentage { get; set; }
         public decimal? VatPercentage { get; set; }
         public decimal? LineTotal { get; set; }
+    }
+
+    // Feedback 22 november: waar een inkooporder ontvangen wordt (null = de eigen loods), waar geladen wordt (leeg als de leverancier levert)
+    // en waar afgeleverd wordt (leeg = de eigen loods; de klant bij directe handel).
+    public sealed class OrderLogisticsDto
+    {
+        public int? ReceiveLocationId { get; set; }
+        public string LoadingAddress { get; set; }
+        public string DeliveryAddress { get; set; }
     }
 }

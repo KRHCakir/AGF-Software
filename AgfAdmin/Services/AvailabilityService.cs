@@ -303,7 +303,10 @@ namespace AgfAdmin.Services
                     c.Ggn,
                     c.SplitOffQuantity,
                     c.SplitOffNetWeightKg,
-                    c.OriginRejectionLineId != null))
+                    c.OriginRejectionLineId != null,
+                    c.Pallet.StockLocation.Name,
+                    c.Pallet.StockLocation.Kind,
+                    c.Pallet.StockLocation.CountryCode))
                 .ToListAsync(cancellationToken);
 
             // Alleen Active Physical verkoopreserveringen (SalesOrderLineId); legacy OrderLineId-reserveringen nooit.
