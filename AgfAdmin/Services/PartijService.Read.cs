@@ -32,7 +32,8 @@ namespace AgfAdmin.Services
 
         // Zoeken op partijnummer (zonder spaties en streepjes), partij van de leverancier, product en leverancier (bij een verkoop-partij:
         // klant, VO-nummer en product); status Open of SoldOut. Soort: Purchase (standaard, zoals P1), Sales of all.
-        public async Task<ServiceResult<PartijListDto>> ListAsync(string query, string status, int page, int pageSize, CancellationToken cancellationToken = default, string kind = null)
+        public async Task<ServiceResult<PartijListDto>> ListAsync(string query, string status, int page, int pageSize, CancellationToken cancellationToken = default, string kind = null,
+            SortRequest sort = null)
         {
             var kindFilter = string.IsNullOrWhiteSpace(kind) ? PartijRules.KindPurchase
                 : kind.Trim().Equals("all", StringComparison.OrdinalIgnoreCase) ? null
@@ -73,9 +74,9 @@ namespace AgfAdmin.Services
             var ordered = candidates.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id);
             List<PartijListItemDto> items;
             int total;
-            if (statusFilter == null)
+            if (statusFilter == null && sort == null)
             {
-                // Zonder statusfilter pagineren in de database en alleen de feiten van de gevraagde pagina laden.
+                // Zonder statusfilter en zonder gekozen sortering pagineren in de database en alleen de feiten van de gevraagde pagina laden.
                 total = await candidates.CountAsync(cancellationToken);
                 var pagePartijen = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken);
                 var pageFacts = await LoadFactsAsync(pagePartijen, cancellationToken);
@@ -83,10 +84,11 @@ namespace AgfAdmin.Services
             }
             else
             {
-                // De status is afgeleid uit de feiten; daarom eerst de (al door de zoekterm beperkte) kandidaten berekenen.
+                // De status en de aantallen zijn afgeleid uit de feiten; daarom eerst de (al door de zoekterm beperkte) kandidaten berekenen,
+                // dan filteren op status en sorteren op de gekozen kolom (feedback 22 november) over alle partijen, en pas dan pagineren.
                 var partijen = await ordered.ToListAsync(cancellationToken);
                 var facts = await LoadFactsAsync(partijen, cancellationToken);
-                var matching = partijen.Select(p => Totals<PartijListItemDto>(p, facts)).Where(i => i.Status == statusFilter).ToList();
+                var matching = ListSort.Apply(partijen.Select(p => Totals<PartijListItemDto>(p, facts)).Where(i => statusFilter == null || i.Status == statusFilter), sort, ListSortFields.Partijen);
                 total = matching.Count;
                 items = matching.Skip((page - 1) * pageSize).Take(pageSize).ToList();
             }

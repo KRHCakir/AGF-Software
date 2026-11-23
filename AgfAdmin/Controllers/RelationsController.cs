@@ -20,8 +20,11 @@ namespace AgfAdmin.Controllers
         [HttpGet]
         // certificate: attention, Expired, ExpiringSoon, productsPending, none of een soort (certificaten deel 1).
         public async Task<IActionResult> List([FromQuery] string role, [FromQuery] string query, [FromQuery] bool includeInactive = false, [FromQuery] int page = 1, [FromQuery] int pageSize = RelationRules.DefaultPageSize,
-            [FromQuery] string certificate = null) =>
-            Ok(await _service.ListAsync(role, query, includeInactive, page, pageSize, HttpContext?.RequestAborted ?? default, certificate));
+            [FromQuery] string certificate = null, [FromQuery] string sort = null, [FromQuery] string direction = null)
+        {
+            if (!this.TryReadSort(sort, direction, ListSortFields.Relations, out var order, out var rejected)) return rejected;
+            return Ok(await _service.ListAsync(role, query, includeInactive, page, pageSize, HttpContext?.RequestAborted ?? default, certificate, order));
+        }
 
         [HttpGet("reference")]
         public async Task<IActionResult> Reference() => Ok(await _service.ReferenceAsync(HttpContext?.RequestAborted ?? default));

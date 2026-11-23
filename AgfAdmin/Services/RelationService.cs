@@ -64,7 +64,9 @@ namespace AgfAdmin.Services
 
         // certificate (certificaten deel 1): attention (een certificaat verloopt binnenkort of is verlopen), Expired, ExpiringSoon,
         // productsPending, none (zonder certificaat) of een soort (GlobalGapIfa, Skal, …). Zoeken vindt ook een certificaatnummer.
-        public async Task<RelationListDto> ListAsync(string role, string query, bool includeInactive, int page, int pageSize, CancellationToken cancellationToken = default, string certificate = null)
+        // sort (feedback 22 november): een veld uit ListSortFields.Relations; dan wordt over alle passende relaties gesorteerd en daarna gepagineerd.
+        public async Task<RelationListDto> ListAsync(string role, string query, bool includeInactive, int page, int pageSize, CancellationToken cancellationToken = default, string certificate = null,
+            SortRequest sort = null)
         {
             page = Math.Max(1, page);
             pageSize = pageSize <= 0 ? RelationRules.DefaultPageSize : Math.Min(pageSize, RelationRules.MaxPageSize);
@@ -103,10 +105,10 @@ namespace AgfAdmin.Services
                 };
             }
             var total = await relations.CountAsync(cancellationToken);
-            // De server bepaalt de definitieve resultaten en hun volgorde: een exacte zoekcode eerst, daarna op naam. De werkplek filtert niet opnieuw.
-            var pageItems = await relations
-                .OrderByDescending(r => term != "" && r.SearchCodeKey == term).ThenBy(r => r.Name).ThenBy(r => r.Id)
-                .Skip((page - 1) * pageSize).Take(pageSize)
+            // De server bepaalt de definitieve resultaten en hun volgorde: een exacte zoekcode eerst, daarna op naam (of op de gekozen kolom).
+            // De werkplek filtert niet opnieuw.
+            var ordered = relations.OrderByDescending(r => term != "" && r.SearchCodeKey == term).ThenBy(r => r.Name).ThenBy(r => r.Id);
+            var projected = ordered
                 .Select(r => new
                 {
                     r.Id, r.SearchCode, r.Name, r.TradeName, r.IsActive, r.IsCarrier, r.Email, r.Phone, r.VatNumber, r.Version,
@@ -114,22 +116,20 @@ namespace AgfAdmin.Services
                     VendorId = r.Vendor == null ? (int?)null : r.Vendor.Id,
                     Main = r.Addresses.Where(a => a.IsActive).OrderByDescending(a => a.Purpose == AddressPurpose.Main).ThenByDescending(a => a.IsDefault).ThenBy(a => a.SortOrder).Select(a => new { a.City, a.CountryCode }).FirstOrDefault(),
                     PrimaryContact = r.Contacts.Where(c => c.IsActive).OrderByDescending(c => c.IsPrimary).ThenBy(c => c.SortOrder).Select(c => c.Name).FirstOrDefault()
-                })
-                .ToListAsync(cancellationToken);
-            var certificates = await CertificateService.SummariesAsync(_db, pageItems.Select(r => r.Id).ToList(), cancellationToken);
-            return new RelationListDto
+                });
+            var rows = sort == null
+                ? await projected.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(cancellationToken)
+                : await projected.ToListAsync(cancellationToken);
+            var items = rows.Select(r => new RelationListItemDto
             {
-                Total = total,
-                Page = page,
-                PageSize = pageSize,
-                Items = pageItems.Select(r => new RelationListItemDto
-                {
-                    Id = r.Id, SearchCode = r.SearchCode, Name = r.Name, TradeName = r.TradeName, IsActive = r.IsActive, Email = r.Email, Phone = r.Phone,
-                    VatNumber = r.VatNumber, Version = r.Version, CustomerId = r.CustomerId, VendorId = r.VendorId, IsCarrier = r.IsCarrier,
-                    City = r.Main?.City, CountryCode = r.Main?.CountryCode, PrimaryContactName = r.PrimaryContact,
-                    Certificates = certificates.GetValueOrDefault(r.Id) ?? new List<RelationCertificateSummaryDto>()
-                }).ToList()
-            };
+                Id = r.Id, SearchCode = r.SearchCode, Name = r.Name, TradeName = r.TradeName, IsActive = r.IsActive, Email = r.Email, Phone = r.Phone,
+                VatNumber = r.VatNumber, Version = r.Version, CustomerId = r.CustomerId, VendorId = r.VendorId, IsCarrier = r.IsCarrier,
+                City = r.Main?.City, CountryCode = r.Main?.CountryCode, PrimaryContactName = r.PrimaryContact,
+            }).ToList();
+            if (sort != null) items = ListSort.Apply(items, sort, ListSortFields.Relations).Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var certificates = await CertificateService.SummariesAsync(_db, items.Select(r => r.Id).ToList(), cancellationToken);
+            foreach (var item in items) item.Certificates = certificates.GetValueOrDefault(item.Id) ?? new List<RelationCertificateSummaryDto>();
+            return new RelationListDto { Total = total, Page = page, PageSize = pageSize, Items = items };
         }
 
         public async Task<ServiceResult<RelationDto>> GetAsync(int id, CancellationToken cancellationToken = default)

@@ -14,7 +14,9 @@ namespace AgfAdmin.Services
 
         // Alle certificaten (Stamgegevens › Certificaten), of alleen die aandacht vragen (attention: bijna verlopen en verlopen, gesorteerd
         // op einddatum), met paginering: Total is het aantal bij het filter, niet het aantal op de pagina. Alleen actieve certificaten van actieve relaties en het eigen bedrijf, tenzij includeArchived.
-        public async Task<CertificateOverviewDto> OverviewAsync(string query, string type, string status, bool includeArchived, int page = 1, int pageSize = DefaultOverviewPageSize, CancellationToken cancellationToken = default)
+        // sort (feedback 22 november): een veld uit ListSortFields.Certificates; dan wordt over alle passende certificaten gesorteerd en daarna gepagineerd.
+        public async Task<CertificateOverviewDto> OverviewAsync(string query, string type, string status, bool includeArchived, int page = 1, int pageSize = DefaultOverviewPageSize, CancellationToken cancellationToken = default,
+            SortRequest sort = null)
         {
             page = Math.Max(page, 1);
             pageSize = pageSize < 1 ? DefaultOverviewPageSize : Math.Min(pageSize, MaxOverviewPageSize);
@@ -41,9 +43,9 @@ namespace AgfAdmin.Services
                 certificates = certificates.Where(c => (key != null && c.NumberKey.Contains(key)) || (c.Relation != null && c.Relation.Name.ToLower().Contains(term)));
             }
             var total = await certificates.CountAsync(cancellationToken);
-            var rows = await certificates
-                .OrderBy(c => c.ValidUntil == null).ThenBy(c => c.ValidUntil).ThenBy(c => c.Relation == null ? "" : c.Relation.Name).ThenBy(c => c.Id)
-                .Skip((page - 1) * pageSize).Take(pageSize)
+            var ordered = certificates
+                .OrderBy(c => c.ValidUntil == null).ThenBy(c => c.ValidUntil).ThenBy(c => c.Relation == null ? "" : c.Relation.Name).ThenBy(c => c.Id);
+            var rows = await (sort == null ? ordered.Skip((page - 1) * pageSize).Take(pageSize) : ordered)
                 .Select(c => new
                 {
                     c.Id, c.RelationId, RelationName = c.Relation == null ? null : c.Relation.Name,
@@ -58,14 +60,17 @@ namespace AgfAdmin.Services
                 Total = total,
                 Page = page,
                 PageSize = pageSize,
-                Items = rows.Select(c => new CertificateOverviewItemDto
+                Items = Page(rows.Select(c => new CertificateOverviewItemDto
                 {
                     CertificateId = c.Id, RelationId = c.RelationId, RelationName = c.RelationName, IsCustomer = c.IsCustomer, IsVendor = c.IsVendor, IsCarrier = c.IsCarrier,
                     TypeCode = c.TypeCode, TypeName = CertificateRules.TypeName(c.TypeCode, c.CustomTypeName), Number = c.Number, ValidUntil = c.ValidUntil,
                     DaysLeft = c.ValidUntil is DateOnly until ? CertificateRules.DaysLeft(until, today) : null,
                     Status = CertificateRules.Status(c.ValidUntil, today, settings.CertificateWarningDays), ProductsPending = c.ProductsPending, IsActive = c.IsActive, ProductNames = c.Products,
-                }).ToList(),
+                })),
             };
+            // Zonder gekozen sortering is de pagina al in de database gekozen; anders hier, na het sorteren over alle rijen.
+            List<CertificateOverviewItemDto> Page(IEnumerable<CertificateOverviewItemDto> items) =>
+                sort == null ? items.ToList() : ListSort.Apply(items, sort, ListSortFields.Certificates).Skip((page - 1) * pageSize).Take(pageSize).ToList();
         }
 
         // De samenvatting per relatie voor de relatielijst: per actief certificaat de soort en de status.
