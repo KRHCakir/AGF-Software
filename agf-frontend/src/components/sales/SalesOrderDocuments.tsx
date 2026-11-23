@@ -8,6 +8,31 @@ import { ApiError, toApiError } from '../../services/apiClient';
 import { confirmSalesOrder, getDocumentPdf, getSalesOrderDocuments, markDocumentSent, updateSalesOrderLoading } from '../../services/salesOrderDocumentService';
 import type { SalesOrder } from '../../types/salesOrder';
 import type { SalesOrderDocument, SalesOrderDocuments as Documents } from '../../types/salesOrderDocument';
+
+// Feedback 22 november: de documenten van één levering (laadbon en transportopdracht per levering). Een order met één levering toont
+// precies wat er vóór de leveringen stond.
+interface DeliveryGroup {
+    id: number | null;
+    sequence: number;
+    partijNumber: string | null;
+    loadAt: string | null;
+    licensePlate: string | null;
+    needsResend: boolean;
+    transportOrderNeedsResend: boolean;
+    documents: SalesOrderDocument[];
+}
+
+export function deliveryGroups(data: Documents): DeliveryGroup[] {
+    const deliveries = data.deliveries ?? [];
+    if (deliveries.length <= 1) {
+        return [{ id: deliveries[0]?.salesDeliveryId ?? null, sequence: 1, partijNumber: deliveries[0]?.partijNumber ?? null, loadAt: data.loadAt, licensePlate: data.licensePlate,
+            needsResend: data.needsResend, transportOrderNeedsResend: data.transportOrderNeedsResend === true, documents: data.documents }];
+    }
+    return [...deliveries].sort((a, b) => a.sequence - b.sequence).map((d) => ({
+        id: d.salesDeliveryId, sequence: d.sequence, partijNumber: d.partijNumber, loadAt: d.loadAt, licensePlate: d.licensePlate, needsResend: d.needsResend,
+        transportOrderNeedsResend: d.transportOrderNeedsResend, documents: data.documents.filter((document) => document.salesDeliveryId === d.salesDeliveryId),
+    }));
+}
 import ErrorNotice from '../supply/ErrorNotice';
 import { inputClass } from '../supply/FieldError';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
@@ -86,11 +111,8 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
     const [error, setError] = useState<ApiError | null>(null);
     const [busy, setBusy] = useState(false);
     const [asking, setAsking] = useState(false);
-    const [editing, setEditing] = useState(false);
     const [loadAt, setLoadAt] = useState('');
     const [plate, setPlate] = useState('');
-    const [showOlder, setShowOlder] = useState(false);
-    const [showOlderTransport, setShowOlderTransport] = useState(false);
     const [popupBlocked, setPopupBlocked] = useState(false);
     const cancelled = order.status === 'Cancelled';
 
@@ -101,10 +123,8 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
         setError(null);
         setPopupBlocked(false);
         setAsking(false);
-        setEditing(false);
         setLoadAt('');
         setPlate('');
-        setShowOlder(false);
     }, [order.id]);
 
     // Opnieuw ophalen na elke wijziging van de order (versie): een nieuwe reservering kan een nieuwe versie van de laadbon geven.
@@ -140,42 +160,16 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
         });
     };
     const details = () => ({ loadAt: loadAtFromInput(loadAt), licensePlate: plate.trim() === '' ? null : plate.trim() });
-    const startEdit = () => {
-        setLoadAt(inputFromLoadAt(data?.loadAt ?? null));
-        setPlate(data?.licensePlate ?? '');
-        setEditing(true);
-    };
     const confirm = (event: FormEvent) => {
         event.preventDefault();
         void run(() => confirmSalesOrder(order.id, details()), () => { setAsking(false); onChanged?.(); });
     };
-    const saveLoading = (event: FormEvent) => {
-        event.preventDefault();
-        void run(() => updateSalesOrderLoading(order.id, details()), () => { setEditing(false); onChanged?.(); });
-    };
 
-    const slips = (data?.documents ?? []).filter((document) => document.kind === 'LoadingSlip');
-    const latest = slips.find((document) => document.latest) ?? null;
-    const older = slips.filter((document) => !document.latest);
-    const transportOrders = (data?.documents ?? []).filter((document) => document.kind === 'TransportOrder');
-    const transportLatest = transportOrders.find((document) => document.latest) ?? null;
-    const transportOlder = transportOrders.filter((document) => !document.latest);
     const delivery = formatCalendarDate(order.requestedDeliveryDate, locale);
 
-    const loadingFields = (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-                <label htmlFor={`load-at-${order.id}`} className="text-xs font-medium text-gray-700">{t('so_load_at')}</label>
-                <input id={`load-at-${order.id}`} type="datetime-local" value={loadAt} onChange={(event) => setLoadAt(event.target.value)} className={inputClass} data-tour="so-load-at" />
-                <span className="block text-xs text-gray-600">{t('so_load_at_hint', { date: delivery })}</span>
-            </div>
-            <div>
-                <label htmlFor={`plate-${order.id}`} className="text-xs font-medium text-gray-700">{t('so_license_plate')}</label>
-                <input id={`plate-${order.id}`} value={plate} maxLength={MAX_PLATE} onChange={(event) => setPlate(event.target.value)} className={inputClass} data-tour="so-license-plate" />
-                <span className="block text-xs text-gray-600">{t('so_license_plate_hint')}</span>
-            </div>
-        </div>
-    );
+    const loadingFields = <LoadingFields id={`${order.id}`} loadAt={loadAt} plate={plate} onLoadAt={setLoadAt} onPlate={setPlate} deliveryDate={delivery} />;
+    const groups = data ? deliveryGroups(data) : [];
+    const multiple = groups.length > 1;
 
     return (
         <section aria-labelledby={`documents-${order.id}`} className="space-y-2 rounded-md border border-gray-300 bg-white px-4 py-3" data-testid="so-documents" data-tour="so-documents">
@@ -215,98 +209,183 @@ export default function SalesOrderDocuments({ order, onChanged, reloadKey = 0 }:
 
             {data?.confirmedAt && (
                 <>
-                    <p className="text-sm text-gray-800" data-testid="so-confirmed-by">
-                        {t('so_confirmed_by', { date: formatDateTime(data.confirmedAt, locale), name: data.confirmedBy ?? '–' })}
-                        {' · '}{t('so_load_at')}: {data.loadAt ? formatDateTime(data.loadAt, locale) : delivery}
-                        {' · '}{t('so_license_plate')}: {data.licensePlate ?? t('so_license_plate_empty')}
-                        {!cancelled && !editing && <button type="button" className="ml-2 text-blue-800 underline underline-offset-2" onClick={startEdit} data-tour="so-loading-edit">{t('so_loading_edit')}</button>}
-                    </p>
-                    {/* Geannuleerd terwijl het formulier openstond: dan niet meer aan te passen. */}
-                    {editing && !cancelled && (
-                        <form onSubmit={saveLoading} className="space-y-2 rounded border border-gray-200 bg-gray-50 px-3 py-2" data-testid="so-loading-form">
-                            {loadingFields}
-                            <div className="flex flex-wrap gap-2">
-                                <button type="submit" className={primaryButtonClass} disabled={busy}>{busy ? t('supply_saving') : t('so_loading_save')}</button>
-                                <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => setEditing(false)}>{t('cancel')}</button>
-                            </div>
-                        </form>
-                    )}
-                    {data.needsResend && latest && !cancelled && (
-                        <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-950" data-testid="so-slip-changed">
-                            ⚠ {t('so_slip_changed', { version: String(latest.version) })}
-                            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void run(() => markDocumentSent(order.id, latest.id))} data-tour="so-slip-sent">{t('so_slip_sent')}</button>
+                    {multiple && (
+                        <p className="text-sm text-gray-800" data-testid="so-confirmed-by">
+                            {t('so_confirmed_by', { date: formatDateTime(data.confirmedAt, locale), name: data.confirmedBy ?? '–' })}
                         </p>
                     )}
-                    {latest && (
-                        <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="so-slip-latest" data-tour="so-slip">
-                            <span className="font-semibold">{t('so_slip_name', { number: latest.number, version: String(latest.version) })}</span>
-                            <span className="text-gray-600">{formatDateTime(latest.createdAt, locale)} · {latest.createdBy}</span>
-                            {latest.sentAt && <span className="text-xs text-gray-600">{t('so_slip_sent_by', { date: formatDateTime(latest.sentAt, locale), name: latest.sentBy ?? '–' })}</span>}
-                            <span className="ml-auto flex flex-wrap gap-2">
-                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(latest, 'view')} data-tour="so-slip-view">{t('so_slip_view')}</button>
-                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(latest, 'download')} data-tour="so-slip-download">{t('so_slip_download')}</button>
-                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(latest, 'print')} data-tour="so-slip-print">{t('so_slip_print')}</button>
-                            </span>
-                        </div>
-                    )}
-                    {older.length > 0 && (
-                        <div className="text-sm">
-                            <button type="button" className="text-blue-800 underline underline-offset-2" aria-expanded={showOlder} onClick={() => setShowOlder((open) => !open)}>
-                                {t(showOlder ? 'so_slip_older_hide' : 'so_slip_older', { count: String(older.length) })}
-                            </button>
-                            {showOlder && (
-                                <ul className="mt-1 space-y-1" data-testid="so-slip-older">
-                                    {older.map((document) => (
-                                        <li key={document.id} className="flex flex-wrap items-center gap-2 text-gray-700">
-                                            <span>{t('so_slip_name', { number: document.number, version: String(document.version) })} · {formatDateTime(document.createdAt, locale)}</span>
-                                            <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'view')}>{t('so_slip_view')}</button>
-                                            <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'download')}>{t('so_slip_download')}</button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    )}
-                    {/* De transportopdracht (documenten deel 2): alleen met transport op de order. */}
-                    {!cancelled && data.hasTransport === false && <p className="text-sm text-gray-700" data-testid="so-transport-order-missing">{t('so_transport_order_missing')}</p>}
-                    {transportLatest && data.transportOrderNeedsResend && !cancelled && (
-                        <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-950" data-testid="so-transport-order-changed">
-                            ⚠ {t('so_transport_order_changed', { version: String(transportLatest.version) })}
-                            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void run(() => markDocumentSent(order.id, transportLatest.id))} data-tour="so-transport-order-sent">{t('so_slip_sent')}</button>
-                        </p>
-                    )}
-                    {transportLatest && (
-                        <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="so-transport-order-latest" data-tour="so-transport-order">
-                            <span className="font-semibold">{t('so_transport_order_name', { number: transportLatest.number, version: String(transportLatest.version) })}</span>
-                            <span className="text-gray-600">{formatDateTime(transportLatest.createdAt, locale)} · {transportLatest.createdBy}</span>
-                            {transportLatest.sentAt && <span className="text-xs text-gray-600">{t('so_slip_sent_by', { date: formatDateTime(transportLatest.sentAt, locale), name: transportLatest.sentBy ?? '–' })}</span>}
-                            <span className="ml-auto flex flex-wrap gap-2">
-                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(transportLatest, 'view')} data-tour="so-transport-order-view">{t('so_slip_view')}</button>
-                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(transportLatest, 'download')} data-tour="so-transport-order-download">{t('so_slip_download')}</button>
-                                <button type="button" className={secondaryButtonClass} onClick={() => pdf(transportLatest, 'print')} data-tour="so-transport-order-print">{t('so_slip_print')}</button>
-                            </span>
-                        </div>
-                    )}
-                    {transportOlder.length > 0 && (
-                        <div className="text-sm">
-                            <button type="button" className="text-blue-800 underline underline-offset-2" aria-expanded={showOlderTransport} onClick={() => setShowOlderTransport((open) => !open)}>
-                                {t(showOlderTransport ? 'so_slip_older_hide' : 'so_slip_older', { count: String(transportOlder.length) })}
-                            </button>
-                            {showOlderTransport && (
-                                <ul className="mt-1 space-y-1" data-testid="so-transport-order-older">
-                                    {transportOlder.map((document) => (
-                                        <li key={document.id} className="flex flex-wrap items-center gap-2 text-gray-700">
-                                            <span>{t('so_transport_order_name', { number: document.number, version: String(document.version) })} · {formatDateTime(document.createdAt, locale)}</span>
-                                            <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'view')}>{t('so_slip_view')}</button>
-                                            <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => pdf(document, 'download')}>{t('so_slip_download')}</button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    )}
+                    {!cancelled && data.hasTransport === false && multiple && <p className="text-sm text-gray-700" data-testid="so-transport-order-missing">{t('so_transport_order_missing')}</p>}
+                    {groups.map((group) => (
+                        <DeliveryDocumentsBlock key={group.id ?? 0} order={order} group={group} multiple={multiple} busy={busy} cancelled={cancelled} deliveryDate={delivery}
+                            confirmedText={t('so_confirmed_by', { date: formatDateTime(data.confirmedAt!, locale), name: data.confirmedBy ?? '–' })}
+                            hasTransportMissing={!cancelled && data.hasTransport === false && !multiple}
+                            onRun={run} onPdf={pdf} onChanged={onChanged} />
+                    ))}
                 </>
             )}
         </section>
+    );
+}
+
+function LoadingFields({ id, loadAt, plate, onLoadAt, onPlate, deliveryDate }: {
+    id: string; loadAt: string; plate: string; onLoadAt: (value: string) => void; onPlate: (value: string) => void; deliveryDate: string;
+}) {
+    const { t } = useTranslation();
+    return (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+                <label htmlFor={`load-at-${id}`} className="text-xs font-medium text-gray-700">{t('so_load_at')}</label>
+                <input id={`load-at-${id}`} type="datetime-local" value={loadAt} onChange={(event) => onLoadAt(event.target.value)} className={inputClass} data-tour="so-load-at" />
+                <span className="block text-xs text-gray-600">{t('so_load_at_hint', { date: deliveryDate })}</span>
+            </div>
+            <div>
+                <label htmlFor={`plate-${id}`} className="text-xs font-medium text-gray-700">{t('so_license_plate')}</label>
+                <input id={`plate-${id}`} value={plate} maxLength={MAX_PLATE} onChange={(event) => onPlate(event.target.value)} className={inputClass} data-tour="so-license-plate" />
+                <span className="block text-xs text-gray-600">{t('so_license_plate_hint')}</span>
+            </div>
+        </div>
+    );
+}
+
+// Eén levering: laden op en kenteken (aan te passen), "opnieuw versturen", de nieuwste laadbon en transportopdracht met Bekijken,
+// Downloaden en Afdrukken, en de oudere versies. Bij één levering zonder kop, zoals vóór de leveringen.
+function DeliveryDocumentsBlock({ order, group, multiple, busy, cancelled, deliveryDate, confirmedText, hasTransportMissing, onRun, onPdf, onChanged }: {
+    order: SalesOrder;
+    group: DeliveryGroup;
+    multiple: boolean;
+    busy: boolean;
+    cancelled: boolean;
+    deliveryDate: string;
+    confirmedText: string;
+    hasTransportMissing: boolean;
+    onRun: (call: () => Promise<Documents>, after?: () => void) => Promise<void>;
+    onPdf: (document: SalesOrderDocument, mode: 'view' | 'download' | 'print') => void;
+    onChanged?: () => void;
+}) {
+    const { t, locale } = useTranslation();
+    const [editing, setEditing] = useState(false);
+    const [loadAt, setLoadAt] = useState('');
+    const [plate, setPlate] = useState('');
+    const [showOlder, setShowOlder] = useState(false);
+    const [showOlderTransport, setShowOlderTransport] = useState(false);
+    const startEdit = () => {
+        setLoadAt(inputFromLoadAt(group.loadAt));
+        setPlate(group.licensePlate ?? '');
+        setEditing(true);
+    };
+    const saveLoading = (event: FormEvent) => {
+        event.preventDefault();
+        const details = { loadAt: loadAtFromInput(loadAt), licensePlate: plate.trim() === '' ? null : plate.trim(), ...(multiple && group.id !== null ? { salesDeliveryId: group.id } : {}) };
+        void onRun(() => updateSalesOrderLoading(order.id, details), () => { setEditing(false); onChanged?.(); });
+    };
+    const slips = group.documents.filter((document) => document.kind === 'LoadingSlip');
+    const latest = slips.find((document) => document.latest) ?? null;
+    const older = slips.filter((document) => !document.latest);
+    const transportOrders = group.documents.filter((document) => document.kind === 'TransportOrder');
+    const transportLatest = transportOrders.find((document) => document.latest) ?? null;
+    const transportOlder = transportOrders.filter((document) => !document.latest);
+    const loading = (
+        <>
+            {t('so_load_at')}: {group.loadAt ? formatDateTime(group.loadAt, locale) : deliveryDate}
+            {' · '}{t('so_license_plate')}: {group.licensePlate ?? t('so_license_plate_empty')}
+            {!cancelled && !editing && <button type="button" className="ml-2 text-blue-800 underline underline-offset-2" onClick={startEdit} data-tour="so-loading-edit">{t('so_loading_edit')}</button>}
+        </>
+    );
+
+    return (
+        <div className={multiple ? 'space-y-2 rounded border border-gray-200 px-3 py-2' : 'space-y-2'} data-testid="so-delivery-documents" data-delivery-sequence={group.sequence}>
+            {multiple
+                ? (
+                    <p className="text-sm text-gray-800">
+                        <span className="font-semibold">{t('so_delivery_heading', { sequence: String(group.sequence), partij: group.partijNumber ?? '–' })}</span>
+                        {' · '}{loading}
+                    </p>
+                )
+                : <p className="text-sm text-gray-800" data-testid="so-confirmed-by">{confirmedText}{' · '}{loading}</p>}
+            {/* Geannuleerd terwijl het formulier openstond: dan niet meer aan te passen. */}
+            {editing && !cancelled && (
+                <form onSubmit={saveLoading} className="space-y-2 rounded border border-gray-200 bg-gray-50 px-3 py-2" data-testid="so-loading-form">
+                    <LoadingFields id={`${order.id}-${group.sequence}`} loadAt={loadAt} plate={plate} onLoadAt={setLoadAt} onPlate={setPlate} deliveryDate={deliveryDate} />
+                    <div className="flex flex-wrap gap-2">
+                        <button type="submit" className={primaryButtonClass} disabled={busy}>{busy ? t('supply_saving') : t('so_loading_save')}</button>
+                        <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => setEditing(false)}>{t('cancel')}</button>
+                    </div>
+                </form>
+            )}
+            {group.needsResend && latest && !cancelled && (
+                <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-950" data-testid="so-slip-changed">
+                    ⚠ {t('so_slip_changed', { version: String(latest.version) })}
+                    <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void onRun(() => markDocumentSent(order.id, latest.id))} data-tour="so-slip-sent">{t('so_slip_sent')}</button>
+                </p>
+            )}
+            {latest && (
+                <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="so-slip-latest" data-tour="so-slip">
+                    <span className="font-semibold">{t('so_slip_name', { number: latest.number, version: String(latest.version) })}</span>
+                    <span className="text-gray-600">{formatDateTime(latest.createdAt, locale)} · {latest.createdBy}</span>
+                    {latest.sentAt && <span className="text-xs text-gray-600">{t('so_slip_sent_by', { date: formatDateTime(latest.sentAt, locale), name: latest.sentBy ?? '–' })}</span>}
+                    <span className="ml-auto flex flex-wrap gap-2">
+                        <button type="button" className={secondaryButtonClass} onClick={() => onPdf(latest, 'view')} data-tour="so-slip-view">{t('so_slip_view')}</button>
+                        <button type="button" className={secondaryButtonClass} onClick={() => onPdf(latest, 'download')} data-tour="so-slip-download">{t('so_slip_download')}</button>
+                        <button type="button" className={secondaryButtonClass} onClick={() => onPdf(latest, 'print')} data-tour="so-slip-print">{t('so_slip_print')}</button>
+                    </span>
+                </div>
+            )}
+            {older.length > 0 && (
+                <div className="text-sm">
+                    <button type="button" className="text-blue-800 underline underline-offset-2" aria-expanded={showOlder} onClick={() => setShowOlder((open) => !open)}>
+                        {t(showOlder ? 'so_slip_older_hide' : 'so_slip_older', { count: String(older.length) })}
+                    </button>
+                    {showOlder && (
+                        <ul className="mt-1 space-y-1" data-testid="so-slip-older">
+                            {older.map((document) => (
+                                <li key={document.id} className="flex flex-wrap items-center gap-2 text-gray-700">
+                                    <span>{t('so_slip_name', { number: document.number, version: String(document.version) })} · {formatDateTime(document.createdAt, locale)}</span>
+                                    <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => onPdf(document, 'view')}>{t('so_slip_view')}</button>
+                                    <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => onPdf(document, 'download')}>{t('so_slip_download')}</button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+            {/* De transportopdracht (documenten deel 2): alleen met transport op de order. */}
+            {hasTransportMissing && <p className="text-sm text-gray-700" data-testid="so-transport-order-missing">{t('so_transport_order_missing')}</p>}
+            {transportLatest && group.transportOrderNeedsResend && !cancelled && (
+                <p role="alert" className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-sm font-medium text-amber-950" data-testid="so-transport-order-changed">
+                    ⚠ {t('so_transport_order_changed', { version: String(transportLatest.version) })}
+                    <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void onRun(() => markDocumentSent(order.id, transportLatest.id))} data-tour="so-transport-order-sent">{t('so_slip_sent')}</button>
+                </p>
+            )}
+            {transportLatest && (
+                <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="so-transport-order-latest" data-tour="so-transport-order">
+                    <span className="font-semibold">{t('so_transport_order_name', { number: transportLatest.number, version: String(transportLatest.version) })}</span>
+                    <span className="text-gray-600">{formatDateTime(transportLatest.createdAt, locale)} · {transportLatest.createdBy}</span>
+                    {transportLatest.sentAt && <span className="text-xs text-gray-600">{t('so_slip_sent_by', { date: formatDateTime(transportLatest.sentAt, locale), name: transportLatest.sentBy ?? '–' })}</span>}
+                    <span className="ml-auto flex flex-wrap gap-2">
+                        <button type="button" className={secondaryButtonClass} onClick={() => onPdf(transportLatest, 'view')} data-tour="so-transport-order-view">{t('so_slip_view')}</button>
+                        <button type="button" className={secondaryButtonClass} onClick={() => onPdf(transportLatest, 'download')} data-tour="so-transport-order-download">{t('so_slip_download')}</button>
+                        <button type="button" className={secondaryButtonClass} onClick={() => onPdf(transportLatest, 'print')} data-tour="so-transport-order-print">{t('so_slip_print')}</button>
+                    </span>
+                </div>
+            )}
+            {transportOlder.length > 0 && (
+                <div className="text-sm">
+                    <button type="button" className="text-blue-800 underline underline-offset-2" aria-expanded={showOlderTransport} onClick={() => setShowOlderTransport((open) => !open)}>
+                        {t(showOlderTransport ? 'so_slip_older_hide' : 'so_slip_older', { count: String(transportOlder.length) })}
+                    </button>
+                    {showOlderTransport && (
+                        <ul className="mt-1 space-y-1" data-testid="so-transport-order-older">
+                            {transportOlder.map((document) => (
+                                <li key={document.id} className="flex flex-wrap items-center gap-2 text-gray-700">
+                                    <span>{t('so_transport_order_name', { number: document.number, version: String(document.version) })} · {formatDateTime(document.createdAt, locale)}</span>
+                                    <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => onPdf(document, 'view')}>{t('so_slip_view')}</button>
+                                    <button type="button" className="text-blue-800 underline underline-offset-2" onClick={() => onPdf(document, 'download')}>{t('so_slip_download')}</button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }

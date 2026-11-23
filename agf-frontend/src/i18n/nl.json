@@ -2886,6 +2886,7 @@
   "so_transport_order_name": "Transportopdracht {number} · versie {version}",
   "so_transport_order_changed": "Transportopdracht gewijzigd (versie {version}): opnieuw versturen naar de vervoerder.",
   "so_transport_order_missing": "Geen transportopdracht: kies een vervoerder of eigen transport.",
+  "so_delivery_heading": "Levering {sequence} · {partij}",
   "transport_order_settings_title": "Transportopdracht",
   "warehouse_recipients_title": "E-mailadressen van de loods",
   "warehouse_recipients_text": "De laadbon gaat per e-mail naar deze adressen (na controle en een klik op Versturen).",

@@ -2886,6 +2886,7 @@
   "so_transport_order_name": "Transport order {number} · version {version}",
   "so_transport_order_changed": "Transport order changed (version {version}): send it to the carrier again.",
   "so_transport_order_missing": "No transport order: choose a carrier or own transport.",
+  "so_delivery_heading": "Delivery {sequence} · {partij}",
   "transport_order_settings_title": "Transport order",
   "warehouse_recipients_title": "E-mail addresses of the warehouse",
   "warehouse_recipients_text": "The loading slip goes to these addresses by e-mail (after checking and a click on Send).",
