@@ -45,6 +45,10 @@ namespace AgfAdmin.Services
 
         public async Task<ServiceResult<PartijSummaryDto>> SetPartijColorAsync(int partijId, SetPartijColorDto request, CancellationToken cancellationToken = default)
         {
+            if (request == null)
+            {
+                return ServiceResult<PartijSummaryDto>.Validation(new Dictionary<string, string[]> { ["color"] = new[] { "A request body is required; send {\"color\": null} to clear the color." } });
+            }
             var partij = await db.Partijen.SingleOrDefaultAsync(p => p.Id == partijId, cancellationToken);
             if (partij == null) return ServiceResult<PartijSummaryDto>.NotFound($"Lot {partijId} does not exist.");
             if (partij.Kind != PartijRules.KindPurchase)
@@ -52,7 +56,7 @@ namespace AgfAdmin.Services
                 return ServiceResult<PartijSummaryDto>.Validation(new Dictionary<string, string[]> { ["color"] = new[] { "Only a purchase lot has a color." } });
             }
             var allowed = await AllowedAsync(db, partijId, cancellationToken);
-            var wanted = string.IsNullOrWhiteSpace(request?.Color) ? null : request.Color.Trim();
+            var wanted = string.IsNullOrWhiteSpace(request.Color) ? null : request.Color.Trim();
             var color = wanted == null ? null : allowed.FirstOrDefault(c => string.Equals(c, wanted, StringComparison.OrdinalIgnoreCase));
             if (wanted != null && color == null)
             {
@@ -62,20 +66,23 @@ namespace AgfAdmin.Services
             }
             if (!string.Equals(partij.Color, color, StringComparison.Ordinal))
             {
-                db.PartijAuditEvents.Add(new PartijAuditEvent
-                {
-                    PartijId = partij.Id, EventType = PartijRules.EventColorChanged, OldValue = partij.Color, NewValue = color,
-                    ActorReference = _user.Actor(PartijRules.MaxActorLength), OccurredAt = DateTime.UtcNow
-                });
-                partij.Color = color;
-                try
-                {
-                    await db.SaveChangesAsync(cancellationToken);
-                }
-                catch (DbUpdateConcurrencyException)
+                // Alleen de kleurkolom wordt voorwaardelijk bijgewerkt (de oude waarde moet nog kloppen); andere wijzigingen aan de partij blijven ongemoeid.
+                var oldColor = partij.Color;
+                await using var transaction = db.Database.CurrentTransaction == null ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+                var changed = await db.Partijen.Where(p => p.Id == partijId && p.Color == oldColor)
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.Color, color), cancellationToken);
+                if (changed == 0)
                 {
                     return ServiceResult<PartijSummaryDto>.Conflict($"The color of lot {partij.Number} was changed at the same time; reload and try again.");
                 }
+                db.PartijAuditEvents.Add(new PartijAuditEvent
+                {
+                    PartijId = partij.Id, EventType = PartijRules.EventColorChanged, OldValue = oldColor, NewValue = color,
+                    ActorReference = _user.Actor(PartijRules.MaxActorLength), OccurredAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync(cancellationToken);
+                if (transaction != null) await transaction.CommitAsync(cancellationToken);
+                await db.Entry(partij).ReloadAsync(cancellationToken);
             }
             return ServiceResult<PartijSummaryDto>.Ok(await new PartijService(db, _user).SummaryAsync(partij, cancellationToken));
         }
