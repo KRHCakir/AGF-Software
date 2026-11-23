@@ -38,6 +38,10 @@ namespace AgfAdmin.Models
 
         public string Note { get; set; }
 
+        // Feedback 22 november: kleur van een inkoop-partij (optioneel), een waarde uit de kleurenlijst van haar product. Ingevuld bij de keuring
+        // of op het partijdetail; geldt voor de hele partij, niet per pallet. Alleen met een historieregel (regel 43).
+        public string Color { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         // Weergavenaam van de ingelogde gebruiker (ICurrentUser), nooit van de client; "Migratie" bij partijen uit bestaande regels.
         public string CreatedBy { get; set; }

@@ -553,6 +553,7 @@ namespace AgfAdmin.Services
             Id = partij.Id,
             Number = partij.Number,
             Kind = partij.Kind,
+            Color = partij.Color,
             SalesOrderId = partij.SalesOrderId,
             Status = partij.Status,
             Note = partij.Note,

@@ -360,6 +360,7 @@ namespace AgfAdmin.DTOs
         // Feedback 22 november: de inkoop-partij, de voorraadlocatie (leeg = de eigen loods), maat, herkomst en leverancier.
         public int? PartijId { get; set; }
         public string PartijNumber { get; set; }
+        public string PartijColor { get; set; }
         public string StockLocationName { get; set; }
         public string Size { get; set; }
         public string Origin { get; set; }
@@ -376,6 +377,7 @@ namespace AgfAdmin.DTOs
         public decimal AvailableQuantity { get; set; }
         public int PalletCount { get; set; }
         public string Size { get; set; }
+        public string Color { get; set; }
         public string Origin { get; set; }
         public List<string> Locations { get; set; } = new();
         public List<string> Bins { get; set; } = new();

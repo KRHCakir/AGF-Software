@@ -824,7 +824,7 @@ namespace AgfAdmin.Services
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Ggn, c.Unit,
                     c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt,
                     c.CreatedAt, c.SupplyCommitmentLine.SupplyCommitmentId, SupplyOrderNumber = c.SupplyCommitmentLine.SupplyCommitment.OrderNumber,
-                    c.PartijId, PartijNumber = c.Partij.Number, StockLocationName = c.Pallet.StockLocation.Name,
+                    c.PartijId, PartijNumber = c.Partij.Number, PartijColor = c.Partij.Color, StockLocationName = c.Pallet.StockLocation.Name,
                     Size = c.SupplyCommitmentLine.ProductVariant.SizeCategory, VariantOrigin = c.SupplyCommitmentLine.ProductVariant.OriginCountryCode ?? c.SupplyCommitmentLine.ProductVariant.Origin,
                     SupplyOrigin = c.SupplyCommitmentLine.SupplyCommitment.Origin, VendorName = c.SupplyCommitmentLine.SupplyCommitment.Vendor.Name
                 })
@@ -866,6 +866,7 @@ namespace AgfAdmin.Services
                         SupplyOrderNumber = c.SupplyOrderNumber,
                         PartijId = c.PartijId,
                         PartijNumber = c.PartijNumber,
+                        PartijColor = c.PartijColor,
                         StockLocationName = c.StockLocationName,
                         Size = c.Size,
                         Origin = c.VariantOrigin ?? c.SupplyOrigin,
@@ -897,6 +898,7 @@ namespace AgfAdmin.Services
                     AvailableQuantity = g.Sum(s => s.AvailableQuantity),
                     PalletCount = g.Select(s => s.PalletId).Distinct().Count(),
                     Size = g.Select(s => s.Size).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
+                    Color = g.Select(s => s.PartijColor).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
                     Origin = g.Select(s => s.Origin).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
                     Locations = g.Select(s => s.StockLocationName).Distinct().OrderBy(n => n ?? "", StringComparer.Ordinal).ToList(),
                     Bins = g.Select(s => s.WarehouseLocation).Where(b => !string.IsNullOrWhiteSpace(b)).Distinct().OrderBy(b => b, StringComparer.Ordinal).ToList(),

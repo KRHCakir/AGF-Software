@@ -24,6 +24,20 @@ namespace AgfAdmin.DTOs
         public string Suggestion { get; set; }
     }
 
+    // Feedback 22 november: de kleurenlijst van een product (leeg = geen kleur voor dit product).
+    public sealed class ProductColorsDto
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; }
+        public List<string> Colors { get; set; } = new();
+    }
+
+    // De kleur van een inkoop-partij; leeg = geen kleur.
+    public sealed class SetPartijColorDto
+    {
+        public string Color { get; set; }
+    }
+
     // Eén palletregel met voorraad maar zonder partij (werklijst "Partij ontbreekt").
     public sealed class MissingPartijLineDto
     {
@@ -42,6 +56,7 @@ namespace AgfAdmin.DTOs
 
     public sealed class PartijSummaryDto
     {
+        public string Color { get; set; }
         public int Id { get; set; }
         public string Number { get; set; }
         // Purchase of Sales; bij Sales de verkooporder (1-op-1).
@@ -109,6 +124,8 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string Number { get; set; }
+        // Feedback 22 november: kleur van de inkoop-partij (leeg = geen).
+        public string Color { get; set; }
         // Purchase of Sales. Bij Sales: de verkooporder (1-op-1), de klant, wat er besteld is (OrderedQuantity) en uit welke
         // inkoop-partijen de colli komen (SourcePartijen, via de reserveringen); de inkoopvelden blijven dan 0 of leeg.
         public string Kind { get; set; }
@@ -145,6 +162,8 @@ namespace AgfAdmin.DTOs
     public sealed class PartijDetailDto : PartijTotalsDto
     {
         public string Note { get; set; }
+        // De kleuren die deze partij mag hebben (de lijsten van haar producten); leeg = geen kleur mogelijk.
+        public List<string> AllowedColors { get; set; } = new();
         public string CreatedBy { get; set; }
         // Er hangt een order, orderregel of palletregel aan: nummer alleen via "Nummer corrigeren", niet meer te verwijderen.
         public bool Linked { get; set; }

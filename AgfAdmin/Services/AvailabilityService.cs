@@ -184,7 +184,7 @@ namespace AgfAdmin.Services
             var lines = await _db.SupplyCommitmentLines.AsNoTracking().Where(l => lineIds.Contains(l.Id) && l.PartijId != null)
                 .Select(l => new { l.Id, l.PartijId, l.Partij.Number }).ToDictionaryAsync(l => l.Id, cancellationToken);
             var contents = await _db.PalletContentLines.AsNoTracking().Where(c => contentIds.Contains(c.Id) && c.PartijId != null)
-                .Select(c => new { c.Id, c.PartijId, c.Partij.Number }).ToDictionaryAsync(c => c.Id, cancellationToken);
+                .Select(c => new { c.Id, c.PartijId, c.Partij.Number, c.Partij.Color }).ToDictionaryAsync(c => c.Id, cancellationToken);
             foreach (var line in drillDown.SourceLines.Where(l => lines.ContainsKey(l.SupplyCommitmentLineId)))
             {
                 (line.PartijId, line.PartijNumber) = (lines[line.SupplyCommitmentLineId].PartijId, lines[line.SupplyCommitmentLineId].Number);
@@ -196,6 +196,8 @@ namespace AgfAdmin.Services
             foreach (var content in drillDown.ContentLines.Where(c => contents.ContainsKey(c.PalletContentLineId)))
             {
                 (content.PartijId, content.PartijNumber) = (contents[content.PalletContentLineId].PartijId, contents[content.PalletContentLineId].Number);
+                // Feedback 22 november: de kleur van de partij in Beschikbaarheid.
+                content.PartijColor = contents[content.PalletContentLineId].Color;
             }
         }
 

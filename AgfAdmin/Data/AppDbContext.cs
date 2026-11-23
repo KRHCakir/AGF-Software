@@ -625,6 +625,11 @@ namespace AgfAdmin.Data
             // Partij: de sleutel (hoofdletters, zonder spaties en streepjes) is uniek per soort, en een voorgesteld volgnummer is uniek in
             // zijn soort en periode; een botsing bij gelijktijdig aanmaken probeert de service opnieuw met het volgende nummer. Een
             // verkoop-partij hoort bij precies één verkooporder en een order heeft hoogstens één verkoop-partij (unieke index).
+            modelBuilder.Entity<Product>(b =>
+            {
+                b.Property(p => p.ColorValues).HasMaxLength(LotColorRules.MaxStoredLength);
+            });
+
             modelBuilder.Entity<Partij>(b =>
             {
                 b.ToTable("Partijen", t =>
@@ -649,6 +654,7 @@ namespace AgfAdmin.Data
                 b.HasOne(p => p.SalesOrder).WithMany().HasForeignKey(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(p => p.Invoice).WithOne(i => i.SalesPartij).HasForeignKey<Partij>(p => p.InvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
+                b.Property(p => p.Color).HasMaxLength(LotColorRules.MaxColorLength);
                 b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(p => p.RequestId).IsUnique();
             });
@@ -668,7 +674,7 @@ namespace AgfAdmin.Data
                 b.Property(e => e.ActorReference).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(e => e.PartijId);
                 b.ToTable(t => t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed",
-                    "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged')"));
+                    "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged', 'ColorChanged')"));
             });
 
             modelBuilder.Entity<ProductVariant>(b =>
