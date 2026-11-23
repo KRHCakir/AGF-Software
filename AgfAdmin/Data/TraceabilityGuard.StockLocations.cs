@@ -38,7 +38,12 @@ namespace AgfAdmin.Data
                 .ToDictionary(l => l.Id, l => l.Kind);
             var changed = locations.Where(l => kinds.TryGetValue(l.Id, out var kind) && !string.Equals(kind, l.Kind, StringComparison.Ordinal)).Select(l => l.Id).ToList();
             if (changed.Count == 0) return;
-            var used = await AnyAsync(db.Pallets.AsNoTracking().Where(p => p.StockLocationId != null && changed.Contains(p.StockLocationId.Value)), async, cancellationToken)
+            // Ook verwijzingen die in dezelfde save nieuw of gewijzigd zijn (nog niet opgeslagen).
+            var pending = db.ChangeTracker.Entries<Pallet>().Where(e => e.State is EntityState.Added or EntityState.Modified)
+                    .Any(e => e.Entity.StockLocationId != null && changed.Contains(e.Entity.StockLocationId.Value))
+                || db.ChangeTracker.Entries<SupplyCommitment>().Where(e => e.State is EntityState.Added or EntityState.Modified)
+                    .Any(e => e.Entity.ReceiveLocationId != null && changed.Contains(e.Entity.ReceiveLocationId.Value));
+            var used = pending || await AnyAsync(db.Pallets.AsNoTracking().Where(p => p.StockLocationId != null && changed.Contains(p.StockLocationId.Value)), async, cancellationToken)
                 || await AnyAsync(db.SupplyCommitments.AsNoTracking().Where(c => c.ReceiveLocationId != null && changed.Contains(c.ReceiveLocationId.Value)), async, cancellationToken);
             if (used)
             {

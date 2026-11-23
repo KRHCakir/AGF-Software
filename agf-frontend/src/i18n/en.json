@@ -2387,6 +2387,7 @@
   "receipt_inspect": "Inspect / reject",
   "receipt_error_kg_required": "Enter the net kg: the order has no kg per package.",
   "receipt_error_pallet_range": "Number of pallets: a whole number from 1 to 99.",
+  "receipt_certificate_changed": "The GGN warning has changed; read the warning at the top and click Receive again.",
   "receipt_field_quantity": "Quantity",
   "receipt_field_netKg": "Net kg",
   "receipt_field_palletCount": "Number of pallets",

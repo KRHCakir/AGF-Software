@@ -229,7 +229,7 @@ namespace AgfAdmin.Services
         // Feedback 22 november: de laadplaats uit de locatie van de gereserveerde pallets (zoals de transportopdracht hem kiest).
         private async Task<string> PalletLoadingPlaceAsync(int orderId, CancellationToken cancellationToken) =>
             TransportOrderBuilder.PalletLoadingPlace(await db.StockReservations.AsNoTracking()
-                .Where(r => r.SalesOrderLine.SalesOrderId == orderId && r.PalletContentLineId != null && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed))
+                .Where(r => r.SalesOrderLine.SalesOrderId == orderId && r.PalletContentLineId != null && r.Status == ReservationRules.StatusActive)
                 .Select(r => new Pallet
                 {
                     StockLocationId = r.PalletContentLine.Pallet.StockLocationId,

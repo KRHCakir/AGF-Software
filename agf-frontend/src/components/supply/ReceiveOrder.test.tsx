@@ -45,7 +45,7 @@ describe('ReceiveOrder', () => {
         await enter(quantityOf(1));
         await mounted.waitFor(() => mounted.hasText('P-000009'), 'received pallet');
         assert.equal(posted[0].url.endsWith('/receipts/orders/7/lines/1'), true);
-        assert.deepEqual({ ...bodies()[0], requestId: 'x' }, { requestId: 'x', quantity: 100, netWeightKg: null, palletCount: null, palletReferences: null });
+        assert.deepEqual({ ...bodies()[0], requestId: 'x' }, { requestId: 'x', quantity: 100, netWeightKg: null, palletCount: null, palletReferences: null, certificateWarningToken: null });
         assert.ok(mounted.container.querySelector('[data-tour="receive-line-inspect"]'), 'Keuren / afwijzen offered for the quarantine pallet');
         assert.equal(mounted.container.querySelector('[role="dialog"]'), null, 'no control questions');
     });
@@ -107,6 +107,20 @@ describe('ReceiveOrder', () => {
         assert.ok(mounted.button('receipt_deliver_all'));
         assert.equal(mounted.button('receipt_receive'), null);
         assert.ok(mounted.container.querySelector('[data-tour="receive-location"]'));
+    });
+
+    test('the token of the shown GGN warning goes along; a changed warning is loaded again and the input stays', async () => {
+        const warning = { productId: 1, productName: 'Mango', supplierName: 'Fruit Peru', kinds: ['NotCovered'], deliveryDate: '2026-11-23',
+            certificates: [{ certificateId: 1, number: '4049928000001', validUntil: null, productNames: ['Limoen'] }], message: 'x' };
+        setup(order([line(1, 100)], { certificateWarnings: [warning], certificateWarningToken: 'abc' }));
+        await mounted.render(<ReceiveOrder orderId={7} />);
+        await mounted.waitFor(() => quantityOf(1), 'quantity');
+        await act(async () => setValue(quantityOf(1), '60'));
+        replies.push(json(409, { code: 'CERTIFICATE_CONFIRMATION_REQUIRED', checks: [warning], message: 'x' }));
+        await click(mounted.button('receipt_receive')!);
+        await mounted.waitFor(() => mounted.hasText('receipt_certificate_changed'), 'changed warning');
+        assert.equal(bodies()[0].certificateWarningToken, 'abc');
+        assert.equal(quantityOf(1).value, '60', 'the typed quantity stays');
     });
 
     test('an order that cannot be received says why and offers no button', async () => {

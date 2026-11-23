@@ -48,10 +48,13 @@ export interface ReceiptOrder {
     notReceivableReason: string | null;
     lines: ReceiptLine[];
     certificateWarnings: CertificateCheck[];
+    // Kenmerk van de getoonde GGN-meldingen (null zonder melding): gaat mee bij Ontvangen, zodat de server weet welke melding gezien is.
+    certificateWarningToken?: string | null;
 }
 
 export interface ReceiveLineRequest {
     requestId: string;
+    certificateWarningToken?: string | null;
     quantity: number;
     netWeightKg?: number | null;
     palletCount?: number | null;
@@ -77,7 +80,8 @@ const isLine = (value: unknown): value is ReceiptLine => isObject(value) && isNu
 export const isReceiptOrder = (value: unknown): value is ReceiptOrder => isObject(value) && isNumber(value.orderId) && isNullableString(value.orderNumber)
     && isNullableString(value.supplierReference) && isNumber(value.vendorId) && isNullableString(value.vendorName) && isNullableString(value.expectedAt)
     && isNullableString(value.partijNumber) && isString(value.status) && typeof value.receivable === 'boolean' && isNullableString(value.notReceivableReason)
-    && isArrayOf(value.lines, isLine) && isArrayOf(value.certificateWarnings, isCertificateCheck);
+    && isArrayOf(value.lines, isLine) && isArrayOf(value.certificateWarnings, isCertificateCheck)
+    && (value.certificateWarningToken === undefined || isNullableString(value.certificateWarningToken));
 
 export const isReceiveLineResult = (value: unknown): value is ReceiveLineResult => isObject(value) && isNumber(value.lineId) && isNumber(value.quantity)
     && isNumber(value.netWeightKg) && isArrayOf(value.pallets, isPallet) && isReceiptOrder(value.order);

@@ -9,12 +9,13 @@ namespace AgfAdmin.Data
         // ---- Regel 39: een deels ontvangen inkooporderregel splitsen (feedback 22 november, zie PurchaseOrderService.Edit) ----
         //
         // 1. een regel met SplitFromLineId (het open deel) ontstaat alleen samen met een Edit-auditregel van haar order in dezelfde save, en
-        //    wijst naar een opgeslagen regel van dezelfde order waarop al iets ontvangen is; SplitFromLineId verandert daarna nooit;
+        //    wijst naar een opgeslagen regel van dezelfde order die deels ontvangen is (meer dan niets, minder dan verwacht vóór deze save);
+        //    SplitFromLineId verandert daarna nooit;
         // 2. het vervallen restant (CancelledQuantity) staat nooit op een nieuwe regel, verandert alleen samen met een Edit-auditregel, daalt
         //    nooit en stijgt alleen met precies de verlaging van het verwachte aantal (besteld = verwacht + vervallen blijft gelijk), en het
         //    verwachte aantal komt daarbij nooit onder wat ontvangen is (dat bewaakt regel 29);
-        // 3. ontvangen hoeveelheden veranderen nooit: aantal, eenheid, netto kg en gewichtsmethode van een opgeslagen palletregel liggen vast
-        //    (een correctie, afsplitsing of afkeuring maakt altijd nieuwe regels).
+        // 3. ontvangen hoeveelheden veranderen nooit: aantal, eenheid, netto kg en gewichtsmethode van een opgeslagen palletregel liggen vast en
+        //    een palletregel wordt nooit verwijderd (een correctie, afsplitsing of afkeuring maakt altijd nieuwe regels).
         private static async Task CheckLineSplitsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             await CheckReceivedQuantitiesAsync(db, async, cancellationToken);
@@ -31,16 +32,24 @@ namespace AgfAdmin.Data
             }
 
             var sourceIds = added.Select(e => e.Entity.SplitFromLine?.Id ?? e.Entity.SplitFromLineId!.Value).Distinct().ToList();
-            var sources = sourceIds.Count == 0 ? new Dictionary<int, int>()
-                : (await ToListAsync(db.SupplyCommitmentLines.AsNoTracking().Where(l => sourceIds.Contains(l.Id)).Select(l => new { l.Id, l.SupplyCommitmentId }), async, cancellationToken))
-                    .ToDictionary(l => l.Id, l => l.SupplyCommitmentId);
-            var receivedSources = sourceIds.Count == 0 ? new HashSet<int>()
-                : (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => sourceIds.Contains(c.SupplyCommitmentLineId)).Select(c => c.SupplyCommitmentLineId).Distinct(), async, cancellationToken)).ToHashSet();
+            // De bron zoals opgeslagen (vóór deze save): order, eenheid en verwacht aantal, en wat er geldig ontvangen is in de eenheid van de
+            // regel (zoals de ontvangst telt: geen correctie- of afgesplitste inhoud, geen geannuleerde pallet). Deels ontvangen = 0 < ontvangen < verwacht.
+            var sources = sourceIds.Count == 0 ? new Dictionary<int, (int OrderId, string Unit, decimal Expected)>()
+                : (await ToListAsync(db.SupplyCommitmentLines.AsNoTracking().Where(l => sourceIds.Contains(l.Id)).Select(l => new { l.Id, l.SupplyCommitmentId, l.ExpectedUnit, l.ExpectedQuantity }), async, cancellationToken))
+                    .ToDictionary(l => l.Id, l => (OrderId: l.SupplyCommitmentId, Unit: l.ExpectedUnit, Expected: l.ExpectedQuantity));
+            var receipts = sourceIds.Count == 0 ? new List<(int LineId, string Unit, decimal Quantity)>()
+                : (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => sourceIds.Contains(c.SupplyCommitmentLineId) && c.OriginCorrectionLineId == null
+                        && c.OriginRejectionLineId == null && c.Pallet.LogisticsStatus != PalletRules.StatusCancelled)
+                    .Select(c => new { c.SupplyCommitmentLineId, c.Unit, c.Quantity }), async, cancellationToken))
+                    .Select(c => (LineId: c.SupplyCommitmentLineId, c.Unit, c.Quantity)).ToList();
+            decimal ReceivedOn(int lineId, string unit) =>
+                receipts.Where(r => r.LineId == lineId && (unit == null || string.Equals(r.Unit, unit, StringComparison.Ordinal))).Sum(r => r.Quantity);
             foreach (var entry in added)
             {
                 var sourceId = entry.Entity.SplitFromLine?.Id ?? entry.Entity.SplitFromLineId!.Value;
                 var orderId = entry.Property(l => l.SupplyCommitmentId).CurrentValue;
-                if (!sources.TryGetValue(sourceId, out var sourceOrder) || sourceOrder != orderId || !receivedSources.Contains(sourceId))
+                if (!sources.TryGetValue(sourceId, out var source) || source.OrderId != orderId
+                    || ReceivedOn(sourceId, source.Unit) is var received && (received <= 0m || received >= source.Expected))
                 {
                     throw new TraceabilityViolationException("A split line is the open part of a stored, partly received line of the same purchase order.");
                 }
@@ -76,6 +85,10 @@ namespace AgfAdmin.Data
 
         private static async Task CheckReceivedQuantitiesAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
+            if (db.ChangeTracker.Entries<PalletContentLine>().Any(e => e.State == EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("Received quantities never change: a pallet content line is never deleted.");
+            }
             var contents = db.ChangeTracker.Entries<PalletContentLine>().Where(e => e.State == EntityState.Modified).Select(e => e.Entity).ToList();
             if (contents.Count == 0) return;
             var ids = contents.Select(c => c.Id).ToList();
