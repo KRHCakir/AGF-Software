@@ -267,8 +267,9 @@ namespace AgfAdmin.Services
                     .Select(i => new { i.InvoiceNumber, i.CustomCustomerName, i.DeliveryDate, i.InvoiceDate }).SingleAsync(cancellationToken);
                 var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.InvoiceId == partij.InvoiceId).OrderBy(l => l.Id)
                     .Select(l => new { l.Description, l.Quantity, l.Unit, l.PartijId, Number = l.Partij.Number, l.OriginCountry,
-                        Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault(),
-                        PurchaseOrigin = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Origin).FirstOrDefault() })
+                        // Via de inkoopregels van de partij (review): bij oudere orders staat de partij soms alleen op de regel.
+                        Vendor = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Vendor.Name).FirstOrDefault(),
+                        PurchaseOrigin = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Origin).FirstOrDefault() })
                     .ToListAsync(cancellationToken);
                 return new SalesLotTraceDto
                 {
@@ -458,7 +459,7 @@ namespace AgfAdmin.Services
             var invoices = await _db.Invoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.InvoiceNumber, i.CustomCustomerName }).ToListAsync(cancellationToken);
             var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => ids.Contains(l.InvoiceId))
                 .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, l.ProductVariantId, Number = l.Partij.Number,
-                    Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault() })
+                    Vendor = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Vendor.Name).FirstOrDefault() })
                 .ToListAsync(cancellationToken);
             // Inkoopprijs van de inkoop-partij: alleen de inkoopregel van hetzelfde product én dezelfde eenheid (de prijs geldt per verpakking van de
             // regel, review); zonder passende regel blijft de prijs, en daarmee de inkoopwaarde, onbekend. Nooit omrekenen tussen eenheden.
