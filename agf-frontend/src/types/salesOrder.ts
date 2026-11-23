@@ -1,4 +1,5 @@
 import type { PurchaseLineTotalsDto } from './purchaseOrder';
+import type { DeliveryTerm } from '../lib/deliveryTerm';
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, QualityStatus } from './availability';
 import { hasConsistentDeliveryState } from '../lib/deliveryState';
@@ -57,6 +58,8 @@ export interface CreateSalesOrderRequest {
     lines: CreateSalesOrderLineRequest[];
     // Emballage (pallets, kratten) naast de goederen; alleen meegestuurd als er emballage is.
     packagingLines?: CreateSalesOrderPackagingLineRequest[];
+    // Feedback 22 november: de leveringsconditie van deze order (voorgevuld uit de klant); weggelaten = die van de klant.
+    deliveryTerm?: DeliveryTerm;
 }
 
 export interface CreateSalesOrderPackagingLineRequest {
@@ -376,6 +379,15 @@ export interface SalesOrder {
     awaitingStock?: boolean;
     // Feedback 22 november (ontbreekt bij een oudere server): de totalenrij onder de goederenregels en in amounts de hele order (met emballage).
     totals?: PurchaseLineTotalsDto;
+    // Feedback 22 november (ontbreekt bij een oudere server): de leveringsconditie van deze order; null = geen.
+    deliveryTerm?: DeliveryTerm | null;
+}
+
+// PUT /api/sales-orders/{id}/delivery-term: de leveringsconditie van een open order aanpassen (auditregel; de klant verandert niet).
+export interface UpdateSalesOrderDeliveryTermRequest {
+    requestId: string;
+    expectedOrderVersion: number;
+    deliveryTerm: DeliveryTerm;
 }
 
 export interface SalesOrderCreditWarning {

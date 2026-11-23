@@ -1,3 +1,4 @@
+import type { DeliveryTerm } from '../lib/deliveryTerm';
 import { PACKAGE_UNITS, PackageUnit } from './availability';
 import { JsonObject, isArrayOf, isNumber, isObject, isOptionalNullableString, isString } from './guards';
 
@@ -15,6 +16,8 @@ export interface VendorOption {
     isActive: boolean;
     // Standaardvaluta van de leverancier (rol), alleen als voorstel bij een nieuwe inkooporder of factuur (valuta-ronde).
     defaultCurrency?: string | null;
+    // Feedback 22 november: de leveringsconditie van de leverancier, als voorstel op een nieuwe inkooporder.
+    deliveryTerm?: DeliveryTerm | null;
 }
 
 export interface CustomerOption {
@@ -26,6 +29,8 @@ export interface CustomerOption {
     // Plaats van het hoofdadres en btw-nummer: alleen om op te zoeken in de klantkeuze.
     city?: string | null;
     vatNumber?: string | null;
+    // Feedback 22 november: de leveringsconditie van de klant, als voorstel op een nieuwe verkooporder.
+    deliveryTerm?: DeliveryTerm | null;
 }
 
 // Klant aanmaken vanuit Verkoop (POST /api/customers). Lege optionele velden gaan als null mee.

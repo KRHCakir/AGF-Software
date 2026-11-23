@@ -19,6 +19,7 @@ const EVENT_KEYS: Record<string, string> = {
     DirectTradeShipmentCorrected: 'sales_event_direct_trade_corrected',
     ShipmentDeliveryConfirmed: 'sales_event_delivery_confirmed',
     ShipmentDeliveryRetracted: 'sales_event_delivery_retracted',
+    DeliveryTermChanged: 'sales_event_delivery_term_changed',
 };
 
 // Orderhistorie uit GET /api/sales-orders/{id}/audit-events (append-only, alleen lezen).
@@ -49,6 +50,9 @@ export default function OrderHistory({ orderId, token }: { orderId: number; toke
                     <span className="font-medium text-gray-900">{EVENT_KEYS[event.eventType] ? t(EVENT_KEYS[event.eventType]) : event.eventType}</span>
                     <span className="ml-2 text-xs text-gray-600">{formatDateTime(event.occurredAt, locale)}{event.actorReference && <> · {t('inspection_event_by', { actor: event.actorReference })}</>}</span>
                     {event.reason && <span className="block text-xs italic text-gray-700">“{event.reason}”</span>}
+                    {event.eventType === 'DeliveryTermChanged' && (
+                        <span className="block text-xs text-gray-700" data-testid="history-delivery-term">{event.oldValue ?? t('delivery_term_none')} → {event.newValue ?? t('delivery_term_none')}</span>
+                    )}
                 </li>
             ))}
         </ol>

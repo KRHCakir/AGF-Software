@@ -1,9 +1,10 @@
-import { ApiError, getJson, postJson } from './apiClient';
+import { ApiError, getJson, postJson, putJson } from './apiClient';
 import { getAvailabilityOverview } from './availabilityService';
 import { SaveResult } from './supplyService';
 import { AvailabilityQuantity, PackageUnit } from '../types/availability';
 import {
     CancelSalesOrderRequest,
+    UpdateSalesOrderDeliveryTermRequest,
     CorrectSalesDispatchRequest,
     CreateSalesDispatchRequest,
     CreateDirectTradeAllocationRequest,
@@ -204,6 +205,15 @@ export async function cancelSalesOrder(orderId: number, request: CancelSalesOrde
     const { json } = await postJson(`/sales-orders/${orderId}/cancel`, request, signal);
     if (!isSalesOrder(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij het annuleren van de verkooporder.');
+    }
+    return json;
+}
+
+// Feedback 22 november: de leveringsconditie van een open order aanpassen; het antwoord is de order zoals ze nu is.
+export async function updateSalesOrderDeliveryTerm(orderId: number, request: UpdateSalesOrderDeliveryTermRequest, signal?: AbortSignal): Promise<SalesOrder> {
+    const { json } = await putJson(`/sales-orders/${orderId}/delivery-term`, request, signal);
+    if (!isSalesOrder(json)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het aanpassen van de leveringsconditie.');
     }
     return json;
 }
