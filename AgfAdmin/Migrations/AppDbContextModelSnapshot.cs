@@ -5037,6 +5037,22 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("DeliveryTermKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DeliveryTermText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Incoterm")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("IncotermPlace")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("InternalNote")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -5102,6 +5118,8 @@ namespace AgfAdmin.Migrations
                             t.HasCheckConstraint("CK_SalesOrders_CancelledConsistent", "\"Status\" <> 'Cancelled' OR (\"CancelledAt\" IS NOT NULL AND \"CancelReason\" IS NOT NULL AND length(trim(\"CancelReason\")) > 0)");
 
                             t.HasCheckConstraint("CK_SalesOrders_Confirmed", "(\"ConfirmedAt\" IS NULL) = (\"ConfirmedBy\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_SalesOrders_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
 
                             t.HasCheckConstraint("CK_SalesOrders_OrderSequence_Positive", "\"OrderSequence\" > 0");
 
@@ -5868,6 +5886,14 @@ namespace AgfAdmin.Migrations
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DeliveryTermKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DeliveryTermText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Destination")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -5912,6 +5938,14 @@ namespace AgfAdmin.Migrations
                     b.Property<string>("FinalizedVia")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Incoterm")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("IncotermPlace")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
@@ -6004,6 +6038,8 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("SupplyCommitments", t =>
                         {
+                            t.HasCheckConstraint("CK_SupplyCommitments_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
+
                             t.HasCheckConstraint("CK_SupplyCommitments_DocumentStatus_Allowed", "(\"DocumentStatus\" = 'Open' AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL AND \"FinalizedVia\" IS NULL) OR (\"DocumentStatus\" = 'Definitive' AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"FinalizedVia\" IS NOT NULL AND \"FinalizedVia\" IN ('Manual', 'Invoice'))");
 
                             t.HasCheckConstraint("CK_SupplyCommitments_ExchangeRate", "(\"Currency\" = 'EUR' AND CAST(\"ExchangeRate\" AS REAL) = 1 AND \"ExchangeRateDate\" IS NULL AND \"ExchangeRateSource\" = 'NotApplicable') OR (\"Currency\" <> 'EUR' AND CAST(\"ExchangeRate\" AS REAL) > 0 AND \"ExchangeRateSource\" IN ('ECB', 'Manual') AND (\"ExchangeRateSource\" <> 'ECB' OR \"ExchangeRateDate\" IS NOT NULL))");

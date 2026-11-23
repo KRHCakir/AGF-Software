@@ -13,6 +13,16 @@ namespace AgfAdmin.DTOs
         public List<CreateSalesOrderLineDto> Lines { get; set; }
         // Emballage naast de goederen (optioneel); een order met alleen emballage mag ook.
         public List<CreateSalesOrderPackagingLineDto> PackagingLines { get; set; }
+        // Feedback 22 november: de leveringsconditie van deze order. Weggelaten = die van de klant; met een lege soort = geen.
+        public DeliveryTermDto DeliveryTerm { get; set; }
+    }
+
+    // De leveringsconditie van een open order aanpassen (feedback 22 november): met de verwachte orderversie, vastgelegd als auditregel.
+    public sealed class UpdateSalesOrderDeliveryTermDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedOrderVersion { get; set; }
+        public DeliveryTermDto DeliveryTerm { get; set; }
     }
 
     public sealed class CreateSalesOrderPackagingLineDto
@@ -112,6 +122,8 @@ namespace AgfAdmin.DTOs
         // Feedback 22 november: de totalenrij onder de goederenregels (zoals bij inkoop; Amount = de goederenregels) en in Amounts de hele
         // order (goederen en emballage): totaal excl. btw, btw per tarief en totaal incl. btw, in euro.
         public PurchaseOrderLineTotalsDto Totals { get; set; }
+        // Feedback 22 november: de leveringsconditie van deze order (null = geen).
+        public DeliveryTermDto DeliveryTerm { get; set; }
     }
 
     // Annuleren van een Open order: alle Active reserveringen (ook on hold) worden in dezelfde transactie vrijgegeven.

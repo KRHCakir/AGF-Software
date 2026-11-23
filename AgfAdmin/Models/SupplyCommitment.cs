@@ -1,7 +1,7 @@
 namespace AgfAdmin.Models
 {
     // Commerciële toezegging van een leverancier (verwacht/onderweg). Nooit fysieke voorraad op zich.
-    public sealed class SupplyCommitment
+    public sealed class SupplyCommitment : IDeliveryTerm
     {
         public int Id { get; set; }
 
@@ -39,6 +39,13 @@ namespace AgfAdmin.Models
         public DateOnly OrderedOn { get; set; }
         // Hoe besteld: Phone, Email, Portal of Other; optioneel.
         public string OrderChannel { get; set; }
+
+        // Feedback 22 november: de leveringsconditie van deze order, bij aanmaken voorgevuld uit de leverancier (of zoals meegestuurd), daarna
+        // alleen met Aanpassen (Edit-auditregel, guard-regels 29 en 37). De leverancier verandert er niet door. Leeg = geen conditie.
+        public string DeliveryTermKind { get; set; }
+        public string Incoterm { get; set; }
+        public string IncotermPlace { get; set; }
+        public string DeliveryTermText { get; set; }
         public string Note { get; set; }
 
         // Partij van deze order (kop): de regels erven haar, de ontvangen palletregels nemen haar over van de regel. Optioneel: oudere

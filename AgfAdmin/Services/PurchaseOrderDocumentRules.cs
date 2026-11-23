@@ -40,6 +40,8 @@ namespace AgfAdmin.Services
         // Feedback 22 november: korting en btw van een regel (aanpassen zolang de order Open is, met een Edit-auditregel).
         public const string FieldDiscount = "discountPercentage";
         public const string FieldVat = "vatPercentage";
+        // Feedback 22 november: de leveringsconditie van de kop (alleen bij aanpassen van een Open order).
+        public const string FieldDeliveryTerm = "deliveryTerm";
         // Certificaten deel 2: het GGN van het product op een regel (aanpassen bij Open, corrigeren met reden bij Definitive).
         public const string FieldGgn = "ggn";
         // Valuta-ronde: valuta en koers van de order (alleen bij aanpassen van een Open order, nooit met een correctie).

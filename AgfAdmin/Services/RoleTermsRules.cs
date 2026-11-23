@@ -47,31 +47,8 @@ namespace AgfAdmin.Services
                 else if (signedOn > today) ValidationErrors.Add(errors, $"{prefix}.mandateSignedOn", "De ondertekeningsdatum van het mandaat kan niet in de toekomst liggen.");
             }
 
-            var kind = Blank(raw.DeliveryTermKind);
-            string incoterm = null, place = null, deliveryText = null;
-            if (kind != null && !DeliveryTermKinds.All.Contains(kind, StringComparer.Ordinal))
-            {
-                ValidationErrors.Add(errors, $"{prefix}.deliveryTermKind", $"Leveringsconditie moet leeg zijn of een van: {string.Join(", ", DeliveryTermKinds.All)}.");
-            }
-            else if (kind == DeliveryTermKinds.Incoterm)
-            {
-                incoterm = Blank(raw.Incoterm)?.ToUpperInvariant();
-                if (incoterm == null || !Incoterms2020.Contains(incoterm, StringComparer.Ordinal))
-                {
-                    ValidationErrors.Add(errors, $"{prefix}.incoterm", $"Kies een Incoterm 2020: {string.Join(", ", Incoterms2020)}.");
-                }
-                place = ValidationErrors.OptionalText(raw.IncotermPlace, MaxIncotermPlaceLength, $"{prefix}.incotermPlace", errors);
-                if (place == null && !errors.ContainsKey($"{prefix}.incotermPlace")) ValidationErrors.Add(errors, $"{prefix}.incotermPlace", "Een Incoterm hoort bij een plaats (bijvoorbeeld FCA Venlo).");
-            }
-            else if (kind == DeliveryTermKinds.Other)
-            {
-                deliveryText = ValidationErrors.OptionalText(raw.DeliveryTermText, MaxDeliveryTermTextLength, $"{prefix}.deliveryTermText", errors);
-                if (deliveryText == null && !errors.ContainsKey($"{prefix}.deliveryTermText")) ValidationErrors.Add(errors, $"{prefix}.deliveryTermText", "Omschrijf de eigen leveringsconditie.");
-            }
-            else if (kind != null)
-            {
-                deliveryText = ValidationErrors.OptionalText(raw.DeliveryTermText, MaxDeliveryTermTextLength, $"{prefix}.deliveryTermText", errors);
-            }
+            // Leveringsconditie: dezelfde regels als op een order (DeliveryTermRules).
+            var delivery = DeliveryTermRules.Normalize(new DeliveryTermRules.DeliveryTerm(raw.DeliveryTermKind, raw.Incoterm, raw.IncotermPlace, raw.DeliveryTermText), prefix, errors);
 
             var trade = Blank(raw.TradeConditions);
             string tradeText = null;
@@ -84,7 +61,7 @@ namespace AgfAdmin.Services
                 tradeText = ValidationErrors.OptionalText(raw.TradeConditionsText, MaxTradeConditionsTextLength, $"{prefix}.tradeConditionsText", errors);
                 if (tradeText == null && !errors.ContainsKey($"{prefix}.tradeConditionsText")) ValidationErrors.Add(errors, $"{prefix}.tradeConditionsText", "Omschrijf welke andere handelsvoorwaarden gelden.");
             }
-            return new Terms(method, mandate, signedOn, kind, incoterm, place, deliveryText, trade, tradeText);
+            return new Terms(method, mandate, signedOn, delivery.Kind, delivery.Incoterm, delivery.Place, delivery.Text, trade, tradeText);
         }
 
         public static Credit NormalizeCredit(Credit raw, string prefix, Dictionary<string, List<string>> errors)

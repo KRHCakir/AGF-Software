@@ -350,18 +350,27 @@ namespace AgfAdmin.Data
         {
             entity.Property(r => r.PaymentMethod).IsRequired().HasMaxLength(16).HasDefaultValue(PaymentMethods.BankTransfer);
             entity.Property(r => r.MandateReference).HasMaxLength(35);
-            entity.Property(r => r.DeliveryTermKind).HasMaxLength(16);
-            entity.Property(r => r.Incoterm).HasMaxLength(3);
-            entity.Property(r => r.IncotermPlace).HasMaxLength(100);
-            entity.Property(r => r.DeliveryTermText).HasMaxLength(200);
+            ConfigureDeliveryTerm(entity);
             entity.Property(r => r.TradeConditions).HasMaxLength(16);
             entity.Property(r => r.TradeConditionsText).HasMaxLength(200);
         }
 
+        // Leveringsconditie: bij de rol en (feedback 22 november) per verkoop- en inkooporder.
+        private static void ConfigureDeliveryTerm<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity) where T : class, IDeliveryTerm
+        {
+            entity.Property(r => r.DeliveryTermKind).HasMaxLength(16);
+            entity.Property(r => r.Incoterm).HasMaxLength(3);
+            entity.Property(r => r.IncotermPlace).HasMaxLength(100);
+            entity.Property(r => r.DeliveryTermText).HasMaxLength(200);
+        }
+
+        private static void AddDeliveryTermCheck(Microsoft.EntityFrameworkCore.Metadata.Builders.TableBuilder table, string name) =>
+            table.HasCheckConstraint($"CK_{name}_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
+
         private static void AddRoleTermChecks(Microsoft.EntityFrameworkCore.Metadata.Builders.TableBuilder table, string name)
         {
             table.HasCheckConstraint($"CK_{name}_PaymentMethod_Allowed", "\"PaymentMethod\" IN ('BankTransfer', 'DirectDebit', 'Cash', 'Offset')");
-            table.HasCheckConstraint($"CK_{name}_DeliveryTermKind_Allowed", "\"DeliveryTermKind\" IS NULL OR \"DeliveryTermKind\" IN ('Incoterm', 'Franco', 'AfKwekerij', 'Other')");
+            AddDeliveryTermCheck(table, name);
             table.HasCheckConstraint($"CK_{name}_TradeConditions_Allowed", "\"TradeConditions\" IS NULL OR \"TradeConditions\" IN ('Own', 'Frugiventa', 'Cofreurop', 'Other')");
         }
 
@@ -626,6 +635,8 @@ namespace AgfAdmin.Data
             modelBuilder.Entity<SupplyCommitment>(b =>
             {
                 b.Property(c => c.Route).IsRequired().HasMaxLength(32);
+                ConfigureDeliveryTerm(b);
+                b.ToTable(t => AddDeliveryTermCheck(t, "SupplyCommitments"));
                 b.Property(c => c.Status).IsRequired().HasMaxLength(32);
                 b.Property(c => c.Origin).IsRequired().HasMaxLength(200);
                 // Herkomst als land uit de vaste lijst (zie SupplyCommitment); de oude tekst alleen voor de audit.
@@ -1361,6 +1372,8 @@ namespace AgfAdmin.Data
                 b.Property(o => o.ConfirmedBy).HasMaxLength(100);
                 b.Property(o => o.LicensePlate).HasMaxLength(32);
                 b.ToTable(t => t.HasCheckConstraint("CK_SalesOrders_Confirmed", "(\"ConfirmedAt\" IS NULL) = (\"ConfirmedBy\" IS NULL)"));
+                ConfigureDeliveryTerm(b);
+                b.ToTable(t => AddDeliveryTermCheck(t, "SalesOrders"));
                 b.Property(o => o.Version).IsConcurrencyToken();
                 b.HasIndex(o => o.RequestId).IsUnique();
                 // NULL telt als verschillend: alleen geannuleerde orders hebben een sleutel.

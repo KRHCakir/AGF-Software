@@ -70,6 +70,11 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Cancel(int id, [FromBody] CancelSalesOrderDto request) =>
             this.ToActionResult(await _orders.CancelAsync(id, request, HttpContext?.RequestAborted ?? default));
 
+        // Feedback 22 november: de leveringsconditie van een open order aanpassen (verwachte orderversie, auditregel; de klant verandert niet).
+        [HttpPut("{id:int}/delivery-term")]
+        public async Task<IActionResult> UpdateDeliveryTerm(int id, [FromBody] UpdateSalesOrderDeliveryTermDto request) =>
+            this.ToActionResult(await _orders.UpdateDeliveryTermAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         // Alleen lezen: orderhistorie (append-only).
         [HttpGet("{id:int}/audit-events")]
         public async Task<IActionResult> GetAuditEvents(int id) =>

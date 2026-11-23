@@ -14,6 +14,7 @@ namespace AgfAdmin.Services
         Task<ServiceResult<IReadOnlyList<SalesOrderDto>>> ListAsync(SalesOrderFilter filter, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<ReservableStockLineDto>>> GetReservableStockAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default);
         Task<ServiceResult<SalesOrderDto>> CancelAsync(int salesOrderId, CancelSalesOrderDto request, CancellationToken cancellationToken = default);
+        Task<ServiceResult<SalesOrderDto>> UpdateDeliveryTermAsync(int salesOrderId, UpdateSalesOrderDeliveryTermDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>> GetAuditEventsAsync(int salesOrderId, CancellationToken cancellationToken = default);
         Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<AwaitingStockLineDto>>> GetAwaitingStockAsync(CancellationToken cancellationToken = default);
@@ -61,7 +62,7 @@ namespace AgfAdmin.Services
             var existing = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
             if (existing != null)
             {
-                return (await WithWarningsAsync(await ResultForRetryAsync(existing, candidate, cancellationToken), cancellationToken), false);
+                return (await WithWarningsAsync(await ResultForRetryAsync(existing, candidate, request.DeliveryTerm != null, cancellationToken), cancellationToken), false);
             }
 
             // Nieuwe invoer: hele pallets (na de replaycontrole, zodat een eerder opgeslagen opdracht nog steeds herkend wordt).
@@ -81,7 +82,8 @@ namespace AgfAdmin.Services
                 return (refusedPackaging, false);
             }
 
-            var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId).Select(c => new { c.Relation.IsActive }).SingleOrDefaultAsync(cancellationToken);
+            var customerState = await _db.Customers.AsNoTracking().Where(c => c.Id == candidate.CustomerId)
+                .Select(c => new { c.Relation.IsActive, c.DeliveryTermKind, c.Incoterm, c.IncotermPlace, c.DeliveryTermText }).SingleOrDefaultAsync(cancellationToken);
             if (customerState == null)
             {
                 return (ServiceResult<SalesOrderDto>.NotFound($"Customer {candidate.CustomerId} does not exist."), false);
@@ -90,6 +92,11 @@ namespace AgfAdmin.Services
             {
                 // Inactieve relatie: historie blijft leesbaar, maar een nieuwe order wordt expliciet geweigerd (nooit stilzwijgend).
                 return (ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {candidate.CustomerId} belongs to an inactive relation; reactivate the relation first or choose another customer." } }), false);
+            }
+            // Geen leveringsconditie meegestuurd: die van de klant (de waarde van nu ligt vast bij de order; de klant verandert niet).
+            if (request.DeliveryTerm == null)
+            {
+                DeliveryTermRules.Apply(candidate, new DeliveryTermRules.DeliveryTerm(customerState.DeliveryTermKind, customerState.Incoterm, customerState.IncotermPlace, customerState.DeliveryTermText));
             }
             var variantIds = candidate.Lines.Select(l => l.ProductVariantId).Distinct().ToList();
             var known = await _db.ProductVariants.Where(v => variantIds.Contains(v.Id))
@@ -154,7 +161,7 @@ namespace AgfAdmin.Services
                 var concurrent = await OrderQuery().SingleOrDefaultAsync(o => o.RequestId == candidate.RequestId, cancellationToken);
                 if (concurrent != null)
                 {
-                    return (await WithWarningsAsync(await ResultForRetryAsync(concurrent, candidate, cancellationToken), cancellationToken), false);
+                    return (await WithWarningsAsync(await ResultForRetryAsync(concurrent, candidate, request.DeliveryTerm != null, cancellationToken), cancellationToken), false);
                 }
                 // Anders bezette het nummer een gelijktijdige andere order: opnieuw met het volgende nummer.
                 if (DbErrors.IsUniqueViolation(exception))
@@ -256,6 +263,8 @@ namespace AgfAdmin.Services
                 ValidationErrors.Add(errors, "requestedDeliveryDate", "A requested delivery date is required.");
             }
             var actor = _user.Actor(ReservationRules.MaxActorLength);
+            // Leveringsconditie (feedback 22 november): meegestuurd = zoals gevraagd (gecontroleerd); weggelaten = die van de klant (bij aanmaken).
+            var deliveryTerm = request.DeliveryTerm == null ? null : DeliveryTermRules.Normalize(DeliveryTermRules.Of(request.DeliveryTerm), "deliveryTerm", errors);
             if (!string.IsNullOrWhiteSpace(request.SalesPartijNumber) && PartijService.NumberError(request.SalesPartijNumber) is { } partijError)
             {
                 ValidationErrors.Add(errors, "salesPartijNumber", partijError);
@@ -340,7 +349,7 @@ namespace AgfAdmin.Services
                 line.CreatedAt = now;
             }
             var partijNumber = string.IsNullOrWhiteSpace(request.SalesPartijNumber) ? null : request.SalesPartijNumber.Trim();
-            return new SalesOrder
+            var order = new SalesOrder
             {
                 RequestId = request.RequestId!.Value,
                 CustomerId = request.CustomerId!.Value,
@@ -355,14 +364,26 @@ namespace AgfAdmin.Services
                 Lines = lines,
                 PackagingLines = packagingLines
             };
+            if (deliveryTerm != null) DeliveryTermRules.Apply(order, deliveryTerm);
+            return order;
         }
 
         // Strikt: klant, genormaliseerde referentie, leverdatum (UTC, microseconden), actor en de regels in volgorde (met kg en bron;
         // een oudere opdracht zonder kg komt overeen met een regel zonder kg; zonder opgegeven verkoopbron telt elke opgeslagen bron).
-        private async Task<ServiceResult<SalesOrderDto>> ResultForRetryAsync(SalesOrder existing, SalesOrder candidate, CancellationToken cancellationToken)
+        private async Task<ServiceResult<SalesOrderDto>> ResultForRetryAsync(SalesOrder existing, SalesOrder candidate, bool deliveryTermAsked, CancellationToken cancellationToken)
         {
             var existingLines = existing.Lines.OrderBy(l => l.Id).ToList();
             var candidateLines = candidate.Lines.ToList();
+            // Leveringsconditie: de oorspronkelijke (bij aanmaken vastgelegde) waarde, niet de huidige: die kan intussen aangepast zijn.
+            // Is ze aangepast, dan is de oude waarde van de eerste DeliveryTermChanged-regel de oorspronkelijke.
+            string originalTerm = DeliveryTermRules.Describe(DeliveryTermRules.Of(existing));
+            if (deliveryTermAsked)
+            {
+                var firstChange = await _db.SalesOrderAuditEvents.AsNoTracking()
+                    .Where(e => e.SalesOrderId == existing.Id && e.EventType == ReservationRules.DeliveryTermChangedEvent)
+                    .OrderBy(e => e.Id).Select(e => new { e.OldValue }).FirstOrDefaultAsync(cancellationToken);
+                if (firstChange != null) originalTerm = firstChange.OldValue;
+            }
             // Partij: vergeleken met de oorspronkelijke aanvraag (RequestPartijKey), niet met het huidige nummer (dat kan intussen aangepast
             // of gecorrigeerd zijn). Een order van vóór de verkoop-partij is gelijk aan een aanvraag zonder eigen nummer.
             var samePartij = existing.RequestPartijKey == null ? candidate.RequestPartijKey == "auto"
@@ -373,6 +394,8 @@ namespace AgfAdmin.Services
                 && existing.RequestedDeliveryDate.Ticks == candidate.RequestedDeliveryDate.Ticks
                 && string.Equals(existing.ActorReference, candidate.ActorReference, StringComparison.Ordinal)
                 && SamePackaging(existing, candidate)
+                // Leveringsconditie: alleen als de aanvraag er een meestuurde (anders nam de order die van de klant over).
+                && (!deliveryTermAsked || originalTerm == DeliveryTermRules.Describe(DeliveryTermRules.Of(candidate)))
                 && existingLines.Count == candidateLines.Count
                 && existingLines.Zip(candidateLines).All(pair =>
                     pair.First.ProductVariantId == pair.Second.ProductVariantId
@@ -1005,6 +1028,7 @@ namespace AgfAdmin.Services
             Delivered = order.Lines.Count > 0 && order.Lines.All(l => DeliveredQuantity(l) == l.Quantity),
             PackagingLines = order.PackagingLines.OrderBy(l => l.Id).Select(ToPackagingDto).ToList(),
             Totals = TotalsOf(order),
+            DeliveryTerm = order.DeliveryTermKind == null ? null : DeliveryTermDto.From(order),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
                 // Gereserveerd = Active Physical; toegewezen = Active DirectTrade; verzonden = Consumed. Open trekt alle drie af.
