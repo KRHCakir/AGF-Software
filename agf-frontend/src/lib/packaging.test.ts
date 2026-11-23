@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { CostArticle } from '../types/costArticle';
 import { buildPackagingLines, effectivePackagesPerPallet,packagingLineTotal, palletArticle, palletProposal, parsePackagingQuantity, parseUnitPrice } from './packaging.ts';
-import { buildOrderPayload, groupErrors, type OrderDraft } from './salesOrderRules.ts';
+import { buildOrderPayload, emptyOrderLine, groupErrors, type OrderDraft } from './salesOrderRules.ts';
 import { setInputLocale } from './decimal.ts';
 
 // Emballage op een verkooporder, onafhankelijk uitgeschreven naar SalesOrderService.Packaging en CostArticleRules.
@@ -10,7 +10,7 @@ import { setInputLocale } from './decimal.ts';
 const article = (id: number, name: string, extra: Partial<CostArticle> = {}): CostArticle =>
     ({ id, name, kind: 'Packaging', isStandard: true, isActive: true, sortOrder: id * 10, lineCount: 0, defaultUnitPrice: null, vatPercentage: 9, ...extra });
 const goods = (productVariantId: string, quantity: string) =>
-    ({ key: `g-${productVariantId}-${quantity}`, productVariantId, quantity, unit: (productVariantId === '' ? '' : 'colli') as 'colli' | '', mode: 'packages' as const, palletCount: '', packagesPerPallet: '' });
+    ({ ...emptyOrderLine(`g-${productVariantId}-${quantity}`), productVariantId, quantity, unit: (productVariantId === '' ? '' : 'colli') as 'colli' | '' });
 const pack = (costArticleId: string, quantity: string, unitPrice = '') => ({ key: `p-${costArticleId}-${quantity}`, costArticleId, quantity, unitPrice });
 const draft = (extra: Partial<OrderDraft>): OrderDraft => ({ customerId: '7', customerReference: '', internalNote: '', requestedDeliveryDate: '2026-11-12', lines: [goods('', '')], ...extra });
 
@@ -106,7 +106,7 @@ describe('order payload with packaging', () => {
         assert.equal(result.ok, false);
         if (result.ok) return;
         assert.deepEqual(Object.keys(groupErrors(result.errors)).sort(), ['lines[1].quantity', 'packagingLines[0].quantity']);
-        const halfFilled = buildOrderPayload(draft({ lines: [{ ...goods('', ''), netKg: '12' }], packagingLines: [pack('1', '2')] }));
-        assert.ok(!halfFilled.ok && 'lines[0].productVariantId' in groupErrors(halfFilled.errors), 'only kg typed is checked, never skipped silently');
+        const halfFilled = buildOrderPayload(draft({ lines: [{ ...goods('', ''), unitPrice: '12' }], packagingLines: [pack('1', '2')] }));
+        assert.ok(!halfFilled.ok && 'lines[0].productVariantId' in groupErrors(halfFilled.errors), 'only a price typed is checked, never skipped silently');
     });
 });

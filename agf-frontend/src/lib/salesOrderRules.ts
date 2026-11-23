@@ -1,12 +1,9 @@
-import type { PackageUnit } from '../types/availability';
 import type { CreateSalesOrderRequest } from '../types/salesOrder';
-import type { SupplySource } from '../types/salesSupply';
 import { toLocalMidnightIso } from './calendarDate.ts';
 import { parsePositiveDecimal, type DecimalError } from './decimal.ts';
-import { resolveLineWeight, weightPayload, type LineWeightDraft } from './lineWeight.ts';
 import { buildPackagingLines, type PackagingLineDraft } from './packaging.ts';
-import { resolvePalletInput, type QuantityInputMode } from './palletInput.ts';
-import type { PackageKgDefaults } from './quantityKg.ts';
+import { type PurchaseArticle, isBlankPurchaseLine } from './purchaseOrderLines.ts';
+import { type SalesLineDraft, emptySalesLine, salesLinePayload } from './salesLine.ts';
 import { shownKgTotal } from './weightDisplay.ts';
 
 // Pure regels van de verkoopwerkplek, los van React en i18n, zodat ze met node:test te toetsen zijn.
@@ -35,27 +32,18 @@ export type RuleCode =
     | 'future_date'
     | 'before_shipping'
     | 'not_whole'
-    | 'gross_below_net';
+    | 'gross_below_net'
+    | 'out_of_range';
 
 export interface RuleError {
     field: string;
     code: RuleCode;
 }
 
-export interface OrderLineDraft extends LineWeightDraft {
-    key: string;
-    productVariantId: string;
-    quantity: string;
-    unit: PackageUnit | '';
-    // Invoer per pallet: 'pallets' rekent quantity uit palletCount × packagesPerPallet; 'packages' is de gewone invoer.
-    mode: QuantityInputMode;
-    palletCount: string;
-    packagesPerPallet: string;
-    loosePackages?: string;
-    // Uit voorraad of uit verwachte aanvoer; leeg = de server kiest (uit voorraad als het past). sourceTouched: door de gebruiker gekozen.
-    supplySource?: SupplySource | '';
-    sourceTouched?: boolean;
-}
+// Feedback 22 november: de verkooporderregel is de regel van de inkooporder plus de bron (zie salesLine.ts).
+export type OrderLineDraft = SalesLineDraft;
+export const emptyOrderLine = emptySalesLine;
+export { SALES_LINE_FIELD } from './salesLine.ts';
 
 export interface OrderDraft {
     customerId: string;
@@ -70,8 +58,7 @@ export interface OrderDraft {
 
 // Een goederenregel waar niets in staat (geen enkel veld): telt niet mee als de order emballage heeft. Half ingevuld wordt gecontroleerd.
 export function isBlankOrderLine(line: OrderLineDraft): boolean {
-    return [line.productVariantId, line.quantity, line.unit, line.palletCount, line.packagesPerPallet, line.loosePackages ?? '', line.netKg ?? '', line.grossKg ?? '']
-        .every((value) => value.trim() === '');
+    return isBlankPurchaseLine(line) && line.unit === '' && !line.sourceTouched;
 }
 
 export const MAX_INTERNAL_NOTE_LENGTH = 1000;
@@ -118,9 +105,9 @@ export function normalizeReason(text: string, required: boolean): BuildResult<st
 }
 
 // Volledige validatie van een nieuwe order; alle fouten tegelijk, met dezelfde veldsleutels als de backend.
-// `kgDefaults` geeft de standaard kg per verpakking van een variant (voor berekende kg); zonder blijft alleen ingevulde kg over.
+// `articleOf` geeft het artikel van een variant (eenheid, kg per verpakking, colli per pallet, btw); de regel rekent zoals de inkoopregel.
 // Wie de order maakt, stuurt de client niet mee: dat is de ingelogde gebruiker aan de serverkant.
-export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: number) => PackageKgDefaults | undefined = () => undefined): BuildResult<OrderPayload> {
+export function buildOrderPayload(draft: OrderDraft, articleOf: (variantId: number) => PurchaseArticle | undefined = () => undefined): BuildResult<OrderPayload> {
     const errors: RuleError[] = [];
 
     const customerId = Number(draft.customerId);
@@ -149,34 +136,17 @@ export function buildOrderPayload(draft: OrderDraft, kgDefaults: (variantId: num
         if (skip(line)) return [];
         const prefix = `lines[${index}]`;
         const before = errors.length;
-        if (!/^[1-9]\d*$/.test(line.productVariantId)) errors.push({ field: `${prefix}.productVariantId`, code: 'required' });
-        // Palletinvoer: het totaal volgt uit pallets × verpakkingen per pallet; de server controleert dezelfde rekensom.
-        const amounts = resolvePalletInput(line);
-        if (!amounts.ok) for (const error of amounts.errors) errors.push({ field: `${prefix}.${error.field}`, code: error.code as RuleCode });
-        if (line.unit === '') errors.push({ field: `${prefix}.unit`, code: 'required' });
-        // Kg optioneel: berekend uit het artikel of ingevuld; bruto nooit onder netto (zelfde regels als LineWeightRules).
-        const weight = resolveLineWeight(line, amounts.ok ? amounts.value.quantity : null, kgDefaults(Number(line.productVariantId)));
-        if (!weight.ok) for (const error of weight.errors) errors.push({ field: `${prefix}.${error.field === 'net' ? 'netWeightKg' : 'grossWeightKg'}`, code: error.code });
+        // Zoals de inkoopregel: artikel en aantal verplicht, eenheid en kg uit het artikel (bruto aan te passen), prijs, korting en btw.
+        const built = salesLinePayload(line, prefix, /^[1-9]\d*$/.test(line.productVariantId) ? articleOf(Number(line.productVariantId)) : undefined);
+        for (const error of built.errors) errors.push({ field: error.field, code: error.code as RuleCode });
         // Eén regel per variant + eenheid + bron, net als de databank-index: anders worden reserveringen dubbelzinnig. Een gesplitste
         // regel (deel uit voorraad, rest uit verwachte aanvoer) zijn dus twee regels met elk een eigen bron.
         if (errors.length === before) {
-            const key = `${line.productVariantId}|${line.unit}|${line.supplySource ?? ''}`;
+            const key = `${line.productVariantId}|${built.unit}|${line.supplySource ?? ''}`;
             if (seen.has(key)) errors.push({ field: prefix, code: 'duplicate_line' });
             seen.add(key);
         }
-        return [{
-            productVariantId: Number(line.productVariantId),
-            quantity: amounts.ok ? amounts.value.quantity : 0,
-            unit: (line.unit === '' ? 'box' : line.unit) as PackageUnit,
-            palletCount: amounts.ok ? amounts.value.palletCount : null,
-            packagesPerPallet: amounts.ok ? amounts.value.packagesPerPallet : null,
-            // Losse verpakkingen alleen als ze zijn ingevuld: een regel zonder blijft dezelfde opdracht als vroeger.
-            ...(amounts.ok && amounts.value.loosePackages !== null ? { loosePackages: amounts.value.loosePackages } : {}),
-            // Kg en bron alleen als er kg is: een regel zonder kg blijft dezelfde opdracht als vóór deze velden.
-            ...(weight.ok ? weightPayload(weight.value, 'netWeightKg', 'grossWeightKg') : {}),
-            // Bron alleen als die gekozen is: zonder bron blijft het dezelfde opdracht als vóór dit veld.
-            ...(line.supplySource ? { supplySource: line.supplySource } : {}),
-        }];
+        return [built.payload];
     });
 
     if (errors.length > 0 || requestedDeliveryDate === null) {
