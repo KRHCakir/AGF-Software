@@ -12,6 +12,8 @@ namespace AgfAdmin.DTOs
     {
         public DateTime? LoadAt { get; set; }
         public string LicensePlate { get; set; }
+        // Feedback 22 november: de levering waarvoor dit geldt; leeg = de eerste levering (die van de order zelf, zoals vóór de leveringen).
+        public int? SalesDeliveryId { get; set; }
     }
 
     // Instellingen van de laadbon per bedrijf: taal van de kopteksten (en, nl), klantnaam en leverancierskolom.
@@ -38,6 +40,19 @@ namespace AgfAdmin.DTOs
         public bool TransportOrderNeedsResend { get; set; }
         public bool HasTransport { get; set; }
         public List<SalesOrderDocumentDto> Documents { get; set; } = new();
+        // Feedback 22 november: per levering de verkoop-partij, laden op, kenteken en of de laadbon of transportopdracht opnieuw moet.
+        public List<SalesDeliveryDocumentsDto> Deliveries { get; set; } = new();
+    }
+
+    public sealed class SalesDeliveryDocumentsDto
+    {
+        public int SalesDeliveryId { get; set; }
+        public int Sequence { get; set; }
+        public string PartijNumber { get; set; }
+        public DateTime? LoadAt { get; set; }
+        public string LicensePlate { get; set; }
+        public bool NeedsResend { get; set; }
+        public bool TransportOrderNeedsResend { get; set; }
     }
 
     public sealed class SalesOrderDocumentDto
@@ -52,6 +67,9 @@ namespace AgfAdmin.DTOs
         public DateTime? SentAt { get; set; }
         public string SentBy { get; set; }
         public bool Latest { get; set; }
+        // De levering van dit document en haar volgnummer (1 = de eerste levering).
+        public int SalesDeliveryId { get; set; }
+        public int DeliverySequence { get; set; }
         // Verstuurd per mail (documenten deel 3): naar wie; leeg = niet per mail (of alleen doorgegeven).
         public string SentTo { get; set; }
     }

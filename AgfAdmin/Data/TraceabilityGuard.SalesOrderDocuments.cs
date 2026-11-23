@@ -9,7 +9,8 @@ namespace AgfAdmin.Data
         //
         // Wie en wanneer een verkooporder bevestigde ligt vast zodra het gezet is. Een document bij een order is een versie die nooit
         // verandert of verdwijnt: alleen "verstuurd/doorgegeven" (SentAt, SentBy) wordt één keer gezet. Een nieuwe versie hoort bij een
-        // bevestigde order en volgt de vorige op (1, 2, 3 per order en soort). Vergeleken met de opgeslagen waarden in de database.
+        // bevestigde order en volgt de vorige op (1, 2, 3 per order en soort; sinds feedback 22 november per levering en soort, want elke
+        // levering heeft haar eigen laadbon en transportopdracht). Vergeleken met de opgeslagen waarden in de database.
         private static async Task CheckSalesOrderDocumentsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             if (db.ChangeTracker.Entries<SalesOrderDocument>().Any(e => e.State == EntityState.Deleted))
@@ -25,7 +26,7 @@ namespace AgfAdmin.Data
                 {
                     var now = entry.Entity;
                     if (!stored.TryGetValue(now.Id, out var before)) continue;
-                    var same = before.SalesOrderId == now.SalesOrderId && before.Kind == now.Kind && before.Number == now.Number && before.Version == now.Version
+                    var same = before.SalesOrderId == now.SalesOrderId && before.SalesDeliveryId == now.SalesDeliveryId && before.Kind == now.Kind && before.Number == now.Number && before.Version == now.Version
                         && before.Reason == now.Reason && before.SnapshotJson == now.SnapshotJson && before.ContentHash == now.ContentHash
                         && before.CreatedAt == now.CreatedAt && before.CreatedBy == now.CreatedBy;
                     var sentOnce = before.SentAt == null || (before.SentAt == now.SentAt && before.SentBy == now.SentBy);
@@ -57,15 +58,16 @@ namespace AgfAdmin.Data
             var orderIds = added.Select(d => d.SalesOrderId).Distinct().ToList();
             var confirmed = (await ToListAsync(db.SalesOrders.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.ConfirmedAt }), async, cancellationToken))
                 .ToDictionary(o => o.Id, o => o.ConfirmedAt);
-            var versions = await ToListAsync(db.SalesOrderDocuments.AsNoTracking().Where(d => orderIds.Contains(d.SalesOrderId)).Select(d => new { d.SalesOrderId, d.Kind, d.Version }), async, cancellationToken);
-            foreach (var group in added.GroupBy(d => (d.SalesOrderId, d.Kind)))
+            var versions = await ToListAsync(db.SalesOrderDocuments.AsNoTracking().Where(d => orderIds.Contains(d.SalesOrderId)).Select(d => new { d.SalesOrderId, d.SalesDeliveryId, d.Kind, d.Version }), async, cancellationToken);
+            foreach (var group in added.GroupBy(d => (d.SalesOrderId, DeliveryId: d.SalesDelivery?.Id ?? d.SalesDeliveryId, d.Kind)))
             {
                 var tracked = db.ChangeTracker.Entries<SalesOrder>().Select(e => e.Entity).FirstOrDefault(o => o.Id == group.Key.SalesOrderId);
                 if ((tracked?.ConfirmedAt ?? confirmed.GetValueOrDefault(group.Key.SalesOrderId)) == null)
                 {
                     throw new TraceabilityViolationException($"A document of sales order {group.Key.SalesOrderId} belongs to a confirmed order.");
                 }
-                var next = versions.Where(v => v.SalesOrderId == group.Key.SalesOrderId && v.Kind == group.Key.Kind).Select(v => v.Version).DefaultIfEmpty(0).Max() + 1;
+                var next = versions.Where(v => v.SalesOrderId == group.Key.SalesOrderId && v.SalesDeliveryId == group.Key.DeliveryId && v.Kind == group.Key.Kind)
+                    .Select(v => v.Version).DefaultIfEmpty(0).Max() + 1;
                 foreach (var document in group.OrderBy(d => d.Version))
                 {
                     if (document.Version != next++)

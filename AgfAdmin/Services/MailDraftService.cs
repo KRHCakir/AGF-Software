@@ -30,12 +30,15 @@ namespace AgfAdmin.Services
             var now = DateTime.UtcNow;
             var actor = _user.Actor(SalesOrderDocumentRules.MaxActorLength);
             var created = 0;
-            foreach (var group in documents.GroupBy(d => d.Kind))
+            // Feedback 22 november: per levering en soort document (elke levering heeft een eigen laadbon en transportopdracht).
+            var deliveryOf = documents.ToDictionary(d => d.Id, d => d.SalesDeliveryId);
+            foreach (var group in documents.GroupBy(d => (d.SalesDeliveryId, d.Kind)))
             {
                 var latest = group.OrderByDescending(d => d.Version).First();
                 // Een open concept van een oudere versie gaat altijd weg (vervangen), ook als de nieuwe versie al een concept heeft of zelf
                 // geen krijgt: zo ruimt elke ronde een concept op dat een gelijktijdige aanvraag nog voor een oudere versie maakte.
-                foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
+                foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && deliveryOf.GetValueOrDefault(d.DocumentId) == latest.SalesDeliveryId
+                    && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
                 {
                     old.Status = DocumentMailRules.StatusSuperseded;
                     old.UpdatedAt = now;
@@ -107,7 +110,7 @@ namespace AgfAdmin.Services
         {
             await EnsureDraftsAsync(orderId, cancellationToken);
             return await Query().Where(d => d.SalesOrderId == orderId && d.Status != DocumentMailRules.StatusDiscarded && d.Status != DocumentMailRules.StatusSuperseded
-                    && (d.Status == DocumentMailRules.StatusSent || !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.DocumentKind && x.Version > d.Document.Version)))
+                    && (d.Status == DocumentMailRules.StatusSent || !db.SalesOrderDocuments.Any(x => x.SalesDeliveryId == d.Document.SalesDeliveryId && x.Kind == d.DocumentKind && x.Version > d.Document.Version)))
                 .OrderBy(d => d.DocumentKind).ThenByDescending(d => d.Id).Select(Projection).ToListAsync(cancellationToken);
         }
 
@@ -118,7 +121,7 @@ namespace AgfAdmin.Services
         // Een open concept van een oudere documentversie (een gelijktijdige aanvraag kan er nog een maken) staat er nooit tussen.
         private IQueryable<MailDraft> OpenQuery() =>
             Query().Where(d => (((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
-                || d.Status == DocumentMailRules.StatusSending) && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.DocumentKind && x.Version > d.Document.Version));
+                || d.Status == DocumentMailRules.StatusSending) && !db.SalesOrderDocuments.Any(x => x.SalesDeliveryId == d.Document.SalesDeliveryId && x.Kind == d.DocumentKind && x.Version > d.Document.Version));
 
         // Bevestigde orders van vóór de conceptfunctie hebben nog geen concept. Voor het tellen en pagineren vullen we die per gerichte batch aan:
         // alleen orders met een nieuwste, niet doorgegeven document zonder enig concept (ook geen verwijderd of vervangen) komen in aanmerking.
@@ -132,7 +135,7 @@ namespace AgfAdmin.Services
                     .Where(d => d.SentAt == null && d.SalesOrder.ConfirmedAt != null
                         && (d.Kind != SalesOrderDocumentRules.KindTransportOrder || d.SalesOrder.Transport.Mode == SalesTransportRules.ModeCarrier)
                         && !db.MailDrafts.Any(m => m.DocumentId == d.Id)
-                        && !db.SalesOrderDocuments.Any(x => x.SalesOrderId == d.SalesOrderId && x.Kind == d.Kind && x.Version > d.Version))
+                        && !db.SalesOrderDocuments.Any(x => x.SalesDeliveryId == d.SalesDeliveryId && x.Kind == d.Kind && x.Version > d.Version))
                     .Select(d => d.SalesOrderId).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
                 if (orderIds.Count == 0) break;
                 var made = 0;
@@ -281,12 +284,15 @@ namespace AgfAdmin.Services
         {
             var stored = await db.MailTemplates.AsNoTracking().SingleOrDefaultAsync(t => t.Kind == document.Kind, cancellationToken);
             var (subject, body) = stored != null ? (stored.Subject, stored.Body) : MailTemplateRules.Default(document.Kind);
+            // De levering van dit document: haar verkoop-partij en laaddatum (de eerste levering: die van de order).
+            var delivery = order.Deliveries.FirstOrDefault(d => d.Id == document.SalesDeliveryId);
+            var loadAt = delivery == null ? order.LoadAt : SalesDeliveryRules.Loading(order, delivery).LoadAt;
             var values = new Dictionary<string, string>
             {
                 ["{bedrijf}"] = company.CompanyName, ["{document}"] = MailTemplateRules.DocumentName(document.Kind), ["{nummer}"] = document.Number,
-                ["{versie}"] = document.Version.ToString(), ["{order}"] = order.OrderNumber, ["{partij}"] = order.FirstSalesPartij?.Number ?? order.OrderNumber,
+                ["{versie}"] = document.Version.ToString(), ["{order}"] = order.OrderNumber, ["{partij}"] = delivery?.Partij?.Number ?? order.OrderNumber,
                 ["{klant}"] = order.Customer?.Name, ["{datum}"] = MailTemplateRules.Date(DateTime.UtcNow, false),
-                ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : "nog niet bekend",
+                ["{laaddatum}"] = loadAt != null ? MailTemplateRules.Date(loadAt.Value, true) : "nog niet bekend",
             };
             var text = MailTemplateRules.Render(body, values).Trim();
             var closing = string.IsNullOrWhiteSpace(settings?.Signature) ? MailTemplateRules.Render(MailTemplateRules.DefaultClosing, values) : settings.Signature;
