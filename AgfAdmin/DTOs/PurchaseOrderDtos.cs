@@ -189,8 +189,12 @@ namespace AgfAdmin.DTOs
         public decimal? LoosePackages { get; set; }
         public decimal? UnitPrice { get; set; }
         // Feedback 22 november: zoals bij aanmaken (leeg = geen korting, btw niet vastgelegd).
-        public decimal? DiscountPercentage { get; set; }
-        public decimal? VatPercentage { get; set; }
+        // Weggelaten in de JSON = ongewijzigd (opgeslagen waarde blijft); een expliciete null wist de waarde.
+        private decimal? _discountPercentage, _vatPercentage;
+        public decimal? DiscountPercentage { get => _discountPercentage; set { _discountPercentage = value; DiscountPercentageSpecified = true; } }
+        public decimal? VatPercentage { get => _vatPercentage; set { _vatPercentage = value; VatPercentageSpecified = true; } }
+        [System.Text.Json.Serialization.JsonIgnore] public bool DiscountPercentageSpecified { get; private set; }
+        [System.Text.Json.Serialization.JsonIgnore] public bool VatPercentageSpecified { get; private set; }
     }
 
     public sealed class PurchaseOrderLineTotalsDto
