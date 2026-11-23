@@ -193,13 +193,26 @@ namespace AgfAdmin.DTOs
         public decimal? LoosePackages { get; set; }
         public decimal? UnitPrice { get; set; }
         // Feedback 22 november: zoals bij aanmaken (leeg = geen korting, btw niet vastgelegd).
-        public decimal? DiscountPercentage { get; set; }
-        public decimal? VatPercentage { get; set; }
+        // Weggelaten in de JSON = ongewijzigd (opgeslagen waarde blijft); een expliciete null wist de waarde.
+        private decimal? _discountPercentage, _vatPercentage;
+        public decimal? DiscountPercentage { get => _discountPercentage; set { _discountPercentage = value; DiscountPercentageSpecified = true; } }
+        public decimal? VatPercentage { get => _vatPercentage; set { _vatPercentage = value; VatPercentageSpecified = true; } }
+        [System.Text.Json.Serialization.JsonIgnore] public bool DiscountPercentageSpecified { get; private set; }
+        [System.Text.Json.Serialization.JsonIgnore] public bool VatPercentageSpecified { get; private set; }
+    }
+
+    public sealed class UnitQuantityDto
+    {
+        public string Unit { get; set; }
+        public decimal Quantity { get; set; }
     }
 
     public sealed class PurchaseOrderLineTotalsDto
     {
-        public decimal Quantity { get; set; }
+        // Het totaalaantal; null bij gemengde eenheden (box en colli tellen we nooit op), dan staat het aantal per eenheid in QuantitiesByUnit.
+        public decimal? Quantity { get; set; }
+        // Alleen gevuld door de verkooporder: het aantal per eenheid, op eenheid gesorteerd.
+        public List<UnitQuantityDto> QuantitiesByUnit { get; set; }
         public decimal? NetWeightKg { get; set; }
         public decimal? GrossWeightKg { get; set; }
         public decimal? Amount { get; set; }
@@ -216,12 +229,14 @@ namespace AgfAdmin.DTOs
 
         // De totalenrij onder de regels (kg, aantal, pallets, bedrag) en de btw-samenvatting; gedeeld door inkoop- en verkooporder.
         public static PurchaseOrderLineTotalsDto From(IReadOnlyCollection<AgfAdmin.Services.PurchaseLineMath.Line> lines,
-            IEnumerable<AgfAdmin.Services.OrderLineMath.Line> amountLines, decimal exchangeRate)
+            IEnumerable<AgfAdmin.Services.OrderLineMath.Line> amountLines, decimal exchangeRate, IReadOnlyCollection<(string Unit, decimal Quantity)> unitQuantities = null)
         {
             var totals = AgfAdmin.Services.PurchaseLineMath.Sum(lines);
+            List<UnitQuantityDto> byUnit = unitQuantities?.GroupBy(u => u.Unit).OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new UnitQuantityDto { Unit = g.Key, Quantity = g.Sum(u => u.Quantity) }).ToList();
             return new PurchaseOrderLineTotalsDto
             {
-                Quantity = totals.Quantity, NetWeightKg = totals.NetKg, GrossWeightKg = totals.GrossKg, Amount = totals.Amount, Pallets = totals.Pallets,
+                Quantity = byUnit != null && byUnit.Count > 1 ? null : totals.Quantity, QuantitiesByUnit = byUnit, NetWeightKg = totals.NetKg, GrossWeightKg = totals.GrossKg, Amount = totals.Amount, Pallets = totals.Pallets,
                 AmountEur = totals.Amount is decimal amount ? AgfAdmin.Services.ExchangeRateRules.ToEuro(amount, exchangeRate) : null,
                 LinesWithoutNet = totals.LinesWithoutNet, LinesWithoutGross = totals.LinesWithoutGross, LinesWithoutPrice = totals.LinesWithoutPrice,
                 LinesWithoutPallets = totals.LinesWithoutPallets,
