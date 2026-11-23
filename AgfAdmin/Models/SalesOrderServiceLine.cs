@@ -19,6 +19,8 @@ namespace AgfAdmin.Models
         public decimal? UnitPrice { get; set; }          // excl. btw, >= 0; null = nog geen prijs
         public decimal? DiscountPercentage { get; set; } // 0 tot en met 100; null = geen korting
         public decimal VatPercentage { get; set; }       // 0, 9 of 21; voorstel uit het artikel
+        // Was het btw-tarief in de aanvraag opgegeven (anders het tarief van het artikel)? Voor de replaycontrole.
+        public bool VatSpecified { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

@@ -70,6 +70,22 @@ public sealed class SalesOrderServiceLineTests : IDisposable
     }
 
     [Fact]
+    public async Task A_replay_that_omits_or_adds_the_vat_rate_is_a_conflict()
+    {
+        await ArrangeAsync();
+        var request = WithServices(_s.Order(), ("Transport", 1m, 95m, null, 9m));
+        Assert.Equal(ServiceResultStatus.Created, (await _s.CreateAsync(request)).Status);
+        Assert.Equal(ServiceResultStatus.Ok, (await _s.CreateAsync(request)).Status);
+        request.ServiceLines[0].VatPercentage = null;
+        Assert.Equal(ServiceResultStatus.Conflict, (await _s.CreateAsync(request)).Status);
+
+        var omitted = WithServices(_s.Order(), ("Transport", 1m, 95m, null, null));
+        Assert.Equal(ServiceResultStatus.Created, (await _s.CreateAsync(omitted)).Status);
+        omitted.ServiceLines[0].VatPercentage = 21m;
+        Assert.Equal(ServiceResultStatus.Conflict, (await _s.CreateAsync(omitted)).Status);
+    }
+
+    [Fact]
     public async Task A_service_line_is_on_neither_the_loading_slip_nor_the_transport_order_and_never_changes()
     {
         await ArrangeAsync();

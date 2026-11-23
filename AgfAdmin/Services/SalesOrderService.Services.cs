@@ -48,7 +48,7 @@ namespace AgfAdmin.Services
                     {
                         CostArticleId = line.CostArticleId!.Value, Quantity = line.Quantity!.Value, UnitPrice = line.UnitPrice, DiscountPercentage = line.DiscountPercentage,
                         // Weggelaten btw: het tarief van het artikel, gezet in ResolveServicesAsync (-1 als markering tot dan).
-                        VatPercentage = line.VatPercentage ?? -1m,
+                        VatPercentage = line.VatPercentage ?? -1m, VatSpecified = line.VatPercentage != null,
                     });
                 }
             }
@@ -86,14 +86,15 @@ namespace AgfAdmin.Services
             return errors.Count > 0 ? ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)) : null;
         }
 
-        // Replay: dezelfde diensten in dezelfde volgorde (artikel, aantal, prijs, korting, en de btw als die was opgegeven).
+        // Replay: dezelfde diensten in dezelfde volgorde (artikel, aantal, prijs, korting, en de btw: opgegeven of weggelaten telt mee, zodat weglaten geen joker is).
         private static bool SameServices(SalesOrder existing, SalesOrder candidate)
         {
             var stored = existing.ServiceLines.OrderBy(l => l.Id).ToList();
             var asked = candidate.ServiceLines.ToList();
             return stored.Count == asked.Count && stored.Zip(asked).All(pair => pair.First.CostArticleId == pair.Second.CostArticleId
                 && pair.First.Quantity == pair.Second.Quantity && pair.First.UnitPrice == pair.Second.UnitPrice
-                && pair.First.DiscountPercentage == pair.Second.DiscountPercentage && (pair.Second.VatPercentage < 0m || pair.First.VatPercentage == pair.Second.VatPercentage));
+                && pair.First.DiscountPercentage == pair.Second.DiscountPercentage && pair.First.VatSpecified == pair.Second.VatSpecified
+                && (!pair.Second.VatSpecified || pair.First.VatPercentage == pair.Second.VatPercentage));
         }
 
         private static SalesOrderServiceLineDto ToServiceDto(SalesOrderServiceLine line) => new()
