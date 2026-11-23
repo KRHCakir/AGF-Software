@@ -61,7 +61,7 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     }, [productVariantId, unit]);
 
     const shown = matchingLots(options ?? [], value !== null && text === known ? '' : text).filter((option) => option.partijId !== exclude);
-    // Enter op een precies getypt nummer kiest die partij, ook als de lijst dicht is of nog laadt (Chrome-proef: snel typen en Enter).
+    // Enter of het veld verlaten op een precies getypt nummer kiest die partij, ook als de lijst dicht is of nog laadt (Chrome-proef en review).
     const enterPending = useRef(false);
     const takeExact = (from: readonly LotOption[]) => {
         const exact = exactLot(from, text);
@@ -94,7 +94,9 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     const onBlur = () => {
         setOpen(false);
         if (text.trim() === '') { enterPending.current = false; if (value !== null) choose(null); return; }
-        const exact = exactLot(options ?? [], text);
+        // Nog aan het laden (review): het exacte nummer alsnog kiezen zodra de lijst binnen is.
+        if (options === null) { enterPending.current = true; return; }
+        const exact = exactLot(options, text);
         if (exact !== null && exact.partijId !== exclude && exact.partijId !== value?.partijId) choose(exact);
     };
     const unknown = options !== null && text.trim() !== '' && (value === null || text !== known) && exactLot(options, text) === null;
