@@ -25,7 +25,7 @@ describe('MissingPartijWorklist', () => {
         assert.equal(mounted.buttons().length, 0, 'the worklist links, it never links a lot itself');
     });
 
-    test('shows nothing when every stock line has a lot, or when the list cannot be read', async () => {
+    test('shows nothing when every stock line has a lot, and an error with retry when the list cannot be read', async () => {
         stubFetch({ nextPost: async () => json(500, {}), onGet: () => json(200, []) });
         mounted = new Mounted();
         await mounted.render(<MissingPartijWorklist reloadToken={0} />);
@@ -36,7 +36,9 @@ describe('MissingPartijWorklist', () => {
         stubFetch({ nextPost: async () => json(500, {}), onGet: () => json(500, { message: 'down' }) });
         mounted = new Mounted();
         await mounted.render(<MissingPartijWorklist reloadToken={0} />);
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        assert.equal(mounted.container.querySelector('[data-tour="partij-missing"]'), null);
+        await mounted.waitFor(() => mounted.container.querySelector('[data-tour="partij-missing"][role="alert"]'), 'load error');
+        assert.ok(mounted.hasText('partij_missing_load_failed'));
+        assert.equal(mounted.buttons().length, 1, 'retry button');
+        assert.ok(mounted.hasText('partij_missing_retry'));
     });
 });

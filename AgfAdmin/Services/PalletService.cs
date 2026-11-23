@@ -614,7 +614,9 @@ namespace AgfAdmin.Services
             var order = await _db.SupplyCommitments.Include(c => c.Lines).Include(c => c.Partij).SingleAsync(c => c.Id == source.SupplyCommitmentId, cancellationToken);
             var partij = order.Partij;
             // Bestaande voorraad zonder partij op deze order wordt niet stilzwijgend gekoppeld: eerst via Partij › Inkooporder koppelen (met reden).
-            var hasUnlinkedStock = await _db.PalletContentLines.AnyAsync(c => c.PartijId == null && c.SupplyCommitmentLine.SupplyCommitmentId == order.Id, cancellationToken);
+            // Zelfde definitie als de werklijst Partij ontbreekt (nog op voorraad, pallet niet geannuleerd), zodat elke blokkade daar zichtbaar is.
+            var hasUnlinkedStock = await _db.PalletContentLines.AnyAsync(c => c.PartijId == null && c.SupplyCommitmentLine.SupplyCommitmentId == order.Id
+                && c.Pallet.LogisticsStatus != PalletRules.StatusCancelled && c.Quantity - c.DispatchedQuantity - c.SplitOffQuantity > 0m, cancellationToken);
             if (hasUnlinkedStock)
             {
                 return ServiceResult<PalletContentLineDto>.Conflict($"Purchase order {order.Id} has stock without a lot; link a lot to the order first (Lot › Link purchase order, with a reason) before receiving more.");
