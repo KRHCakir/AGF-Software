@@ -2383,6 +2383,7 @@
   "receipt_inspect": "Keuren / afwijzen",
   "receipt_error_kg_required": "Vul het netto kg in: de order kent geen kg per verpakking.",
   "receipt_error_pallet_range": "Aantal pallets: een heel getal van 1 tot en met 99.",
+  "receipt_certificate_changed": "De GGN-melding is veranderd; lees de melding bovenaan en klik opnieuw op Ontvangen.",
   "receipt_field_quantity": "Aantal",
   "receipt_field_netKg": "Netto kg",
   "receipt_field_palletCount": "Aantal pallets",
