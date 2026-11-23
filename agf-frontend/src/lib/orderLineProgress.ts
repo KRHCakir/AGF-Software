@@ -15,6 +15,12 @@ export interface LineProgress {
     status: LineProgressStatus;
 }
 
+// Actieve regels volgen de server (PurchaseOrderService.ActiveLines): een regel die iets verwacht of iets ontving. Een geheel vervangen regel
+// zonder ontvangst hoort niet in het overzicht.
+export function activeLines(lines: PurchaseOrderLine[]): PurchaseOrderLine[] {
+    return lines.filter((line) => line.expectedQuantity > 0 || line.receivedQuantity > 0);
+}
+
 export function lineProgress(line: PurchaseOrderLine): LineProgress {
     const cancelled = line.cancelledQuantity ?? 0;
     const open = Math.max(0, line.expectedQuantity - line.receivedQuantity);
