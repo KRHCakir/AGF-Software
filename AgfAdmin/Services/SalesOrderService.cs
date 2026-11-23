@@ -309,6 +309,8 @@ namespace AgfAdmin.Services
                     {
                         ValidationErrors.Add(errors, $"{key}.supplySource", $"Supply source must be one of: {string.Join(", ", SalesSupplyRules.Sources)}.");
                     }
+                    // Prijs, korting en btw (feedback 22 november), zoals op de inkooporderregel; de server vult niets zelf in.
+                    OrderLineMath.Validate(line.UnitPrice, line.DiscountPercentage, line.VatPercentage, key, errors, ValidationErrors.Add);
                     if (errors.Count > before || total == null)
                     {
                         continue;
@@ -322,7 +324,8 @@ namespace AgfAdmin.Services
                     }
                     // SupplySource blijft null als de aanvrager er geen opgaf: de replayvergelijking accepteert dan elke opgeslagen bron.
                     lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet, LoosePackages = line.LoosePackages,
-                        NetWeightKg = line.NetWeightKg, GrossWeightKg = line.GrossWeightKg, WeightSource = weightSource, SupplySource = line.SupplySource });
+                        NetWeightKg = line.NetWeightKg, GrossWeightKg = line.GrossWeightKg, WeightSource = weightSource, SupplySource = line.SupplySource,
+                        UnitPrice = line.UnitPrice, DiscountPercentage = line.DiscountPercentage, VatPercentage = line.VatPercentage });
                 }
             }
 
@@ -380,6 +383,9 @@ namespace AgfAdmin.Services
                     && pair.First.NetWeightKg == pair.Second.NetWeightKg
                     && pair.First.GrossWeightKg == pair.Second.GrossWeightKg
                     && string.Equals(pair.First.WeightSource, pair.Second.WeightSource, StringComparison.Ordinal)
+                    && pair.First.UnitPrice == pair.Second.UnitPrice
+                    && pair.First.DiscountPercentage == pair.Second.DiscountPercentage
+                    && pair.First.VatPercentage == pair.Second.VatPercentage
                     && (pair.Second.SupplySource == null || string.Equals(pair.First.SupplySource, pair.Second.SupplySource, StringComparison.Ordinal))
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
@@ -941,6 +947,22 @@ namespace AgfAdmin.Services
                 .Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
                 .AsSplitQuery();
 
+        // Pallets van een regel, niet afgerond: de eigen palletinvoer, anders de colli per pallet van het artikel (zoals bij inkoop).
+        private static decimal? ExactPallets(SalesOrderLine line) =>
+            PurchaseLineMath.Pallets(line.Quantity, PurchaseLineMath.PackagesPerPallet(line.PackagesPerPallet, line.ProductVariant?.DefaultPackagesPerPallet));
+
+        // Feedback 22 november: de totalenrij onder de goederenregels (zoals bij inkoop) en de btw-samenvatting over de hele order:
+        // goederen (aantal × prijs min korting) en emballage (aantal × prijs, btw van het artikel). Bedragen in euro.
+        internal static PurchaseOrderLineTotalsDto TotalsOf(SalesOrder order)
+        {
+            var lines = order.Lines.OrderBy(l => l.Id).ToList();
+            var goods = lines.Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), l.VatPercentage));
+            var packaging = order.PackagingLines.OrderBy(l => l.Id).Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, null), l.VatPercentage));
+            return PurchaseOrderLineTotalsDto.From(
+                lines.Select(l => new PurchaseLineMath.Line(l.Quantity, l.NetWeightKg, l.GrossWeightKg, OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), ExactPallets(l))).ToList(),
+                goods.Concat(packaging), 1m, lines.Select(l => (l.Unit, l.Quantity)).ToList());
+        }
+
         // Bevestigd afgeleverd op een regel: uitsluitend Consumed reserveringen waarvan de bijbehorende verzending een bevestiging heeft.
         internal static decimal DeliveredQuantity(SalesOrderLine line) =>
             line.Reservations.Where(r => r.Status == ReservationRules.StatusConsumed && StockReservationService.DeliveryOf(r) != null).Sum(r => r.Quantity);
@@ -982,6 +1004,7 @@ namespace AgfAdmin.Services
             // Per regel in de eigen eenheid; nooit één ordertotaal over box en colli heen.
             Delivered = order.Lines.Count > 0 && order.Lines.All(l => DeliveredQuantity(l) == l.Quantity),
             PackagingLines = order.PackagingLines.OrderBy(l => l.Id).Select(ToPackagingDto).ToList(),
+            Totals = TotalsOf(order),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
             {
                 // Gereserveerd = Active Physical; toegewezen = Active DirectTrade; verzonden = Consumed. Open trekt alle drie af.
@@ -1008,6 +1031,15 @@ namespace AgfAdmin.Services
                     GrossWeightKg = line.GrossWeightKg,
                     WeightSource = line.WeightSource,
                     SupplySource = line.SupplySource,
+                    UnitPrice = line.UnitPrice,
+                    DiscountPercentage = line.DiscountPercentage,
+                    VatPercentage = line.VatPercentage,
+                    LineTotal = OrderLineMath.LineAmount(line.Quantity, line.UnitPrice, line.DiscountPercentage),
+                    Brand = line.ProductVariant?.Brand,
+                    Origin = line.ProductVariant?.Origin,
+                    Size = line.ProductVariant?.SizeCategory,
+                    Packaging = line.ProductVariant?.Packaging,
+                    Pallets = ExactPallets(line) is { } pallets ? PurchaseLineMath.Round2(pallets) : null,
                     Balance = balance == null ? null : SalesBalanceLoader.ToBalanceDto(balance),
                     Coverage = coverage == null ? null : SalesBalanceLoader.ToCoverageDto(coverage),
                     AwaitingStock = line.SupplySource == SalesSupplyRules.SourceExpected && coverage != null

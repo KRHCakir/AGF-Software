@@ -98,7 +98,7 @@ namespace AgfAdmin.Services
             Quantity = line.Quantity,
             UnitPrice = line.UnitPrice,
             VatPercentage = line.VatPercentage,
-            LineTotal = line.UnitPrice * line.Quantity,
+            LineTotal = OrderLineMath.LineAmount(line.Quantity, line.UnitPrice, null),
         };
     }
 }
