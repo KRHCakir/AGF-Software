@@ -247,7 +247,7 @@ export default function PurchaseOrderLines<D extends PurchaseLineDraft = Purchas
                                         onChange={(event) => onChange(line.key, { vat: event.target.value, vatTouched: true } as Partial<D>)}
                                         onKeyDown={last === 'vat' ? (event) => onLastField(event, index) : undefined}
                                         className={`${inputClass} !mt-0 w-20 text-right`}>
-                                        {row?.vat == null && <option value="">{t('po_line_vat_none')}</option>}
+                                        <option value="">{t('po_line_vat_none')}</option>
                                         {VAT_RATES.map((rate) => <option key={rate} value={String(rate)}>{percent(rate)}%</option>)}
                                     </select>
                                     <FieldError id={`${prefix}.vatPercentage`} messages={errors(`${prefix}.vatPercentage`)} />
