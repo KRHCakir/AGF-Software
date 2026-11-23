@@ -4,8 +4,14 @@ import type { PartijRecall, SalesLotTrace } from '../types/partij';
 
 export type Cell = string | number | null | undefined;
 
+// Excel leest een cel die (na voorloopwitruimte) met = + - @ begint, of met tab/CR, als formule; een apostrof ervoor maakt er tekst van.
+export function neutralizeFormula(text: string): string {
+    return /^\s*[=+\-@]|^[\t\r]/.test(text) ? `'${text}` : text;
+}
+
 export function csvCell(value: Cell, number: (value: number) => string): string {
-    const text = value === null || value === undefined ? '' : typeof value === 'number' ? number(value) : value;
+    // Getallen zijn onze eigen opmaak (ook negatief); tekst uit gegevensvelden kan als formule worden gelezen, dus neutraliseren we die.
+    const text = value === null || value === undefined ? '' : typeof value === 'number' ? number(value) : neutralizeFormula(value);
     return /[;"\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

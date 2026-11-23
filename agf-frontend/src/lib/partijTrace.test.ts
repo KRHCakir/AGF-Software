@@ -15,6 +15,17 @@ describe('traceability export', () => {
         assert.equal(csvCell(null, number), '');
     });
 
+    test('text that Excel would read as a formula is neutralised, numbers are not', () => {
+        assert.equal(csvCell('=HYPERLINK("x")', number), '"\'=HYPERLINK(""x"")"');
+        assert.equal(csvCell('+1', number), "'+1");
+        assert.equal(csvCell('-2', number), "'-2");
+        assert.equal(csvCell('@SUM(A1)', number), "'@SUM(A1)");
+        assert.equal(csvCell('  =1+1', number), "'  =1+1");
+        assert.equal(csvCell('\t=1', number), "'\t=1");
+        assert.equal(csvCell('Kweker =K', number), 'Kweker =K');
+        assert.equal(csvCell(-5, number), '-5');
+    });
+
     test('the recall has the sum and a line per destination and direct invoice', () => {
         const csv = recallCsv('I-2611010', {
             unit: 'colli', received: 38, shipped: 12, returned: 0, rejected: 8, onHand: 18, difference: 0,
