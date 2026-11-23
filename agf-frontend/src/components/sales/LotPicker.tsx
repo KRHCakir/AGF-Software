@@ -79,7 +79,7 @@ export default function LotPicker({ productVariantId, unit, value, onChange, dis
     return (
         <div className="relative" data-tour={dataTour}>
             <label htmlFor={id} className="text-xs font-medium text-gray-700">{label}</label>
-            <input ref={input} id={id} value={text} disabled={disabled || productVariantId === null} autoComplete="off" role="combobox" aria-expanded={open} aria-controls={listId}
+            <input ref={input} id={id} value={text} data-tour={dataTour ? `${dataTour}-input` : undefined} disabled={disabled || productVariantId === null} autoComplete="off" role="combobox" aria-expanded={open} aria-controls={listId}
                 aria-autocomplete="list" aria-activedescendant={open && shown[active] ? `${listId}-${active}` : undefined}
                 onChange={(event) => { setText(event.target.value); setOpen(true); setActive(0); if (event.target.value.trim() === '' && value !== null) onChange(null); }}
                 onFocus={() => setActive(0)} onKeyDown={onKeyDown} onBlur={onBlur} placeholder={t('lot_picker_placeholder')} className={`${inputClass} font-mono`} />

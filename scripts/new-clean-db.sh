@@ -147,6 +147,12 @@ SQL
 update "CompanySettings" set "PartijSequenceDigits" = :digits, "SalesPartijNumberFormat" = :'sales_format', "SalesPartijSequenceDigits" = :sales_digits;
 SQL
     fi
+    # Feedback 22 november: dezelfde omzetting als de migratie AddLotNumberingIV. Komt de bron nog van vóór die migratie, dan krijgt de
+    # nieuwe database toch de standaard I- en V-; een zelf gekozen formaat blijft staan.
+    psql -d "$database" -v ON_ERROR_STOP=1 -q <<'SQL'
+update "CompanySettings" set "PartijNumberFormat" = 'I-{JJ}{MM}{volgnr}' where "PartijNumberFormat" in ('{JJ}{MM}{volgnr}', '5{JJ}{MM}{volgnr}');
+update "CompanySettings" set "SalesPartijNumberFormat" = 'V-{JJ}{MM}{volgnr}' where "SalesPartijNumberFormat" = '{JJ}{MM}{volgnr}';
+SQL
     rm -rf "$work"
     trap - EXIT
 fi
