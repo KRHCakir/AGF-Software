@@ -81,6 +81,26 @@ public sealed class PartijTraceTests : IDisposable
         Assert.True(second > 0);
     }
 
+    // Review: de inkoopwaarde van een directe factuur gebruikt de inkoopprijs alleen in dezelfde eenheid (de prijs geldt per verpakking).
+    [Theory]
+    [InlineData("colli", 40.0)]
+    [InlineData("kg", null)]
+    public async Task A_Direct_Invoice_Lot_Has_A_Purchase_Value_Only_In_The_Unit_Of_The_Purchase_Price(string unit, double? expected)
+    {
+        await ArrangeAsync();
+        await using (var db = _s.Factory.CreateContext())
+        {
+            var created = await new SalesInvoiceController(db, new PartijService(db)).CreateInvoice(new SalesInvoiceController.CreateInvoiceDto
+            {
+                CustomerName = "Balieklant", Lines = new() { new() { Description = "Tomaat ronde", Quantity = 4m, Unit = unit, UnitPrice = 12m, VATPercentage = 9m, PartijId = _lotA } }
+            });
+            Assert.IsType<OkObjectResult>(created);
+        }
+        await using var verify = _s.Factory.CreateContext();
+        var lot = await verify.Partijen.SingleAsync(p => p.InvoiceId != null);
+        Assert.Equal(expected == null ? null : (decimal?)expected.Value, (await DetailAsync(lot.Id)).PurchaseValue);
+    }
+
     // Review: twee verzendingen van dezelfde order uit dezelfde partij blijven twee regels, elk met de datum van die verzending.
     [Fact]
     public async Task Each_Dispatch_Is_Its_Own_Destination_With_Its_Own_Date()

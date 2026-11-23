@@ -52,8 +52,8 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
     const requestId = useRef<string | null>(null);
     // Opdracht met onzekere uitkomst (netwerk-/vormfout): blijft ook na Annuleren bewaard, zodat heropenen dezelfde sleutel en keuze gebruikt.
     const uncertain = useRef<{ requestId: string; chosen: number[] } | null>(null);
-    // Zolang die onzekere opdracht er is, ligt de keuze vast (review): eerst dezelfde opdracht herhalen of de order controleren, anders
-    // zou een gewijzigde keuze met een nieuwe sleutel een tweede levering kunnen maken.
+    // Zolang die onzekere opdracht er is, ligt de keuze vast (review): alleen een definitief antwoord op dezelfde sleutel (aangemaakt, herkend
+    // of geweigerd) geeft haar vrij. De order opnieuw lezen is niet genoeg: de eerste POST kan op de server nog lopen.
     const [locked, setLocked] = useState(false);
 
     useEffect(() => {
@@ -95,14 +95,6 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         if (ok) { uncertain.current = null; writeStored(order.id, null); setLocked(false); }
         setRefreshFailed(!ok);
         return ok;
-    };
-    // Onzekere uitkomst: de order opnieuw lezen. Daarna staat een eventueel al gemaakte levering in de lijst en is een nieuwe keuze vrij.
-    const checkOrder = async () => {
-        if (busy) return;
-        setBusy(true);
-        try {
-            if (await refresh()) { setOpen(false); setError(null); requestId.current = null; }
-        } finally { setBusy(false); }
     };
     const retryRefresh = async () => {
         if (busy) return;
@@ -195,7 +187,6 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                     {locked && (
                         <div className="space-y-1 text-sm text-amber-950" data-testid="so-partial-delivery-uncertain">
                             <p>{t('so_partial_delivery_uncertain')}</p>
-                            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void checkOrder()} data-testid="so-partial-delivery-check">{t('so_partial_delivery_check')}</button>
                         </div>
                     )}
                 </form>
