@@ -1,4 +1,5 @@
 import type { OrderAmounts } from '../lib/orderLineMath';
+import type { DeliveryTerm } from '../lib/deliveryTerm';
 import { isArrayOf, isNullableNumber, isNullableString, isNumber, isObject, isString } from './guards';
 import { PurchaseOrderDeviation, isPurchaseOrderDeviation } from './receiptDeviation';
 
@@ -269,6 +270,8 @@ export interface PurchaseOrderDetail {
     vendorFixed?: boolean;
     partijFixed?: boolean;
     changes?: PurchaseOrderChange[];
+    // Feedback 22 november (ontbreekt bij een oudere server): de leveringsconditie van deze order; null = geen.
+    deliveryTerm?: DeliveryTerm | null;
 }
 
 export interface UpdatePurchaseOrderLineRequest {
@@ -309,6 +312,8 @@ export interface UpdatePurchaseOrderRequest {
     exchangeRateSource?: 'ECB' | 'Manual' | null;
     lines: UpdatePurchaseOrderLineRequest[];
     confirmedCertificateProductIds?: number[];
+    // Feedback 22 november: de leveringsconditie; weggelaten = ongewijzigd.
+    deliveryTerm?: DeliveryTerm;
 }
 
 export interface FinalizePurchaseOrderRequest {

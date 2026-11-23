@@ -40,6 +40,8 @@ import CustomerPicker from '../sales/CustomerPicker';
 import ArticleAddButton from '../shared/ArticleAddButton';
 import NewArticlePanel from '../articles/NewArticlePanel';
 import PurchaseOrderLines from './PurchaseOrderLines';
+import DeliveryTermField from '../shared/DeliveryTermField';
+import { type DeliveryTermDraft, deliveryTermDraftOf, deliveryTermPayload, describeDeliveryTerm } from '../../lib/deliveryTerm';
 import { lineKgLabel } from '../shared/lineKgLabel';
 import { palletBreakdownLabel } from '../shared/palletBreakdownLabel';
 import ErrorNotice from './ErrorNotice';
@@ -155,6 +157,9 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     const [suggestionToken, setSuggestionToken] = useState(0);
     // Bij aanpassen nooit een voorstel over de partij van de order heen.
     const partijTouched = useRef(editing !== null);
+    // Feedback 22 november: de leveringsconditie van deze order (bij aanpassen zoals opgeslagen); volgt de leverancier tot de gebruiker haar aanpast.
+    const [deliveryTerm, setDeliveryTerm] = useState<DeliveryTermDraft>(() => deliveryTermDraftOf(editing?.order.deliveryTerm));
+    const termTouched = useRef(editing !== null);
     // Valuta-ronde: valuta en koers van de order (euro standaard; bij aanpassen de vastgelegde) en de lijst om uit te kiezen.
     const [money, setMoney] = useState<CurrencyDraft>(() => (editing === null ? euroDraft()
         : draftFromDocument(editing.order.currency, editing.order.exchangeRate, editing.order.exchangeRateSource, editing.order.exchangeRateDate, locale)));
@@ -264,8 +269,10 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
     };
 
     // Een andere leverancier stelt haar standaardvaluta voor, zolang de gebruiker de valuta niet zelf koos (en nooit bij aanpassen).
+    // Feedback 22 november: zo ook haar leveringsconditie, zolang de gebruiker die niet zelf aanpaste.
     const chooseVendor = (vendor: VendorOption | null) => {
         updateHeader('vendorId', vendor === null ? '' : String(vendor.id));
+        if (editing === null && !termTouched.current) setDeliveryTerm(deliveryTermDraftOf(vendor?.deliveryTerm));
         // Zolang de gebruiker de valuta niet zelf koos, volgt ze de leverancier; een leverancier zonder standaardvaluta (of geen
         // leverancier) is euro, zodat de valuta van een eerder gekozen leverancier niet blijft staan.
         const proposal = vendor?.defaultCurrency?.trim().toUpperCase();
@@ -274,6 +281,9 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             setMoney(isEuro(wanted) ? euroDraft() : { currency: wanted, rate: '', source: 'ECB', rateDate: null, touched: false });
         }
     };
+
+    const chosenVendor = reference.vendors.find((vendor) => String(vendor.id) === header.vendorId) ?? null;
+    const vendorTerm = describeDeliveryTerm(chosenVendor?.deliveryTerm, t);
 
     const updatePartij = (choice: PartijChoice) => {
         if (locked) return;
@@ -382,6 +392,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
             if (minimum !== null && payload.expectedQuantity < minimum) addError(found, `lines[${index}].expectedQuantity`, t('po_edit_min_quantity', { received: formatQuantity(minimum, locale) }));
         }
         const payloadLines = built.lines.map((line) => line.payload);
+        const term = deliveryTermPayload(deliveryTerm);
+        for (const termError of term.ok ? [] : term.errors) addError(found, termError.field, t(`relations_error_${termError.code}`));
 
         if (Object.keys(found).length > 0) {
             return { payload: null, errors: found };
@@ -401,6 +413,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                 ...(supplierLotReference === '' ? {} : { supplierLotReference }),
                 ...(note === '' ? {} : { note }),
                 ...(currency.ok ? currency.value : {}),
+                ...(term.ok ? { deliveryTerm: term.value } : {}),
                 lines: payloadLines,
             },
             errors: {},
@@ -426,6 +439,7 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                     ...(payload.orderedOn === undefined ? {} : { orderedOn: payload.orderedOn }), ...(payload.note === undefined ? {} : { note: payload.note }),
                     ...partijPayload(partij), ...(payload.supplierLotReference === undefined ? {} : { supplierLotReference: payload.supplierLotReference }),
                     currency: payload.currency, exchangeRate: payload.exchangeRate, exchangeRateSource: payload.exchangeRateSource,
+                    ...(payload.deliveryTerm === undefined ? {} : { deliveryTerm: payload.deliveryTerm }),
                     lines: editLines ?? [],
                 },
             };
@@ -491,6 +505,8 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
         setResult(null);
         partijTouched.current = editing !== null;
         setPartij(editing === null ? NO_PARTIJ : orderPartij(editing.order));
+        termTouched.current = editing !== null;
+        setDeliveryTerm(deliveryTermDraftOf(editing?.order.deliveryTerm));
         setPartijExists(null);
         setSuggestionToken((token) => token + 1);
     };
@@ -635,6 +651,11 @@ export default function PlanSupplyForm({ route, reference, onReceive, editing = 
                         </span>
                     )}
                     <FieldError id="orderOriginCountryCode" messages={[...(e('originCountryCode') ?? []), ...(e('origin') ?? [])]} />
+                </div>
+                <div className="col-span-2 md:col-span-3">
+                    <DeliveryTermField value={deliveryTerm} errors={e} locked={locked} dataTour="supply-delivery-term"
+                        onChange={(next) => { if (locked) return; termTouched.current = true; setDeliveryTerm(next); edited(); }}
+                        hint={editing !== null ? t('delivery_term_order_only') : chosenVendor === null ? null : vendorTerm === null ? t('delivery_term_vendor_none') : t('delivery_term_from_vendor', { term: vendorTerm })} />
                 </div>
                 {/* Valuta-ronde: valuta en koers in de kop (na de vaste volgorde Leverancier, Ordernummer, Besteldatum, Verwacht, Herkomst). */}
                 <div className="col-span-2 md:col-span-3">

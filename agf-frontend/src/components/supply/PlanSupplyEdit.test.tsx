@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { setInputLocale } from '../../lib/decimal.ts';
-import { Mounted, json, setValue } from '../../test/reactHarness.ts';
+import { Mounted, json, setSelectValue, setValue } from '../../test/reactHarness.ts';
 import type { PurchaseOrderDetail, PurchaseOrderLine } from '../../types/purchaseOrder';
 import PlanSupplyForm, { type ReferenceData } from './PlanSupplyForm';
 
@@ -56,6 +56,18 @@ describe('PlanSupplyForm: editing a purchase order', () => {
         mounted = new Mounted();
     });
     afterEach(async () => { await mounted.unmount(); });
+
+    test('feedback 22 november: the delivery term opens as stored on the order and a change goes along with the edit', async () => {
+        await render(order({ deliveryTerm: { deliveryTermKind: 'Incoterm', incoterm: 'CIF', incotermPlace: 'Rotterdam', deliveryTermText: null } }));
+        assert.equal(mounted.container.querySelector<HTMLSelectElement>('[id="deliveryTerm.deliveryTermKind-input"]')!.value, 'Incoterm');
+        assert.equal(field('deliveryTerm.incotermPlace-input').value, 'Rotterdam');
+        assert.equal(testId('delivery-term-hint')!.textContent, 'delivery_term_order_only');
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="deliveryTerm.deliveryTermKind-input"]')!, 'Franco'); });
+        await type('deliveryTerm.deliveryTermText-input', 'Venlo');
+        await submit();
+        await mounted.waitFor(() => puts.length === 1, 'PUT');
+        assert.deepEqual(JSON.parse(puts[0].body).deliveryTerm, { deliveryTermKind: 'Franco', incoterm: null, incotermPlace: null, deliveryTermText: 'Venlo' });
+    });
 
     test('opens with the stored values; an untouched line goes back as stored; Tab on the last GGN adds a line', async () => {
         await render(order());

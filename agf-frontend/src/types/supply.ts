@@ -1,3 +1,4 @@
+import type { DeliveryTerm } from '../lib/deliveryTerm';
 import { isWeightMethod, type WeightMethod } from '../lib/weight';
 import { PACKAGE_UNITS, PackageUnit, SupplyRoute } from './availability';
 import { isOptionalLineWeight, type WeightSource } from './salesOrder';
@@ -51,6 +52,8 @@ export interface CreateSupplyCommitmentRequest {
     exchangeRate?: number | null;
     exchangeRateSource?: 'ECB' | 'Manual' | null;
     lines: CreateSupplyCommitmentLineRequest[];
+    // Feedback 22 november: de leveringsconditie van deze order (voorgevuld uit de leverancier); weggelaten = die van de leverancier.
+    deliveryTerm?: DeliveryTerm;
     // Certificaten deel 1: de producten waarvoor "Ja, klopt" gekozen is na de vraag over het GGN-certificaat.
     confirmedCertificateProductIds?: number[];
 }
