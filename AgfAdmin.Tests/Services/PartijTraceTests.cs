@@ -117,6 +117,18 @@ public sealed class PartijTraceTests : IDisposable
         var recall = (await DetailAsync(_lotA)).Recall;
         Assert.Equal((lot.Number, "Balieklant", 4m), (recall.DirectInvoices.Single().SalesPartijNumber, recall.DirectInvoices.Single().CustomerName, recall.DirectInvoices.Single().Quantity));
         Assert.Equal(0m, recall.Difference);
+
+        // Review: een factuur zonder eigen verkoop-partij (bijvoorbeeld een orderfactuur) is geen directe factuur, ook niet met een partij op de regel.
+        await using (var db = _s.Factory.CreateContext())
+        {
+            db.Add(new Invoice
+            {
+                InvoiceNumber = "FAC-ORDER-1", InvoiceDate = DateTime.UtcNow, CustomCustomerName = "Orderklant",
+                InvoiceLines = new List<InvoiceLine> { new() { Description = "Tomaat ronde", Quantity = 2m, Unit = "colli", UnitPrice = 12m, PartijId = _lotA } }
+            });
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal("Balieklant", (await DetailAsync(_lotA)).Recall.DirectInvoices.Single().CustomerName);
         var listed = (await new PartijService(verify).ListAsync(lot.Number, "all", 1, 50, kind: "Sales")).Value.Items.Single();
         Assert.Equal("Balieklant", listed.CustomerName);
         Assert.Equal(new[] { "I-2611010" }, listed.SourcePartijen);
