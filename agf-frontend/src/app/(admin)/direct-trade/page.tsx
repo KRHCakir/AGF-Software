@@ -1,8 +1,9 @@
 'use client';
 
-import SupplyWorkspace from '../../../components/supply/SupplyWorkspace';
+import DirectTradeArchive from '../../../components/supply/DirectTradeArchive';
 
-// Klantgebonden aanvoer (DirectTrade): vroeger de keuze "Directe handel" op /supply. Gaat rechtstreeks naar de klant, nooit voorraad.
+// Feedback 22 november: Direct trade is geen apart menu-onderdeel meer; dit adres toont de klantgebonden aanvoer van vroeger (alleen lezen).
+// Nieuwe directe handel is een gewone inkooporder met een ontvangstlocatie van de soort Onderweg.
 export default function DirectTradePage() {
-    return <SupplyWorkspace task="direct-trade" />;
+    return <DirectTradeArchive />;
 }

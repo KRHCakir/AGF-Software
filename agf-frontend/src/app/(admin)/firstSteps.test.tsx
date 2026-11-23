@@ -7,7 +7,6 @@ import { navigate } from '../../test/nextNavigationStub.ts';
 import { emptyApiResponse } from '../../test/emptyApi.ts';
 import { Mounted, json } from '../../test/reactHarness.ts';
 import Home from './dashboard/page';
-import DirectTradePage from './direct-trade/page';
 import NewPurchaseInvoicePage from './purchase-invoices/new/page';
 import NewPurchaseOrderPage from './purchase-orders/new/page';
 import SalesOrdersPage from './sales-orders/page';
@@ -72,12 +71,9 @@ describe('first steps on an empty system', () => {
         assert.ok(urls.some((url) => url.includes('/relations') && url.includes('includeInactive=false')));
     });
 
-    test('Inkooporder aanmaken needs a supplier and an article; Klantgebonden aanvoer also a customer', async () => {
+    test('Inkooporder aanmaken needs a supplier and an article', async () => {
         await mounted.render(<NewPurchaseOrderPage />);
         assert.deepEqual(needs(await found('missing-master-data')), ['missing-vendor', 'missing-article']);
-        await mounted.render(<DirectTradePage />);
-        await found('missing-customer');
-        assert.deepEqual(needs(await found('missing-master-data')), ['missing-vendor', 'missing-customer', 'missing-article']);
     });
 
     test('A new sales order says a customer and an article are needed first', async () => {

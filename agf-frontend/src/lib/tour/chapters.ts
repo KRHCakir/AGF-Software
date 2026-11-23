@@ -28,7 +28,6 @@ export const SCREENS_CHAPTER: TourChapter = {
         screen('availability', '/availability'),
         screen('partijen', '/partijen'),
         screen('sales', '/sales-orders'),
-        screen('direct-trade', '/direct-trade'),
         screen('relations', '/relations'),
         screen('articles', '/articles'),
     ],
