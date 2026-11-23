@@ -194,8 +194,10 @@ namespace AgfAdmin.Services
                 var lot = await _db.Partijen.AsNoTracking().Where(p => p.Id == partijId).Select(p => new { p.Number, p.Kind }).SingleOrDefaultAsync(cancellationToken);
                 var message = lot == null ? $"Lot {partijId} does not exist."
                     : lot.Kind != PartijRules.KindPurchase ? $"Lot {lot.Number} is a sales lot; a sales order line comes from a purchase lot."
-                    : !await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == partijId && c.SupplyCommitmentLine.ProductVariantId == variantId, cancellationToken)
-                        && !await _db.SupplyCommitmentLines.AsNoTracking().AnyAsync(l => l.PartijId == partijId && l.ProductVariantId == variantId, cancellationToken)
+                    : !await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == partijId && c.SupplyCommitmentLine.ProductVariantId == variantId
+                            && (c.Quantity - c.DispatchedQuantity - c.SplitOffQuantity > 0m), cancellationToken)
+                        && !await _db.SupplyCommitmentLines.AsNoTracking().AnyAsync(l => l.PartijId == partijId && l.ProductVariantId == variantId
+                            && SupplyRules.AllocatableCommitmentStatuses.Contains(l.SupplyCommitment.Status), cancellationToken)
                         ? $"Lot {lot.Number} has no stock or expected supply of this article."
                         : null;
                 if (message != null)
