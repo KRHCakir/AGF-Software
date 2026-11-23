@@ -9,16 +9,23 @@ import { parseUnitPrice } from '../../lib/packaging';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
 import { isMacPlatform, matchShortcut, shortcutLabel } from '../../lib/shortcuts';
 import { type PurchaseArticle, type PurchaseLineDraft, type PurchaseLineRow, isBlankPurchaseLine, purchaseLineTotals } from '../../lib/purchaseOrderLines';
+import { type AmountLine, VAT_RATES, formatPercent, parseDiscount } from '../../lib/orderLineMath';
+import { formatDecimalInput } from '../../lib/decimal';
 import { type LineLimits, lineLimits } from '../../lib/purchaseOrderEdit';
 import { ggnHint, ggnProblem } from '../../lib/productGgn';
 import { normalizeGgn } from '../../lib/ggn';
 import type { GgnProposal } from '../../types/productGgn';
 import { unitLabelKey } from '../../lib/units';
 import type { ProductOption, VariantOption } from '../../types/referenceData';
-import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
+import { OrderAmountsSummary, PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from '../purchase/PurchaseLineTable';
 import ProductVariantPicker from '../shared/ProductVariantPicker';
 import FieldError, { fieldProps, inputClass } from './FieldError';
 import { secondaryButtonClass } from './SuccessPanel';
+
+export interface LineFieldNames { quantity: string; unit: string; gross: string; net?: string }
+export const PURCHASE_LINE_FIELDS: LineFieldNames = { quantity: 'expectedQuantity', unit: 'expectedUnit', gross: 'expectedGrossWeightKg' };
+// De verkooporder (POST /api/sales-orders): ook een fout op de netto kg staat bij de bruto.
+export const SALES_LINE_FIELDS: LineFieldNames = { quantity: 'quantity', unit: 'unit', gross: 'grossWeightKg', net: 'netWeightKg' };
 
 const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underline underline-offset-2 disabled:text-gray-500';
 
@@ -31,9 +38,20 @@ const linkButton = 'whitespace-nowrap text-xs font-medium text-blue-800 underlin
 // wat vastligt na ontvangst: dan staat de uitleg bij het veld (artikel vast, nooit onder ontvangen, regel blijft staan).
 // Certificaten deel 2: na Prijs het GGN van het product (Tab: Product, Aantal, Prijs, GGN). Het voorstel uit de GGN-certificaten van de
 // leverancier staat eronder (voorgesteld, kiezen bij meer, of geen); de gebruiker mag altijd een eigen nummer typen of het leegmaken.
-export default function PurchaseOrderLines({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
-    currency = null, rate = null, ggnProposalOf = () => undefined }: {
-    lines: PurchaseLineDraft[];
+// Feedback 22 november: na Prijs de korting (leeg = geen) en het btw-tarief (voorstel uit het artikel), dus Tab: Product, Aantal, Prijs,
+// Korting, Btw, GGN; onder de tabel de btw per tarief. Dezelfde component voor de verkooporder: zonder GGN-kolom (`withGgn` onwaar) is
+// Btw het laatste veld, `extraAmounts` telt emballage mee in de btw, en `tourPrefix` geeft de rondleiding haar eigen namen.
+export default function PurchaseOrderLines<D extends PurchaseLineDraft = PurchaseLineDraft>({ lines, rows, products, variantOf, locked, isDirect, errors, onChange, onAdd, onRemove, onNewArticle, productExtra, limits = () => lineLimits(undefined),
+    currency = null, rate = null, ggnProposalOf = () => undefined, withGgn = true, extraAmounts = [], tourPrefix = 'supply-line', testId = 'purchase-lines', showAmounts = true, fields = PURCHASE_LINE_FIELDS }: {
+    lines: D[];
+    // De veldnamen van de server in ids en foutsleutels (lines[i].expectedQuantity bij inkoop, lines[i].quantity bij verkoop).
+    fields?: LineFieldNames;
+    withGgn?: boolean;
+    // Onwaar: de btw-samenvatting staat elders (de verkooporder zet haar onder de emballage).
+    showAmounts?: boolean;
+    extraAmounts?: readonly AmountLine[];
+    tourPrefix?: string;
+    testId?: string;
     // Valuta-ronde: valuta van de order (prijzen en totalen staan erin) en de koers voor het eurobedrag onder het totaal.
     currency?: string | null;
     rate?: number | null;
@@ -43,13 +61,13 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
     locked: boolean;
     isDirect: boolean;
     errors: (key: string) => string[] | undefined;
-    onChange: (key: string, patch: Partial<PurchaseLineDraft>) => void;
+    onChange: (key: string, patch: Partial<D>) => void;
     onAdd: () => void;
     onRemove: (key: string) => void;
     onNewArticle?: (key: string) => void;
-    productExtra: (line: PurchaseLineDraft, index: number) => ReactNode;
+    productExtra: (line: D, index: number) => ReactNode;
     limits?: (key: string) => LineLimits;
-    ggnProposalOf?: (line: PurchaseLineDraft) => GgnProposal | undefined;
+    ggnProposalOf?: (line: D) => GgnProposal | undefined;
 }) {
     const { t, locale } = useTranslation();
     const labels = usePurchaseLineLabels();
@@ -75,13 +93,13 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
         onAdd();
     };
 
-    const openGross = (line: PurchaseLineDraft, row: PurchaseLineRow) => {
+    const openGross = (line: D, row: PurchaseLineRow) => {
         setGrossOpen((current) => new Set(current).add(line.key));
-        if (!line.grossKgEntered) onChange(line.key, { grossKg: row.weight?.grossWeightKg == null ? '' : formatKgInput(row.weight.grossWeightKg) });
-        setTimeout(() => document.getElementById(`lines[${lines.indexOf(line)}].expectedGrossWeightKg-input`)?.focus(), 0);
+        if (!line.grossKgEntered) onChange(line.key, { grossKg: row.weight?.grossWeightKg == null ? '' : formatKgInput(row.weight.grossWeightKg) } as Partial<D>);
+        setTimeout(() => document.getElementById(`lines[${lines.indexOf(line)}].${fields.gross}-input`)?.focus(), 0);
     };
     // Alt+B, Alt+A en Alt+R in een veld van de regel: dezelfde acties als de knoppen.
-    const onRowKey = (event: KeyboardEvent<HTMLTableRowElement>, line: PurchaseLineDraft, row: PurchaseLineRow, index: number) => {
+    const onRowKey = (event: KeyboardEvent<HTMLTableRowElement>, line: D, row: PurchaseLineRow, index: number) => {
         if (locked) return;
         const action = matchShortcut(event, isMac);
         if (action === 'adjustGross' && line.productVariantId !== '') {
@@ -97,16 +115,19 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
             setTimeout(() => document.getElementById(`lines[${next}].productVariantId-input`)?.focus(), 0);
         }
     };
-    const resetGross = (line: PurchaseLineDraft) => {
+    const resetGross = (line: D) => {
         setGrossOpen((current) => { const next = new Set(current); next.delete(line.key); return next; });
-        onChange(line.key, { grossKg: '', grossKgEntered: false });
+        onChange(line.key, { grossKg: '', grossKgEntered: false } as Partial<D>);
     };
+    const percent = (value: number) => formatPercent(value, locale);
+    const filled = rows.filter((_, index) => !isBlankPurchaseLine(lines[index]));
+    const totals = purchaseLineTotals(filled, extraAmounts);
 
     return (
         <div className="rounded border border-gray-200 max-md:border-0">
-            <table className={purchaseLineTableClass} data-testid="purchase-lines">
+            <table className={purchaseLineTableClass} data-testid={testId}>
                 <PurchaseLineHead trailing={<>
-                    <th scope="col" className="px-2 py-1.5">{t('po_line_col_ggn')}</th>
+                    {withGgn && <th scope="col" className="px-2 py-1.5">{t('po_line_col_ggn')}</th>}
                     {isDirect && <th scope="col" className="px-2 py-1.5">{t('supply_lot_optional')}</th>}
                     <th scope="col" className="px-2 py-1.5"><span className="sr-only">{t('supply_remove_line')}</span></th>
                 </>} />
@@ -116,7 +137,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         const row = rows[index];
                         const variant = line.productVariantId === '' ? undefined : variantOf(Number(line.productVariantId));
                         const editingGross = line.grossKgEntered === true || grossOpen.has(line.key);
-                        const last = isDirect ? 'lot' : 'ggn';
+                        const last = isDirect ? 'lot' : withGgn ? 'ggn' : 'vat';
                         const proposal = line.productVariantId === '' ? undefined : ggnProposalOf(line);
                         const hint = ggnHint(line, proposal);
                         const problem = ggnProblem(line.ggn ?? '');
@@ -124,16 +145,17 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         const choosing = proposal?.kind === 'Many' && (normalizeGgn(line.ggn ?? '') === '' || proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')));
                         const limit = limits(line.key);
                         return (
-                            <tr key={line.key} className={purchaseLineRowClass(index)} data-tour="supply-line" data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
+                            <tr key={line.key} className={purchaseLineRowClass(index)} data-tour={tourPrefix} data-tour-key={index} onKeyDown={(event) => onRowKey(event, line, row, index)}>
                                 <td {...lineCell('product', labels.product, 'w-64 max-md:w-auto', true)}>
                                     <label htmlFor={`${prefix}.productVariantId-input`} className="sr-only">{t('supply_variant')} {index + 1}</label>
-                                    <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`supply-line-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
+                                    <ProductVariantPicker id={`${prefix}.productVariantId`} dataTour={`${tourPrefix}-product-${index}`} ariaLabel={`${t('supply_variant')} ${index + 1}`} products={products}
                                         value={line.productVariantId} disabled={locked || limit.articleFixed} invalid={(errors(`${prefix}.productVariantId`) ?? []).length > 0}
                                         describedBy={(errors(`${prefix}.productVariantId`) ?? []).length > 0 ? `${prefix}.productVariantId` : undefined}
                                         onChange={(variantId) => {
-                                            onChange(line.key, { productVariantId: variantId, unit: '' });
+                                            // Een ander artikel: ook het btw-tarief van dat artikel (review: een eerder gekozen tarief hoort bij het vorige artikel).
+                                            onChange(line.key, { productVariantId: variantId, unit: '', vat: '', vatTouched: false } as Partial<D>);
                                             // Feedback 22 november: een gekozen artikel staat direct op de regel en de cursor springt naar Aantal.
-                                            if (variantId !== '') focusQuantityAfterPick(`${prefix}.productVariantId-input`, `${prefix}.expectedQuantity-input`);
+                                            if (variantId !== '') focusQuantityAfterPick(`${prefix}.productVariantId-input`, `${prefix}.${fields.quantity}-input`);
                                         }} />
                                     <FieldError id={`${prefix}.productVariantId`} messages={errors(`${prefix}.productVariantId`)} />
                                     <FieldError id={prefix} messages={errors(prefix)} />
@@ -149,9 +171,9 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                     <div className="space-y-1">
                                         {editingGross ? (
                                             <>
-                                                <label htmlFor={`${prefix}.expectedGrossWeightKg-input`} className="sr-only">{labels.gross} {index + 1}</label>
-                                                <input {...fieldProps(`${prefix}.expectedGrossWeightKg`, errors(`${prefix}.expectedGrossWeightKg`))} inputMode="decimal" data-decimals={2} value={line.grossKg ?? ''} disabled={locked}
-                                                    data-tour="supply-line-gross" data-tour-key={index} onChange={(event) => onChange(line.key, { grossKg: event.target.value, grossKgEntered: true })}
+                                                <label htmlFor={`${prefix}.${fields.gross}-input`} className="sr-only">{labels.gross} {index + 1}</label>
+                                                <input {...fieldProps(`${prefix}.${fields.gross}`, errors(`${prefix}.${fields.gross}`))} inputMode="decimal" data-decimals={2} value={line.grossKg ?? ''} disabled={locked}
+                                                    data-tour={`${tourPrefix}-gross`} data-tour-key={index} onChange={(event) => onChange(line.key, { grossKg: event.target.value, grossKgEntered: true } as Partial<D>)}
                                                     className={`${inputClass} !mt-0 w-24 text-right`} />
                                                 {line.grossKgEntered && <span className="block text-xs font-medium text-amber-900" data-testid={`${prefix}.gross-deviates`}>{t('po_line_gross_deviates')}</span>}
                                                 <button type="button" tabIndex={-1} disabled={locked} className={linkButton} onClick={() => resetGross(line)}>↺ {t('po_line_gross_reset')}</button>
@@ -160,21 +182,22 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                             <>
                                                 <span data-testid={`${prefix}.gross`}>{kg(row?.weight?.grossWeightKg)}</span>
                                                 {variant && !locked && (
-                                                    <button type="button" tabIndex={-1} title={`${t('po_line_gross_adjust')} (${shortcutLabel('adjustGross', isMac)})`} className={`${linkButton} block`} data-tour="supply-line-gross-adjust" data-tour-key={index}
+                                                    <button type="button" tabIndex={-1} title={`${t('po_line_gross_adjust')} (${shortcutLabel('adjustGross', isMac)})`} className={`${linkButton} block`} data-tour={`${tourPrefix}-gross-adjust`} data-tour-key={index}
                                                         onClick={() => openGross(line, row)}>{t('po_line_gross_adjust')}</button>
                                                 )}
                                             </>
                                         )}
-                                        <FieldError id={`${prefix}.expectedGrossWeightKg`} messages={errors(`${prefix}.expectedGrossWeightKg`)} />
+                                        <FieldError id={`${prefix}.${fields.gross}`} messages={errors(`${prefix}.${fields.gross}`)} />
+                                        {fields.net && <FieldError id={`${prefix}.${fields.net}`} messages={errors(`${prefix}.${fields.net}`)} />}
                                     </div>
                                 </td>
                                 <td {...lineCell('net', labels.net)} data-testid={`${prefix}.net`}>{kg(row?.weight?.netWeightKg)}</td>
                                 <td {...lineCell('quantity', labels.quantity, 'min-w-[8rem]')}>
                                     <div className="space-y-1">
                                         <div className="flex items-center justify-end gap-1.5">
-                                            <label htmlFor={`${prefix}.expectedQuantity-input`} className="sr-only">{labels.quantity} {index + 1}</label>
-                                            <input {...fieldProps(`${prefix}.expectedQuantity`, errors(`${prefix}.expectedQuantity`))} inputMode="decimal" value={line.quantity} disabled={locked}
-                                                data-tour="supply-line-quantity" data-tour-key={index} onChange={(event) => onChange(line.key, { quantity: event.target.value })}
+                                            <label htmlFor={`${prefix}.${fields.quantity}-input`} className="sr-only">{labels.quantity} {index + 1}</label>
+                                            <input {...fieldProps(`${prefix}.${fields.quantity}`, errors(`${prefix}.${fields.quantity}`))} inputMode="decimal" value={line.quantity} disabled={locked}
+                                                data-tour={`${tourPrefix}-quantity`} data-tour-key={index} onChange={(event) => onChange(line.key, { quantity: event.target.value } as Partial<D>)}
                                                 className={`${inputClass} !mt-0 w-20 text-right`} />
                                             {row?.unit && <span className="text-xs text-gray-700" data-testid={`${prefix}.unit`}>{t(unitLabelKey(row.unit)).toLowerCase()}</span>}
                                         </div>
@@ -186,25 +209,46 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         {limit.minimumQuantity !== null && (
                                             <span className="block text-xs text-gray-700" data-testid={`${prefix}.minimum`}>{t('po_edit_min_quantity', { received: formatQuantity(limit.minimumQuantity, locale) })}</span>
                                         )}
-                                        <FieldError id={`${prefix}.expectedQuantity`} messages={errors(`${prefix}.expectedQuantity`)} />
-                                        <FieldError id={`${prefix}.expectedUnit`} messages={errors(`${prefix}.expectedUnit`)} />
+                                        <FieldError id={`${prefix}.${fields.quantity}`} messages={errors(`${prefix}.${fields.quantity}`)} />
+                                        <FieldError id={`${prefix}.${fields.unit}`} messages={errors(`${prefix}.${fields.unit}`)} />
                                     </div>
                                 </td>
                                 <td {...lineCell('packaging', labels.packaging)} data-testid={`${prefix}.packaging`}>{text(variant?.packaging)}</td>
                                 <td {...lineCell('price', labels.price, 'min-w-[7rem]')}>
                                     <label htmlFor={`${prefix}.unitPrice-input`} className="sr-only">{labels.price} {index + 1}</label>
                                     <input {...fieldProps(`${prefix}.unitPrice`, errors(`${prefix}.unitPrice`))} inputMode="decimal" data-decimals={2} value={line.unitPrice} disabled={locked}
-                                        data-tour="supply-line-price" data-tour-key={index} onChange={(event) => onChange(line.key, { unitPrice: event.target.value })}
-                                        onBlur={() => { const price = parseUnitPrice(line.unitPrice); if (price.ok && price.value !== null) onChange(line.key, { unitPrice: formatAmountInput(price.value) }); }}
+                                        data-tour={`${tourPrefix}-price`} data-tour-key={index} onChange={(event) => onChange(line.key, { unitPrice: event.target.value } as Partial<D>)}
+                                        onBlur={() => { const price = parseUnitPrice(line.unitPrice); if (price.ok && price.value !== null) onChange(line.key, { unitPrice: formatAmountInput(price.value) } as Partial<D>); }}
                                         className={`${inputClass} !mt-0 w-24 text-right`} />
                                     <FieldError id={`${prefix}.unitPrice`} messages={errors(`${prefix}.unitPrice`)} />
                                 </td>
+                                <td {...lineCell('discount', labels.discount, 'min-w-[5rem]')}>
+                                    <label htmlFor={`${prefix}.discountPercentage-input`} className="sr-only">{labels.discount} {index + 1}</label>
+                                    <input {...fieldProps(`${prefix}.discountPercentage`, errors(`${prefix}.discountPercentage`))} inputMode="decimal" value={line.discount ?? ''} disabled={locked}
+                                        title={t('po_line_discount_hint')} data-tour={`${tourPrefix}-discount`} data-tour-key={index}
+                                        onChange={(event) => onChange(line.key, { discount: event.target.value } as Partial<D>)}
+                                        onBlur={() => { const discount = parseDiscount(line.discount ?? ''); if (discount.ok && discount.value !== null) onChange(line.key, { discount: formatDecimalInput(discount.value, 2) } as Partial<D>); }}
+                                        className={`${inputClass} !mt-0 w-16 text-right`} />
+                                    <FieldError id={`${prefix}.discountPercentage`} messages={errors(`${prefix}.discountPercentage`)} />
+                                </td>
+                                <td {...lineCell('vat', labels.vat, 'min-w-[5.5rem]')}>
+                                    <label htmlFor={`${prefix}.vatPercentage-input`} className="sr-only">{labels.vat} {index + 1}</label>
+                                    <select {...fieldProps(`${prefix}.vatPercentage`, errors(`${prefix}.vatPercentage`))} value={row?.vat == null ? '' : String(row.vat)} disabled={locked}
+                                        data-tour={`${tourPrefix}-vat`} data-tour-key={index}
+                                        onChange={(event) => onChange(line.key, { vat: event.target.value, vatTouched: true } as Partial<D>)}
+                                        onKeyDown={last === 'vat' ? (event) => onLastField(event, index) : undefined}
+                                        className={`${inputClass} !mt-0 w-20 text-right`}>
+                                        <option value="">{t('po_line_vat_none')}</option>
+                                        {VAT_RATES.map((rate) => <option key={rate} value={String(rate)}>{percent(rate)}%</option>)}
+                                    </select>
+                                    <FieldError id={`${prefix}.vatPercentage`} messages={errors(`${prefix}.vatPercentage`)} />
+                                </td>
                                 <td {...lineCell('total', labels.total)} data-testid={`${prefix}.total`}>{row?.total == null ? '–' : formatMoney(row.total, currency, locale)}</td>
-                                <td {...lineCell('extra', t('po_line_col_ggn'), 'min-w-[10rem]')}>
+                                {withGgn && <td {...lineCell('extra', t('po_line_col_ggn'), 'min-w-[10rem]')}>
                                     <div className="space-y-1 max-md:text-right">
                                         <label htmlFor={`${prefix}.ggn-input`} className="sr-only">{t('po_line_col_ggn')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.ggn`, errors(`${prefix}.ggn`))} value={line.ggn ?? ''} disabled={locked} inputMode="numeric" maxLength={20}
-                                            data-tour="supply-line-ggn" data-tour-key={index} onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}
+                                            data-tour={`${tourPrefix}-ggn`} data-tour-key={index} onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true } as Partial<D>)}
                                             onKeyDown={last === 'ggn' && !choosing ? (event) => onLastField(event, index) : undefined}
                                             className={`${inputClass} !mt-0 w-40 font-mono`} />
                                         {/* Kiezen bij meer treffers; met een eigen nummer (niet in de lijst) is er niets te kiezen. */}
@@ -212,7 +256,7 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                             <select aria-label={t('po_line_ggn_choose_label', { n: String(index + 1) })} disabled={locked} className={`${inputClass} !mt-0 w-40 text-xs`}
                                                 onKeyDown={last === 'ggn' ? (event) => onLastField(event, index) : undefined}
                                                 value={proposal.options.some((o) => o.ggn === normalizeGgn(line.ggn ?? '')) ? normalizeGgn(line.ggn ?? '') : ''} data-testid={`${prefix}.ggn-choice`}
-                                                onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true })}>
+                                                onChange={(event) => onChange(line.key, { ggn: event.target.value, ggnTouched: true } as Partial<D>)}>
                                                 <option value="">{t('po_line_ggn_choose')}</option>
                                                 {proposal.options.map((o) => <option key={o.ggn} value={o.ggn}>{o.ggn}{o.producerName ? ` · ${o.producerName}` : ''}</option>)}
                                             </select>
@@ -221,12 +265,12 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                                         {problem === 'ggn_check_digit' && <span className="block text-xs font-medium text-amber-900" data-testid={`${prefix}.ggn-check-digit`}>{t('cert_warning_ggn_check_digit')}</span>}
                                         <FieldError id={`${prefix}.ggn`} messages={errors(`${prefix}.ggn`)} />
                                     </div>
-                                </td>
+                                </td>}
                                 {isDirect && (
                                     <td {...lineCell('extra', t('supply_lot_optional'))}>
                                         <label htmlFor={`${prefix}.lotNumber-input`} className="sr-only">{t('supply_lot_optional')} {index + 1}</label>
                                         <input {...fieldProps(`${prefix}.lotNumber`, errors(`${prefix}.lotNumber`))} value={line.lotNumber} disabled={locked} maxLength={100}
-                                            onChange={(event) => onChange(line.key, { lotNumber: event.target.value })} onKeyDown={(event) => onLastField(event, index)} className={`${inputClass} !mt-0`} />
+                                            onChange={(event) => onChange(line.key, { lotNumber: event.target.value } as Partial<D>)} onKeyDown={(event) => onLastField(event, index)} className={`${inputClass} !mt-0`} />
                                         <FieldError id={`${prefix}.lotNumber`} messages={errors(`${prefix}.lotNumber`)} />
                                     </td>
                                 )}
@@ -239,8 +283,9 @@ export default function PurchaseOrderLines({ lines, rows, products, variantOf, l
                         );
                     })}
                 </tbody>
-                <PurchaseLineTotalsRow totals={purchaseLineTotals(rows.filter((_, index) => !isBlankPurchaseLine(lines[index])))} trailingCells={isDirect ? 3 : 2} currency={currency} rate={rate} />
+                <PurchaseLineTotalsRow totals={totals} trailingCells={(isDirect ? 2 : 1) + (withGgn ? 1 : 0)} currency={currency} rate={rate} />
             </table>
+            {showAmounts && <div className="px-2 pb-2"><OrderAmountsSummary amounts={totals.amounts} currency={currency} rate={rate} /></div>}
             {!locked && <p className="px-2 py-1 text-xs text-gray-600" data-testid="purchase-lines-keys">{t('po_line_keys_hint', { gross: shortcutLabel('adjustGross', isMac), article: shortcutLabel('newArticle', isMac), remove: shortcutLabel('removeLine', isMac) })}</p>}
         </div>
     );

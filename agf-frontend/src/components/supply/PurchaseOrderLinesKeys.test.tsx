@@ -31,11 +31,11 @@ describe('purchase order lines: keyboard', () => {
     beforeEach(() => { mounted = new Mounted(); });
     afterEach(async () => { await mounted.unmount(); });
 
-    test('Tab goes through product, quantity, price and GGN only; every button is outside the Tab order and names its shortcut', async () => {
+    test('Tab goes through product, quantity, price, discount, VAT and GGN only; every button is outside the Tab order and names its shortcut', async () => {
         await mounted.render(<Harness />);
         const row = mounted.container.querySelector('tbody tr')!;
         const tabbable = Array.from(row.querySelectorAll<HTMLElement>('input, button, select')).filter((element) => element.tabIndex >= 0).map((element) => element.id);
-        assert.deepEqual(tabbable, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input', 'lines[0].ggn-input']);
+        assert.deepEqual(tabbable, ['lines[0].productVariantId-input', 'lines[0].expectedQuantity-input', 'lines[0].unitPrice-input', 'lines[0].discountPercentage-input', 'lines[0].vatPercentage-input', 'lines[0].ggn-input']);
         assert.ok(Array.from(row.querySelectorAll<HTMLButtonElement>('button')).every((button) => button.tabIndex === -1));
         const adjust = row.querySelector<HTMLButtonElement>('[data-tour="supply-line-gross-adjust"]')!;
         const remove = row.querySelector<HTMLButtonElement>('button[aria-label^="supply_remove_line_n"]')!;

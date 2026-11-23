@@ -18,9 +18,10 @@ import PurchaseOrderDocument, { PurchaseOrderChanges } from './PurchaseOrderDocu
 import DeviationsSection from './DeviationsSection';
 import ReceiptsSection from './ReceiptsSection';
 import { sectionClass } from './sectionClass';
-import { PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from './PurchaseLineTable';
+import { OrderAmountsSummary, PurchaseLineHead, PurchaseLineTotalsRow, lineCell, purchaseLineBodyClass, purchaseLineRowClass, purchaseLineTableClass, usePurchaseLineLabels } from './PurchaseLineTable';
 import { unitLabelKey } from '../../lib/units';
 import { formatPallets, palletWordKey } from '../../lib/purchaseLine';
+import { formatPercent } from '../../lib/orderLineMath';
 import type { PackageUnit } from '../../types/availability';
 import { rateLine } from '../../lib/documentCurrency';
 import { isEuro } from '../../lib/exchangeRate';
@@ -151,6 +152,8 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                                 </td>
                                 <td {...lineCell('packaging', labels.packaging)}>{line.packaging || '–'}</td>
                                 <td {...lineCell('price', labels.price)}>{line.unitPrice == null ? '–' : formatMoney(line.unitPrice, order.currency ?? null, locale)}</td>
+                                <td {...lineCell('discount', labels.discount)}>{line.discountPercentage == null ? '–' : `${formatPercent(line.discountPercentage, locale)}%`}</td>
+                                <td {...lineCell('vat', labels.vat)}>{line.vatPercentage == null ? '–' : `${formatPercent(line.vatPercentage, locale)}%`}</td>
                                 <td {...lineCell('total', labels.total)}>{line.lineTotal == null ? '–' : formatMoney(line.lineTotal, order.currency ?? null, locale)}</td>
                             </tr>
                         ))}
@@ -160,6 +163,7 @@ export default function PurchaseOrderDetail({ order, onChanged, invoices }: {
                         shownGrossKg: order.totals.grossWeightKg === null ? null : shownKgTotal(order.lines.map((line) => line.expectedGrossWeightKg)) }}
                         currency={order.currency ?? null} rate={order.exchangeRate ?? null} />}
                 </table>
+                <OrderAmountsSummary amounts={order.totals?.amounts} currency={order.currency ?? null} rate={order.exchangeRate ?? null} />
             </section>
 
             <ReceiptsSection order={order} onChanged={onChanged} />
