@@ -14,12 +14,11 @@ import ReceiveOrderPicker from './ReceiveOrderPicker';
 import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 import { SignedInAs } from '../shared/CurrentUserContext';
 
-export type SupplyTask = 'purchase-order' | 'receipt' | 'direct-trade';
+export type SupplyTask = 'purchase-order' | 'receipt';
 
 const TASKS: Record<SupplyTask, { titleKey: string; introKey: string; route: SupplyRoute }> = {
     'purchase-order': { titleKey: 'nav_purchase_order_new', introKey: 'intro_purchase_order_new', route: 'Warehouse' },
     receipt: { titleKey: 'nav_receipts', introKey: 'intro_receipts', route: 'Warehouse' },
-    'direct-trade': { titleKey: 'nav_direct_trade', introKey: 'intro_direct_trade', route: 'DirectTrade' },
 };
 
 // Eén scherm per taak, op dezelfde formulieren als de vroegere werkplek "Aanvoer": Inkooporder aanmaken (eigen magazijn), Ontvangst

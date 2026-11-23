@@ -26,12 +26,6 @@ describe('SupplyWorkspace', () => {
         assert.equal(mounted.container.querySelector('input[name="supply-destination"], input[name="supply-mode"]'), null);
     });
 
-    test('Klantgebonden aanvoer: the DirectTrade form', async () => {
-        await mounted.render(<SupplyWorkspace task="direct-trade" />);
-        await mounted.waitFor(() => mounted.hasText('supply_save_plan_direct'), 'direct form');
-        assert.equal(mounted.container.querySelector('h1')?.textContent, 'nav_direct_trade');
-    });
-
     test('Ontvangst with ?order= shows what is expected for that purchase order', async () => {
         await mounted.render(<SupplyWorkspace task="receipt" orderId={3} />);
         await mounted.waitFor(() => gets.some((url) => url.endsWith('/receipts/orders/3')), 'order 3 loaded');

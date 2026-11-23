@@ -43,6 +43,7 @@ export default function Home() {
         <div className="mt-2 flex flex-wrap gap-3 text-sm">
           <Link href="/orders" className="font-medium text-amber-950 underline underline-offset-2">{t('orders_legacy_nav')}</Link>
           <Link href="/inventory" className="font-medium text-amber-950 underline underline-offset-2">{t('inventory_legacy_nav')}</Link>
+          <Link href="/direct-trade" className="font-medium text-amber-950 underline underline-offset-2" data-tour="start-direct-trade-archive">{t('direct_trade_archive_title')}</Link>
           <Link href="/incoming-invoices" className="font-medium text-amber-950 underline underline-offset-2">{t('invoices_legacy_nav')}</Link>
           <Link href="/tracking" className="font-medium text-amber-950 underline underline-offset-2">{t('tracking_nav')}</Link>
         </div>

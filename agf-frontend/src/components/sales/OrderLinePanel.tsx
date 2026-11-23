@@ -370,9 +370,8 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
                         <button type="button" data-tour="sales-choose-stock" className={secondaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
                             {t('sales_choose_stock')}
                         </button>
-                        <button type="button" className={`${secondaryButtonClass} border-violet-300 text-violet-900 hover:bg-violet-50`} disabled={!canStart} onClick={() => { setNotice(null); setAllocating(true); }}>
-                            <span aria-hidden="true">🔒 </span>{t('sales_allocate_direct_trade')}
-                        </button>
+                        {/* Feedback 22 november: geen nieuwe klantgebonden toewijzing meer (directe handel is een gewone inkooporder met een locatie
+                            Onderweg); een toewijzing die nog onderweg is, wordt hieronder afgemaakt. */}
                         {!readOnly && line.openQuantity === 0 && (
                             <span className="text-xs text-gray-600">
                                 {progress.fulfilled ? t('sales_line_fulfilled_hint')

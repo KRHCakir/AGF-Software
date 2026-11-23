@@ -7,7 +7,7 @@ describe('process menu', () => {
         assert.deepEqual(NAV_GROUPS.map((group) => group.id), ['purchase', 'stock', 'sales', 'master']);
         assert.deepEqual(NAV_GROUPS[0].items.map((item) => item.href), ['/purchase-orders', '/purchase-orders/new', '/receipts', '/inspection', '/purchase-invoices']);
         assert.deepEqual(NAV_GROUPS[1].items.map((item) => item.href), ['/availability', '/partijen']);
-        assert.deepEqual(NAV_GROUPS[2].items.map((item) => item.href), ['/sales-orders', '/direct-trade', '/mail-drafts']);
+        assert.deepEqual(NAV_GROUPS[2].items.map((item) => item.href), ['/sales-orders', '/mail-drafts']);
         assert.deepEqual(NAV_GROUPS[3].items.map((item) => item.href), ['/relations', '/articles', '/certificates']);
         const all = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
         for (const missing of ['/lots', '/deliveries', '/sales-invoices']) assert.equal(all.includes(missing), false, `${missing} has no page yet`);
@@ -27,7 +27,8 @@ describe('process menu', () => {
         assert.deepEqual(activeNav('/purchase-invoices/new'), { itemId: 'purchase-invoices', groupId: 'purchase' });
         assert.deepEqual(activeNav('/availability'), { itemId: 'availability', groupId: 'stock' });
         assert.deepEqual(activeNav('/partijen'), { itemId: 'partijen', groupId: 'stock' });
-        assert.deepEqual(activeNav('/direct-trade'), { itemId: 'direct-trade', groupId: 'sales' });
+        // Feedback 22 november: Direct trade staat niet meer in het menu (alleen nog als archief, via Start).
+        assert.equal(activeNav('/direct-trade'), null);
         assert.deepEqual(activeNav('/dashboard'), { itemId: 'start', groupId: null });
         assert.deepEqual(activeNav('/settings'), { itemId: 'settings', groupId: null });
         assert.equal(activeNav('/sales-orders-archive'), null, 'a prefix of another word is not a match');
