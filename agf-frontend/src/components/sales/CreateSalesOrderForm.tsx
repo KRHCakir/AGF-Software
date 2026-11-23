@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatQuantity } from '../../lib/availability';
 import { formatCalendarDate, isoToDateInput } from '../../lib/calendarDate';
-import { formatAmountInput, formatDecimalInput, formatKgInput } from '../../lib/decimal';
+import { formatAmountInput, formatDecimalInput, formatKgInput, parsePositiveDecimal } from '../../lib/decimal';
 import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrderCommand, withAttempt } from '../../lib/pendingCommands';
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
@@ -221,17 +221,34 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     };
 
     // Splitsen: een aangepaste bruto wordt gewist (opnieuw berekend uit het nieuwe aantal; een getypt totaal klopt na het splitsen niet meer).
+    // Een aangepaste netto wordt naar verhouding van het aantal over beide regels verdeeld.
     // Deze regel wordt het deel uit voorraad, direct eronder een regel met hetzelfde artikel, dezelfde eenheid, prijs, korting en btw voor
     // de rest uit verwachte aanvoer.
     const splitLine = (key: string, stock: number, expected: number) => {
         if (locked || draft.lines.length >= MAX_ORDER_LINES) return;
         setDraft((current) => ({
             ...current,
-            lines: current.lines.flatMap((line, index) => (line.key !== key ? [line] : [
-                { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, supplySource: 'Stock' as const, sourceTouched: true },
-                { ...emptyLine(), productVariantId: line.productVariantId, unit: unitOf(index) as OrderLineDraft['unit'], quantity: formatDecimalInput(expected), unitPrice: line.unitPrice,
-                    discount: line.discount, vat: line.vat, vatTouched: line.vatTouched, supplySource: 'Expected' as const, sourceTouched: true },
-            ])),
+            lines: current.lines.flatMap((line, index) => {
+                if (line.key !== key) return [line];
+                // Een zelf ingevoerd netto gewicht (artikel zonder standaard) gaat niet verloren: naar verhouding over beide regels.
+                let stockNet: string | null = null;
+                let expectedNet: string | null = null;
+                const enteredNet = line.netKgEntered === true ? parsePositiveDecimal(line.netKg ?? '') : null;
+                if (enteredNet?.ok && stock + expected > 0) {
+                    const stockPart = Math.round((enteredNet.value * stock / (stock + expected)) * 1000) / 1000;
+                    const expectedPart = Math.round((enteredNet.value - stockPart) * 1000) / 1000;
+                    if (stockPart > 0 && expectedPart > 0) {
+                        stockNet = formatKgInput(stockPart);
+                        expectedNet = formatKgInput(expectedPart);
+                    }
+                }
+                return [
+                    { ...line, quantity: formatDecimalInput(stock), grossKg: '', grossKgEntered: false, netKg: stockNet ?? '', netKgEntered: stockNet !== null, supplySource: 'Stock' as const, sourceTouched: true },
+                    { ...emptyLine(), productVariantId: line.productVariantId, unit: unitOf(index) as OrderLineDraft['unit'], quantity: formatDecimalInput(expected), unitPrice: line.unitPrice,
+                        discount: line.discount, vat: line.vat, vatTouched: line.vatTouched, supplySource: 'Expected' as const, sourceTouched: true,
+                        ...(expectedNet !== null ? { netKg: expectedNet, netKgEntered: true } : {}) },
+                ];
+            }),
         }));
         edited();
     };
