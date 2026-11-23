@@ -123,7 +123,8 @@ public sealed class SalesPartijNumberingTests : IDisposable
 
         await using var verify = _s.Factory.CreateContext();
         Assert.Equal(new[] { "V-2611001", "V-2611002", "V-2611003", "V-2611004" }, await verify.Partijen.Where(p => p.Kind == "Sales").OrderBy(p => p.Number).Select(p => p.Number).ToListAsync());
-        Assert.Equal(4, await verify.SalesOrders.CountAsync(o => o.SalesPartij != null));
+        // Feedback 22 november: elke order heeft één eerste levering met haar verkoop-partij.
+        Assert.Equal(4, await verify.SalesOrders.CountAsync(o => o.Deliveries.Count(d => d.Sequence == 1) == 1));
     }
 
     [Fact]

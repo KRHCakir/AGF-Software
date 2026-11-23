@@ -33,7 +33,7 @@ public class LoadingSlipRulesTests : IDisposable
     private async Task<LoadingSlipSnapshot> BuildAsync(int orderId, string warehouse = null)
     {
         await using var db = _factory.CreateContext();
-        var order = await db.SalesOrders.Include(o => o.Customer).Include(o => o.SalesPartij).Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
+        var order = await db.SalesOrders.Include(o => o.Customer).Include(o => o.Deliveries).ThenInclude(d => d.Partij).Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
             .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
             .Include(o => o.Lines).ThenInclude(l => l.Reservations).AsSplitQuery().SingleAsync(o => o.Id == orderId);
         return LoadingSlipBuilder.Build(order, new CompanySettings { CompanyName = "Kwekerij Voorbeeld B.V.", Address = "Loodsweg 1, Barendrecht", LoadingSlipWarehouseAddress = warehouse });
@@ -88,9 +88,16 @@ public class LoadingSlipRulesTests : IDisposable
         Assert.Equal(("Supplier B · LOT-A", "P-WH"), (slip.Rows[0].Supplier, slip.Rows[0].PalletReference));
     }
 
-    private static SalesOrderDocument Version(int orderId, int version) => new()
+    // Feedback 22 november: een document hoort bij een levering van zijn order (hier de eerste).
+    private SalesOrderDocument Version(int orderId, int version)
     {
-        SalesOrderId = orderId, Kind = SalesOrderDocumentRules.KindLoadingSlip, Number = "LB-1", Version = version, Reason = version == 1 ? "Confirmed" : "Changed",
+        using var db = _factory.CreateContext();
+        return VersionOf(orderId, db.SalesDeliveries.Single(d => d.SalesOrderId == orderId && d.Sequence == 1).Id, version);
+    }
+
+    private static SalesOrderDocument VersionOf(int orderId, int deliveryId, int version) => new()
+    {
+        SalesOrderId = orderId, SalesDeliveryId = deliveryId, Kind = SalesOrderDocumentRules.KindLoadingSlip, Number = "LB-1", Version = version, Reason = version == 1 ? "Confirmed" : "Changed",
         SnapshotJson = "{}", ContentHash = $"h{version}", CreatedBy = "Jan",
     };
 

@@ -273,7 +273,9 @@ namespace AgfAdmin.Services
             if (latest != null && latest.ContentHash == hash) return false;
             db.SalesOrderDocuments.Add(new SalesOrderDocument
             {
-                SalesOrderId = order.Id, Kind = kind, Number = SalesOrderDocumentRules.NumberFor(kind, order.OrderNumber), Version = (latest?.Version ?? 0) + 1,
+                // Feedback 22 november: elk document hoort bij een levering; deellevering en documenten per levering volgen in de volgende PR's.
+                SalesOrderId = order.Id, SalesDeliveryId = SalesDeliveryRules.Ordered(order).First().Id,
+                Kind = kind, Number = SalesOrderDocumentRules.NumberFor(kind, order.OrderNumber), Version = (latest?.Version ?? 0) + 1,
                 Reason = latest == null ? SalesOrderDocumentRules.ReasonConfirmed : SalesOrderDocumentRules.ReasonChanged,
                 SnapshotJson = json, ContentHash = hash, CreatedAt = now, CreatedBy = Actor(),
             });
@@ -305,7 +307,7 @@ namespace AgfAdmin.Services
 
         private Task<SalesOrder> LoadAsync(int orderId, CancellationToken cancellationToken) =>
             db.SalesOrders
-                .Include(o => o.Customer).ThenInclude(c => c.Relation).ThenInclude(r => r.Addresses).Include(o => o.SalesPartij).Include(o => o.Documents)
+                .Include(o => o.Customer).ThenInclude(c => c.Relation).ThenInclude(r => r.Addresses).Include(o => o.Deliveries).ThenInclude(d => d.Partij).Include(o => o.Documents)
                 .Include(o => o.Transport).ThenInclude(t => t.CarrierRelation).ThenInclude(r => r.Addresses)
                 .Include(o => o.Transport).ThenInclude(t => t.UnloadingAddress)
                 .Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)

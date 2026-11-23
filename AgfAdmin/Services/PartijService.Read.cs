@@ -168,13 +168,13 @@ namespace AgfAdmin.Services
                 Kind = c.FromCorrection ? "Correction" : c.FromSplit ? "SplitOff" : "Receipt", Quantity = c.Quantity, Unit = c.Unit, NetWeightKg = c.NetWeightKg,
                 OnHandQuantity = OnHand(c), QualityStatus = c.QualityStatus, ReceivedAt = DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc)
             }).ToList();
-            detail.SalesOrders = facts.Sales.GroupBy(s => new { s.SalesOrderId, s.Unit }).Select(g => new PartijSalesOrderDto
+            detail.SalesOrders = facts.Sales.GroupBy(s => new { s.SalesOrderId, s.SalesPartijId, s.Unit }).Select(g => new PartijSalesOrderDto
             {
                 SalesOrderId = g.Key.SalesOrderId, OrderNumber = g.First().OrderNumber, SalesPartijId = g.First().SalesPartijId, SalesPartijNumber = g.First().SalesPartijNumber,
                 CustomerName = g.First().CustomerName, Status = g.First().OrderStatus, Unit = g.Key.Unit,
                 ReservedQuantity = g.Where(s => s.Status == ReservationRules.StatusActive).Sum(s => s.Quantity),
                 ShippedQuantity = g.Where(s => s.Status == ReservationRules.StatusConsumed).Sum(s => s.Quantity)
-            }).OrderBy(s => s.SalesOrderId).ThenBy(s => s.Unit).ToList();
+            }).OrderBy(s => s.SalesOrderId).ThenBy(s => s.SalesPartijNumber).ThenBy(s => s.Unit).ToList();
             await AddCostsAsync(detail, partij, facts, cancellationToken);
             var events = await _db.PartijAuditEvents.AsNoTracking().Where(e => e.PartijId == id).OrderBy(e => e.OccurredAt).ThenBy(e => e.Id).ToListAsync(cancellationToken);
             detail.History = events.Select(e => new PartijHistoryDto
@@ -262,7 +262,10 @@ namespace AgfAdmin.Services
                         || (r.PalletContentLineId == null && r.SupplyCommitmentLine.PartijId != null && ids.Contains(r.SupplyCommitmentLine.PartijId.Value))))
                 .Select(r => new SaleFact(r.PalletContentLine != null ? r.PalletContentLine.PartijId.Value : r.SupplyCommitmentLine.PartijId.Value,
                     r.SalesOrderLine.SalesOrderId, r.SalesOrderLine.SalesOrder.OrderNumber, r.SalesOrderLine.SalesOrder.Customer.Name, r.SalesOrderLine.SalesOrder.Status,
-                    r.Status, r.Quantity, r.Unit, r.SalesOrderLine.SalesOrder.SalesPartij.Id, r.SalesOrderLine.SalesOrder.SalesPartij.Number))
+                    r.Status, r.Quantity, r.Unit,
+                    // Feedback 22 november: de verkoop-partij van de levering van deze reservering (leeg = de eerste levering van de order).
+                    r.SalesDeliveryId != null ? r.SalesDelivery.PartijId : r.SalesOrderLine.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => (int?)d.PartijId).FirstOrDefault(),
+                    r.SalesDeliveryId != null ? r.SalesDelivery.Partij.Number : r.SalesOrderLine.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => d.Partij.Number).FirstOrDefault()))
                 .ToListAsync(cancellationToken);
             return new Facts(lines, contents, sales) { SalesSides = await LoadSalesSidesAsync(partijen, cancellationToken) };
         }

@@ -9,6 +9,9 @@ namespace AgfAdmin.Models
 
         public int SalesOrderId { get; set; }
         public SalesOrder SalesOrder { get; set; }
+        // De levering van dit document (feedback 22 november: laadbon en transportopdracht per levering); vast na aanmaken.
+        public int SalesDeliveryId { get; set; }
+        public SalesDelivery SalesDelivery { get; set; }
 
         public string Kind { get; set; }          // LoadingSlip (SalesOrderDocumentRules)
         public string Number { get; set; }        // LB-2026-0012: het VO-nummer met LB ervoor, gelijk voor alle versies

@@ -12,6 +12,10 @@ namespace AgfAdmin.Models
 
         // Eigenaar in de nieuwe verkoopflow.
         public int? SalesOrderLineId { get; set; }
+        // Feedback 22 november: de levering (en dus de verkoop-partij) waar deze reservering mee gaat; leeg = de eerste levering van de order.
+        // Alleen bij een actieve reservering te verplaatsen, met een auditregel (regel 42).
+        public int? SalesDeliveryId { get; set; }
+        public SalesDelivery SalesDelivery { get; set; }
         public SalesOrderLine SalesOrderLine { get; set; }
 
         // Idempotentiesleutels van het aanmaak- en vrijgavecommando (uniek).
