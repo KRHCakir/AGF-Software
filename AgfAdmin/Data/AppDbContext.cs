@@ -116,9 +116,21 @@ namespace AgfAdmin.Data
             EnsureReservationDeliveriesAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
+            var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
+            if (lotKeys.Count == 0)
+            {
+                TraceabilityGuard.Validate(this);
+                IncrementVersions();
+                return base.SaveChanges(acceptAllChangesOnSuccess);
+            }
+            // Regel 41: nummerlock en controle horen in dezelfde transactie als het opslaan.
+            using var transaction = Database.CurrentTransaction == null ? Database.BeginTransaction() : null;
+            TraceabilityGuard.LockLotNumbersAsync(this, lotKeys, async: false, CancellationToken.None).GetAwaiter().GetResult();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
-            return base.SaveChanges(acceptAllChangesOnSuccess);
+            var saved = base.SaveChanges(acceptAllChangesOnSuccess);
+            transaction?.Commit();
+            return saved;
         }
 
         public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
@@ -130,9 +142,21 @@ namespace AgfAdmin.Data
             await EnsureReservationDeliveriesAsync(async: true, cancellationToken);
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
+            var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
+            if (lotKeys.Count == 0)
+            {
+                await TraceabilityGuard.ValidateAsync(this, cancellationToken);
+                IncrementVersions();
+                return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            }
+            // Regel 41: nummerlock en controle horen in dezelfde transactie als het opslaan.
+            await using var transaction = Database.CurrentTransaction == null ? await Database.BeginTransactionAsync(cancellationToken) : null;
+            await TraceabilityGuard.LockLotNumbersAsync(this, lotKeys, async: true, cancellationToken);
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
-            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            if (transaction != null) await transaction.CommitAsync(cancellationToken);
+            return saved;
         }
 
         // Veilige overgang: een nieuwe klant- of leveranciersrol zonder relatie (oudere schrijvers, seeds, tests) krijgt bij het
