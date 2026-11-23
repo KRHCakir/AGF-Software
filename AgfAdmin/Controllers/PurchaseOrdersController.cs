@@ -45,6 +45,11 @@ namespace AgfAdmin.Controllers
                 .Select(part => int.TryParse(part, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) ? id : 0)
                 .Where(id => id > 0).Distinct().ToList();
 
+        // Feedback 22 november: voorstel voor het laadadres (de leverancier, als we ophalen) en het afleveradres (de klant, bij directe handel).
+        [HttpGet("address-proposals")]
+        public async Task<IActionResult> AddressProposals([FromQuery] int? vendorId, [FromQuery] int? customerId) =>
+            Ok(await _service.AddressProposalsAsync(vendorId, customerId, HttpContext?.RequestAborted ?? default));
+
         // "Herkomst controleren": orders met een oude herkomsttekst die niet eenduidig een land was (feedback 22 november).
         [HttpGet("origin-check")]
         public async Task<IActionResult> OriginCheck() => Ok(await _service.OriginCheckAsync(HttpContext?.RequestAborted ?? default));

@@ -89,6 +89,28 @@ public class StockLocationOrderTests : IDisposable
     }
 
     [Fact]
+    public async Task The_Address_Proposals_Are_The_Supplier_For_Pick_Up_And_The_Customer_For_Direct_Trade()
+    {
+        int vendorId, customerId;
+        await using (var db = _factory.CreateContext())
+        {
+            var supplier = new Relation { Name = "Fictieve Teler SAC", Addresses = { new RelationAddress { Purpose = AddressPurpose.Main, Line1 = "Calle 1", City = "Lima", CountryCode = "PE", IsDefault = true } } };
+            var client = new Relation { Name = "Fictieve Klant AE", Addresses = { new RelationAddress { Purpose = AddressPurpose.Delivery, Line1 = "Odos 2", City = "Athene", CountryCode = "GR", IsDefault = true } } };
+            db.Relations.AddRange(supplier, client);
+            await db.SaveChangesAsync();
+            var vendor = new Vendor { Name = "Fictieve Teler SAC", RelationId = supplier.Id };
+            var customer = new Customer { Name = "Fictieve Klant AE", RelationId = client.Id };
+            db.AddRange(vendor, customer);
+            await db.SaveChangesAsync();
+            (vendorId, customerId) = (vendor.Id, customer.Id);
+        }
+        await using var check = _factory.CreateContext();
+        var proposals = await new PurchaseOrderService(check).AddressProposalsAsync(vendorId, customerId);
+        Assert.Equal(("Fictieve Teler SAC\nCalle 1, Lima, PE", "Fictieve Klant AE\nOdos 2, Athene, GR"), (proposals.VendorAddress, proposals.CustomerAddress));
+        Assert.Null((await new PurchaseOrderService(check).AddressProposalsAsync(null, null)).VendorAddress);
+    }
+
+    [Fact]
     public void The_Loading_Place_Of_A_Delivery_Is_The_Location_Of_The_Reserved_Pallets_Unless_Set_Per_Delivery()
     {
         var crossdock = new StockLocation { Id = 3, Name = "Cross-dock Venlo", Kind = StockLocationRules.KindCrossdock, Address = "Fictief Cross-dock\nVenlo" };

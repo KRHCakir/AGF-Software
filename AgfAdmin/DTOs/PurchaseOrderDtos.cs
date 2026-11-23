@@ -64,6 +64,14 @@ namespace AgfAdmin.DTOs
 
     // Een verkooporder die van deze inkooporder reserveert (Active) of verzonden heeft (Consumed), per eenheid opgeteld.
     // Vrijgegeven en teruggenomen reserveringen tellen niet. Afgeleid uit StockReservation.SupplyCommitmentLineId; niets opgeslagen.
+    // Feedback 22 november: naam en adres van de leverancier (laadadres als we ophalen) en van de klant (afleveradres bij directe handel), zoals
+    // op de transportopdracht; null als de relatie geen adres heeft.
+    public sealed class OrderAddressProposalsDto
+    {
+        public string VendorAddress { get; set; }
+        public string CustomerAddress { get; set; }
+    }
+
     public sealed class PurchaseOrderSalesLinkDto
     {
         public int SalesOrderId { get; set; }
