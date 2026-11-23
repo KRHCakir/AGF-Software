@@ -446,13 +446,24 @@ namespace AgfAdmin.Services
             var ids = invoiceIds.Keys.ToList();
             var invoices = await _db.Invoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.InvoiceNumber, i.CustomCustomerName }).ToListAsync(cancellationToken);
             var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => ids.Contains(l.InvoiceId))
-                .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, Number = l.Partij.Number,
+                .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, l.ProductVariantId, Number = l.Partij.Number,
                     Vendor = _db.SupplyCommitments.Where(c => c.PartijId == l.PartijId).Select(c => c.Vendor.Name).FirstOrDefault() })
                 .ToListAsync(cancellationToken);
+            // Inkoopprijs van de inkoop-partij: bij voorkeur de inkoopregel van hetzelfde product, anders de eerste met een prijs.
+            var purchasePartijIds = lines.Where(l => l.PartijId != null).Select(l => l.PartijId.Value).Distinct().ToList();
+            var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.UnitPrice != null)
+                .OrderBy(c => c.Id)
+                .Select(c => new { PartijId = c.PartijId.Value, c.ProductVariantId, c.UnitPrice, c.DiscountPercentage, c.SupplyCommitment.ExchangeRate }).ToListAsync(cancellationToken);
             return invoices.ToDictionary(i => invoiceIds[i.Id], i => new SalesSide(invoiceIds[i.Id], 0, i.InvoiceNumber, "Invoiced", i.CustomCustomerName,
                 lines.Where(l => l.InvoiceId == i.Id).OrderBy(l => l.Id).Select(l => (l.Id, l.Description, l.Quantity, l.Unit, (decimal?)(l.NetWeight > 0m ? l.NetWeight : null))).ToList(),
                 lines.Where(l => l.InvoiceId == i.Id && l.PartijId != null)
-                    .Select(l => new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight)).ToList()));
+                    .Select(l =>
+                    {
+                        var mine = costs.Where(c => c.PartijId == l.PartijId).ToList();
+                        var cost = mine.FirstOrDefault(c => c.ProductVariantId == l.ProductVariantId) ?? mine.FirstOrDefault();
+                        return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight,
+                            null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m);
+                    }).ToList()));
         }
 
         // Weergavestatus van de order als geheel (alle regels en ontvangsten, ook van andere partijen), met dezelfde regels als de inkooporderlijst.
