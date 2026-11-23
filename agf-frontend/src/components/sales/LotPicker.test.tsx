@@ -80,7 +80,7 @@ describe('lot picker', () => {
         const line = { id: 1, productVariantId: 7, unit: 'colli' } as unknown as SalesOrderLine;
         const reservation = { id: 55, version: 3, partijId: 1, partijNumber: 'I-2611001', lotNumber: 'I-2611001' } as unknown as StockReservation;
         let changed = 0;
-        await mounted.render(<ChangeLotForm line={line} reservation={reservation} onCancel={() => undefined} onChanged={() => { changed++; }} />);
+        await mounted.render(<ChangeLotForm line={line} reservation={reservation} onCancel={() => undefined} onReload={() => undefined} onChanged={() => { changed++; }} />);
         await mounted.waitFor(() => (calls.length > 0 ? true : null), 'options requested');
         const input = one('#change-lot-55') as HTMLInputElement;
         await key(input, 'ArrowDown');
@@ -98,6 +98,23 @@ describe('lot picker', () => {
         const [first, second] = posts.map((post) => JSON.parse(post.body!) as { requestId: string; expectedReservationVersion: number; partijId: number });
         assert.deepEqual({ v: first.expectedReservationVersion, p: first.partijId }, { v: 3, p: 2 });
         assert.equal(first.requestId, second.requestId);
+    });
+
+    test('a conflict on Change lot offers to reload the order and decide again', async () => {
+        const line = { id: 1, productVariantId: 7, unit: 'colli' } as unknown as SalesOrderLine;
+        const reservation = { id: 55, version: 3, partijId: 1, partijNumber: 'I-2611001', lotNumber: 'I-2611001' } as unknown as StockReservation;
+        let reloaded = 0;
+        await mounted.render(<ChangeLotForm line={line} reservation={reservation} onCancel={() => undefined} onReload={() => { reloaded++; }} onChanged={() => undefined} />);
+        await mounted.waitFor(() => (calls.length > 0 ? true : null), 'options requested');
+        const input = one('#change-lot-55') as HTMLInputElement;
+        await key(input, 'ArrowDown');
+        await mounted.waitFor(() => one('[data-testid="lot-picker-list"]'), 'list open');
+        await key(input, 'Enter');
+        answer = (_method, url) => (url.includes('/lot-options') ? json(200, options) : json(409, { message: 'Reservation 55 is at version 4, not 3' }));
+        await act(async () => { one('[data-tour="sales-change-lot-save"]')!.click(); });
+        await mounted.waitFor(() => one('[data-testid="change-lot-reload"]'), 'reload offered');
+        await act(async () => { (one('[data-testid="change-lot-reload"]') as HTMLButtonElement).click(); });
+        assert.equal(reloaded, 1);
     });
 
     test('reserving from a chosen lot asks the oldest-first proposal of only that lot', async () => {
