@@ -5385,6 +5385,60 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderServiceLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CostArticleId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DiscountPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("VatPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<bool>("VatSpecified")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CostArticleId");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.ToTable("SalesOrderServiceLines", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesOrderServiceLines_DiscountPercentage_Range", "\"DiscountPercentage\" IS NULL OR CAST(\"DiscountPercentage\" AS NUMERIC) BETWEEN 0 AND 100");
+
+                            t.HasCheckConstraint("CK_SalesOrderServiceLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+
+                            t.HasCheckConstraint("CK_SalesOrderServiceLines_UnitPrice_NotNegative", "\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0");
+
+                            t.HasCheckConstraint("CK_SalesOrderServiceLines_VatPercentage_Allowed", "\"VatPercentage\" IS NULL OR CAST(\"VatPercentage\" AS NUMERIC) IN (0, 9, 21)");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderTransport", b =>
                 {
                     b.Property<int>("SalesOrderId")
@@ -7428,6 +7482,25 @@ namespace AgfAdmin.Migrations
                     b.Navigation("SalesOrder");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesOrderServiceLine", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.CostArticle", "CostArticle")
+                        .WithMany()
+                        .HasForeignKey("CostArticleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany("ServiceLines")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CostArticle");
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderTransport", b =>
                 {
                     b.HasOne("AgfAdmin.Models.Relation", "CarrierRelation")
@@ -7909,6 +7982,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("PackagingLines");
 
                     b.Navigation("SalesPartij");
+
+                    b.Navigation("ServiceLines");
 
                     b.Navigation("Transport");
                 });

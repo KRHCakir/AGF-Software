@@ -70,6 +70,7 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrder> SalesOrders { get; set; }
         public DbSet<SalesOrderLine> SalesOrderLines { get; set; }
         public DbSet<SalesOrderPackagingLine> SalesOrderPackagingLines { get; set; }
+        public DbSet<SalesOrderServiceLine> SalesOrderServiceLines { get; set; }
         public DbSet<SalesOrderDocument> SalesOrderDocuments { get; set; }
         public DbSet<SalesOrderTransport> SalesOrderTransports { get; set; }
         public DbSet<DocumentRecipient> DocumentRecipients { get; set; }
@@ -515,6 +516,23 @@ namespace AgfAdmin.Data
                 b.Property(l => l.VatPercentage).HasPrecision(5, 2);
                 b.ToTable(t => t.HasCheckConstraint("CK_SalesOrderPackagingLines_Values", "\"Quantity\" > 0 AND (\"UnitPrice\" IS NULL OR CAST(\"UnitPrice\" AS NUMERIC) >= 0) "
                     + "AND CAST(\"VatPercentage\" AS NUMERIC) BETWEEN 0 AND 100"));
+            });
+
+            // Dienstregels op een verkooporder (feedback 22 november): geen voorraad, alleen artikel, aantal, prijs, korting en btw (guard-regel 38).
+            modelBuilder.Entity<SalesOrderServiceLine>(b =>
+            {
+                // Restrict, geen cascade: een order met diensten verwijderen zou de regels buiten guard-regel 38 om weghalen.
+                b.HasOne(l => l.SalesOrder).WithMany(o => o.ServiceLines).HasForeignKey(l => l.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).OnDelete(DeleteBehavior.Restrict);
+                b.Property(l => l.Quantity).HasPrecision(18, 3);
+                b.Property(l => l.UnitPrice).HasPrecision(18, 2);
+                b.Property(l => l.DiscountPercentage).HasPrecision(5, 2);
+                b.Property(l => l.VatPercentage).HasPrecision(5, 2);
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesOrderServiceLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
+                    PriceChecks(t, "SalesOrderServiceLines");
+                });
             });
 
             modelBuilder.Entity<CompanySettings>(b =>

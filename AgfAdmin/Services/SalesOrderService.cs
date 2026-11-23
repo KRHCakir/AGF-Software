@@ -76,7 +76,7 @@ namespace AgfAdmin.Services
                 return (ServiceResult<SalesOrderDto>.Validation(ValidationErrors.ToArrays(errors)), false);
             }
 
-            var refusedPackaging = await ResolvePackagingAsync(candidate, cancellationToken);
+            var refusedPackaging = await ResolvePackagingAsync(candidate, cancellationToken) ?? await ResolveServicesAsync(candidate, cancellationToken);
             if (refusedPackaging != null)
             {
                 return (refusedPackaging, false);
@@ -273,9 +273,10 @@ namespace AgfAdmin.Services
             var lines = new List<SalesOrderLine>();
             // Goederen, emballage of allebei: een order met alleen emballage (pallets, kratten) mag ook.
             var packagingLines = BuildPackagingLines(request.PackagingLines, errors);
+            var serviceLines = BuildServiceLines(request.ServiceLines, errors);
             if ((request.Lines?.Count ?? 0) == 0)
             {
-                if ((request.PackagingLines?.Count ?? 0) == 0)
+                if ((request.PackagingLines?.Count ?? 0) == 0 && (request.ServiceLines?.Count ?? 0) == 0)
                 {
                     ValidationErrors.Add(errors, "lines", "At least one line is required.");
                 }
@@ -362,7 +363,8 @@ namespace AgfAdmin.Services
                 CreatedAt = now,
                 UpdatedAt = now,
                 Lines = lines,
-                PackagingLines = packagingLines
+                PackagingLines = packagingLines,
+                ServiceLines = serviceLines
             };
             if (deliveryTerm != null) DeliveryTermRules.Apply(order, deliveryTerm);
             return order;
@@ -394,6 +396,7 @@ namespace AgfAdmin.Services
                 && existing.RequestedDeliveryDate.Ticks == candidate.RequestedDeliveryDate.Ticks
                 && string.Equals(existing.ActorReference, candidate.ActorReference, StringComparison.Ordinal)
                 && SamePackaging(existing, candidate)
+                && SameServices(existing, candidate)
                 // Leveringsconditie: alleen als de aanvraag er een meestuurde (anders nam de order die van de klant over).
                 && (!deliveryTermAsked || originalTerm == DeliveryTermRules.Describe(DeliveryTermRules.Of(candidate)))
                 && existingLines.Count == candidateLines.Count
@@ -968,6 +971,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeShipmentLine).ThenInclude(d => d.DirectTradeShipment).ThenInclude(s => s.DeliveryConfirmations).ThenInclude(c => c.Retraction)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.DirectTradeCorrectionLine)
                 .Include(o => o.PackagingLines).ThenInclude(p => p.CostArticle)
+                .Include(o => o.ServiceLines).ThenInclude(p => p.CostArticle)
                 .AsSplitQuery();
 
         // Pallets van een regel, niet afgerond: de eigen palletinvoer, anders de colli per pallet van het artikel (zoals bij inkoop).
@@ -975,15 +979,16 @@ namespace AgfAdmin.Services
             PurchaseLineMath.Pallets(line.Quantity, PurchaseLineMath.PackagesPerPallet(line.PackagesPerPallet, line.ProductVariant?.DefaultPackagesPerPallet));
 
         // Feedback 22 november: de totalenrij onder de goederenregels (zoals bij inkoop) en de btw-samenvatting over de hele order:
-        // goederen (aantal × prijs min korting) en emballage (aantal × prijs, btw van het artikel). Bedragen in euro.
+        // goederen (aantal × prijs min korting), emballage (aantal × prijs, btw van het artikel) en diensten. Bedragen in euro.
         internal static PurchaseOrderLineTotalsDto TotalsOf(SalesOrder order)
         {
             var lines = order.Lines.OrderBy(l => l.Id).ToList();
             var goods = lines.Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), l.VatPercentage));
             var packaging = order.PackagingLines.OrderBy(l => l.Id).Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, null), l.VatPercentage));
+            var services = order.ServiceLines.OrderBy(l => l.Id).Select(l => new OrderLineMath.Line(OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), l.VatPercentage));
             return PurchaseOrderLineTotalsDto.From(
                 lines.Select(l => new PurchaseLineMath.Line(l.Quantity, l.NetWeightKg, l.GrossWeightKg, OrderLineMath.LineAmount(l.Quantity, l.UnitPrice, l.DiscountPercentage), ExactPallets(l))).ToList(),
-                goods.Concat(packaging), 1m, lines.Select(l => (l.Unit, l.Quantity)).ToList());
+                goods.Concat(packaging).Concat(services), 1m, lines.Select(l => (l.Unit, l.Quantity)).ToList());
         }
 
         // Bevestigd afgeleverd op een regel: uitsluitend Consumed reserveringen waarvan de bijbehorende verzending een bevestiging heeft.
@@ -1027,6 +1032,7 @@ namespace AgfAdmin.Services
             // Per regel in de eigen eenheid; nooit één ordertotaal over box en colli heen.
             Delivered = order.Lines.Count > 0 && order.Lines.All(l => DeliveredQuantity(l) == l.Quantity),
             PackagingLines = order.PackagingLines.OrderBy(l => l.Id).Select(ToPackagingDto).ToList(),
+            ServiceLines = order.ServiceLines.OrderBy(l => l.Id).Select(ToServiceDto).ToList(),
             Totals = TotalsOf(order),
             DeliveryTerm = order.DeliveryTermKind == null ? null : DeliveryTermDto.From(order),
             Lines = order.Lines.OrderBy(l => l.Id).Select(line =>
