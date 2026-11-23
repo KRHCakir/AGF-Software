@@ -10,7 +10,7 @@ import { toApiError } from '../../services/apiClient';
 import { getReceiptOrder, receiveLine } from '../../services/receiptService';
 import { certificateChecksOf } from '../../types/certificate';
 import type { PackageUnit } from '../../types/availability';
-import type { ReceiptLine, ReceiptOrder } from '../../types/receipt';
+import type { ReceiptLine, ReceiptOrder, ReceiveLineRequest } from '../../types/receipt';
 import QualityBadge from '../availability/QualityBadge';
 import { UnitBadge } from '../availability/QuantityCell';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
@@ -33,7 +33,7 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
     const [busy, setBusy] = useState<number | 'all' | null>(null);
     const [errors, setErrors] = useState<Record<number, string[]>>({});
     const [notice, setNotice] = useState<string | null>(null);
-    const requests = useRef(new Map<number, { key: string; requestId: string }>());
+    const requests = useRef(new Map<number, { key: string; requestId: string; request: Omit<ReceiveLineRequest, 'requestId'>; uncertain: boolean }>());
     const inFlight = useRef(false);
 
     useEffect(() => {
@@ -71,14 +71,17 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
         }
         const key = requestKey(line.id, built.request);
         let request = requests.current.get(line.id);
-        if (!request || request.key !== key) {
-            request = { key, requestId: newRequestId() };
+        // Na een onzekere fout (netwerk, 5xx) weten we niet of de server het verzoek verwerkte. Dan eerst hetzelfde verzoek met dezelfde
+        // requestId herhalen, ook als de invoer intussen is gewijzigd: de server geeft dan de al geboekte uitkomst terug (geen dubbele ontvangst).
+        if (!request || (request.key !== key && !request.uncertain)) {
+            request = { key, requestId: newRequestId(), request: built.request, uncertain: false };
             requests.current.set(line.id, request);
         }
+        const pending = request;
         try {
             // Het kenmerk van de GGN-melding die op het scherm staat: zo legt de server vast dat de ontvanger haar zag.
             const certificateWarningToken = state.status === 'ready' ? state.data.certificateWarningToken ?? null : null;
-            const result = await receiveLine(orderId, line.id, { ...built.request, requestId: request.requestId, certificateWarningToken });
+            const result = await receiveLine(orderId, line.id, { ...pending.request, requestId: pending.requestId, certificateWarningToken });
             requests.current.delete(line.id);
             setErrors((current) => { const next = { ...current }; delete next[line.id]; return next; });
             setState({ status: 'ready', data: result.order });
@@ -92,6 +95,7 @@ export default function ReceiveOrder({ orderId }: { orderId: number }) {
             return true;
         } catch (caught) {
             const error = toApiError(caught);
+            pending.uncertain = !error.isDefinitiveRejection;
             // De GGN-melding is intussen veranderd (of nog niet getoond): de actuele melding ophalen en tonen; de invoer blijft staan.
             if (error.status === 409 && certificateChecksOf(error.body) !== null) {
                 setErrors((current) => ({ ...current, [line.id]: [t('receipt_certificate_changed')] }));
@@ -215,6 +219,8 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
     onEnter: (event: KeyboardEvent<HTMLInputElement>) => void;
 }) {
     const { t, locale } = useTranslation();
+    // Tijdens een lopende ontvangst blijft de invoer staan zoals ze was (readOnly houdt de focus), zodat er niets stilletjes verloren gaat.
+    const locked = busy !== null;
     const progress = progressOf(line);
     const errorId = `receive-error-${line.id}`;
     const toInspect = line.pallets.filter((pallet) => pallet.qualityStatus === 'Quarantine');
@@ -237,14 +243,14 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
                             <label className="text-xs text-gray-700">
                                 <span className="sr-only md:not-sr-only md:block">{t('receipt_quantity')}</span>
                                 <span className="md:hidden">{t('receipt_quantity')} </span>
-                                <input inputMode="decimal" value={draft.quantity} onChange={(event) => onEdit({ quantity: event.target.value })} onKeyDown={onEnter}
+                                <input inputMode="decimal" value={draft.quantity} onChange={(event) => onEdit({ quantity: event.target.value })} onKeyDown={onEnter} readOnly={locked}
                                     aria-describedby={errors ? errorId : undefined} aria-invalid={errors ? true : undefined}
                                     data-tour="receive-quantity" data-tour-key={line.id} className={`${inputClass} w-24 text-right`} />
                             </label>
                             {line.netKgPerPackage === null && (
                                 <label className="text-xs text-gray-700">
                                     <span className="md:block">{t('receipt_net_kg')}</span>
-                                    <input inputMode="decimal" value={draft.netKg} onChange={(event) => onEdit({ netKg: event.target.value })} onKeyDown={onEnter}
+                                    <input inputMode="decimal" value={draft.netKg} onChange={(event) => onEdit({ netKg: event.target.value })} onKeyDown={onEnter} readOnly={locked}
                                         data-tour="receive-net-kg" data-tour-key={line.id} className={`${inputClass} w-28 text-right`} />
                                 </label>
                             )}
@@ -260,7 +266,7 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
                         )}
                         {receivable && (
                             <button type="button" className={secondaryButtonClass} aria-expanded={draft.palletsOpen} aria-controls={`receive-pallets-${line.id}`}
-                                onClick={() => onEdit({ palletsOpen: !draft.palletsOpen })} data-tour="receive-line-pallets" data-tour-key={line.id}>
+                                disabled={locked} onClick={() => onEdit({ palletsOpen: !draft.palletsOpen })} data-tour="receive-line-pallets" data-tour-key={line.id}>
                                 {t('receipt_pallet_numbers')}
                             </button>
                         )}
@@ -286,14 +292,14 @@ function ReceiveLineRows({ line, draft, errors, busy, receivable, onEdit, onRece
                             <legend className="sr-only">{t('receipt_pallet_numbers')}</legend>
                             <label className="text-xs text-gray-700">
                                 <span className="block">{t('receipt_pallet_count')}</span>
-                                <input inputMode="numeric" value={draft.palletCount} onChange={(event) => onEdit({ palletCount: event.target.value })} onKeyDown={onEnter}
+                                <input inputMode="numeric" value={draft.palletCount} onChange={(event) => onEdit({ palletCount: event.target.value })} onKeyDown={onEnter} readOnly={locked}
                                     data-tour="receive-pallet-count" data-tour-key={line.id} className={`${inputClass} w-16 text-right`} />
                             </label>
                             {referenceInputs(draft).map((reference, index) => (
                                 <label key={index} className="text-xs text-gray-700">
                                     <span className="block">{t('receipt_pallet_number', { index: String(index + 1) })}</span>
                                     {/* Scannen of typen; Enter gaat naar het volgende nummer, na het laatste wordt de regel ontvangen. */}
-                                    <input value={reference} placeholder={t('receipt_pallet_number_auto')} autoComplete="off" className={`${inputClass} w-36`}
+                                    <input value={reference} placeholder={t('receipt_pallet_number_auto')} autoComplete="off" readOnly={locked} className={`${inputClass} w-36`}
                                         data-tour="receive-pallet-number" data-tour-key={`${line.id}-${index}`}
                                         onChange={(event) => {
                                             const next = referenceInputs(draft);

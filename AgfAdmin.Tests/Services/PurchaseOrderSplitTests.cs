@@ -182,11 +182,11 @@ public class PurchaseOrderSplitTests : IDisposable
             await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
         }
 
-        // Een palletregel verdwijnt nooit; een gesplitste regel vanaf een volledig ontvangen regel kan niet (ook niet buiten de service om).
+        // Een palletregel verdwijnt nooit (de database weigert dat: de auditregel van de ontvangst houdt haar vast).
         await using (var db = _factory.CreateContext())
         {
             db.PalletContentLines.Remove(await db.PalletContentLines.SingleAsync());
-            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         }
 
         // Na de splitsing: de oude regel houdt haar vervallen restant (nooit lager) en de nieuwe regel haar herkomst.
