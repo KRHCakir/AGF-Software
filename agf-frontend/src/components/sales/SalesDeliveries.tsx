@@ -52,10 +52,14 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
     const requestId = useRef<string | null>(null);
     // Opdracht met onzekere uitkomst (netwerk-/vormfout): blijft ook na Annuleren bewaard, zodat heropenen dezelfde sleutel en keuze gebruikt.
     const uncertain = useRef<{ requestId: string; chosen: number[] } | null>(null);
+    // Zolang die onzekere opdracht er is, ligt de keuze vast (review): eerst dezelfde opdracht herhalen of de order controleren, anders
+    // zou een gewijzigde keuze met een nieuwe sleutel een tweede levering kunnen maken.
+    const [locked, setLocked] = useState(false);
 
     useEffect(() => {
         setOpen(false); setChosen([]); setError(null); setRefreshFailed(false); requestId.current = null;
         uncertain.current = loadStored(order.id);
+        setLocked(uncertain.current !== null);
     }, [order.id]);
 
     const reservations = order.lines.flatMap((line) => line.reservations.map((reservation) => ({ line, reservation })))
@@ -74,22 +78,31 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         const pending = uncertain.current;
         requestId.current = pending?.requestId ?? newRequestId();
         setChosen(pending?.chosen ?? []);
+        setLocked(pending !== null);
         setError(null);
         setOpen(true);
     };
     const toggle = (id: number) => {
+        if (locked) return;
         // Een andere keuze is een andere opdracht: dan ook een nieuwe sleutel (anders weigert de server de herhaling).
         requestId.current = newRequestId();
-        uncertain.current = null;
-        writeStored(order.id, null);
         setChosen((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
     };
     // Verversen na een geslaagde POST: pas als de order bijgewerkt is, vervalt de bewaarde opdracht.
     const refresh = async () => {
         let ok = true;
         try { ok = (await onChanged()) !== false; } catch { ok = false; }
-        if (ok) { uncertain.current = null; writeStored(order.id, null); }
+        if (ok) { uncertain.current = null; writeStored(order.id, null); setLocked(false); }
         setRefreshFailed(!ok);
+        return ok;
+    };
+    // Onzekere uitkomst: de order opnieuw lezen. Daarna staat een eventueel al gemaakte levering in de lijst en is een nieuwe keuze vrij.
+    const checkOrder = async () => {
+        if (busy) return;
+        setBusy(true);
+        try {
+            if (await refresh()) { setOpen(false); setError(null); requestId.current = null; }
+        } finally { setBusy(false); }
     };
     const retryRefresh = async () => {
         if (busy) return;
@@ -114,7 +127,7 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
         } catch (caught) {
             // Dezelfde sleutel blijft staan: opnieuw proberen is dezelfde opdracht.
             const apiError = toApiError(caught);
-            if (apiError.isDefinitiveRejection) { uncertain.current = null; writeStored(order.id, null); }
+            if (apiError.isDefinitiveRejection) { uncertain.current = null; writeStored(order.id, null); setLocked(false); } else { setLocked(true); }
             setError(apiError);
         } finally {
             setBusy(false);
@@ -155,7 +168,7 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                     {reservations.length === 0
                         ? <p className="text-sm text-gray-700">{t('so_partial_delivery_nothing_reserved')}</p>
                         : (
-                            <fieldset className="space-y-1" disabled={busy}>
+                            <fieldset className="space-y-1" disabled={busy || locked}>
                                 <legend className="text-xs font-medium text-gray-700">{t('so_partial_delivery_choose')}</legend>
                                 {reservations.map(({ line, reservation }) => {
                                     const current = deliveryOf(reservation);
@@ -179,6 +192,12 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                         </button>
                         <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => { setOpen(false); requestId.current = null; }}>{t('cancel')}</button>
                     </div>
+                    {locked && (
+                        <div className="space-y-1 text-sm text-amber-950" data-testid="so-partial-delivery-uncertain">
+                            <p>{t('so_partial_delivery_uncertain')}</p>
+                            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void checkOrder()} data-testid="so-partial-delivery-check">{t('so_partial_delivery_check')}</button>
+                        </div>
+                    )}
                 </form>
             )}
         </section>
