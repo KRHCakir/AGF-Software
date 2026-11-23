@@ -2,18 +2,19 @@ import '../../test/setupDom.ts';
 import assert from 'node:assert/strict';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { Mounted, click, json, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { Mounted, click, json, setSelectValue, setValue, stubFetch } from '../../test/reactHarness.ts';
+import { PURCHASE_LINE_COLUMNS } from '../purchase/PurchaseLineTable';
 import type { CustomerOption, ProductOption } from '../../types/referenceData';
 import CreateSalesOrderForm from './CreateSalesOrderForm';
 import { HydratedGate, PendingCommandsProvider } from './PendingCommandsContext';
 
-// Kg op de orderregel door de echte componentlevenscyclus: berekend uit het artikel (grijs) en live met het aantal mee,
-// zelf ingevuld (zwart) volgt het aantal niet meer, ↺ zet terug; zonder standaard leeg met hint en "= … per colli"; totaal
-// onder de regels; de klant kiezen met "Lo" + Tab; geen treffer opent "Nieuwe klant" met de getypte naam.
+// De verkooporderregel door de echte componentlevenscyclus (feedback 22 november): dezelfde kolommen en Tab-volgorde als de inkooporder,
+// kg, eenheid en btw-voorstel uit het artikel, prijs, korting en bedrag, totalen en btw per tarief; de klant kiezen met "Lo" + Tab; geen
+// treffer opent "Nieuwe klant" met de getypte naam.
 
 const customers: CustomerOption[] = [{ id: 1, name: 'Local Market Stalls', searchCode: 'LMS', isActive: true, city: 'Rotterdam' }, { id: 2, name: 'DEMO Klant B', searchCode: null, isActive: true }];
 const variant = (id: number, name: string, net: number | null, gross: number | null) =>
-    ({ id, name, origin: 'Peru', packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: 'colli' as const, defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross });
+    ({ id, name, origin: 'Peru', packaging: null, sizeCategory: null, shortcutCode: null, defaultPackagesPerPallet: null, packagingUnit: 'colli' as const, defaultNetKgPerPackage: net, defaultGrossKgPerPackage: gross, vatPercentage: 9 });
 const products: ProductOption[] = [{ id: 1, name: 'Avocado', variants: [variant(1, 'Hass', 10, 10.3), variant(2, 'Green', null, null)] }];
 
 let mounted: Mounted;
@@ -31,6 +32,7 @@ const type = (id: string, text: string) => act(async () => { field(id).focus(); 
 const key = async (id: string, name: string) => {
     await act(async () => { field(id).dispatchEvent(new window.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
 };
+const text = (testId: string) => mounted.container.querySelector(`[data-testid="${testId}"]`)?.textContent;
 const chooseVariant = async (index: number, text: string) => {
     await type(`lines[${index}].productVariantId-input`, text);
     await key(`lines[${index}].productVariantId-input`, 'Enter');
@@ -43,6 +45,74 @@ describe('CreateSalesOrderForm: kg on the order line and customer search', () =>
         mounted = new Mounted();
     });
     afterEach(async () => { await mounted.unmount(); });
+
+    test('feedback 22 november: the same columns as the purchase order; kg, unit and pallets from the article; totals row and VAT per rate', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        const head = Array.from(mounted.container.querySelectorAll('[data-testid="sales-lines"] thead th')).map((th) => th.textContent);
+        assert.deepEqual(head.slice(0, PURCHASE_LINE_COLUMNS.length), PURCHASE_LINE_COLUMNS.map((column) => `po_line_col_${column}`));
+        await chooseVariant(0, 'hass');
+        await type('lines[0].quantity-input', '1.560');
+        assert.equal(text('lines[0].net'), '15,600 kg');
+        assert.equal(text('lines[0].gross'), '16,068 kg');
+        assert.equal(text('lines[0].unit'), 'unit_colli');
+        assert.equal(mounted.container.querySelector('[id="lines[0].unit-input"]'), null, 'the unit is text from the article, never a choice');
+        await type('lines[0].unitPrice-input', '2,50');
+        await type('lines[0].discountPercentage-input', '10');
+        assert.equal(field('lines[0].vatPercentage-input').value, '9', 'VAT proposed from the article');
+        assert.equal(text('lines[0].total'), '3,510.00 EUR');
+        assert.equal(mounted.container.querySelector('[data-testid="line-totals-quantity"]')!.textContent, '1,560');
+        assert.equal(mounted.container.querySelector('[data-testid="order-amounts-net"]')!.textContent, '3,510.00 EUR');
+        assert.equal(mounted.container.querySelector('[data-testid="order-amounts-gross"]')!.textContent, '3,825.90 EUR');
+    });
+
+    test('Tab goes product, quantity, price, discount, VAT; Tab on VAT of the last line makes a new line with the cursor in its product', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await chooseVariant(0, 'hass');
+        await type('lines[0].quantity-input', '10');
+        const row = mounted.container.querySelector('[data-testid="sales-lines"] tbody tr')!;
+        const tabbable = Array.from(row.querySelectorAll<HTMLElement>('input, select, button')).filter((element) => element.tabIndex >= 0).map((element) => element.id).filter((id) => id.startsWith('lines[0]'));
+        assert.deepEqual(tabbable, ['lines[0].productVariantId-input', 'lines[0].quantity-input', 'lines[0].unitPrice-input', 'lines[0].discountPercentage-input', 'lines[0].vatPercentage-input']);
+        await key('lines[0].vatPercentage-input', 'Tab');
+        await mounted.waitFor(() => mounted.container.querySelector('[id="lines[1].productVariantId-input"]'), 'new line');
+        await mounted.waitFor(() => window.document.activeElement === field('lines[1].productVariantId-input'), 'cursor in the new product');
+    });
+
+    test('the saved payload carries price, discount, VAT and calculated or adjusted kg; "Lo" + Tab chooses the customer', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        await type('customerId-input', 'Lo');
+        await key('customerId-input', 'Tab');
+        assert.equal(field('customerId-input').value, 'Local Market Stalls · Rotterdam');
+        await type('requestedDeliveryDate-input', '2026-10-30');
+        await chooseVariant(0, 'hass');
+        await type('lines[0].quantity-input', '1.560');
+        await type('lines[0].unitPrice-input', '2,50');
+        await type('lines[0].discountPercentage-input', '2,5');
+        await click(mounted.button('+ supply_add_line')!);
+        await chooseVariant(1, 'green');
+        await type('lines[1].quantity-input', '221');
+        await act(async () => { setSelectValue(mounted.container.querySelector<HTMLSelectElement>('[id="lines[1].vatPercentage-input"]')!, '21'); });
+        await act(async () => { mounted.form()!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })); });
+        await mounted.waitFor(() => posted.length > 0, 'POST');
+        const body = JSON.parse(posted[0].body);
+        assert.equal(body.customerId, 1);
+        assert.deepEqual(body.lines, [
+            { productVariantId: 1, quantity: 1560, unit: 'colli', palletCount: null, packagesPerPallet: null, netWeightKg: 15600, grossWeightKg: 16068, weightSource: 'Calculated',
+                unitPrice: 2.5, discountPercentage: 2.5, vatPercentage: 9 },
+            { productVariantId: 2, quantity: 221, unit: 'colli', palletCount: null, packagesPerPallet: null, vatPercentage: 21 },
+        ]);
+    });
+
+    test('at 390 px every line is a block with the field names in front; nothing falls away', async () => {
+        await mounted.render(element());
+        await mounted.waitFor(() => mounted.form(), 'order form');
+        const cells = Array.from(mounted.container.querySelectorAll<HTMLElement>('[data-testid="sales-lines"] tbody tr td[data-label]'));
+        assert.ok(cells.length >= PURCHASE_LINE_COLUMNS.length);
+        assert.ok(cells.every((cell) => cell.className.includes('max-md:')), 'block view below 768 px');
+        assert.ok(mounted.container.querySelector('[data-testid="sales-lines"] thead')!.className.includes('max-md:hidden'));
+    });
 
     test('no customer found: "new customer" opens the panel with the typed text as name', async () => {
         await mounted.render(element());

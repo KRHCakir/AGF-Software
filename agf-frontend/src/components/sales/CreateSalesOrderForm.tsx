@@ -9,7 +9,9 @@ import { CREATE_CUSTOMER_KEY, CREATE_ORDER_KEY, CreateCustomerCommand, CreateOrd
 import { newRequestId } from '../../lib/requestId';
 import { unitLabelKey } from '../../lib/units';
 import { MAX_ORDER_LINES, MAX_SALES_PARTIJ_NUMBER_LENGTH, OrderDraft, OrderLineDraft, buildOrderPayload, emptyOrderLine, isBlankOrderLine, remapPayloadLineKeys, salesPartijPayload } from '../../lib/salesOrderRules';
-import { purchaseLineRow } from '../../lib/purchaseOrderLines';
+import { purchaseLineRow, purchaseLineTotals } from '../../lib/purchaseOrderLines';
+import { OrderAmountsSummary } from '../purchase/PurchaseLineTable';
+import { lineAmount } from '../../lib/orderLineMath';
 import { partijNumberKey } from '../../lib/partijRules';
 import { findPartijByNumber, getNextPartijNumber } from '../../services/partijService';
 import { isPartijExistsConflict } from '../../types/partij';
@@ -20,7 +22,7 @@ import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
 import { listPackagingArticles } from '../../services/costArticleService';
-import { packagingDraftFrom, palletProposal } from '../../lib/packaging';
+import { packagingDraftFrom, palletProposal, parsePackagingQuantity, parseUnitPrice } from '../../lib/packaging';
 import type { CostArticle } from '../../types/costArticle';
 import { PackagingLinesInput, PackagingLinesView } from './PackagingLines';
 import { SaveResult } from '../../services/supplyService';
@@ -192,6 +194,12 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const rows = draft.lines.map((line) => purchaseLineRow(line, /^[1-9]\d*$/.test(line.productVariantId) ? variantOf(Number(line.productVariantId)) : undefined));
     // "Pallet toevoegen": de pallets van de goederenregels samen, naar boven afgerond (alleen een voorstel).
     const proposal = palletProposal(rows.map((row) => ({ quantity: row.quantity, packagesPerPallet: row.perPallet })));
+    // Emballage telt mee in de btw-samenvatting onder de regels (aantal × prijs, btw van het artikel).
+    const packagingAmounts = (draft.packagingLines ?? []).map((line) => {
+        const article = packagingArticles.find((candidate) => String(candidate.id) === line.costArticleId);
+        const price = parseUnitPrice(line.unitPrice);
+        return { amount: lineAmount(parsePackagingQuantity(line.quantity), price.ok ? price.value : null, null), vatPercentage: article?.vatPercentage ?? null };
+    });
 
     // Stand per gekozen variant + eenheid (Voorraad · Verwacht · Vrij) en de bron per regel. Zolang de gebruiker niet zelf kiest, volgt de
     // bron het voorstel: uit voorraad als het past, uit verwachte aanvoer als er niets vrij is; past maar een deel, dan het splitsvoorstel.
@@ -504,7 +512,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                 <FieldError id="lines" messages={e('lines')} />
                 {/* Feedback 22 november: dezelfde regelcomponent als de inkooporder; onder het artikel de stand en de bron van de regel. */}
                 <PurchaseOrderLines<OrderLineDraft> lines={draft.lines} rows={rows} products={products} variantOf={variantOf} locked={locked} isDirect={false} withGgn={false}
-                    tourPrefix="sales-line" testId="sales-lines" errors={e} fields={SALES_LINE_FIELDS} currency="EUR"
+                    tourPrefix="sales-line" testId="sales-lines" errors={e} fields={SALES_LINE_FIELDS} currency="EUR" showAmounts={false}
                     onChange={updateLine} onAdd={addLine} onRemove={removeLine} onNewArticle={(key) => setNewArticleFor(key)}
                     productExtra={(line, index) => {
                         const unit = unitOf(index);
@@ -557,6 +565,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
             )}
             <PackagingLinesInput lines={draft.packagingLines ?? []} articles={packagingArticles} proposal={proposal} locked={locked} errors={e}
                 onChange={(packagingLines) => { if (locked) return; setDraft((current) => ({ ...current, packagingLines })); edited(); }} />
+            {/* Totaal excl. btw, btw per tarief en totaal incl. btw over goederen en emballage samen. */}
+            <OrderAmountsSummary amounts={purchaseLineTotals(rows.filter((_, index) => !isBlankLine(draft.lines[index])), packagingAmounts).amounts} currency="EUR" />
 
             {pending === null && (
                 <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
