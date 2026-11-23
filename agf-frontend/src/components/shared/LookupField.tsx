@@ -227,7 +227,7 @@ export default function LookupField<T>({ id, ariaLabel, selected, search, onSele
                 />
                 {/* Buiten de Tab-volgorde: Tab gaat na een keuze naar het volgende veld; wissen kan met Backspace of Delete. */}
                 {selected !== null && (
-                    <button type="button" tabIndex={-1} onClick={clearSelection} disabled={disabled} aria-label={t(changeKey)} title={t(changeKey)}
+                    <button type="button" tabIndex={-1} onClick={clearSelection} disabled={disabled} aria-label={t(changeKey)} title={t(changeKey)} data-tour={dataTour ? `${dataTour}-clear` : undefined}
                         className="mt-1 shrink-0 rounded border border-gray-300 px-2 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40">
                         ✕
                     </button>

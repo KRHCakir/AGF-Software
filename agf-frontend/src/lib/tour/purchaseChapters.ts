@@ -4,7 +4,7 @@
 
 import { prerequisite, step } from './compose';
 import { ARTICLE_STEPS, VENDOR_STEPS } from './masterdataChapter';
-import { lookupDeviation, lookupDeviationStock, lookupOrderEdit, lookupPurchase, lookupReceive, precheckDeviation, precheckOrderEdit, precheckPurchase, precheckReceive } from './prechecks';
+import { lookupOrderEdit, lookupOtherArticle, lookupPurchase, lookupReceive, lookupSplit, precheckOrderEdit, precheckPurchase, precheckReceive, precheckSplit } from './prechecks';
 import type { TourAction, TourChapter, TourStep } from './types';
 
 const order = (id: string, route: string, actions: readonly TourAction[]) => step('order', id, route, actions);
@@ -176,36 +176,27 @@ export const OPEN_ORDER_FOR_RECEIPT: TourStep[] = [...MASTER_FOR_PURCHASE, ...pr
 
 const receive = (id: string, route: string, actions: readonly TourAction[]) => step('receive', id, route, actions);
 
-// Blinde invoer: wat er werkelijk is aangekomen, kenmerk voor kenmerk (lege kenmerken worden overgeslagen), daarna partij, aantal en kg.
-// Heeft de orderregel een partij, dan neemt de ontvangst die over: niets te typen, de rondleiding wijst haar aan.
-const enterReceipt = (lot: string): TourAction[] => [
-    { kind: 'click', target: 'receive-line:{{orderId}}-{{lineId}}' },
-    { kind: 'pick', target: 'receive-origin:{{lineId}}', text: '{{originText}}', expect: '{{originName}}', when: '{{originText}}' },
-    { kind: 'pick', target: 'receive-size:{{lineId}}', text: '{{size}}', when: '{{size}}' },
-    { kind: 'pick', target: 'receive-packaging:{{lineId}}', text: '{{packaging}}', when: '{{packaging}}' },
-    { kind: 'pick', target: 'receive-class:{{lineId}}', text: '{{tradeClass}}', when: '{{tradeClass}}' },
-    { kind: 'pick', target: 'receive-brand:{{lineId}}', text: '{{brand}}', when: '{{brand}}' },
-    { kind: 'type', target: 'receive-lot:{{lineId}}', text: lot, when: '{{typeLot}}' },
-    { kind: 'highlight', target: 'receive-partij:{{lineId}}', when: '{{partijNumber}}' },
-    { kind: 'type', target: 'receive-quantity:{{lineId}}', text: '{{quantity}}' },
-    { kind: 'type', target: 'receive-kg-per-package:{{lineId}}', text: '{{kgPerPackage}}', when: '{{kgPerPackage}}' },
-    { kind: 'type', target: 'receive-net-kg:{{lineId}}', text: '{{netKg}}', when: '{{netKg}}' },
-];
-
-// Ontvangen en goedkeuren van de open demo-inkooporder; ook gebruikt door Verkopen voor aankomst en Verkooporder.
+// Ontvangen en goedkeuren van de open demo-inkooporder; ook gebruikt door Verkopen voor aankomst en Verkooporder. Feedback 22 november:
+// één scherm met Dit wordt verwacht en per regel één knop Ontvangen; geen controlevragen. Keuren is de optionele knop Keuren / afwijzen.
 export const RECEIVE_CORE: TourStep[] = [
     receive('open', '/receipts', [
         { kind: 'lookup', run: lookupReceive },
         { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
+        { kind: 'click', target: 'receive-order:{{orderId}}' },
+        { kind: 'wait', target: 'receive-expected' },
+        { kind: 'highlight', target: 'receive-expected' },
     ]),
-    receive('line', '/receipts', [...enterReceipt('{{lot}}'), { kind: 'highlight', target: 'receive-weight:{{lineId}}' }]),
-    receive('register', '/receipts', [
-        { kind: 'click', target: 'receive-save' },
-        { kind: 'wait', target: 'receive-to-inspection' },
-        { kind: 'highlight', target: 'receive-to-inspection' },
+    receive('line', '/receipts?order={{orderId}}', [
+        { kind: 'type', target: 'receive-quantity:{{lineId}}', text: '{{quantity}}' },
+        { kind: 'highlight', target: 'receive-line-pallets:{{lineId}}' },
     ]),
-    receive('inspector', '/receipts', [
-        { kind: 'click', target: 'receive-to-inspection' },
+    receive('register', '/receipts?order={{orderId}}', [
+        { kind: 'click', target: 'receive-line-button:{{lineId}}' },
+        { kind: 'wait', target: 'receive-line-inspect:{{lineId}}' },
+        { kind: 'highlight', target: 'receive-notice' },
+    ]),
+    receive('inspector', '/receipts?order={{orderId}}', [
+        { kind: 'click', target: 'receive-line-inspect:{{lineId}}' },
     ]),
     // Wie beoordeelt: per keuring gekozen (hier de rondleiding zelf); vastgelegd naast de ingelogde gebruiker.
     receive('approve', '/inspection', [
@@ -242,45 +233,63 @@ export const RECEIVE_CHAPTER: TourChapter = {
     ],
 };
 
-const deviation = (id: string, route: string, actions: readonly TourAction[]) => step('deviation', id, route, actions);
+const split = (id: string, route: string, actions: readonly TourAction[]) => step('split', id, route, actions);
 
-// Afwijking bij ontvangst: de helft komt uit een ander land en met 5% meer kg per colli. Bestaat die variant nog niet, dan maakt de
-// ontvangst hem aan; daarna vraagt "Klopt dit?" naar de herkomst en het gewicht, en komt de voorraad op de exacte variant.
-export const DEVIATION_CHAPTER: TourChapter = {
-    id: 'deviation',
-    titleKey: 'tour_ch_deviation_title',
-    summaryKey: 'tour_ch_deviation_summary',
-    doneKey: 'tour_ch_deviation_done',
+// Het artikel uit het andere land (zelfde artikel, maat, verpakking, klasse en merk; alleen het land verschilt), als het er nog niet is: de
+// stappen van Nieuw artikel, met de snelcode, het land en het merk van het bestelde artikel.
+const OTHER_ARTICLE_STEPS: TourStep[] = ARTICLE_STEPS.map((original, index) => ({
+    ...original,
+    actions: [
+        ...(index === 0 ? [{ kind: 'lookup', run: lookupOtherArticle } as TourAction] : []),
+        ...original.actions.map((action): TourAction => {
+            if (action.kind === 'type' && action.target === 'article-shortcut-code') return { ...action, text: '{{otherShortcut}}' };
+            if (action.kind === 'type' && action.target === 'article-brand') return { ...action, text: '{{orderedBrand}}' };
+            if (action.kind === 'pick' && action.target === 'article-origin') return { ...action, text: '{{otherCode}}', expect: '{{otherOrigin}}' };
+            return action;
+        }),
+    ],
+}));
+
+// Feedback 22 november: iets anders ontvangen. De helft komt binnen zoals besteld; de rest blijkt uit een ander land te komen. De gebruiker
+// past de orderregel aan (geen controlevraag bij ontvangst): omdat er al iets ontvangen is, splitst de regel, en het restant van de oude
+// regel vervalt, zodat niets dubbel telt.
+export const SPLIT_CHAPTER: TourChapter = {
+    id: 'split',
+    titleKey: 'tour_ch_split_title',
+    summaryKey: 'tour_ch_split_summary',
+    doneKey: 'tour_ch_split_done',
     writes: true,
-    precheck: precheckDeviation,
+    precheck: precheckSplit,
     steps: [
         ...OPEN_ORDER_FOR_RECEIPT,
-        deviation('open', '/receipts', [
-            { kind: 'lookup', run: lookupDeviation },
+        ...prerequisite(OTHER_ARTICLE_STEPS, 'mz', '{{needOtherArticle}}'),
+        split('receive', '/receipts', [
+            { kind: 'lookup', run: lookupSplit },
             { kind: 'type', target: 'receive-search', text: '{{orderId}}' },
+            { kind: 'click', target: 'receive-order:{{orderId}}' },
+            { kind: 'type', target: 'receive-quantity:{{lineId}}', text: '{{half}}' },
+            { kind: 'click', target: 'receive-line-button:{{lineId}}' },
+            { kind: 'wait', target: 'receive-line-inspect:{{lineId}}' },
+            { kind: 'highlight', target: 'receive-line-received:{{lineId}}' },
         ]),
-        deviation('enter', '/receipts', enterReceipt('{{lot}}')),
-        deviation('check', '/receipts', [
-            { kind: 'click', target: 'receive-save' },
-            { kind: 'click', target: 'new-article-create:{{lineId}}', when: '{{createVariant}}' },
-            { kind: 'wait', target: 'deviation-dialog' },
-            { kind: 'highlight', target: 'deviation-dialog' },
+        split('article', '/purchase-orders/edit?id={{orderId}}', [
+            { kind: 'click', target: 'supply-line-product-0-clear' },
+            { kind: 'pick', target: 'supply-line-product-0', text: '{{otherSearch}}', expect: '{{otherOrigin}}' },
+            { kind: 'highlight', target: 'supply-line-split:0' },
         ]),
-        deviation('confirm', '/receipts', [
-            { kind: 'select', target: 'deviation-reason', value: 'SupplierDeliveredDifferently' },
-            { kind: 'click', target: 'deviation-yes' },
-            { kind: 'wait', target: 'receive-to-inspection' },
+        split('ask', '/purchase-orders/edit?id={{orderId}}', [
+            { kind: 'click', target: 'supply-save' },
+            { kind: 'wait', target: 'split-dialog' },
+            { kind: 'highlight', target: 'split-dialog' },
         ]),
-        deviation('order', '/purchase-orders?id={{orderId}}', [
-            { kind: 'wait', target: 'po-deviations' },
-            { kind: 'highlight', target: 'po-deviations' },
+        split('save', '/purchase-orders/edit?id={{orderId}}', [
+            { kind: 'click', target: 'split-remainder:0-Cancelled' },
+            { kind: 'click', target: 'split-confirm' },
+            { kind: 'wait', target: 'po-line-split' },
         ]),
-        // De voorraad staat op de variant die werkelijk binnenkwam (in keuring tot hij is goedgekeurd).
-        deviation('stock', '/availability?productVariantId={{actualVariantId}}', [
-            { kind: 'lookup', run: lookupDeviationStock },
-            { kind: 'click', target: 'availability-view-sales' },
-            { kind: 'wait', target: 'availability-free:{{actualVariantId}}' },
-            { kind: 'highlight', target: 'availability-free:{{actualVariantId}}' },
+        split('order', '/purchase-orders?id={{orderId}}', [
+            { kind: 'wait', target: 'order-line-progress' },
+            { kind: 'highlight', target: 'po-line-progress' },
         ]),
     ],
 };
