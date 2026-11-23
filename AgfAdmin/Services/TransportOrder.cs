@@ -88,9 +88,10 @@ namespace AgfAdmin.Services
             ?? string.Join(", ", new[] { settings.CompanyName, settings.Address }.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()));
 
         // Feedback 22 november: liggen alle gereserveerde pallets van de order op dezelfde voorraadlocatie (geen eigen loods), dan is dat de
-        // laadplaats: naam en adres van die locatie. Eén pallet in de eigen loods, of pallets op verschillende locaties: null (de loods).
+        // laadplaats: naam en adres van die locatie. Alleen actieve reserveringen (de openstaande levering); al verzonden pallets van een
+        // eerdere levering tellen niet mee. Eén pallet in de eigen loods, of pallets op verschillende locaties: null (de loods).
         public static string PalletLoadingPlace(SalesOrder order) =>
-            PalletLoadingPlace(order.Lines.SelectMany(l => l.Reservations).Where(r => r.Status is "Active" or "Consumed").Select(r => r.PalletContentLine?.Pallet).Where(p => p != null));
+            PalletLoadingPlace(order.Lines.SelectMany(l => l.Reservations).Where(r => r.Status is "Active").Select(r => r.PalletContentLine?.Pallet).Where(p => p != null));
 
         public static string PalletLoadingPlace(IEnumerable<Pallet> pallets)
         {
