@@ -68,8 +68,8 @@ export default function PartijTrace({ partij }: { partij: PartijDetail }) {
         const csv = () => download(recallCsv(partij.number, recall, {
             lot: t('partij_trace_lot'), received: t('partij_trace_received'), shipped: t('partij_trace_shipped'), returned: t('partij_trace_returned'),
             rejected: t('partij_trace_rejected'), onHand: t('partij_trace_on_hand'), difference: t('partij_trace_difference'), salesLot: t('partij_trace_sales_lot'),
-            customer: t('partij_trace_customer'), reference: t('partij_trace_reference'), quantity: t('partij_trace_quantity'), date: t('partij_trace_date'),
-            directInvoice: t('partij_trace_direct_invoice'),
+            customer: t('partij_trace_customer'), reference: t('partij_trace_reference'), quantity: t('partij_trace_quantity'), unit: t('partij_trace_unit'), date: t('partij_trace_date'),
+            directInvoice: t('partij_trace_direct_invoice'), directInvoiceNote: t('partij_trace_direct_invoice_note'),
         }, format), `Recall ${partij.number}.csv`);
         const totals: [string, number, boolean][] = [
             ['partij_trace_received', recall.received, false], ['partij_trace_shipped', recall.shipped, false], ['partij_trace_returned', recall.returned, false],
@@ -127,7 +127,7 @@ export default function PartijTrace({ partij }: { partij: PartijDetail }) {
         const trace = partij.delivery;
         const csv = () => download(deliveryCsv(partij.number, trace, {
             lot: t('partij_trace_lot'), customer: t('partij_trace_customer'), reference: t('partij_trace_reference'), date: t('partij_trace_delivery_date'),
-            product: t('partij_trace_product'), quantity: t('partij_trace_quantity'), purchaseLot: t('partij_trace_purchase_lot'), supplier: t('partij_trace_supplier'),
+            product: t('partij_trace_product'), quantity: t('partij_trace_quantity'), unit: t('partij_trace_unit'), purchaseLot: t('partij_trace_purchase_lot'), supplier: t('partij_trace_supplier'),
             origin: t('partij_trace_origin'), status: t('partij_trace_status'), delivered: t('partij_trace_delivered'), planned: t('partij_trace_planned'),
         }, format), `Levering ${partij.number}.csv`);
         return (
