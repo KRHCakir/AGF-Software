@@ -18,7 +18,8 @@ export default function OrderLineProgress({ lines: allLines }: { lines: Purchase
     const lines = activeLines(allLines);
     const { t, locale } = useTranslation();
     const q = (value: number) => formatQuantity(value, locale);
-    const number = new Map(lines.map((line, index) => [line.id, index + 1]));
+    // Zelfde nummering als het orderdetail: positie in alle orderregels, ook de geheel vervangen regels die hier niet getoond worden.
+    const number = new Map(allLines.map((line, index) => [line.id, index + 1]));
     const cell = 'px-2 py-1 align-top';
     return (
         <div className="max-h-[32rem] overflow-y-auto rounded border border-gray-200" data-testid="order-line-progress" data-tour="order-line-progress">
@@ -39,7 +40,7 @@ export default function OrderLineProgress({ lines: allLines }: { lines: Purchase
                         const p = lineProgress(line);
                         return (
                             <tr key={line.id} className={`grid grid-cols-[2rem_1fr] gap-x-1 py-1 md:table-row md:py-0 ${index % 2 === 1 ? 'md:bg-gray-50/60' : ''}`} data-testid={`order-line-progress-${line.id}`}>
-                                <td className={`${cell} row-span-3 font-mono text-gray-600 md:row-span-1`}>{index + 1}</td>
+                                <td className={`${cell} row-span-3 font-mono text-gray-600 md:row-span-1`}>{number.get(line.id)}</td>
                                 <td className={cell}>
                                     <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                                     {line.origin && <span className="text-gray-600"> · {line.origin}</span>}
