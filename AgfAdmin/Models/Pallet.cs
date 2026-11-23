@@ -22,6 +22,10 @@ namespace AgfAdmin.Models
         public string LocationContext { get; set; } // Supplier, Warehouse, Crossdock, InTransit, Customer, External
         public string WarehouseLocation { get; set; } // optioneel; alleen in het eigen magazijn
 
+        // Feedback 22 november: de voorraadlocatie waar de pallet ontvangen is (null = de eigen loods). Gezet bij aanmaken, daarna vast (regel 40).
+        public int? StockLocationId { get; set; }
+        public StockLocation StockLocation { get; set; }
+
         public int? StockReceiptId { get; set; }
         public StockReceipt StockReceipt { get; set; }
 

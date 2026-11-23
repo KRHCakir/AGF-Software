@@ -15,6 +15,8 @@ namespace AgfAdmin.DTOs
         public string LogisticsStatus { get; set; }
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
+        // Feedback 22 november: de voorraadlocatie (null = de eigen loods); alleen bij aanmaken (guard-regel 40).
+        public int? StockLocationId { get; set; }
         public string Reason { get; set; }
     }
 
@@ -70,6 +72,10 @@ namespace AgfAdmin.DTOs
         public string LogisticsStatus { get; set; }
         public string LocationContext { get; set; }
         public string WarehouseLocation { get; set; }
+        // Voorraadlocatie: Id en naam zijn null voor de eigen loods; de soort is dan OwnWarehouse.
+        public int? StockLocationId { get; set; }
+        public string StockLocationName { get; set; }
+        public string StockLocationKind { get; set; }
         public DateTime CreatedAt { get; set; }
         public int Version { get; set; }
         public List<PalletContentLineDto> ContentLines { get; set; } = new();

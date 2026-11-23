@@ -48,6 +48,14 @@ namespace AgfAdmin.Models
         public string DeliveryTermText { get; set; }
         public string Note { get; set; }
 
+        // Feedback 22 november: waar ontvangen wordt (null = de eigen loods; een locatie van de soort Onderweg bij directe handel: daar heet
+        // Ontvangen Afgeleverd), het laadadres (leeg als de leverancier levert; het adres van de leverancier als we ophalen) en het afleveradres
+        // (leeg = de eigen loods; de klant bij directe handel). Vrije tekst zoals op de transportopdracht.
+        public int? ReceiveLocationId { get; set; }
+        public StockLocation ReceiveLocation { get; set; }
+        public string LoadingAddress { get; set; }
+        public string DeliveryAddress { get; set; }
+
         // Partij van deze order (kop): de regels erven haar, de ontvangen palletregels nemen haar over van de regel. Optioneel: oudere
         // orders en orders zonder partij blijven geldig ("Geen partij"). Partij van de leverancier: diens eigen lotnummer, vrije tekst.
         public int? PartijId { get; set; }

@@ -3415,6 +3415,9 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(18)
                         .HasColumnType("character varying(18)");
 
+                    b.Property<int?>("StockLocationId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("StockReceiptId")
                         .HasColumnType("integer");
 
@@ -3440,6 +3443,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("Sscc")
                         .IsUnique();
+
+                    b.HasIndex("StockLocationId");
 
                     b.HasIndex("StockReceiptId");
 
@@ -5714,6 +5719,64 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.StockLocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("StockLocations", t =>
+                        {
+                            t.HasCheckConstraint("CK_StockLocations_Kind", "\"Kind\" IN ('OwnWarehouse', 'Supplier', 'Crossdock', 'ExternalStorage', 'InTransit')");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.StockMovement", b =>
                 {
                     b.Property<int>("Id")
@@ -5940,6 +6003,10 @@ namespace AgfAdmin.Migrations
                     b.Property<int?>("CustomerId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DeliveryAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("DeliveryTermKind")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
@@ -6001,6 +6068,10 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("LoadingAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -6038,6 +6109,9 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<int?>("PartijId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ReceiveLocationId")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("RequestId")
@@ -6081,6 +6155,8 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("OriginCountryCode");
 
                     b.HasIndex("PartijId");
+
+                    b.HasIndex("ReceiveLocationId");
 
                     b.HasIndex("RequestId")
                         .IsUnique();
@@ -7091,10 +7167,17 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.Pallet", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.StockLocation", "StockLocation")
+                        .WithMany()
+                        .HasForeignKey("StockLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.StockReceipt", "StockReceipt")
                         .WithMany()
                         .HasForeignKey("StockReceiptId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("StockLocation");
 
                     b.Navigation("StockReceipt");
                 });
@@ -7680,6 +7763,11 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("PartijId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.StockLocation", "ReceiveLocation")
+                        .WithMany()
+                        .HasForeignKey("ReceiveLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.Vendor", "Vendor")
                         .WithMany()
                         .HasForeignKey("VendorId")
@@ -7689,6 +7777,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Partij");
+
+                    b.Navigation("ReceiveLocation");
 
                     b.Navigation("Vendor");
                 });
