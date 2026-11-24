@@ -101,6 +101,27 @@ public sealed class PartijTraceTests : IDisposable
         Assert.Equal(expected == null ? null : (decimal?)expected.Value, (await DetailAsync(lot.Id)).PurchaseValue);
     }
 
+    // Review: een tweede passende inkoopregel zonder prijs is twijfel; dan geen prijs, ook al heeft de andere regel er wel een.
+    [Fact]
+    public async Task A_Second_Matching_Purchase_Line_Without_Price_Leaves_The_Direct_Invoice_Value_Unknown()
+    {
+        await ArrangeAsync();
+        await using (var db = _s.Factory.CreateContext())
+        {
+            var order = await db.SupplyCommitments.SingleAsync(c => c.PartijId == _lotA);
+            db.Add(new SupplyCommitmentLine { SupplyCommitmentId = order.Id, ProductVariantId = _s.TomatoId, ExpectedQuantity = 5m, ExpectedUnit = "colli", PartijId = _lotA });
+            await db.SaveChangesAsync();
+            var created = await new SalesInvoiceController(db, new PartijService(db)).CreateInvoice(new SalesInvoiceController.CreateInvoiceDto
+            {
+                CustomerName = "Balieklant", Lines = new() { new() { Description = "Tomaat ronde", Quantity = 4m, Unit = "colli", UnitPrice = 12m, VATPercentage = 9m, PartijId = _lotA } }
+            });
+            Assert.IsType<OkObjectResult>(created);
+        }
+        await using var verify = _s.Factory.CreateContext();
+        var lot = await verify.Partijen.SingleAsync(p => p.InvoiceId != null);
+        Assert.Null((await DetailAsync(lot.Id)).PurchaseValue);
+    }
+
     // Review: twee verzendingen van dezelfde order uit dezelfde partij blijven twee regels, elk met de datum van die verzending.
     [Fact]
     public async Task Each_Dispatch_Is_Its_Own_Destination_With_Its_Own_Date()

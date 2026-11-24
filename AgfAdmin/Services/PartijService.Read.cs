@@ -465,7 +465,8 @@ namespace AgfAdmin.Services
             // Inkoopprijs van de inkoop-partij: alleen de inkoopregel van hetzelfde product én dezelfde eenheid (de prijs geldt per verpakking van de
             // regel, review); zonder passende regel blijft de prijs, en daarmee de inkoopwaarde, onbekend. Nooit omrekenen tussen eenheden.
             var purchasePartijIds = lines.Where(l => l.PartijId != null).Select(l => l.PartijId.Value).Distinct().ToList();
-            var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.UnitPrice != null)
+            // Ook regels zonder prijs: die tellen mee als kandidaat, zodat twijfel nooit een prijs oplevert (review); zonder prijs is de waarde onbekend.
+            var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.SupplyCommitment.Status != SupplyRules.StatusCancelled)
                 .OrderBy(c => c.Id)
                 .Select(c => new { PartijId = c.PartijId.Value, c.ProductVariantId, c.ExpectedUnit, c.UnitPrice, c.DiscountPercentage, c.SupplyCommitment.ExchangeRate }).ToListAsync(cancellationToken);
             return invoices.ToDictionary(i => invoiceIds[i.Id], i => new SalesSide(invoiceIds[i.Id], 0, i.InvoiceNumber, "Invoiced", i.CustomCustomerName,
