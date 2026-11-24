@@ -47,6 +47,12 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
     openFifo?: boolean;
 }) {
     const { t, locale } = useTranslation();
+    const deliveries = [...(order.deliveries ?? [])].sort((a, b) => a.sequence - b.sequence);
+    const deliveryOf = (reservationId: number): string | null => {
+        if (deliveries.length <= 1) return null;
+        const delivery = deliveries.find((d) => d.reservationIds.includes(reservationId));
+        return delivery ? t('so_reservation_delivery', { sequence: String(delivery.sequence), partij: delivery.partijNumber ?? '–' }) : null;
+    };
     const { commands } = usePendingCommands();
     const [choosing, setChoosing] = useState(false);
     const [allocating, setAllocating] = useState(false);
@@ -295,7 +301,11 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
                                             ) : (
                                                 <>
                                                     <td className={`${td} font-mono`}>{reservation.palletReference ?? t('availability_unknown')}</td>
-                                                    <td className={td}>{reservation.lotNumber ?? t('availability_unknown')}</td>
+                                                    <td className={td}>
+                                                        {reservation.lotNumber ?? t('availability_unknown')}
+                                                        {/* Feedback 22 november: met meer leveringen staat bij elke pallet met welke levering (V-nummer) hij meegaat. */}
+                                                        {deliveryOf(reservation.id) && <span className="block text-xs text-gray-600" data-testid="reservation-delivery">{deliveryOf(reservation.id)}</span>}
+                                                    </td>
                                                     <td className={`${td} font-mono text-xs`} data-testid="reservation-purchase-order">{reservation.supplyOrderNumber ?? t('availability_unknown')}</td>
                                                     <td className={`${td} font-mono text-xs`}>{reservation.warehouseLocation ?? t('supply_no_bin')}</td>
                                                     <td className={`${td} text-right`}>{formatQuantity(reservation.quantity, locale)} <UnitBadge unit={reservation.unit} /></td>

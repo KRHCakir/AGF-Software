@@ -29,6 +29,7 @@ import { ServiceLinesView } from './ServiceLines';
 import { usePendingCommands } from './PendingCommandsContext';
 import { ExpectedAllocationBadge, OnHoldBadge, OrderStatusBadge } from './ReservationBadges';
 import ChainStrip from '../shared/ChainStrip';
+import SalesDeliveries from './SalesDeliveries';
 import SalesOrderDocuments from './SalesOrderDocuments';
 import SalesOrderTransport from './SalesOrderTransport';
 import SalesOrderDeliveryTerm from './SalesOrderDeliveryTerm';
@@ -401,6 +402,8 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
                     </div>
                 )}
             </header>
+            {/* Feedback 22 november: de leveringen, elk met een eigen V-nummer; Deellevering maakt er een bij. */}
+            <SalesDeliveries order={order} readOnly={readOnly} onChanged={onOrderChanged} />
             {/* Bevestigen, de laadbon (documenten deel 1) en het transport met de transportopdracht (deel 2). */}
             <SalesOrderDocuments order={order} onChanged={() => void onOrderChanged()} reloadKey={transportSaves} />
             <SalesOrderTransport order={order} onChanged={() => { setTransportSaves((n) => n + 1); void onOrderChanged(); }} />
