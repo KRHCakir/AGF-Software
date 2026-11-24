@@ -17,6 +17,8 @@ namespace AgfAdmin.Services
         Task<ServiceResult<SalesOrderDto>> UpdateDeliveryTermAsync(int salesOrderId, UpdateSalesOrderDeliveryTermDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<SalesOrderAuditEventDto>>> GetAuditEventsAsync(int salesOrderId, CancellationToken cancellationToken = default);
         Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default);
+        Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, int? partijId, CancellationToken cancellationToken = default);
+        Task<ServiceResult<IReadOnlyList<LotOptionDto>>> GetLotOptionsAsync(int productVariantId, string unit, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<AwaitingStockLineDto>>> GetAwaitingStockAsync(CancellationToken cancellationToken = default);
     }
 
@@ -113,6 +115,13 @@ namespace AgfAdmin.Services
                 return (ServiceResult<SalesOrderDto>.Validation(new Dictionary<string, string[]> { [$"lines[{index}].productVariantId"] = new[] { ArticleRules.ArchivedMessage(archived.Id) } }), false);
             }
 
+            // Feedback 22 november: een gevraagde partij is een inkoop-partij met dit artikel (op voorraad of verwacht).
+            var lotErrors = await RequestedLotErrorsAsync(lines, cancellationToken);
+            if (lotErrors.Count > 0)
+            {
+                return (ServiceResult<SalesOrderDto>.Validation(lotErrors), false);
+            }
+
             // Berekende kg: exact aantal × de huidige standaard van het artikel (na de replaycontrole, net als hele pallets).
             for (var i = 0; i < lines.Count; i++)
             {
@@ -173,6 +182,30 @@ namespace AgfAdmin.Services
 
             var created = await OrderQuery().SingleAsync(o => o.Id == candidate.Id, cancellationToken);
             return (await WithWarningsAsync(ServiceResult<SalesOrderDto>.Created(await ToDtoWithBalancesAsync(created, null, cancellationToken)), cancellationToken), false);
+        }
+
+        private async Task<Dictionary<string, string[]>> RequestedLotErrorsAsync(List<SalesOrderLine> lines, CancellationToken cancellationToken)
+        {
+            var errors = new Dictionary<string, string[]>();
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].PartijId is not int partijId) continue;
+                var variantId = lines[i].ProductVariantId;
+                var lot = await _db.Partijen.AsNoTracking().Where(p => p.Id == partijId).Select(p => new { p.Number, p.Kind }).SingleOrDefaultAsync(cancellationToken);
+                var message = lot == null ? $"Lot {partijId} does not exist."
+                    : lot.Kind != PartijRules.KindPurchase ? $"Lot {lot.Number} is a sales lot; a sales order line comes from a purchase lot."
+                    : !await _db.PalletContentLines.AsNoTracking().AnyAsync(c => c.PartijId == partijId && c.SupplyCommitmentLine.ProductVariantId == variantId
+                            && (c.Quantity - c.DispatchedQuantity - c.SplitOffQuantity > 0m), cancellationToken)
+                        && !await _db.SupplyCommitmentLines.AsNoTracking().AnyAsync(l => l.PartijId == partijId && l.ProductVariantId == variantId
+                            && SupplyRules.AllocatableCommitmentStatuses.Contains(l.SupplyCommitment.Status), cancellationToken)
+                        ? $"Lot {lot.Number} has no stock or expected supply of this article."
+                        : null;
+                if (message != null)
+                {
+                    errors[$"lines[{i}].partijId"] = new[] { message };
+                }
+            }
+            return errors;
         }
 
         private async Task<ServiceResult<SalesOrderDto>> AttachSalesPartijAsync(CreateSalesOrderDto request, SalesOrder candidate, CancellationToken cancellationToken)
@@ -335,7 +368,7 @@ namespace AgfAdmin.Services
                     // SupplySource blijft null als de aanvrager er geen opgaf: de replayvergelijking accepteert dan elke opgeslagen bron.
                     lines.Add(new SalesOrderLine { ProductVariantId = line.ProductVariantId.Value, Quantity = total.Value, Unit = line.Unit, PalletCount = line.PalletCount, PackagesPerPallet = line.PackagesPerPallet, LoosePackages = line.LoosePackages,
                         NetWeightKg = line.NetWeightKg, GrossWeightKg = line.GrossWeightKg, WeightSource = weightSource, SupplySource = line.SupplySource,
-                        UnitPrice = line.UnitPrice, DiscountPercentage = line.DiscountPercentage, VatPercentage = line.VatPercentage });
+                        UnitPrice = line.UnitPrice, DiscountPercentage = line.DiscountPercentage, VatPercentage = line.VatPercentage, PartijId = line.PartijId });
                 }
             }
 
@@ -412,6 +445,7 @@ namespace AgfAdmin.Services
                     && pair.First.UnitPrice == pair.Second.UnitPrice
                     && pair.First.DiscountPercentage == pair.Second.DiscountPercentage
                     && pair.First.VatPercentage == pair.Second.VatPercentage
+                    && pair.First.PartijId == pair.Second.PartijId
                     && (pair.Second.SupplySource == null || string.Equals(pair.First.SupplySource, pair.Second.SupplySource, StringComparison.Ordinal))
                     && string.Equals(pair.First.Unit, pair.Second.Unit, StringComparison.Ordinal));
 
@@ -774,10 +808,15 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<IReadOnlyList<ReservableStockLineDto>>.NotFound($"Sales order line {salesOrderLineId} does not exist on sales order {salesOrderId}.");
             }
+            return ServiceResult<IReadOnlyList<ReservableStockLineDto>>.Ok(await ReservableAsync(_db, line.ProductVariantId, line.Unit, cancellationToken));
+        }
 
-            var contents = await _db.PalletContentLines.AsNoTracking()
-                .Where(c => c.SupplyCommitmentLine.ProductVariantId == line.ProductVariantId
-                    && c.Unit == line.Unit
+        // Vrije, goedgekeurde voorraad van dit artikel in deze eenheid, per palletregel (gedeeld door "Kies voorraad", FIFO en de partijkeuze).
+        internal static async Task<List<ReservableStockLineDto>> ReservableAsync(AppDbContext db, int productVariantId, string unit, CancellationToken cancellationToken)
+        {
+            var contents = await db.PalletContentLines.AsNoTracking()
+                .Where(c => c.SupplyCommitmentLine.ProductVariantId == productVariantId
+                    && c.Unit == unit
                     && c.QualityStatus == PalletRules.QualityApproved
                     && c.Pallet.LogisticsStatus == PalletRules.StatusReceived
                     && c.Pallet.LocationContext == PalletRules.LocationWarehouse
@@ -786,12 +825,15 @@ namespace AgfAdmin.Services
                 {
                     c.Id, c.PalletId, PalletReference = c.Pallet.Reference, c.Pallet.WarehouseLocation, c.LotNumber, c.Ggn, c.Unit,
                     c.Quantity, c.NetWeightKg, c.WeightMethod, c.NetKgPerPackage, c.DispatchedQuantity, c.DispatchedNetWeightKg, c.SplitOffQuantity, c.SplitOffNetWeightKg, c.QualityStatus, c.Version, PalletCreatedAt = c.Pallet.CreatedAt,
-                    c.CreatedAt, c.SupplyCommitmentLine.SupplyCommitmentId, SupplyOrderNumber = c.SupplyCommitmentLine.SupplyCommitment.OrderNumber
+                    c.CreatedAt, c.SupplyCommitmentLine.SupplyCommitmentId, SupplyOrderNumber = c.SupplyCommitmentLine.SupplyCommitment.OrderNumber,
+                    c.PartijId, PartijNumber = c.Partij.Number, StockLocationName = c.Pallet.StockLocation.Name,
+                    Size = c.SupplyCommitmentLine.ProductVariant.SizeCategory, VariantOrigin = c.SupplyCommitmentLine.ProductVariant.OriginCountryCode ?? c.SupplyCommitmentLine.ProductVariant.Origin,
+                    SupplyOrigin = c.SupplyCommitmentLine.SupplyCommitment.Origin, VendorName = c.SupplyCommitmentLine.SupplyCommitment.Vendor.Name
                 })
                 .ToListAsync(cancellationToken);
 
-            var reserved = await ReservedByContentLineAsync(_db, contents.Select(c => c.Id).ToList(), cancellationToken);
-            var result = contents
+            var reserved = await ReservedByContentLineAsync(db, contents.Select(c => c.Id).ToList(), cancellationToken);
+            return contents
                 .Select(c =>
                 {
                     var (quantity, kg) = reserved.GetValueOrDefault(c.Id);
@@ -823,21 +865,61 @@ namespace AgfAdmin.Services
                         ContentLineVersion = c.Version,
                         ReceivedAt = DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc),
                         SupplyCommitmentId = c.SupplyCommitmentId,
-                        SupplyOrderNumber = c.SupplyOrderNumber
+                        SupplyOrderNumber = c.SupplyOrderNumber,
+                        PartijId = c.PartijId,
+                        PartijNumber = c.PartijNumber,
+                        StockLocationName = c.StockLocationName,
+                        Size = c.Size,
+                        Origin = c.SupplyOrigin ?? c.VariantOrigin,
+                        VendorName = c.VendorName,
                     };
                 })
                 .Where(c => c.AvailableQuantity > 0m)
                 .OrderBy(c => c.PalletReference, StringComparer.Ordinal)
                 .ThenBy(c => c.PalletContentLineId)
                 .ToList();
-            return ServiceResult<IReadOnlyList<ReservableStockLineDto>>.Ok(result);
+        }
+
+        // Feedback 22 november: de partijkeuze. De vrije voorraad van een artikel per inkoop-partij: vrij aantal, maat, herkomst, locatie(s),
+        // vroegste ontvangst en leverancier; de oudste partij eerst (zoals FIFO). Voorraad zonder partij staat er op haar lotnummer bij, maar
+        // is niet te kiezen (werklijst Partij ontbreekt). Een houdbaarheidsdatum (THT) bestaat nog niet; dan zou dit FEFO zijn.
+        public async Task<ServiceResult<IReadOnlyList<LotOptionDto>>> GetLotOptionsAsync(int productVariantId, string unit, CancellationToken cancellationToken = default)
+        {
+            if (!SupplyRules.IsPackageUnit(unit))
+            {
+                return ServiceResult<IReadOnlyList<LotOptionDto>>.Validation(new Dictionary<string, string[]> { ["unit"] = new[] { $"Unit must be one of: {string.Join(", ", SupplyRules.PackageUnits)}." } });
+            }
+            var stock = await ReservableAsync(_db, productVariantId, unit, cancellationToken);
+            var options = stock.GroupBy(s => (s.PartijId, Number: s.PartijNumber ?? s.LotNumber))
+                .Select(g => new LotOptionDto
+                {
+                    PartijId = g.Key.PartijId,
+                    Number = g.Key.Number,
+                    Unit = unit,
+                    AvailableQuantity = g.Sum(s => s.AvailableQuantity),
+                    PalletCount = g.Select(s => s.PalletId).Distinct().Count(),
+                    Size = g.Select(s => s.Size).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
+                    Origin = g.Select(s => s.Origin).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
+                    Locations = g.Select(s => s.StockLocationName).Distinct().OrderBy(n => n ?? "", StringComparer.Ordinal).ToList(),
+                    Bins = g.Select(s => s.WarehouseLocation).Where(b => !string.IsNullOrWhiteSpace(b)).Distinct().OrderBy(b => b, StringComparer.Ordinal).ToList(),
+                    ReceivedAt = g.Min(s => s.ReceivedAt),
+                    VendorName = g.Select(s => s.VendorName).FirstOrDefault(v => v != null),
+                })
+                .OrderBy(o => o.ReceivedAt).ThenBy(o => o.Number, StringComparer.Ordinal)
+                .ToList();
+            return ServiceResult<IReadOnlyList<LotOptionDto>>.Ok(options);
         }
 
         // ======================== Verkopen vóór aankomst: oudste partij eerst en de werklijst ========================
 
         // Oudste partij eerst (FIFO): op ontvangstmoment (registratie van de inhoudsregel; er is geen apart ontvangstveld), dan partijnummer,
         // dan inhoudsregel. Verdeelt wat de regel nog nodig heeft over zoveel pallets als nodig; niets wordt opgeslagen.
-        public async Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default)
+        // Feedback 22 november: met een partij (meegegeven, anders de gevraagde partij van de regel) alleen uit die partij; zonder partij de
+        // oudste partij eerst over alle voorraad, zoals altijd.
+        public async Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, CancellationToken cancellationToken = default) =>
+            await GetFifoProposalAsync(salesOrderId, salesOrderLineId, null, cancellationToken);
+
+        public async Task<ServiceResult<FifoReservationProposalDto>> GetFifoProposalAsync(int salesOrderId, int salesOrderLineId, int? partijId, CancellationToken cancellationToken = default)
         {
             var reservable = await GetReservableStockAsync(salesOrderId, salesOrderLineId, cancellationToken);
             if (reservable.Status != ServiceResultStatus.Ok)
@@ -846,7 +928,8 @@ namespace AgfAdmin.Services
             }
             var line = await _db.SalesOrderLines.AsNoTracking().SingleAsync(l => l.Id == salesOrderLineId, cancellationToken);
             var needed = Math.Max(0m, line.Quantity - await CommittedOnOrderLineAsync(_db, line.Id, cancellationToken));
-            var candidates = FifoOrder(reservable.Value).ToList();
+            var lot = partijId ?? line.PartijId;
+            var candidates = FifoOrder(reservable.Value.Where(c => lot == null || c.PartijId == lot)).ToList();
             var items = ProposeFifo(candidates, needed);
             return ServiceResult<FifoReservationProposalDto>.Ok(new FifoReservationProposalDto
             {
@@ -962,6 +1045,7 @@ namespace AgfAdmin.Services
                 .Include(o => o.Customer)
                 .Include(o => o.Deliveries).ThenInclude(d => d.Partij)
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
+                .Include(o => o.Lines).ThenInclude(l => l.Partij)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Partij)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.SupplyCommitmentLine).ThenInclude(s => s.SupplyCommitment).ThenInclude(c => c.Vendor)
@@ -1052,6 +1136,8 @@ namespace AgfAdmin.Services
                 {
                     Id = line.Id,
                     ProductVariantId = line.ProductVariantId,
+                    PartijId = line.PartijId,
+                    PartijNumber = line.Partij?.Number,
                     ProductName = line.ProductVariant?.Product?.Name,
                     ProductVariantName = line.ProductVariant?.Name,
                     Quantity = line.Quantity,

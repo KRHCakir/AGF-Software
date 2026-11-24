@@ -60,9 +60,14 @@ namespace AgfAdmin.Controllers
             this.ToActionResult(await _orders.GetAwaitingStockAsync(HttpContext?.RequestAborted ?? default));
 
         // Voorstel "Reserveren (oudste partij eerst)": alleen lezen; bevestigen via reservations/batch.
+        // Feedback 22 november: de partijkeuze van een orderregel (ook al vóór de order bestaat): vrije voorraad per inkoop-partij.
+        [HttpGet("lot-options")]
+        public async Task<IActionResult> LotOptions([FromQuery] int productVariantId, [FromQuery] string unit) =>
+            this.ToActionResult(await _orders.GetLotOptionsAsync(productVariantId, unit, HttpContext?.RequestAborted ?? default));
+
         [HttpGet("{id:int}/lines/{lineId:int}/fifo-proposal")]
-        public async Task<IActionResult> FifoProposal(int id, int lineId) =>
-            this.ToActionResult(await _orders.GetFifoProposalAsync(id, lineId, HttpContext?.RequestAborted ?? default));
+        public async Task<IActionResult> FifoProposal(int id, int lineId, [FromQuery] int? partijId = null) =>
+            this.ToActionResult(await _orders.GetFifoProposalAsync(id, lineId, partijId, HttpContext?.RequestAborted ?? default));
 
         [HttpGet("{id:int}/lines/{lineId:int}/reservable-stock")]
         public async Task<IActionResult> GetReservableStock(int id, int lineId) =>

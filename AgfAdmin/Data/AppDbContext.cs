@@ -1545,6 +1545,8 @@ namespace AgfAdmin.Data
 
             modelBuilder.Entity<SalesOrderLine>(b =>
             {
+                // Feedback 22 november: de gevraagde inkoop-partij van de regel (optioneel).
+                b.HasOne(l => l.Partij).WithMany().HasForeignKey(l => l.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(l => l.Quantity).HasPrecision(18, 3);
                 b.Property(l => l.Unit).IsRequired().HasMaxLength(32);
                 b.Property(l => l.PalletCount).HasPrecision(18, 3);

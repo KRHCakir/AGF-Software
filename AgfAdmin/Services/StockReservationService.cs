@@ -12,13 +12,14 @@ namespace AgfAdmin.Services
         Task<ServiceResult<StockReservationDto>> ReserveAsync(int salesOrderId, int salesOrderLineId, CreateStockReservationDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<StockReservationDto>> ReleaseAsync(int reservationId, ReleaseStockReservationDto request, CancellationToken cancellationToken = default);
         Task<ServiceResult<IReadOnlyList<StockReservationDto>>> ReserveBatchAsync(int salesOrderId, int salesOrderLineId, CreateStockReservationBatchDto request, CancellationToken cancellationToken = default);
+        Task<ServiceResult<IReadOnlyList<StockReservationDto>>> ChangeLotAsync(int reservationId, ChangeReservationLotDto request, CancellationToken cancellationToken = default);
     }
 
     // Reserveren op precies één PalletContentLine (Warehouse-route, Received + Warehouse, Approved) en weer vrijgeven.
     // Hoeveelheid, eenheid en netto-kg zijn altijd expliciet; er wordt niets afgeleid of omgerekend.
     // Concurrency: reserveren raakt de inhoudsregel, de orderregel en de pallet aan (versie +1, concurrency-token);
     // vrijgeven controleert expectedReservationVersion en raakt de inhoudsregel aan. Eén save = één transactie met audit.
-    public sealed class StockReservationService : IStockReservationService
+    public sealed partial class StockReservationService : IStockReservationService
     {
         private static readonly JsonSerializerOptions SnapshotJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 

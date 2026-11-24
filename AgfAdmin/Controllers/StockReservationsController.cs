@@ -19,6 +19,11 @@ namespace AgfAdmin.Controllers
         }
 
         // Vrijgeven met een verplichte reden en de verwachte reserveringsversie (optimistische concurrency).
+        // Feedback 22 november: de partij van een actieve reservering wijzigen (bij het picken), met auditregel.
+        [HttpPost("{id:int}/change-lot")]
+        public async Task<IActionResult> ChangeLot(int id, [FromBody] ChangeReservationLotDto request) =>
+            this.ToActionResult(await _reservations.ChangeLotAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         [HttpPost("{id:int}/release")]
         public async Task<IActionResult> Release(int id, [FromBody] ReleaseStockReservationDto request) =>
             this.ToActionResult(await _reservations.ReleaseAsync(id, request, HttpContext?.RequestAborted ?? default));

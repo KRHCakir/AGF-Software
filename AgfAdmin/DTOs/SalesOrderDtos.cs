@@ -91,6 +91,8 @@ namespace AgfAdmin.DTOs
         public decimal? UnitPrice { get; set; }
         public decimal? DiscountPercentage { get; set; }
         public decimal? VatPercentage { get; set; }
+        // Feedback 22 november: de gevraagde inkoop-partij (optioneel); leeg = de oudste partij eerst bij het reserveren.
+        public int? PartijId { get; set; }
     }
 
     public sealed class SalesOrderFilter
@@ -178,6 +180,9 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public int ProductVariantId { get; set; }
+        // Feedback 22 november: de gevraagde inkoop-partij van de regel (leeg = de oudste partij eerst).
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
         public string ProductName { get; set; }
         public string ProductVariantName { get; set; }
         public decimal Quantity { get; set; }
@@ -352,6 +357,30 @@ namespace AgfAdmin.DTOs
         public DateTime ReceivedAt { get; set; }
         public int SupplyCommitmentId { get; set; }
         public string SupplyOrderNumber { get; set; }
+        // Feedback 22 november: de inkoop-partij, de voorraadlocatie (leeg = de eigen loods), maat, herkomst en leverancier.
+        public int? PartijId { get; set; }
+        public string PartijNumber { get; set; }
+        public string StockLocationName { get; set; }
+        public string Size { get; set; }
+        public string Origin { get; set; }
+        public string VendorName { get; set; }
+    }
+
+    // Feedback 22 november: één partij in de partijkeuze van een orderregel. PartijId null = voorraad zonder partij (alleen ter informatie).
+    // Locations: de voorraadlocaties (null = de eigen loods); Bins: de vakken in de loods.
+    public sealed class LotOptionDto
+    {
+        public int? PartijId { get; set; }
+        public string Number { get; set; }
+        public string Unit { get; set; }
+        public decimal AvailableQuantity { get; set; }
+        public int PalletCount { get; set; }
+        public string Size { get; set; }
+        public string Origin { get; set; }
+        public List<string> Locations { get; set; } = new();
+        public List<string> Bins { get; set; } = new();
+        public DateTime ReceivedAt { get; set; }
+        public string VendorName { get; set; }
     }
 
     // Verzenden: gekozen Active reserveringen in hun geheel verbruiken; hoeveelheid, eenheid en kg komen uit de reservering.
@@ -454,6 +483,15 @@ namespace AgfAdmin.DTOs
         public string Unit { get; set; }
         public decimal? NetWeightKg { get; set; }
         public string Reason { get; set; }
+    }
+
+    // Feedback 22 november: bij het picken de partij van een reservering wijzigen. De reservering wordt vrijgegeven en dezelfde hoeveelheid
+    // wordt uit de gekozen partij gereserveerd (oudste pallet eerst), in één opslag met auditregels. Idempotent via requestId.
+    public sealed class ChangeReservationLotDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? ExpectedReservationVersion { get; set; }
+        public int? PartijId { get; set; }
     }
 
     public sealed class ReleaseStockReservationDto

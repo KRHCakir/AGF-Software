@@ -5352,6 +5352,9 @@ namespace AgfAdmin.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<int?>("PartijId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ProductVariantId")
                         .HasColumnType("integer");
 
@@ -5391,6 +5394,8 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("character varying(16)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PartijId");
 
                     b.HasIndex("ProductVariantId");
 
@@ -7657,6 +7662,11 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderLine", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithMany()
+                        .HasForeignKey("PartijId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductVariantId")
@@ -7668,6 +7678,8 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("SalesOrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Partij");
 
                     b.Navigation("ProductVariant");
 
