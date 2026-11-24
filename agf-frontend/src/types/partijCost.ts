@@ -13,6 +13,8 @@ export interface LineAllocation {
     quantity?: number;
     unit?: string | null;
     netKg?: number;
+    // Feedback 22 november: inkoopwaarde in euro (Verdeel naar waarde); null of ontbrekend = geen prijzen.
+    value?: number | null;
 }
 
 export interface AllocationHistory {

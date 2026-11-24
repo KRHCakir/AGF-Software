@@ -23,6 +23,7 @@ import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel
 import PartijStatusBadge from './PartijStatusBadge';
 import { SalesPartijSources, SalesPartijSummary } from './SalesPartijSections';
 import PartijCostsSection from './PartijCostsSection';
+import PartijTrace from './PartijTrace';
 
 const h3 = 'mb-2 text-sm font-semibold text-gray-900';
 const link = 'font-mono text-blue-800 underline underline-offset-2';
@@ -140,6 +141,8 @@ export default function PartijDetail({ partij, onChanged, onDeleted }: { partij:
             </section>
             </>}
 
+            {/* Feedback 22 november: herleidbaarheid (recall bij inkoop, levering bij verkoop), af te drukken en als CSV te exporteren. */}
+            <PartijTrace partij={partij} />
             <PartijCostsSection partij={partij} />
 
             <section className={sectionClass} aria-labelledby="partij-history">

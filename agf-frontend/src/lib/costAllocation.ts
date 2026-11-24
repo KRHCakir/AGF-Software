@@ -2,7 +2,8 @@
 // zodat ze met node:test te toetsen is. Rekenen in centen (gehele getallen): nooit een afrondingsfout in de som.
 import { parseLocaleDecimal, type NumberLocale } from './decimal.ts';
 
-export type DistributeMode = 'equal' | 'kg' | 'colli';
+// Feedback 22 november: ook naar de inkoopwaarde van de partijen (Verdeel naar waarde).
+export type DistributeMode = 'equal' | 'kg' | 'colli' | 'value';
 
 // Een partij in de verdeling, met de basis voor "verdeel naar kg / colli": ontvangen (inkoop) of besteld (verkoop).
 export interface CostTarget {
@@ -14,6 +15,8 @@ export interface CostTarget {
     quantity: number;
     unit: string | null;
     netKg: number;
+    // Inkoopwaarde in euro (null = geen prijzen bekend: doet niet mee met Verdeel naar waarde).
+    value?: number | null;
 }
 
 export interface Distribution {
@@ -25,11 +28,11 @@ export interface Distribution {
 
 const toCents = (euros: number) => Math.round(euros * 100);
 
-// Verdeel het bedrag (euro) over de partijen: gelijk, naar netto kg of naar colli. Afronden op centen naar beneden; de resterende centen
+// Verdeel het bedrag (euro) over de partijen: gelijk, naar netto kg, naar colli of naar inkoopwaarde. Afronden op centen naar beneden; de resterende centen
 // gaan naar de grootste partij (bij gelijke grootte de eerste), zodat de som precies het bedrag is. Een partij zonder kg of colli doet
 // niet mee; doet niemand mee, dan krijgt niemand iets.
 export function distribute(totalEuros: number, targets: readonly CostTarget[], mode: DistributeMode): Distribution {
-    const weights = targets.map((target) => (mode === 'equal' ? 1 : mode === 'kg' ? target.netKg : target.quantity));
+    const weights = targets.map((target) => (mode === 'equal' ? 1 : mode === 'kg' ? target.netKg : mode === 'value' ? target.value ?? 0 : target.quantity));
     const skipped = targets.filter((_, index) => !(weights[index] > 0)).map((target) => target.partijId);
     const sum = weights.reduce((total, weight) => total + (weight > 0 ? weight : 0), 0);
     if (sum <= 0) return { amounts: targets.map(() => null), skipped: targets.map((target) => target.partijId) };
