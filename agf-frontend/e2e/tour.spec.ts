@@ -70,6 +70,9 @@ function expectAllSteps(result: Played) {
 
 const tourRefOf = (done: string) => /(DEMO-TOUR-\d+)/.exec(done)?.[1] ?? '';
 
+// Klant en artikel van de verkooporder uit het hoofdstuk Verkooporder, voor de test Verkopen per partij.
+let soldArticle: { customerId: number; productVariantId: number; unit: string } | null = null;
+
 // Op een lege database doet een los gestart hoofdstuk alles zelf (stamgegevens, order, ontvangst, verkoop): ruim de tijd.
 test.describe.configure({ mode: 'serial', timeout: 600_000 });
 
@@ -256,8 +259,10 @@ test('hoofdstuk Verkooporder: VO-nummer, gereserveerd met inkooporder, partij en
     const result = await play(page, 'sales');
     expectAllSteps(result);
     const number = /Verkooporder (VO-\d{4}-\d+)/.exec(result.done)?.[1];
-    const orders = await json<{ id: number; orderNumber: string; customerReference: string | null; actorReference: string; lines: { quantity: number; dispatchedQuantity: number }[] }[]>(request, `/sales-orders?q=${number}`);
+    const orders = await json<{ id: number; orderNumber: string; customerId: number; customerReference: string | null; actorReference: string;
+        lines: { quantity: number; dispatchedQuantity: number; productVariantId: number; unit: string }[] }[]>(request, `/sales-orders?q=${number}`);
     const order = orders.find((candidate) => candidate.orderNumber === number)!;
+    soldArticle = { customerId: order.customerId, productVariantId: order.lines[0].productVariantId, unit: order.lines[0].unit };
     expect(order.customerReference).toMatch(/^DEMO-TOUR-\d+$/);
     expect(order.actorReference).toBe(await signedIn(request));
     expect(order.lines.map((line) => [line.quantity, line.dispatchedQuantity])).toEqual([[4, 4]]);
@@ -274,6 +279,52 @@ test('hoofdstuk Verkooporder: VO-nummer, gereserveerd met inkooporder, partij en
     const after = await json<{ id: number; status: string; to: string; sentBy: string }[]>(request, `/sales-orders/${order.id}/mail-drafts`);
     expect(after.find((draft) => draft.id === transport.id)).toMatchObject({ status: 'Sent', to: 'planning@vervoerder.example', sentBy: await signedIn(request) });
     await expectActorBack(page);
+    await page.close();
+});
+
+// Feedback 22 november: verkopen per partij. Een nieuwe order (via de API, met klant en artikel van de rondleiding) krijgt in het scherm zijn
+// voorraad uit een gekozen partij (Partij kiezen, typen en Enter); daarna maakt Deellevering een tweede levering met een eigen V-nummer, en na
+// bevestigen heeft elke levering haar eigen laadbon.
+test('Verkopen per partij: partij kiezen op de orderregel, deellevering met een eigen V-nummer en laadbon', async ({ request }) => {
+    expect(soldArticle, 'het hoofdstuk Verkooporder liep eerst').not.toBeNull();
+    const { customerId, productVariantId, unit } = soldArticle!;
+    const options = await json<{ partijId: number | null; number: string; availableQuantity: number }[]>(request, `/sales-orders/lot-options?productVariantId=${productVariantId}&unit=${unit}`);
+    const lot = options.find((option) => option.partijId !== null && option.availableQuantity >= 2);
+    expect(lot, 'een partij met minstens 2 vrij').toBeDefined();
+    const created = await request.post(`${API}/sales-orders`, { data: {
+        requestId: crypto.randomUUID(), customerId, requestedDeliveryDate: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+        lines: [{ productVariantId, quantity: 2, unit, supplySource: 'Stock' }],
+    } });
+    expect(created.status()).toBe(201);
+    const orderId = ((await created.json()) as { id: number }).id;
+
+    const page = await context.newPage();
+    await page.goto(`/sales-orders?orderId=${orderId}`);
+    await page.locator('[data-tour="sales-choose-lot"]').click();
+    const picker = page.locator('[data-tour="sales-choose-lot-picker"] input');
+    await picker.fill(lot!.number.replace(/^[A-Z]-/, ''));
+    await page.keyboard.press('Enter');
+    await expect(page.locator('[data-testid="line-fifo-lot"]')).toContainText(lot!.number);
+    await page.locator('[data-tour="sales-fifo-confirm"]').click();
+    type Order = { deliveries: { sequence: number; partijNumber: string; reservationIds: number[] }[]; lines: { reservations: { id: number; status: string; partijNumber: string | null }[] }[] };
+    await expect.poll(async () => (await json<Order>(request, `/sales-orders/${orderId}`)).lines[0].reservations.filter((r) => r.status === 'Active').map((r) => r.partijNumber))
+        .toEqual(expect.arrayContaining([lot!.number]));
+
+    await page.locator('[data-tour="so-partial-delivery"]').click();
+    await page.locator('[data-tour="so-partial-delivery-reservation"]').first().check();
+    await page.locator('[data-tour="so-partial-delivery-create"]').click();
+    await expect.poll(async () => (await json<Order>(request, `/sales-orders/${orderId}`)).deliveries.length).toBe(2);
+    const order = await json<Order>(request, `/sales-orders/${orderId}`);
+    expect(order.deliveries[0].partijNumber).not.toBe(order.deliveries[1].partijNumber);
+    expect(order.deliveries[1].partijNumber).toMatch(/^V-/);
+    expect(order.deliveries[1].reservationIds.length).toBe(1);
+    await expect(page.locator('[data-testid="so-delivery"]')).toHaveCount(2);
+    if (SHOTS !== '') await page.screenshot({ path: `${SHOTS}/partij-deellevering.png`, fullPage: true });
+
+    expect((await request.post(`${API}/sales-orders/${orderId}/confirm`, { data: {} })).ok()).toBeTruthy();
+    const documents = await json<{ documents: { number: string; deliverySequence: number }[] }>(request, `/sales-orders/${orderId}/documents`);
+    expect(documents.documents.map((d) => d.deliverySequence).sort()).toEqual([1, 2]);
+    expect(documents.documents.find((d) => d.deliverySequence === 2)!.number).toMatch(/-2$/);
     await page.close();
 });
 

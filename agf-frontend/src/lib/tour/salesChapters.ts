@@ -39,6 +39,8 @@ export const SALES_CORE: TourStep[] = [
         { kind: 'type', target: 'sales-line-quantity:0', text: '{{salesQuantity}}' },
         { kind: 'highlight', target: 'sales-line-price:0' },
     ]),
+    // Feedback 22 november: de partij van de regel, optioneel. De rondleiding laat het veld leeg: dan neemt reserveren de oudste partij eerst.
+    sales('lot', [{ kind: 'highlight', target: 'sales-line-lot' }]),
     // Emballage: een pallet bij de goederen, met het voorstel uit de regels; doet niets met de voorraad en komt later op de factuur.
     sales('packaging', [
         { kind: 'click', target: 'sales-add-pallet' },
@@ -67,6 +69,12 @@ export const SALES_CORE: TourStep[] = [
     sales('origin', [
         { kind: 'wait', target: 'sales-reservations' },
         { kind: 'highlight', target: 'sales-reservations' },
+    ]),
+    // Feedback 22 november: verkopen per partij. Partij kiezen reserveert uit een gekozen partij (een regel mag uit meer partijen komen), en
+    // per reservering kan de partij bij het picken nog wijzigen. Elke levering is een eigen verkoop-partij; Deellevering maakt er een bij.
+    sales('choose_lot', [
+        { kind: 'highlight', target: 'sales-change-lot' },
+        { kind: 'highlight', target: 'so-deliveries' },
     ]),
     // Transport (documenten deel 2): een vervoerder, snel aangemaakt met alleen de naam (met het kenmerk van deze rondleiding, dus altijd
     // nieuw), de temperatuur, opslaan.
