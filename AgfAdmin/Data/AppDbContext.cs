@@ -73,6 +73,7 @@ namespace AgfAdmin.Data
         public DbSet<SalesOrderPackagingLine> SalesOrderPackagingLines { get; set; }
         public DbSet<SalesOrderServiceLine> SalesOrderServiceLines { get; set; }
         public DbSet<SalesOrderDocument> SalesOrderDocuments { get; set; }
+        public DbSet<SalesDelivery> SalesDeliveries { get; set; }
         public DbSet<SalesOrderTransport> SalesOrderTransports { get; set; }
         public DbSet<DocumentRecipient> DocumentRecipients { get; set; }
         public DbSet<MailDraft> MailDrafts { get; set; }
@@ -112,6 +113,7 @@ namespace AgfAdmin.Data
             EnsurePaymentConditionsAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureOrderNumbersAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureSalesPartijenAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
+            EnsureReservationDeliveriesAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
             var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
@@ -137,6 +139,7 @@ namespace AgfAdmin.Data
             await EnsurePaymentConditionsAsync(async: true, cancellationToken);
             await EnsureOrderNumbersAsync(async: true, cancellationToken);
             await EnsureSalesPartijenAsync(async: true, cancellationToken);
+            await EnsureReservationDeliveriesAsync(async: true, cancellationToken);
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
             var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
@@ -253,31 +256,69 @@ namespace AgfAdmin.Data
         // reeks voor verkoop-partijen, op de dag van vandaag (Europe/Amsterdam). Een zelf getypt nummer zet SalesOrderService zelf (na de
         // dubbelcontrole). Twee gelijktijdige orders kunnen hetzelfde volgnummer kiezen; de unieke index weigert dan de tweede en
         // SalesOrderService probeert opnieuw. Een bestaande order krijgt hier nooit een andere partij.
+        // Feedback 22 november: de verkoop-partij hoort bij de eerste levering (SalesDelivery, volgnummer 1), die hier samen met de order ontstaat.
         private async Task EnsureSalesPartijenAsync(bool async, CancellationToken cancellationToken)
         {
-            var tracked = ChangeTracker.Entries<Partij>().Where(e => e.State != EntityState.Detached).Select(e => e.Entity).ToList();
+            var trackedDeliveries = ChangeTracker.Entries<SalesDelivery>().Where(e => e.State != EntityState.Detached).Select(e => e.Entity).ToList();
             var orders = ChangeTracker.Entries<SalesOrder>().Where(e => e.State == EntityState.Added).Select(e => e.Entity)
-                .Where(o => o.SalesPartij == null && !tracked.Any(p => p.Kind == PartijRules.KindSales && (p.SalesOrder == o || (o.Id > 0 && p.SalesOrderId == o.Id))))
+                .Where(o => !trackedDeliveries.Any(d => d.SalesOrder == o || (o.Id > 0 && d.SalesOrderId == o.Id)))
                 .OrderBy(o => o.CreatedAt).ToList();
             if (orders.Count == 0)
             {
                 return;
             }
-            var settingsQuery = CompanySettings.AsNoTracking().OrderBy(c => c.Id);
-            var settings = (async ? await settingsQuery.FirstOrDefaultAsync(cancellationToken) : settingsQuery.FirstOrDefault()) ?? new CompanySettings();
+            var trackedLots = ChangeTracker.Entries<Partij>().Where(e => e.State != EntityState.Detached).Select(e => e.Entity).ToList();
+            CompanySettings settings = null;
             // Vandaag, zoals het voorstel op het scherm (PartijService.NextNumberAsync) en de inkoop-partij.
             var day = BusinessCalendar.Today();
             foreach (var order in orders)
             {
-                var (number, period, sequence) = await PartijService.AllocateAsync(this, PartijRules.KindSales, settings.SalesPartijNumberFormat, settings.PartijSequenceReset,
-                    settings.SalesPartijSequenceDigits, day, async, cancellationToken);
-                var partij = new Partij
+                // Een zelf getypte (of door een test meegegeven) verkoop-partij van deze order gaat voor; anders het volgende voorstel.
+                var partij = trackedLots.FirstOrDefault(p => p.Kind == PartijRules.KindSales && p.InvoiceId == null && p.Invoice == null
+                    && (p.SalesOrder == order || (order.Id > 0 && p.SalesOrderId == order.Id)));
+                if (partij == null)
                 {
-                    Kind = PartijRules.KindSales, Number = number, NumberKey = PartijRules.NumberKey(number), SequencePeriod = period, Sequence = sequence,
-                    CreatedAt = order.CreatedAt, CreatedBy = Truncate(order.ActorReference, PartijRules.MaxActorLength) ?? PartijRules.MigrationActor, SalesOrder = order
-                };
-                order.SalesPartij = partij;
-                Partijen.Add(partij);
+                    if (settings == null)
+                    {
+                        var settingsQuery = CompanySettings.AsNoTracking().OrderBy(c => c.Id);
+                        settings = (async ? await settingsQuery.FirstOrDefaultAsync(cancellationToken) : settingsQuery.FirstOrDefault()) ?? new CompanySettings();
+                    }
+                    var (number, period, sequence) = await PartijService.AllocateAsync(this, PartijRules.KindSales, settings.SalesPartijNumberFormat, settings.PartijSequenceReset,
+                        settings.SalesPartijSequenceDigits, day, async, cancellationToken);
+                    partij = new Partij
+                    {
+                        Kind = PartijRules.KindSales, Number = number, NumberKey = PartijRules.NumberKey(number), SequencePeriod = period, Sequence = sequence,
+                        CreatedAt = order.CreatedAt, CreatedBy = Truncate(order.ActorReference, PartijRules.MaxActorLength) ?? PartijRules.MigrationActor, SalesOrder = order
+                    };
+                    Partijen.Add(partij);
+                }
+                var delivery = new SalesDelivery { SalesOrder = order, Sequence = 1, Partij = partij, CreatedAt = order.CreatedAt, CreatedBy = partij.CreatedBy };
+                order.Deliveries.Add(delivery);
+                SalesDeliveries.Add(delivery);
+            }
+        }
+
+        // Feedback 22 november: een nieuwe verkoopreservering op een order met deellevering(en) gaat mee met de laatste levering (daar staat
+        // ook wat nog niet gereserveerd is), ongeacht de schrijver. Zonder deellevering blijft de levering leeg: dat is de eerste.
+        private async Task EnsureReservationDeliveriesAsync(bool async, CancellationToken cancellationToken)
+        {
+            var added = ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State == EntityState.Added && e.Entity.SalesDelivery == null && e.Entity.SalesDeliveryId == null && e.Entity.SalesOrderLineId != null)
+                .Select(e => e.Entity).ToList();
+            if (added.Count == 0)
+            {
+                return;
+            }
+            var lineIds = added.Select(r => r.SalesOrderLineId.Value).Distinct().ToList();
+            var query = SalesOrderLines.AsNoTracking().Where(l => lineIds.Contains(l.Id))
+                .Select(l => new { l.Id, Last = l.SalesOrder.Deliveries.OrderByDescending(d => d.Sequence).Select(d => new { d.Id, d.Sequence }).FirstOrDefault() });
+            var lastOfLine = (async ? await query.ToListAsync(cancellationToken) : query.ToList()).ToDictionary(l => l.Id, l => l.Last);
+            foreach (var reservation in added)
+            {
+                if (lastOfLine.TryGetValue(reservation.SalesOrderLineId.Value, out var last) && last != null && last.Sequence > 1)
+                {
+                    reservation.SalesDeliveryId = last.Id;
+                }
             }
         }
 
@@ -336,6 +377,11 @@ namespace AgfAdmin.Data
             foreach (var entry in ChangeTracker.Entries<StockLocation>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<SalesDelivery>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(d => d.Version).CurrentValue = entry.Property(d => d.Version).OriginalValue + 1;
             }
 
             foreach (var entry in ChangeTracker.Entries<SalesOrderTransport>().Where(e => e.State == EntityState.Modified))
@@ -623,7 +669,8 @@ namespace AgfAdmin.Data
                 b.Property(p => p.Status).IsRequired().HasMaxLength(16);
                 b.Property(p => p.SequencePeriod).HasMaxLength(10);
                 b.HasIndex(p => new { p.Kind, p.SequencePeriod, p.Sequence }).IsUnique();
-                b.HasOne(p => p.SalesOrder).WithOne(o => o.SalesPartij).HasForeignKey<Partij>(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                // Feedback 22 november: een order heeft een verkoop-partij per levering (SalesDelivery.PartijId), dus meerdere.
+                b.HasOne(p => p.SalesOrder).WithMany().HasForeignKey(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(p => p.Invoice).WithOne(i => i.SalesPartij).HasForeignKey<Partij>(p => p.InvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
                 b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
@@ -1029,6 +1076,7 @@ namespace AgfAdmin.Data
 
             modelBuilder.Entity<StockReservation>(b =>
             {
+                b.HasOne(r => r.SalesDelivery).WithMany().HasForeignKey(r => r.SalesDeliveryId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(r => r.Source).IsRequired().HasMaxLength(32);
                 b.Property(r => r.Status).IsRequired().HasMaxLength(32);
                 b.Property(r => r.Quantity).HasPrecision(18, 3);
@@ -1339,7 +1387,10 @@ namespace AgfAdmin.Data
                 b.Property(d => d.CreatedBy).IsRequired().HasMaxLength(100);
                 b.Property(d => d.SentBy).HasMaxLength(100);
                 b.HasOne(d => d.SalesOrder).WithMany(o => o.Documents).HasForeignKey(d => d.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
-                b.HasIndex(d => new { d.SalesOrderId, d.Kind, d.Version }).IsUnique();
+                // Versies tellen per levering (feedback 22 november: elke levering een eigen laadbon en transportopdracht).
+                b.HasOne(d => d.SalesDelivery).WithMany().HasForeignKey(d => d.SalesDeliveryId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(d => new { d.SalesDeliveryId, d.Kind, d.Version }).IsUnique();
+                b.HasIndex(d => d.SalesOrderId);
                 b.ToTable(t =>
                 {
                     t.HasCheckConstraint("CK_SalesOrderDocuments_Version", "\"Version\" >= 1");
@@ -1418,6 +1469,18 @@ namespace AgfAdmin.Data
 
             // Transport van een verkooporder (documenten deel 2): hooguit één per order. Een vervoerder bij Carrier, nooit bij Own. Het
             // gekozen losadres mag later van de klant verdwijnen (dan leeg); de transportopdracht bewaart haar eigen snapshot.
+            modelBuilder.Entity<SalesDelivery>(b =>
+            {
+                b.HasOne(d => d.SalesOrder).WithMany(o => o.Deliveries).HasForeignKey(d => d.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.Partij).WithOne(p => p.SalesDelivery).HasForeignKey<SalesDelivery>(d => d.PartijId).OnDelete(DeleteBehavior.Restrict);
+                b.HasIndex(d => new { d.SalesOrderId, d.Sequence }).IsUnique();
+                b.HasIndex(d => d.RequestId).IsUnique();
+                b.Property(d => d.LicensePlate).HasMaxLength(SalesOrderDocumentRules.MaxLicensePlateLength);
+                b.Property(d => d.CreatedBy).IsRequired().HasMaxLength(100);
+                b.Property(d => d.Version).IsConcurrencyToken();
+                b.ToTable(t => t.HasCheckConstraint("CK_SalesDeliveries_Sequence", "\"Sequence\" >= 1"));
+            });
+
             modelBuilder.Entity<SalesOrderTransport>(b =>
             {
                 b.HasKey(t => t.SalesOrderId);

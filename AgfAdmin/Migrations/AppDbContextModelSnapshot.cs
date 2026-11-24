@@ -3751,8 +3751,7 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("RequestId")
                         .IsUnique();
 
-                    b.HasIndex("SalesOrderId")
-                        .IsUnique();
+                    b.HasIndex("SalesOrderId");
 
                     b.HasIndex("Kind", "NumberKey")
                         .IsUnique();
@@ -4816,6 +4815,62 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesDelivery", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LicensePlate")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("LoadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PartijId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SalesOrderId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartijId")
+                        .IsUnique();
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
+
+                    b.HasIndex("SalesOrderId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("SalesDeliveries", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesDeliveries_Sequence", "\"Sequence\" >= 1");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>
                 {
                     b.Property<int>("Id")
@@ -5227,6 +5282,9 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int>("SalesDeliveryId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("SalesOrderId")
                         .HasColumnType("integer");
 
@@ -5246,7 +5304,9 @@ namespace AgfAdmin.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SalesOrderId", "Kind", "Version")
+                    b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("SalesDeliveryId", "Kind", "Version")
                         .IsUnique();
 
                     b.ToTable("SalesOrderDocuments", t =>
@@ -5930,6 +5990,9 @@ namespace AgfAdmin.Migrations
                     b.Property<Guid?>("RequestId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("SalesDeliveryId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("SalesOrderLineId")
                         .HasColumnType("integer");
 
@@ -5968,6 +6031,8 @@ namespace AgfAdmin.Migrations
 
                     b.HasIndex("RequestId")
                         .IsUnique();
+
+                    b.HasIndex("SalesDeliveryId");
 
                     b.HasIndex("SalesOrderLineId");
 
@@ -7265,8 +7330,8 @@ namespace AgfAdmin.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
-                        .WithOne("SalesPartij")
-                        .HasForeignKey("AgfAdmin.Models.Partij", "SalesOrderId")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Invoice");
@@ -7430,6 +7495,25 @@ namespace AgfAdmin.Migrations
                     b.Navigation("RelationContact");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesDelivery", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Partij", "Partij")
+                        .WithOne("SalesDelivery")
+                        .HasForeignKey("AgfAdmin.Models.SalesDelivery", "PartijId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
+                        .WithMany("Deliveries")
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Partij");
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesDispatch", b =>
                 {
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
@@ -7554,11 +7638,19 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrderDocument", b =>
                 {
+                    b.HasOne("AgfAdmin.Models.SalesDelivery", "SalesDelivery")
+                        .WithMany()
+                        .HasForeignKey("SalesDeliveryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
                         .WithMany("Documents")
                         .HasForeignKey("SalesOrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("SalesDelivery");
 
                     b.Navigation("SalesOrder");
                 });
@@ -7751,6 +7843,11 @@ namespace AgfAdmin.Migrations
                         .HasForeignKey("PalletContentLineId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("AgfAdmin.Models.SalesDelivery", "SalesDelivery")
+                        .WithMany()
+                        .HasForeignKey("SalesDeliveryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("AgfAdmin.Models.SalesOrderLine", "SalesOrderLine")
                         .WithMany("Reservations")
                         .HasForeignKey("SalesOrderLineId")
@@ -7765,6 +7862,8 @@ namespace AgfAdmin.Migrations
                     b.Navigation("OrderLine");
 
                     b.Navigation("PalletContentLine");
+
+                    b.Navigation("SalesDelivery");
 
                     b.Navigation("SalesOrderLine");
 
@@ -8047,6 +8146,11 @@ namespace AgfAdmin.Migrations
                     b.Navigation("ContentLines");
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.Partij", b =>
+                {
+                    b.Navigation("SalesDelivery");
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.Product", b =>
                 {
                     b.Navigation("Variants");
@@ -8110,13 +8214,13 @@ namespace AgfAdmin.Migrations
 
             modelBuilder.Entity("AgfAdmin.Models.SalesOrder", b =>
                 {
+                    b.Navigation("Deliveries");
+
                     b.Navigation("Documents");
 
                     b.Navigation("Lines");
 
                     b.Navigation("PackagingLines");
-
-                    b.Navigation("SalesPartij");
 
                     b.Navigation("ServiceLines");
 

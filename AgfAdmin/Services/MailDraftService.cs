@@ -18,7 +18,7 @@ namespace AgfAdmin.Services
         // van een oudere versie wordt "vervangen". Eigen transport of klant haalt op: geen vervoerder, dus geen concept voor de transportopdracht.
         public async Task<int> EnsureDraftsAsync(int orderId, CancellationToken cancellationToken = default)
         {
-            var order = await db.SalesOrders.AsNoTracking().Include(o => o.Customer).Include(o => o.SalesPartij)
+            var order = await db.SalesOrders.AsNoTracking().Include(o => o.Customer).Include(o => o.Deliveries).ThenInclude(d => d.Partij)
                 .Include(o => o.Transport).ThenInclude(t => t.CarrierRelation)
                 .SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken);
             if (order?.ConfirmedAt == null) return 0;
@@ -284,7 +284,7 @@ namespace AgfAdmin.Services
             var values = new Dictionary<string, string>
             {
                 ["{bedrijf}"] = company.CompanyName, ["{document}"] = MailTemplateRules.DocumentName(document.Kind), ["{nummer}"] = document.Number,
-                ["{versie}"] = document.Version.ToString(), ["{order}"] = order.OrderNumber, ["{partij}"] = order.SalesPartij?.Number ?? order.OrderNumber,
+                ["{versie}"] = document.Version.ToString(), ["{order}"] = order.OrderNumber, ["{partij}"] = order.FirstSalesPartij?.Number ?? order.OrderNumber,
                 ["{klant}"] = order.Customer?.Name, ["{datum}"] = MailTemplateRules.Date(DateTime.UtcNow, false),
                 ["{laaddatum}"] = order.LoadAt != null ? MailTemplateRules.Date(order.LoadAt.Value, true) : "nog niet bekend",
             };

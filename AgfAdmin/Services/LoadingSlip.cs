@@ -114,7 +114,7 @@ namespace AgfAdmin.Services
                 settings.LoadingSlipShowCustomer, settings.LoadingSlipShowSupplier,
                 settings.CompanyName, Blank(settings.Address), LogoImageOf(settings.LogoPath),
                 Blank(settings.LoadingSlipWarehouseAddress),
-                settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.SalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
+                settings.LoadingSlipShowCustomer ? order.Customer?.Name : null, order.FirstSalesPartij?.Number, order.OrderNumber, Blank(order.CustomerReference),
                 Second(order.RequestedDeliveryDate), order.LoadAt == null ? null : Second(order.LoadAt.Value), Blank(order.LicensePlate),
                 rows, packaging, rows.Sum(r => r.Quantity), pallets.Count == 0 ? null : pallets.Sum(), kgs.Count == 0 ? null : kgs.Sum(),
                 Second(order.ConfirmedAt ?? DateTime.UtcNow), order.ConfirmedBy, WeightDisplay.Clamp(settings.WeightDisplayDecimals), Blank(ownCoc));

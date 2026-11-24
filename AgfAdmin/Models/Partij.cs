@@ -24,6 +24,8 @@ namespace AgfAdmin.Models
         // verkoop-partij. Een verkoop-partij hoort bij precies één verkooporder óf één directe factuur (database-check en regel 24).
         public int? InvoiceId { get; set; }
         public Invoice Invoice { get; set; }
+        // De levering waar deze verkoop-partij bij hoort (feedback 22 november: een verkoop-partij is één levering aan één klant).
+        public SalesDelivery SalesDelivery { get; set; }
 
         // Opgeslagen status: nu altijd Open. Uitverkocht wordt afgeleid (PartijRules.DisplayStatus), Afgesloten komt met het
         // partijrapport (P3) als tweede opgeslagen waarde.

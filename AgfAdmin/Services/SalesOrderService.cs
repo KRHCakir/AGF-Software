@@ -189,8 +189,8 @@ namespace AgfAdmin.Services
             }
             built.Partij.CreatedAt = candidate.CreatedAt;
             built.Partij.SalesOrder = candidate;
-            candidate.SalesPartij = built.Partij;
             _db.Partijen.Add(built.Partij);
+            // De eerste levering met deze partij maakt AppDbContext (EnsureSalesPartijenAsync) bij het opslaan, zoals bij een voorgesteld nummer.
             return null;
         }
 
@@ -489,7 +489,7 @@ namespace AgfAdmin.Services
                 var q = filter.Q.Trim().ToLower();
                 var partijKey = PartijRules.NumberKey(filter.Q);
                 query = query.Where(o => o.OrderNumber.ToLower().Contains(q)
-                    || (partijKey != null && o.SalesPartij != null && o.SalesPartij.NumberKey.Contains(partijKey))
+                    || (partijKey != null && o.Deliveries.Any(d => d.Partij.NumberKey.Contains(partijKey)))
                     || (o.CustomerReference != null && o.CustomerReference.ToLower().Contains(q))
                     || o.Customer.Name.ToLower().Contains(q)
                     || o.PackagingLines.Any(p => p.CostArticle.Name.ToLower().Contains(q))
@@ -960,7 +960,7 @@ namespace AgfAdmin.Services
         private IQueryable<SalesOrder> OrderQuery() =>
             _db.SalesOrders.AsNoTracking()
                 .Include(o => o.Customer)
-                .Include(o => o.SalesPartij)
+                .Include(o => o.Deliveries).ThenInclude(d => d.Partij)
                 .Include(o => o.Lines).ThenInclude(l => l.ProductVariant).ThenInclude(v => v.Product)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
                 .Include(o => o.Lines).ThenInclude(l => l.Reservations).ThenInclude(r => r.PalletContentLine).ThenInclude(c => c.Partij)
@@ -1009,8 +1009,10 @@ namespace AgfAdmin.Services
         {
             Id = order.Id,
             OrderNumber = order.OrderNumber,
-            SalesPartijId = order.SalesPartij?.Id,
-            SalesPartijNumber = order.SalesPartij?.Number,
+            SalesPartijId = order.FirstSalesPartij?.Id,
+            SalesPartijNumber = order.FirstSalesPartij?.Number,
+            // Feedback 22 november: elke levering met haar verkoop-partij en de reserveringen die erbij horen (leeg = de eerste levering).
+            Deliveries = SalesDeliveryRules.ToDtos(order),
             // Zelfde regel als PartijService.SalesNumberFixedAsync: geannuleerd, of iets gereserveerd (ook toegewezen, verzonden of vrijgegeven).
             SalesPartijFixed = order.Status != ReservationRules.OrderStatusOpen || order.Lines.Any(l => l.Reservations.Count > 0),
             RequestId = order.RequestId,

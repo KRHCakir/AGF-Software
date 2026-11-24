@@ -111,6 +111,8 @@ namespace AgfAdmin.DTOs
         public int? SalesPartijId { get; set; }
         public string SalesPartijNumber { get; set; }
         public bool SalesPartijFixed { get; set; }
+        // Feedback 22 november: de leveringen van de order, elk met een eigen verkoop-partij (V-nummer); de eerste staat er altijd.
+        public List<SalesDeliveryDto> Deliveries { get; set; } = new();
         public Guid RequestId { get; set; }
         public int CustomerId { get; set; }
         public string CustomerName { get; set; }
@@ -230,9 +232,27 @@ namespace AgfAdmin.DTOs
         public List<StockReservationDto> Reservations { get; set; } = new();
     }
 
+    // Eén levering van een verkooporder (feedback 22 november): volgnummer, verkoop-partij, laden op en kenteken (de eerste levering die
+    // van de order), en welke reserveringen erbij horen. Wat nog niet gereserveerd is, staat op de laatste levering.
+    public sealed class SalesDeliveryDto
+    {
+        public int Id { get; set; }
+        public int Sequence { get; set; }
+        public int PartijId { get; set; }
+        public string PartijNumber { get; set; }
+        public bool Last { get; set; }
+        public DateTime? LoadAt { get; set; }
+        public string LicensePlate { get; set; }
+        public List<int> ReservationIds { get; set; } = new();
+        public DateTime CreatedAt { get; set; }
+        public string CreatedBy { get; set; }
+    }
+
     public sealed class StockReservationDto
     {
         public int Id { get; set; }
+        // Feedback 22 november: de levering van deze reservering; leeg = de eerste levering van de order.
+        public int? SalesDeliveryId { get; set; }
         public Guid? RequestId { get; set; }
         public int SalesOrderId { get; set; }
         public int SalesOrderLineId { get; set; }

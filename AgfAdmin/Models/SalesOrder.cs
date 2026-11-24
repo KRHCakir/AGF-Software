@@ -19,9 +19,11 @@ namespace AgfAdmin.Models
         public string OrderNumber { get; set; }
         public int OrderYear { get; set; }
         public int OrderSequence { get; set; }
-        // Verkoop-partij (P2): het partijnummer waarmee op papier gewerkt wordt (261140), naast het VO-nummer. Bij het eerste opslaan
-        // toegekend (voorgesteld of zelf getypt), daarna 1-op-1 met deze order. Welk van de twee later het hoofdnummer wordt, kiest de eigenaar.
-        public Partij SalesPartij { get; set; }
+        // Leveringen (feedback 22 november): elke levering heeft een eigen verkoop-partij (V-nummer). De eerste levering ontstaat samen met de
+        // order, met de verkoop-partij die vóór deze ronde 1-op-1 bij de order hoorde (P2). Zie SalesDelivery.
+        public ICollection<SalesDelivery> Deliveries { get; set; } = new List<SalesDelivery>();
+        // De verkoop-partij van de eerste levering (het partijnummer op het orderformulier); alleen als de leveringen met hun partij geladen zijn.
+        public Partij FirstSalesPartij => Deliveries?.OrderBy(d => d.Sequence).FirstOrDefault()?.Partij;
         // Partij uit de oorspronkelijke aanvraag, voor de replayvergelijking: "auto" (voorgesteld) of "new:<sleutel>" (zelf getypt).
         // Null bij orders van vóór de verkoop-partij.
         public string RequestPartijKey { get; set; }
