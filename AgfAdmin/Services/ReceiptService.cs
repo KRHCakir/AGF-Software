@@ -185,9 +185,11 @@ namespace AgfAdmin.Services
                 return Validation(errors);
             }
 
-            // Lotnummer: de partij van de regel neemt PalletService over; zonder partij het lot van de regel, anders het ordernummer, zodat
-            // de ontvangst altijd herleidbaar is tot deze order.
-            var lot = line.PartijId != null ? null : FirstText(line.LotNumber, order.SupplierLotReference, order.OrderNumber);
+            // Lotnummer: de partij van de regel neemt PalletService over. Zonder partij krijgt de order er bij deze ontvangst een (regel 41):
+            // met de nummering aan het volgende voorstel (I-…); met eigen nummers het lot van de regel, anders dat van de leverancier, anders
+            // het ordernummer, zodat de ontvangst altijd herleidbaar is tot deze order.
+            var ownNumbers = (await PartijService.SettingsAsync(_db, cancellationToken)).PartijNumberMode != PartijRules.ModeAuto;
+            var lot = line.PartijId != null || order.PartijId != null || !ownNumbers ? null : FirstText(line.LotNumber, order.SupplierLotReference, order.OrderNumber);
             var ggn = line.Ggn ?? await ProposedGgnAsync(order.VendorId, cancellationToken);
             var requestId = request.RequestId!.Value;
 

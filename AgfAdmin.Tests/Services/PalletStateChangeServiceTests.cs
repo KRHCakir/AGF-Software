@@ -447,7 +447,7 @@ public class PalletStateChangeServiceTests : IDisposable
     public async Task One_Unapproved_Line_Blocks_Dispatch_Of_The_Whole_Pallet()
     {
         var (palletId, _) = await PalletInStateAsync("Received");
-        await AddLineAsync(palletId, _seed.WarehouseLine, "LOT-2");
+        await AddLineAsync(palletId, _seed.WarehouseLine, "LOT-1");
 
         Assert.Equal(ServiceResultStatus.Conflict, (await ChangeStatusAsync(palletId, await StatusCommandAsync(palletId, "Dispatched", "InTransit"))).Status);
     }
@@ -711,7 +711,7 @@ public class PalletStateChangeServiceTests : IDisposable
     public async Task Allowed_Quality_Transition_Changes_Only_That_Line_And_Writes_One_Event(string from, string to, string reason)
     {
         var (palletId, lineId) = await PalletInStateAsync("Received", quality: from);
-        var otherLineId = await AddLineAsync(palletId, _seed.WarehouseLine, "LOT-OTHER");
+        var otherLineId = await AddLineAsync(palletId, _seed.WarehouseLine, "LOT-1");
         var lineBefore = await LoadLineAsync(lineId);
         var palletVersionBefore = await PalletVersionAsync(palletId);
         var eventsBefore = (await EventsAsync()).Count;
@@ -1007,7 +1007,7 @@ public class PalletStateChangeServiceTests : IDisposable
     public async Task Reused_Quality_RequestId_With_Different_Command_Is_Conflict(string change)
     {
         var (palletId, lineId) = await PalletInStateAsync("Received", quality: "Quarantine");
-        var otherLineId = await AddLineAsync(palletId, _seed.WarehouseLine, "LOT-OTHER");
+        var otherLineId = await AddLineAsync(palletId, _seed.WarehouseLine, "LOT-1");
         var command = await QualityCommandAsync(lineId, "Blocked", "Claim");
         await ChangeQualityAsync(palletId, lineId, command);
 

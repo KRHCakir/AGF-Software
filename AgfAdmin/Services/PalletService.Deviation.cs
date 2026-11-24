@@ -111,6 +111,8 @@ namespace AgfAdmin.Services
                 // Certificaten deel 2: het GGN zoals bij deze ontvangst gekozen.
                 Ggn = candidate.Ggn,
                 PartijId = original.PartijId,
+                // Een partij die de order pas bij deze ontvangst kreeg (nog zonder id) via de navigatie.
+                Partij = original.Partij,
                 ReplacesLineId = original.Id,
                 CreatedAt = candidate.CreatedAt
             };

@@ -1,4 +1,5 @@
 using AgfAdmin.DTOs;
+using AgfAdmin.Models;
 using AgfAdmin.Services;
 using AgfAdmin.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -175,12 +176,24 @@ public class PartijOrderTests : IDisposable
     [Fact]
     public async Task Received_Order_Without_Lot_Is_Linked_With_A_Reason_And_Keeps_Its_Lot_Numbers()
     {
+        // Voorraad van vóór regel 41 (bijvoorbeeld in een kopie): een ontvangen regel zonder partij, rechtstreeks in de database. Die staat
+        // in de werklijst "Partij ontbreekt" tot de order met reden aan een partij gekoppeld is.
         var order = (await CreateAsync(await RequestAsync())).Value;
-        await ReceiveAsync(order.Lines[0].Id, "OUD-7");
+        await using (var legacy = _factory.CreateContext())
+        {
+            legacy.PalletContentLines.Add(new PalletContentLine
+            {
+                RequestId = Guid.NewGuid(), Pallet = new Pallet { Reference = "P-OUD-7", LogisticsStatus = "Received", LocationContext = "Warehouse" },
+                SupplyCommitmentLineId = order.Lines[0].Id, LotNumber = "OUD-7", Quantity = 10m, Unit = "box", NetWeightKg = 40m, QualityStatus = "Quarantine"
+            });
+            await legacy.SaveChangesAsync();
+        }
         var partij = await PartijTestData.CreateAsync(_factory, "2610251");
 
         await using var db = _factory.CreateContext();
         var service = new PartijService(db);
+        var missing = Assert.Single(await service.MissingAsync());
+        Assert.Equal(("P-OUD-7", order.OrderNumber, "OUD-7", 10m), (missing.PalletReference, missing.OrderNumber, missing.LotNumber, missing.OnHandQuantity));
         Assert.Equal(ServiceResultStatus.Validation, (await service.LinkOrderAsync(partij, new LinkPartijDto { SupplyCommitmentId = order.Id })).Status);
         var linked = await service.LinkOrderAsync(partij, new LinkPartijDto { SupplyCommitmentId = order.Id, Reason = "Partij stond op de pakbon" });
         Assert.Equal(ServiceResultStatus.Ok, linked.Status);
@@ -190,5 +203,6 @@ public class PartijOrderTests : IDisposable
         Assert.Equal((partij, "OUD-7"), (content.PartijId, content.LotNumber));
         var audit = await verify.PartijAuditEvents.AsNoTracking().SingleAsync();
         Assert.Equal(("OrderLinked", order.Id, "Partij stond op de pakbon"), (audit.EventType, audit.SupplyCommitmentId.Value, audit.Reason));
+        Assert.Empty(await new PartijService(verify).MissingAsync());
     }
 }

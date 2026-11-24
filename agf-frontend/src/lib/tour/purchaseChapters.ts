@@ -4,7 +4,7 @@
 
 import { prerequisite, step } from './compose';
 import { ARTICLE_STEPS, VENDOR_STEPS } from './masterdataChapter';
-import { lookupOrderEdit, lookupOtherArticle, lookupPurchase, lookupReceive, lookupSplit, precheckOrderEdit, precheckPurchase, precheckReceive, precheckSplit } from './prechecks';
+import { lookupOrderEdit, lookupOtherArticle, lookupPurchase, lookupReceive, lookupReceivedLot, lookupSplit, precheckOrderEdit, precheckPurchase, precheckReceive, precheckSplit } from './prechecks';
 import type { TourAction, TourChapter, TourStep } from './types';
 
 const order = (id: string, route: string, actions: readonly TourAction[]) => step('order', id, route, actions);
@@ -195,7 +195,9 @@ export const RECEIVE_CORE: TourStep[] = [
         { kind: 'wait', target: 'receive-line-inspect:{{lineId}}' },
         { kind: 'highlight', target: 'receive-notice' },
     ]),
+    // Een lookup loopt aan het begin van zijn stap (vóór de klikken): hier, na Ontvangen, leest hij de partij die de ontvangst gaf.
     receive('inspector', '/receipts?order={{orderId}}', [
+        { kind: 'lookup', run: lookupReceivedLot },
         { kind: 'click', target: 'receive-line-inspect:{{lineId}}' },
     ]),
     // Wie beoordeelt: per keuring gekozen (hier de rondleiding zelf); vastgelegd naast de ingelogde gebruiker.
