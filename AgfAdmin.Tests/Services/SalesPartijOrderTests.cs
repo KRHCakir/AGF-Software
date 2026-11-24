@@ -18,7 +18,9 @@ public sealed class SalesPartijOrderTests : IDisposable
 
     public void Dispose() => _s.Dispose();
 
-    private async Task SettingsAsync(string format = "5{JJ}{MM}{volgnr}", string salesFormat = null, int? digits = null, string mode = "Auto", string reset = "Yearly", int? salesDigits = null)
+    // Een bedrijf met de formaten van vóór feedback 22 november (5 vooraan voor inkoop, verkoop zonder letter): zo testen deze tests de
+    // twee reeksen los van de nieuwe standaard I- en V- (zie LotNumberingTests).
+    private async Task SettingsAsync(string format = "5{JJ}{MM}{volgnr}", string salesFormat = "{JJ}{MM}{volgnr}", int? digits = null, string mode = "Auto", string reset = "Yearly", int? salesDigits = null)
     {
         await using var db = _s.Factory.CreateContext();
         var result = await new PartijService(db).UpdateSettingsAsync(new PartijSettingsDto
@@ -48,8 +50,10 @@ public sealed class SalesPartijOrderTests : IDisposable
         return await new PartijService(db).CorrectNumberAsync(partijId, new CorrectPartijNumberDto { Number = number, Reason = reason });
     }
 
+    // Feedback 22 november: een partijnummer is uniek over inkoop en verkoop samen. Binnen een reeks geeft een bestaand nummer 409 met de
+    // bestaande partij; hetzelfde nummer in de andere reeks wordt geweigerd met uitleg (validatie), en er ontstaat niets.
     [Fact]
-    public async Task The_Duplicate_Check_Uses_The_Key_Within_One_Series()
+    public async Task The_Duplicate_Check_Uses_The_Key_Over_Both_Series()
     {
         await _s.ArrangeAsync();
         await SettingsAsync();
@@ -58,14 +62,16 @@ public sealed class SalesPartijOrderTests : IDisposable
         Assert.Equal(ServiceResultStatus.Conflict, duplicate.Status);
         Assert.Equal("5261145", ((PartijExistsConflictDto)duplicate.ConflictBody).Partij.Number);
 
-        // Een verkoop-partij is een andere reeks: hetzelfde nummer mag daar één keer.
-        Assert.Equal("5261145", (await SaleAsync("5261 145")).Value.SalesPartijNumber.Replace(" ", ""));
-        var twice = await SaleAsync("5261-145");
-        Assert.Equal(ServiceResultStatus.Conflict, twice.Status);
+        var sale = await SaleAsync("5261 145");
+        Assert.Equal(ServiceResultStatus.Validation, sale.Status);
+        Assert.Contains("already exists as a purchase lot", sale.Errors["salesPartijNumber"].Single());
+        Assert.Equal("5261146", (await SaleAsync("5261 146")).Value.SalesPartijNumber.Replace(" ", ""));
+        Assert.Equal(ServiceResultStatus.Conflict, (await SaleAsync("5261-146")).Status);
+        var purchaseWithSalesNumber = await PurchaseAsync("5261146");
+        Assert.Equal(ServiceResultStatus.Validation, purchaseWithSalesNumber.Status);
         await using var db = _s.Factory.CreateContext();
         Assert.Equal(1, await db.SalesOrders.CountAsync());
-        Assert.NotNull(await new PartijService(db).FindByNumberAsync("5261145", "Sales"));
-        Assert.NotNull(await new PartijService(db).FindByNumberAsync("5261145"));
+        Assert.Equal(2, await db.Partijen.CountAsync());
     }
 
     [Fact]
@@ -106,7 +112,7 @@ public sealed class SalesPartijOrderTests : IDisposable
 
         await using var db = _s.Factory.CreateContext();
         var events = await db.PartijAuditEvents.Where(e => e.PartijId == partijId).OrderBy(e => e.Id).ToListAsync();
-        Assert.Equal(new[] { ("NumberChanged", "2611001", "261140", (string)null), ("NumberCorrected", "261140", "261141", "Verkeerd overgenomen van de bon") },
+        Assert.Equal(new[] { ("NumberChanged", "V-2611001", "261140", (string)null), ("NumberCorrected", "261140", "261141", "Verkeerd overgenomen van de bon") },
             events.Select(e => (e.EventType, e.OldValue, e.NewValue, e.Reason)));
         var read = (await new SalesOrderService(db).GetAsync(order.Id)).Value;
         Assert.Equal(("261141", true), (read.SalesPartijNumber, read.SalesPartijFixed));

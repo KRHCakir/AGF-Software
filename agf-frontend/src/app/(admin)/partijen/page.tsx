@@ -18,7 +18,7 @@ import type { PartijDetail as Detail, PartijList as List } from '../../../types/
 
 const PAGE_SIZE = 50;
 
-// Voorraad › Partijen: de server zoekt (partijnummer zonder spaties en streepjes, partij van de leverancier, product, leverancier; bij
+// Voorraad › Partijen: de server zoekt (partijnummer zonder spaties en streepjes, ook zonder I- of V-, partij van de leverancier, product, leverancier; bij
 // verkoop-partijen ook klant en VO-nummer) en pagineert; nieuwste eerst; klikken opent het detail (?id=). Twee tabbladen: inkoop-partijen
 // (één leverancier) en verkoop-partijen (één verkooporder), ?soort=verkoop.
 export default function PartijenPage() {
@@ -48,6 +48,9 @@ function PartijenWorkspace() {
     const [reloadToken, setReloadToken] = useState(0);
     const [list, setList] = useState<LoadState<List>>({ status: 'loading' });
     const [detail, setDetail] = useState<LoadState<Detail> | null>(null);
+    // Feedback 22 november: zoeken zonder letter vindt beide soorten (261140 vindt I-261140 en V-261140). De lijst toont één soort; hoeveel
+    // partijen van de andere soort ook passen, staat eronder met een knop naar dat tabblad.
+    const [otherKindCount, setOtherKindCount] = useState(0);
     const detailRef = useRef<HTMLDivElement | null>(null);
     const pendingScrollId = useRef<number | null>(null);
 
@@ -72,6 +75,15 @@ function PartijenWorkspace() {
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
     }, [debounced, status, kind, page, reloadToken, sort, sortReady]);
+
+    useEffect(() => {
+        if (debounced === '') { setOtherKindCount(0); return; }
+        const controller = new AbortController();
+        listPartijen({ query: debounced, status: 'all', kind: kind === 'Sales' ? 'Purchase' : 'Sales', page: 1, pageSize: 1 }, controller.signal)
+            .then((data) => setOtherKindCount(data.total))
+            .catch((caught: unknown) => { if (toApiError(caught).kind !== 'aborted') setOtherKindCount(0); });
+        return () => controller.abort();
+    }, [debounced, kind, reloadToken]);
 
     useEffect(() => {
         if (selectedId === null) { setDetail(null); return; }
@@ -145,6 +157,15 @@ function PartijenWorkspace() {
                     </select>
                 </div>
             </div>
+
+            {otherKindCount > 0 && (
+                <p className="flex flex-wrap items-center gap-2 text-sm text-gray-700" data-testid="partij-other-kind">
+                    {t(kind === 'Sales' ? 'partij_other_kind_purchase' : 'partij_other_kind_sales', { count: String(otherKindCount), query: debounced })}
+                    <button type="button" className={secondaryButtonClass} onClick={() => chooseKind(kind === 'Sales' ? 'Purchase' : 'Sales')}>
+                        {t(kind === 'Sales' ? 'partij_show_purchase' : 'partij_show_sales')}
+                    </button>
+                </p>
+            )}
 
             {list.status === 'loading' && <LoadingRows label={t('partij_loading')} />}
             {list.status === 'error' && <ErrorState error={list.error} onRetry={() => setReloadToken((n) => n + 1)} />}

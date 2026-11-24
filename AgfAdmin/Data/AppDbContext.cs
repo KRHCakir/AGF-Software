@@ -114,9 +114,21 @@ namespace AgfAdmin.Data
             EnsureSalesPartijenAsync(async: false, CancellationToken.None).GetAwaiter().GetResult();
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
+            var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
+            if (lotKeys.Count == 0)
+            {
+                TraceabilityGuard.Validate(this);
+                IncrementVersions();
+                return base.SaveChanges(acceptAllChangesOnSuccess);
+            }
+            // Regel 41: nummerlock en controle horen in dezelfde transactie als het opslaan.
+            using var transaction = Database.CurrentTransaction == null ? Database.BeginTransaction() : null;
+            TraceabilityGuard.LockLotNumbersAsync(this, lotKeys, async: false, CancellationToken.None).GetAwaiter().GetResult();
             TraceabilityGuard.Validate(this);
             IncrementVersions();
-            return base.SaveChanges(acceptAllChangesOnSuccess);
+            var saved = base.SaveChanges(acceptAllChangesOnSuccess);
+            transaction?.Commit();
+            return saved;
         }
 
         public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
@@ -127,9 +139,21 @@ namespace AgfAdmin.Data
             await EnsureSalesPartijenAsync(async: true, cancellationToken);
             EnsureInvoiceNumberKeys();
             EnsureShortcutKeys();
+            var lotKeys = Database.IsNpgsql() ? TraceabilityGuard.LotNumberKeysToLock(this) : new List<string>();
+            if (lotKeys.Count == 0)
+            {
+                await TraceabilityGuard.ValidateAsync(this, cancellationToken);
+                IncrementVersions();
+                return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            }
+            // Regel 41: nummerlock en controle horen in dezelfde transactie als het opslaan.
+            await using var transaction = Database.CurrentTransaction == null ? await Database.BeginTransactionAsync(cancellationToken) : null;
+            await TraceabilityGuard.LockLotNumbersAsync(this, lotKeys, async: true, cancellationToken);
             await TraceabilityGuard.ValidateAsync(this, cancellationToken);
             IncrementVersions();
-            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            if (transaction != null) await transaction.CommitAsync(cancellationToken);
+            return saved;
         }
 
         // Veilige overgang: een nieuwe klant- of leveranciersrol zonder relatie (oudere schrijvers, seeds, tests) krijgt bij het
@@ -588,8 +612,9 @@ namespace AgfAdmin.Data
                     t.HasCheckConstraint("CK_Partijen_NumberKey_NotBlank", "length(\"NumberKey\") > 0");
                     t.HasCheckConstraint("CK_Partijen_Sequence_Consistent",
                         "(\"Sequence\" IS NULL AND \"SequencePeriod\" IS NULL) OR (\"Sequence\" > 0 AND \"SequencePeriod\" IS NOT NULL)");
+                    // Een verkoop-partij hoort bij precies één verkooporder of één directe factuur (feedback 22 november); een inkoop-partij bij geen van beide.
                     t.HasCheckConstraint("CK_Partijen_Kind_SalesOrder",
-                        "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL) OR (\"Kind\" = 'Sales' AND \"SalesOrderId\" IS NOT NULL)");
+                        "(\"Kind\" = 'Purchase' AND \"SalesOrderId\" IS NULL AND \"InvoiceId\" IS NULL) OR (\"Kind\" = 'Sales' AND ((\"SalesOrderId\" IS NOT NULL AND \"InvoiceId\" IS NULL) OR (\"SalesOrderId\" IS NULL AND \"InvoiceId\" IS NOT NULL)))");
                 });
                 b.Property(p => p.Number).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
                 b.Property(p => p.NumberKey).IsRequired().HasMaxLength(PartijRules.MaxNumberLength);
@@ -599,9 +624,16 @@ namespace AgfAdmin.Data
                 b.Property(p => p.SequencePeriod).HasMaxLength(10);
                 b.HasIndex(p => new { p.Kind, p.SequencePeriod, p.Sequence }).IsUnique();
                 b.HasOne(p => p.SalesOrder).WithOne(o => o.SalesPartij).HasForeignKey<Partij>(p => p.SalesOrderId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(p => p.Invoice).WithOne(i => i.SalesPartij).HasForeignKey<Partij>(p => p.InvoiceId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
                 b.Property(p => p.Note).HasMaxLength(PartijRules.MaxNoteLength);
                 b.Property(p => p.CreatedBy).IsRequired().HasMaxLength(PartijRules.MaxActorLength);
                 b.HasIndex(p => p.RequestId).IsUnique();
+            });
+
+            modelBuilder.Entity<InvoiceLine>(b =>
+            {
+                b.ToTable("InvoiceLine");
+                b.HasOne(l => l.Partij).WithMany().HasForeignKey(l => l.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<PartijAuditEvent>(b =>

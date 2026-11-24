@@ -18,7 +18,9 @@ public sealed class SalesPartijNumberingTests : IDisposable
 
     public void Dispose() => _s.Dispose();
 
-    private async Task SettingsAsync(string format = "5{JJ}{MM}{volgnr}", string salesFormat = null, int? digits = null, string mode = "Auto", string reset = "Yearly", int? salesDigits = null)
+    // Een bedrijf met de formaten van vóór feedback 22 november (5 vooraan voor inkoop, verkoop zonder letter): zo testen deze tests de
+    // twee reeksen los van de nieuwe standaard I- en V- (zie LotNumberingTests).
+    private async Task SettingsAsync(string format = "5{JJ}{MM}{volgnr}", string salesFormat = "{JJ}{MM}{volgnr}", int? digits = null, string mode = "Auto", string reset = "Yearly", int? salesDigits = null)
     {
         await using var db = _s.Factory.CreateContext();
         var result = await new PartijService(db).UpdateSettingsAsync(new PartijSettingsDto
@@ -113,14 +115,14 @@ public sealed class SalesPartijNumberingTests : IDisposable
 
         // De eerste schrijver heeft 2611003 al gekozen; vóór zijn save neemt een gelijktijdige order dat nummer. De unieke index weigert
         // de eerste, die het opnieuw probeert met het volgende VO-nummer en de volgende verkoop-partij.
-        await using var racing = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal("2611003", await LotOfAsync((await SaleAsync()).Id)));
+        await using var racing = _s.Factory.CreateContextBeforeGuard(async () => Assert.Equal("V-2611003", await LotOfAsync((await SaleAsync()).Id)));
         var request = _s.Order((5m, "Stock"));
         var result = await new SalesOrderService(racing).CreateAsync(request);
         Assert.Equal(ServiceResultStatus.Created, result.Status);
-        Assert.Equal("2611004", await LotOfAsync(result.Value.Id));
+        Assert.Equal("V-2611004", await LotOfAsync(result.Value.Id));
 
         await using var verify = _s.Factory.CreateContext();
-        Assert.Equal(new[] { "2611001", "2611002", "2611003", "2611004" }, await verify.Partijen.Where(p => p.Kind == "Sales").OrderBy(p => p.Number).Select(p => p.Number).ToListAsync());
+        Assert.Equal(new[] { "V-2611001", "V-2611002", "V-2611003", "V-2611004" }, await verify.Partijen.Where(p => p.Kind == "Sales").OrderBy(p => p.Number).Select(p => p.Number).ToListAsync());
         Assert.Equal(4, await verify.SalesOrders.CountAsync(o => o.SalesPartij != null));
     }
 
@@ -140,8 +142,8 @@ public sealed class SalesPartijNumberingTests : IDisposable
         await using var db = _s.Factory.CreateContext();
 
         var service = new PartijService(db);
-        Assert.Equal(0, (await service.ListAsync("2611001", "all", 1, 50)).Value.Total);
-        var sales = (await service.ListAsync("2611001", "all", 1, 50, kind: "Sales")).Value;
+        Assert.Equal(0, (await service.ListAsync("V-2611001", "all", 1, 50)).Value.Total);
+        var sales = (await service.ListAsync("V-2611001", "all", 1, 50, kind: "Sales")).Value;
         var item = Assert.Single(sales.Items);
         Assert.Equal(("Sales", order.OrderNumber, 5m, 5m), (item.Kind, item.SalesOrderNumber, item.OrderedQuantity, item.SoldQuantity));
         var detail = (await service.GetAsync(item.Id)).Value;
@@ -149,6 +151,6 @@ public sealed class SalesPartijNumberingTests : IDisposable
         Assert.Equal((purchaseLot, "52611002", "Kweker K", 5m, 0m), (source.PartijId, source.Number, source.VendorName, source.ReservedQuantity, source.ShippedQuantity));
         Assert.Equal(new[] { "52611002" }, item.SourcePartijen);
         // De inkoop-partij noemt de verkoop-partij bij de verkooporder.
-        Assert.Equal("2611001", (await service.GetAsync(purchaseLot)).Value.SalesOrders.Single().SalesPartijNumber);
+        Assert.Equal("V-2611001", (await service.GetAsync(purchaseLot)).Value.SalesOrders.Single().SalesPartijNumber);
     }
 }

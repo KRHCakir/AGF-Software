@@ -32,11 +32,11 @@ public class PartijServiceTests : IDisposable
     [Fact]
     public async Task Suggestion_Follows_The_Default_Format_And_Counts_Up()
     {
-        Assert.Equal("2610001", (await CreateAsync()).Value.Number);
-        Assert.Equal("2610002", (await CreateAsync()).Value.Number);
+        Assert.Equal("I-2610001", (await CreateAsync()).Value.Number);
+        Assert.Equal("I-2610002", (await CreateAsync()).Value.Number);
         await using var db = _factory.CreateContext();
         var next = await new PartijService(db).NextNumberAsync();
-        Assert.Equal("2610003", next.Value.Suggestion);
+        Assert.Equal("I-2610003", next.Value.Suggestion);
         // Live voorbeeld voor een nog niet opgeslagen formaat.
         Assert.Equal("2026-003", (await new PartijService(db).NextNumberAsync("{JJJJ}-{volgnr}")).Value.Suggestion);
     }
@@ -87,7 +87,7 @@ public class PartijServiceTests : IDisposable
         var unknown = await service.UpdateSettingsAsync(new PartijSettingsDto { Mode = "Auto", Format = "{JJ}{DD}{volgnr}", SequenceReset = "Yearly" });
         Assert.Contains("{DD}", unknown.Errors["format"].Single());
         Assert.Equal(ServiceResultStatus.Validation, (await service.NextNumberAsync("{JJ}")).Status);
-        Assert.Equal("{JJ}{MM}{volgnr}", (await service.GetSettingsAsync()).Format);
+        Assert.Equal("I-{JJ}{MM}{volgnr}", (await service.GetSettingsAsync()).Format);
     }
 
     [Theory]
@@ -140,13 +140,13 @@ public class PartijServiceTests : IDisposable
     {
         // De eerste schrijver heeft zijn voorstel al gekozen (2610001); vóór zijn save bezet een gelijktijdige schrijver hetzelfde
         // volgnummer. De unieke index weigert de eerste, die het opnieuw probeert met het volgende nummer.
-        await using var db = _factory.CreateContextBeforeGuard(async () => Assert.Equal("2610001", (await CreateAsync()).Value.Number));
+        await using var db = _factory.CreateContextBeforeGuard(async () => Assert.Equal("I-2610001", (await CreateAsync()).Value.Number));
         var result = await new PartijService(db).CreateAsync(new CreatePartijDto { RequestId = Guid.NewGuid() });
 
         Assert.Equal(ServiceResultStatus.Created, result.Status);
-        Assert.Equal("2610002", result.Value.Number);
+        Assert.Equal("I-2610002", result.Value.Number);
         await using var verify = _factory.CreateContext();
-        Assert.Equal(new[] { "2610001", "2610002" }, await verify.Partijen.OrderBy(p => p.Number).Select(p => p.Number).ToListAsync());
+        Assert.Equal(new[] { "I-2610001", "I-2610002" }, await verify.Partijen.OrderBy(p => p.Number).Select(p => p.Number).ToListAsync());
     }
 
     [Fact]
