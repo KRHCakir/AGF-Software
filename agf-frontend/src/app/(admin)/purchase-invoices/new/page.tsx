@@ -25,6 +25,7 @@ import type { ProductOption } from '../../../../types/referenceData';
 import { MissingMasterDataNotice } from '../../../../components/shared/FirstStep';
 import { missingMasterData } from '../../../../lib/masterDataStatus';
 import type { PurchaseInvoiceSettings, PurchaseVendor } from '../../../../types/purchaseInvoice';
+import PageTitle from '../../../../components/shared/PageTitle';
 
 interface Reference {
     vendors: PurchaseVendor[];
@@ -140,7 +141,7 @@ export default function NewPurchaseInvoicePage() {
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('purchase_new_title')}</h1>
+                    <PageTitle>{t('purchase_new_title')}</PageTitle>
                     <p className="text-sm text-gray-600">{t('purchase_new_subtitle')}</p>
                     {/* Een factuur heeft geen inkooporder of ontvangst nodig: ook kosten van derden gaan hier direct in. */}
                     <p className="text-sm text-gray-800" data-testid="purchase-direct-hint" data-tour="purchase-direct-hint">

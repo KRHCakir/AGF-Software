@@ -13,6 +13,7 @@ import { toApiError } from '../../../../services/apiClient';
 import { getPurchaseOrder } from '../../../../services/purchaseOrderService';
 import { getCustomers, getProductsWithVariants, getVendors } from '../../../../services/referenceDataService';
 import type { PurchaseOrderDetail } from '../../../../types/purchaseOrder';
+import PageTitle from '../../../../components/shared/PageTitle';
 
 // Inkooporder aanpassen (stap 4a): hetzelfde formulier als Inkooporder aanmaken, gevuld met de opgeslagen order (?id=). Een definitieve
 // order opent meteen op de order zelf: daar staat ze volledig alleen-lezen, met de melding en Correctie (met reden).
@@ -57,7 +58,7 @@ function PurchaseOrderEdit() {
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
-                <h1 className="text-2xl font-bold text-gray-900" data-tour="page-title">{t('po_edit_title')}</h1>
+                <PageTitle data-tour="page-title">{t('po_edit_title')}</PageTitle>
                 <Link href={back} className="text-sm font-medium text-blue-800 underline underline-offset-2">{t('po_edit_back')}</Link>
             </div>
             {id === null && <p role="alert" className="text-sm text-red-800">{t('po_not_found')}</p>}

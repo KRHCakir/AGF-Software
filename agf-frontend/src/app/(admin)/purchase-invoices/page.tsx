@@ -19,6 +19,7 @@ import { listRowClass, rowClick } from '../../../lib/listRows';
 import { type SortColumns, sortRows } from '../../../lib/listSort';
 import { SortHeader } from '../../../components/shared/SortHeader';
 import { useListSort } from '../../../components/shared/useListSort';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Sorteren op de kolomkoppen (feedback 22 november). De lijst toont de 200 nieuwste facturen (zoeken vindt oudere); er wordt binnen de
 // getoonde facturen gesorteerd. Het bedrag sorteert op het bedrag in euro.
@@ -87,7 +88,7 @@ function PurchaseInvoicesWorkspace() {
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('purchase_title')}</h1>
+                    <PageTitle>{t('purchase_title')}</PageTitle>
                     <p className="text-sm text-gray-600">{t('purchase_subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-2">

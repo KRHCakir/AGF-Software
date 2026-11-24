@@ -29,6 +29,7 @@ import { listRowClass, rowClick } from '../../../lib/listRows';
 import { type SortColumns, sortRows } from '../../../lib/listSort';
 import { SortHeader } from '../../../components/shared/SortHeader';
 import { useListSort } from '../../../components/shared/useListSort';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Sorteren op de kolomkoppen (feedback 22 november). Standaard blijft de volgorde van de lijst (bij zoeken de beste treffer eerst); een net
 // aangemaakt artikel staat zolang de melding staat altijd bovenaan.
@@ -155,7 +156,7 @@ export default function ArticlesPage() {
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('articles_title')}</h1>
+                    <PageTitle data-tour="page-title">{t('articles_title')}</PageTitle>
                     <p className="text-sm text-gray-600">{t('articles_subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">

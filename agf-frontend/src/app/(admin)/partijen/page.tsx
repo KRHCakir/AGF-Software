@@ -16,6 +16,7 @@ import { useTranslation } from '../../../i18n/LanguageContext';
 import { toApiError } from '../../../services/apiClient';
 import { type PartijQuery, getPartij, listPartijen } from '../../../services/partijService';
 import type { PartijDetail as Detail, PartijList as List } from '../../../types/partij';
+import PageTitle from '../../../components/shared/PageTitle';
 
 const PAGE_SIZE = 50;
 
@@ -127,7 +128,7 @@ function PartijenWorkspace() {
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('partij_title')}</h1>
+                    <PageTitle data-tour="page-title">{t('partij_title')}</PageTitle>
                     <p className="text-sm text-gray-600" data-testid="page-intro">{t('intro_partijen')}</p>
                 </div>
                 <button type="button" onClick={() => setReloadToken((n) => n + 1)} className={secondaryButtonClass}>↻ {t('availability_refresh')}</button>

@@ -16,6 +16,7 @@ import { unitLabelKey } from '../../../lib/units';
 import { parseAvailabilityParams } from '../../../lib/availabilityLinks';
 import { getAvailabilityOverview, toAvailabilityError } from '../../../services/availabilityService';
 import { AvailabilityOverview, PACKAGE_UNITS } from '../../../types/availability';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Alleen-lezen overzicht van de beschikbaarheid uit de echte Availability API. Geen schrijfacties.
 // useSearchParams vraagt in Next.js 15 een Suspense-grens; zo blijft de pagina statisch te genereren.
@@ -135,7 +136,7 @@ function AvailabilityWorkspace() {
         <div className="mx-auto max-w-[110rem] space-y-4 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('availability')}</h1>
+                    <PageTitle data-tour="page-title">{t('availability')}</PageTitle>
                     <p className="text-sm text-gray-600">{t('availability_subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-gray-600">

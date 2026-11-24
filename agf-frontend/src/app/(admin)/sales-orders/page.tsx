@@ -24,6 +24,7 @@ import { getSalesOrder, listSalesOrders } from '../../../services/salesOrderServ
 import { CustomerOption, ProductOption } from '../../../types/referenceData';
 import { SalesOrder } from '../../../types/salesOrder';
 import { SignedInAs } from '../../../components/shared/CurrentUserContext';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Kantoorwerkplek "Verkoop": verkooporder aanmaken, exacte goedgekeurde voorraad reserveren en weer vrijgeven.
 // Nieuwe flow naast de legacy-pagina Bestellingen (oud); er wordt niets gesynchroniseerd of gemigreerd.
@@ -269,7 +270,7 @@ function SalesWorkspace() {
             <div ref={aboveRef} className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('sales')}</h1>
+                    <PageTitle data-tour="page-title">{t('sales')}</PageTitle>
                     <p className="text-sm text-gray-600">{t('sales_subtitle')}</p>
                 </div>
                 <SignedInAs className="sm:self-end" />

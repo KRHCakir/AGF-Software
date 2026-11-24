@@ -24,6 +24,7 @@ import { getVendors } from '../../../services/referenceDataService';
 import VendorPicker from '../../../components/purchase/VendorPicker';
 import type { PurchaseOrderDetail as Order, PurchaseOrderList as OrderList } from '../../../types/purchaseOrder';
 import type { VendorOption } from '../../../types/referenceData';
+import PageTitle from '../../../components/shared/PageTitle';
 
 const PAGE_SIZE = 50;
 
@@ -136,7 +137,7 @@ function PurchaseOrdersWorkspace() {
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('po_title')}</h1>
+                    <PageTitle data-tour="page-title">{t('po_title')}</PageTitle>
                     <p className="text-sm text-gray-600" data-testid="page-intro">{t('intro_purchase_orders')}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
