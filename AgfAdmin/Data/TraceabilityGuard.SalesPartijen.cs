@@ -36,7 +36,10 @@ namespace AgfAdmin.Data
                     throw new TraceabilityViolationException($"Lot '{partij.Number}' is a purchase lot or a sales lot; only a sales lot belongs to a sales order.");
                 }
                 var withNewInvoice = !hasOrder && invoiceEntry != null && invoiceEntry.State == EntityState.Added;
-                if (partij.Kind == PartijRules.KindSales && !withNewInvoice && (orderEntry == null || orderEntry.State != EntityState.Added))
+                // Feedback 22 november: of als verkoop-partij van een nieuwe levering (Deellevering) van een bestaande order; regel 42 bewaakt
+                // dat die levering bij dezelfde order hoort en het volgende volgnummer heeft.
+                var withNewDelivery = hasOrder && partij.SalesDelivery != null && db.Entry(partij.SalesDelivery).State == EntityState.Added;
+                if (partij.Kind == PartijRules.KindSales && !withNewInvoice && !withNewDelivery && (orderEntry == null || orderEntry.State != EntityState.Added))
                 {
                     throw new TraceabilityViolationException($"Sales lot '{partij.Number}' is created together with its sales order, never added to an existing order.");
                 }

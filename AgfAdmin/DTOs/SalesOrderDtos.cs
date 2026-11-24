@@ -248,6 +248,16 @@ namespace AgfAdmin.DTOs
         public string CreatedBy { get; set; }
     }
 
+    // Deellevering: een nieuwe levering met een nieuw V-nummer; de gekozen actieve reserveringen gaan mee (leeg mag: dan alleen wat nog
+    // niet gereserveerd is). Idempotent via requestId.
+    public sealed class CreateSalesDeliveryDto
+    {
+        public Guid? RequestId { get; set; }
+        public List<int> ReservationIds { get; set; }
+        // Eigen nummer voor de verkoop-partij van de nieuwe levering; leeg = het volgende V-nummer (verplicht bij eigen nummers).
+        public string PartijNumber { get; set; }
+    }
+
     public sealed class StockReservationDto
     {
         public int Id { get; set; }

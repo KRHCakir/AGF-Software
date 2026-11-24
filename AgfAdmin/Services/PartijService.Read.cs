@@ -21,7 +21,8 @@ namespace AgfAdmin.Services
         // Verkoop-partij: de order, haar regels en per reservering de inkoop-partij waar de colli vandaan komen.
         private sealed record SalesSide(int PartijId, int SalesOrderId, string OrderNumber, string OrderStatus, string CustomerName, List<(int LineId, string Product, decimal Quantity, string Unit, decimal? NetKg)> Lines,
             List<SourceFact> Sources);
-        private sealed record SourceFact(int SalesOrderId, int SalesOrderLineId, int? PartijId, string Number, string VendorName, string Product, string Status, decimal Quantity, string Unit, decimal NetKg);
+        private sealed record SourceFact(int SalesOrderId, int SalesOrderLineId, int? PartijId, string Number, string VendorName, string Product, string Status, decimal Quantity, string Unit, decimal NetKg,
+            int? DeliveryId = null);
         private sealed record Facts(List<LineFact> Lines, List<ContentFact> Contents, List<SaleFact> Sales)
         {
             public ILookup<int, LineFact> LinesByPartij { get; } = Lines.ToLookup(l => l.PartijId);
@@ -270,14 +271,20 @@ namespace AgfAdmin.Services
             return new Facts(lines, contents, sales) { SalesSides = await LoadSalesSidesAsync(partijen, cancellationToken) };
         }
 
+        // Feedback 22 november: een verkoop-partij is één levering. Per partij de reserveringen van haar levering (leeg = de eerste) en per
+        // orderregel het aantal van die levering; wat nog niet gereserveerd is, telt bij de laatste levering (zoals op de laadbon).
         private async Task<Dictionary<int, SalesSide>> LoadSalesSidesAsync(List<Partij> partijen, CancellationToken cancellationToken)
         {
-            var byOrder = partijen.Where(p => p.Kind == PartijRules.KindSales && p.SalesOrderId != null).ToDictionary(p => p.SalesOrderId.Value, p => p.Id);
-            if (byOrder.Count == 0)
+            var salesIds = partijen.Where(p => p.Kind == PartijRules.KindSales && p.SalesOrderId != null).Select(p => p.Id).ToList();
+            if (salesIds.Count == 0)
             {
                 return new Dictionary<int, SalesSide>();
             }
-            var orderIds = byOrder.Keys.ToList();
+            var deliveries = await _db.SalesDeliveries.AsNoTracking().Where(d => salesIds.Contains(d.PartijId))
+                .Select(d => new { d.Id, d.PartijId, d.SalesOrderId, d.Sequence }).ToListAsync(cancellationToken);
+            var orderIds = deliveries.Select(d => d.SalesOrderId).Distinct().ToList();
+            var lastSequence = (await _db.SalesDeliveries.AsNoTracking().Where(d => orderIds.Contains(d.SalesOrderId)).Select(d => new { d.SalesOrderId, d.Sequence }).ToListAsync(cancellationToken))
+                .GroupBy(d => d.SalesOrderId).ToDictionary(g => g.Key, g => g.Max(d => d.Sequence));
             var orders = await _db.SalesOrders.AsNoTracking().Where(o => orderIds.Contains(o.Id))
                 .Select(o => new { o.Id, o.OrderNumber, o.Status, Customer = o.Customer.Name }).ToListAsync(cancellationToken);
             var lines = await _db.SalesOrderLines.AsNoTracking().Where(l => orderIds.Contains(l.SalesOrderId))
@@ -289,11 +296,28 @@ namespace AgfAdmin.Services
                     r.PalletContentLine != null ? r.PalletContentLine.PartijId : r.SupplyCommitmentLine.PartijId,
                     r.PalletContentLine != null ? r.PalletContentLine.Partij.Number : r.SupplyCommitmentLine.Partij.Number,
                     r.SupplyCommitmentLine.SupplyCommitment.Vendor.Name, r.SupplyCommitmentLine.ProductVariant.Product.Name + " " + r.SupplyCommitmentLine.ProductVariant.Name,
-                    r.Status, r.Quantity, r.Unit, r.NetWeightKg ?? 0m))
+                    r.Status, r.Quantity, r.Unit, r.NetWeightKg ?? 0m, r.SalesDeliveryId))
                 .ToListAsync(cancellationToken);
-            return orders.ToDictionary(o => byOrder[o.Id], o => new SalesSide(byOrder[o.Id], o.Id, o.OrderNumber, o.Status, o.Customer,
-                lines.Where(l => l.SalesOrderId == o.Id).Select(l => (l.Id, l.Product, l.Quantity, l.Unit, l.NetWeightKg)).ToList(),
-                sources.Where(s => s.SalesOrderId == o.Id).ToList()));
+            var result = new Dictionary<int, SalesSide>();
+            foreach (var delivery in deliveries)
+            {
+                var order = orders.Single(o => o.Id == delivery.SalesOrderId);
+                var last = lastSequence[delivery.SalesOrderId] == delivery.Sequence;
+                var orderSources = sources.Where(s => s.SalesOrderId == order.Id).ToList();
+                var mine = orderSources.Where(s => s.DeliveryId == delivery.Id || (s.DeliveryId == null && delivery.Sequence == 1)).ToList();
+                var deliveryLines = new List<(int LineId, string Product, decimal Quantity, string Unit, decimal? NetKg)>();
+                foreach (var line in lines.Where(l => l.SalesOrderId == order.Id).OrderBy(l => l.Id))
+                {
+                    var open = Math.Max(0m, line.Quantity - orderSources.Where(s => s.SalesOrderLineId == line.Id).Sum(s => s.Quantity));
+                    var quantity = mine.Where(s => s.SalesOrderLineId == line.Id).Sum(s => s.Quantity) + (last ? open : 0m);
+                    if (quantity <= 0m) continue;
+                    decimal? kg = line.NetWeightKg is decimal lineKg && line.Quantity > 0m
+                        ? (quantity == line.Quantity ? lineKg : Math.Round(lineKg * quantity / line.Quantity, 3, MidpointRounding.AwayFromZero)) : null;
+                    deliveryLines.Add((line.Id, line.Product, quantity, line.Unit, kg));
+                }
+                result[delivery.PartijId] = new SalesSide(delivery.PartijId, order.Id, order.OrderNumber, order.Status, order.Customer, deliveryLines, mine);
+            }
+            return result;
         }
 
         // Weergavestatus van de order als geheel (alle regels en ontvangsten, ook van andere partijen), met dezelfde regels als de inkooporderlijst.

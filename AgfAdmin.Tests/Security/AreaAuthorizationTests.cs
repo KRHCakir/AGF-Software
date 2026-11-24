@@ -44,6 +44,7 @@ public sealed class AreaAuthorizationTests
         builder.Services.AddScoped<IDirectTradeShipmentCorrectionService, DirectTradeShipmentCorrectionService>();
         builder.Services.AddScoped<IDeliveryConfirmationService, DeliveryConfirmationService>();
         builder.Services.AddScoped<IDeliveryRetractionService, DeliveryRetractionService>();
+        builder.Services.AddScoped<SalesDeliveryService>();
         builder.Services.AddScoped<CountryService>();
         builder.Services.AddScoped<PartijService>();
         // SettingsController draagt [EnableCors("AllowFrontend")]; zonder CORS-middleware geeft ASP.NET dan een 500.
