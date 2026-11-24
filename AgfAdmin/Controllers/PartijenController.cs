@@ -64,6 +64,11 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> LinkOrder(int id, [FromBody] LinkPartijDto request) =>
             this.ToActionResult(await _service.LinkOrderAsync(id, request, HttpContext?.RequestAborted ?? default));
 
+        // Feedback 22 november: de kleur van een inkoop-partij (bij de keuring of op het partijdetail), met historie.
+        [HttpPut("{id:int}/color")]
+        public async Task<IActionResult> SetColor(int id, [FromBody] SetPartijColorDto request, [FromServices] LotColorService colors) =>
+            this.ToActionResult(await colors.SetPartijColorAsync(id, request, HttpContext?.RequestAborted ?? default));
+
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {

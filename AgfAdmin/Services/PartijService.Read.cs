@@ -139,6 +139,7 @@ namespace AgfAdmin.Services
                 }).OrderBy(s => s.Number).ThenBy(s => s.Product).ToList();
             }
             detail.Note = partij.Note;
+            detail.AllowedColors = partij.Kind == PartijRules.KindPurchase ? await LotColorService.AllowedAsync(_db, partij.Id, cancellationToken) : new List<string>();
             detail.CreatedBy = partij.CreatedBy;
             detail.Linked = await IsLinkedAsync(id, cancellationToken);
             detail.NumberFixed = partij.Kind != PartijRules.KindSales ? detail.Linked
@@ -382,6 +383,7 @@ namespace AgfAdmin.Services
                 Id = partij.Id,
                 Number = partij.Number,
                 Kind = partij.Kind,
+                Color = partij.Color,
                 CreatedAt = DateTime.SpecifyKind(partij.CreatedAt, DateTimeKind.Utc),
                 Status = PartijRules.DisplayStatus(partij.Status, received.Count > 0, onHand + inInspection, openExpected),
                 Vendors = lines.Select(l => l.VendorName).Where(v => v != null).Distinct().OrderBy(v => v).ToList(),

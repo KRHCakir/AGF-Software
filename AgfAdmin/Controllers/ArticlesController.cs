@@ -104,6 +104,15 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Restore(int id, [FromBody] ArticleActionDto request) =>
             this.ToActionResult(await _lifecycle.RestoreAsync(id, request, HttpContext?.RequestAborted ?? default));
 
+        // Feedback 22 november: de kleurenlijst van een product (voor de kleur van een partij).
+        [HttpGet("products/{productId:int}/colors")]
+        public async Task<IActionResult> ProductColors(int productId, [FromServices] LotColorService colors) =>
+            this.ToActionResult(await colors.GetProductColorsAsync(productId, HttpContext?.RequestAborted ?? default));
+
+        [HttpPut("products/{productId:int}/colors")]
+        public async Task<IActionResult> UpdateProductColors(int productId, [FromBody] ProductColorsDto request, [FromServices] LotColorService colors) =>
+            this.ToActionResult(await colors.UpdateProductColorsAsync(productId, request, HttpContext?.RequestAborted ?? default));
+
         // Productsoorten zonder artikelen, en zo'n soort verwijderen (409 "product-has-articles" zolang er artikelen onder hangen).
         [HttpGet("products/empty")]
         public async Task<IActionResult> EmptyProducts() => Ok(await _lifecycle.EmptyProductsAsync(HttpContext?.RequestAborted ?? default));

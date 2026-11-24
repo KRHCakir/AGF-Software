@@ -3693,6 +3693,10 @@ namespace AgfAdmin.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Color")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3818,7 +3822,7 @@ namespace AgfAdmin.Migrations
 
                     b.ToTable("PartijAuditEvents", t =>
                         {
-                            t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed", "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged')");
+                            t.HasCheckConstraint("CK_PartijAuditEvents_EventType_Allowed", "\"EventType\" IN ('NumberCorrected', 'OrderLinked', 'Deleted', 'NumberChanged', 'ColorChanged')");
                         });
                 });
 
@@ -4015,6 +4019,10 @@ namespace AgfAdmin.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ColorValues")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");

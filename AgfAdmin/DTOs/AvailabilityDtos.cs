@@ -229,6 +229,7 @@ namespace AgfAdmin.DTOs
         public string LotNumber { get; set; }
         public int? PartijId { get; set; }
         public string PartijNumber { get; set; }
+        public string PartijColor { get; set; }
         public string Unit { get; set; }
         // Historische ontvangst; wordt nooit gewijzigd door verzendingen.
         public decimal Quantity { get; set; }

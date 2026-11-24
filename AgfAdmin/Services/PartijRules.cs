@@ -56,6 +56,8 @@ namespace AgfAdmin.Services
         // Alleen bij een verkoop-partij zolang er op haar order niets gereserveerd of geleverd is: nummer aangepast zonder reden
         // (regel 24). Daarna gaat het nummer, net als bij een inkoop-partij, alleen via NumberCorrected met reden.
         public const string EventNumberChanged = "NumberChanged";
+        // Feedback 22 november: kleur van de partij gezet of gewijzigd (oud en nieuw).
+        public const string EventColorChanged = "ColorChanged";
 
         // Een order zonder partij krijgt bij de eerste ontvangst een partij (regel 41): de reden in de historie, of de notitie van een nieuwe partij.
         public const string LinkedAtReceiptReason = "Automatisch bij ontvangst: de order had nog geen partij.";

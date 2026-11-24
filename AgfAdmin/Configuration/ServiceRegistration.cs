@@ -61,6 +61,7 @@ namespace AgfAdmin.Configuration
             services.AddSingleton<Services.Mail.MailSendLimiter>();
             services.AddScoped<Services.Mail.MailSendService>();
             services.AddScoped<PartijService>();
+            services.AddScoped<LotColorService>();
             services.AddScoped<CostArticleService>();
             services.AddScoped<PartijCostService>();
             // ECB-koersen voor facturen in een andere valuta; ExchangeRates:Source = Off zet ophalen uit (afgeschermde testomgeving).
