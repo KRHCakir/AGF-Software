@@ -140,7 +140,8 @@ namespace AgfAdmin.Services
             detail.Note = partij.Note;
             detail.CreatedBy = partij.CreatedBy;
             detail.Linked = await IsLinkedAsync(id, cancellationToken);
-            detail.NumberFixed = partij.Kind == PartijRules.KindSales ? await SalesNumberFixedAsync(_db, partij.SalesOrderId!.Value, async: true, cancellationToken) : detail.Linked;
+            detail.NumberFixed = partij.Kind != PartijRules.KindSales ? detail.Linked
+                : partij.SalesOrderId == null || await SalesNumberFixedAsync(_db, partij.SalesOrderId.Value, async: true, cancellationToken);
             if (partij.Kind == PartijRules.KindPurchase)
             {
                 detail.ReservedQuantity = facts.Sales.Where(s => s.Status == ReservationRules.StatusActive).Sum(s => s.Quantity);

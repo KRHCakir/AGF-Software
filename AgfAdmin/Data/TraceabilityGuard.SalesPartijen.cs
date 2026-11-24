@@ -6,7 +6,7 @@ namespace AgfAdmin.Data
 {
     internal static partial class TraceabilityGuard
     {
-        private sealed record StoredPartijKind(int Id, string Kind, int? SalesOrderId);
+        private sealed record StoredPartijKind(int Id, string Kind, int? SalesOrderId, int? InvoiceId);
 
         // ---- Regel 24: verkoop-partijen (zie PartijRules.KindSales en AppDbContext.EnsureSalesPartijenAsync) ----
         //
@@ -23,16 +23,20 @@ namespace AgfAdmin.Data
                 .Where(e => e.State == EntityState.Added && e.Entity.EventType == PartijRules.EventNumberChanged).Select(e => e.Entity).ToList();
 
             // Nieuwe partijen: soort uit de lijst; een verkoop-partij hoort bij een order die in dezelfde save ontstaat, een inkoop-partij bij geen.
+            // Feedback 22 november: of bij een directe factuur die in dezelfde save ontstaat (dan zonder order).
             foreach (var entry in partijEntries.Where(e => e.State == EntityState.Added))
             {
                 var partij = entry.Entity;
                 var orderEntry = partij.SalesOrder != null ? db.Entry(partij.SalesOrder) : null;
+                var invoiceEntry = partij.Invoice != null ? db.Entry(partij.Invoice) : null;
                 var hasOrder = partij.SalesOrder != null || entry.Property(p => p.SalesOrderId).CurrentValue != null;
-                if (!PartijRules.IsKind(partij.Kind) || (partij.Kind == PartijRules.KindPurchase && hasOrder))
+                var hasInvoice = partij.Invoice != null || entry.Property(p => p.InvoiceId).CurrentValue != null;
+                if (!PartijRules.IsKind(partij.Kind) || (partij.Kind == PartijRules.KindPurchase && (hasOrder || hasInvoice)))
                 {
                     throw new TraceabilityViolationException($"Lot '{partij.Number}' is a purchase lot or a sales lot; only a sales lot belongs to a sales order.");
                 }
-                if (partij.Kind == PartijRules.KindSales && (orderEntry == null || orderEntry.State != EntityState.Added))
+                var withNewInvoice = !hasOrder && invoiceEntry != null && invoiceEntry.State == EntityState.Added;
+                if (partij.Kind == PartijRules.KindSales && !withNewInvoice && (orderEntry == null || orderEntry.State != EntityState.Added))
                 {
                     throw new TraceabilityViolationException($"Sales lot '{partij.Number}' is created together with its sales order, never added to an existing order.");
                 }
@@ -52,7 +56,7 @@ namespace AgfAdmin.Data
             var existingIds = partijEntries.Where(e => e.State != EntityState.Added).Select(e => e.Entity.Id)
                 .Concat(numberChanges.Select(e => e.PartijId)).Distinct().ToList();
             var stored = existingIds.Count == 0 ? new Dictionary<int, StoredPartijKind>()
-                : (await ToListAsync(db.Partijen.AsNoTracking().Where(p => existingIds.Contains(p.Id)).Select(p => new StoredPartijKind(p.Id, p.Kind, p.SalesOrderId)), async, cancellationToken))
+                : (await ToListAsync(db.Partijen.AsNoTracking().Where(p => existingIds.Contains(p.Id)).Select(p => new StoredPartijKind(p.Id, p.Kind, p.SalesOrderId, p.InvoiceId)), async, cancellationToken))
                     .ToDictionary(p => p.Id);
             foreach (var entry in partijEntries.Where(e => e.State != EntityState.Added))
             {
@@ -65,9 +69,10 @@ namespace AgfAdmin.Data
                     throw new TraceabilityViolationException("A sales lot belongs to its sales order and is never deleted.");
                 }
                 if (entry.State == EntityState.Modified
-                    && (!string.Equals(before.Kind, entry.Entity.Kind, StringComparison.Ordinal) || before.SalesOrderId != entry.Property(p => p.SalesOrderId).CurrentValue))
+                    && (!string.Equals(before.Kind, entry.Entity.Kind, StringComparison.Ordinal) || before.SalesOrderId != entry.Property(p => p.SalesOrderId).CurrentValue
+                        || before.InvoiceId != entry.Property(p => p.InvoiceId).CurrentValue))
                 {
-                    throw new TraceabilityViolationException("The kind of a lot and the sales order of a sales lot never change.");
+                    throw new TraceabilityViolationException("The kind of a lot and the sales order or direct invoice of a sales lot never change.");
                 }
             }
 
@@ -87,7 +92,7 @@ namespace AgfAdmin.Data
             await CheckPurchaseOnlyLinksAsync(db, async, cancellationToken);
         }
 
-        // Inkooporders, inkoopregels en palletregels krijgen alleen een inkoop-partij.
+        // Inkooporders, inkoopregels, palletregels en de regels van een directe factuur krijgen alleen een inkoop-partij.
         private static async Task CheckPurchaseOnlyLinksAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
             var linked = db.ChangeTracker.Entries<SupplyCommitment>()
@@ -99,6 +104,9 @@ namespace AgfAdmin.Data
                 .Concat(db.ChangeTracker.Entries<PalletContentLine>()
                     .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(c => c.PartijId).IsModified))
                     .Select(e => (Partij: e.Entity.Partij, Id: e.Property(c => c.PartijId).CurrentValue)))
+                .Concat(db.ChangeTracker.Entries<InvoiceLine>()
+                    .Where(e => e.State == EntityState.Added || (e.State == EntityState.Modified && e.Property(l => l.PartijId).IsModified))
+                    .Select(e => (Partij: e.Entity.Partij, Id: e.Property(l => l.PartijId).CurrentValue)))
                 .Where(l => l.Partij != null || l.Id != null)
                 .ToList();
             if (linked.Count == 0)
