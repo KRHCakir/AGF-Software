@@ -9,6 +9,7 @@ import { getJson } from '../../services/apiClient';
 import { isSupplyCommitmentList, type SupplyCommitment } from '../../types/supply';
 import { ErrorState, LoadState, LoadingRows } from '../availability/StateViews';
 import OrderNumberText from '../purchase/OrderNumberText';
+import PageTitle from '../shared/PageTitle';
 
 // Feedback 22 november: Direct trade is geen apart onderdeel meer. Directe handel is een gewone inkooporder met als ontvangstlocatie een
 // locatie van de soort Onderweg (Inkooporder › Locatie en adressen). De klantgebonden aanvoer van vóór deze ronde blijft hier leesbaar
@@ -36,7 +37,7 @@ export default function DirectTradeArchive() {
     return (
         <div className="mx-auto max-w-[96rem] space-y-4 p-2">
             <div>
-                <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('direct_trade_archive_title')}</h1>
+                <PageTitle data-tour="page-title">{t('direct_trade_archive_title')}</PageTitle>
                 <p className="text-sm text-gray-600" data-testid="page-intro">{t('direct_trade_archive_intro')}</p>
                 <p className="mt-1 text-sm"><Link href="/purchase-orders/new" className="font-medium text-blue-800 underline underline-offset-2">{t('direct_trade_archive_new')}</Link></p>
             </div>

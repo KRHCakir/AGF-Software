@@ -9,6 +9,7 @@ import { showLegacyDemoChrome } from '../../../lib/featureFlags';
 import { NAV_GROUPS } from '../../../lib/navigation';
 import GettingStartedCard from '../../../components/shared/GettingStartedCard';
 import CertificateExpiryList from '../../../components/certificates/CertificateExpiryList';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Startpagina: ingang naar de schermen, per procesgroep zoals het menu. De oude kengetallen (deels vaste voorbeeldwaarden) staan standaard uit.
 export default function Home() {
@@ -16,7 +17,7 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">{t('start_title')}</h1>
+        <PageTitle>{t('start_title')}</PageTitle>
         <p className="text-sm text-gray-600">{t('start_subtitle')}</p>
       </div>
       <GettingStartedCard />

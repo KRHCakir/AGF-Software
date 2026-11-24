@@ -19,6 +19,7 @@ import { SignedInAs } from '../../../components/shared/CurrentUserContext';
 import { SortSelect } from '../../../components/shared/SortHeader';
 import { useListSort } from '../../../components/shared/useListSort';
 import { type SortColumns, sortRows } from '../../../lib/listSort';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Sorteren (feedback 22 november): de keuring staat als kaarten per pallet, dus een keuzelijst "Sorteren op" (op elk scherm). Standaard
 // blijft de nieuwste pallet eerst.
@@ -145,7 +146,7 @@ function InspectionWorkspace() {
         <div className="mx-auto max-w-[96rem] space-y-4 p-2">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t('inspection')}</h1>
+                    <PageTitle data-tour="page-title">{t('inspection')}</PageTitle>
                     <p className="text-sm text-gray-600">{t('inspection_subtitle')}</p>
                 </div>
                 <div className="flex items-end gap-4">

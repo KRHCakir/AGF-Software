@@ -12,6 +12,7 @@ import type { MailDraft } from '../../../types/documentMail';
 import { SortSelect } from '../../../components/shared/SortHeader';
 import { useListSort } from '../../../components/shared/useListSort';
 import { type SortColumns, sortRows } from '../../../lib/listSort';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Sorteren (feedback 22 november): de lijst staat als regels zonder kolomkoppen, dus een keuzelijst "Sorteren op". Standaard nieuwste eerst.
 const DRAFT_COLUMNS: SortColumns<MailDraft> = {
@@ -41,7 +42,7 @@ export default function MailDraftsPage() {
 
     return (
         <main className="space-y-3 p-4" data-testid="mail-drafts-page" data-tour="mail-drafts-page">
-            <h1 className="text-xl font-semibold text-gray-900">{t('mail_drafts_title')}</h1>
+            <PageTitle>{t('mail_drafts_title')}</PageTitle>
             <p className="text-sm text-gray-700">{t('mail_drafts_page_text')}</p>
             {error && <ErrorNotice error={error} />}
             {!error && drafts === null && <LoadingRows label={t('mail_drafts_loading')} />}

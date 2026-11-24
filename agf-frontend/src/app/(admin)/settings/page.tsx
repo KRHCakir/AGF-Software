@@ -15,6 +15,7 @@ import MailTemplatesSetting from '../../../components/settings/MailTemplatesSett
 import PaymentConditionsAdmin from '../../../components/settings/PaymentConditionsAdmin';
 import StockLocationsSetting from '../../../components/settings/StockLocationsSetting';
 import { useTranslation } from '../../../i18n/LanguageContext';
+import PageTitle from '../../../components/shared/PageTitle';
 
 // Instellingen: bedrijfsbrede keuzelijsten en adressen (één bedrijf, geen tenantstructuur). Betalingscondities worden door
 // klant- en leveranciersrollen gedeeld; het GLOBALG.A.P.-portaaladres gebruikt de handmatige GGN-controle op de leverancierskaart; de
@@ -25,7 +26,7 @@ export default function SettingsPage() {
     return (
         <div className="mx-auto max-w-5xl space-y-3 p-2">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">{t('settings_title')}</h1>
+                <PageTitle>{t('settings_title')}</PageTitle>
                 <p className="text-sm text-gray-600">{t('settings_subtitle')}</p>
             </div>
             <PartijNumberingSetting />

@@ -19,6 +19,7 @@ const CERTIFICATE_SORT_KEYS = ['relation', 'type', 'number', 'products', 'validU
 import { toApiError } from '../../../services/apiClient';
 import { getCertificateOverview, getCertificateReference } from '../../../services/certificateService';
 import type { CertificateOverview, CertificateReference } from '../../../types/certificate';
+import PageTitle from '../../../components/shared/PageTitle';
 
 const STATUSES = ['', 'attention', 'Expired', 'ExpiringSoon', 'Valid', 'NoEndDate', 'productsPending'] as const;
 const PAGE_SIZE = 100;
@@ -66,7 +67,7 @@ export default function CertificatesPage() {
     return (
         <div className="mx-auto max-w-[96rem] space-y-3 p-2">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900" data-tour="page-title">{t('cert_page_title')}</h1>
+                <PageTitle data-tour="page-title">{t('cert_page_title')}</PageTitle>
                 <p className="text-sm text-gray-600">{t('cert_page_subtitle')}</p>
             </div>
             <CertificateExpiryList />

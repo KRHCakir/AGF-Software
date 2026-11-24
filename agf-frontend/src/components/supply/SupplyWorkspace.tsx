@@ -13,6 +13,7 @@ import ReceiveOrder from './ReceiveOrder';
 import ReceiveOrderPicker from './ReceiveOrderPicker';
 import PurchaseOrderChain from '../purchase/PurchaseOrderChain';
 import { SignedInAs } from '../shared/CurrentUserContext';
+import PageTitle from '../shared/PageTitle';
 
 export type SupplyTask = 'purchase-order' | 'receipt';
 
@@ -51,7 +52,7 @@ export default function SupplyWorkspace({ task, orderId = null }: { task: Supply
         <div className="mx-auto max-w-[96rem] space-y-4 p-2">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 data-tour="page-title" className="text-2xl font-bold text-gray-900">{t(config.titleKey)}</h1>
+                    <PageTitle data-tour="page-title">{t(config.titleKey)}</PageTitle>
                     <p className="text-sm text-gray-600" data-testid="page-intro">{t(config.introKey)}</p>
                 </div>
                 <SignedInAs />
