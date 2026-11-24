@@ -124,6 +124,9 @@ namespace AgfAdmin.DTOs
     {
         public int Id { get; set; }
         public string Number { get; set; }
+        // Feedback 22 november: de inkoopwaarde in euro (Verdeel naar waarde). Inkoop-partij: de regelbedragen van haar inkooporders;
+        // verkoop-partij: de colli uit inkoop-partijen tegen hun inkoopprijs. Null = geen prijzen bekend.
+        public decimal? PurchaseValue { get; set; }
         // Feedback 22 november: kleur van de inkoop-partij (leeg = geen).
         public string Color { get; set; }
         // Purchase of Sales. Bij Sales: de verkooporder (1-op-1), de klant, wat er besteld is (OrderedQuantity) en uit welke
@@ -184,6 +187,81 @@ namespace AgfAdmin.DTOs
         // of (bij een verkoop-partij) op de inkoop-partijen waar de colli vandaan komen.
         public List<PartijLinkedCostDto> LinkedCosts { get; set; } = new();
         public List<PartijHistoryDto> History { get; set; } = new();
+        // Feedback 22 november: herleidbaarheid. Bij een inkoop-partij de recall (waar alles naartoe ging en wat er nog ligt), bij een
+        // verkoop-partij de levering met per regel de inkoop-partijen waar de colli vandaan komen.
+        public PartijRecallDto Recall { get; set; }
+        public SalesLotTraceDto Delivery { get; set; }
+    }
+
+    // Inkoop-partij: ontvangen = geleverd (min teruggenomen) + afgekeurd + nog op voorraad; Verschil is wat daarvan afwijkt (0 als de
+    // boekingen kloppen). Directe facturen staan apart: die boeken geen voorraad af en tellen dus niet mee in de som.
+    public sealed class PartijRecallUnitDto
+    {
+        public string Unit { get; set; }
+        public decimal Received { get; set; }
+        public decimal Shipped { get; set; }
+        public decimal Returned { get; set; }
+        public decimal Rejected { get; set; }
+        public decimal OnHand { get; set; }
+        public decimal Difference { get; set; }
+    }
+
+    public sealed class PartijRecallDto
+    {
+        public string Unit { get; set; }
+        public decimal Received { get; set; }
+        public decimal Shipped { get; set; }
+        public decimal Returned { get; set; }
+        public decimal Rejected { get; set; }
+        public decimal OnHand { get; set; }
+        public decimal Difference { get; set; }
+        // Balans per eenheid; de totalen hierboven (en Unit) zijn alleen gevuld als er precies één eenheid is.
+        public List<PartijRecallUnitDto> ByUnit { get; set; } = new();
+        public List<PartijDestinationDto> Destinations { get; set; } = new();
+        public List<PartijDestinationDto> DirectInvoices { get; set; } = new();
+    }
+
+    // Waar het naartoe ging: een verkoop-partij (levering) of directe factuur, met klant, colli en datum.
+    public sealed class PartijDestinationDto
+    {
+        public int? SalesPartijId { get; set; }
+        public string SalesPartijNumber { get; set; }
+        public int? SalesOrderId { get; set; }
+        public string Reference { get; set; }
+        public string CustomerName { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public DateTime? Date { get; set; }
+    }
+
+    // Verkoop-partij: klant, leverdatum (verzonden, anders laden op, anders de gevraagde leverdatum) en per regel de inkoop-partijen.
+    public sealed class SalesLotTraceDto
+    {
+        public string CustomerName { get; set; }
+        public int? SalesOrderId { get; set; }
+        public string Reference { get; set; }
+        public int? Sequence { get; set; }
+        public DateTime? DeliveryDate { get; set; }
+        public bool Shipped { get; set; }
+        public List<SalesLotTraceLineDto> Lines { get; set; } = new();
+    }
+
+    public sealed class SalesLotTraceLineDto
+    {
+        public string Product { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public List<SalesLotTraceSourceDto> Sources { get; set; } = new();
+    }
+
+    public sealed class SalesLotTraceSourceDto
+    {
+        public int? PartijId { get; set; }
+        public string Number { get; set; }
+        public string VendorName { get; set; }
+        public string Origin { get; set; }
+        public decimal Quantity { get; set; }
+        public string Status { get; set; }
     }
 
     public sealed class PartijCostLineDto

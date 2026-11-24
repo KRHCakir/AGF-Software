@@ -225,6 +225,7 @@ namespace AgfAdmin.Services
             allocation.Quantity = sales ? totals.OrderedQuantity : totals.ReceivedQuantity;
             allocation.Unit = totals.Unit;
             allocation.NetKg = totals.NetKg;
+            allocation.Value = totals.PurchaseValue;
             return allocation;
         }
 

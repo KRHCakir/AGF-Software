@@ -12,7 +12,8 @@ namespace AgfAdmin.Services
         public const int MaxPageSize = 200;
 
         private sealed record LineFact(int PartijId, int LineId, int OrderId, string OrderNumber, string OrderStatus, DateOnly OrderedOn, DateTime? ExpectedAt,
-            string SupplierLotReference, string VendorName, string Product, decimal Expected, string Unit, string SupplierReference);
+            string SupplierLotReference, string VendorName, string Product, decimal Expected, string Unit, string SupplierReference,
+            decimal? UnitPrice = null, decimal? Discount = null, decimal Rate = 1m);
         private sealed record ContentFact(int PartijId, int Id, int PalletId, string PalletReference, string PalletStatus, int LineId, int OrderId, string OrderNumber,
             string ProductName, string VariantName, string LotNumber, decimal Quantity, decimal Dispatched, decimal SplitOff, string Unit, decimal NetWeightKg,
             string QualityStatus, bool FromCorrection, bool FromSplit, DateTime CreatedAt);
@@ -22,7 +23,8 @@ namespace AgfAdmin.Services
         private sealed record SalesSide(int PartijId, int SalesOrderId, string OrderNumber, string OrderStatus, string CustomerName, List<(int LineId, string Product, decimal Quantity, string Unit, decimal? NetKg)> Lines,
             List<SourceFact> Sources);
         private sealed record SourceFact(int SalesOrderId, int SalesOrderLineId, int? PartijId, string Number, string VendorName, string Product, string Status, decimal Quantity, string Unit, decimal NetKg,
-            int? DeliveryId = null);
+            int? DeliveryId = null, string Origin = null, decimal? UnitPrice = null, decimal? Discount = null, decimal Rate = 1m, DateTime? ShippedAt = null,
+            string PriceUnit = null);
         private sealed record Facts(List<LineFact> Lines, List<ContentFact> Contents, List<SaleFact> Sales)
         {
             public ILookup<int, LineFact> LinesByPartij { get; } = Lines.ToLookup(l => l.PartijId);
@@ -178,6 +180,14 @@ namespace AgfAdmin.Services
                 ShippedQuantity = g.Where(s => s.Status == ReservationRules.StatusConsumed).Sum(s => s.Quantity)
             }).OrderBy(s => s.SalesOrderId).ThenBy(s => s.SalesPartijNumber).ThenBy(s => s.Unit).ToList();
             await AddCostsAsync(detail, partij, facts, cancellationToken);
+            if (partij.Kind == PartijRules.KindPurchase)
+            {
+                detail.Recall = await RecallAsync(partij, facts, detail.Unit, cancellationToken);
+            }
+            else
+            {
+                detail.Delivery = await DeliveryTraceAsync(partij, facts, cancellationToken);
+            }
             var events = await _db.PartijAuditEvents.AsNoTracking().Where(e => e.PartijId == id).OrderBy(e => e.OccurredAt).ThenBy(e => e.Id).ToListAsync(cancellationToken);
             detail.History = events.Select(e => new PartijHistoryDto
                 {
@@ -188,6 +198,113 @@ namespace AgfAdmin.Services
                     NewValue = events.FirstOrDefault(e => e.EventType is PartijRules.EventNumberCorrected or PartijRules.EventNumberChanged)?.OldValue ?? partij.Number })
                 .ToList();
             return ServiceResult<PartijDetailDto>.Ok(detail);
+        }
+
+        // Feedback 22 november, herleidbaarheid van een inkoop-partij (recall): wat er binnenkwam, waar het naartoe ging (per verkoop-partij met
+        // klant, colli en datum), wat afgekeurd is en wat er nog ligt. Ontvangen = geleverd - teruggenomen + afgekeurd + op voorraad; Verschil
+        // toont wat daarvan afwijkt. Geannuleerde pallets tellen nergens mee. Directe facturen staan apart (zij boeken geen voorraad af).
+        private async Task<PartijRecallDto> RecallAsync(Partij partij, Facts facts, string unit, CancellationToken cancellationToken)
+        {
+            var live = facts.Contents.Where(c => c.PalletStatus != PalletRules.StatusCancelled).ToList();
+            // Nooit verschillende eenheden bij elkaar optellen: per eenheid een eigen balans; de totalen bovenaan gelden alleen bij één eenheid.
+            var byUnit = live.GroupBy(c => c.Unit).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g =>
+            {
+                var rec = g.Where(IsPhysicalReceipt).Sum(c => c.Quantity);
+                var ret = g.Where(c => c.FromCorrection).Sum(c => c.Quantity);
+                var shp = g.Sum(c => c.Dispatched);
+                var rej = g.Where(c => c.QualityStatus == PalletRules.QualityRejected).Sum(OnHand);
+                var hand = g.Where(c => c.QualityStatus != PalletRules.QualityRejected).Sum(OnHand);
+                return new PartijRecallUnitDto { Unit = g.Key, Received = rec, Shipped = shp, Returned = ret, Rejected = rej, OnHand = hand, Difference = rec - (shp - ret) - rej - hand };
+            }).ToList();
+            var single = byUnit.Count == 1 ? byUnit[0] : null;
+            if (single != null) unit = single.Unit;
+            else if (byUnit.Count > 1) unit = null;
+            var shipments = await _db.SalesDispatchLines.AsNoTracking()
+                .Where(l => l.PalletContentLine.PartijId == partij.Id)
+                .Select(l => new
+                {
+                    l.Quantity, l.Unit, l.SalesDispatchId, l.SalesDispatch.DispatchedAt, l.SalesDispatch.SalesOrderId, OrderNumber = l.SalesDispatch.SalesOrder.OrderNumber,
+                    Customer = l.SalesDispatch.SalesOrder.Customer.Name,
+                    LotId = l.StockReservation.SalesDeliveryId != null ? l.StockReservation.SalesDelivery.PartijId
+                        : l.SalesDispatch.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => (int?)d.PartijId).FirstOrDefault(),
+                    LotNumber = l.StockReservation.SalesDeliveryId != null ? l.StockReservation.SalesDelivery.Partij.Number
+                        : l.SalesDispatch.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => d.Partij.Number).FirstOrDefault(),
+                })
+                .ToListAsync(cancellationToken);
+            // Alleen directe facturen (een factuur met een eigen verkoop-partij); een orderfactuur telt via de levering (review).
+            var invoices = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.PartijId == partij.Id && l.Invoice.SalesPartij != null)
+                .Select(l => new { l.Quantity, l.Unit, l.Invoice.InvoiceNumber, l.Invoice.InvoiceDate, l.Invoice.CustomCustomerName, LotId = (int?)l.Invoice.SalesPartij.Id, LotNumber = l.Invoice.SalesPartij.Number })
+                .ToListAsync(cancellationToken);
+            return new PartijRecallDto
+            {
+                Unit = unit, Received = single?.Received ?? 0m, Shipped = single?.Shipped ?? 0m, Returned = single?.Returned ?? 0m,
+                Rejected = single?.Rejected ?? 0m, OnHand = single?.OnHand ?? 0m, Difference = single?.Difference ?? 0m, ByUnit = byUnit,
+                // Per verzending een eigen regel met haar eigen datum (review): twee verzendingen op verschillende dagen worden nooit één datum.
+                Destinations = shipments.GroupBy(s => new { s.SalesDispatchId, s.DispatchedAt, s.LotId, s.LotNumber, s.SalesOrderId, s.OrderNumber, s.Customer, s.Unit })
+                    .Select(g => new PartijDestinationDto
+                    {
+                        SalesPartijId = g.Key.LotId, SalesPartijNumber = g.Key.LotNumber, SalesOrderId = g.Key.SalesOrderId, Reference = g.Key.OrderNumber, CustomerName = g.Key.Customer,
+                        Quantity = g.Sum(s => s.Quantity), Unit = g.Key.Unit, Date = DateTime.SpecifyKind(g.Key.DispatchedAt, DateTimeKind.Utc)
+                    })
+                    .OrderBy(d => d.Date).ThenBy(d => d.SalesPartijNumber).ToList(),
+                DirectInvoices = invoices.GroupBy(i => new { i.LotId, i.LotNumber, i.InvoiceNumber, i.CustomCustomerName, i.Unit, i.InvoiceDate })
+                    .Select(g => new PartijDestinationDto
+                    {
+                        SalesPartijId = g.Key.LotId, SalesPartijNumber = g.Key.LotNumber, Reference = g.Key.InvoiceNumber, CustomerName = g.Key.CustomCustomerName,
+                        Quantity = g.Sum(i => i.Quantity), Unit = g.Key.Unit, Date = DateTime.SpecifyKind(g.Key.InvoiceDate, DateTimeKind.Utc)
+                    })
+                    .OrderBy(d => d.Date).ToList(),
+            };
+        }
+
+        // Feedback 22 november, herleidbaarheid van een verkoop-partij: de klant, de leverdatum (verzonden; anders laden op; anders de gevraagde
+        // leverdatum) en per regel de inkoop-partijen waar de colli vandaan komen, met leverancier en herkomst. Bij een directe factuur de
+        // regels van de factuur met hun inkoop-partij.
+        private async Task<SalesLotTraceDto> DeliveryTraceAsync(Partij partij, Facts facts, CancellationToken cancellationToken)
+        {
+            if (partij.InvoiceId != null)
+            {
+                var invoice = await _db.Invoices.AsNoTracking().Where(i => i.Id == partij.InvoiceId)
+                    .Select(i => new { i.InvoiceNumber, i.CustomCustomerName, i.DeliveryDate, i.InvoiceDate }).SingleAsync(cancellationToken);
+                var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.InvoiceId == partij.InvoiceId).OrderBy(l => l.Id)
+                    .Select(l => new { l.Description, l.Quantity, l.Unit, l.PartijId, Number = l.Partij.Number, l.OriginCountry,
+                        // Via de inkoopregels van de partij (review): bij oudere orders staat de partij soms alleen op de regel.
+                        Vendor = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Vendor.Name).FirstOrDefault(),
+                        PurchaseOrigin = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Origin).FirstOrDefault() })
+                    .ToListAsync(cancellationToken);
+                return new SalesLotTraceDto
+                {
+                    CustomerName = invoice.CustomCustomerName, Reference = invoice.InvoiceNumber, Shipped = true,
+                    DeliveryDate = DateTime.SpecifyKind(invoice.DeliveryDate ?? invoice.InvoiceDate, DateTimeKind.Utc),
+                    Lines = lines.Select(l => new SalesLotTraceLineDto
+                    {
+                        Product = l.Description, Quantity = l.Quantity, Unit = l.Unit,
+                        Sources = l.PartijId == null ? new() : new() { new SalesLotTraceSourceDto { PartijId = l.PartijId, Number = l.Number, VendorName = l.Vendor, Origin = string.IsNullOrWhiteSpace(l.OriginCountry) ? l.PurchaseOrigin : l.OriginCountry, Quantity = l.Quantity, Status = "Invoiced" } }
+                    }).ToList(),
+                };
+            }
+            if (!facts.SalesSides.TryGetValue(partij.Id, out var side))
+            {
+                return null;
+            }
+            var delivery = await _db.SalesDeliveries.AsNoTracking().Where(d => d.PartijId == partij.Id)
+                .Select(d => new { d.Sequence, d.LoadAt, OrderLoadAt = d.SalesOrder.LoadAt, d.SalesOrder.RequestedDeliveryDate }).SingleOrDefaultAsync(cancellationToken);
+            var shippedAt = side.Sources.Where(s => s.ShippedAt != null).Select(s => s.ShippedAt).Max();
+            DateTime? planned = delivery == null ? null : (delivery.Sequence <= 1 ? delivery.OrderLoadAt : delivery.LoadAt) ?? delivery.RequestedDeliveryDate;
+            var date = shippedAt ?? planned;
+            return new SalesLotTraceDto
+            {
+                CustomerName = side.CustomerName, SalesOrderId = side.SalesOrderId, Reference = side.OrderNumber, Sequence = delivery?.Sequence,
+                Shipped = shippedAt != null, DeliveryDate = date == null ? null : DateTime.SpecifyKind(date.Value, DateTimeKind.Utc),
+                Lines = side.Lines.Select(l => new SalesLotTraceLineDto
+                {
+                    Product = l.Product, Quantity = l.Quantity, Unit = l.Unit,
+                    Sources = side.Sources.Where(s => s.SalesOrderLineId == l.LineId)
+                        .GroupBy(s => new { s.PartijId, s.Number, s.VendorName, s.Origin, s.Status })
+                        .Select(g => new SalesLotTraceSourceDto { PartijId = g.Key.PartijId, Number = g.Key.Number, VendorName = g.Key.VendorName, Origin = g.Key.Origin, Quantity = g.Sum(s => s.Quantity), Status = g.Key.Status })
+                        .OrderBy(s => s.Number).ToList(),
+                }).ToList(),
+            };
         }
 
         // Kosten (P2): de kostenregels van deze partij met factuur en leverancier, en apart (niet opgeteld) de kosten op de gekoppelde
@@ -248,7 +365,8 @@ namespace AgfAdmin.Services
                 .Where(l => l.PartijId != null && ids.Contains(l.PartijId.Value))
                 .Select(l => new LineFact(l.PartijId.Value, l.Id, l.SupplyCommitmentId, l.SupplyCommitment.OrderNumber, l.SupplyCommitment.Status, l.SupplyCommitment.OrderedOn,
                     l.SupplyCommitment.ExpectedAt, l.SupplyCommitment.SupplierLotReference, l.SupplyCommitment.Vendor.Name,
-                    l.ProductVariant.Product.Name + " " + l.ProductVariant.Name, l.ExpectedQuantity, l.ExpectedUnit, l.SupplyCommitment.SupplierReference))
+                    l.ProductVariant.Product.Name + " " + l.ProductVariant.Name, l.ExpectedQuantity, l.ExpectedUnit, l.SupplyCommitment.SupplierReference,
+                    l.UnitPrice, l.DiscountPercentage, l.SupplyCommitment.ExchangeRate))
                 .ToListAsync(cancellationToken);
             var contents = await _db.PalletContentLines.AsNoTracking()
                 .Where(c => c.PartijId != null && ids.Contains(c.PartijId.Value))
@@ -269,7 +387,12 @@ namespace AgfAdmin.Services
                     r.SalesDeliveryId != null ? r.SalesDelivery.PartijId : r.SalesOrderLine.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => (int?)d.PartijId).FirstOrDefault(),
                     r.SalesDeliveryId != null ? r.SalesDelivery.Partij.Number : r.SalesOrderLine.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => d.Partij.Number).FirstOrDefault()))
                 .ToListAsync(cancellationToken);
-            return new Facts(lines, contents, sales) { SalesSides = await LoadSalesSidesAsync(partijen, cancellationToken) };
+            var sides = await LoadSalesSidesAsync(partijen, cancellationToken);
+            foreach (var invoiceSide in await LoadInvoiceSidesAsync(partijen, cancellationToken))
+            {
+                sides[invoiceSide.Key] = invoiceSide.Value;
+            }
+            return new Facts(lines, contents, sales) { SalesSides = sides };
         }
 
         // Feedback 22 november: een verkoop-partij is één levering. Per partij de reserveringen van haar levering (leeg = de eerste) en per
@@ -297,7 +420,10 @@ namespace AgfAdmin.Services
                     r.PalletContentLine != null ? r.PalletContentLine.PartijId : r.SupplyCommitmentLine.PartijId,
                     r.PalletContentLine != null ? r.PalletContentLine.Partij.Number : r.SupplyCommitmentLine.Partij.Number,
                     r.SupplyCommitmentLine.SupplyCommitment.Vendor.Name, r.SupplyCommitmentLine.ProductVariant.Product.Name + " " + r.SupplyCommitmentLine.ProductVariant.Name,
-                    r.Status, r.Quantity, r.Unit, r.NetWeightKg ?? 0m, r.SalesDeliveryId))
+                    r.Status, r.Quantity, r.Unit, r.NetWeightKg ?? 0m, r.SalesDeliveryId,
+                    r.SupplyCommitmentLine.SupplyCommitment.Origin ?? r.SupplyCommitmentLine.ProductVariant.OriginCountryCode,
+                    r.SupplyCommitmentLine.UnitPrice, r.SupplyCommitmentLine.DiscountPercentage, r.SupplyCommitmentLine.SupplyCommitment.ExchangeRate,
+                    r.DispatchLine != null ? r.DispatchLine.SalesDispatch.DispatchedAt : (DateTime?)null, r.SupplyCommitmentLine.ExpectedUnit))
                 .ToListAsync(cancellationToken);
             var result = new Dictionary<int, SalesSide>();
             foreach (var delivery in deliveries)
@@ -319,6 +445,44 @@ namespace AgfAdmin.Services
                 result[delivery.PartijId] = new SalesSide(delivery.PartijId, order.Id, order.OrderNumber, order.Status, order.Customer, deliveryLines, mine);
             }
             return result;
+        }
+
+        // Feedback 22 november: de verkoop-partij van een directe factuur, als "verkoopkant" zonder order: de factuurregels met hun inkoop-partij.
+        // SalesOrderId 0 = geen order; het factuurnummer staat op de plek van het ordernummer.
+        private async Task<Dictionary<int, SalesSide>> LoadInvoiceSidesAsync(List<Partij> partijen, CancellationToken cancellationToken)
+        {
+            var invoiceIds = partijen.Where(p => p.Kind == PartijRules.KindSales && p.InvoiceId != null).ToDictionary(p => p.InvoiceId.Value, p => p.Id);
+            if (invoiceIds.Count == 0)
+            {
+                return new Dictionary<int, SalesSide>();
+            }
+            var ids = invoiceIds.Keys.ToList();
+            var invoices = await _db.Invoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.InvoiceNumber, i.CustomCustomerName }).ToListAsync(cancellationToken);
+            var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => ids.Contains(l.InvoiceId))
+                .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, l.ProductVariantId, Number = l.Partij.Number,
+                    Vendor = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Vendor.Name).FirstOrDefault() })
+                .ToListAsync(cancellationToken);
+            // Inkoopprijs van de inkoop-partij: alleen de inkoopregel van hetzelfde product én dezelfde eenheid (de prijs geldt per verpakking van de
+            // regel, review); zonder passende regel blijft de prijs, en daarmee de inkoopwaarde, onbekend. Nooit omrekenen tussen eenheden.
+            var purchasePartijIds = lines.Where(l => l.PartijId != null).Select(l => l.PartijId.Value).Distinct().ToList();
+            // Ook regels zonder prijs: die tellen mee als kandidaat, zodat twijfel nooit een prijs oplevert (review); zonder prijs is de waarde onbekend.
+            var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.SupplyCommitment.Status != SupplyRules.StatusCancelled)
+                .OrderBy(c => c.Id)
+                .Select(c => new { PartijId = c.PartijId.Value, c.ProductVariantId, c.ExpectedUnit, c.UnitPrice, c.DiscountPercentage, c.SupplyCommitment.ExchangeRate }).ToListAsync(cancellationToken);
+            return invoices.ToDictionary(i => invoiceIds[i.Id], i => new SalesSide(invoiceIds[i.Id], 0, i.InvoiceNumber, "Invoiced", i.CustomCustomerName,
+                lines.Where(l => l.InvoiceId == i.Id).OrderBy(l => l.Id).Select(l => (l.Id, l.Description, l.Quantity, l.Unit, (decimal?)(l.NetWeight > 0m ? l.NetWeight : null))).ToList(),
+                lines.Where(l => l.InvoiceId == i.Id && l.PartijId != null)
+                    .Select(l =>
+                    {
+                        var mine = costs.Where(c => c.PartijId == l.PartijId).ToList();
+                        // Een directe factuurregel kent meestal geen artikel: dan de enige geprijsde regel van de partij in die eenheid; meer
+                        // kandidaten (of geen) is twijfel, en dan blijft de waarde onbekend.
+                        var sameUnit = mine.Where(c => c.ExpectedUnit != null && string.Equals(c.ExpectedUnit, l.Unit, StringComparison.OrdinalIgnoreCase)
+                            && (l.ProductVariantId == null || c.ProductVariantId == l.ProductVariantId)).ToList();
+                        var cost = sameUnit.Count == 1 ? sameUnit[0] : null;
+                        return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight,
+                            null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m, null, cost?.ExpectedUnit);
+                    }).ToList()));
         }
 
         // Weergavestatus van de order als geheel (alle regels en ontvangsten, ook van andere partijen), met dezelfde regels als de inkooporderlijst.
@@ -357,7 +521,7 @@ namespace AgfAdmin.Services
                 return new T
                 {
                     Id = partij.Id, Number = partij.Number, Kind = partij.Kind, CreatedAt = DateTime.SpecifyKind(partij.CreatedAt, DateTimeKind.Utc), Status = partij.Status,
-                    SalesOrderId = side.SalesOrderId, SalesOrderNumber = side.OrderNumber, SalesOrderStatus = side.OrderStatus, CustomerName = side.CustomerName,
+                    SalesOrderId = side.SalesOrderId > 0 ? side.SalesOrderId : null, SalesOrderNumber = side.OrderNumber, SalesOrderStatus = side.OrderStatus, CustomerName = side.CustomerName,
                     Products = side.Lines.Select(l => l.Product).Distinct().OrderBy(p => p).ToList(),
                     Unit = SingleUnit(side.Lines.Select(l => l.Unit)),
                     OrderedQuantity = side.Lines.Sum(l => l.Quantity),
@@ -365,7 +529,12 @@ namespace AgfAdmin.Services
                     SourcePartijen = side.Sources.Select(s => s.Number).Where(n => n != null).Distinct().OrderBy(n => n).ToList(),
                     Vendors = side.Sources.Select(s => s.VendorName).Where(v => v != null).Distinct().OrderBy(v => v).ToList(),
                     // Per orderregel: de kg van de regel, en voor een regel zonder kg de gereserveerde kg van die regel (nooit dubbel).
-                    NetKg = side.Lines.Sum(l => l.NetKg ?? side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.NetKg))
+                    NetKg = side.Lines.Sum(l => l.NetKg ?? side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.NetKg)),
+                    // Alleen een volledig gedekte levering heeft een inkoopwaarde: elke regel moet in zijn geheel uit (geprijsde) bronnen komen.
+                    // De inkoopprijs geldt per verpakking van de inkoopregel: een bron in een andere eenheid maakt de waarde onbekend (review).
+                    PurchaseValue = side.Lines.All(l => side.Sources.Where(s => s.SalesOrderLineId == l.LineId).Sum(s => s.Quantity) >= l.Quantity)
+                        && side.Sources.All(s => s.PriceUnit != null && string.Equals(s.PriceUnit, s.Unit, StringComparison.OrdinalIgnoreCase))
+                        ? Value(side.Sources.Select(s => (s.Quantity, s.UnitPrice, s.Discount, s.Rate))) : null
                 };
             }
             var lines = facts.LinesByPartij[partij.Id].ToList();
@@ -396,8 +565,19 @@ namespace AgfAdmin.Services
                 InInspectionQuantity = inInspection,
                 OpenExpectedQuantity = openExpected,
                 SoldQuantity = sales.Sum(s => s.Quantity),
-                NetKg = received.Sum(c => c.NetWeightKg)
+                NetKg = received.Sum(c => c.NetWeightKg),
+                PurchaseValue = Value(liveLines.Select(l => (l.Expected, l.UnitPrice, l.Discount, l.Rate)))
             };
+        }
+
+        // Inkoopwaarde in euro (feedback 22 november, Verdeel naar waarde): aantal × prijs min korting, gedeeld door de koers van de order, op
+        // centen. Heeft één regel geen prijs, dan is de waarde onvolledig en dus null
+        // (dan doet de partij niet mee met verdelen naar waarde); een te lage waarde zou de verdeling vertekenen.
+        private static decimal? Value(IEnumerable<(decimal Quantity, decimal? UnitPrice, decimal? Discount, decimal Rate)> parts)
+        {
+            var priced = parts.ToList();
+            if (priced.Count == 0 || priced.Any(p => p.UnitPrice == null)) return null;
+            return priced.Sum(p => ExchangeRateRules.ToEuro(OrderLineMath.LineAmount(p.Quantity, p.UnitPrice, p.Discount) ?? 0m, p.Rate > 0m ? p.Rate : 1m));
         }
 
         // Fysieke ontvangst: geen teruggeboekte of afgesplitste inhoud (die is al bij de oorspronkelijke regel geteld), geen geannuleerde pallet.
