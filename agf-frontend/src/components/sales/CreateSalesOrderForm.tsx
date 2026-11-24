@@ -18,6 +18,7 @@ import { isPartijExistsConflict } from '../../types/partij';
 import { type SellPrefill, orderLabel, singleSource } from '../../lib/salesSupply';
 import type { SupplySource } from '../../types/salesSupply';
 import LineSourceChoice from './LineSourceChoice';
+import LotPicker from './LotPicker';
 import { useSalesBalances } from './useSalesBalances';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesOrder } from '../../services/salesOrderService';
@@ -76,6 +77,8 @@ const draftFromCommand = (command: CreateOrderCommand): OrderDraft => ({
         unitPrice: line.unitPrice == null ? '' : formatAmountInput(line.unitPrice),
         discount: line.discountPercentage == null ? '' : formatDecimalInput(line.discountPercentage, 2),
         vat: line.vatPercentage == null ? '' : String(line.vatPercentage), vatTouched: true,
+        // De gevraagde partij van een bevroren opdracht (het nummer staat in de lijst zodra de partijkeuze geladen is).
+        partijId: line.partijId ?? null, partijNumber: line.partijId ? `#${line.partijId}` : null,
         // Ingevulde netto en aangepaste bruto als ingevuld terugzetten (ook bij opdrachten van vóór de nieuwe regel); berekende kg rekent het
         // (vergrendelde) concept zelf opnieuw uit.
         ...(line.weightSource === 'Entered' && line.netWeightKg != null ? { netKg: formatKgInput(line.netWeightKg), netKgEntered: true } : {}),
@@ -125,6 +128,14 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
     const termTouched = useRef(pending !== null);
     const [draft, setDraft] = useState<OrderDraft>(() => (pending !== null ? draftFromCommand(pending) : prefill !== null ? prefilledDraft(prefill) : emptyDraft()));
     const [submitting, setSubmitting] = useState(false);
+    // Regels waarvan de partijtekst niet is vastgelegd: opslaan wacht tot die tekst een bestaande partij is of leeg.
+    const [lotPending, setLotPending] = useState<ReadonlySet<string>>(new Set());
+    const setLotPendingOf = (key: string, on: boolean) => setLotPending((current) => {
+        if (current.has(key) === on) return current;
+        const next = new Set(current);
+        if (on) next.add(key); else next.delete(key);
+        return next;
+    });
     const [error, setError] = useState<ApiError | null>(null);
     const [errors, setErrors] = useState<FieldErrors>({});
     // Fixes 5b: weggaan met een fout of niet-opgeslagen wijzigingen vraagt eerst (LeaveGuard).
@@ -219,7 +230,10 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
     const updateLine = (key: string, patch: Partial<OrderLineDraft>) => {
         if (locked) return;
-        setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, ...patch } : line)) }));
+        // Een ander artikel: de gekozen partij hoort bij het oude artikel en vervalt.
+        const lotReset = (line: OrderLineDraft): Partial<OrderLineDraft> =>
+            patch.productVariantId !== undefined && patch.productVariantId !== line.productVariantId ? { partijId: null, partijNumber: null } : {};
+        setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, ...patch, ...lotReset(line) } : line)) }));
         edited();
     };
 
@@ -314,7 +328,8 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
         if (target === null && draft.lines.length >= MAX_ORDER_LINES) return;
         const fresh = target === null ? emptyLine() : null;
         // Eenheid en btw komen uit het (nieuwe) artikel, zoals bij een keuze op de regel.
-        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, unit: '', vat: '', vatTouched: false });
+        const withVariant = (line: OrderLineDraft): OrderLineDraft => ({ ...line, productVariantId: String(variantId), grossKg: '', grossKgEntered: false, netKg: '', netKgEntered: false, unit: '', vat: '', vatTouched: false,
+            partijId: null, partijNumber: null });
         setDraft((current) => ({ ...current, lines: fresh !== null ? [...current.lines, withVariant(fresh)] : current.lines.map((line) => (line.key === target ? withVariant(line) : line)) }));
         focusQuantityOf.current = fresh?.key ?? target;
         edited();
@@ -582,9 +597,22 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
                         // Stand en bron van de regel onder de regel: in de Tab-volgorde na Btw, zodat Tab vanuit het artikel naar Aantal gaat.
                         const unit = unitOf(index);
                         const unitText = unit === '' ? t('supply_unit').toLowerCase() : t(unitLabelKey(unit)).toLowerCase();
-                        if (stateOf(line, index) === null && e(`lines[${index}].supplySource`) === undefined) return null;
+                        // Feedback 22 november: de partij van de regel (optioneel), na Btw in de Tab-volgorde.
+                        const variantId = /^[1-9]\d*$/.test(line.productVariantId) ? Number(line.productVariantId) : null;
+                        const lotPicker = variantId === null ? null : (
+                            <div className="mt-1 max-w-md">
+                                <LotPicker id={`lines[${index}].partijId-input`} productVariantId={variantId} unit={unit} disabled={locked} dataTour="sales-line-lot"
+                                    label={t('sales_line_lot')} hint={t('sales_line_lot_hint')}
+                                    value={line.partijId ? { partijId: line.partijId, number: line.partijNumber ?? `#${line.partijId}` } : null}
+                                    onPendingChange={(on) => setLotPendingOf(line.key, on)}
+                                    onChange={(lot) => updateLine(line.key, { partijId: lot?.partijId ?? null, partijNumber: lot?.number ?? null })} />
+                                <FieldError id={`lines[${index}].partijId`} messages={e(`lines[${index}].partijId`)} />
+                            </div>
+                        );
+                        if (stateOf(line, index) === null && e(`lines[${index}].supplySource`) === undefined) return lotPicker;
                         return (
                             <>
+                                {lotPicker}
                                 <LineSourceChoice name={`lines[${index}]`} quantity={rows[index]?.quantity ?? null} unitText={unitText} state={stateOf(line, index)}
                                     source={effectiveSource(line, index)} packagesPerPallet={rows[index]?.perPallet ?? null}
                                     locked={locked} canSplit={draft.lines.length < MAX_ORDER_LINES} onSource={(source) => chooseSource(line.key, source)} onSplit={(stock, expected) => splitLine(line.key, stock, expected)} />
@@ -629,7 +657,7 @@ export default function CreateSalesOrderForm({ customers: knownCustomers, produc
 
             {pending === null && (
                 <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
-                    <button type="submit" data-tour="sales-save" className={primaryButtonClass} disabled={locked}>
+                    <button type="submit" data-tour="sales-save" className={primaryButtonClass} disabled={locked || lotPending.size > 0}>
                         {submitting ? t('supply_saving') : t('sales_save_order')}
                     </button>
                     <SubmitErrors errors={errors} />

@@ -23,7 +23,9 @@ import { DirectTradeCorrectedBadge, DirectTradeShippedBadge, ExpectedAllocationB
 import ReservableStockTable from './ReservableStockTable';
 import ReserveForm from './ReserveForm';
 import LineSupplyInfo from './LineSupplyInfo';
+import ChangeLotForm from './ChangeLotForm';
 import FifoReserveForm from './FifoReserveForm';
+import LotPicker, { type ChosenLot } from './LotPicker';
 
 const th = 'px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-600';
 const td = 'px-2 py-1.5 align-top';
@@ -60,6 +62,10 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
     const [selected, setSelected] = useState<ReservableStockLine | null>(null);
     const [selectedSupply, setSelectedSupply] = useState<DirectTradeSupplyLine | null>(null);
     const [releasingId, setReleasingId] = useState<number | null>(null);
+    // Feedback 22 november: reserveren uit een gekozen partij, en de partij van een reservering wijzigen.
+    const [choosingLot, setChoosingLot] = useState(false);
+    const [fifoLot, setFifoLot] = useState<ChosenLot | null>(null);
+    const [changingLotId, setChangingLotId] = useState<number | null>(null);
     const [stockToken, setStockToken] = useState(0);
     // Elke herlaadactie na een conflict geeft de formulieren een nieuwe sleutel; een bewaard commando komt daarbij gewoon terug.
     const [decisionToken, setDecisionToken] = useState(0);
@@ -107,6 +113,7 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
 
     const onFifoReserved = async (saved: SaveResult<StockReservation[]>) => {
         setFifo(false);
+        setFifoLot(null);
         await afterWrite('reserved', saved.replayed);
     };
 
@@ -357,6 +364,16 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
                                                         {t('sales_release')}
                                                     </button>
                                                 )}
+                                                {/* Feedback 22 november: bij het picken een andere partij (vrijgeven en opnieuw reserveren, met auditregel). */}
+                                                {reservation.status === 'Active' && !readOnly && !releaseOpen && !allocation && changingLotId !== reservation.id && (
+                                                    <button type="button" className={`${secondaryButtonClass} ml-2`} onClick={() => setChangingLotId(reservation.id)} disabled={lineBlock !== null}
+                                                        data-tour="sales-change-lot">{t('sales_change_lot')}</button>
+                                                )}
+                                                {changingLotId === reservation.id && reservation.status === 'Active' && (
+                                                    <ChangeLotForm line={line} reservation={reservation} onCancel={() => setChangingLotId(null)}
+                                                        onReload={() => { setChangingLotId(null); void reload(); }}
+                                                        onChanged={async () => { setChangingLotId(null); await afterWrite('reserved', false); }} />
+                                                )}
                                                 {releaseOpen && (
                                                     <ReleaseReservationForm key={`${reservation.id}:${reservation.version}:${decisionToken}`} orderId={order.id} line={line}
                                                         reservation={reservation} onSucceeded={onReleased} onReload={() => void reload()} onCancel={() => setReleasingId(null)} />
@@ -372,13 +389,27 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
             </div>
 
             <div className="border-t border-gray-200 px-3 py-2">
-                {!showChooser && !showAllocator && !showFifo && (
+                {!showChooser && !showAllocator && !showFifo && line.partijNumber && (
+                    <p className="mb-2 text-xs text-gray-700" data-testid="line-requested-lot">{t('sales_line_requested_lot', { lot: line.partijNumber })}</p>
+                )}
+                {!showChooser && !showAllocator && !showFifo && choosingLot && (
+                    <div className="mb-2 max-w-md space-y-2" data-testid="line-lot-choice">
+                        <LotPicker id={`line-${line.id}-lot`} productVariantId={line.productVariantId} unit={line.unit} value={null} dataTour="sales-choose-lot-picker"
+                            label={t('sales_choose_lot_label')} hint={t('sales_choose_lot_hint')}
+                            onChange={(lot) => { if (lot !== null) { setFifoLot(lot); setChoosingLot(false); setFifo(true); } }} />
+                        <button type="button" className={secondaryButtonClass} onClick={() => setChoosingLot(false)}>{t('cancel')}</button>
+                    </div>
+                )}
+                {!showChooser && !showAllocator && !showFifo && !choosingLot && (
                     <div className="flex flex-wrap items-center gap-2">
                         <button type="button" data-tour="sales-reserve-fifo" className={primaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setFifo(true); }}>
                             {t('sales_fifo_start')}
                         </button>
                         <button type="button" data-tour="sales-choose-stock" className={secondaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosing(true); }}>
                             {t('sales_choose_stock')}
+                        </button>
+                        <button type="button" data-tour="sales-choose-lot" className={secondaryButtonClass} disabled={!canStart} onClick={() => { setNotice(null); setChoosingLot(true); }}>
+                            {t('sales_choose_lot')}
                         </button>
                         {/* Feedback 22 november: geen nieuwe klantgebonden toewijzing meer (directe handel is een gewone inkooporder met een locatie
                             Onderweg); een toewijzing die nog onderweg is, wordt hieronder afgemaakt. */}
@@ -392,8 +423,11 @@ export default function OrderLinePanel({ order, line, readOnly, onOrderChanged, 
                     </div>
                 )}
                 {showFifo && (
-                    <FifoReserveForm key={`${line.version}:${decisionToken}`} orderId={order.id} line={line}
-                        onSucceeded={onFifoReserved} onReload={() => void reload()} onCancel={() => setFifo(false)} />
+                    <>
+                        {fifoLot !== null && <p className="mb-1 text-xs font-medium text-gray-800" data-testid="line-fifo-lot">{t('sales_fifo_from_lot', { lot: fifoLot.number })}</p>}
+                        <FifoReserveForm key={`${line.version}:${decisionToken}:${fifoLot?.partijId ?? 0}`} orderId={order.id} line={line} partijId={fifoLot?.partijId}
+                            onSucceeded={onFifoReserved} onReload={() => void reload()} onCancel={() => { setFifo(false); setFifoLot(null); }} />
+                    </>
                 )}
                 {showChooser && !showFifo && (
                     <div className="space-y-3">

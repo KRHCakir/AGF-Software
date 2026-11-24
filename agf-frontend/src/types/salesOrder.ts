@@ -44,6 +44,8 @@ export interface CreateSalesOrderLineRequest {
     unitPrice?: number;
     discountPercentage?: number;
     vatPercentage?: number;
+    // Feedback 22 november: de gevraagde inkoop-partij (optioneel); weggelaten = de oudste partij eerst bij het reserveren.
+    partijId?: number;
 }
 
 export interface CreateSalesOrderRequest {
@@ -311,6 +313,9 @@ export interface StockReservation {
 export interface SalesOrderLine {
     id: number;
     productVariantId: number;
+    // Feedback 22 november: de gevraagde inkoop-partij van de regel; ontbreekt bij een oudere server (= geen, de oudste partij eerst).
+    partijId?: number | null;
+    partijNumber?: string | null;
     productName: string | null;
     productVariantName: string | null;
     quantity: number;
@@ -478,6 +483,37 @@ export interface ReservableStockLine {
     receivedAt?: string;
     supplyCommitmentId?: number;
     supplyOrderNumber?: string | null;
+    // Feedback 22 november: partij, kleur, voorraadlocatie (leeg = de eigen loods), maat, herkomst en leverancier; ontbreken bij een oudere server.
+    partijId?: number | null;
+    partijNumber?: string | null;
+    partijColor?: string | null;
+    stockLocationName?: string | null;
+    size?: string | null;
+    origin?: string | null;
+    vendorName?: string | null;
+}
+
+// Feedback 22 november: één partij in de partijkeuze (vrije voorraad per inkoop-partij). partijId null = voorraad zonder partij (alleen ter
+// informatie). locations: voorraadlocaties (null = de eigen loods); bins: vakken in de loods.
+export interface LotOption {
+    partijId: number | null;
+    number: string | null;
+    unit: string;
+    availableQuantity: number;
+    palletCount: number;
+    size: string | null;
+    color: string | null;
+    origin: string | null;
+    locations: (string | null)[];
+    bins: string[];
+    receivedAt: string;
+    vendorName: string | null;
+}
+
+export function isLotOption(value: unknown): value is LotOption {
+    return isObject(value) && (value.partijId === null || isNumber(value.partijId)) && isNullableString(value.number) && isString(value.unit)
+        && isNumber(value.availableQuantity) && isNumber(value.palletCount) && isNullableString(value.size) && (value.color === undefined || isNullableString(value.color))
+        && isNullableString(value.origin) && Array.isArray(value.locations) && Array.isArray(value.bins) && isString(value.receivedAt);
 }
 
 function isUnit(value: unknown): value is PackageUnit {

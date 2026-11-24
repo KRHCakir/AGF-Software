@@ -41,6 +41,8 @@ import {
     isSalesOrderList,
     isStockReservation,
     isFifoReservationProposal,
+    isLotOption,
+    type LotOption,
     isStockReservationList,
     type CreateStockReservationBatchRequest,
     type FifoReservationProposal,
@@ -51,8 +53,10 @@ import { type AwaitingStockLine, isAwaitingStockList } from '../types/salesSuppl
 // opdracht was al verwerkt. Een 409 betekent altijd: herladen en opnieuw beslissen, nooit stil opnieuw versturen.
 
 // Voorstel "Reserveren (oudste partij eerst)" voor één orderregel; alleen lezen.
-export async function getFifoProposal(orderId: number, lineId: number, signal?: AbortSignal): Promise<FifoReservationProposal> {
-    const json = await getJson(`/sales-orders/${orderId}/lines/${lineId}/fifo-proposal`, signal);
+// Feedback 22 november: met partijId het voorstel uit alleen die partij (de partijkeuze); zonder de oudste partij eerst (of de gevraagde
+// partij van de regel).
+export async function getFifoProposal(orderId: number, lineId: number, signal?: AbortSignal, partijId?: number): Promise<FifoReservationProposal> {
+    const json = await getJson(`/sales-orders/${orderId}/lines/${lineId}/fifo-proposal${partijId === undefined ? '' : `?partijId=${partijId}`}`, signal);
     if (!isFifoReservationProposal(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij het voorstel oudste partij eerst.');
     }
@@ -207,6 +211,24 @@ export async function createSalesDelivery(orderId: number, request: { requestId:
     const { json } = await postJson(`/sales-orders/${orderId}/deliveries`, request, signal);
     if (!isSalesOrder(json)) {
         throw new ApiError('shape', 'Onverwacht antwoord bij de deellevering.');
+    }
+    return json;
+}
+
+// Feedback 22 november: de partijkeuze: vrije voorraad per inkoop-partij van dit artikel in deze eenheid.
+export async function getLotOptions(productVariantId: number, unit: string, signal?: AbortSignal): Promise<LotOption[]> {
+    const json = await getJson(`/sales-orders/lot-options?productVariantId=${productVariantId}&unit=${encodeURIComponent(unit)}`, signal);
+    if (!Array.isArray(json) || !json.every(isLotOption)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij de partijkeuze.');
+    }
+    return json;
+}
+
+// Feedback 22 november: bij het picken de partij van een reservering wijzigen (vrijgeven en opnieuw reserveren uit de gekozen partij).
+export async function changeReservationLot(reservationId: number, request: { requestId: string; expectedReservationVersion: number; partijId: number }, signal?: AbortSignal): Promise<StockReservation[]> {
+    const { json } = await postJson(`/stock-reservations/${reservationId}/change-lot`, request, signal);
+    if (!Array.isArray(json) || !json.every(isStockReservation)) {
+        throw new ApiError('shape', 'Onverwacht antwoord bij het wijzigen van de partij.');
     }
     return json;
 }

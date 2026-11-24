@@ -30,9 +30,11 @@ const td = 'px-2 py-1.5 align-top';
 // "Reserveren (oudste partij eerst)": het systeem stelt de pallets voor op ontvangstmoment en dan partijnummer, over zoveel pallets als
 // nodig. De gebruiker past aantallen aan (kg zoals bij één reservering: berekend gewicht volgt het aantal, gewogen kg vul je in) en
 // bevestigt. Eén batch van gewone exacte reserveringen, alles of niets; bevroren en bewaard tot de uitkomst bekend is (zelfde requestId).
-export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, onCancel }: {
+export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, onCancel, partijId }: {
     orderId: number;
     line: SalesOrderLine;
+    // Feedback 22 november: het voorstel uit alleen deze partij (de partijkeuze); weggelaten = de oudste partij eerst.
+    partijId?: number;
     onSucceeded: (saved: SaveResult<StockReservation[]>) => Promise<void>;
     onReload: () => void;
     onCancel: () => void;
@@ -53,7 +55,7 @@ export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, 
     useEffect(() => {
         const controller = new AbortController();
         setProposal({ status: 'loading' });
-        getFifoProposal(orderId, line.id, controller.signal)
+        getFifoProposal(orderId, line.id, controller.signal, partijId)
             .then((data) => {
                 setProposal({ status: 'ready', data });
                 // Een bevroren opdracht toont zijn eigen aantallen; anders het voorstel van het systeem.
@@ -65,7 +67,7 @@ export default function FifoReserveForm({ orderId, line, onSucceeded, onReload, 
                 if (apiError.kind !== 'aborted') setProposal({ status: 'error', error: apiError });
             });
         return () => controller.abort();
-    }, [orderId, line.id, token]);
+    }, [orderId, line.id, token, partijId]);
 
     const conflict = error !== null && error.kind === 'http' && (error.status === 409 || error.status === 404);
     const locked = submitting || pending !== null || conflict;
