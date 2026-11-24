@@ -14,6 +14,7 @@ import {
 import { getAvailabilityVariant, toAvailabilityError } from '../../services/availabilityService';
 import { AvailabilityDrillDown, ContentLineAvailability, PackageUnit, SupplyRoute } from '../../types/availability';
 import QualityBadge from './QualityBadge';
+import { LotColorBadge } from '../partij/LotColor';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import GgnBadge from '../shared/GgnBadge';
 import { UnitBadge } from './QuantityCell';
@@ -84,6 +85,7 @@ export default function AvailabilityDrawer({ selection, onClose }: { selection: 
             </td>
             <td className={td}>
                 <PartijNumberLink partijId={line.partijId} partijNumber={line.partijNumber} lotNumber={line.lotNumber} className="" />
+                <LotColorBadge color={line.partijColor} />
                 {line.ggn && <span className="ml-1"><GgnBadge ggn={line.ggn} /></span>}
                 {line.origin === 'DispatchCorrection' && (
                     <span className="ml-1 inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{t('sales_origin_correction')}</span>

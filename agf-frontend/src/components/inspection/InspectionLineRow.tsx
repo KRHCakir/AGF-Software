@@ -1,5 +1,6 @@
 'use client';
 
+import { LotColorField } from '../partij/LotColor';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/LanguageContext';
 import { formatDateTime, formatKg, formatQuantity } from '../../lib/availability';
@@ -149,6 +150,8 @@ export default function InspectionLineRow({ context, line, readOnly, onSucceeded
             <td className="px-3 py-2">
                 <span className="font-medium text-gray-900">{line.productName} · {line.productVariantName}</span>
                 <span className="block text-xs text-gray-600">{t('supply_lot')} {line.lotNumber}</span>
+                {/* Feedback 22 november: QC vult de kleur in; die geldt voor de hele partij, niet voor deze pallet. */}
+                {!readOnly && line.partijId != null && <LotColorField partijId={line.partijId} partijNumber={line.lotNumber} compact />}
                 {line.ggn && <span className="mt-0.5 block"><GgnBadge ggn={line.ggn} /></span>}
                 {line.origin === 'DispatchCorrection' && (
                     <span className="mt-1 inline-flex rounded border border-amber-300 bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{t('sales_origin_correction')}</span>

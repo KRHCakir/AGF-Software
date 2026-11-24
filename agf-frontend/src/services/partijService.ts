@@ -5,6 +5,8 @@ import {
     MissingPartijLine,
     PartijDetail,
     PartijList,
+    ProductColors,
+    isProductColors,
     PartijNextNumber,
     PartijSettings,
     PartijSummary,
@@ -46,6 +48,25 @@ export async function listPartijen(query: PartijQuery, signal?: AbortSignal): Pr
 export async function getMissingPartijen(signal?: AbortSignal): Promise<MissingPartijLine[]> {
     const json = await getJson('/partijen/missing', signal);
     if (!isMissingPartijLines(json)) throw new ApiError('shape', 'Onverwacht antwoord bij voorraad zonder partij.');
+    return json;
+}
+
+// Feedback 22 november: de kleur van een inkoop-partij (leeg = geen); de server controleert de kleurenlijst van het product.
+export async function setPartijColor(id: number, color: string | null, signal?: AbortSignal): Promise<PartijSummary> {
+    const { json } = await putJson(`/partijen/${id}/color`, { color }, signal);
+    if (!isPartijSummary(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de kleur van de partij.');
+    return json;
+}
+
+export async function getProductColors(productId: number, signal?: AbortSignal): Promise<ProductColors> {
+    const json = await getJson(`/articles/products/${productId}/colors`, signal);
+    if (!isProductColors(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de kleuren van het product.');
+    return json;
+}
+
+export async function updateProductColors(productId: number, colors: string[], signal?: AbortSignal): Promise<ProductColors> {
+    const { json } = await putJson(`/articles/products/${productId}/colors`, { colors }, signal);
+    if (!isProductColors(json)) throw new ApiError('shape', 'Onverwacht antwoord bij de kleuren van het product.');
     return json;
 }
 

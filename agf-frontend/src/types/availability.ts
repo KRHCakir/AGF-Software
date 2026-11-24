@@ -153,6 +153,8 @@ export interface ContentLineAvailability {
     // Partij van de regel (null = geen partij): het nummer uit de partij zelf, met link naar het partijdetail.
     partijId?: number | null;
     partijNumber?: string | null;
+    // Feedback 22 november: kleur van de partij; ontbreekt bij een oudere server.
+    partijColor?: string | null;
     unit: PackageUnit;
     // Historische ontvangst; voorraad = ontvangst - afgeboekt door verzendingen.
     quantity: number;

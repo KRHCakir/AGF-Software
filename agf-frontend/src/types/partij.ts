@@ -26,6 +26,8 @@ export interface PartijNextNumber {
 export interface PartijSummary {
     id: number;
     number: string;
+    // Feedback 22 november: kleur van een inkoop-partij; ontbreekt bij een oudere server.
+    color?: string | null;
     kind: PartijKind;
     salesOrderId: number | null;
     status: string;
@@ -38,6 +40,7 @@ export interface PartijSummary {
 export interface PartijTotals {
     id: number;
     number: string;
+    color?: string | null;
     kind: PartijKind;
     // Alleen bij een verkoop-partij: de order (1-op-1), de klant, wat er besteld is en uit welke inkoop-partijen de colli komen.
     salesOrderId: number | null;
@@ -161,6 +164,8 @@ export interface PartijLinkedCost {
 
 export interface PartijDetail extends PartijTotals {
     note: string | null;
+    // De kleuren die deze partij mag hebben (de lijsten van haar producten); ontbreekt bij een oudere server.
+    allowedColors?: string[];
     createdBy: string;
     linked: boolean;
     // Het nummer verandert alleen met reden (inkoop-partij met koppelingen; verkoop-partij na reserveren of leveren).
@@ -245,4 +250,11 @@ export interface MissingPartijLine {
 export function isMissingPartijLines(value: unknown): value is MissingPartijLine[] {
     return Array.isArray(value) && value.every((v) => isRecord(v) && isNumber(v.palletContentLineId) && isNumber(v.supplyCommitmentId) && isString(v.palletReference)
         && isString(v.orderNumber) && isNumber(v.onHandQuantity) && isString(v.unit) && isString(v.receivedAt));
+}
+
+// Feedback 22 november: de kleurenlijst van een product (Stamgegevens).
+export interface ProductColors { productId: number; productName: string; colors: string[] }
+
+export function isProductColors(value: unknown): value is ProductColors {
+    return isRecord(value) && isNumber(value.productId) && isString(value.productName) && Array.isArray(value.colors) && value.colors.every(isString);
 }
