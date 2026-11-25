@@ -83,7 +83,9 @@ export default function InvoiceConceptEditor({ invoice, onChanged, onReload }: {
                     <tbody>
                         {drafts.map((draft, index) => {
                             const key = `lines[${index}]`;
+                            // Bij een andere factuur horen de concepten nog even bij de vorige (tot het effect ze vervangt): sla die regel over.
                             const line = invoice.lines[index];
+                            if (line === undefined || line.id !== draft.id) return null;
                             return (
                                 <tr key={draft.id} className={draft.remove ? 'opacity-50' : ''} data-testid="si-edit-line">
                                     <td className="px-1 py-1 align-top">{line.description ?? '–'}{line.lotNumber && <span className="block font-mono text-xs text-gray-600">{line.lotNumber}</span>}</td>
