@@ -253,7 +253,7 @@ namespace AgfAdmin.Services
                             lot.Item().Text(line.Lots ?? "");
                             if (line.Ggn != null) lot.Item().Text($"GGN {line.Ggn}").FontSize(7);
                         });
-                        Cell().AlignRight().Text(line.NetKg == null ? "" : WeightDisplay.Kg(line.NetKg, 0));
+                        Cell().AlignRight().Text(line.NetKg == null ? "" : WeightDisplay.Kg(line.NetKg, null));
                     }
                     Cell().AlignRight().Text(line.UnitPrice == null ? L("noPrice") : Money(line.UnitPrice));
                     Cell().Text(Unit(line.Unit));
