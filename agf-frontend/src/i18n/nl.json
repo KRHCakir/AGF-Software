@@ -3585,5 +3585,15 @@
   "si_direct_save": "Concept opslaan",
   "si_revenue_type": "Omzetsoort",
   "lot_picker_placeholder_required": "Partijnummer (verplicht)",
+  "si_mail_document_name": "Factuur {number}",
+  "settings_revenue_types_title": "Omzetsoorten",
+  "settings_revenue_types_hint": "Voor dienst- en vrije regels op een verkoopfactuur. De code is voor de grootboekrekening in het boekhoudpakket, later.",
+  "settings_revenue_types_default": "Standaard",
+  "settings_revenue_types_make_default": "Maak standaard",
+  "settings_revenue_types_deactivate": "Inactief zetten",
+  "settings_revenue_types_activate": "Weer actief",
+  "settings_revenue_types_name": "Nieuwe omzetsoort",
+  "settings_revenue_types_code": "Code grootboek (optioneel)",
+  "settings_revenue_types_add": "Toevoegen",
   "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept."
 }

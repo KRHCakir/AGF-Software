@@ -1,4 +1,6 @@
 import { ApiError, getBlob, getJson, postJson, putJson } from './apiClient';
+import { isMailDraft, type MailDraft } from '../types/documentMail';
+import { isArrayOf } from '../types/guards';
 import {
     isDeliveryInvoicingList, isFinalizeResults, isInvoicingCustomers, isRevenueTypes, isSalesInvoice, isSalesInvoiceList,
     type DeliveryInvoicing, type FinalizeResult, type InvoicingCustomer, type RevenueType, type SalesInvoice, type SalesInvoiceList,
@@ -91,4 +93,18 @@ export async function getToInvoice(signal?: AbortSignal): Promise<InvoicingCusto
     const json = await getJson('/sales-invoices/to-invoice', signal);
     if (!isInvoicingCustomers(json)) throw shape('de werklijst Nog te factureren');
     return json;
+}
+
+// Het mailconcept (en eerdere) van een definitieve factuur.
+export async function getInvoiceMailDrafts(id: number, signal?: AbortSignal): Promise<MailDraft[]> {
+    const json = await getJson(`/sales-invoices/${id}/mail-drafts`, signal);
+    if (!isArrayOf(json, isMailDraft)) throw shape('de mailconcepten van de factuur');
+    return json;
+}
+
+// Omzetsoorten (Beheer): toevoegen en wijzigen met de versie die de gebruiker zag.
+export async function saveRevenueType(id: number | null, body: { name: string; externalCode: string | null; isActive: boolean; isDefault: boolean; expectedVersion?: number }): Promise<RevenueType> {
+    const { json } = id === null ? await postJson('/revenue-types', body) : await putJson(`/revenue-types/${id}`, body);
+    if (!isRevenueTypes([json])) throw shape('de omzetsoort');
+    return json as RevenueType;
 }

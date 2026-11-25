@@ -1,5 +1,6 @@
 'use client';
 
+import RevenueTypesSetting from '../../../components/settings/RevenueTypesSetting';
 import AiReadingSetting from '../../../components/settings/AiReadingSetting';
 import CostArticlesAdmin from '../../../components/settings/CostArticlesAdmin';
 import GlobalGapPortalSetting from '../../../components/settings/GlobalGapPortalSetting';
@@ -38,6 +39,7 @@ export default function SettingsPage() {
             <WarehouseRecipientsSetting />
             <MailSenderSetting />
             <MailTemplatesSetting />
+            <RevenueTypesSetting />
             <PaymentConditionsAdmin />
             <CostArticlesAdmin />
             <GlobalGapPortalSetting />
