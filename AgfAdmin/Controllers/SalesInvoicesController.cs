@@ -40,6 +40,16 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> Discard(int id, [FromBody] DiscardSalesInvoiceDto request) =>
             this.ToActionResult(await invoices.DiscardAsync(id, request, Aborted));
 
+        // Definitief maken: nummer, momentopname en (directe factuur) afboeken. 200 ook bij herhaling; 400 met wat er ontbreekt; 409.
+        [HttpPost("{id:int}/finalize")]
+        public async Task<IActionResult> Finalize(int id, [FromBody] FinalizeSalesInvoiceDto request) =>
+            this.ToActionResult(await invoices.FinalizeAsync(id, request, Aborted));
+
+        // Een selectie: elke factuur apart; het antwoord zegt per factuur of ze definitief is en zo niet, waarom.
+        [HttpPost("finalize")]
+        public async Task<IActionResult> FinalizeMany([FromBody] FinalizeSalesInvoicesDto request) =>
+            this.ToActionResult(await invoices.FinalizeManyAsync(request, Aborted));
+
         // De werklijst Nog te factureren: leveringen met een rest, per klant.
         [HttpGet("to-invoice")]
         public async Task<IActionResult> ToInvoice() => Ok(await invoices.ToInvoiceAsync(Aborted));

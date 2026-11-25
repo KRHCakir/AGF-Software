@@ -69,6 +69,27 @@ namespace AgfAdmin.DTOs
         public int? RevenueTypeId { get; set; }
     }
 
+    public sealed class FinalizeSalesInvoiceDto
+    {
+        public int? ExpectedVersion { get; set; }
+    }
+
+    // Definitief maken van een selectie uit de lijst: elke factuur met de versie die de gebruiker zag.
+    public sealed class FinalizeSalesInvoicesDto
+    {
+        public List<FinalizeSalesInvoiceItemDto> Invoices { get; set; } = new();
+    }
+
+    public sealed class FinalizeSalesInvoiceItemDto
+    {
+        public int Id { get; set; }
+        public int? ExpectedVersion { get; set; }
+    }
+
+    public sealed record FinalizeSalesInvoiceResultDto(int Id, bool Final, string InvoiceNumber, int? Version, string Message, IReadOnlyDictionary<string, string[]> Errors);
+
+    public sealed record FinalizeSalesInvoicesResultDto(IReadOnlyList<FinalizeSalesInvoiceResultDto> Results);
+
     public sealed class DiscardSalesInvoiceDto
     {
         public int? ExpectedVersion { get; set; }
