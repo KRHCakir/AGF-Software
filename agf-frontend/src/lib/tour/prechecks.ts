@@ -452,15 +452,18 @@ export async function precheckAiCertificate(signal: AbortSignal): Promise<TourPr
     return { missing: [], vars: { vendorName: vendor.vendor.name, vendorRelationId: String(relation.id), aiOff: status.enabled ? '' : 'ja' } };
 }
 
-// Verkoopfactuur 1: een geleverde levering van een DEMO-TOUR-verkooporder die nog te factureren is (zonder open concept). Alleen lezen.
+// Verkoopfactuur 1: een geleverde levering van een DEMO-TOUR-verkooporder die nog te factureren is. Een levering met een open concept
+// (de rondleiding was onderbroken na Factureren) telt ook: die wordt hervat bij het concept (needInvoice leeg), het eerst. Alleen lezen.
 export async function lookupToInvoice(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
     const [customers, orders] = await Promise.all([getToInvoice(signal), listSalesOrders({ status: 'Open' }, signal)]);
     const tourOrders = new Set(orders.filter((order) => isTour(order.customerReference)).map((order) => order.id));
-    const delivery = customers.flatMap((customer) => customer.deliveries)
-        .filter((d) => tourOrders.has(d.salesOrderId) && d.hasRest && d.openConceptId === null && d.lines.some((line) => line.rest > 0))
-        .sort((a, b) => b.salesOrderId - a.salesOrderId || a.sequence - b.sequence)[0];
+    const candidates = customers.flatMap((customer) => customer.deliveries)
+        .filter((d) => tourOrders.has(d.salesOrderId) && d.hasRest && d.lines.some((line) => line.rest > 0))
+        .sort((a, b) => b.salesOrderId - a.salesOrderId || a.sequence - b.sequence);
+    const resumable = candidates.find((d) => d.openConceptId !== null);
+    const delivery = resumable ?? candidates[0];
     if (!delivery) return { missing: [{ key: 'tour_missing_to_invoice' }] };
-    return { missing: [], vars: { orderId: String(delivery.salesOrderId), deliveryId: String(delivery.salesDeliveryId) } };
+    return { missing: [], vars: { orderId: String(delivery.salesOrderId), deliveryId: String(delivery.salesDeliveryId), needInvoice: resumable ? '' : 'yes' } };
 }
 
 // Na Factureren: het concept van die levering (om het te openen).

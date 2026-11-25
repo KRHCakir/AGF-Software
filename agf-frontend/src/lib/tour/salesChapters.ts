@@ -241,12 +241,16 @@ export const INVOICE_CHAPTER: TourChapter = {
             { kind: 'wait', target: 'si-to-invoice' },
             { kind: 'highlight', target: 'si-to-invoice' },
         ]),
-        salesInvoice('invoice', '/sales-orders?orderId={{orderId}}', [
-            { kind: 'wait', target: 'so-delivery-invoice:{{deliveryId}}' },
-            { kind: 'highlight', target: 'so-deliveries' },
-            { kind: 'click', target: 'so-delivery-invoice:{{deliveryId}}' },
-            { kind: 'wait', target: 'so-delivery-invoice-open:{{deliveryId}}' },
-        ]),
+        // Overgeslagen als er al een concept van de rondleiding is (onderbroken rondleiding): dan gaat het verder bij "open".
+        {
+            ...salesInvoice('invoice', '/sales-orders?orderId={{orderId}}', [
+                { kind: 'wait', target: 'so-delivery-invoice:{{deliveryId}}' },
+                { kind: 'highlight', target: 'so-deliveries' },
+                { kind: 'click', target: 'so-delivery-invoice:{{deliveryId}}' },
+                { kind: 'wait', target: 'so-delivery-invoice-open:{{deliveryId}}' },
+            ]),
+            when: '{{needInvoice}}',
+        },
         salesInvoice('open', '/sales-orders?orderId={{orderId}}', [
             { kind: 'lookup', run: lookupConcept },
             { kind: 'click', target: 'so-delivery-invoice-open:{{deliveryId}}' },
