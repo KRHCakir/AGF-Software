@@ -17,7 +17,9 @@ namespace AgfAdmin.Data
         //    deze save blijft (Definitief maken legt eerst de momentopname van de regels vast en zet daarna, in een tweede save, de status);
         //    waar een regel vandaan komt (soort, levering, orderregel, dienst- of emballageregel, artikel) verandert nooit; een uit het
         //    concept gehaalde regel verandert nooit meer;
-        // 5. een omzetsoort wordt nooit verwijderd.
+        // 5. een omzetsoort wordt nooit verwijderd;
+        // 6. een PDF-versie (SalesInvoiceDocument) hoort bij een definitieve factuur, met opeenvolgende versies vanaf 1; ze wordt nooit
+        //    verwijderd en haar inhoud verandert nooit; alleen het moment van versturen wordt één keer vastgelegd.
         // Vergeleken met de opgeslagen waarden in de database, niet met OriginalValues.
         private sealed record StoredInvoice(int Id, string Kind, string Status, int? CustomerId, Guid? RequestId, string RequestFingerprint, string CreatedBy, DateTime CreatedAt);
         private sealed record StoredInvoiceLine(int Id, int InvoiceId, string LineKind, int? SalesDeliveryId, int? SalesOrderLineId, int? SalesOrderServiceLineId,
@@ -25,6 +27,7 @@ namespace AgfAdmin.Data
 
         private static async Task CheckSalesInvoicesAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
+            await CheckSalesInvoiceDocumentsAsync(db, async, cancellationToken);
             if (db.ChangeTracker.Entries<RevenueType>().Any(e => e.State == EntityState.Deleted))
             {
                 throw new TraceabilityViolationException("A revenue type is never deleted; set it inactive instead.");
@@ -138,6 +141,46 @@ namespace AgfAdmin.Data
                     if (before.RemovedAt != null)
                     {
                         throw new TraceabilityViolationException("A line removed from a concept never changes again.");
+                    }
+                }
+            }
+        }
+
+        private static async Task CheckSalesInvoiceDocumentsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
+        {
+            var entries = db.ChangeTracker.Entries<SalesInvoiceDocument>().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).ToList();
+            if (entries.Count == 0)
+            {
+                return;
+            }
+            if (entries.Any(e => e.State == EntityState.Deleted))
+            {
+                throw new TraceabilityViolationException("A sales invoice document is never deleted.");
+            }
+            foreach (var entry in entries.Where(e => e.State == EntityState.Modified))
+            {
+                var changed = entry.Properties.Where(p => p.IsModified && !Equals(p.OriginalValue, p.CurrentValue)).Select(p => p.Metadata.Name).ToList();
+                if (changed.Any(name => name is not (nameof(SalesInvoiceDocument.SentAt) or nameof(SalesInvoiceDocument.SentBy)))
+                    || entry.Property(d => d.SentAt).OriginalValue != null && changed.Count > 0)
+                {
+                    throw new TraceabilityViolationException("A sales invoice document never changes; only the moment it was sent is recorded, once.");
+                }
+            }
+            foreach (var group in entries.Where(e => e.State == EntityState.Added).GroupBy(e => e.Entity.InvoiceId))
+            {
+                var invoiceId = group.Key;
+                var tracked = db.ChangeTracker.Entries<Invoice>().FirstOrDefault(e => e.Entity.Id == invoiceId);
+                var stored = await FirstOrDefaultAsync(db.Invoices.AsNoTracking().Where(i => i.Id == invoiceId).Select(i => new { i.Kind, i.Status, i.InvoiceNumber }), async, cancellationToken);
+                if (stored == null || stored.Kind == null || stored.Status != SalesInvoiceRules.StatusFinal || tracked != null && tracked.State == EntityState.Modified && tracked.Entity.Status != SalesInvoiceRules.StatusFinal)
+                {
+                    throw new TraceabilityViolationException("A document is only made for a final sales invoice.");
+                }
+                var last = (await ToListAsync(db.SalesInvoiceDocuments.AsNoTracking().Where(d => d.InvoiceId == invoiceId).Select(d => d.Version), async, cancellationToken)).DefaultIfEmpty(0).Max();
+                foreach (var entry in group.OrderBy(e => e.Entity.Version))
+                {
+                    if (entry.Entity.Version != ++last || entry.Entity.Number != stored.InvoiceNumber || entry.Entity.SentAt != null)
+                    {
+                        throw new TraceabilityViolationException("Document versions of a sales invoice follow each other from 1, carry the invoice number and are not sent yet.");
                     }
                 }
             }

@@ -56,6 +56,18 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> FinalizeMany([FromBody] FinalizeSalesInvoicesDto request) =>
             this.ToActionResult(await invoices.FinalizeManyAsync(request, Aborted));
 
+        // De PDF: een concept live (met CONCEPT), een definitieve factuur uit haar bewaarde versie. Inline, of met download=true als bestand.
+        [HttpGet("{id:int}/pdf")]
+        public async Task<IActionResult> Pdf(int id, [FromQuery] bool download = false)
+        {
+            var result = await invoices.PdfAsync(id, Aborted);
+            if (result.Status != ServiceResultStatus.Ok) return this.ToActionResult(result);
+            return download ? File(result.Value.Bytes, "application/pdf", result.Value.FileName) : File(result.Value.Bytes, "application/pdf");
+        }
+
+        [HttpGet("{id:int}/documents")]
+        public async Task<IActionResult> Documents(int id) => this.ToActionResult(await invoices.DocumentsAsync(id, Aborted));
+
         // De werklijst Nog te factureren: leveringen met een rest, per klant.
         [HttpGet("to-invoice")]
         public async Task<IActionResult> ToInvoice() => Ok(await invoices.ToInvoiceAsync(Aborted));

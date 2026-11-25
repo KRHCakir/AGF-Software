@@ -5282,6 +5282,62 @@ namespace AgfAdmin.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AgfAdmin.Models.SalesInvoiceDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("InvoiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SentBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("SalesInvoiceDocuments", t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesInvoiceDocuments_Sent", "(\"SentAt\" IS NULL) = (\"SentBy\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_SalesInvoiceDocuments_Version", "\"Version\" >= 1");
+                        });
+                });
+
             modelBuilder.Entity("AgfAdmin.Models.SalesInvoiceStockLine", b =>
                 {
                     b.Property<int>("Id")
@@ -7941,6 +7997,17 @@ namespace AgfAdmin.Migrations
                     b.Navigation("StockMovement");
 
                     b.Navigation("StockReservation");
+                });
+
+            modelBuilder.Entity("AgfAdmin.Models.SalesInvoiceDocument", b =>
+                {
+                    b.HasOne("AgfAdmin.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("AgfAdmin.Models.SalesInvoiceStockLine", b =>

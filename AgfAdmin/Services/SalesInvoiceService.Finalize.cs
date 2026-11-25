@@ -149,6 +149,9 @@ namespace AgfAdmin.Services
                 invoice.CustomerVatNumber = string.IsNullOrWhiteSpace(customer.VATNumber) ? null : customer.VATNumber.Trim();
                 invoice.UpdatedAt = now;
                 await db.SaveChangesAsync(cancellationToken);
+                // 3. De PDF-versie met de momentopname, in dezelfde transactie.
+                await AddFinalDocumentAsync(invoice, now, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
                 if (transaction != null)
                 {
                     await transaction.CommitAsync(cancellationToken);
