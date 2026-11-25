@@ -28,18 +28,7 @@ namespace AgfAdmin.Data
                 }
             }
 
-            var added = db.ChangeTracker.Entries<StockReservation>()
-                .Where(e => e.State == EntityState.Added && IsInvoiceReservation(e.Entity) && e.Entity.Status == ReservationRules.StatusActive)
-                .Select(e => e.Entity).ToList();
-            var changedLines = db.ChangeTracker.Entries<InvoiceLine>()
-                .Where(e => e.State == EntityState.Modified && e.Entity.Id > 0
-                    && (e.Property(l => l.PartijId).IsModified || e.Property(l => l.ProductVariantId).IsModified || e.Property(l => l.Unit).IsModified
-                        || e.Property(l => l.LineKind).IsModified || e.Property(l => l.RemovedAt).IsModified))
-                .Select(e => e.Entity).ToList();
-            var closing = db.ChangeTracker.Entries<Invoice>()
-                .Where(e => e.State == EntityState.Modified && e.Entity.Kind == SalesInvoiceRules.KindDirect && e.Property(i => i.Status).IsModified
-                    && e.Entity.Status is SalesInvoiceRules.StatusFinal or SalesInvoiceRules.StatusDiscarded)
-                .Select(e => e.Entity).ToList();
+            var (added, changedLines, closing) = InvoiceStockChanges(db);
 
             await LockInvoiceRowsAsync(db, added, closing, changedLines, async, cancellationToken);
 
@@ -55,6 +44,36 @@ namespace AgfAdmin.Data
             {
                 await CheckClosingInvoiceStockAsync(db, invoice, async, cancellationToken);
             }
+        }
+
+        // Wat regel 46 controleert: nieuwe actieve factuurreserveringen, gewijzigde factuurregels en een directe factuur die wordt afgesloten.
+        private static (List<StockReservation> Added, List<InvoiceLine> ChangedLines, List<Invoice> Closing) InvoiceStockChanges(AppDbContext db)
+        {
+            var added = db.ChangeTracker.Entries<StockReservation>()
+                .Where(e => e.State == EntityState.Added && IsInvoiceReservation(e.Entity) && e.Entity.Status == ReservationRules.StatusActive)
+                .Select(e => e.Entity).ToList();
+            var changedLines = db.ChangeTracker.Entries<InvoiceLine>()
+                .Where(e => e.State == EntityState.Modified && e.Entity.Id > 0
+                    && (e.Property(l => l.PartijId).IsModified || e.Property(l => l.ProductVariantId).IsModified || e.Property(l => l.Unit).IsModified
+                        || e.Property(l => l.LineKind).IsModified || e.Property(l => l.RemovedAt).IsModified))
+                .Select(e => e.Entity).ToList();
+            var closing = db.ChangeTracker.Entries<Invoice>()
+                .Where(e => e.State == EntityState.Modified && e.Entity.Kind == SalesInvoiceRules.KindDirect && e.Property(i => i.Status).IsModified
+                    && e.Entity.Status is SalesInvoiceRules.StatusFinal or SalesInvoiceRules.StatusDiscarded)
+                .Select(e => e.Entity).ToList();
+            return (added, changedLines, closing);
+        }
+
+        // Regel 46 zet factuurrijen vast; dat slot werkt alleen binnen een transactie. AppDbContext opent er daarom zelf een als de schrijver
+        // dat niet deed (zoals bij regel 41), zodat de controles nooit zonder slot lezen, ook niet voor een toekomstige schrijver.
+        internal static bool NeedsInvoiceStockTransaction(AppDbContext db)
+        {
+            if (!db.Database.IsNpgsql())
+            {
+                return false;
+            }
+            var (added, changedLines, closing) = InvoiceStockChanges(db);
+            return added.Count > 0 || changedLines.Count > 0 || closing.Count > 0;
         }
 
         // Zet de factuurrijen vast (FOR UPDATE, PostgreSQL, binnen de transactie van de schrijfactie) vóór de controles lezen: reserveren, regels
