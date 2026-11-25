@@ -219,7 +219,7 @@ namespace AgfAdmin.Services
                     c.ConstantColumn(32);
                     c.RelativeColumn(3);
                     // De partij-kolom is breed genoeg voor een GGN (13 cijfers) op één regel.
-                    if (withGoods) { c.ConstantColumn(38); c.RelativeColumn(2.5f); c.ConstantColumn(44); }
+                    if (withGoods) { c.ConstantColumn(44); c.RelativeColumn(2.5f); c.ConstantColumn(44); }
                     c.ConstantColumn(56);
                     c.ConstantColumn(34);
                     c.ConstantColumn(40);
