@@ -208,6 +208,35 @@ public sealed class InvoiceStockGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task After_Booking_Out_The_Line_Cannot_Change_And_The_Invoice_Cannot_Be_Discarded()
+    {
+        var a = await ArrangeAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            await ReserveAsync(db, a.LineId, a.Seed.ApprovedBox, 10m, 40m);
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            await ConsumeAsync(db, (await db.StockReservations.SingleAsync(r => r.InvoiceLineId == a.LineId)).Id);
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.InvoiceLines.SingleAsync(l => l.Id == a.LineId)).Unit = "kg";
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var invoice = await db.Invoices.SingleAsync(i => i.Id == a.InvoiceId);
+            invoice.Status = SalesInvoiceRules.StatusDiscarded;
+            invoice.DiscardedAt = DateTime.UtcNow;
+            invoice.DiscardedBy = "test";
+            await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
     public async Task A_Discarded_Concept_Holds_No_Stock_Anymore()
     {
         var a = await ArrangeAsync();
