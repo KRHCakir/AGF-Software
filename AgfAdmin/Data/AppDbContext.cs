@@ -703,15 +703,21 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_Invoices_Kind_Allowed", "\"Kind\" IS NULL OR \"Kind\" IN ('Delivery', 'Direct')");
                     t.HasCheckConstraint("CK_Invoices_NewModel",
-                        "\"Kind\" IS NULL OR (\"Status\" IN ('Concept', 'Final', 'Discarded') AND \"CustomerId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"CreatedBy\" IS NOT NULL)");
+                        "\"Kind\" IS NULL OR (\"Status\" IN ('Concept', 'Final', 'Discarded') AND \"CustomerId\" IS NOT NULL AND \"RequestId\" IS NOT NULL " +
+                        "AND \"RequestFingerprint\" IS NOT NULL AND \"CreatedBy\" IS NOT NULL)");
+                    // Definitief: alle nummervelden gevuld; geen definitieve factuur: allemaal leeg (ook niet gedeeltelijk).
                     t.HasCheckConstraint("CK_Invoices_Final_Numbered",
-                        "\"Kind\" IS NULL OR ((\"Status\" = 'Final') = (\"InvoiceNumber\" IS NOT NULL AND \"InvoiceYear\" IS NOT NULL AND \"InvoiceSequence\" IS NOT NULL " +
-                        "AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"DueDate\" IS NOT NULL AND \"PaymentTermDays\" IS NOT NULL))");
+                        "\"Kind\" IS NULL " +
+                        "OR (\"Status\" = 'Final' AND \"InvoiceNumber\" IS NOT NULL AND \"InvoiceYear\" IS NOT NULL AND \"InvoiceSequence\" IS NOT NULL " +
+                        "AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"DueDate\" IS NOT NULL AND \"PaymentTermDays\" IS NOT NULL) " +
+                        "OR (\"Status\" <> 'Final' AND \"InvoiceNumber\" IS NULL AND \"InvoiceYear\" IS NULL AND \"InvoiceSequence\" IS NULL " +
+                        "AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL)");
                     t.HasCheckConstraint("CK_Invoices_Discarded",
                         "\"Kind\" IS NULL OR ((\"Status\" = 'Discarded') = (\"DiscardedAt\" IS NOT NULL AND \"DiscardedBy\" IS NOT NULL))");
                     t.HasCheckConstraint("CK_Invoices_Sequence_Positive", "\"InvoiceSequence\" IS NULL OR \"InvoiceSequence\" > 0");
                 });
                 b.Property(i => i.Kind).HasMaxLength(16);
+                b.Property(i => i.RequestFingerprint).HasMaxLength(64);
                 b.Property(i => i.InvoiceNumber).HasMaxLength(64);
                 b.Property(i => i.FinalizedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
                 b.Property(i => i.CreatedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
