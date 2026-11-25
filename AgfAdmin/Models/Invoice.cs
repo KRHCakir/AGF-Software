@@ -40,8 +40,10 @@ namespace AgfAdmin.Models
 
         // --- Verkoopfactuur 1 (nieuw model; alle velden leeg bij oude facturen) ---
         public string? Kind { get; set; }
-        // Idempotentiesleutel van het aanmaakcommando (uniek).
+        // Idempotentiesleutel van het aanmaakcommando (uniek) en de vingerafdruk van die aanvraag (SHA-256 van de genormaliseerde inhoud):
+        // een herhaling met dezelfde sleutel geeft alleen bij precies dezelfde aanvraag dezelfde factuur terug.
         public Guid? RequestId { get; set; }
+        public string? RequestFingerprint { get; set; }
         // Doorlopend nummer per jaar, alleen bij Definitief (uniek samen).
         public int? InvoiceYear { get; set; }
         public int? InvoiceSequence { get; set; }
