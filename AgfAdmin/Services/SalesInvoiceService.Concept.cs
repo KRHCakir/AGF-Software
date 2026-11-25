@@ -84,7 +84,7 @@ namespace AgfAdmin.Services
         private Task<bool> RequestIdExistsAsync(Guid requestId, CancellationToken cancellationToken) =>
             db.Invoices.AsNoTracking().AnyAsync(i => i.RequestId == requestId, cancellationToken);
 
-        // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (bij een regel die er al staat, wordt het aantal verhoogd).
+        // Leveringen bij een bestaand concept: de rest per orderregel komt erbij (regels die er al staan blijven ongemoeid; dienst- en emballageregels komen alleen mee bij orders met een nieuwe productregel).
         public async Task<ServiceResult<SalesInvoiceDto>> AddDeliveriesAsync(int id, AddInvoiceDeliveriesDto request, CancellationToken cancellationToken = default)
         {
             var deliveryIds = (request?.DeliveryIds ?? new List<int>()).Distinct().OrderBy(d => d).ToList();
@@ -144,21 +144,17 @@ namespace AgfAdmin.Services
             var order = deliveries.OrderBy(d => d.OrderNumber, StringComparer.Ordinal).ThenBy(d => d.Sequence).Select(d => d.Id).ToList();
             var sort = invoice.InvoiceLines.Select(l => l.SortOrder).DefaultIfEmpty(-1).Max();
             var changed = false;
+            var newOrderIds = new HashSet<int>(); // orders met een nieuwe productregel: alleen daarvoor komen de extra's mee
 
             foreach (var state in states.OrderBy(s => order.IndexOf(s.DeliveryId)).ThenBy(s => s.OrderLineId))
             {
                 var existing = current.FirstOrDefault(l => l.SalesDeliveryId == state.DeliveryId && l.SalesOrderLineId == state.OrderLineId);
                 if (existing != null)
                 {
-                    // De rest telt al zonder deze factuur: de regel krijgt het volledige nog niet elders gefactureerde aantal.
-                    if (existing.Quantity != state.Rest)
-                    {
-                        existing.Quantity = state.Rest;
-                        existing.NetWeight = ShareKg(state, state.Rest);
-                        changed = true;
-                    }
+                    // Een regel die al op het concept staat, is misschien bewust aangepast: laat hem ongemoeid.
                     continue;
                 }
+                newOrderIds.Add(state.OrderId);
                 var orderLine = orderLines[state.OrderLineId];
                 var variant = orderLine.ProductVariant;
                 invoice.InvoiceLines.Add(new InvoiceLine
@@ -172,7 +168,7 @@ namespace AgfAdmin.Services
                 });
                 changed = true;
             }
-            foreach (var extra in extras)
+            foreach (var extra in extras.Where(e => newOrderIds.Contains(e.OrderId)))
             {
                 var existing = current.FirstOrDefault(l => extra.Packaging ? l.SalesOrderPackagingLineId == extra.LineId : l.SalesOrderServiceLineId == extra.LineId);
                 if (existing != null)
