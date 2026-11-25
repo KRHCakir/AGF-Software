@@ -55,8 +55,9 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
     const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
     const variantOf = (id: number) => variants.get(id);
     const rows = lines.map((line) => purchaseLineRow(line, /^[1-9]\d*$/.test(line.productVariantId) ? variantOf(Number(line.productVariantId)) : undefined));
-    // Tijdens een lopende aanvraag is het formulier vergrendeld; de sleutel blijft dan behouden (de uitkomst is nog onzeker).
-    const edited = () => { if (busy) return; requestId.current = null; setFailure(null); };
+    // De sleutel blijft behouden bij wijzigingen: na een netwerkfout is de uitkomst onzeker en moet opnieuw opslaan dezelfde aanvraag zijn.
+    // Alleen een definitieve afwijzing of succes wist de sleutel (zie save).
+    const edited = () => { if (busy) return; setFailure(null); };
 
     const updateLine = (key: string, patch: Partial<SalesLineDraft>) => {
         // Een ander artikel: de gekozen partij hoort bij het oude artikel en vervalt.
@@ -193,9 +194,11 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
                             </div>
                             <div>
                                 <label htmlFor={`${key}.revenueTypeId`} className="text-xs font-medium text-gray-700">{t('si_revenue_type')}</label>
-                                <select id={`${key}.revenueTypeId`} className={inputClass} value={line.revenueTypeId} onChange={(event) => changeService(index, { revenueTypeId: event.target.value })}>
+                                <select id={`${key}.revenueTypeId`} className={inputClass} value={line.revenueTypeId} aria-invalid={!!errors[`${key}.revenueTypeId`]} onChange={(event) => changeService(index, { revenueTypeId: event.target.value })}>
+                                    {line.revenueTypeId === '' && <option value="">—</option>}
                                     {revenueTypes.filter((r) => r.isActive).map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
                                 </select>
+                                <FieldError id={`${key}.revenueTypeId`} messages={lineErrors(`${key}.revenueTypeId`)} />
                                 <button type="button" className="mt-1 text-xs text-blue-800 underline underline-offset-2" onClick={() => { setServices((current) => current.filter((_, i) => i !== index)); edited(); }}>{t('si_remove')}</button>
                             </div>
                         </div>
