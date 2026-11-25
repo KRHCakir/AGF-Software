@@ -33,7 +33,7 @@ public sealed class InvoiceStockGuardTests : IDisposable
         await db.Database.ExecuteSqlAsync($"UPDATE \"PalletContentLines\" SET \"PartijId\" = {other.Id} WHERE \"Id\" = {seed.SecondPalletApprovedBox}");
         var invoice = new Invoice
         {
-            Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, CustomerId = seed.CustomerId, RequestId = Guid.NewGuid(), CreatedBy = "test",
+            Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, CustomerId = seed.CustomerId, RequestId = Guid.NewGuid(), RequestFingerprint = "test", CreatedBy = "test",
             InvoiceLines = new List<InvoiceLine>
             {
                 new() { LineKind = SalesInvoiceRules.LineProduct, ProductVariantId = seed.AvocadoId, PartijId = lot.Id, Description = "Avocado Hass", Quantity = 10m, Unit = "box", UnitPrice = 12m, VATPercentage = 9m }
