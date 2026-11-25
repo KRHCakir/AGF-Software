@@ -19,8 +19,7 @@ namespace AgfAdmin.Controllers
     public class SalesInvoiceController : ControllerBase
     {
         private readonly AppDbContext _context;
-        private readonly PartijService _partijen;
-        public SalesInvoiceController(AppDbContext context, PartijService partijen) { _context = context; _partijen = partijen; }
+        public SalesInvoiceController(AppDbContext context) { _context = context; }
 
         [HttpGet]
         public async Task<IActionResult> GetInvoices()
@@ -45,125 +44,11 @@ namespace AgfAdmin.Controllers
             return Ok(invoices);
         }
 
-        // Directe factuur (verkoop zonder verkooporder, bijvoorbeeld contant aan de balie). Feedback 22 november: de factuur krijgt een eigen
-        // verkoop-partij (het volgende V-nummer, of een eigen nummer dat nog nergens als partij bestaat) en elke regel mag naar de inkoop-partij
-        // wijzen waar de goederen uit komen. Een nummer dat al bestaat, van welke soort ook, wordt geweigerd met uitleg (409 PARTIJ_TAKEN).
+        // Verkoopfactuur 1: de directe factuur maak je met POST /api/sales-invoices (concept, partij en voorraad, Definitief met nummer).
+        // Deze oude route maakte een factuur zonder voorraad en zonder concept; ze is vervangen. Bestaande facturen blijven leesbaar.
         [HttpPost]
-        public async Task<IActionResult> CreateInvoice([FromBody] CreateInvoiceDto dto)
-        {
-            var cancellationToken = HttpContext?.RequestAborted ?? default;
-            if (dto == null)
-            {
-                return this.ToActionResult(ServiceResult<object>.Validation(new Dictionary<string, string[]> { ["request"] = new[] { "A request body is required." } }));
-            }
-            dto.Lines ??= new List<CreateInvoiceLineDto>();
-            var lotErrors = await PurchaseLotErrorsAsync(dto.Lines, cancellationToken);
-            if (lotErrors.Count > 0)
-            {
-                return this.ToActionResult(ServiceResult<object>.Validation(lotErrors));
-            }
-            Customer? customer = null;
-            if (dto.CustomerId is int customerId)
-            {
-                customer = await _context.Customers.FindAsync(new object[] { customerId }, cancellationToken);
-                if (customer == null)
-                {
-                    return this.ToActionResult(ServiceResult<object>.Validation(new Dictionary<string, string[]> { ["customerId"] = new[] { $"Customer {customerId} does not exist." } }));
-                }
-            }
-
-            for (var attempt = 1; ; attempt++)
-            {
-                var lot = await _partijen.BuildDirectInvoiceLotAsync<object>(dto.BatchNumber, "batchNumber", cancellationToken);
-                if (lot.Refused != null)
-                {
-                    return this.ToActionResult(lot.Refused);
-                }
-                var invoice = BuildInvoice(dto, customer, lot.Partij);
-                _context.Invoices.Add(invoice);
-                _context.Partijen.Add(lot.Partij);
-                try
-                {
-                    await _context.SaveChangesAsync(cancellationToken);
-                    return Ok(invoice);
-                }
-                catch (DbUpdateException exception) when (DbErrors.IsUniqueViolation(exception) && attempt < PartijService.MaxNumberAttempts)
-                {
-                    // Een gelijktijdige schrijver koos hetzelfde V-nummer: opnieuw met het volgende.
-                    _context.ChangeTracker.Clear();
-                }
-            }
-        }
-
-        // Elke opgegeven partij op een regel bestaat en is een inkoop-partij.
-        private async Task<Dictionary<string, string[]>> PurchaseLotErrorsAsync(List<CreateInvoiceLineDto> lines, CancellationToken cancellationToken)
-        {
-            var ids = lines.Where(l => l.PartijId != null).Select(l => l.PartijId.Value).Distinct().ToList();
-            var kinds = await _context.Partijen.AsNoTracking().Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.Kind, cancellationToken);
-            var errors = new Dictionary<string, string[]>();
-            for (var i = 0; i < lines.Count; i++)
-            {
-                if (lines[i].PartijId is not int id) continue;
-                if (!kinds.TryGetValue(id, out var kind))
-                {
-                    errors[$"lines[{i}].partijId"] = new[] { $"Lot {id} does not exist." };
-                }
-                else if (kind != PartijRules.KindPurchase)
-                {
-                    errors[$"lines[{i}].partijId"] = new[] { "A line of a direct invoice comes from a purchase lot, not from a sales lot." };
-                }
-            }
-            return errors;
-        }
-
-        private static Invoice BuildInvoice(CreateInvoiceDto dto, Customer customer, Partij salesLot)
-        {
-            decimal subTotal = dto.Lines.Sum(l => l.Quantity * l.UnitPrice);
-            decimal vatAmount = dto.Lines.Sum(l => l.Quantity * l.UnitPrice * (l.VATPercentage / 100m));
-
-            var invoice = new Invoice
-            {
-                InvoiceNumber = $"FAC-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}",
-                InvoiceDate = DateTime.UtcNow,
-                DueDate = DateTime.UtcNow.AddDays(customer?.PaymentTermsDays > 0 ? customer.PaymentTermsDays : 14),
-                CustomerId = dto.CustomerId,
-                CustomCustomerName = customer?.Name ?? dto.CustomerName,
-                Status = "Nieuw",
-                PaymentStatus = "Open",
-                SubTotal = subTotal,
-                VATAmount = vatAmount,
-                TotalAmount = subTotal + vatAmount,
-                
-                // --- HIER WORDEN DE NIEUWE HEADER VELDEN OPGESLAGEN ---
-                DeliveryDate = dto.DeliveryDate ?? DateTime.UtcNow,
-                // Het nummer van de eigen verkoop-partij (feedback 22 november), niet meer vrij.
-                BatchNumber = salesLot.Number,
-                SalesPartij = salesLot,
-                DeliveryAddress = dto.DeliveryAddress ?? customer?.BillingAddress,
-                ShippingMethod = dto.ShippingMethod,
-                ReferenceNumber = dto.ReferenceNumber,
-                
-                // --- HIER WORDEN DE NIEUWE REGEL VELDEN OPGESLAGEN ---
-                InvoiceLines = dto.Lines.Select(l => new InvoiceLine
-                {
-                    Description = l.Description,
-                    Quantity = l.Quantity,
-                    Unit = l.Unit,
-                    UnitPrice = l.UnitPrice,
-                    TareWeight = l.TareWeight,
-                    NetWeight = l.NetWeight,
-                    OriginCountry = l.OriginCountry,
-                    QualityClass = l.QualityClass,
-                    DiscountPercentage = l.DiscountPercentage,
-                    Remarks = l.Remarks,
-                    VATPercentage = l.VATPercentage,
-                    PartijId = l.PartijId
-                }).ToList()
-            };
-            salesLot.Invoice = invoice;
-            return invoice;
-        }
-
+        public IActionResult CreateInvoice() =>
+            StatusCode(StatusCodes.Status410Gone, new { message = "This route was replaced: create a direct invoice with POST /api/sales-invoices." });
 
         [HttpGet("{id}/pdf")]
         public async Task<IActionResult> GenerateInvoicePdf(int id)
@@ -338,41 +223,5 @@ namespace AgfAdmin.Controllers
 
             var pdfBytes = document.GeneratePdf();
             return File(pdfBytes, "application/pdf", $"{invoice.InvoiceNumber}.pdf");}
-        public class CreateInvoiceDto
-        {
-            public int? CustomerId { get; set; }
-            public string? CustomerName { get; set; }
-            
-            // --- AGF Specifieke Header Velden ---
-            public DateTime? DeliveryDate { get; set; }
-            // Eigen nummer voor de verkoop-partij van deze factuur; leeg = het volgende V-nummer. Nooit gelijk aan een bestaande partij.
-            public string? BatchNumber { get; set; }
-            public string? DeliveryAddress { get; set; }
-            public string? ShippingMethod { get; set; }
-            public string? ReferenceNumber { get; set; }
-            
-            public List<CreateInvoiceLineDto> Lines { get; set; } = new();
-        }
-
-        public class CreateInvoiceLineDto
-        {
-            public string Description { get; set; } = string.Empty;
-            public decimal Quantity { get; set; } // Bruto aantal of stuks
-            public string Unit { get; set; } = "kg"; // kg, doos, pallet, stuk
-            public decimal UnitPrice { get; set; }
-            
-            // --- AGF Specifieke Regel Velden ---
-            public decimal TareWeight { get; set; }
-            public decimal NetWeight { get; set; }
-            public string? OriginCountry { get; set; }
-            public string? QualityClass { get; set; }
-            public decimal DiscountPercentage { get; set; }
-            public string? Remarks { get; set; }
-            
-            public decimal VATPercentage { get; set; }
-
-            // De inkoop-partij waar deze regel uit komt (optioneel); vast na aanmaken.
-            public int? PartijId { get; set; }
-        }
     }
 }

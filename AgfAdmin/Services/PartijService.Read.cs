@@ -172,7 +172,7 @@ namespace AgfAdmin.Services
                 Kind = c.FromCorrection ? "Correction" : c.FromSplit ? "SplitOff" : "Receipt", Quantity = c.Quantity, Unit = c.Unit, NetWeightKg = c.NetWeightKg,
                 OnHandQuantity = OnHand(c), QualityStatus = c.QualityStatus, ReceivedAt = DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc)
             }).ToList();
-            detail.SalesOrders = facts.Sales.GroupBy(s => new { s.SalesOrderId, s.SalesPartijId, s.Unit }).Select(g => new PartijSalesOrderDto
+            detail.SalesOrders = facts.Sales.Where(s => s.SalesOrderId > 0).GroupBy(s => new { s.SalesOrderId, s.SalesPartijId, s.Unit }).Select(g => new PartijSalesOrderDto
             {
                 SalesOrderId = g.Key.SalesOrderId, OrderNumber = g.First().OrderNumber, SalesPartijId = g.First().SalesPartijId, SalesPartijNumber = g.First().SalesPartijNumber,
                 CustomerName = g.First().CustomerName, Status = g.First().OrderStatus, Unit = g.Key.Unit,
@@ -202,7 +202,8 @@ namespace AgfAdmin.Services
 
         // Feedback 22 november, herleidbaarheid van een inkoop-partij (recall): wat er binnenkwam, waar het naartoe ging (per verkoop-partij met
         // klant, colli en datum), wat afgekeurd is en wat er nog ligt. Ontvangen = geleverd - teruggenomen + afgekeurd + op voorraad; Verschil
-        // toont wat daarvan afwijkt. Geannuleerde pallets tellen nergens mee. Directe facturen staan apart (zij boeken geen voorraad af).
+        // toont wat daarvan afwijkt. Geannuleerde pallets tellen nergens mee. Een definitieve directe factuur (verkoopfactuur 1) boekt af en staat
+        // bij de bestemmingen; oude directe facturen (zonder voorraad) staan apart.
         private async Task<PartijRecallDto> RecallAsync(Partij partij, Facts facts, string unit, CancellationToken cancellationToken)
         {
             var live = facts.Contents.Where(c => c.PalletStatus != PalletRules.StatusCancelled).ToList();
@@ -231,8 +232,15 @@ namespace AgfAdmin.Services
                         : l.SalesDispatch.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => d.Partij.Number).FirstOrDefault(),
                 })
                 .ToListAsync(cancellationToken);
-            // Alleen directe facturen (een factuur met een eigen verkoop-partij); een orderfactuur telt via de levering (review).
-            var invoices = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.PartijId == partij.Id && l.Invoice.SalesPartij != null)
+            // Verkoopfactuur 1: een directe factuur die definitief is, boekt af (afboekregel per pallet); die staat als bestemming, met het
+            // factuurnummer als referentie en de datum van afboeken.
+            var invoiceShipments = await _db.SalesInvoiceStockLines.AsNoTracking()
+                .Where(l => l.PalletContentLine.PartijId == partij.Id)
+                .Select(l => new { l.Quantity, l.Unit, l.CreatedAt, l.InvoiceId, l.Invoice.InvoiceNumber, l.Invoice.CustomCustomerName, LotId = (int?)l.Invoice.SalesPartij.Id, LotNumber = l.Invoice.SalesPartij.Number })
+                .ToListAsync(cancellationToken);
+            // Alleen directe facturen van vóór verkoopfactuur 1 (Kind leeg, eigen verkoop-partij, geen voorraad); een orderfactuur telt via de
+            // levering (review) en een nieuwe directe factuur via haar afboeking hierboven.
+            var invoices = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.PartijId == partij.Id && l.Invoice.SalesPartij != null && l.Invoice.Kind == null)
                 .Select(l => new { l.Quantity, l.Unit, l.Invoice.InvoiceNumber, l.Invoice.InvoiceDate, l.Invoice.CustomCustomerName, LotId = (int?)l.Invoice.SalesPartij.Id, LotNumber = l.Invoice.SalesPartij.Number })
                 .ToListAsync(cancellationToken);
             return new PartijRecallDto
@@ -246,6 +254,12 @@ namespace AgfAdmin.Services
                         SalesPartijId = g.Key.LotId, SalesPartijNumber = g.Key.LotNumber, SalesOrderId = g.Key.SalesOrderId, Reference = g.Key.OrderNumber, CustomerName = g.Key.Customer,
                         Quantity = g.Sum(s => s.Quantity), Unit = g.Key.Unit, Date = DateTime.SpecifyKind(g.Key.DispatchedAt, DateTimeKind.Utc)
                     })
+                    .Concat(invoiceShipments.GroupBy(s => new { s.InvoiceId, s.InvoiceNumber, s.CustomCustomerName, s.LotId, s.LotNumber, s.Unit })
+                        .Select(g => new PartijDestinationDto
+                        {
+                            SalesPartijId = g.Key.LotId, SalesPartijNumber = g.Key.LotNumber, Reference = g.Key.InvoiceNumber, CustomerName = g.Key.CustomCustomerName,
+                            Quantity = g.Sum(s => s.Quantity), Unit = g.Key.Unit, Date = DateTime.SpecifyKind(g.Max(s => s.CreatedAt), DateTimeKind.Utc)
+                        }))
                     .OrderBy(d => d.Date).ThenBy(d => d.SalesPartijNumber).ToList(),
                 DirectInvoices = invoices.GroupBy(i => new { i.LotId, i.LotNumber, i.InvoiceNumber, i.CustomCustomerName, i.Unit, i.InvoiceDate })
                     .Select(g => new PartijDestinationDto
@@ -265,8 +279,9 @@ namespace AgfAdmin.Services
             if (partij.InvoiceId != null)
             {
                 var invoice = await _db.Invoices.AsNoTracking().Where(i => i.Id == partij.InvoiceId)
-                    .Select(i => new { i.InvoiceNumber, i.CustomCustomerName, i.DeliveryDate, i.InvoiceDate }).SingleAsync(cancellationToken);
-                var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.InvoiceId == partij.InvoiceId).OrderBy(l => l.Id)
+                    .Select(i => new { i.InvoiceNumber, i.CustomCustomerName, i.DeliveryDate, i.InvoiceDate, i.Kind, i.Status }).SingleAsync(cancellationToken);
+                var final = invoice.Kind == null || invoice.Status == SalesInvoiceRules.StatusFinal;
+                var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => l.InvoiceId == partij.InvoiceId && l.RemovedAt == null && invoice.Status != SalesInvoiceRules.StatusDiscarded).OrderBy(l => l.Id)
                     .Select(l => new { l.Description, l.Quantity, l.Unit, l.PartijId, Number = l.Partij.Number, l.OriginCountry,
                         // Via de inkoopregels van de partij (review): bij oudere orders staat de partij soms alleen op de regel.
                         Vendor = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Vendor.Name).FirstOrDefault(),
@@ -274,12 +289,12 @@ namespace AgfAdmin.Services
                     .ToListAsync(cancellationToken);
                 return new SalesLotTraceDto
                 {
-                    CustomerName = invoice.CustomCustomerName, Reference = invoice.InvoiceNumber, Shipped = true,
+                    CustomerName = invoice.CustomCustomerName, Reference = invoice.InvoiceNumber, Shipped = final,
                     DeliveryDate = DateTime.SpecifyKind(invoice.DeliveryDate ?? invoice.InvoiceDate, DateTimeKind.Utc),
                     Lines = lines.Select(l => new SalesLotTraceLineDto
                     {
                         Product = l.Description, Quantity = l.Quantity, Unit = l.Unit,
-                        Sources = l.PartijId == null ? new() : new() { new SalesLotTraceSourceDto { PartijId = l.PartijId, Number = l.Number, VendorName = l.Vendor, Origin = string.IsNullOrWhiteSpace(l.OriginCountry) ? l.PurchaseOrigin : l.OriginCountry, Quantity = l.Quantity, Status = "Invoiced" } }
+                        Sources = l.PartijId == null ? new() : new() { new SalesLotTraceSourceDto { PartijId = l.PartijId, Number = l.Number, VendorName = l.Vendor, Origin = string.IsNullOrWhiteSpace(l.OriginCountry) ? l.PurchaseOrigin : l.OriginCountry, Quantity = l.Quantity, Status = final ? "Invoiced" : "Reserved" } }
                     }).ToList(),
                 };
             }
@@ -387,6 +402,13 @@ namespace AgfAdmin.Services
                     r.SalesDeliveryId != null ? r.SalesDelivery.PartijId : r.SalesOrderLine.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => (int?)d.PartijId).FirstOrDefault(),
                     r.SalesDeliveryId != null ? r.SalesDelivery.Partij.Number : r.SalesOrderLine.SalesOrder.Deliveries.Where(d => d.Sequence == 1).Select(d => d.Partij.Number).FirstOrDefault()))
                 .ToListAsync(cancellationToken);
+            // Verkoopfactuur 1: een directe factuur houdt voorraad vast (concept) of heeft afgeboekt (definitief); ordernummer 0 = geen order.
+            sales.AddRange(await _db.StockReservations.AsNoTracking()
+                .Where(r => r.InvoiceLineId != null && (r.Status == ReservationRules.StatusActive || r.Status == ReservationRules.StatusConsumed)
+                    && r.PalletContentLine.PartijId != null && ids.Contains(r.PalletContentLine.PartijId.Value))
+                .Select(r => new SaleFact(r.PalletContentLine.PartijId.Value, 0, r.InvoiceLine.Invoice.InvoiceNumber, r.InvoiceLine.Invoice.CustomCustomerName,
+                    r.InvoiceLine.Invoice.Status, r.Status, r.Quantity, r.Unit, r.InvoiceLine.Invoice.SalesPartij.Id, r.InvoiceLine.Invoice.SalesPartij.Number))
+                .ToListAsync(cancellationToken));
             var sides = await LoadSalesSidesAsync(partijen, cancellationToken);
             foreach (var invoiceSide in await LoadInvoiceSidesAsync(partijen, cancellationToken))
             {
@@ -457,8 +479,9 @@ namespace AgfAdmin.Services
                 return new Dictionary<int, SalesSide>();
             }
             var ids = invoiceIds.Keys.ToList();
-            var invoices = await _db.Invoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.InvoiceNumber, i.CustomCustomerName }).ToListAsync(cancellationToken);
-            var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => ids.Contains(l.InvoiceId))
+            // Verkoopfactuur 1: een vervallen concept heeft geen inhoud meer; een concept is nog niet gefactureerd (gereserveerd).
+            var invoices = await _db.Invoices.AsNoTracking().Where(i => ids.Contains(i.Id)).Select(i => new { i.Id, i.InvoiceNumber, i.CustomCustomerName, i.Kind, i.Status }).ToListAsync(cancellationToken);
+            var lines = await _db.Set<InvoiceLine>().AsNoTracking().Where(l => ids.Contains(l.InvoiceId) && l.RemovedAt == null && l.Invoice.Status != SalesInvoiceRules.StatusDiscarded)
                 .Select(l => new { l.Id, l.InvoiceId, l.Description, l.Quantity, l.Unit, l.NetWeight, l.PartijId, l.ProductVariantId, Number = l.Partij.Number,
                     Vendor = _db.SupplyCommitmentLines.Where(c => c.PartijId == l.PartijId).OrderBy(c => c.Id).Select(c => c.SupplyCommitment.Vendor.Name).FirstOrDefault() })
                 .ToListAsync(cancellationToken);
@@ -469,7 +492,8 @@ namespace AgfAdmin.Services
             var costs = await _db.SupplyCommitmentLines.AsNoTracking().Where(c => c.PartijId != null && purchasePartijIds.Contains(c.PartijId.Value) && c.SupplyCommitment.Status != SupplyRules.StatusCancelled)
                 .OrderBy(c => c.Id)
                 .Select(c => new { PartijId = c.PartijId.Value, c.ProductVariantId, c.ExpectedUnit, c.UnitPrice, c.DiscountPercentage, c.SupplyCommitment.ExchangeRate }).ToListAsync(cancellationToken);
-            return invoices.ToDictionary(i => invoiceIds[i.Id], i => new SalesSide(invoiceIds[i.Id], 0, i.InvoiceNumber, "Invoiced", i.CustomCustomerName,
+            string StatusOf(string kind, string status) => kind == null || status == SalesInvoiceRules.StatusFinal ? "Invoiced" : status == SalesInvoiceRules.StatusConcept ? "Reserved" : status;
+            return invoices.ToDictionary(i => invoiceIds[i.Id], i => new SalesSide(invoiceIds[i.Id], 0, i.InvoiceNumber, StatusOf(i.Kind, i.Status), i.CustomCustomerName,
                 lines.Where(l => l.InvoiceId == i.Id).OrderBy(l => l.Id).Select(l => (l.Id, l.Description, l.Quantity, l.Unit, (decimal?)(l.NetWeight > 0m ? l.NetWeight : null))).ToList(),
                 lines.Where(l => l.InvoiceId == i.Id && l.PartijId != null)
                     .Select(l =>
@@ -480,7 +504,7 @@ namespace AgfAdmin.Services
                         var sameUnit = mine.Where(c => c.ExpectedUnit != null && string.Equals(c.ExpectedUnit, l.Unit, StringComparison.OrdinalIgnoreCase)
                             && (l.ProductVariantId == null || c.ProductVariantId == l.ProductVariantId)).ToList();
                         var cost = sameUnit.Count == 1 ? sameUnit[0] : null;
-                        return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, "Invoiced", l.Quantity, l.Unit, l.NetWeight,
+                        return new SourceFact(0, l.Id, l.PartijId, l.Number, l.Vendor, l.Description, StatusOf(i.Kind, i.Status), l.Quantity, l.Unit, l.NetWeight,
                             null, null, cost?.UnitPrice, cost?.DiscountPercentage, cost?.ExchangeRate ?? 1m, null, cost?.ExpectedUnit);
                     }).ToList()));
         }
