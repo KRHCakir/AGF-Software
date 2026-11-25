@@ -35,6 +35,19 @@ namespace AgfAdmin.Services
             ("amount", SortKind.Number, i => i.AmountEur),
             ("invoices", SortKind.Natural, i => i.InvoiceNumbers.FirstOrDefault()?.InvoiceNumber));
 
+        // Verkoopfacturen (verkoopfactuur 1): status in de volgorde van het proces (concept, definitief, vervallen).
+        public static readonly IReadOnlyDictionary<string, SortField<SalesInvoiceListItemDto>> SalesInvoices = Fields<SalesInvoiceListItemDto>(
+            ("number", SortKind.Natural, i => i.InvoiceNumber),
+            ("customer", SortKind.Text, i => i.CustomerName),
+            ("invoiceDate", SortKind.Date, i => i.Status == SalesInvoiceRules.StatusConcept ? null : i.InvoiceDate),
+            ("deliveryDate", SortKind.Date, i => i.DeliveryDate),
+            ("dueDate", SortKind.Date, i => i.DueDate),
+            ("lots", SortKind.Natural, i => i.SalesLotNumbers.FirstOrDefault()),
+            ("status", SortKind.Number, i => Rank(SalesInvoiceRules.Statuses, i.Status)),
+            ("net", SortKind.Number, i => i.Net),
+            ("gross", SortKind.Number, i => i.Gross),
+            ("createdAt", SortKind.Date, i => i.CreatedAt));
+
         // Partijen (inkoop en verkoop in één API; de website biedt per soort de eigen kolommen aan).
         public static readonly IReadOnlyDictionary<string, SortField<PartijListItemDto>> Partijen = Fields<PartijListItemDto>(
             ("number", SortKind.Natural, i => i.Number),

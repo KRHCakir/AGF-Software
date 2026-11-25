@@ -127,3 +127,26 @@ namespace AgfAdmin.DTOs
 
     public sealed record InvoicingCustomerDto(int CustomerId, string CustomerName, IReadOnlyList<DeliveryInvoicingDto> Deliveries);
 }
+
+namespace AgfAdmin.DTOs
+{
+    // Verkoopfactuur 1: de lijst Verkoop › Verkoopfacturen.
+    public sealed record SalesInvoiceListItemDto(
+        int Id, string Kind, string Status, string InvoiceNumber, DateTime InvoiceDate, DateTime? DeliveryDate, DateTime? DueDate, int? CustomerId, string CustomerName,
+        IReadOnlyList<string> SalesLotNumbers, IReadOnlyList<string> PurchaseLotNumbers, IReadOnlyList<string> OrderNumbers, string ReferenceNumber,
+        decimal Net, decimal Vat, decimal Gross, int LinesWithoutPrice, bool Stale, DateTime CreatedAt, int Version);
+
+    public sealed record SalesInvoiceListDto(IReadOnlyList<SalesInvoiceListItemDto> Items, int Total, int Page, int PageSize);
+
+    // Omzetsoort (Beheer): naam, code voor de grootboekrekening later, actief en standaard.
+    public sealed record RevenueTypeDto(int Id, string Name, string ExternalCode, bool IsActive, bool IsDefault, int Version);
+
+    public sealed class SaveRevenueTypeDto
+    {
+        public string Name { get; set; }
+        public string ExternalCode { get; set; }
+        public bool? IsActive { get; set; }
+        public bool? IsDefault { get; set; }
+        public int? ExpectedVersion { get; set; }
+    }
+}

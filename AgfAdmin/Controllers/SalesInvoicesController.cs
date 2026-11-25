@@ -15,6 +15,12 @@ namespace AgfAdmin.Controllers
     {
         private CancellationToken Aborted => HttpContext?.RequestAborted ?? default;
 
+        // De lijst: ?query=&status=all|open|Concept|Final|Discarded&sort=&direction=&page=&pageSize=
+        [HttpGet]
+        public async Task<IActionResult> List([FromQuery] string query, [FromQuery] string status, [FromQuery] string sort, [FromQuery] string direction,
+            [FromQuery] int page = 1, [FromQuery] int pageSize = SalesInvoiceService.DefaultPageSize) =>
+            this.ToActionResult(await invoices.ListAsync(query, status, sort, direction, page, pageSize, Aborted));
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> Get(int id) => this.ToActionResult(await invoices.GetAsync(id, Aborted));
 
