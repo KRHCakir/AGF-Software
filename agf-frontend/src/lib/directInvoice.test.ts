@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { buildDirectLines, emptyService, formKeyOf, serviceDraftAmounts } from './directInvoice.ts';
+import { buildDirectLines, emptyService, formKeyOf, isShownFormKey, serviceDraftAmounts } from './directInvoice.ts';
 import { emptySalesLine, type SalesLineDraft } from './salesLine.ts';
 import type { PurchaseArticle } from './purchaseOrderLines.ts';
 
@@ -29,5 +29,8 @@ describe('direct invoice lines', () => {
         assert.equal(formKeyOf('lines[1].quantity', [0, 2], [0]), 'lines[2].quantity');
         assert.equal(formKeyOf('lines[2].revenueTypeId', [0, 2], [3]), 'services[3].revenueTypeId');
         assert.equal(formKeyOf('customerId', [0], []), 'customerId');
+        assert.equal(formKeyOf('lines[2].vatPercentage', [0, 2], [3]), 'services[3].vat');
+        assert.equal(isShownFormKey('services[3].vat'), true);
+        assert.equal(isShownFormKey('lines[0].discountPercentage'), false);
     });
 });

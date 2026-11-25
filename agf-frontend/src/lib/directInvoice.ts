@@ -74,9 +74,18 @@ export function serviceDraftAmounts(services: ServiceDraft[], locale?: NumberLoc
 }
 
 // Een serverfout op lines[i] (de gecombineerde lijst) terug naar het veld van het formulier.
+// Bij vrije regels heet btw in het formulier `vat` (de server: vatPercentage).
 export function formKeyOf(serverKey: string, productIndexes: number[], serviceIndexes: number[]): string {
     const match = /^lines\[(\d+)\](.*)$/.exec(serverKey);
     if (match === null) return serverKey;
     const index = Number(match[1]);
-    return index < productIndexes.length ? `lines[${productIndexes[index]}]${match[2]}` : `services[${serviceIndexes[index - productIndexes.length] ?? 0}]${match[2]}`;
+    if (index < productIndexes.length) return `lines[${productIndexes[index]}]${match[2]}`;
+    return `services[${serviceIndexes[index - productIndexes.length] ?? 0}]${match[2].replace(/^\.vatPercentage$/, '.vat')}`;
+}
+
+// Heeft het formulier bij deze sleutel een plek om de fout te tonen? Zo niet, dan toont het formulier de fout als terugvalmelding.
+export function isShownFormKey(key: string): boolean {
+    return /^(customerId|lines)$/.test(key)
+        || /^lines\[\d+\]\.(productVariantId|quantity|unit|grossWeightKg|netWeightKg|partijId)$/.test(key)
+        || /^services\[\d+\]\.(description|costArticleId|quantity|unitPrice|vat|revenueTypeId)$/.test(key);
 }
