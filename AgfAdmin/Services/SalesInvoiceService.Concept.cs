@@ -430,7 +430,6 @@ namespace AgfAdmin.Services
             {
                 await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({OrderLockClass}, {orderId})", cancellationToken);
             }
-            await LockInvoiceStockAsync(invoice, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }

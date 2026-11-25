@@ -65,3 +65,52 @@ public static class SalesInvoiceTestData
         return await new SalesInvoiceService(db).CreateFromDeliveriesAsync(new CreateInvoiceFromDeliveriesDto { RequestId = requestId, DeliveryIds = deliveryIds.ToList() });
     }
 }
+
+// Verkoopfactuur 1, directe factuur: partij I-2611001 op pallet P-WH (40 doos, 160 kg) en I-2611002 op P-WH2 (20 doos, 80 kg).
+public static class DirectInvoiceTestData
+{
+    public sealed record Arranged(SalesSeed Seed, int LotA, int LotB);
+
+    public static async Task<Arranged> ArrangeAsync(SqliteAppDbContextFactory factory)
+    {
+        var seed = await SalesTestData.SeedAsync(factory);
+        await using var db = factory.CreateContext();
+        var a = new Partij { Number = "I-2611001", NumberKey = PartijRules.NumberKey("I-2611001"), CreatedBy = "test" };
+        var b = new Partij { Number = "I-2611002", NumberKey = PartijRules.NumberKey("I-2611002"), CreatedBy = "test" };
+        db.Partijen.AddRange(a, b);
+        await db.SaveChangesAsync();
+        // Opzet buiten de guard om: de inhoud van de twee pallets hoort bij deze partijen.
+        await db.Database.ExecuteSqlAsync($"UPDATE \"PalletContentLines\" SET \"PartijId\" = {a.Id} WHERE \"Id\" = {seed.ApprovedBox}");
+        await db.Database.ExecuteSqlAsync($"UPDATE \"PalletContentLines\" SET \"PartijId\" = {b.Id} WHERE \"Id\" = {seed.SecondPalletApprovedBox}");
+        return new Arranged(seed, a.Id, b.Id);
+    }
+
+    public static SalesInvoiceNewLineDto Product(int variantId, int? lotId, decimal quantity, decimal? price = 12m, decimal? vat = 9m) => new()
+    {
+        LineKind = SalesInvoiceRules.LineProduct, ProductVariantId = variantId, PartijId = lotId, Unit = "box", Quantity = quantity, UnitPrice = price, VatPercentage = vat
+    };
+
+    public static SalesInvoiceNewLineDto Service(string description, decimal price, decimal vat = 21m) => new()
+    {
+        LineKind = SalesInvoiceRules.LineService, Description = description, Quantity = 1m, UnitPrice = price, VatPercentage = vat
+    };
+
+    public static async Task<ServiceResult<SalesInvoiceDto>> CreateAsync(SqliteAppDbContextFactory factory, int customerId, params SalesInvoiceNewLineDto[] lines) =>
+        await CreateAsync(factory, customerId, Guid.NewGuid(), null, lines);
+
+    public static async Task<ServiceResult<SalesInvoiceDto>> CreateAsync(SqliteAppDbContextFactory factory, int customerId, Guid requestId, string lotNumber, params SalesInvoiceNewLineDto[] lines)
+    {
+        await using var db = factory.CreateContext();
+        return await new SalesInvoiceService(db).CreateDirectAsync(new CreateDirectInvoiceDto
+        {
+            RequestId = requestId, CustomerId = customerId, LotNumber = lotNumber, DeliveryDate = new DateOnly(2026, 11, 25), Lines = lines.ToList()
+        });
+    }
+
+    public static async Task<decimal> FreeAsync(SqliteAppDbContextFactory factory, Arranged a, int lotId)
+    {
+        await using var db = factory.CreateContext();
+        var options = (await new SalesOrderService(db).GetLotOptionsAsync(a.Seed.AvocadoId, "box")).Value;
+        return options.SingleOrDefault(o => o.PartijId == lotId)?.AvailableQuantity ?? 0m;
+    }
+}

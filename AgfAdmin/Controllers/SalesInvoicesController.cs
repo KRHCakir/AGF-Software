@@ -23,6 +23,11 @@ namespace AgfAdmin.Controllers
         public async Task<IActionResult> FromDeliveries([FromBody] CreateInvoiceFromDeliveriesDto request) =>
             this.ToActionResult(await invoices.CreateFromDeliveriesAsync(request, Aborted));
 
+        // Directe factuur (zonder order): 201 met het concept en een eigen V-nummer, 200 bij herhaling, 400 (geen partij, meer dan vrij), 409.
+        [HttpPost]
+        public async Task<IActionResult> CreateDirect([FromBody] CreateDirectInvoiceDto request) =>
+            this.ToActionResult(await invoices.CreateDirectAsync(request, Aborted));
+
         [HttpPost("{id:int}/deliveries")]
         public async Task<IActionResult> AddDeliveries(int id, [FromBody] AddInvoiceDeliveriesDto request) =>
             this.ToActionResult(await invoices.AddDeliveriesAsync(id, request, Aborted));

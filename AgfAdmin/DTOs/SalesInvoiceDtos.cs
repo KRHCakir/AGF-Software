@@ -9,6 +9,18 @@ namespace AgfAdmin.DTOs
         public List<int> DeliveryIds { get; set; } = new();
     }
 
+    // Directe factuur (zonder order): klant, regels (product uit een partij of dienst/vrije regel), leverdatum, referentie en eventueel
+    // een eigen nummer voor de verkoop-partij (leeg = het volgende V-nummer).
+    public sealed class CreateDirectInvoiceDto
+    {
+        public Guid? RequestId { get; set; }
+        public int? CustomerId { get; set; }
+        public DateOnly? DeliveryDate { get; set; }
+        public string ReferenceNumber { get; set; }
+        public string LotNumber { get; set; }
+        public List<SalesInvoiceNewLineDto> Lines { get; set; } = new();
+    }
+
     // Leveringen bij een bestaand concept zetten (zelfde klant).
     public sealed class AddInvoiceDeliveriesDto
     {
