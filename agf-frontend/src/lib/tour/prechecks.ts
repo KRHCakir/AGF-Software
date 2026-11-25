@@ -12,6 +12,7 @@ import { addDays, searchVendors } from '../purchaseInvoiceRules';
 import { getPurchaseOrder, listPurchaseOrders } from '../../services/purchaseOrderService';
 import { getAiReadingStatus } from '../../services/aiReadingService';
 import { listSalesOrders } from '../../services/salesOrderService';
+import { getOrderInvoicing, getSalesInvoice, getToInvoice } from '../../services/salesInvoiceService';
 import { getAvailabilityOverview } from '../../services/availabilityService';
 import { getCountries } from '../../services/countryService';
 import { getNextPartijNumber } from '../../services/partijService';
@@ -449,4 +450,35 @@ export async function precheckAiCertificate(signal: AbortSignal): Promise<TourPr
         ?? relations.items.find((item) => item.name === vendor.vendor.name);
     if (!relation) return { missing: [missingVendor] };
     return { missing: [], vars: { vendorName: vendor.vendor.name, vendorRelationId: String(relation.id), aiOff: status.enabled ? '' : 'ja' } };
+}
+
+// Verkoopfactuur 1: een geleverde levering van een DEMO-TOUR-verkooporder die nog te factureren is (zonder open concept). Alleen lezen.
+export async function lookupToInvoice(_vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const [customers, orders] = await Promise.all([getToInvoice(signal), listSalesOrders({ status: 'Open' }, signal)]);
+    const tourOrders = new Set(orders.filter((order) => isTour(order.customerReference)).map((order) => order.id));
+    const delivery = customers.flatMap((customer) => customer.deliveries)
+        .filter((d) => tourOrders.has(d.salesOrderId) && d.hasRest && d.openConceptId === null && d.lines.some((line) => line.rest > 0))
+        .sort((a, b) => b.salesOrderId - a.salesOrderId || a.sequence - b.sequence)[0];
+    if (!delivery) return { missing: [{ key: 'tour_missing_to_invoice' }] };
+    return { missing: [], vars: { orderId: String(delivery.salesOrderId), deliveryId: String(delivery.salesDeliveryId) } };
+}
+
+// Na Factureren: het concept van die levering (om het te openen).
+export async function lookupConcept(vars: Readonly<Record<string, string>>, signal: AbortSignal): Promise<TourPrecheck> {
+    const deliveries = await getOrderInvoicing(Number(vars.orderId), signal);
+    const concept = deliveries.find((d) => String(d.salesDeliveryId) === vars.deliveryId)?.openConceptId ?? null;
+    if (concept === null) return { missing: [{ key: 'tour_missing_concept' }] };
+    // Regels zonder prijs (de rondleiding vult op de order geen prijs in): needPrice0..3 = die regel krijgt in het concept een prijs.
+    const invoice = await getSalesInvoice(concept, signal);
+    const flags = Object.fromEntries([0, 1, 2, 3].map((index) => [`needPrice${index}`, invoice.lines[index] && invoice.lines[index].unitPrice === null ? 'yes' : '']));
+    return { missing: [], vars: { invoiceId: String(concept), needPrice: Object.values(flags).some((flag) => flag !== '') ? 'yes' : '', ...flags } };
+}
+
+// Zonder geleverde rondleidingsverkoop (lege database) maakt het hoofdstuk eerst stamgegevens, voorraad en een verzonden verkoop aan.
+export async function precheckSalesInvoice(signal: AbortSignal): Promise<TourPrecheck> {
+    const data = await masterData(signal);
+    const found = await lookupToInvoice({}, signal);
+    if (found.missing.length === 0) return { missing: [], vars: masterFlags(data, {}), writes: true };
+    const needStock = !await sellableTourStock(signal, data.article);
+    return { missing: [], vars: { ...masterFlags(data, { customer: true }), needOrder: flag(needStock), needStock: flag(needStock), needSale: 'yes' }, writes: true };
 }

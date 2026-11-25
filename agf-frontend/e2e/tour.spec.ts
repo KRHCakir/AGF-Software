@@ -431,12 +431,23 @@ test('Doe zelf: de gebruiker kiest zelf de leverancier en de rondleiding gaat ve
     await page.close();
 });
 
-test('Verkoopfacturen: alleen een plek in de lijst', async () => {
+// Verkoopfactuur 1: factureren vanuit de verzonden levering van de rondleiding, Definitief met nummer (zonder gaten) en een bewaarde PDF;
+// er staat een mailconcept klaar dat niet verstuurd is. De factuur neemt prijs en btw van de orderregel over.
+test('hoofdstuk Verkoopfactuur: factureren vanuit de levering, definitief maken, PDF bekijken', async ({ request }) => {
     const page = await context.newPage();
-    await page.goto('/dashboard');
-    await page.getByRole('button', { name: 'Demo-assistent' }).click();
-    const chapter = page.getByTestId('tour-chapter-invoice');
-    await expect(chapter).toContainText('Komt zodra facturen klaar zijn.');
-    await expect(chapter.getByRole('button')).toHaveCount(0);
+    const result = await play(page, 'invoice');
+    expectAllSteps(result);
+    const final = await json<{ items: { id: number; status: string; invoiceNumber: string | null; kind: string; orderNumbers: string[]; gross: number }[] }>(request, '/sales-invoices?status=Final&sort=createdAt&direction=desc&pageSize=5');
+    const invoice = final.items[0];
+    expect([invoice.status, invoice.kind, /^VF-\d{4}-\d{5}$/.test(invoice.invoiceNumber ?? '')]).toEqual(['Final', 'Delivery', true]);
+    const detail = await json<{ lines: { lineKind: string; unitPrice: number | null; lotNumber: string | null }[]; totals: { vatRates: unknown[] }; finalizedBy: string }>(request, `/sales-invoices/${invoice.id}`);
+    expect(detail.lines.filter((line) => line.lineKind === 'Product').every((line) => line.unitPrice !== null && line.lotNumber !== null)).toBe(true);
+    expect(detail.totals.vatRates.length).toBeGreaterThan(0);
+    expect(detail.finalizedBy).toBe(await signedIn(request));
+    const pdf = await request.get(`${API}/sales-invoices/${invoice.id}/pdf`);
+    expect([pdf.ok(), (await pdf.body()).subarray(0, 4).toString()]).toEqual([true, '%PDF']);
+    const drafts = await json<{ status: string; documentKind: string }[]>(request, `/sales-invoices/${invoice.id}/mail-drafts`);
+    expect(drafts.map((draft) => [draft.documentKind, draft.status])).toEqual([['Invoice', 'Draft']]);
+    for (const extra of context.pages()) if (extra !== page) await extra.close();
     await page.close();
 });

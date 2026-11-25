@@ -30,7 +30,7 @@ hieronder, ook Stamgegevens, Inkoopfactuur invoeren en De rode draad. Al gepland
 | 9 | De rode draad | De keten-strip op inkooporder, ontvangst en verkooporder, en het partijdetail onder Voorraad › Partijen. |
 | 10 | Inkoopfactuur invoeren | De factuur van de leverancier, met een regel waarvan het bedrag `120,00` wordt, en de totalen. |
 | 11 | Kosten verdelen over partijen | Een factuur van derden zonder inkooporder: kostenartikel Handling, € 5.000. Daarna "Aan welke partij hoort dit?": € 500 op de verkoop-partij van de rondleiding, de rest blijft algemene kosten. Tot slot het blok Kosten op die partij. Op een lege database maakt het hoofdstuk eerst een verkoop aan. |
-| 12 | Verkoopfacturen | Nog een lege plek: "Komt zodra facturen klaar zijn". |
+| 12 | Verkoopfactuur | Werklijst Nog te factureren, Factureren op de verzonden levering, het concept (prijzen invullen), btw per tarief, Definitief maken met bevestiging (nummer VF-jjjj-nnnnn), PDF bekijken en het mailconcept (niet verstuurd). Op een lege database eerst stamgegevens, voorraad en een verzonden verkoop. |
 
 Wie iets vastlegt, volgt altijd uit de ingelogde gebruiker; er is geen veld "Medewerker" meer. Alleen bij Keuring kiest de rondleiding
 expliciet de beoordelaar ("Demo-assistent"), zoals een gebruiker dat per keuring doet. Na afloop staat de eigen onthouden beoordelaar

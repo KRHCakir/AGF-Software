@@ -3,7 +3,7 @@
 
 import { prerequisite, step } from './compose';
 import { CUSTOMER_STEPS } from './masterdataChapter';
-import { lookupCosts, lookupInvoice, lookupSales, precheckCosts, precheckInvoice, precheckSales } from './prechecks';
+import { lookupConcept, lookupCosts, lookupInvoice, lookupSales, lookupToInvoice, precheckCosts, precheckInvoice, precheckSales, precheckSalesInvoice } from './prechecks';
 import { MASTER_FOR_PURCHASE, ORDER_CORE, RECEIVE_CORE } from './purchaseChapters';
 import type { TourAction, TourChapter, TourStep } from './types';
 
@@ -220,11 +220,63 @@ export const COSTS_CHAPTER: TourChapter = {
     ],
 };
 
+const salesInvoice = (id: string, route: string, actions: readonly TourAction[]) => step('sinvoice', id, route, actions);
+
+// Verkoopfactuur 1: factureren vanuit de levering. De werklijst Nog te factureren, dan op de verkooporder Factureren voor de verzonden
+// levering (een concept met prijs, korting en btw van de order), het concept met btw per tarief, Definitief maken (met bevestiging; het
+// nummer en de momentopname) en de PDF met het mailconcept, dat pas na een klik wordt verstuurd. Op een lege database maakt het hoofdstuk
+// eerst stamgegevens, voorraad en een verzonden verkoop aan (zoals Kosten verdelen).
 export const INVOICE_CHAPTER: TourChapter = {
     id: 'invoice',
     titleKey: 'tour_ch_invoice_title',
-    summaryKey: 'demo_tour_coming_soon',
+    summaryKey: 'tour_ch_invoice_summary',
+    doneKey: 'tour_ch_invoice_done',
     writes: true,
-    comingSoon: true,
-    steps: [],
+    precheck: precheckSalesInvoice,
+    steps: [
+        ...STOCK_FOR_SALES,
+        ...prerequisite(SALES_CORE, 's', '{{needSale}}'),
+        salesInvoice('worklist', '/sales-invoices', [
+            { kind: 'lookup', run: lookupToInvoice },
+            { kind: 'wait', target: 'si-to-invoice' },
+            { kind: 'highlight', target: 'si-to-invoice' },
+        ]),
+        salesInvoice('invoice', '/sales-orders?orderId={{orderId}}', [
+            { kind: 'wait', target: 'so-delivery-invoice:{{deliveryId}}' },
+            { kind: 'highlight', target: 'so-deliveries' },
+            { kind: 'click', target: 'so-delivery-invoice:{{deliveryId}}' },
+            { kind: 'wait', target: 'so-delivery-invoice-open:{{deliveryId}}' },
+        ]),
+        salesInvoice('open', '/sales-orders?orderId={{orderId}}', [
+            { kind: 'lookup', run: lookupConcept },
+            { kind: 'click', target: 'so-delivery-invoice-open:{{deliveryId}}' },
+            { kind: 'wait', target: 'si-detail' },
+        ]),
+        // Een concept is nog te wijzigen: regels zonder prijs krijgen er hier een (de rondleiding vulde op de order geen prijs in).
+        salesInvoice('price', '/sales-invoices?id={{invoiceId}}', [
+            { kind: 'wait', target: 'si-edit' },
+            { kind: 'click', target: 'si-edit', when: '{{needPrice}}' },
+            { kind: 'type', target: 'si-edit-price:0', text: '12,50', when: '{{needPrice0}}' },
+            { kind: 'type', target: 'si-edit-price:1', text: '7,50', when: '{{needPrice1}}' },
+            { kind: 'type', target: 'si-edit-price:2', text: '7,50', when: '{{needPrice2}}' },
+            { kind: 'type', target: 'si-edit-price:3', text: '7,50', when: '{{needPrice3}}' },
+            { kind: 'click', target: 'si-edit-save', when: '{{needPrice}}' },
+            { kind: 'wait', target: 'si-edit' },
+        ]),
+        salesInvoice('concept', '/sales-invoices?id={{invoiceId}}', [
+            { kind: 'wait', target: 'si-totals' },
+            { kind: 'highlight', target: 'si-totals' },
+        ]),
+        salesInvoice('finalize', '/sales-invoices?id={{invoiceId}}', [
+            { kind: 'click', target: 'si-finalize' },
+            { kind: 'click', target: 'si-finalize-confirm' },
+            { kind: 'wait', target: 'si-detail', text: 'VF-' },
+        ]),
+        salesInvoice('pdf', '/sales-invoices?id={{invoiceId}}', [
+            { kind: 'highlight', target: 'si-pdf' },
+            { kind: 'click', target: 'si-pdf' },
+            { kind: 'wait', target: 'si-mail' },
+            { kind: 'highlight', target: 'si-mail' },
+        ]),
+    ],
 };
