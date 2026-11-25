@@ -241,16 +241,14 @@ export const INVOICE_CHAPTER: TourChapter = {
             { kind: 'wait', target: 'si-to-invoice' },
             { kind: 'highlight', target: 'si-to-invoice' },
         ]),
-        // Overgeslagen als er al een concept van de rondleiding is (onderbroken rondleiding): dan gaat het verder bij "open".
-        {
-            ...salesInvoice('invoice', '/sales-orders?orderId={{orderId}}', [
-                { kind: 'wait', target: 'so-delivery-invoice:{{deliveryId}}' },
-                { kind: 'highlight', target: 'so-deliveries' },
-                { kind: 'click', target: 'so-delivery-invoice:{{deliveryId}}' },
-                { kind: 'wait', target: 'so-delivery-invoice-open:{{deliveryId}}' },
-            ]),
-            when: '{{needInvoice}}',
-        },
+        // Is er al een concept van de rondleiding (onderbroken rondleiding), dan staat er Concept openen in plaats van Factureren: de
+        // stap wijst de leveringen dan alleen aan. Voorwaarden per actie, want een stap overslaan mag alleen voor wat vooraf komt.
+        salesInvoice('invoice', '/sales-orders?orderId={{orderId}}', [
+            { kind: 'wait', target: 'so-delivery-invoice:{{deliveryId}}', when: '{{needInvoice}}' },
+            { kind: 'highlight', target: 'so-deliveries' },
+            { kind: 'click', target: 'so-delivery-invoice:{{deliveryId}}', when: '{{needInvoice}}' },
+            { kind: 'wait', target: 'so-delivery-invoice-open:{{deliveryId}}' },
+        ]),
         salesInvoice('open', '/sales-orders?orderId={{orderId}}', [
             { kind: 'lookup', run: lookupConcept },
             { kind: 'click', target: 'so-delivery-invoice-open:{{deliveryId}}' },
