@@ -129,7 +129,7 @@ namespace AgfAdmin.Services
 
         // Nieuwe regels controleren en, voor productregels, verdelen over de oudste vrije pallets van de gekozen partij. Eigen actieve
         // reserveringen van deze factuur (releasing) tellen weer als vrij, omdat ze in dezelfde save worden vrijgegeven.
-        private async Task<List<PlannedLine>> PlanNewLinesAsync(List<SalesInvoiceNewLineDto> lines, string field, Dictionary<int, decimal> releasing,
+        private async Task<List<PlannedLine>> PlanNewLinesAsync(List<SalesInvoiceNewLineDto> lines, string field, Dictionary<int, (decimal Quantity, decimal Kg)> releasing,
             Dictionary<string, string[]> errors, CancellationToken cancellationToken)
         {
             var planned = new List<PlannedLine>();
@@ -199,13 +199,13 @@ namespace AgfAdmin.Services
                     var candidates = SalesOrderService.FifoOrder(stock.Where(s => s.PartijId == lot.Id)).Select(s =>
                     {
                         var (q, kg) = used.GetValueOrDefault(s.PalletContentLineId);
-                        var back = releasing?.GetValueOrDefault(s.PalletContentLineId) ?? 0m;
+                        var (back, backKg) = releasing?.GetValueOrDefault(s.PalletContentLineId) ?? (0m, 0m);
                         return new ReservableStockLineDto
                         {
                             PalletContentLineId = s.PalletContentLineId, ReceivedAt = s.ReceivedAt, LotNumber = s.LotNumber, WeightMethod = s.WeightMethod,
                             NetKgPerPackage = s.NetKgPerPackage, Ggn = s.Ggn,
                             AvailableQuantity = s.AvailableQuantity - q + back,
-                            AvailableNetWeightKg = s.AvailableNetWeightKg - kg + (s.OnHandQuantity > 0m ? Math.Round(back * s.OnHandNetWeightKg / s.OnHandQuantity, 3, MidpointRounding.AwayFromZero) : 0m)
+                            AvailableNetWeightKg = s.AvailableNetWeightKg - kg + backKg
                         };
                     }).Where(s => s.AvailableQuantity > 0m).ToList();
                     var items = SalesOrderService.ProposeFifo(candidates, quantity);
@@ -350,10 +350,10 @@ namespace AgfAdmin.Services
                     if (!changes[i].Remove) requantified.Add((line, i));
                 }
             }
-            var back = releasing.GroupBy(r => r.PalletContentLineId!.Value).ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity));
+            var back = releasing.GroupBy(r => r.PalletContentLineId!.Value).ToDictionary(g => g.Key, g => (Quantity: g.Sum(r => r.Quantity), Kg: g.Sum(r => r.NetWeightKg ?? 0m)));
             var replans = new List<(InvoiceLine Line, PlannedLine Plan)>();
             // Lopend saldo: wat eerdere herplanningen van deze aanvraag nemen, is niet meer beschikbaar voor de volgende.
-            var freed = new Dictionary<int, decimal>(back);
+            var freed = new Dictionary<int, (decimal Quantity, decimal Kg)>(back);
             foreach (var (line, index) in requantified)
             {
                 var dto = new SalesInvoiceNewLineDto
@@ -367,7 +367,11 @@ namespace AgfAdmin.Services
                 if (plan != null)
                 {
                     replans.Add((line, plan));
-                    foreach (var a in plan.Allocations) freed[a.ContentId] = freed.GetValueOrDefault(a.ContentId) - a.Quantity;
+                    foreach (var a in plan.Allocations)
+                    {
+                        var (freedQuantity, freedKg) = freed.GetValueOrDefault(a.ContentId);
+                        freed[a.ContentId] = (freedQuantity - a.Quantity, freedKg - a.Kg);
+                    }
                 }
             }
             for (var i = 0; i < changes.Count; i++)
@@ -383,7 +387,8 @@ namespace AgfAdmin.Services
                 }
             }
             var newLines = request.NewLines ?? new List<SalesInvoiceNewLineDto>();
-            if (invoice.InvoiceLines.Count(SalesInvoiceRules.Counts) + newLines.Count > SalesInvoiceRules.MaxLinesPerInvoice)
+            var removedIds = changes.Where(c => c.Remove).Select(c => c.Id).ToHashSet();
+            if (invoice.InvoiceLines.Count(l => SalesInvoiceRules.Counts(l) && !removedIds.Contains(l.Id)) + newLines.Count > SalesInvoiceRules.MaxLinesPerInvoice)
             {
                 errors["newLines"] = new[] { $"At most {SalesInvoiceRules.MaxLinesPerInvoice} lines per invoice." };
             }
