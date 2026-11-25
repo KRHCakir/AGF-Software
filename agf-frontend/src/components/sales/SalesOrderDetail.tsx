@@ -294,17 +294,25 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
     // Verkoopfactuur 1: per levering wat er gefactureerd is (keten-strip en Factureren); bij elke nieuwe versie van de order opnieuw.
     const [invoicing, setInvoicing] = useState<DeliveryInvoicing[] | undefined>(undefined);
     const [invoicingToken, setInvoicingToken] = useState(0);
+    const [invoicingFailed, setInvoicingFailed] = useState(false);
     useEffect(() => {
         const controller = new AbortController();
+        setInvoicingFailed(false);
         getOrderInvoicing(order.id, controller.signal)
-            .then((next) => { if (!controller.signal.aborted) setInvoicing(next); })
-            .catch(() => { if (!controller.signal.aborted) setInvoicing(undefined); });
+            .then((next) => { if (!controller.signal.aborted) { setInvoicing(next); setInvoicingFailed(false); } })
+            .catch(() => { if (!controller.signal.aborted) { setInvoicing(undefined); setInvoicingFailed(true); } });
         return () => controller.abort();
     }, [order.id, order.version, invoicingToken]);
 
     return (
         <div className="space-y-3">
             <ChainStrip steps={salesOrderChain(order, invoicing === undefined ? undefined : { deliveries: invoicing })} />
+            {invoicingFailed && (
+                <div role="alert" data-testid="invoicing-load-failed" className="flex flex-wrap items-center gap-3 rounded border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-900">
+                    <p>{t('sales_invoicing_load_failed')}</p>
+                    <button type="button" className={secondaryButtonClass} onClick={() => setInvoicingToken((n) => n + 1)}>{t('sales_invoicing_retry')}</button>
+                </div>
+            )}
             <header className="rounded-md border border-gray-300 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-lg font-semibold text-gray-900">{t('sales_order_heading', { id: orderLabel(order) })} · {order.customerName ?? t('availability_unknown')}</h2>

@@ -658,6 +658,8 @@
   "sales_refresh": "Refresh",
   "sales_refreshing": "Refreshing…",
   "sales_refresh_failed": "Refresh failed; you still see the previous data. Open input and unresolved actions are kept.",
+  "sales_invoicing_load_failed": "The invoicing data could not be loaded; Invoice and invoice numbers are temporarily unavailable.",
+  "sales_invoicing_retry": "Try again",
   "sales_list_refresh_failed": "The list could not be refreshed; you still see the previous list.",
   "error_technical_details": "Technical details",
   "error_http_status": "HTTP status {status}",
