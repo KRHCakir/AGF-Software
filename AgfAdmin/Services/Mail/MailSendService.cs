@@ -16,7 +16,7 @@ namespace AgfAdmin.Services.Mail
 
         public async Task<ServiceResult<MailDraftDto>> SendAsync(int id, MailDraftActionDto request, CancellationToken cancellationToken = default)
         {
-            var draft = await db.MailDrafts.Include(d => d.Document).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
+            var draft = await db.MailDrafts.Include(d => d.Document).Include(d => d.InvoiceDocument).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
             if (draft == null) return ServiceResult<MailDraftDto>.NotFound($"Mail {id} does not exist.");
             var now = DateTime.UtcNow;
             // Onzeker: te lang "bezig", of een eerdere poging eindigde met een onbekende uitkomst (dan staat de reden bij een concept in "bezig").
@@ -28,7 +28,7 @@ namespace AgfAdmin.Services.Mail
             }
             if (request?.ExpectedVersion != draft.Version) return Conflict("This mail was changed by someone else; reload and try again.", "stale");
             // Nooit een oudere versie van het document versturen: er is intussen een nieuwere, met een eigen concept.
-            if (await db.SalesOrderDocuments.AnyAsync(x => x.SalesOrderId == draft.SalesOrderId && x.Kind == draft.DocumentKind && x.Version > draft.Document.Version, cancellationToken))
+            if (draft.DocumentId != null && await db.SalesOrderDocuments.AnyAsync(x => x.SalesOrderId == draft.SalesOrderId && x.Kind == draft.DocumentKind && x.Version > draft.Document.Version, cancellationToken))
             {
                 return Conflict("There is a newer version of this document; send that one.", "superseded");
             }
@@ -78,7 +78,7 @@ namespace AgfAdmin.Services.Mail
             {
                 // Voorbereiding (wachtwoord ontsleutelen, PDF maken) hoort bij de verzending: een fout hier wordt "mislukt" met een reden, niet "bezig".
                 smtp = settings.SmtpOf(stored);
-                var (bytes, name) = Pdf(draft.Document);
+                var (bytes, name) = draft.InvoiceDocument != null ? InvoicePdf(draft.InvoiceDocument) : Pdf(draft.Document);
                 var mail = new OutgoingMail(stored?.FromAddress ?? "verkoop@nagebootst.agf.local", stored?.FromName, to, cc, draft.Subject, draft.Body, name, bytes);
                 result = await sender.SendAsync(mail, smtp, sendLimit.Token);
             }
@@ -117,8 +117,17 @@ namespace AgfAdmin.Services.Mail
                     await using var transaction = await db.Database.BeginTransactionAsync(CancellationToken.None);
                     await db.SaveChangesAsync(CancellationToken.None);
                     // Het document: verstuurd (één keer, zoals Doorgegeven; regel 31 staat alleen dat toe).
-                    await db.SalesOrderDocuments.Where(d => d.Id == draft.DocumentId && d.SentAt == null)
-                        .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)done).SetProperty(d => d.SentBy, actor), CancellationToken.None);
+                    if (draft.DocumentId != null)
+                    {
+                        await db.SalesOrderDocuments.Where(d => d.Id == draft.DocumentId && d.SentAt == null)
+                            .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)done).SetProperty(d => d.SentBy, actor), CancellationToken.None);
+                    }
+                    else
+                    {
+                        // Verkoopfactuur 1: de factuur is verstuurd (één keer; regel 44 staat alleen dat toe).
+                        await db.SalesInvoiceDocuments.Where(d => d.Id == draft.InvoiceDocumentId && d.SentAt == null)
+                            .ExecuteUpdateAsync(u => u.SetProperty(d => d.SentAt, (DateTime?)done).SetProperty(d => d.SentBy, actor), CancellationToken.None);
+                    }
                     await transaction.CommitAsync(CancellationToken.None);
                 }
                 catch (Exception exception)
@@ -153,6 +162,12 @@ namespace AgfAdmin.Services.Mail
             document.Kind == SalesOrderDocumentRules.KindTransportOrder
                 ? (TransportOrderPdf.Render(document, TransportOrderBuilder.Deserialize(document.SnapshotJson)), TransportOrderPdf.FileName(document))
                 : (LoadingSlipPdf.Render(document, LoadingSlipBuilder.Deserialize(document.SnapshotJson)), LoadingSlipPdf.FileName(document));
+
+        private static (byte[] Bytes, string Name) InvoicePdf(Models.SalesInvoiceDocument document)
+        {
+            var snapshot = SalesInvoiceSnapshotBuilder.Deserialize(document.SnapshotJson);
+            return (SalesInvoicePdf.Render(snapshot), SalesInvoicePdf.FileName(snapshot));
+        }
 
         private static ServiceResult<MailDraftDto> Conflict(string message, string code) => ServiceResult<MailDraftDto>.Conflict(message, new { code, message });
     }

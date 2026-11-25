@@ -11,7 +11,7 @@ namespace AgfAdmin.Controllers
     [Authorize(Policy = Permissions.Sales)]
     [ApiController]
     [Route("api/sales-invoices")]
-    public class SalesInvoicesController(SalesInvoiceService invoices) : ControllerBase
+    public class SalesInvoicesController(SalesInvoiceService invoices, MailDraftService drafts) : ControllerBase
     {
         private CancellationToken Aborted => HttpContext?.RequestAborted ?? default;
 
@@ -64,6 +64,10 @@ namespace AgfAdmin.Controllers
             if (result.Status != ServiceResultStatus.Ok) return this.ToActionResult(result);
             return download ? File(result.Value.Bytes, "application/pdf", result.Value.FileName) : File(result.Value.Bytes, "application/pdf");
         }
+
+        // Het mailconcept (en eerdere) van de factuur; versturen gaat via /api/mail-drafts/{id}/send, zoals bij de laadbon.
+        [HttpGet("{id:int}/mail-drafts")]
+        public async Task<IActionResult> MailDrafts(int id) => Ok(await drafts.ForInvoiceAsync(id, Aborted));
 
         [HttpGet("{id:int}/documents")]
         public async Task<IActionResult> Documents(int id) => this.ToActionResult(await invoices.DocumentsAsync(id, Aborted));

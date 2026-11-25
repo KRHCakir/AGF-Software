@@ -10,7 +10,7 @@ namespace AgfAdmin.Services
     // invulvelden, geen opmaakeditor. Leeg maken = terug naar het vaste standaardsjabloon. Geldt voor nieuwe concepten.
     public sealed class MailTemplateService(AppDbContext db, ICurrentUser user = null)
     {
-        private static readonly string[] Kinds = { SalesOrderDocumentRules.KindLoadingSlip, SalesOrderDocumentRules.KindTransportOrder };
+        private static readonly string[] Kinds = { SalesOrderDocumentRules.KindLoadingSlip, SalesOrderDocumentRules.KindTransportOrder, DocumentMailRules.KindInvoice };
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
 
         public async Task<MailTemplatesDto> GetAsync(CancellationToken cancellationToken = default)

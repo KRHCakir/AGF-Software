@@ -6,10 +6,16 @@ namespace AgfAdmin.Models
     public sealed class MailDraft
     {
         public int Id { get; set; }
-        public int SalesOrderId { get; set; }
+        // Een concept hoort bij precies één document: een documentversie van een verkooporder (laadbon, transportopdracht), of, sinds
+        // verkoopfactuur 1, de PDF-versie van een verkoopfactuur (dan zijn SalesOrderId en DocumentId leeg). Database-check.
+        public int? SalesOrderId { get; set; }
         public SalesOrder SalesOrder { get; set; }
-        public int DocumentId { get; set; }
+        public int? DocumentId { get; set; }
         public SalesOrderDocument Document { get; set; }
+        public int? InvoiceId { get; set; }
+        public Invoice Invoice { get; set; }
+        public int? InvoiceDocumentId { get; set; }
+        public SalesInvoiceDocument InvoiceDocument { get; set; }
         public string DocumentKind { get; set; }
         public string Status { get; set; }             // Draft, Sending, Sent, Failed, Discarded, Superseded
         public string To { get; set; }                 // adressen gescheiden door komma's

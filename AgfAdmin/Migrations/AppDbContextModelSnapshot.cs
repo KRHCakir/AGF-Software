@@ -3267,13 +3267,19 @@ namespace AgfAdmin.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<int>("DocumentId")
+                    b.Property<int?>("DocumentId")
                         .HasColumnType("integer");
 
                     b.Property<string>("DocumentKind")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("InvoiceDocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("InvoiceId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone");
@@ -3300,7 +3306,7 @@ namespace AgfAdmin.Migrations
                     b.Property<DateTime?>("PreviousSentAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("SalesOrderId")
+                    b.Property<int?>("SalesOrderId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("SentAt")
@@ -3341,12 +3347,19 @@ namespace AgfAdmin.Migrations
                     b.HasIndex("DocumentId")
                         .IsUnique();
 
+                    b.HasIndex("InvoiceDocumentId")
+                        .IsUnique();
+
+                    b.HasIndex("InvoiceId");
+
                     b.HasIndex("SalesOrderId");
 
                     b.HasIndex("Status", "SalesOrderId");
 
                     b.ToTable("MailDrafts", t =>
                         {
+                            t.HasCheckConstraint("CK_MailDrafts_Owner", "(\"SalesOrderId\" IS NOT NULL AND \"DocumentId\" IS NOT NULL AND \"InvoiceId\" IS NULL AND \"InvoiceDocumentId\" IS NULL) OR (\"SalesOrderId\" IS NULL AND \"DocumentId\" IS NULL AND \"InvoiceId\" IS NOT NULL AND \"InvoiceDocumentId\" IS NOT NULL)");
+
                             t.HasCheckConstraint("CK_MailDrafts_Sent", "(\"Status\" = 'Sent') = (\"SentAt\" IS NOT NULL AND \"SentBy\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_MailDrafts_Status", "\"Status\" IN ('Draft', 'Sending', 'Sent', 'Failed', 'Discarded', 'Superseded')");
@@ -7572,16 +7585,28 @@ namespace AgfAdmin.Migrations
                     b.HasOne("AgfAdmin.Models.SalesOrderDocument", "Document")
                         .WithMany()
                         .HasForeignKey("DocumentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.SalesInvoiceDocument", "InvoiceDocument")
+                        .WithMany()
+                        .HasForeignKey("InvoiceDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AgfAdmin.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AgfAdmin.Models.SalesOrder", "SalesOrder")
                         .WithMany()
                         .HasForeignKey("SalesOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Document");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("InvoiceDocument");
 
                     b.Navigation("SalesOrder");
                 });

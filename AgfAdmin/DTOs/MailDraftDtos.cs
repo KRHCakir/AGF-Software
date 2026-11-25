@@ -4,10 +4,13 @@ namespace AgfAdmin.DTOs
     public sealed class MailDraftDto
     {
         public int Id { get; set; }
-        public int SalesOrderId { get; set; }
+        // Bij een verkoopfactuur (verkoopfactuur 1) zijn order en orderdocument leeg en staan factuur en factuurdocument ingevuld.
+        public int? SalesOrderId { get; set; }
         public string OrderNumber { get; set; }
         public string CustomerName { get; set; }
-        public int DocumentId { get; set; }
+        public int? DocumentId { get; set; }
+        public int? InvoiceId { get; set; }
+        public int? InvoiceDocumentId { get; set; }
         public string DocumentKind { get; set; }
         public string DocumentNumber { get; set; }
         public int DocumentVersion { get; set; }

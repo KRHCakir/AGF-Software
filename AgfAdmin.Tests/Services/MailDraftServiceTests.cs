@@ -132,7 +132,7 @@ public class MailDraftServiceTests : IDisposable
         await RunAsync(db => new LoadingSlipService(db).ConfirmAsync(orderId, new ConfirmSalesOrderDto()));
         var first = (await DraftsAsync(orderId)).Single(d => d.DocumentKind == "TransportOrder");
         // Versie 1 is doorgegeven; daarna een kouder transport: versie 2 met een nieuw concept.
-        await RunAsync(db => new LoadingSlipService(db).MarkSentAsync(orderId, first.DocumentId));
+        await RunAsync(db => new LoadingSlipService(db).MarkSentAsync(orderId, first.DocumentId.Value));
         var current = await RunAsync(db => new SalesOrderTransportService(db).GetAsync(orderId));
         await CarrierAsync(orderId, carrierId, current.Value.Version, 1.5m);
         var drafts = await DraftsAsync(orderId);

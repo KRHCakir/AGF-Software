@@ -1585,10 +1585,17 @@ namespace AgfAdmin.Data
                 b.Property(d => d.Version).IsConcurrencyToken();
                 b.HasOne(d => d.SalesOrder).WithMany().HasForeignKey(d => d.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
                 b.HasOne(d => d.Document).WithMany().HasForeignKey(d => d.DocumentId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.Invoice).WithMany().HasForeignKey(d => d.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(d => d.InvoiceDocument).WithMany().HasForeignKey(d => d.InvoiceDocumentId).OnDelete(DeleteBehavior.Restrict);
                 b.HasIndex(d => d.DocumentId).IsUnique();
+                b.HasIndex(d => d.InvoiceDocumentId).IsUnique();
                 b.HasIndex(d => new { d.Status, d.SalesOrderId });
                 b.ToTable(t =>
                 {
+                    // Verkoopfactuur 1: een document van een order of van een verkoopfactuur, nooit beide en nooit geen.
+                    t.HasCheckConstraint("CK_MailDrafts_Owner",
+                        "(\"SalesOrderId\" IS NOT NULL AND \"DocumentId\" IS NOT NULL AND \"InvoiceId\" IS NULL AND \"InvoiceDocumentId\" IS NULL) " +
+                        "OR (\"SalesOrderId\" IS NULL AND \"DocumentId\" IS NULL AND \"InvoiceId\" IS NOT NULL AND \"InvoiceDocumentId\" IS NOT NULL)");
                     t.HasCheckConstraint("CK_MailDrafts_Status", "\"Status\" IN ('Draft', 'Sending', 'Sent', 'Failed', 'Discarded', 'Superseded')");
                     t.HasCheckConstraint("CK_MailDrafts_Sent", "(\"Status\" = 'Sent') = (\"SentAt\" IS NOT NULL AND \"SentBy\" IS NOT NULL)");
                 });
