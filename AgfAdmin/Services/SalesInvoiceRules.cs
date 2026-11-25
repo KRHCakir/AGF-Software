@@ -40,6 +40,7 @@ namespace AgfAdmin.Services
         public const string DefaultRevenueTypeName = "Omzet diensten";
         public const int MaxDeliveriesPerInvoice = 50;
         public const int MaxLinesPerInvoice = 200;
+        public const int MaxFinalizeSelection = 50;
         // Eenheid van dienst- en emballageregels.
         public const string PieceUnit = "piece";
 
