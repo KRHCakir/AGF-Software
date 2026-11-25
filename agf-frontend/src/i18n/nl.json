@@ -3619,5 +3619,6 @@
   "tour_sinvoice_pdf_why": "De PDF is bewaard zoals hij nu is. Er wordt niets verstuurd zonder een klik op Versturen.",
   "tour_sinvoice_price_title": "Een concept is nog te wijzigen",
   "tour_sinvoice_price_what": "Regels zonder prijs krijgen hier hun prijs; aantal, korting en btw kunnen ook nog.",
-  "tour_sinvoice_price_why": "Zolang er een regel zonder prijs is, kan de factuur niet definitief."
+  "tour_sinvoice_price_why": "Zolang er een regel zonder prijs is, kan de factuur niet definitief.",
+  "si_direct_earlier_saved": "Een eerdere poging is mogelijk al opgeslagen als concept, met de gegevens van toen. Kijk eerst in Verkoopfacturen; opnieuw opslaan maakt een nieuw concept."
 }

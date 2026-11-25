@@ -292,15 +292,17 @@ export default function SalesOrderDetail({ order, onOrderChanged, onRefresh, ref
     };
     const showRefreshFailed = refreshFailed || localRefreshFailed;
     // Verkoopfactuur 1: per levering wat er gefactureerd is (keten-strip en Factureren); bij elke nieuwe versie van de order opnieuw.
-    const [invoicing, setInvoicing] = useState<DeliveryInvoicing[] | undefined>(undefined);
+    // Bewaard met de order waar ze bij horen: bij een andere order tellen de gegevens van de vorige niet, ook niet tot de nieuwe binnen zijn.
+    const [loadedInvoicing, setLoadedInvoicing] = useState<{ orderId: number; deliveries: DeliveryInvoicing[] } | undefined>(undefined);
+    const invoicing = loadedInvoicing?.orderId === order.id ? loadedInvoicing.deliveries : undefined;
     const [invoicingToken, setInvoicingToken] = useState(0);
     const [invoicingFailed, setInvoicingFailed] = useState(false);
     useEffect(() => {
         const controller = new AbortController();
         setInvoicingFailed(false);
         getOrderInvoicing(order.id, controller.signal)
-            .then((next) => { if (!controller.signal.aborted) { setInvoicing(next); setInvoicingFailed(false); } })
-            .catch(() => { if (!controller.signal.aborted) { setInvoicing(undefined); setInvoicingFailed(true); } });
+            .then((next) => { if (!controller.signal.aborted) { setLoadedInvoicing({ orderId: order.id, deliveries: next }); setInvoicingFailed(false); } })
+            .catch(() => { if (!controller.signal.aborted) { setLoadedInvoicing(undefined); setInvoicingFailed(true); } });
         return () => controller.abort();
     }, [order.id, order.version, invoicingToken]);
 

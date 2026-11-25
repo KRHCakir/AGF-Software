@@ -3619,5 +3619,6 @@
   "tour_sinvoice_pdf_why": "The PDF is stored as it is now. Nothing is sent without a click on Send.",
   "tour_sinvoice_price_title": "A draft can still be changed",
   "tour_sinvoice_price_what": "Lines without a price get their price here; quantity, discount and VAT can still change too.",
-  "tour_sinvoice_price_why": "As long as a line has no price, the invoice cannot become final."
+  "tour_sinvoice_price_why": "As long as a line has no price, the invoice cannot become final.",
+  "si_direct_earlier_saved": "An earlier attempt may already have been saved as a draft, with the details of that moment. Check Sales invoices first; saving again creates a new draft."
 }

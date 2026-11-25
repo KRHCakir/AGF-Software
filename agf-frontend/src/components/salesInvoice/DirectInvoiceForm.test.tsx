@@ -74,4 +74,28 @@ describe('direct invoice form', () => {
             { lineKind: 'Service', costArticleId: null, description: 'Stroom koelcel november', quantity: 1, unitPrice: 120.5, discountPercentage: null, vatPercentage: 21, revenueTypeId: 1 },
         ]);
     });
+    test('after an uncertain failure the key is kept; a refusal of that key then says an earlier attempt may be saved', async () => {
+        const bodies: string[] = [];
+        globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.method !== 'POST') return json(404, {});
+            bodies.push(String(init.body));
+            if (bodies.length === 1) throw new TypeError('Failed to fetch');
+            return json(409, { title: 'RequestId was already used for another invoice.' });
+        }) as typeof fetch;
+        await render();
+        await type('customerId-input', 'Marktkraam');
+        await key('customerId-input', 'Tab');
+        await click(mounted.container.querySelector<HTMLElement>('[data-tour="si-add-service"]')!);
+        await type('services[0].description', 'Stroom koelcel november');
+        await type('services[0].unitPrice', '120,50');
+        await submit();
+        await mounted.waitFor(() => (bodies.length === 1 ? true : null), 'first POST');
+        await type('services[0].unitPrice', '130,00');
+        await submit();
+        await mounted.waitFor(() => mounted.container.querySelector('[data-testid="si-direct-earlier-saved"]'), 'earlier saved notice');
+        const [first, second] = bodies.map((body) => JSON.parse(body));
+        assert.equal(second.requestId, first.requestId);
+        assert.deepEqual([first.lines[0].unitPrice, second.lines[0].unitPrice], [120.5, 130]);
+        assert.equal(created.length, 0);
+    });
 });
