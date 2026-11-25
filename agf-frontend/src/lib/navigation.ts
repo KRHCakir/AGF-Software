@@ -1,8 +1,8 @@
 // Het menu volgt het proces: Inkoop, Voorraad, Verkoop en Stamgegevens, met Start ervoor en Instellingen en Help erna. Op brede
 // schermen staat het boven (TopNav: groepen als tabs, de schermen van de actieve groep in een gekleurde balk eronder); op smalle
 // schermen klapt het uit onder de knop Menu (AppMenu). "Oud" is weg (feedback 11 november): de oude schermen die nog bestaan, staan
-// alleen nog als link op Start en bij Artikelen. Alleen schermen die bestaan staan erin: geen Leveringen- of
-// Verkoopfacturenpagina, want die zijn er (nog) niet. Geen imports: met node:test te toetsen.
+// alleen nog als link op Start en bij Artikelen. Alleen schermen die bestaan staan erin: geen Leveringenpagina, want
+// die is er (nog) niet. Verkoopfacturen staan sinds verkoopfactuur 1 onder Verkoop. Geen imports: met node:test te toetsen.
 
 export interface NavItem {
     id: string;
@@ -41,6 +41,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     {
         id: 'sales', labelKey: 'nav_group_sales', items: [
             { id: 'sales-orders', href: '/sales-orders', labelKey: 'nav_sales_orders' },
+            { id: 'sales-invoices', href: '/sales-invoices', labelKey: 'nav_sales_invoices' },
             { id: 'mail-drafts', href: '/mail-drafts', labelKey: 'nav_mail_drafts' },
         ],
     },
