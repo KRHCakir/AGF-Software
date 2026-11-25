@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { PurchaseOrderDetail, PurchaseOrderReceiptLine } from '../types/purchaseOrder';
 import type { SalesOrder, SalesOrderLine, StockReservation } from '../types/salesOrder';
-import { CHAIN_STEPS, ChainStep, purchaseOrderChain, salesOrderChain } from './chain.ts';
+import { CHAIN_STEPS, ChainStep, purchaseOrderChain, salesOrderChain, salesInvoiceStep } from './chain.ts';
 
 // De keten-strip rekent alleen met wat de API al geeft: status, aantallen en links per stap; de factuur is grijs zonder link.
 
@@ -246,5 +246,21 @@ describe('chain: the lot links to its lot page', () => {
     test('from the purchase order: the lot of the order next to the order itself; no lot, no extra link', () => {
         assert.deepEqual(hrefs(step(purchaseOrderChain(order({ partijId: 7, partijNumber: '2610251' }), 'order'), 'order')), ['/purchase-orders?id=3', '/partijen?id=7']);
         assert.equal(step(purchaseOrderChain(order(), 'order'), 'order').links.length, 1);
+    });
+});
+
+describe('sales invoice step', () => {
+    const delivery = (delivered: number, hasRest: boolean, invoices: { id: number; status: string; invoiceNumber: string | null }[]) => ({ hasRest, lines: [{ delivered }], invoices });
+
+    test('nothing delivered, to invoice, partly invoiced (draft) and invoiced, with links to the invoices', () => {
+        assert.deepEqual(salesInvoiceStep({ deliveries: [delivery(0, false, [])] }).parts, [{ key: 'chain_nothing_yet' }]);
+        assert.equal(salesInvoiceStep({ deliveries: [delivery(30, true, [])] }).parts[0].key, 'chain_to_invoice');
+        const draft = salesInvoiceStep({ deliveries: [delivery(30, false, [{ id: 5, status: 'Concept', invoiceNumber: null }])] });
+        assert.equal(draft.state, 'partial');
+        assert.deepEqual(draft.links, [{ label: '', key: 'chain_invoice_concept', href: '/sales-invoices?id=5' }]);
+        const done = salesInvoiceStep({ deliveries: [delivery(30, false, [{ id: 5, status: 'Final', invoiceNumber: 'VF-2026-00001' }]), delivery(0, false, [])] });
+        assert.equal(done.state, 'done');
+        assert.deepEqual(done.links, [{ label: 'VF-2026-00001', href: '/sales-invoices?id=5' }]);
+        assert.equal(salesInvoiceStep(undefined).state, 'unavailable');
     });
 });

@@ -57,6 +57,27 @@ const partijLink = (id: number, number: string): ChainLink => ({ label: number, 
 
 const invoiceStep = (): Omit<ChainStep, 'current'> => ({ key: 'invoice', state: 'unavailable', parts: [{ key: 'chain_not_yet' }], links: [] });
 
+// Verkoopfactuur 1: de factuur bij een verkooporder, uit wat er per levering gefactureerd is. Niets geleverd: nog niets; alles wat geleverd
+// is staat op een definitieve factuur: gefactureerd; anders deels (concept of rest). Zonder die gegevens (nog niet geladen) "nog niet".
+export interface SalesInvoicingFacts {
+    deliveries: { hasRest: boolean; lines: { delivered: number }[]; invoices: { id: number; status: string; invoiceNumber: string | null }[] }[];
+}
+
+export const salesInvoiceStep = (facts?: SalesInvoicingFacts): Omit<ChainStep, 'current'> => {
+    if (facts === undefined) return invoiceStep();
+    const delivered = facts.deliveries.filter((d) => d.lines.some((line) => line.delivered > 0));
+    const invoices = [...new Map(facts.deliveries.flatMap((d) => d.invoices).map((i) => [i.id, i])).values()];
+    const allFinal = delivered.length > 0 && !delivered.some((d) => d.hasRest) && delivered.every((d) => d.invoices.length > 0 && d.invoices.every((i) => i.status === 'Final'));
+    return {
+        key: 'invoice',
+        state: delivered.length === 0 ? 'empty' : allFinal ? 'done' : invoices.length > 0 ? 'partial' : 'empty',
+        parts: [{ key: delivered.length === 0 ? 'chain_nothing_yet' : allFinal ? 'chain_invoiced' : invoices.length > 0 ? 'chain_invoiced_partly' : 'chain_to_invoice' }],
+        links: invoices.slice(0, MAX_LINKS).map((invoice): ChainLink => invoice.invoiceNumber
+            ? { label: invoice.invoiceNumber, href: `/sales-invoices?id=${invoice.id}` }
+            : { label: '', key: 'chain_invoice_concept', href: `/sales-invoices?id=${invoice.id}` }),
+    };
+};
+
 // Inkoopfactuur bij een inkooporder (stap 4b): de gekoppelde facturen met link, en Gefactureerd / Deels / Niet. Zonder die gegevens (een
 // oudere server) blijft het "nog niet".
 const purchaseInvoiceStep = (order: PurchaseOrderDetail): Omit<ChainStep, 'current'> => {
@@ -156,7 +177,7 @@ export function purchaseOrderChain(order: PurchaseOrderDetail, current: 'order' 
 }
 
 // Vanaf de verkooporder: de herkomst (inkooporder en partij) uit de reserveringen, dan de order zelf en de levering.
-export function salesOrderChain(order: SalesOrder): ChainStep[] {
+export function salesOrderChain(order: SalesOrder, invoicing?: SalesInvoicingFacts): ChainStep[] {
     const reservations = order.lines.flatMap((line) => line.reservations).filter((r) => r.status === 'Active' || r.status === 'Consumed');
     const physical = reservations.filter((r) => r.source !== 'DirectTrade');
     const unit = singleUnit(order.lines.map((line) => line.unit));
@@ -243,7 +264,7 @@ export function salesOrderChain(order: SalesOrder): ChainStep[] {
             ],
             links: [],
         },
-        invoiceStep(),
+        salesInvoiceStep(invoicing),
     ];
     return steps.map((step) => ({ ...step, current: step.key === 'sales' }));
 }

@@ -7,6 +7,9 @@ import { newRequestId } from '../../lib/requestId';
 import { ApiError, toApiError } from '../../services/apiClient';
 import { createSalesDelivery } from '../../services/salesOrderService';
 import type { SalesOrder, StockReservation } from '../../types/salesOrder';
+import Link from 'next/link';
+import { createInvoiceFromDeliveries } from '../../services/salesInvoiceService';
+import type { DeliveryInvoicing } from '../../types/salesInvoice';
 import PartijNumberLink from '../partij/PartijNumberLink';
 import ErrorNotice from '../supply/ErrorNotice';
 import { primaryButtonClass, secondaryButtonClass } from '../supply/SuccessPanel';
@@ -40,7 +43,54 @@ function loadStored(orderId: number): { requestId: string; chosen: number[] } | 
     return { requestId: stored.requestId, chosen: stored.chosen };
 }
 
-export default function SalesDeliveries({ order, readOnly, onChanged }: { order: SalesOrder; readOnly: boolean; onChanged: () => Promise<unknown> | void }) {
+// Verkoopfactuur 1: per levering Factureren (een concept met de rest van die levering), of het open concept en de definitieve facturen.
+// Een herhaling na een netwerkfout gebruikt dezelfde sleutel (geen tweede concept).
+function DeliveryInvoice({ deliveryId, info, onChanged }: { deliveryId: number; info: DeliveryInvoicing | undefined; onChanged?: () => void }) {
+    const { t } = useTranslation();
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<ApiError | null>(null);
+    const [created, setCreated] = useState<number | null>(null);
+    const key = useRef<string | null>(null);
+    if (info === undefined) return null;
+    const finals = info.invoices.filter((invoice) => invoice.status === 'Final');
+    const concept = created ?? info.openConceptId;
+    const invoice = async () => {
+        key.current ??= newRequestId();
+        setBusy(true);
+        setError(null);
+        try {
+            const result = await createInvoiceFromDeliveries(key.current, [deliveryId]);
+            key.current = null;
+            setCreated(result.value.id);
+            onChanged?.();
+        } catch (caught) {
+            const apiError = toApiError(caught);
+            if (apiError.isDefinitiveRejection) key.current = null;
+            setError(apiError);
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <span className="flex flex-wrap items-baseline gap-x-2" data-testid="so-delivery-invoicing">
+            {finals.map((final) => (
+                <Link key={final.id} href={`/sales-invoices?id=${final.id}`} className="font-mono text-blue-800 underline underline-offset-2">{final.invoiceNumber}</Link>
+            ))}
+            {concept !== null && (
+                <Link href={`/sales-invoices?id=${concept}`} data-tour="so-delivery-invoice-open" data-tour-key={String(deliveryId)} className="font-medium text-blue-800 underline underline-offset-2">{t('so_invoice_open_concept')}</Link>
+            )}
+            {concept === null && info.hasRest && (
+                <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void invoice()} data-tour="so-delivery-invoice" data-tour-key={String(deliveryId)}>{t('so_invoice_delivery')}</button>
+            )}
+            {concept === null && !info.hasRest && finals.length > 0 && <span className="text-xs text-gray-600">{t('so_invoice_done')}</span>}
+            {error && <span className="basis-full"><ErrorNotice error={error} /></span>}
+        </span>
+    );
+}
+
+export default function SalesDeliveries({ order, readOnly, onChanged, invoicing, onInvoicingChanged }: {
+    order: SalesOrder; readOnly: boolean; onChanged: () => Promise<unknown> | void; invoicing?: DeliveryInvoicing[]; onInvoicingChanged?: () => void;
+}) {
     const { t, locale } = useTranslation();
     const deliveries = [...(order.deliveries ?? [])].sort((a, b) => a.sequence - b.sequence);
     const [open, setOpen] = useState(false);
@@ -150,6 +200,7 @@ export default function SalesDeliveries({ order, readOnly, onChanged }: { order:
                             {t('so_delivery_pallets', { count: String(counted.filter((reservation) => delivery.reservationIds.includes(reservation.id)).length) })}
                         </span>
                         {delivery.last && deliveries.length > 1 && <span className="text-xs text-gray-600">{t('so_delivery_rest')}</span>}
+                        <span className="ml-auto"><DeliveryInvoice deliveryId={delivery.id} info={invoicing?.find((d) => d.salesDeliveryId === delivery.id)} onChanged={onInvoicingChanged} /></span>
                     </li>
                 ))}
             </ul>

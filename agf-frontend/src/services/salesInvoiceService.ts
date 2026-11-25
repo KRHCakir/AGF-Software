@@ -1,7 +1,7 @@
 import { ApiError, getBlob, getJson, postJson, putJson } from './apiClient';
 import {
-    isFinalizeResults, isRevenueTypes, isSalesInvoice, isSalesInvoiceList,
-    type FinalizeResult, type RevenueType, type SalesInvoice, type SalesInvoiceList,
+    isDeliveryInvoicingList, isFinalizeResults, isInvoicingCustomers, isRevenueTypes, isSalesInvoice, isSalesInvoiceList,
+    type DeliveryInvoicing, type FinalizeResult, type InvoicingCustomer, type RevenueType, type SalesInvoice, type SalesInvoiceList,
 } from '../types/salesInvoice';
 
 // Verkoopfactuur 1: /api/sales-invoices. Elke schrijfactie draagt de versie die de gebruiker zag (expectedVersion) of een requestId.
@@ -76,5 +76,19 @@ export async function getSalesInvoicePdf(id: number, download = false, signal?: 
 export async function getRevenueTypes(includeInactive = false, signal?: AbortSignal): Promise<RevenueType[]> {
     const json = await getJson(`/revenue-types${includeInactive ? '?includeInactive=true' : ''}`, signal);
     if (!isRevenueTypes(json)) throw shape('de omzetsoorten');
+    return json;
+}
+
+// Per levering van een verkooporder: geleverd, gefactureerd en rest, met het open concept en de facturen.
+export async function getOrderInvoicing(orderId: number, signal?: AbortSignal): Promise<DeliveryInvoicing[]> {
+    const json = await getJson(`/sales-orders/${orderId}/invoicing`, signal);
+    if (!isDeliveryInvoicingList(json)) throw shape('het factureren van de order');
+    return json;
+}
+
+// De werklijst Nog te factureren: leveringen met een rest, per klant.
+export async function getToInvoice(signal?: AbortSignal): Promise<InvoicingCustomer[]> {
+    const json = await getJson('/sales-invoices/to-invoice', signal);
+    if (!isInvoicingCustomers(json)) throw shape('de werklijst Nog te factureren');
     return json;
 }

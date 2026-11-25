@@ -131,3 +131,36 @@ export function isFinalizeResults(value: unknown): value is { results: FinalizeR
 export function isRevenueTypes(value: unknown): value is RevenueType[] {
     return isArrayOf(value, (r): r is RevenueType => isObject(r) && isNumber(r.id) && isString(r.name) && typeof r.isActive === 'boolean' && typeof r.isDefault === 'boolean' && isNumber(r.version));
 }
+
+// Per levering: geleverd, gefactureerd en rest per orderregel, het open concept en de facturen (verkooporder en werklijst).
+export interface DeliveryInvoicingLine { salesOrderLineId: number; description: string | null; unit: string; delivered: number; invoiced: number; rest: number }
+export interface DeliveryInvoicingInvoice { id: number; status: SalesInvoiceStatus; invoiceNumber: string | null }
+export interface DeliveryInvoicing {
+    salesDeliveryId: number;
+    salesOrderId: number;
+    orderNumber: string;
+    sequence: number;
+    partijNumber: string | null;
+    customerId: number;
+    customerName: string | null;
+    deliveredAt: string | null;
+    daysSinceDelivery: number | null;
+    lines: DeliveryInvoicingLine[];
+    hasRest: boolean;
+    openConceptId: number | null;
+    invoices: DeliveryInvoicingInvoice[];
+}
+export interface InvoicingCustomer { customerId: number; customerName: string | null; deliveries: DeliveryInvoicing[] }
+
+const isDeliveryInvoicing = (value: unknown): value is DeliveryInvoicing => isObject(value) && isNumber(value.salesDeliveryId) && isNumber(value.salesOrderId)
+    && isNumber(value.sequence) && typeof value.hasRest === 'boolean' && isNullableNumber(value.openConceptId) && isNullableNumber(value.daysSinceDelivery)
+    && isArrayOf(value.lines, (l): l is DeliveryInvoicingLine => isObject(l) && isNumber(l.delivered) && isNumber(l.invoiced) && isNumber(l.rest))
+    && isArrayOf(value.invoices, (i): i is DeliveryInvoicingInvoice => isObject(i) && isNumber(i.id) && isStatus(i.status) && isNullableString(i.invoiceNumber));
+
+export function isDeliveryInvoicingList(value: unknown): value is DeliveryInvoicing[] {
+    return isArrayOf(value, isDeliveryInvoicing);
+}
+
+export function isInvoicingCustomers(value: unknown): value is InvoicingCustomer[] {
+    return isArrayOf(value, (c): c is InvoicingCustomer => isObject(c) && isNumber(c.customerId) && isArrayOf(c.deliveries, isDeliveryInvoicing));
+}
