@@ -93,6 +93,21 @@ public sealed class InvoiceStockGuardTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Line_Removed_By_Another_Writer_Gets_No_Reservation_Even_If_This_Context_Still_Has_It_As_Unchanged()
+    {
+        var a = await ArrangeAsync();
+        await using var db = _factory.CreateContext();
+        var line = await db.InvoiceLines.SingleAsync(l => l.Id == a.LineId); // de tracker kent de regel nog als niet weggehaald
+        await using (var other = _factory.CreateContext())
+        {
+            await other.Database.ExecuteSqlAsync($"UPDATE \"InvoiceLine\" SET \"RemovedAt\" = {DateTime.UtcNow} WHERE \"Id\" = {a.LineId}");
+        }
+        Assert.Null(line.RemovedAt);
+        await ReserveAsync(db, a.LineId, a.Seed.ApprovedBox, 5m, 20m);
+        await Assert.ThrowsAsync<TraceabilityViolationException>(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
     public async Task An_Invoice_Reservation_Holds_Stock_From_Its_Own_Lot_And_Counts_As_Not_Free()
     {
         var a = await ArrangeAsync();
