@@ -181,6 +181,23 @@ public sealed class SalesInvoiceDeliveryTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Service_Line_Removed_From_The_Concept_Does_Not_Come_Back_When_A_Delivery_Is_Added()
+    {
+        var a = await SalesInvoiceTestData.ArrangeAsync(_factory);
+        var first = (await SalesInvoiceTestData.FromDeliveriesAsync(_factory, Guid.NewGuid(), a.FirstDelivery)).Value;
+        var service = first.Lines.Single(l => l.LineKind == SalesInvoiceRules.LineService);
+        var removed = await UpdateAsync(first, new UpdateSalesInvoiceLineDto { Id = service.Id, Remove = true });
+        Assert.Equal(ServiceResultStatus.Ok, removed.Status);
+
+        await using var db = _factory.CreateContext();
+        var added = await new SalesInvoiceService(db).AddDeliveriesAsync(first.Id, new AddInvoiceDeliveriesDto { ExpectedVersion = removed.Value.Version, DeliveryIds = new List<int> { a.SecondDelivery } });
+        Assert.Equal(ServiceResultStatus.Ok, added.Status);
+        Assert.Equal(new[] { 30m, 15m }, added.Value.Lines.Where(l => l.LineKind == SalesInvoiceRules.LineProduct).Select(l => l.Quantity));
+        Assert.DoesNotContain(added.Value.Lines, l => l.LineKind == SalesInvoiceRules.LineService);
+        Assert.Single(added.Value.Lines, l => l.LineKind == SalesInvoiceRules.LinePackaging);
+    }
+
+    [Fact]
     public async Task A_Discarded_Concept_Or_A_Removed_Line_Frees_The_Delivery_Again()
     {
         var a = await SalesInvoiceTestData.ArrangeAsync(_factory);
