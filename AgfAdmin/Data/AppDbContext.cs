@@ -29,6 +29,7 @@ namespace AgfAdmin.Data
         public DbSet<InvoiceLine> InvoiceLines { get; set; }
         public DbSet<RevenueType> RevenueTypes { get; set; }
         public DbSet<SalesInvoiceStockLine> SalesInvoiceStockLines { get; set; }
+        public DbSet<SalesInvoiceDocument> SalesInvoiceDocuments { get; set; }
         public DbSet<Inventory> Inventory { get; set; }
         public DbSet<Shipment> Shipments { get; set; }
 
@@ -781,6 +782,23 @@ namespace AgfAdmin.Data
                 {
                     t.HasCheckConstraint("CK_SalesInvoiceStockLines_Quantity_Positive", "CAST(\"Quantity\" AS NUMERIC) > 0");
                     t.HasCheckConstraint("CK_SalesInvoiceStockLines_NetWeight_Positive", "CAST(\"NetWeightKg\" AS NUMERIC) > 0");
+                });
+            });
+
+            // De PDF-versies van een definitieve verkoopfactuur (regel 44): nooit verwijderd, inhoud vast, alleen één keer verstuurd.
+            modelBuilder.Entity<SalesInvoiceDocument>(b =>
+            {
+                b.HasOne(d => d.Invoice).WithMany().HasForeignKey(d => d.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+                b.Property(d => d.Number).IsRequired().HasMaxLength(SalesInvoiceRules.MaxNumberLength);
+                b.Property(d => d.SnapshotJson).IsRequired();
+                b.Property(d => d.ContentHash).IsRequired().HasMaxLength(64);
+                b.Property(d => d.CreatedBy).IsRequired().HasMaxLength(SalesInvoiceRules.MaxActorLength);
+                b.Property(d => d.SentBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
+                b.HasIndex(d => new { d.InvoiceId, d.Version }).IsUnique();
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_SalesInvoiceDocuments_Version", "\"Version\" >= 1");
+                    t.HasCheckConstraint("CK_SalesInvoiceDocuments_Sent", "(\"SentAt\" IS NULL) = (\"SentBy\" IS NULL)");
                 });
             });
 

@@ -136,6 +136,8 @@ namespace AgfAdmin.DTOs
         IReadOnlyList<string> SalesLotNumbers, IReadOnlyList<string> PurchaseLotNumbers, IReadOnlyList<string> OrderNumbers, string ReferenceNumber,
         decimal Net, decimal Vat, decimal Gross, int LinesWithoutPrice, bool Stale, DateTime CreatedAt, int Version);
 
+    public sealed record SalesInvoiceDocumentDto(int Id, string Number, int Version, DateTime CreatedAt, string CreatedBy, DateTime? SentAt, string SentBy);
+
     public sealed record SalesInvoiceListDto(IReadOnlyList<SalesInvoiceListItemDto> Items, int Total, int Page, int PageSize);
 
     // Omzetsoort (Beheer): naam, code voor de grootboekrekening later, actief en standaard.
