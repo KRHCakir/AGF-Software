@@ -148,6 +148,12 @@ namespace AgfAdmin.Data
                 : (await ToListAsync(db.Invoices.AsNoTracking().Where(i => invoiceIds.Contains(i.Id)).Select(i => new { i.Id, i.Kind, i.Status }), async, cancellationToken))
                     .ToDictionary(i => i.Id, i => (i.Kind, i.Status));
 
+            // Na het factuurrijslot opnieuw gelezen: een regel die intussen door een andere schrijver is weggehaald of gewijzigd, telt zoals
+            // hij is opgeslagen, niet zoals de tracker hem nog kent (een ongewijzigde regel wordt in dit opslaan niet overschreven).
+            var savedLineIds = added.Select(r => LineOf(r)?.Id ?? 0).Where(id => id > 0).Distinct().ToList();
+            var savedLines = savedLineIds.Count == 0 ? new Dictionary<int, InvoiceLine>()
+                : (await ToListAsync(db.InvoiceLines.AsNoTracking().Where(l => savedLineIds.Contains(l.Id)), async, cancellationToken)).ToDictionary(l => l.Id);
+
             var contentIds = added.Select(r => r.PalletContentLine?.Id ?? r.PalletContentLineId ?? 0).Where(id => id > 0).Distinct().ToList();
             var contents = (await ToListAsync(db.PalletContentLines.AsNoTracking().Where(c => contentIds.Contains(c.Id))
                     .Select(c => new { c.Id, c.PartijId, c.SupplyCommitmentLine.ProductVariantId, c.Unit }), async, cancellationToken))
@@ -159,6 +165,14 @@ namespace AgfAdmin.Data
                 if (line == null)
                 {
                     continue; // bestaat niet: de FK weigert dit
+                }
+                if (line.Id > 0 && savedLines.TryGetValue(line.Id, out var saved) && db.Entry(line).State == EntityState.Unchanged)
+                {
+                    line = saved;
+                }
+                else if (line.Id > 0 && savedLines.TryGetValue(line.Id, out var savedChanged) && savedChanged.RemovedAt != null)
+                {
+                    throw new TraceabilityViolationException("Stock is only held for a product line of a direct invoice that is a concept.");
                 }
                 var invoice = line.Invoice ?? trackedInvoices.FirstOrDefault(e => e.Entity.Id == line.InvoiceId)?.Entity;
                 var (kind, status) = invoice != null ? (invoice.Kind, invoice.Status) : storedStatus.TryGetValue(line.InvoiceId, out var s) ? s : (null, null);
