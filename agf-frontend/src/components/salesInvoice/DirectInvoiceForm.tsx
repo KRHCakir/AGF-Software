@@ -55,7 +55,8 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
     const variants = useMemo(() => new Map(products.flatMap((product) => product.variants.map((variant) => [variant.id, variant] as const))), [products]);
     const variantOf = (id: number) => variants.get(id);
     const rows = lines.map((line) => purchaseLineRow(line, /^[1-9]\d*$/.test(line.productVariantId) ? variantOf(Number(line.productVariantId)) : undefined));
-    const edited = () => { requestId.current = null; setFailure(null); };
+    // Tijdens een lopende aanvraag is het formulier vergrendeld; de sleutel blijft dan behouden (de uitkomst is nog onzeker).
+    const edited = () => { if (busy) return; requestId.current = null; setFailure(null); };
 
     const updateLine = (key: string, patch: Partial<SalesLineDraft>) => {
         // Een ander artikel: de gekozen partij hoort bij het oude artikel en vervalt.
@@ -114,17 +115,17 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div>
                     <label htmlFor="customerId-input" className="text-xs font-medium text-gray-700">{t('si_col_customer')}</label>
-                    <CustomerPicker id="customerId" dataTour="si-direct-customer" customers={customers} value={customerId} newCustomerDisabled invalid={!!errors.customerId}
+                    <CustomerPicker id="customerId" dataTour="si-direct-customer" customers={customers} value={customerId} newCustomerDisabled disabled={busy} invalid={!!errors.customerId}
                         describedBy={errors.customerId ? 'customerId' : undefined} onChange={(customer) => { setCustomerId(customer === null ? '' : String(customer.id)); edited(); }} />
                     <FieldError id="customerId" messages={lineErrors('customerId')} />
                 </div>
                 <div>
                     <label htmlFor="deliveryDate" className="text-xs font-medium text-gray-700">{t('si_col_delivery_date')}</label>
-                    <DateField id="deliveryDate" value={deliveryDate} onChange={(value) => { setDeliveryDate(value); edited(); }} dataTour="si-direct-delivery-date" />
+                    <DateField id="deliveryDate" value={deliveryDate} onChange={(value) => { setDeliveryDate(value); edited(); }} dataTour="si-direct-delivery-date" disabled={busy} />
                 </div>
                 <div>
                     <label htmlFor="si-direct-reference" className="text-xs font-medium text-gray-700">{t('si_reference')}</label>
-                    <input id="si-direct-reference" className={inputClass} value={reference} maxLength={100} onChange={(event) => { setReference(event.target.value); edited(); }} />
+                    <input id="si-direct-reference" className={inputClass} value={reference} maxLength={100} disabled={busy} onChange={(event) => { setReference(event.target.value); edited(); }} />
                 </div>
             </div>
 
@@ -153,7 +154,7 @@ export default function DirectInvoiceForm({ customers, products, serviceArticles
                 <button type="button" onClick={addLine} disabled={busy} className={secondaryButtonClass}>+ {t('supply_add_line')}</button>
             </fieldset>
 
-            <fieldset className="space-y-2" data-testid="si-direct-services">
+            <fieldset className="space-y-2" data-testid="si-direct-services" disabled={busy}>
                 <legend className="text-sm font-semibold text-gray-900">{t('si_direct_services')}</legend>
                 <p className="text-xs text-gray-700">{t('si_direct_services_text')}</p>
                 {services.map((line, index) => {

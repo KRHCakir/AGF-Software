@@ -28,9 +28,10 @@ export function finalizeBlockers(invoice: Pick<SalesInvoice, 'status' | 'lines' 
     return blockers;
 }
 
-// Een concept uit de lijst kan mee in een selectie als het regels met een prijs heeft (de server controleert het opnieuw).
+// Een concept uit de lijst kan mee in een selectie als geen enkele regel een prijs mist; een nultotaal (gratis of 100% korting) is geldig.
+// De server controleert opnieuw, ook of er regels zijn.
 export function selectable(item: SalesInvoiceListItem): boolean {
-    return item.status === 'Concept' && item.linesWithoutPrice === 0 && item.gross !== 0;
+    return item.status === 'Concept' && item.linesWithoutPrice === 0;
 }
 
 // Het nummer zoals in de lijst: het factuurnummer, of "Concept" zolang er geen nummer is.
