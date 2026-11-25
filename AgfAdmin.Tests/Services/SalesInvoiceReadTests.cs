@@ -20,7 +20,7 @@ public sealed class SalesInvoiceReadTests : IDisposable
         await using var db = _factory.CreateContext();
         var invoice = new Invoice
         {
-            Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, CustomerId = a.Seed.CustomerId, RequestId = Guid.NewGuid(), CreatedBy = "Jan",
+            Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, CustomerId = a.Seed.CustomerId, RequestId = Guid.NewGuid(), RequestFingerprint = "test", CreatedBy = "Jan",
             CustomCustomerName = "Customer T", InvoiceDate = DateTime.UtcNow,
             InvoiceLines = new List<InvoiceLine>
             {

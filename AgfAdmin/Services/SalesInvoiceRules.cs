@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using AgfAdmin.Models;
 
 namespace AgfAdmin.Services
@@ -70,6 +73,13 @@ namespace AgfAdmin.Services
             string.Create(CultureInfo.InvariantCulture, $"{NumberPrefix}-{year:D4}-{sequence.ToString($"D{SequenceDigits}", CultureInfo.InvariantCulture)}");
 
         public static bool IsNewModel(Invoice invoice) => invoice.Kind != null;
+
+        // Vingerafdruk van een aanmaakaanvraag: SHA-256 (hex, 64 tekens) van de genormaliseerde inhoud als JSON. Een herhaling met dezelfde
+        // sleutel maar een andere inhoud is daardoor herkenbaar, ook nadat het concept is bijgewerkt.
+        public static string Fingerprint(object canonical) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(canonical, FingerprintJson)))).ToLowerInvariant();
+
+        private static readonly JsonSerializerOptions FingerprintJson = new(JsonSerializerDefaults.Web);
 
         // Een regel telt mee (in totalen, PDF en "al gefactureerd") zolang ze niet uit het concept is gehaald.
         public static bool Counts(InvoiceLine line) => line.RemovedAt == null;

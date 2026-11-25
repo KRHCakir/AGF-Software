@@ -101,6 +101,13 @@ namespace AgfAdmin.Migrations
                 type: "integer",
                 nullable: true);
 
+            migrationBuilder.AddColumn<string>(
+                name: "RequestFingerprint",
+                table: "Invoices",
+                type: "character varying(64)",
+                maxLength: 64,
+                nullable: true);
+
             migrationBuilder.AddColumn<Guid>(
                 name: "RequestId",
                 table: "Invoices",
@@ -267,7 +274,7 @@ namespace AgfAdmin.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Invoices_Final_Numbered",
                 table: "Invoices",
-                sql: "\"Kind\" IS NULL OR ((\"Status\" = 'Final') = (\"InvoiceNumber\" IS NOT NULL AND \"InvoiceYear\" IS NOT NULL AND \"InvoiceSequence\" IS NOT NULL AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"DueDate\" IS NOT NULL AND \"PaymentTermDays\" IS NOT NULL))");
+                sql: "\"Kind\" IS NULL OR (\"Status\" = 'Final' AND \"InvoiceNumber\" IS NOT NULL AND \"InvoiceYear\" IS NOT NULL AND \"InvoiceSequence\" IS NOT NULL AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"DueDate\" IS NOT NULL AND \"PaymentTermDays\" IS NOT NULL) OR (\"Status\" <> 'Final' AND \"InvoiceNumber\" IS NULL AND \"InvoiceYear\" IS NULL AND \"InvoiceSequence\" IS NULL AND \"FinalizedAt\" IS NULL AND \"FinalizedBy\" IS NULL)");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Invoices_Kind_Allowed",
@@ -277,7 +284,7 @@ namespace AgfAdmin.Migrations
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Invoices_NewModel",
                 table: "Invoices",
-                sql: "\"Kind\" IS NULL OR (\"Status\" IN ('Concept', 'Final', 'Discarded') AND \"CustomerId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"CreatedBy\" IS NOT NULL)");
+                sql: "\"Kind\" IS NULL OR (\"Status\" IN ('Concept', 'Final', 'Discarded') AND \"CustomerId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"RequestFingerprint\" IS NOT NULL AND \"CreatedBy\" IS NOT NULL)");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_Invoices_Sequence_Positive",
@@ -417,6 +424,9 @@ namespace AgfAdmin.Migrations
 CREATE OR REPLACE FUNCTION agf_sales_invoice_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF OLD.""Kind"" IS NOT NULL THEN
+        IF TG_OP = 'UPDATE' AND NEW.""Kind"" IS DISTINCT FROM OLD.""Kind"" THEN
+            RAISE EXCEPTION 'The kind of sales invoice % never changes (rule 44).', OLD.""Id"" USING ERRCODE = 'check_violation';
+        END IF;
         IF TG_OP = 'DELETE' THEN
             RAISE EXCEPTION 'Sales invoice % is never deleted (rule 44).', OLD.""Id"" USING ERRCODE = 'check_violation';
         END IF;
@@ -439,13 +449,15 @@ DECLARE
     invoice_status text;
 BEGIN
     IF TG_OP IN ('UPDATE', 'DELETE') THEN
-        SELECT ""Kind"", ""Status"" INTO invoice_kind, invoice_status FROM ""Invoices"" WHERE ""Id"" = OLD.""InvoiceId"";
+        -- Met een gedeeld slot op de factuurrij: Definitief maken (dat de rij eerst FOR UPDATE vastzet) en een regelwijziging lopen
+        -- nooit langs elkaar heen; de één wacht op de ander en ziet daarna de echte status.
+        SELECT ""Kind"", ""Status"" INTO invoice_kind, invoice_status FROM ""Invoices"" WHERE ""Id"" = OLD.""InvoiceId"" FOR SHARE;
         IF invoice_kind IS NOT NULL AND (TG_OP = 'DELETE' OR invoice_status <> 'Concept') THEN
             RAISE EXCEPTION 'Line % of sales invoice % never changes once the invoice is not a concept, and is never deleted (rule 44).', OLD.""Id"", OLD.""InvoiceId"" USING ERRCODE = 'check_violation';
         END IF;
     END IF;
     IF TG_OP IN ('INSERT', 'UPDATE') THEN
-        SELECT ""Kind"", ""Status"" INTO invoice_kind, invoice_status FROM ""Invoices"" WHERE ""Id"" = NEW.""InvoiceId"";
+        SELECT ""Kind"", ""Status"" INTO invoice_kind, invoice_status FROM ""Invoices"" WHERE ""Id"" = NEW.""InvoiceId"" FOR SHARE;
         IF invoice_kind IS NOT NULL AND invoice_status <> 'Concept' THEN
             RAISE EXCEPTION 'Sales invoice % is not a concept: its lines never change (rule 44).', NEW.""InvoiceId"" USING ERRCODE = 'check_violation';
         END IF;
@@ -627,6 +639,10 @@ UPDATE ""InvoiceLine"" SET ""UnitPrice"" = 0 WHERE ""UnitPrice"" IS NULL;
 
             migrationBuilder.DropColumn(
                 name: "PaymentTermDays",
+                table: "Invoices");
+
+            migrationBuilder.DropColumn(
+                name: "RequestFingerprint",
                 table: "Invoices");
 
             migrationBuilder.DropColumn(

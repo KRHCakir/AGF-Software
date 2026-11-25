@@ -32,22 +32,21 @@ namespace AgfAdmin.Services
                 return ServiceResult<SalesInvoiceDto>.Validation(errors);
             }
 
+            var fingerprint = SalesInvoiceRules.Fingerprint(new { kind = SalesInvoiceRules.KindDelivery, deliveryIds });
             for (var attempt = 1; ; attempt++)
             {
-                var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.Kind }).SingleOrDefaultAsync(cancellationToken);
+                // Een herhaling is precies dezelfde aanvraag (dezelfde leveringen), vergeleken met de vingerafdruk die bij het aanmaken is
+                // bewaard; los van wat er daarna op het concept veranderde.
+                var replay = await db.Invoices.AsNoTracking().Where(i => i.RequestId == request.RequestId).Select(i => new { i.Id, i.RequestFingerprint }).SingleOrDefaultAsync(cancellationToken);
                 if (replay != null)
                 {
-                    // Een herhaling als alle gevraagde leveringen op die factuur staan (ook op een weggehaalde regel): na een netwerkfout
-                    // kan het concept al bijgewerkt zijn, bijvoorbeeld met een levering erbij. Zonder extra kolom of migratie.
-                    var onInvoice = (await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == replay.Id && l.SalesDeliveryId != null)
-                        .Select(l => l.SalesDeliveryId.Value).ToListAsync(cancellationToken)).ToHashSet();
-                    return replay.Kind == SalesInvoiceRules.KindDelivery && deliveryIds.All(onInvoice.Contains)
+                    return replay.RequestFingerprint == fingerprint
                         ? ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(replay.Id, cancellationToken))
                         : ServiceResult<SalesInvoiceDto>.Conflict($"RequestId {request.RequestId} was already used for another invoice.");
                 }
                 var invoice = new Invoice
                 {
-                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId,
+                    Kind = SalesInvoiceRules.KindDelivery, Status = SalesInvoiceRules.StatusConcept, RequestId = request.RequestId, RequestFingerprint = fingerprint,
                     CreatedBy = Actor(), CreatedAt = DateTime.UtcNow, InvoiceDate = DateTime.UtcNow, PaymentStatus = "Pending"
                 };
                 var refused = await AddDeliveriesAsync(invoice, deliveryIds, "deliveryIds", cancellationToken);
@@ -447,6 +446,11 @@ namespace AgfAdmin.Services
             foreach (var orderId in orderIds)
             {
                 await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({OrderLockClass}, {orderId})", cancellationToken);
+            }
+            // De factuurrij eerst vastzetten (zoals Definitief maken doet): de regeltrigger wacht daar ook op.
+            if (invoice.Id > 0)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Invoices\" WHERE \"Id\" = {invoice.Id} FOR UPDATE", cancellationToken);
             }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

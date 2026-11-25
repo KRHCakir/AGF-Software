@@ -21,7 +21,7 @@ public class SalesInvoiceGuardTests : IDisposable
         var customer = new Customer { Name = "Groothandel Noord" };
         var invoice = new Invoice
         {
-            Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, Customer = customer, RequestId = Guid.NewGuid(), CreatedBy = "Jan",
+            Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, Customer = customer, RequestId = Guid.NewGuid(), RequestFingerprint = "test", CreatedBy = "Jan",
             InvoiceDate = new DateTime(2026, 11, 25, 9, 0, 0, DateTimeKind.Utc), CustomCustomerName = customer.Name,
             InvoiceLines = new List<InvoiceLine>
             {
@@ -65,7 +65,7 @@ public class SalesInvoiceGuardTests : IDisposable
         await using var db = _factory.CreateContext();
         var invoice = new Invoice
         {
-            Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusFinal, Customer = new Customer { Name = "Klant" }, RequestId = Guid.NewGuid(), CreatedBy = "Jan"
+            Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusFinal, Customer = new Customer { Name = "Klant" }, RequestId = Guid.NewGuid(), RequestFingerprint = "test", CreatedBy = "Jan"
         };
         MakeFinal(invoice);
         db.Invoices.Add(invoice);
@@ -200,7 +200,7 @@ public class SalesInvoiceLotNumberTests : IDisposable
         {
             var invoice = new Invoice
             {
-                Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, Customer = new Customer { Name = "Klant" }, RequestId = Guid.NewGuid(),
+                Kind = SalesInvoiceRules.KindDirect, Status = SalesInvoiceRules.StatusConcept, Customer = new Customer { Name = "Klant" }, RequestId = Guid.NewGuid(), RequestFingerprint = "test",
                 CreatedBy = "Jan", BatchNumber = "V-2611001"
             };
             var lot = new Partij { Number = "V-2611001", NumberKey = PartijRules.NumberKey("V-2611001"), Kind = PartijRules.KindSales, Invoice = invoice, CreatedBy = "Jan" };

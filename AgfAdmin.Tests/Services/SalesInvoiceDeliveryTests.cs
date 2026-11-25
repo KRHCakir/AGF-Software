@@ -174,6 +174,10 @@ public sealed class SalesInvoiceDeliveryTests : IDisposable
         Assert.Equal(ServiceResultStatus.Ok, added.Status);
         Assert.Equal(new[] { 30m, 15m }, added.Value.Lines.Where(l => l.LineKind == SalesInvoiceRules.LineProduct).Select(l => l.Quantity));
         Assert.Equal(2, added.Value.Lines.Count(l => l.LineKind != SalesInvoiceRules.LineProduct));
+
+        // Een herhaling is precies de oorspronkelijke aanvraag, ook nadat er een levering bij kwam; een andere set leveringen niet.
+        Assert.Equal(first.Id, (await SalesInvoiceTestData.FromDeliveriesAsync(_factory, key, a.FirstDelivery)).Value.Id);
+        Assert.Equal(ServiceResultStatus.Conflict, (await SalesInvoiceTestData.FromDeliveriesAsync(_factory, key, a.FirstDelivery, a.SecondDelivery)).Status);
     }
 
     [Fact]

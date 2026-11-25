@@ -148,5 +148,7 @@ public sealed class SalesInvoiceDirectTests : IDisposable
         Assert.Equal(("BALIE-25", ServiceResultStatus.Created), (own.Value.SalesLotNumber, own.Status));
         var again = await DirectInvoiceTestData.CreateAsync(_factory, a.Seed.CustomerId, key, "BALIE-25", DirectInvoiceTestData.Service("Handling", 10m));
         Assert.Equal((ServiceResultStatus.Ok, own.Value.Id), (again.Status, again.Value.Id));
+        var different = await DirectInvoiceTestData.CreateAsync(_factory, a.Seed.CustomerId, key, "BALIE-25", DirectInvoiceTestData.Service("Handling", 11m));
+        Assert.Equal(ServiceResultStatus.Conflict, different.Status);
     }
 }
