@@ -26,6 +26,8 @@ namespace AgfAdmin.Data
         public DbSet<Order> Orders { get; set; }
         public DbSet<Inspection> Inspections { get; set; }
         public DbSet<Invoice> Invoices { get; set; }
+        public DbSet<InvoiceLine> InvoiceLines { get; set; }
+        public DbSet<RevenueType> RevenueTypes { get; set; }
         public DbSet<Inventory> Inventory { get; set; }
         public DbSet<Shipment> Shipments { get; set; }
 
@@ -379,6 +381,16 @@ namespace AgfAdmin.Data
                 entry.Property(l => l.Version).CurrentValue = entry.Property(l => l.Version).OriginalValue + 1;
             }
 
+            foreach (var entry in ChangeTracker.Entries<Invoice>().Where(e => e.State == EntityState.Modified && e.Entity.Kind != null))
+            {
+                entry.Property(i => i.Version).CurrentValue = entry.Property(i => i.Version).OriginalValue + 1;
+            }
+
+            foreach (var entry in ChangeTracker.Entries<RevenueType>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Property(r => r.Version).CurrentValue = entry.Property(r => r.Version).OriginalValue + 1;
+            }
+
             foreach (var entry in ChangeTracker.Entries<SalesDelivery>().Where(e => e.State == EntityState.Modified))
             {
                 entry.Property(d => d.Version).CurrentValue = entry.Property(d => d.Version).OriginalValue + 1;
@@ -683,10 +695,82 @@ namespace AgfAdmin.Data
                 b.HasIndex(p => p.RequestId).IsUnique();
             });
 
+            // Verkoopfactuur 1: het nieuwe model (Kind gevuld) naast de oude facturen (Kind leeg, ongemoeid). Nummer, Definitief en Vervallen
+            // zijn in de database consistent; een definitieve factuur verandert nooit (regel 44 en, in PostgreSQL, een trigger uit de migratie).
+            modelBuilder.Entity<Invoice>(b =>
+            {
+                b.ToTable("Invoices", t =>
+                {
+                    t.HasCheckConstraint("CK_Invoices_Kind_Allowed", "\"Kind\" IS NULL OR \"Kind\" IN ('Delivery', 'Direct')");
+                    t.HasCheckConstraint("CK_Invoices_NewModel",
+                        "\"Kind\" IS NULL OR (\"Status\" IN ('Concept', 'Final', 'Discarded') AND \"CustomerId\" IS NOT NULL AND \"RequestId\" IS NOT NULL AND \"CreatedBy\" IS NOT NULL)");
+                    t.HasCheckConstraint("CK_Invoices_Final_Numbered",
+                        "\"Kind\" IS NULL OR ((\"Status\" = 'Final') = (\"InvoiceNumber\" IS NOT NULL AND \"InvoiceYear\" IS NOT NULL AND \"InvoiceSequence\" IS NOT NULL " +
+                        "AND \"FinalizedAt\" IS NOT NULL AND \"FinalizedBy\" IS NOT NULL AND \"DueDate\" IS NOT NULL AND \"PaymentTermDays\" IS NOT NULL))");
+                    t.HasCheckConstraint("CK_Invoices_Discarded",
+                        "\"Kind\" IS NULL OR ((\"Status\" = 'Discarded') = (\"DiscardedAt\" IS NOT NULL AND \"DiscardedBy\" IS NOT NULL))");
+                    t.HasCheckConstraint("CK_Invoices_Sequence_Positive", "\"InvoiceSequence\" IS NULL OR \"InvoiceSequence\" > 0");
+                });
+                b.Property(i => i.Kind).HasMaxLength(16);
+                b.Property(i => i.InvoiceNumber).HasMaxLength(64);
+                b.Property(i => i.FinalizedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
+                b.Property(i => i.CreatedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
+                b.Property(i => i.DiscardedBy).HasMaxLength(SalesInvoiceRules.MaxActorLength);
+                b.Property(i => i.DiscardReason).HasMaxLength(SalesInvoiceRules.MaxReasonLength);
+                b.Property(i => i.CustomerAddress).HasMaxLength(SalesInvoiceRules.MaxAddressLength);
+                b.Property(i => i.CustomerVatNumber).HasMaxLength(50);
+                b.Property(i => i.Version).IsConcurrencyToken();
+                b.HasIndex(i => i.RequestId).IsUnique();
+                b.HasIndex(i => new { i.InvoiceYear, i.InvoiceSequence }).IsUnique();
+                b.HasIndex(i => i.Status);
+            });
+
             modelBuilder.Entity<InvoiceLine>(b =>
             {
-                b.ToTable("InvoiceLine");
+                b.ToTable("InvoiceLine", t =>
+                {
+                    t.HasCheckConstraint("CK_InvoiceLine_LineKind_Allowed", "\"LineKind\" IS NULL OR \"LineKind\" IN ('Product', 'Service', 'Packaging')");
+                    // Uit een levering: levering en orderregel samen (goederen), of precies één dienst- of emballageregel van de order.
+                    t.HasCheckConstraint("CK_InvoiceLine_DeliverySource", "(\"SalesDeliveryId\" IS NULL) = (\"SalesOrderLineId\" IS NULL)");
+                    t.HasCheckConstraint("CK_InvoiceLine_SingleSource",
+                        "(CASE WHEN \"SalesOrderLineId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"SalesOrderServiceLineId\" IS NULL THEN 0 ELSE 1 END) " +
+                        "+ (CASE WHEN \"SalesOrderPackagingLineId\" IS NULL THEN 0 ELSE 1 END) <= 1");
+                    // Een productregel van het nieuwe model komt uit een levering of uit een (inkoop-)partij; een dienst- of emballageregel nooit.
+                    t.HasCheckConstraint("CK_InvoiceLine_Product_Source",
+                        "\"LineKind\" IS NULL OR \"LineKind\" <> 'Product' OR (\"ProductVariantId\" IS NOT NULL AND (\"SalesOrderLineId\" IS NOT NULL OR \"PartijId\" IS NOT NULL))");
+                    t.HasCheckConstraint("CK_InvoiceLine_Service_NoStock",
+                        "\"LineKind\" IS NULL OR \"LineKind\" = 'Product' OR (\"SalesOrderLineId\" IS NULL AND \"PartijId\" IS NULL AND \"ProductVariantId\" IS NULL)");
+                    t.HasCheckConstraint("CK_InvoiceLine_Quantity_Positive", "\"LineKind\" IS NULL OR CAST(\"Quantity\" AS NUMERIC) > 0");
+                    t.HasCheckConstraint("CK_InvoiceLine_Vat_Allowed", "\"LineKind\" IS NULL OR CAST(\"VATPercentage\" AS NUMERIC) IN (0, 9, 21)");
+                });
                 b.HasOne(l => l.Partij).WithMany().HasForeignKey(l => l.PartijId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SalesDelivery).WithMany().HasForeignKey(l => l.SalesDeliveryId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SalesOrderLine).WithMany().HasForeignKey(l => l.SalesOrderLineId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SalesOrderServiceLine).WithMany().HasForeignKey(l => l.SalesOrderServiceLineId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.SalesOrderPackagingLine).WithMany().HasForeignKey(l => l.SalesOrderPackagingLineId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.CostArticle).WithMany().HasForeignKey(l => l.CostArticleId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.HasOne(l => l.RevenueType).WithMany().HasForeignKey(l => l.RevenueTypeId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+                b.Property(l => l.LineKind).HasMaxLength(16);
+                b.Property(l => l.LineNet).HasPrecision(18, 2);
+                b.Property(l => l.LineVat).HasPrecision(18, 2);
+                b.Property(l => l.LotNumber).HasMaxLength(SalesInvoiceRules.MaxLotNumberLength);
+                b.Property(l => l.Ggn).HasMaxLength(SalesInvoiceRules.MaxGgnLength);
+            });
+
+            modelBuilder.Entity<RevenueType>(b =>
+            {
+                b.Property(r => r.Name).IsRequired().HasMaxLength(SalesInvoiceRules.MaxRevenueTypeNameLength);
+                b.Property(r => r.ExternalCode).HasMaxLength(SalesInvoiceRules.MaxExternalCodeLength);
+                b.Property(r => r.Version).IsConcurrencyToken();
+                b.HasIndex(r => r.Name).IsUnique();
+                // Hooguit één standaard (filter werkt in PostgreSQL en SQLite).
+                b.HasIndex(r => r.IsDefault).IsUnique().HasFilter("\"IsDefault\"");
+                b.ToTable(t =>
+                {
+                    t.HasCheckConstraint("CK_RevenueTypes_Name_NotBlank", "length(trim(\"Name\")) > 0");
+                    t.HasCheckConstraint("CK_RevenueTypes_Default_Active", "NOT \"IsDefault\" OR \"IsActive\"");
+                });
+                b.HasData(new RevenueType { Id = 1, Name = SalesInvoiceRules.DefaultRevenueTypeName, IsActive = true, IsDefault = true, CreatedAt = new DateTime(2026, 11, 25, 0, 0, 0, DateTimeKind.Utc) });
             });
 
             modelBuilder.Entity<PartijAuditEvent>(b =>

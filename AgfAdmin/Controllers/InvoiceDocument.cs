@@ -140,7 +140,7 @@ public class InvoiceDocument : IDocument
                 table.Cell().Element(CellStyle).Text((index + 1).ToString());
                 table.Cell().Element(CellStyle).Text(item.Description);
                 table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Quantity(item.Quantity));
-                table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Money(item.UnitPrice));
+                table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Money(item.UnitPrice ?? 0m));
                 table.Cell().Element(CellStyle).Text(InvoiceNumberFormat.Percentage(item.VATPercentage));
                 table.Cell().Element(CellStyle).AlignRight().Text(InvoiceNumberFormat.Money(item.Total));
             }
