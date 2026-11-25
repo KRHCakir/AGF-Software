@@ -23,7 +23,9 @@ namespace AgfAdmin.Services
         string CustomerName, string CustomerAddress, string CustomerVatNumber,
         string InvoiceNumber, DateTime InvoiceDate, DateTime? DeliveryDate, DateTime? DueDate, int? PaymentTermDays, string CustomerReference,
         IReadOnlyList<string> SalesLotNumbers, IReadOnlyList<string> OrderNumbers,
-        IReadOnlyList<SalesInvoicePdfLine> Lines, IReadOnlyList<SalesInvoicePdfVat> VatRates, decimal? Net, decimal? Vat, decimal? Gross);
+        IReadOnlyList<SalesInvoicePdfLine> Lines, IReadOnlyList<SalesInvoicePdfVat> VatRates, decimal? Net, decimal? Vat, decimal? Gross,
+        // Gewichten zoals het bedrijf ze toont (fixes 5a): hele kilo's of één decimaal, vastgelegd in de versie.
+        int WeightDecimals = WeightDisplay.DefaultDecimals);
 
     public static class SalesInvoiceSnapshotBuilder
     {
@@ -45,7 +47,7 @@ namespace AgfAdmin.Services
                 invoice.Lines.Select(l => new SalesInvoicePdfLine(l.LineKind, l.Quantity, l.Unit, l.Description, Blank(l.Origin), Blank(l.LotNumber), Blank(l.Ggn),
                     l.NetWeightKg, l.UnitPrice, l.DiscountPercentage, l.VatPercentage, l.Amount)).ToList(),
                 invoice.Totals.VatRates.Select(r => new SalesInvoicePdfVat(r.Percentage, r.Net, r.Vat)).ToList(),
-                invoice.Totals.Net, invoice.Totals.Vat, invoice.Totals.Gross);
+                invoice.Totals.Net, invoice.Totals.Vat, invoice.Totals.Gross, WeightDisplay.Clamp(settings?.WeightDisplayDecimals ?? WeightDisplay.DefaultDecimals));
         }
 
         public static string Serialize(SalesInvoiceSnapshot snapshot) => JsonSerializer.Serialize(snapshot, Json);
@@ -254,7 +256,7 @@ namespace AgfAdmin.Services
                             lot.Item().Text(line.Lots ?? "");
                             if (line.Ggn != null) lot.Item().Text($"GGN {line.Ggn}").FontSize(7);
                         });
-                        Cell().AlignRight().Text(line.NetKg == null ? "" : WeightDisplay.Kg(line.NetKg, null));
+                        Cell().AlignRight().Text(line.NetKg == null ? "" : WeightDisplay.Kg(line.NetKg, invoice.WeightDecimals));
                     }
                     Cell().AlignRight().Text(line.UnitPrice == null ? L("noPrice") : UnitPrice(line.UnitPrice.Value));
                     Cell().Text(Unit(line.Unit));
