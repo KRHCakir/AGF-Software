@@ -68,37 +68,43 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<SalesInvoiceDto>.Ok(await DtoAsync(id, cancellationToken));
             }
-            var (invoice, refused) = await ConceptForChangeAsync(id, expectedVersion, cancellationToken);
-            if (refused != null)
-            {
-                return refused;
-            }
-            var errors = SalesInvoiceRules.FinalizeErrors(invoice);
-            var customer = await db.Customers.AsNoTracking().SingleOrDefaultAsync(c => c.Id == invoice.CustomerId, cancellationToken);
-            if (customer == null && !errors.ContainsKey("customerId"))
-            {
-                errors["customerId"] = new[] { "The customer of this invoice does not exist anymore." };
-            }
-            var lines = invoice.InvoiceLines.Where(SalesInvoiceRules.Counts).ToList();
-            var lineIds = lines.Select(l => l.Id).ToList();
-            var active = await db.StockReservations.Include(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
-                .Where(r => r.InvoiceLineId != null && lineIds.Contains(r.InvoiceLineId.Value) && r.Status == ReservationRules.StatusActive)
-                .ToListAsync(cancellationToken);
-            foreach (var line in lines.Where(l => invoice.Kind == SalesInvoiceRules.KindDirect && l.LineKind == SalesInvoiceRules.LineProduct))
-            {
-                if (active.Where(r => r.InvoiceLineId == line.Id).Sum(r => r.Quantity) != line.Quantity)
-                {
-                    errors[$"lines[{lines.IndexOf(line)}].quantity"] = new[] { "The stock of this line is no longer held in full; change the quantity again to reserve it." };
-                }
-            }
-            if (errors.Count > 0)
-            {
-                return ServiceResult<SalesInvoiceDto>.Validation(errors);
-            }
-
+            // Eerst de transactie en, in PostgreSQL, de factuurrij FOR UPDATE: een gelijktijdige wijziging of regel (de regeltrigger vraagt
+            // FOR SHARE) wacht tot deze factuur klaar is, en wij lezen de regels pas daarna.
             var transaction = db.Database.CurrentTransaction == null ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
             try
             {
+                if (db.Database.IsNpgsql())
+                {
+                    await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Invoices\" WHERE \"Id\" = {id} FOR UPDATE", cancellationToken);
+                }
+                var (invoice, refused) = await ConceptForChangeAsync(id, expectedVersion, cancellationToken);
+                if (refused != null)
+                {
+                    return refused;
+                }
+                var errors = SalesInvoiceRules.FinalizeErrors(invoice);
+                var customer = await db.Customers.AsNoTracking().SingleOrDefaultAsync(c => c.Id == invoice.CustomerId, cancellationToken);
+                if (customer == null && !errors.ContainsKey("customerId"))
+                {
+                    errors["customerId"] = new[] { "The customer of this invoice does not exist anymore." };
+                }
+                var lines = invoice.InvoiceLines.Where(SalesInvoiceRules.Counts).ToList();
+                var lineIds = lines.Select(l => l.Id).ToList();
+                var active = await db.StockReservations.Include(r => r.PalletContentLine).ThenInclude(c => c.Pallet)
+                    .Where(r => r.InvoiceLineId != null && lineIds.Contains(r.InvoiceLineId.Value) && r.Status == ReservationRules.StatusActive)
+                    .ToListAsync(cancellationToken);
+                foreach (var line in lines.Where(l => invoice.Kind == SalesInvoiceRules.KindDirect && l.LineKind == SalesInvoiceRules.LineProduct))
+                {
+                    if (active.Where(r => r.InvoiceLineId == line.Id).Sum(r => r.Quantity) != line.Quantity)
+                    {
+                        errors[$"lines[{lines.IndexOf(line)}].quantity"] = new[] { "The stock of this line is no longer held in full; change the quantity again to reserve it." };
+                    }
+                }
+                if (errors.Count > 0)
+                {
+                    return ServiceResult<SalesInvoiceDto>.Validation(errors);
+                }
+
                 var now = DateTime.UtcNow;
                 var year = calendar.DateOf(now).Year;
                 if (db.Database.IsNpgsql())
