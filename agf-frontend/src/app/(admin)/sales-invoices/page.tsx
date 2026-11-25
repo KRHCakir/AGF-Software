@@ -17,7 +17,7 @@ import { sortParams } from '../../../lib/listSort';
 import { SALES_INVOICE_SORT_KEYS, SALES_INVOICE_STATUS_FILTERS } from '../../../lib/salesInvoice';
 import { toApiError } from '../../../services/apiClient';
 import { finalizeSalesInvoices, getSalesInvoice, listSalesInvoices } from '../../../services/salesInvoiceService';
-import type { FinalizeResult, SalesInvoice, SalesInvoiceList as InvoiceList } from '../../../types/salesInvoice';
+import type { FinalizeResult, SalesInvoice, SalesInvoiceList as InvoiceList, SalesInvoiceListItem } from '../../../types/salesInvoice';
 
 const PAGE_SIZE = 50;
 
@@ -54,7 +54,8 @@ function SalesInvoicesWorkspace() {
     const [reloadToken, setReloadToken] = useState(0);
     const [list, setList] = useState<LoadState<InvoiceList>>({ status: 'loading' });
     const [detail, setDetail] = useState<LoadState<SalesInvoice> | null>(null);
-    const [chosen, setChosen] = useState<Set<number>>(new Set());
+    const [chosen, setChosen] = useState<Map<number, SalesInvoiceListItem>>(new Map());
+    const [resultItems, setResultItems] = useState<Map<number, SalesInvoiceListItem>>(new Map());
     const [confirmMany, setConfirmMany] = useState(false);
     const [busy, setBusy] = useState(false);
     const [results, setResults] = useState<FinalizeResult[] | null>(null);
@@ -73,7 +74,12 @@ function SalesInvoicesWorkspace() {
         const controller = new AbortController();
         setList((current) => (current.status === 'ready' ? current : { status: 'loading' }));
         listSalesInvoices({ query: debounced, status, page, pageSize: PAGE_SIZE, ...sortParams(sort) }, controller.signal)
-            .then((data) => setList({ status: 'ready', data }))
+            .then((data) => {
+                // Staat de pagina na een verversing buiten het bereik (bv. na definitief maken), ga dan naar de laatste pagina.
+                const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
+                if (page > lastPage) { setPage(lastPage); return; }
+                setList({ status: 'ready', data });
+            })
             .catch((caught: unknown) => { const apiError = toApiError(caught); if (apiError.kind !== 'aborted') setList({ status: 'error', error: apiError }); });
         return () => controller.abort();
     }, [debounced, status, page, reloadToken, sort, sortReady]);
@@ -99,19 +105,34 @@ function SalesInvoicesWorkspace() {
         setDetail({ status: 'ready', data: invoice });
         setReloadToken((n) => n + 1);
     };
+    const items = list.status === 'ready' ? list.data.items : [];
     const choose = (id: number, on: boolean) => setChosen((current) => {
-        const next = new Set(current);
-        if (on) next.add(id); else next.delete(id);
+        const next = new Map(current);
+        const item = items.find((candidate) => candidate.id === id);
+        if (on && item) next.set(id, item); else next.delete(id);
         return next;
     });
-    const items = list.status === 'ready' ? list.data.items : [];
-    const chosenItems = items.filter((item) => chosen.has(item.id));
+    // De selectie blijft over pagina's heen bewaard, met de versie van het moment van aanvinken.
+    const chosenItems = Array.from(chosen.values());
+    const chosenIds = new Set(chosen.keys());
+    const invoiceLabel = (id: number) => {
+        const item = resultItems.get(id);
+        return item ? `${item.customerName ?? '-'} (#${id})` : `#${id}`;
+    };
     const finalizeMany = async () => {
         setBusy(true);
         setManyError(null);
         try {
-            setResults(await finalizeSalesInvoices(chosenItems.map((item) => ({ id: item.id, expectedVersion: item.version }))));
-            setChosen(new Set());
+            const sent = chosenItems;
+            const outcome = await finalizeSalesInvoices(sent.map((item) => ({ id: item.id, expectedVersion: item.version })));
+            setResultItems(new Map(sent.map((item) => [item.id, item])));
+            setResults(outcome);
+            // Alleen de verzonden facturen uit de selectie halen; ondertussen nieuw aangevinkte blijven staan.
+            setChosen((current) => {
+                const next = new Map(current);
+                sent.forEach((item) => next.delete(item.id));
+                return next;
+            });
             setConfirmMany(false);
             setReloadToken((n) => n + 1);
         } catch (caught) {
@@ -167,7 +188,7 @@ function SalesInvoicesWorkspace() {
                 <ul className="rounded border border-gray-200 bg-white px-3 py-2 text-sm" data-testid="si-results" aria-live="polite">
                     {results.map((result) => (
                         <li key={result.id} className={result.final ? 'text-green-900' : 'text-red-800'}>
-                            {result.final ? t('si_result_final', { number: result.invoiceNumber ?? '' }) : t('si_result_refused', { message: result.message ?? '' })}
+                            {result.final ? t('si_result_final', { invoice: invoiceLabel(result.id), number: result.invoiceNumber ?? '' }) : t('si_result_refused', { invoice: invoiceLabel(result.id), message: result.message ?? '' })}
                         </li>
                     ))}
                 </ul>
@@ -182,7 +203,7 @@ function SalesInvoicesWorkspace() {
                 <EmptyState title={debounced === '' ? t('si_empty') : t('si_none_found')} description={debounced === '' ? t('si_empty_hint') : undefined} testId="si-empty" />
             )}
             {list.status === 'ready' && items.length > 0 && (
-                <SalesInvoiceList items={items} selectedId={selectedId} onOpen={open} sort={sort} onSort={toggleSort} onSortChange={setSort} chosen={chosen} onChoose={choose} />
+                <SalesInvoiceList items={items} selectedId={selectedId} onOpen={open} sort={sort} onSort={toggleSort} onSortChange={setSort} chosen={chosenIds} onChoose={choose} />
             )}
             {pages > 1 && (
                 <nav aria-label={t('si_pages')} className="flex items-center gap-2 text-sm">

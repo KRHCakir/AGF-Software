@@ -74,6 +74,17 @@ namespace AgfAdmin.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // Factuurconcepten hebben geen SalesOrderId/DocumentId; die kunnen niet terug naar
+            // NOT NULL zonder gegevens te verzinnen of te verwijderen. Stop daarom vooraf met een
+            // duidelijke melding in plaats van te falen op een foreign key-schending.
+            migrationBuilder.Sql(@"
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM ""MailDrafts"" WHERE ""SalesOrderId"" IS NULL OR ""DocumentId"" IS NULL) THEN
+        RAISE EXCEPTION 'Rollback van AddInvoiceMailDrafts is niet mogelijk: er bestaan factuurmailconcepten in MailDrafts. Verwijder of verwerk deze eerst handmatig en voer de rollback daarna opnieuw uit.';
+    END IF;
+END $$;");
+
             migrationBuilder.DropForeignKey(
                 name: "FK_MailDrafts_Invoices_InvoiceId",
                 table: "MailDrafts");
