@@ -306,6 +306,19 @@ namespace AgfAdmin.Services
             {
                 return ServiceResult<PartijSummaryDto>.Validation(new Dictionary<string, string[]> { ["number"] = new[] { "The new number is the same as the current number." } });
             }
+            // Verkoopfactuur 1: het V-nummer van een directe factuur staat op de factuur zelf; is die definitief of vervallen, dan blijft het.
+            if (partij.Kind == PartijRules.KindSales && partij.InvoiceId != null)
+            {
+                var invoice = await _db.Invoices.AsNoTracking().Where(i => i.Id == partij.InvoiceId.Value && i.Kind != null && i.Status != SalesInvoiceRules.StatusConcept)
+                    .Select(i => new { i.Status, i.InvoiceNumber }).FirstOrDefaultAsync(cancellationToken);
+                if (invoice != null)
+                {
+                    var message = invoice.Status == SalesInvoiceRules.StatusFinal
+                        ? $"Lot number {partij.Number} is on final sales invoice {invoice.InvoiceNumber} and never changes."
+                        : $"Lot number {partij.Number} belongs to a discarded sales invoice and never changes.";
+                    return ServiceResult<PartijSummaryDto>.Conflict(message, new { code = "PARTIJ_ON_FINAL_INVOICE", message });
+                }
+            }
             var key = PartijRules.NumberKey(number);
             var other = await _db.Partijen.AsNoTracking().SingleOrDefaultAsync(p => p.Kind == partij.Kind && p.NumberKey == key && p.Id != id, cancellationToken);
             if (other != null)
