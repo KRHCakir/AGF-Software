@@ -9,7 +9,8 @@ namespace AgfAdmin.Data
         // ---- Regel 32: mailconcepten (documenten deel 3, zie MailDraftService) ----
         //
         // Een mailconcept verdwijnt nooit (Verwijderen zet het op Discarded). Een verstuurd concept is het bewijs van wat naar wie ging:
-        // daarna verandert er niets meer aan. Bij welk document en welke order het hoort ligt vanaf het begin vast. Vergeleken met de
+        // daarna verandert er niets meer aan. Bij welk document en welke order (of, sinds verkoopfactuur 1, welke factuur) het hoort ligt
+        // vanaf het begin vast. Vergeleken met de
         // opgeslagen waarden in de database.
         private static async Task CheckMailDraftsAsync(AppDbContext db, bool async, CancellationToken cancellationToken)
         {
@@ -20,7 +21,7 @@ namespace AgfAdmin.Data
             var modified = db.ChangeTracker.Entries<MailDraft>().Where(e => e.State == EntityState.Modified).ToList();
             if (modified.Count == 0) return;
             var ids = modified.Select(e => e.Entity.Id).ToList();
-            var stored = (await ToListAsync(db.MailDrafts.AsNoTracking().Where(d => ids.Contains(d.Id)).Select(d => new { d.Id, d.Status, d.SalesOrderId, d.DocumentId, d.DocumentKind }), async, cancellationToken))
+            var stored = (await ToListAsync(db.MailDrafts.AsNoTracking().Where(d => ids.Contains(d.Id)).Select(d => new { d.Id, d.Status, d.SalesOrderId, d.DocumentId, d.InvoiceId, d.InvoiceDocumentId, d.DocumentKind }), async, cancellationToken))
                 .ToDictionary(d => d.Id);
             foreach (var entry in modified)
             {
@@ -29,7 +30,8 @@ namespace AgfAdmin.Data
                 {
                     throw new TraceabilityViolationException($"Mail {before.Id} was sent: what went to whom stays as it was.");
                 }
-                if (before.SalesOrderId != entry.Entity.SalesOrderId || before.DocumentId != entry.Entity.DocumentId || before.DocumentKind != entry.Entity.DocumentKind)
+                if (before.SalesOrderId != entry.Entity.SalesOrderId || before.DocumentId != entry.Entity.DocumentId || before.DocumentKind != entry.Entity.DocumentKind
+                    || before.InvoiceId != entry.Entity.InvoiceId || before.InvoiceDocumentId != entry.Entity.InvoiceDocumentId)
                 {
                     throw new TraceabilityViolationException($"Mail {before.Id} belongs to one document version; that never changes.");
                 }

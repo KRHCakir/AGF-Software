@@ -156,9 +156,11 @@ namespace AgfAdmin.Services
                 invoice.CustomerVatNumber = string.IsNullOrWhiteSpace(customer.VATNumber) ? null : customer.VATNumber.Trim();
                 invoice.UpdatedAt = now;
                 await db.SaveChangesAsync(cancellationToken);
-                // 3. De PDF-versie met de momentopname, in dezelfde transactie.
-                await AddFinalDocumentAsync(invoice, now, cancellationToken);
+                // 3. De PDF-versie met de momentopname en een mailconcept voor de factuur-ontvangers van de klant, in dezelfde transactie.
+                //    Verstuurd wordt er niets: dat gebeurt alleen met de klik op Versturen.
+                var document = await AddFinalDocumentAsync(invoice, now, cancellationToken);
                 await db.SaveChangesAsync(cancellationToken);
+                await new MailDraftService(db, _user).EnsureInvoiceDraftAsync(document.Id, cancellationToken);
                 if (transaction != null)
                 {
                     await transaction.CommitAsync(cancellationToken);

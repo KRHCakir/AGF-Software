@@ -13,6 +13,7 @@ namespace AgfAdmin.Services
     {
         private readonly ICurrentUser _user = user ?? CurrentUser.Default;
         public const string WarehouseName = "de loods";
+        public const string CustomerName = "de klant";
 
         // Een concept voor de nieuwste versie van elk document dat er nog geen heeft (en nog niet doorgegeven of verstuurd is). Een open concept
         // van een oudere versie wordt "vervangen". Eigen transport of klant haalt op: geen vervoerder, dus geen concept voor de transportopdracht.
@@ -37,7 +38,7 @@ namespace AgfAdmin.Services
                 var latest = group.OrderByDescending(d => d.Version).First();
                 // Een open concept van een oudere versie gaat altijd weg (vervangen), ook als de nieuwe versie al een concept heeft of zelf
                 // geen krijgt: zo ruimt elke ronde een concept op dat een gelijktijdige aanvraag nog voor een oudere versie maakte.
-                foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && deliveryOf.GetValueOrDefault(d.DocumentId) == latest.SalesDeliveryId
+                foreach (var old in drafts.Where(d => d.DocumentKind == latest.Kind && d.DocumentId != latest.Id && d.DocumentId != null && deliveryOf.GetValueOrDefault(d.DocumentId.Value) == latest.SalesDeliveryId
                     && (d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed)))
                 {
                     old.Status = DocumentMailRules.StatusSuperseded;
@@ -106,6 +107,58 @@ namespace AgfAdmin.Services
             return created;
         }
 
+        // Verkoopfactuur 1: bij Definitief een concept voor de factuur-ontvangers van de klant (soort Factuur), met onderwerp en tekst uit het
+        // sjabloon en de PDF als bijlage. Er wordt niets verstuurd zonder de klik op Versturen. Zonder ontvanger staat de klant als ontbrekend.
+        public async Task<int?> EnsureInvoiceDraftAsync(int invoiceDocumentId, CancellationToken cancellationToken = default)
+        {
+            var existing = await db.MailDrafts.AsNoTracking().Where(d => d.InvoiceDocumentId == invoiceDocumentId).Select(d => (int?)d.Id).FirstOrDefaultAsync(cancellationToken);
+            if (existing != null) return existing;
+            var document = await db.SalesInvoiceDocuments.AsNoTracking().Include(d => d.Invoice).ThenInclude(i => i.Customer).ThenInclude(c => c.Relation)
+                .SingleOrDefaultAsync(d => d.Id == invoiceDocumentId, cancellationToken);
+            if (document?.Invoice == null || document.SentAt != null) return null;
+            var invoice = document.Invoice;
+            var settings = await db.MailSettings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+            var company = await db.CompanySettings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync(cancellationToken) ?? new CompanySettings();
+            var relation = invoice.Customer?.Relation;
+            var (to, cc, missing, missingId) = relation == null
+                ? (new List<string>(), new List<string>(), invoice.CustomCustomerName ?? CustomerName, (int?)null)
+                : await ForRelationAsync(new DocumentRecipientService(db, _user), relation, DocumentMailRules.KindInvoice, cancellationToken);
+            var lots = await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == invoice.Id && l.RemovedAt == null && l.SalesDeliveryId != null)
+                .Select(l => new { Lot = l.SalesDelivery.Partij.Number, Order = l.SalesDelivery.SalesOrder.OrderNumber }).Distinct().ToListAsync(cancellationToken);
+            var salesLots = string.Join(", ", lots.Select(l => l.Lot).Append(invoice.Kind == SalesInvoiceRules.KindDirect ? invoice.BatchNumber : null).Where(v => v != null).Distinct());
+            var orders = string.Join(", ", lots.Select(l => l.Order).Distinct());
+            var stored = await db.MailTemplates.AsNoTracking().SingleOrDefaultAsync(t => t.Kind == DocumentMailRules.KindInvoice, cancellationToken);
+            var (subjectTemplate, bodyTemplate) = stored != null ? (stored.Subject, stored.Body) : MailTemplateRules.Default(DocumentMailRules.KindInvoice);
+            var values = new Dictionary<string, string>
+            {
+                ["{bedrijf}"] = company.CompanyName, ["{document}"] = MailTemplateRules.DocumentName(DocumentMailRules.KindInvoice), ["{nummer}"] = document.Number,
+                ["{versie}"] = document.Version.ToString(), ["{order}"] = orders.Length > 0 ? orders : salesLots, ["{partij}"] = salesLots,
+                ["{klant}"] = invoice.CustomCustomerName, ["{datum}"] = MailTemplateRules.Date(invoice.InvoiceDate, false),
+                ["{laaddatum}"] = invoice.DeliveryDate != null ? MailTemplateRules.Date(invoice.DeliveryDate.Value, false) : "",
+            };
+            var text = MailTemplateRules.Render(bodyTemplate, values).Trim();
+            var closing = string.IsNullOrWhiteSpace(settings?.Signature) ? MailTemplateRules.Render(MailTemplateRules.DefaultClosing, values) : settings.Signature;
+            text = $"{text}\n\n{closing.Trim()}";
+            var title = MailTemplateRules.Render(subjectTemplate, values).Trim();
+            var now = DateTime.UtcNow;
+            var actor = _user.Actor(SalesOrderDocumentRules.MaxActorLength);
+            var draft = new MailDraft
+            {
+                InvoiceId = invoice.Id, InvoiceDocumentId = document.Id, DocumentKind = DocumentMailRules.KindInvoice, Status = DocumentMailRules.StatusDraft,
+                To = DocumentMailRules.JoinAddresses(to), Cc = DocumentMailRules.JoinAddresses(cc),
+                Subject = title.Length > DocumentMailRules.MaxSubjectLength ? title[..DocumentMailRules.MaxSubjectLength] : title,
+                Body = text.Length > DocumentMailRules.MaxBodyLength ? text[..DocumentMailRules.MaxBodyLength] : text,
+                MissingRecipient = missing, MissingRelationId = missingId, CreatedAt = now, CreatedBy = actor, UpdatedAt = now, UpdatedBy = actor,
+            };
+            db.MailDrafts.Add(draft);
+            await db.SaveChangesAsync(cancellationToken);
+            return draft.Id;
+        }
+
+        public async Task<List<MailDraftDto>> ForInvoiceAsync(int invoiceId, CancellationToken cancellationToken = default) =>
+            await Query().Where(d => d.InvoiceId == invoiceId && d.Status != DocumentMailRules.StatusDiscarded && d.Status != DocumentMailRules.StatusSuperseded)
+                .OrderByDescending(d => d.Id).Select(Projection).ToListAsync(cancellationToken);
+
         public async Task<List<MailDraftDto>> ForOrderAsync(int orderId, CancellationToken cancellationToken = default)
         {
             await EnsureDraftsAsync(orderId, cancellationToken);
@@ -120,7 +173,8 @@ namespace AgfAdmin.Services
 
         // Een open concept van een oudere documentversie (een gelijktijdige aanvraag kan er nog een maken) staat er nooit tussen.
         private IQueryable<MailDraft> OpenQuery() =>
-            Query().Where(d => (((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null)
+            Query().Where(d => (((d.Status == DocumentMailRules.StatusDraft || d.Status == DocumentMailRules.StatusFailed) && d.Document.SentAt == null
+                    && (d.InvoiceDocumentId == null || d.InvoiceDocument.SentAt == null))
                 || d.Status == DocumentMailRules.StatusSending) && !db.SalesOrderDocuments.Any(x => x.SalesDeliveryId == d.Document.SalesDeliveryId && x.Kind == d.DocumentKind && x.Version > d.Document.Version));
 
         // Bevestigde orders van vóór de conceptfunctie hebben nog geen concept. Voor het tellen en pagineren vullen we die per gerichte batch aan:
@@ -151,7 +205,7 @@ namespace AgfAdmin.Services
                                 && r.RelationId == t.CarrierRelationId && (r.Kinds & TransportOrderFlag) != 0)))
                         || (m.DocumentKind != SalesOrderDocumentRules.KindTransportOrder
                             && db.DocumentRecipients.Any(r => r.OwnerKind == DocumentMailRules.OwnerWarehouse && (r.Kinds & LoadingSlipFlag) != 0))))
-                .Select(m => m.SalesOrderId).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
+                .Where(m => m.SalesOrderId != null).Select(m => m.SalesOrderId.Value).Distinct().OrderBy(id => id).Take(BackfillBatchSize).ToListAsync(cancellationToken);
             foreach (var id in filled) await EnsureDraftsAsync(id, cancellationToken);
         }
 
@@ -182,7 +236,7 @@ namespace AgfAdmin.Services
         // Aan, Cc, onderwerp en tekst aanpassen, zolang het concept niet verstuurd is.
         public async Task<ServiceResult<MailDraftDto>> UpdateAsync(int id, UpdateMailDraftDto request, CancellationToken cancellationToken = default)
         {
-            var draft = await db.MailDrafts.Include(d => d.Document).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
+            var draft = await db.MailDrafts.Include(d => d.Document).Include(d => d.InvoiceDocument).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
             if (draft == null) return NotFound(id);
             if (Editable(draft) is { } refused) return refused;
             if (request?.ExpectedVersion != draft.Version) return Stale(draft);
@@ -205,11 +259,15 @@ namespace AgfAdmin.Services
             else if (draft.MissingRecipient == null)
             {
                 var isTransport = draft.DocumentKind == SalesOrderDocumentRules.KindTransportOrder;
+                var isInvoice = draft.DocumentKind == DocumentMailRules.KindInvoice;
                 var carrier = isTransport
                     ? await db.SalesOrders.AsNoTracking().Where(o => o.Id == draft.SalesOrderId).Select(o => o.Transport.CarrierRelation).FirstOrDefaultAsync(cancellationToken)
                     : null;
-                draft.MissingRecipient = carrier?.Name ?? (isTransport ? "de vervoerder" : WarehouseName);
-                draft.MissingRelationId = carrier?.Id;
+                var customer = isInvoice
+                    ? await db.Invoices.AsNoTracking().Where(i => i.Id == draft.InvoiceId).Select(i => i.Customer.Relation).FirstOrDefaultAsync(cancellationToken)
+                    : null;
+                draft.MissingRecipient = carrier?.Name ?? customer?.Name ?? (isTransport ? "de vervoerder" : isInvoice ? CustomerName : WarehouseName);
+                draft.MissingRelationId = carrier?.Id ?? customer?.Id;
             }
             draft.Subject = subject;
             draft.Body = body;
@@ -221,7 +279,7 @@ namespace AgfAdmin.Services
         // Verwijderen haalt het concept weg (status Verwijderd); het document zelf blijft.
         public async Task<ServiceResult<MailDraftDto>> DiscardAsync(int id, MailDraftActionDto request, CancellationToken cancellationToken = default)
         {
-            var draft = await db.MailDrafts.Include(d => d.Document).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
+            var draft = await db.MailDrafts.Include(d => d.Document).Include(d => d.InvoiceDocument).SingleOrDefaultAsync(d => d.Id == id, cancellationToken);
             if (draft == null) return NotFound(id);
             if (Editable(draft) is { } refused) return refused;
             if (request?.ExpectedVersion != draft.Version) return Stale(draft);
@@ -248,7 +306,7 @@ namespace AgfAdmin.Services
         private static ServiceResult<MailDraftDto> Editable(MailDraft draft) =>
             draft.Status is not (DocumentMailRules.StatusDraft or DocumentMailRules.StatusFailed)
                 ? ServiceResult<MailDraftDto>.Conflict($"This mail is {draft.Status.ToLowerInvariant()} and can no longer be changed.", new { code = "notOpen", status = draft.Status })
-                : draft.Document?.SentAt != null
+                : draft.Document?.SentAt != null || draft.InvoiceDocument?.SentAt != null
                     ? ServiceResult<MailDraftDto>.Conflict("This document was passed on already; the draft is closed.", new { code = "notOpen", status = draft.Status })
                     : null;
 
@@ -306,8 +364,11 @@ namespace AgfAdmin.Services
 
         private static readonly System.Linq.Expressions.Expression<Func<MailDraft, MailDraftDto>> Projection = d => new MailDraftDto
         {
-            Id = d.Id, SalesOrderId = d.SalesOrderId, OrderNumber = d.SalesOrder.OrderNumber, CustomerName = d.SalesOrder.Customer.Name, DocumentId = d.DocumentId,
-            DocumentKind = d.DocumentKind, DocumentNumber = d.Document.Number, DocumentVersion = d.Document.Version, Status = d.Status, To = d.To, Cc = d.Cc,
+            Id = d.Id, SalesOrderId = d.SalesOrderId, OrderNumber = d.SalesOrder.OrderNumber,
+            CustomerName = d.SalesOrderId != null ? d.SalesOrder.Customer.Name : d.Invoice.CustomCustomerName, DocumentId = d.DocumentId,
+            InvoiceId = d.InvoiceId, InvoiceDocumentId = d.InvoiceDocumentId, DocumentKind = d.DocumentKind,
+            DocumentNumber = d.DocumentId != null ? d.Document.Number : d.InvoiceDocument.Number, DocumentVersion = d.DocumentId != null ? d.Document.Version : d.InvoiceDocument.Version,
+            Status = d.Status, To = d.To, Cc = d.Cc,
             Subject = d.Subject, Body = d.Body, MissingRecipient = d.MissingRecipient, MissingRelationId = d.MissingRelationId,
             PreviousSentAt = d.PreviousSentAt, CreatedAt = d.CreatedAt, SentAt = d.SentAt, SentBy = d.SentBy, MessageId = d.MessageId,
             LastError = d.LastError, Attempts = d.Attempts, Version = d.Version,

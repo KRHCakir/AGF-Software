@@ -10,6 +10,9 @@ namespace AgfAdmin.Services
 
         public static (string Subject, string Body) Default(string kind) => kind switch
         {
+            // Verkoopfactuur 1: {order} is de verkooporder(s) of, bij een directe factuur, de verkoop-partij; {partij} de V-nummer(s).
+            DocumentMailRules.KindInvoice => ("Factuur {nummer} – {klant}",
+                "Beste,\n\nIn de bijlage factuur {nummer} van {datum} voor partij {partij}.\nGraag betalen vóór de vervaldatum die op de factuur staat."),
             SalesOrderDocumentRules.KindTransportOrder => ("Transportopdracht {nummer} – {order}",
                 "Beste,\n\nIn de bijlage transportopdracht {nummer} (versie {versie}) voor order {order} van {klant}.\nLaden op: {laaddatum}.\n\nWilt u bevestigen dat u de opdracht uitvoert?"),
             _ => ("Laadbon {nummer} – {order} – {klant}",
@@ -19,7 +22,12 @@ namespace AgfAdmin.Services
         // Onder elke tekst komt één afsluiting: de handtekening uit Beheer, of zonder handtekening deze (dus nooit twee keer een groet).
         public const string DefaultClosing = "Met vriendelijke groet,\n{bedrijf}";
 
-        public static string DocumentName(string kind) => kind == SalesOrderDocumentRules.KindTransportOrder ? "Transportopdracht" : "Laadbon";
+        public static string DocumentName(string kind) => kind switch
+        {
+            SalesOrderDocumentRules.KindTransportOrder => "Transportopdracht",
+            DocumentMailRules.KindInvoice => "Factuur",
+            _ => "Laadbon",
+        };
 
         // Vult de bekende invulvelden in; een onbekend veld blijft staan zoals het is.
         public static string Render(string template, IReadOnlyDictionary<string, string> values)
